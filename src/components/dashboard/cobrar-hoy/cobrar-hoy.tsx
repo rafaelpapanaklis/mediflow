@@ -261,11 +261,19 @@ function CuerpoCobrarHoy({
             patientId, appointmentId: cita?.id ?? null, conceptos, clinicTaxMode, conPagoHoy: pagoEfectivo > 0,
             // C-07: lo elegido a mano viaja (null = «Sin asignar» a propósito); si no, hereda.
             ...(doctorTocado ? { doctorId: doctorId || null } : {}),
-            fueraDelPlan: confirmaFuera,
+            // Solo confirma «es otro procedimiento» quien lo marcó VIENDO un aviso del plan (el de la cita o el
+            // del concepto). La casilla de «no se pudo comprobar el plan» no dice nada de ESTA cita: ahí el
+            // servidor decide (409 cita_del_plan) y la hoja enseña su aviso.
+            fueraDelPlan: confirmaFuera && (citaDelPlan || yaDelPlan.length > 0),
           })),
         });
         const out = await res.json().catch(() => ({}));
         if (!res.ok) {
+          if (out?.code === "cita_del_plan" && Array.isArray(out.planIds)) {
+            // El servidor sabe que la cita es del plan y la hoja no lo sabía: se enseña su aviso y su casilla.
+            setPlanesDeLaCita(out.planIds.filter((x: unknown): x is string => typeof x === "string"));
+            setConfirmaFuera(false);
+          }
           toast.error(mensajeDeError(out, t, { estado: res.status, porDefecto: t("cobrarHoy.errorCrear") }));
           return;
         }
@@ -637,7 +645,7 @@ function CuerpoCobrarHoy({
         </div>
 
         {/* ws1-t12 · fase 2: no se pudo comprobar el plan del paciente: confirmar antes de cobrar aparte. */}
-        {planesError && nota === null && yaDelPlan.length === 0 && (
+        {planesError && nota === null && yaDelPlan.length === 0 && !citaDelPlan && (
           <div className={`${c.aviso} ${c.avisoAlerta}`} role="alert" data-cobrar-hoy-plan-sin-leer>
             <span>{t("planTratamiento.cobro.planSinLeer")}</span>
             <label className={c.casilla}>
@@ -650,9 +658,11 @@ function CuerpoCobrarHoy({
         {citaDelPlan && nota === null && yaDelPlan.length === 0 && (
           <div className={`${c.aviso} ${c.avisoAlerta}`} role="alert" data-cobrar-hoy-cita-del-plan>
             <span>
-              {t("planTratamiento.cobro.citaDelPlan", {
-                plan: (planes ?? []).filter((p) => planesDeLaCita.includes(p.planId)).map((p) => p.nombre).join(", "),
-              })}
+              {(() => {
+                // Sin poder leer los planes (lo dijo el servidor al cobrar) no hay nombre que enseñar.
+                const nombres = (planes ?? []).filter((p) => planesDeLaCita.includes(p.planId)).map((p) => p.nombre).join(", ");
+                return nombres ? t("planTratamiento.cobro.citaDelPlan", { plan: nombres }) : t("planTratamiento.cobro.citaDelPlanSinNombre");
+              })()}
             </span>
             {opcionesPlan.some((p) => planesDeLaCita.includes(p.planId)) && (
               <button type="button" className={`${c.enlace} ${h.enlaceAviso}`} disabled={guardando}

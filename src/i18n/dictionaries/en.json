@@ -10749,6 +10749,7 @@
       "irAlAbono": "Pay toward the plan",
       "esOtro": "It's a different procedure, not the plan's: charge it separately.",
       "citaDelPlan": "This appointment belongs to the plan «{plan}»: today's payment goes to its bill. Charging it here separately would charge it twice.",
+      "citaDelPlanSinNombre": "This appointment belongs to a treatment plan: today's payment goes to its bill. Charging it here separately would charge it twice.",
       "consultaAlPlan": "Not on this visit's invoice because it's already in the treatment plan (charged on its invoice): {lista}."
     },
     "citas": {

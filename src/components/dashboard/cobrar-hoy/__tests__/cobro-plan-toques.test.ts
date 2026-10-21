@@ -46,7 +46,7 @@ const TARIFARIO = [{ id: "proc-r", name: "Resina", basePrice: 1250.5, isActive: 
 
 interface Pedida { metodo: string; ruta: string; cuerpo: any }
 
-async function abrir(chromium: { launch(o?: any): Promise<any> }, paquete: string, escena: string, opciones: { cuentas: () => unknown[]; planesDeLaCita?: string[]; viewport?: { width: number; height: number } }) {
+async function abrir(chromium: { launch(o?: any): Promise<any> }, paquete: string, escena: string, opciones: { cuentas: () => unknown[]; planesDeLaCita?: string[]; cuentasFallan?: boolean; altaDeNota?: (cuerpo: any) => { status: number; body: unknown }; viewport?: { width: number; height: number } }) {
   const navegador = await chromium.launch();
   const pagina = await navegador.newPage({ viewport: opciones.viewport ?? { width: 1280, height: 900 } });
   const pedidas: Pedida[] = [];
@@ -64,6 +64,7 @@ async function abrir(chromium: { launch(o?: any): Promise<any> }, paquete: strin
     if (url.pathname === "/paquete.js") return ruta.fulfill({ status: 200, contentType: "text/javascript", body: paquete });
     if (url.pathname === "/api/treatments/cuentas") {
       lecturasDeCuentas++;
+      if (opciones.cuentasFallan) return json(500, { error: "pooler" });
       return json(200, { planes: opciones.cuentas(), planesDeLaCita: opciones.planesDeLaCita ?? [] });
     }
     if (url.pathname === "/api/treatments" && req.method() === "GET") {
@@ -79,7 +80,10 @@ async function abrir(chromium: { launch(o?: any): Promise<any> }, paquete: strin
     if (url.pathname === "/api/clinic/zona") return json(200, { timezone: "America/Mexico_City" });
     if (url.pathname === "/api/invoices/from-appointment") return json(201, { invoice: { id: "inv-cita", invoiceNumber: "F-0102", total: 3000, balance: 3000 }, anticipoAplicado: 0 });
     if (/^\/api\/invoices\/[^/]+$/.test(url.pathname) && req.method() === "POST") return json(200, { ok: true });
-    if (url.pathname === "/api/invoices" && req.method() === "POST") return json(201, { id: "nueva", invoiceNumber: "F-0199", balance: 1250.5 });
+    if (url.pathname === "/api/invoices" && req.method() === "POST") {
+      const r = opciones.altaDeNota?.(cuerpo);
+      return r ? json(r.status, r.body) : json(201, { id: "nueva", invoiceNumber: "F-0199", balance: 1250.5 });
+    }
     return ruta.fulfill({ status: 404, body: "" });
   });
   await pagina.goto("http://cobro.prueba/");
@@ -271,6 +275,38 @@ test("Cobrar hoy desde una cita del plan: abre en el abono de ESE plan, y «Otra
     assert.ok(alta, "con la confirmación sí se crea la nota nueva");
     assert.equal(alta!.cuerpo.appointmentId, "cita1");
     assert.equal(alta!.cuerpo.fueraDelPlan, true, "y el servidor recibe la confirmación");
+  } finally {
+    await navegador.close();
+  }
+});
+
+test("sin poder leer los planes: la casilla de «no se pudo comprobar» NO confirma la cita; el 409 del servidor enseña su aviso", async (t) => {
+  const chromium = await cargarChromium();
+  if (!chromium) { t.skip("Playwright no está en ~/navegador"); return; }
+  const paquete = await empaquetar("src/components/dashboard/cobrar-hoy/__tests__/arnes-cobro-plan.tsx");
+  // El servidor SÍ sabe que la cita es del plan: sin la confirmación sobre ESTA cita, 409.
+  const altaDeNota = (cuerpo: any) =>
+    cuerpo?.fueraDelPlan === true
+      ? { status: 201, body: { id: "nueva", invoiceNumber: "F-0199", balance: 1250.5 } }
+      : { status: 409, body: { code: "cita_del_plan", planIds: ["plan1"], error: "Esta cita es del plan de tratamiento: lo de hoy se abona a la nota del plan." } };
+  const { navegador, pagina, pedidas } = await abrir(chromium, paquete, "cobrar", { cuentas: () => [], cuentasFallan: true, altaDeNota });
+  try {
+    await pagina.waitForSelector("[data-cobrar-hoy-plan-sin-leer]");
+    await pagina.check("[data-cobrar-hoy-plan-sin-leer] input[type=checkbox]");
+    const boton = pagina.locator("button", { hasText: "Cobrar $" });
+    await boton.click();
+    await pagina.waitForSelector("[data-cobrar-hoy-cita-del-plan]");
+    const altas = () => pedidas.filter((p) => p.metodo === "POST" && p.ruta === "/api/invoices");
+    assert.equal(altas().length, 1);
+    assert.equal(altas()[0].cuerpo.fueraDelPlan, undefined, "la casilla de «no se pudo comprobar» no viaja como confirmación");
+    assert.match(await pagina.textContent("[data-cobrar-hoy-cita-del-plan]") ?? "", /Esta cita es del plan de tratamiento/);
+    assert.equal(await pagina.locator("[data-cobrar-hoy-plan-sin-leer]").count(), 0, "un solo aviso");
+    assert.equal(await boton.isDisabled(), true, "hay que confirmar sobre ESTA cita");
+    await pagina.check("[data-cobrar-hoy-cita-del-plan] input[type=checkbox]");
+    await boton.click();
+    for (let i = 0; i < 100 && altas().length < 2; i++) await pagina.waitForTimeout(50);
+    assert.equal(altas().length, 2);
+    assert.equal(altas()[1].cuerpo.fueraDelPlan, true, "ahora sí, confirmado viendo el aviso de la cita");
   } finally {
     await navegador.close();
   }
