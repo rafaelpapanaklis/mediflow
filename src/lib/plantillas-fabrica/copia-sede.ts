@@ -26,3 +26,20 @@ export function plantillasParaSedeNueva<K extends string>(
     createdById: f.createdById ? destinoOwnerUserId : null,
   }));
 }
+
+/**
+ * Las plantillas con imágenes del editor nuevo llevan claves de la carpeta de la
+ * sede de ORIGEN (`documentos/<origen>/…`); en la sede nueva darían 404. Antes de
+ * copiarlas, cada imagen se copia a la carpeta de la sede nueva y el cuerpo se
+ * reescribe con las claves nuevas (`copiar`, que en el servidor es
+ * `copiarImagenesEntreClinicas`). Una por una y solo las que traen imágenes: es
+ * trabajo del bucket, no de la base.
+ */
+export async function conImagenesDeLaSedeNueva<T extends { body: string }>(
+  filas: readonly T[],
+  copiar: (body: string) => Promise<string>,
+): Promise<T[]> {
+  const salida: T[] = [];
+  for (const f of filas) salida.push(f.body.includes("data-archivo") ? { ...f, body: await copiar(f.body) } : f);
+  return salida;
+}

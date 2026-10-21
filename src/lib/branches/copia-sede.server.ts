@@ -6,7 +6,8 @@ import { repoHojas } from "@/lib/indicaciones/db";
 import { columnaAgendaColorExiste } from "@/lib/agenda/color-procedimiento.server";
 import { BANDERAS_AGENDA_FLEXIBLE } from "@/lib/agenda/agenda-flexible";
 import { repoVersiones } from "@/lib/plantillas-fabrica/db";
-import { plantillasParaSedeNueva } from "@/lib/plantillas-fabrica/copia-sede";
+import { conImagenesDeLaSedeNueva, plantillasParaSedeNueva } from "@/lib/plantillas-fabrica/copia-sede";
+import { copiarImagenesEntreClinicas } from "@/lib/documentos/imagenes.server";
 import type { FamiliaVersion } from "@/lib/plantillas-fabrica/versiones";
 import { columnaBotBookableExiste } from "@/lib/whatsapp/bot/servicios-agendables-db";
 import {
@@ -171,9 +172,13 @@ export async function copiarConfiguracion(args: ArgsCopia): Promise<ResultadoCop
         select: { name: true, body: true, isActive: true, createdById: true },
       });
       if (filas.length > 0) {
+        // `origenId` es el de la FILA leída arriba con su filtro de clínica: nunca un dato del cliente.
+        const conImagenes = await conImagenesDeLaSedeNueva(filas, (body) =>
+          copiarImagenesEntreClinicas(body, origenId, destinoId),
+        );
         await prisma.documentTemplate.createMany({
           // Las de fábrica (sin autor) siguen sin autor en la sede nueva: ofrecen «Volver a la de fábrica».
-          data: plantillasParaSedeNueva(filas, kind, destinoId, args.destinoOwnerUserId),
+          data: plantillasParaSedeNueva(conImagenes, kind, destinoId, args.destinoOwnerUserId),
           skipDuplicates: true,
         });
       }

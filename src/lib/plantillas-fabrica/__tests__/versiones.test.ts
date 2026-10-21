@@ -39,7 +39,7 @@ import {
 import type { TemplateDb } from "@/lib/document-templates/service";
 import { cuerpoEdicionHoja, cuerpoEdicionNotaOrto } from "@/app/dashboard/plantillas/cuerpo-edicion";
 import { bloquesDeNotas } from "@/components/specialties/orthodontics/redesign/notas-internas-casos";
-import { plantillasParaSedeNueva } from "../copia-sede";
+import { conImagenesDeLaSedeNueva, plantillasParaSedeNueva } from "../copia-sede";
 import { sinIdsRepetidos, sinRepetirLaMismaHoja } from "@/lib/indicaciones/servicio";
 import { fechaCortaDeCaso } from "@/components/specialties/orthodontics/redesign/notas-internas-casos";
 import type { HojaDTO } from "@/lib/indicaciones/tipos";
@@ -726,4 +726,28 @@ test("N4-P1/N5-P1: entre la copia y la versión editada de la misma hoja, cede l
   assert.deepEqual(hojasSugeridas([pelada, cordales], proc, []).sort(), ["cord", "pelada"], "p2 solo lo cubre la pelada: se queda");
   // Por palabras (sin procedimientos de la cita) siguen siendo la misma indicación: la copia vieja cede a la versión.
   assert.deepEqual(sinRepetirLaMismaHoja([viejaP1, version]).map((h) => h.id), ["ver"]);
+});
+
+test("sede nueva: las plantillas con imágenes se copian con las imágenes de la sede nueva; las demás, tal cual", async () => {
+  const id = "0123456789abcdef0123456789abcdef";
+  const filas = [
+    { name: "Sin foto", body: "<p>texto</p>", isActive: true, createdById: null },
+    { name: "Con foto", body: `<p>Rx</p><img data-archivo="documentos/c-origen/${id}.webp" alt="Rx">`, isActive: true, createdById: "u-origen" },
+  ];
+  const llamadas: string[] = [];
+  // El copiador de verdad es copiarImagenesEntreClinicas (P4, probado en test:documentos-imagenes).
+  const copiar = async (body: string) => {
+    llamadas.push(body);
+    return body.split("documentos/c-origen/").join("documentos/c-nueva/");
+  };
+  const conImagenes = await conImagenesDeLaSedeNueva(filas, copiar);
+  assert.equal(llamadas.length, 1, "solo la que trae imágenes va al bucket");
+  const copia = plantillasParaSedeNueva(conImagenes, "NOTA_EVOLUCION", "c-nueva", "u-dueño-nuevo");
+  assert.deepEqual(copia.map((c) => c.body), ["<p>texto</p>", `<p>Rx</p><img data-archivo="documentos/c-nueva/${id}.webp" alt="Rx">`]);
+  assert.equal(filas[1].body.includes("c-origen"), true, "la fila de origen no se toca");
+
+  // Y el alta de sede lo usa con la clínica de ORIGEN leída con su filtro y la de destino.
+  const fuente = readFileSync(join(process.cwd(), "src/lib/branches/copia-sede.server.ts"), "utf8");
+  assert.match(fuente, /conImagenesDeLaSedeNueva\(filas, \(body\) =>\s*copiarImagenesEntreClinicas\(body, origenId, destinoId\)/);
+  assert.match(fuente, /plantillasParaSedeNueva\(conImagenes, kind, destinoId/);
 });
