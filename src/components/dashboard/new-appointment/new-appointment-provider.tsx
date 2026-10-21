@@ -59,6 +59,43 @@ export function NewAppointmentProvider({
   );
 }
 
+/**
+ * ws1-t1 (plan fase 2 · P8) — todo «Nueva cita» que se abra DENTRO de esto lleva además `extra`
+ * («Agendar lo pendiente» en la agenda: el clic en un hueco abre la cita con el paciente, el
+ * motivo, la duración y las filas del plan). Lo que pasa quien abre (el hueco, el doctor de la
+ * columna) manda sobre `extra`; los `onCreated` se llaman los dos. Con `extra = null`, nada cambia.
+ */
+export function ConParamsDeNuevaCita({
+  extra,
+  children,
+}: {
+  extra: OpenNewAppointmentParams | null;
+  children: ReactNode;
+}) {
+  const padre = useContext(NewAppointmentContext);
+  const ctx = useMemo<NewAppointmentContextValue | null>(() => {
+    if (!padre || !extra) return padre;
+    return {
+      ...padre,
+      open: (p?: OpenNewAppointmentParams) => {
+        const propios = p ?? {};
+        padre.open({
+          ...extra,
+          ...propios,
+          // El hueco elegido trae su doctor: ese manda; si no trae, el del plan.
+          initialDoctorId: propios.initialSlot?.doctorId ?? propios.initialDoctorId ?? extra.initialDoctorId,
+          onCreated: (appt) => {
+            propios.onCreated?.(appt);
+            extra.onCreated?.(appt);
+          },
+        });
+      },
+    };
+  }, [padre, extra]);
+  if (!ctx) return <>{children}</>;
+  return <NewAppointmentContext.Provider value={ctx}>{children}</NewAppointmentContext.Provider>;
+}
+
 export function useNewAppointmentDialog(): NewAppointmentContextValue {
   const ctx = useContext(NewAppointmentContext);
   if (!ctx) {

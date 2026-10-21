@@ -57,6 +57,8 @@ import { VistaDia } from "./vista-dia";
 import { VistaSemana } from "./vista-semana";
 import { VistaMes } from "./vista-mes";
 import { ROPA_VALIDAR } from "./ropa";
+import { ConParamsDeNuevaCita } from "@/components/dashboard/new-appointment/new-appointment-provider";
+import { useAgendarDelPlan } from "./agendar-del-plan";
 import s from "./agenda-nueva.module.css";
 
 export interface AgendaNuevaProps {
@@ -86,6 +88,8 @@ function Armazon({ clinicTaxMode, userRole, highlightId }: AgendaNuevaProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  // ws1-t1 (plan fase 2 · P8): `?agendarPlan=` — «Agendar lo pendiente» desde el plan.
+  const delPlan = useAgendarDelPlan();
 
   // Tras aprobar o rechazar una solicitud de cambio, la cita cambió en el
   // servidor: lo mismo que hace la agenda de siempre.
@@ -112,7 +116,11 @@ function Armazon({ clinicTaxMode, userRole, highlightId }: AgendaNuevaProps) {
 
   return (
     <div className={`${CLASES_MENU} ${s.raiz} ${instrumentSans.variable}`}>
-      <BarraHerramientas />
+      {/* ws1-t1 (P8): con «Agendar lo pendiente», toda Nueva cita de la barra, la cuadrícula y el
+          buscador de huecos lleva el plan. El panel de una cita existente no (reagendar otra cita). */}
+      <ConParamsDeNuevaCita extra={delPlan.extra}>
+        <BarraHerramientas />
+      </ConParamsDeNuevaCita>
 
       <div className={s.cuerpo}>
         <div className={s.zonaAgenda}>
@@ -137,16 +145,23 @@ function Armazon({ clinicTaxMode, userRole, highlightId }: AgendaNuevaProps) {
               arrastrando las citas; Mes no (igual que la agenda de siempre). */}
           {/* WS1-T5 — la leyenda de colores (solo con la bandera `agenda-flexible`). */}
           {ag.vista !== "mes" && <LeyendaColores />}
-          <ArrastreCitas>
-            {ag.vista === "dia" && <VistaDia />}
-            {ag.vista === "semana" && <VistaSemana />}
-          </ArrastreCitas>
-          {ag.vista === "mes" && <VistaMes />}
+          <ConParamsDeNuevaCita extra={delPlan.extra}>
+            <ArrastreCitas>
+              {ag.vista === "dia" && <VistaDia />}
+              {ag.vista === "semana" && <VistaSemana />}
+            </ArrastreCitas>
+            {ag.vista === "mes" && <VistaMes />}
+          </ConParamsDeNuevaCita>
         </div>
 
         {ag.panel === "cita" && <PanelCita clinicTaxMode={clinicTaxMode} userRole={userRole} />}
-        {ag.panel === "huecos" && <PanelHuecos />}
+        {ag.panel === "huecos" && (
+          <ConParamsDeNuevaCita extra={delPlan.extra}>
+            <PanelHuecos />
+          </ConParamsDeNuevaCita>
+        )}
       </div>
+      {delPlan.aviso}
     </div>
   );
 }

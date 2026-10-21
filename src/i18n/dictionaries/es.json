@@ -10674,6 +10674,39 @@
     "ilegibleTexto": "La base de datos no respondió al abrir este presupuesto, así que esta pantalla no sabe qué forma de pago tiene y no la va a tocar: puedes editar los conceptos y guardar con tranquilidad. Para cambiar la forma de pago, recarga la página y vuelve a entrar."
   },
   "planTratamiento": {
+    "citas": {
+      "boton": "Agendar lo pendiente",
+      "botonConN": "Agendar lo pendiente ({n})",
+      "todoAgendado": "Todo lo pendiente ya tiene cita",
+      "titulo": "Agendar lo pendiente",
+      "intro": "Elige qué procedimientos van en esta cita. La duración sale del tarifario y la puedes cambiar al elegir la hora.",
+      "minutos": "{n} min",
+      "sinDuracion": "{n} min (sin duración en el tarifario)",
+      "yaAgendada": "Agendado · {fecha}",
+      "ninguno": "Elige al menos un procedimiento.",
+      "totalUno": "1 procedimiento · {min} min",
+      "total": "{n} procedimientos · {min} min",
+      "cancelar": "Cancelar",
+      "elegirHora": "Elegir hora en la agenda",
+      "prefijoMotivo": "Plan: ",
+      "delPlan": "Del plan de tratamiento: {resumen}",
+      "aviso": {
+        "titulo": "Agendando del plan de {paciente}",
+        "ayuda": "toca un hueco de la agenda o elige la hora.",
+        "elegirHora": "Elegir hora",
+        "salir": "Salir",
+        "yaNoHay": "Esos procedimientos ya tienen cita o ya no están pendientes."
+      },
+      "error": {
+        "plan_citas_no_disponible": "Las citas del plan todavía no están activas en esta clínica. La cita no se guardó.",
+        "plan_filas_invalidas": "Los procedimientos del plan no llegaron bien. La cita no se guardó.",
+        "plan_fila_ajena": "Uno de los procedimientos no es de este paciente. La cita no se guardó.",
+        "plan_no_activo": "Ese plan está pausado, terminado o abandonado: no se agenda de él. La cita no se guardó.",
+      "plan_de_otro_doctor": "Ese plan es de otro doctor: solo su doctor puede agendarlo. La cita no se guardó.",
+        "plan_fila_no_pendiente": "Uno de los procedimientos ya se hizo o se canceló. La cita no se guardó.",
+        "plan_fila_ya_agendada": "Uno de los procedimientos ya tiene una cita por delante. La cita no se guardó."
+      }
+    },
     "lista": {
       "titulo": "Planes de tratamiento",
       "nuevo": "Nuevo plan de tratamiento",
