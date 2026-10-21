@@ -9,7 +9,7 @@ import { applyToothDelta } from "../../../components/dashboard/odontogram-v2/mer
 import { entriesToRecords } from "../../../components/dashboard/odontogram-v2/adapter";
 import {
   CONDICION_TRAS_EXTRACCION, EFECTO_HECHO, aplicarAEntradas, aplicarHecho, cambioDeshacer, comoCambiosDeSync,
-  type EntradaOdontograma,
+  planearDeshacer, type EntradaConId, type EntradaOdontograma,
 } from "../aplicar-hecho";
 import { CONDICIONES_CLINICAS, PROCEDIMIENTOS, type ClaveProcedimiento } from "../../treatments/sugerir-procedimiento";
 import { CONDITIONS } from "../../../components/dashboard/odontogram-v2/data";
@@ -187,4 +187,65 @@ test("el cambio en el formato de «Guardar consulta» (sync con cambios) da lo m
   // Y el deshacer, también como delta.
   const atras = comoCambiosDeSync(aplicarAEntradas(ent, c), cambioDeshacer(c));
   assert.deepEqual(atras[16].now, cambios[16].base);
+});
+
+/* ─────── Fase 2: el deshacer contra el odontograma de HOY (planearDeshacer) ─────── */
+
+let siguiente = 0;
+const conId = (l: EntradaOdontograma[]): EntradaConId[] => l.map((x) => ({ ...x, id: `e${++siguiente}` }));
+/** Lo que deja «hecho» en la base: las altas con su id nuevo y las bajas con su nota. */
+function escribir(ent: EntradaConId[], c: ReturnType<typeof aplicarHecho>) {
+  const k = (x: EntradaOdontograma) => `${x.toothNumber}:${x.surface ?? "_"}:${x.conditionId}`;
+  const fuera = new Set(c.bajas.map(k));
+  const altas = conId(c.altas);
+  return { despues: [...ent.filter((x) => !fuera.has(k(x))), ...altas], escrito: { altas, bajas: c.bajas } };
+}
+const aplicarPlan = (ent: EntradaConId[], p: ReturnType<typeof planearDeshacer>) => {
+  const fuera = new Set(p.borrar.map((x) => x.id));
+  return [...ent.filter((x) => !fuera.has(x.id)), ...conId(p.crear)];
+};
+
+test("deshacer sin cambios posteriores: el odontograma vuelve EXACTO, con la nota del hallazgo devuelto", () => {
+  const ent = conId([e(16, "M", "caries", "profunda"), e(16, "O", "caries"), e(16, null, "__note__", "sensible"), e(17, "O", "caries")]);
+  const { despues, escrito } = escribir(ent, aplicarHecho({ clave: "resina", dientes: [16], caras: ["M", "O"] }, ent));
+  const p = planearDeshacer(escrito, despues);
+  assert.deepEqual(p.conflictos, []);
+  assert.deepEqual(corto(p.borrar), ["16M:restoration", "16O:restoration"]);
+  assert.equal(p.crear.find((x) => x.surface === "M")?.notes, "profunda");
+  assert.deepEqual(ordenado(aplicarPlan(despues, p)), ordenado(ent));
+});
+
+test("deshacer no pisa lo de después: lo que «hecho» puso y alguien quitó no se toca, y ahí no vuelve la caries", () => {
+  const ent = conId([e(16, "M", "caries"), e(16, "O", "caries")]);
+  const { despues, escrito } = escribir(ent, aplicarHecho({ clave: "resina", dientes: [16], caras: ["M", "O"] }, ent));
+  // Después, el doctor cambió la oclusal: quitó la restauración y puso una incrustación.
+  const luego = [...despues.filter((x) => !(x.surface === "O" && x.conditionId === "restoration")), ...conId([e(16, "O", "inlay")])];
+  const p = planearDeshacer(escrito, luego);
+  assert.deepEqual(corto(p.borrar), ["16M:restoration"]);
+  assert.deepEqual(corto(p.crear), ["16M:caries"]);
+  assert.deepEqual(p.conflictos.map((c) => `${c.toothNumber}${c.surface}:${c.conditionId}:${c.motivo}`).sort(),
+    ["16O:caries:cambio_posterior", "16O:restoration:alta_ya_no_esta"]);
+  assert.deepEqual(ordenado(aplicarPlan(luego, p)), ["16M:caries", "16O:inlay"]);
+});
+
+test("deshacer una extracción cuando el diente ya tiene implante: no vuelve nada a ese diente", () => {
+  const ent = conId([e(36, "O", "caries"), e(36, null, "rct"), e(36, null, "crown")]);
+  const ext = escribir(ent, aplicarHecho({ clave: "extraccion", dientes: [36] }, ent));
+  const imp = escribir(ext.despues, aplicarHecho({ clave: "implante", dientes: [36] }, ext.despues));
+  const p = planearDeshacer(ext.escrito, imp.despues);
+  assert.deepEqual(p.borrar, []);
+  assert.deepEqual(p.crear, []);
+  assert.equal(p.conflictos.filter((c) => c.motivo === "cambio_posterior").length, 3);
+  assert.deepEqual(ordenado(aplicarPlan(imp.despues, p)), ["36·:implant"]);
+});
+
+test("deshacer: lo que ya volvió a estar no se duplica, y la alta que alguien repintó (otro id) no se borra", () => {
+  const ent = conId([e(16, "O", "caries")]);
+  const { despues, escrito } = escribir(ent, aplicarHecho({ clave: "resina", dientes: [16], caras: ["O"] }, ent));
+  // Alguien borró la restauración y la volvió a pintar (otro id), y volvió a marcar la caries.
+  const luego = [...despues.filter((x) => x.conditionId !== "restoration"), ...conId([e(16, "O", "restoration"), e(16, "O", "caries")])];
+  const p = planearDeshacer(escrito, luego);
+  assert.deepEqual(p.borrar, []);
+  assert.deepEqual(p.crear, []);
+  assert.deepEqual(p.conflictos.map((c) => c.motivo), ["alta_ya_no_esta"]);
 });

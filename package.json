@@ -567,6 +567,7 @@
     "test:plan-v2": "tsx --test src/lib/treatments/__tests__/leer-plan.test.ts src/lib/treatments/__tests__/cobro.test.ts src/app/api/treatments/__tests__/plan-v2-api.test.ts",
     "test:plan-sugerencias": "tsx --test src/lib/treatments/__tests__/sugerir-procedimiento.test.ts",
     "test:plan-hecho-odontograma": "tsx --test src/lib/odontogram/__tests__/aplicar-hecho.test.ts",
+    "test:plan-hecho-base": "tsx --test src/app/api/treatments/__tests__/plan-hecho-api.test.ts",
     "test:plan-ventana": "tsx --test src/components/dashboard/plan-tratamiento-rediseno/__tests__/ventana-rapida.test.ts",
     "test:plan-ventana-toques": "tsx --test src/components/dashboard/plan-tratamiento-rediseno/__tests__/ventana-toques.test.ts",
     "test:plan-consulta": "tsx --test src/components/dashboard/plan-tratamiento-rediseno/__tests__/consulta-y-limpieza.test.ts",

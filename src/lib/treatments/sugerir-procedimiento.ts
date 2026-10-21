@@ -157,7 +157,7 @@ export interface CondicionClinica {
   sinTratamiento?: MotivoSinTratamiento;
   /**
    * Lo que «Completar consulta» propone COBRAR cuando la marca aparece en el odontograma
-   * (`changesToTreatments` de snapshot.ts). Es lo de siempre; no se cambia aquí.
+   * (`changesToTreatments` de snapshot.ts). «Ausente» no lleva: ver `CONDICIONES_CLINICAS`.
    */
   cobroAlMarcar?: string;
 }
@@ -169,13 +169,12 @@ const sinTratar = (sinTratamiento: MotivoSinTratamiento, cobroAlMarcar?: string)
 
 /**
  * Las 47 condiciones de `odontogram-v2/data.ts`. Las fases son las de siempre del plan
- * (`HALLAZGO_FASE`) y los cobros los de siempre del snapshot (`CONDITION_TREATMENT_CODE`).
+ * (`HALLAZGO_FASE`) y los cobros los del snapshot (`CONDITION_TREATMENT_CODE`).
  *
- * «Ausente» (`missing`) es las dos cosas a la vez, y queda DICHO aquí: para el plan es un
- * hueco por reponer (fase restauradora, se sugiere implante para revisar), y para el cobro
- * automático de «Completar consulta» sigue siendo «Extracción dental» cuando la marca
- * aparece en esa consulta. Cambiar ese cobro cambia lo que la clínica factura: no se toca
- * sin Rafael (ver reporte ws1-t5, DECISIONES).
+ * «Ausente» (`missing`) es un hueco por reponer para el plan (fase restauradora, se sugiere
+ * implante para revisar) y, desde el 21-oct (decisión 6 de Rafael), YA NO se cobra al aparecer
+ * en una consulta: un diente que ya faltaba no es una extracción de hoy. La extracción se cobra
+ * con «Extracción realizada» (`ext_done`) o con la fila de extracción del plan.
  */
 export const CONDICIONES_CLINICAS: Record<string, CondicionClinica> = {
   // ---- Diagnóstico ----
@@ -185,7 +184,7 @@ export const CONDICIONES_CLINICAS: Record<string, CondicionClinica> = {
   pulpitis:       porTratar("urgencia", "endodoncia", { encadena: ["corona"] }),
   necrosis:       porTratar("higienica", "endodoncia", { encadena: ["corona"] }),
   fracture:       porTratar("urgencia", "resina", { revisar: true }),
-  missing:        porTratar("restauradora", "implante", { revisar: true, cobroAlMarcar: "ODO_EXTRACCION" }),
+  missing:        porTratar("restauradora", "implante", { revisar: true }),
   periapical1:    porTratar("higienica", "endodoncia", { encadena: ["corona"] }),
   periapical2:    porTratar("higienica", "endodoncia", { encadena: ["corona"] }),
   periapical3:    porTratar("higienica", "endodoncia", { encadena: ["corona"] }),

@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
 import { cobrosAlMarcar } from "@/lib/treatments/sugerir-procedimiento";
+import { marcasQueNoSeCobran } from "@/lib/treatments/aplicar-hecho-db";
 
 /* ─────── Tipos ───────────────────────────────────────────── */
 
@@ -122,9 +123,10 @@ export const DENTAL_CATALOG_SEED: CatalogSeedItem[] = [
 
 /** Mapping conditionId → código del catálogo facturable. Los diagnósticos
  *  (caries, …) y los ~37 hallazgos nuevos no facturan (devuelven null). Sale
- *  de LA lista compartida con el plan (`CONDICIONES_CLINICAS`, ws1-t5): ahí
- *  queda dicho que «Ausente» es hueco por reponer para el plan y, al aparecer
- *  en una consulta, «Extracción dental» para este cobro (lo de siempre). */
+ *  de LA lista compartida con el plan (`CONDICIONES_CLINICAS`, ws1-t5). Desde
+ *  el 21-oct (decisión 6 de Rafael) «Ausente» NO se cobra: un diente que ya
+ *  faltaba no es una extracción hecha hoy. Solo «Extracción realizada»
+ *  (`ext_done`) propone «Extracción dental». */
 const CONDITION_TREATMENT_CODE: Record<string, string> = cobrosAlMarcar();
 
 /** conditionId → código del catálogo. null = no facturable. */
@@ -252,12 +254,44 @@ function normalizeSnapshotEntry(e: Record<string, unknown>): SnapshotEntry | nul
   return { toothNumber, surface, conditionId, notes: (e.notes ?? null) as string | null };
 }
 
-/** Busca el snapshot inmediatamente anterior a una fecha dada. */
+/**
+ * La base contra la que «Completar consulta» compara para proponer cobros
+ * («Tratamientos detectados»): la foto de la consulta anterior MÁS lo que el
+ * plan de tratamiento ya resolvió desde entonces (ws1-t5 · P7): lo que «hecho»
+ * puso o cubre (lo cobra la nota del plan) y lo que un «deshacer» devolvió (ya
+ * estaba antes). Así nada de eso aparece como «added» ni se propone cobrar.
+ * Sin foto anterior y sin nada del plan devuelve null (primera consulta: lo de
+ * siempre); sin foto pero CON algo del plan, devuelve solo eso (la ruta compara
+ * contra ello en vez de tomar todo como nuevo).
+ *
+ * Si no puede leer lo del plan, LANZA: la ruta lo atrapa y esa vez no propone
+ * nada, en vez de proponer cobros que pueden estar repetidos.
+ */
 export async function findPreviousSnapshot(
   patientId: string,
   beforeDate: Date,
   excludeAppointmentId?: string,
 ): Promise<SnapshotEntry[] | null> {
+  const anterior = await fotoAnterior(patientId, beforeDate, excludeAppointmentId);
+  const delPlan = await marcasQueNoSeCobran(patientId, anterior?.snapshotAt ?? null);
+  if (delPlan.length === 0) return anterior?.entries ?? null;
+  const base = anterior?.entries ?? [];
+  const ya = new Set(base.map(keyOf));
+  const extra: SnapshotEntry[] = [];
+  for (const e of delPlan) {
+    if (ya.has(keyOf(e))) continue;
+    ya.add(keyOf(e));
+    extra.push({ ...e, notes: null });
+  }
+  return [...base, ...extra];
+}
+
+/** La foto de la consulta inmediatamente anterior a una fecha dada, con su fecha. */
+async function fotoAnterior(
+  patientId: string,
+  beforeDate: Date,
+  excludeAppointmentId?: string,
+): Promise<{ entries: SnapshotEntry[]; snapshotAt: Date } | null> {
   const prev = await prisma.odontogramSnapshot.findFirst({
     where: {
       patientId,
@@ -265,11 +299,12 @@ export async function findPreviousSnapshot(
       ...(excludeAppointmentId ? { appointmentId: { not: excludeAppointmentId } } : {}),
     },
     orderBy: { snapshotAt: "desc" },
-    select: { entries: true },
+    select: { entries: true, snapshotAt: true },
   });
   if (!prev) return null;
   const raw = (prev.entries as unknown as Record<string, unknown>[]) ?? [];
-  return raw
-    .map(normalizeSnapshotEntry)
-    .filter((e): e is SnapshotEntry => e !== null);
+  return {
+    entries: raw.map(normalizeSnapshotEntry).filter((e): e is SnapshotEntry => e !== null),
+    snapshotAt: prev.snapshotAt,
+  };
 }

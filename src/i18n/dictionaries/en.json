@@ -10840,6 +10840,38 @@
         "fila_hecha": "That procedure is already done: it is not removed from the plan. If it was a mistake, mark it as pending.",
         "fila_doble": "Someone just billed this plan. Reload and try again."
       }
+    },
+    "hecho": {
+      "marcar": "Mark done",
+      "deshacer": "Undo",
+      "resultado": {
+        "aplicado": "Done. The odontogram now shows it.",
+        "sin_cambio": "Done. This procedure doesn't change the odontogram.",
+        "sin_permiso": "Done. The odontogram wasn't changed: your user can't edit it.",
+        "sin_paciente": "Done. The plan has no patient, so there's no odontogram to update.",
+        "pendiente_de_base": "Done. The odontogram wasn't updated automatically: mark it by hand while this feature is being turned on.",
+        "ya_estaba_hecho": "It was already marked as done."
+      },
+      "deshecho": {
+        "pendiente": "Done: the procedure is pending again and the odontogram is back as it was.",
+        "en_curso": "Done: the procedure is in progress again and the odontogram is back as it was."
+      },
+      "conflicto": {
+        "alta_ya_no_esta": "Tooth {diente}: \"{hallazgo}\" had already been removed later; it wasn't touched.",
+        "cambio_posterior": "Tooth {diente}: \"{hallazgo}\" wasn't restored because that tooth changed later.",
+        "nota_quitada": "Tooth {diente}: \"{hallazgo}\" was removed along with its note (\"{nota}\"); the note is kept in the audit log."
+      },
+      "error": {
+        "generico": "The procedure couldn't be marked.",
+        "sin_filas": "Choose at least one procedure from the plan.",
+        "demasiadas_filas": "Too many procedures at once: mark up to 30.",
+        "fila_desconocida": "That procedure is no longer in this plan. Reload the plan and try again.",
+        "fila_cancelada": "That procedure is cancelled: it can't be marked as done.",
+        "no_esta_hecha": "That procedure isn't marked as done: there's nothing to undo.",
+        "cita_invalida": "That appointment doesn't belong to this patient.",
+        "sin_filas_en_plan": "This is an older plan (text): its procedures can't be marked one by one.",
+        "sin_permiso_odontograma": "This \"done\" changed the odontogram and your user can't edit it: ask a doctor to undo it."
+      }
     }
   },
   "sabina": {

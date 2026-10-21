@@ -51,6 +51,9 @@ export interface CambioOdontograma {
   bajas: EntradaOdontograma[];
   /** Lo que vuelve el odontograma a como estaba (las bajas regresan con su nota). */
   deshacer: { altas: EntradaOdontograma[]; bajas: EntradaOdontograma[] };
+  /** Todo lo que el procedimiento deja en el odontograma, ESTUVIERA o no (lo que «hecho» cubre:
+   *  si el doctor ya lo había pintado, tampoco se vuelve a proponer cobrar). Sin notas. */
+  objetivo: EntradaOdontograma[];
   /** null = hay cambios. */
   sinCambio: SinCambio | null;
   /** Dientes que no son FDI: se ignoran. */
@@ -130,7 +133,8 @@ const clave = (e: { toothNumber: number; surface: string | null; conditionId: st
 export function aplicarHecho(hecho: ProcedimientoHecho, entradas: EntradaOdontograma[]): CambioOdontograma {
   const claveProc = hecho.clave ?? claveDeProcedimiento({ codigo: hecho.codigo, nombre: hecho.nombre });
   const vacio = (sinCambio: SinCambio, dientesInvalidos: number[] = []): CambioOdontograma =>
-    ({ clave: claveProc, altas: [], bajas: [], deshacer: { altas: [], bajas: [] }, sinCambio, dientesInvalidos });
+    ({ clave: claveProc, altas: [], bajas: [], deshacer: { altas: [], bajas: [] }, objetivo: [...objetivo], sinCambio, dientesInvalidos });
+  const objetivo: EntradaOdontograma[] = [];
 
   const dientesInvalidos = [...new Set(hecho.dientes.filter((d) => !esFdi(d)))];
   if (!claveProc) return vacio("procedimiento_desconocido", dientesInvalidos);
@@ -153,6 +157,7 @@ export function aplicarHecho(hecho: ProcedimientoHecho, entradas: EntradaOdontog
   const quitar = (e: EntradaOdontograma) => { if (!bajas.some((b) => clave(b) === clave(e))) bajas.push({ ...e, notes: e.notes ?? null }); };
   const poner = (toothNumber: number, surface: CaraBase | null, conditionId: string) => {
     const e = { toothNumber, surface, conditionId };
+    if (!objetivo.some((o) => clave(o) === clave(e))) objetivo.push({ ...e, notes: null });
     if (!hay.has(clave(e)) && !altas.some((a) => clave(a) === clave(e))) altas.push({ ...e, notes: null });
   };
   let faltanCaras = false;
@@ -188,6 +193,7 @@ export function aplicarHecho(hecho: ProcedimientoHecho, entradas: EntradaOdontog
       if (efecto.todoElDiente && hay.has(clave({ toothNumber: diente, surface: null, conditionId: id }))) {
         const i = bajas.findIndex((b) => clave(b) === clave({ toothNumber: diente, surface: null, conditionId: id }));
         if (i >= 0) bajas.splice(i, 1);
+        objetivo.push({ toothNumber: diente, surface: null, conditionId: id, notes: null });
       } else {
         poner(diente, null, id);
       }
@@ -199,11 +205,13 @@ export function aplicarHecho(hecho: ProcedimientoHecho, entradas: EntradaOdontog
     a.toothNumber - b.toothNumber || (a.surface ?? "").localeCompare(b.surface ?? "") || a.conditionId.localeCompare(b.conditionId);
   altas.sort(orden);
   bajas.sort(orden);
+  objetivo.sort(orden);
   return {
     clave: claveProc,
     altas,
     bajas,
     deshacer: { altas: bajas.map((e) => ({ ...e })), bajas: altas.map((e) => ({ ...e })) },
+    objetivo,
     sinCambio: null,
     dientesInvalidos,
   };
@@ -216,6 +224,7 @@ export function cambioDeshacer(c: CambioOdontograma): CambioOdontograma {
     altas: c.deshacer.altas,
     bajas: c.deshacer.bajas,
     deshacer: { altas: c.altas, bajas: c.bajas },
+    objetivo: c.deshacer.altas,
     sinCambio: c.sinCambio,
     dientesInvalidos: c.dientesInvalidos,
   };
@@ -263,4 +272,81 @@ export function comoCambiosDeSync(
   const out: Record<number, { base: RegistroDiente; now: RegistroDiente }> = {};
   for (const d of dientes) out[d] = { base: registro(entradas, d), now: registro(despues, d) };
   return out;
+}
+
+/* ─────── Deshacer en la base (fase 2): exacto y sin pisar lo que vino después ─────── */
+
+/** Una entrada del odontograma tal como está en la base, con su id. */
+export interface EntradaConId extends EntradaOdontograma { id: string }
+
+/**
+ * Lo que «hecho» escribió en la base: las altas con el id que les tocó (así el deshacer quita
+ * esas y no otra igual que alguien pintó después) y las bajas con su nota (vuelven con ella).
+ */
+export interface EscritoPorHecho {
+  altas: EntradaConId[];
+  bajas: EntradaOdontograma[];
+}
+
+export interface ConflictoDeshacer {
+  toothNumber: number;
+  surface: CaraBase | null;
+  conditionId: string;
+  /** `alta_ya_no_esta`: alguien quitó después lo que puso «hecho» (no se toca nada ahí).
+   *  `cambio_posterior`: lo que «hecho» quitó no se devuelve, porque lo que puso en su lugar ya no está.
+   *  `nota_quitada`: lo que puso «hecho» se quitó igual, pero alguien le había escrito una nota (va en `nota`,
+   *  para que quede en la bitácora). Se quita igual: si se quedara, con la fila otra vez pendiente, la
+   *  consulta lo propondría cobrar además de la nota del plan. */
+  motivo: "alta_ya_no_esta" | "cambio_posterior" | "nota_quitada";
+  nota?: string;
+}
+
+export interface PlanDeDeshacer {
+  /** Las altas de «hecho» que siguen ahí (por id): se quitan. */
+  borrar: EntradaConId[];
+  /** Lo que «hecho» quitó y se devuelve, con su nota. */
+  crear: EntradaOdontograma[];
+  conflictos: ConflictoDeshacer[];
+}
+
+/**
+ * El deshacer de un «hecho» contra el odontograma de HOY. Regla: no pisar lo que vino después.
+ *  - Una alta se quita solo si sigue ahí con SU id. Si alguien la quitó (o la quitó y pintó otra
+ *    igual), no se toca: se avisa.
+ *  - Una baja se devuelve si no está ya, y solo si lo que «hecho» puso en ese sitio (la misma cara;
+ *    si no puso nada en esa cara, el mismo diente) sigue ahí. Si se cambió después (la resina se
+ *    volvió corona, el diente extraído ya tiene implante), no se devuelve: se avisa.
+ *  - Lo que «hecho» quitó sin poner nada en el diente (limpieza) se devuelve si no está.
+ */
+export function planearDeshacer(escrito: EscritoPorHecho, actuales: EntradaConId[]): PlanDeDeshacer {
+  const porId = new Map(actuales.map((e) => [e.id, e]));
+  const hay = new Set(actuales.filter((e) => e.conditionId !== NOTA).map(clave));
+  const borrar: EntradaConId[] = [];
+  const perdidas: EntradaConId[] = [];
+  for (const a of escrito.altas) {
+    const viva = porId.get(a.id);
+    if (viva && clave(viva) === clave(a)) borrar.push(viva);
+    else perdidas.push(a);
+  }
+  const conflictos: ConflictoDeshacer[] = perdidas.map((a) => ({
+    toothNumber: a.toothNumber, surface: a.surface, conditionId: a.conditionId, motivo: "alta_ya_no_esta",
+  }));
+  for (const v of borrar) {
+    const nota = (v.notes ?? "").trim();
+    if (nota) conflictos.push({ toothNumber: v.toothNumber, surface: v.surface, conditionId: v.conditionId, motivo: "nota_quitada", nota });
+  }
+  const crear: EntradaOdontograma[] = [];
+  for (const b of escrito.bajas) {
+    if (b.conditionId === NOTA || hay.has(clave(b))) continue;
+    const enLaCara = escrito.altas.filter((a) => a.toothNumber === b.toothNumber && a.surface === b.surface);
+    const anclas = enLaCara.length > 0 ? enLaCara : escrito.altas.filter((a) => a.toothNumber === b.toothNumber);
+    if (anclas.some((a) => perdidas.includes(a))) {
+      conflictos.push({ toothNumber: b.toothNumber, surface: b.surface, conditionId: b.conditionId, motivo: "cambio_posterior" });
+      continue;
+    }
+    if (!crear.some((c) => clave(c) === clave(b))) crear.push({ ...b, notes: b.notes ?? null });
+  }
+  const orden = (a: EntradaOdontograma, b: EntradaOdontograma) =>
+    a.toothNumber - b.toothNumber || (a.surface ?? "").localeCompare(b.surface ?? "") || a.conditionId.localeCompare(b.conditionId);
+  return { borrar: borrar.sort(orden), crear: crear.sort(orden), conflictos: conflictos.sort(orden) };
 }
