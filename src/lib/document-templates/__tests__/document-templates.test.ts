@@ -939,3 +939,11 @@ test("interpolateDocumentHtml con la clínica: tira las ajenas y lo cuenta en el
   assert.deepEqual(informe, { ajenas: 1, deMas: 0 });
 });
 
+test("(e) data-alineacion de párrafos y títulos acepta exactamente izquierda, centro, derecha y justificado", () => {
+  for (const a of ["izquierda", "centro", "derecha", "justificado"]) {
+    assert.equal(sanitizeTemplateHtml(`<p data-alineacion="${a}">x</p><h2 data-alineacion="${a}">t</h2>`), `<p data-alineacion="${a}">x</p><h2 data-alineacion="${a}">t</h2>`);
+  }
+  for (const a of ["justificada", "justify", "left", "centrado", ""]) {
+    assert.equal(sanitizeTemplateHtml(`<p data-alineacion="${a}">x</p>`), "<p>x</p>", a);
+  }
+});
