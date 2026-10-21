@@ -96,22 +96,25 @@ test("el plan sigue viendo los MISMOS hallazgos por tratar con las MISMAS fases 
   assert.deepEqual(HALLAZGO_FASE, antes);
 });
 
-test("«Completar consulta» sigue cobrando lo MISMO: ni una condición más ni una menos", () => {
+test("«Completar consulta» cobra lo de siempre MENOS «Ausente» (decisión 6, 21-oct): ni una condición más", () => {
   const antes = {
     restoration: "ODO_RESINA", crown: "ODO_CORONA", rct: "ODO_ENDODONCIA",
-    implant: "ODO_IMPLANTE", missing: "ODO_EXTRACCION", ext_done: "ODO_EXTRACCION",
+    implant: "ODO_IMPLANTE", ext_done: "ODO_EXTRACCION",
   };
   assert.deepEqual(cobrosAlMarcar(), antes);
   for (const c of CONDITIONS) assert.equal(conditionToTreatmentCode(c.id), antes[c.id as keyof typeof antes] ?? null, c.id);
   assert.equal(conditionToTreatmentCode("no_existe"), null);
 });
 
-test("«Ausente» queda dicho en UN sitio: hueco por reponer para el plan, extracción para el cobro de siempre", () => {
+test("«Ausente» queda dicho en UN sitio: hueco por reponer para el plan y SIN cobro; «Extracción realizada» sí cobra", () => {
   const m = CONDICIONES_CLINICAS.missing;
   assert.equal(m.fase, "restauradora");
   assert.equal(m.sugiere, "implante");
   assert.equal(m.revisar, true);
-  assert.equal(m.cobroAlMarcar, "ODO_EXTRACCION");
+  assert.equal(m.cobroAlMarcar, undefined);
+  assert.equal(conditionToTreatmentCode("missing"), null);
+  assert.equal(CONDICIONES_CLINICAS.ext_done.cobroAlMarcar, "ODO_EXTRACCION");
+  assert.equal(conditionToTreatmentCode("ext_done"), "ODO_EXTRACCION");
   // Las dos listas viejas ya no existen como literales.
   const snap = readFileSync(join(SRC, "lib/odontogram/snapshot.ts"), "utf8");
   const plan = readFileSync(join(SRC, "components/dashboard/plan-tratamiento-rediseno/plan-clinico.ts"), "utf8");

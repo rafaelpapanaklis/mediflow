@@ -10916,6 +10916,38 @@
         "fila_hecha": "Ese procedimiento ya está hecho: no se quita del plan. Si fue un error, márcalo como pendiente.",
         "fila_doble": "Otra persona acaba de cobrar este plan. Recarga e intenta de nuevo."
       }
+    },
+    "hecho": {
+      "marcar": "Marcar hecho",
+      "deshacer": "Deshacer",
+      "resultado": {
+        "aplicado": "Hecho. El odontograma ya lo muestra.",
+        "sin_cambio": "Hecho. Este procedimiento no cambia el odontograma.",
+        "sin_permiso": "Hecho. El odontograma no se tocó: tu usuario no puede editarlo.",
+        "sin_paciente": "Hecho. El plan no tiene paciente, así que no hay odontograma que actualizar.",
+        "pendiente_de_base": "Hecho. El odontograma no se actualizó solo: márcalo a mano mientras se activa esta función.",
+        "ya_estaba_hecho": "Ya estaba marcado como hecho."
+      },
+      "deshecho": {
+        "pendiente": "Listo: el procedimiento vuelve a pendiente y el odontograma a como estaba.",
+        "en_curso": "Listo: el procedimiento vuelve a en curso y el odontograma a como estaba."
+      },
+      "conflicto": {
+        "alta_ya_no_esta": "Diente {diente}: «{hallazgo}» ya se había quitado después; no se tocó.",
+        "cambio_posterior": "Diente {diente}: no se devolvió «{hallazgo}» porque ese diente cambió después.",
+        "nota_quitada": "Diente {diente}: «{hallazgo}» se quitó con la nota que tenía («{nota}»); la nota queda registrada en la bitácora."
+      },
+      "error": {
+        "generico": "No se pudo marcar el procedimiento.",
+        "sin_filas": "Elige al menos un procedimiento del plan.",
+        "demasiadas_filas": "Son demasiados procedimientos a la vez: marca hasta 30.",
+        "fila_desconocida": "Ese procedimiento ya no es de este plan. Recarga el plan e intenta de nuevo.",
+        "fila_cancelada": "Ese procedimiento está cancelado: no se puede marcar como hecho.",
+        "no_esta_hecha": "Ese procedimiento no está marcado como hecho: no hay nada que deshacer.",
+        "cita_invalida": "Esa cita no es de este paciente.",
+        "sin_filas_en_plan": "Este plan es de los de antes (texto): sus procedimientos no se pueden marcar uno por uno.",
+        "sin_permiso_odontograma": "Este «hecho» cambió el odontograma y tu usuario no puede editarlo: pide a un doctor que lo deshaga."
+      }
     }
   },
   "sabina": {

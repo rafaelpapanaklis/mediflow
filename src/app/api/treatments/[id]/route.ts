@@ -13,6 +13,7 @@ import { aPesos, conProcedimientosValidos, filaDto, leerFilas, planearCambios, t
 import { bloquearPlan, FilaError, procedimientosDeLaClinica, repoFilas, tablaDeFilasExiste } from "@/lib/treatments/items-db";
 import { cuerpoDeErrorDeFila } from "@/lib/treatments/errores";
 import { asegurarNotaDelPlan } from "@/lib/treatments/cobro.server";
+import { accionHecho } from "@/lib/treatments/aplicar-hecho.server";
 
 export async function PATCH(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -38,6 +39,11 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
   }
 
   const body = await req.json();
+
+  // ── ws1-t5 · P7: «hecho» → odontograma, y su deshacer (lib/treatments/aplicar-hecho.server.ts) ──
+  if (body.action === "marcar_hecho" || body.action === "deshacer_hecho") {
+    return accionHecho(req, ctx, { id: plan.id, clinicId: plan.clinicId, patientId: plan.patientId, name: plan.name }, body);
+  }
 
   // ── add_session with optional inventory deduction ─────────────────────────
   // WS1-T5: el descuento se movió DESPUÉS de crear la sesión y vive en la
