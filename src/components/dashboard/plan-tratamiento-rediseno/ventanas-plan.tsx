@@ -8,6 +8,7 @@ import { CLASES_MENU } from "@/components/dashboard/menu-dos-niveles/clases";
 import { esDescripcionDePlan } from "./plan-clinico";
 import { ConvertirEnPresupuesto, type PresupuestoDelPlan } from "../plan-a-presupuesto/convertir-en-presupuesto";
 import { DescargarPlanPdf } from "../plan-a-pdf/descargar-pdf";
+import { AgendarLoPendiente } from "@/components/dashboard/plan-a-agenda/agendar-lo-pendiente";
 import s from "./plan.module.css";
 import { nombreDeProfesional } from "@/lib/nombre-profesional";
 import { DictationMic, appendDictado } from "@/components/clinical/shared/dictation-mic";
@@ -142,6 +143,8 @@ export function VentanaVerPlan({ plan, puedeEditar, puedeDescargar = false, onCe
       <footer className={s.pie}>
         <button type="button" className={s.boton} onClick={onCerrar}>{t("common.close")}</button>
         {puedeDescargar && <DescargarPlanPdf planId={plan.id} />}
+        {/* Fase 2 · C: se esconde solo (sin SQL, sin permiso de agendar, plan no activo o sin pendientes). */}
+        <AgendarLoPendiente planId={plan.id} onAbrirAgenda={onCerrar} />
         {onAbrirPresupuesto && (
           <ConvertirEnPresupuesto planId={plan.id} planCosto={Number(plan.totalCost) || 0} onAbrirPresupuesto={onAbrirPresupuesto} />
         )}

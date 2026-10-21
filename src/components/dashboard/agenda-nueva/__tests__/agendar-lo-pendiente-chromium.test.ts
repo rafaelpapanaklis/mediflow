@@ -76,7 +76,7 @@ async function empaquetar(entrada: string): Promise<string> {
  * aviso de la agenda con los `--ag-*`. Uno u otro: en el arnés no hay hash de CSS Modules y las dos
  * hojas comparten nombres con la ventana Nueva cita (`.velo`, `.cabecera`…).
  */
-function css(modo: "plan" | "agenda"): string {
+function css(modo: "plan" | "agenda" | "ventana" | "tarjeta"): string {
   const bloque = (archivo: string, inicio: string) => {
     const t = readFileSync(join(RAIZ, archivo), "utf8");
     const i = t.indexOf(inicio);
@@ -124,7 +124,7 @@ after(async () => {
   await navegador?.close();
 });
 
-async function abrir(t: { skip(m: string): void }, modo: "plan" | "agenda", opciones: { ancho?: number; respuestaPost?: { status: number; body: unknown } } = {}) {
+async function abrir(t: { skip(m: string): void }, modo: "plan" | "agenda" | "ventana" | "tarjeta", opciones: { ancho?: number; respuestaPost?: { status: number; body: unknown } } = {}) {
   const chromium = await cargarChromium();
   if (!chromium) {
     t.skip("Playwright no está (NAVEGADOR_DIR): la pantalla NO se ejecutó");
@@ -283,4 +283,38 @@ test("agenda a 390 px: el aviso cabe (dos renglones) y nada se sale por los lado
   );
   assert.deepEqual(recortados, []);
   await a.page.screenshot({ path: join(CAPTURAS, "agenda-aviso-390.png") });
+});
+
+/* ── el botón montado donde vive (al unir la fase 2: ventana del plan y tarjeta de la ficha) ── */
+
+test("en el pie de la ventana del plan: sale, abre la hoja, y al ir a la agenda cierra la ventana", async (t) => {
+  const a = await abrir(t, "ventana");
+  if (!a) return;
+  const boton = a.page.locator("footer [data-agendar-lo-pendiente]");
+  await boton.waitFor({ timeout: 15_000 }).catch((e: Error) => { throw new Error(`no se pintó en el pie: ${a.errores.join(" | ") || e.message}`); });
+  assert.equal(await boton.innerText(), "Agendar lo pendiente (2)");
+  await boton.click();
+  const hoja = a.page.getByRole("dialog", { name: /Agendar/ });
+  await hoja.getByRole("button", { name: "Elegir hora en la agenda" }).click();
+  assert.deepEqual(await a.page.evaluate(() => (window as any).__nav), [["push", "/dashboard/agenda?agendarPlan=plan1&filas=f1%2Cf3"]]);
+  assert.equal(await a.page.evaluate(() => (window as any).__cerroVentana), true, "la ventana del plan se cierra al ir a la agenda");
+  assert.deepEqual(a.errores, []);
+});
+
+test("en la tarjeta del plan de la ficha: sale, y tocarlo NO abre el plan (la tarjeta entera es un botón)", async (t) => {
+  const a = await abrir(t, "tarjeta");
+  if (!a) return;
+  const boton = a.page.locator("[data-agendar-lo-pendiente]");
+  await boton.waitFor({ timeout: 15_000 }).catch((e: Error) => { throw new Error(`no se pintó en la tarjeta: ${a.errores.join(" | ") || e.message}`); });
+  await boton.click();
+  await a.page.getByRole("dialog").waitFor();
+  await boton.press("Enter").catch(() => {});
+  assert.equal(await a.page.evaluate(() => (window as any).__abrioPlan ?? 0), 0, "ni el clic ni Enter abren la ventana del plan");
+  await a.page.getByRole("dialog").getByRole("button", { name: "Elegir hora en la agenda" }).click();
+  assert.deepEqual(await a.page.evaluate(() => (window as any).__nav), [["push", "/dashboard/agenda?agendarPlan=plan1&filas=f1%2Cf3"]]);
+  assert.equal(await a.page.evaluate(() => (window as any).__abrioPlan ?? 0), 0);
+  // y tocar la tarjeta fuera del botón sí abre el plan, como siempre
+  await a.page.getByText("Plan 20 oct").click();
+  assert.equal(await a.page.evaluate(() => (window as any).__abrioPlan ?? 0), 1);
+  assert.deepEqual(a.errores, []);
 });

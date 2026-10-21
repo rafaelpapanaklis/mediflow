@@ -4,6 +4,8 @@
  * es parte de la app.
  *
  *  · `window.__MODO__ = "plan"`: la hoja del plan (`AgendarLoPendiente`), como en la ventana del plan.
+ *  · `window.__MODO__ = "ventana"` / `"tarjeta"`: el botón MONTADO donde vive de verdad, en el pie de
+ *    `VentanaVerPlan` y en la tarjeta del plan de la ficha (`PlanTratamiento`).
  *  · `window.__MODO__ = "agenda"`: la agenda «agendando del plan» (`useAgendarDelPlan` con la URL de
  *    la página) y un botón que hace lo mismo que el clic en un hueco de la cuadrícula.
  * Cada `fetch` lo contesta la prueba.
@@ -19,10 +21,22 @@ import {
 } from "@/components/dashboard/new-appointment/new-appointment-provider";
 import { NewPatientProvider } from "@/components/dashboard/new-patient/new-patient-provider";
 import { AgendarLoPendiente } from "@/components/dashboard/plan-a-agenda/agendar-lo-pendiente";
+import { VentanaVerPlan } from "@/components/dashboard/plan-tratamiento-rediseno/ventanas-plan";
+import { PlanTratamiento } from "@/components/dashboard/expediente-rediseno/plan-tratamiento";
 import { useAgendarDelPlan } from "@/components/dashboard/agenda-nueva/agendar-del-plan";
 import es from "@/i18n/dictionaries/es.json";
 
-const w = window as unknown as { __PAYLOAD__: any; __DIA__: string; __MODO__: string; __HUECO__: string; __abrioAgenda?: boolean };
+const w = window as unknown as {
+  __PAYLOAD__: any; __DIA__: string; __MODO__: string; __HUECO__: string; __abrioAgenda?: boolean;
+  __cerroVentana?: boolean; __abrioPlan?: number;
+};
+
+/** Un plan del camino nuevo, activo, como lo pasa la ficha. */
+const PLAN = {
+  id: "plan1", name: "Plan 20 oct", status: "ACTIVE", description: "Resina 16 · Endodoncia 26 · Limpieza",
+  totalSessions: 3, sessionIntervalDays: 7, totalCost: 4200, startDate: "2026-10-20T16:00:00Z", nextExpectedDate: null,
+  doctor: { firstName: "Luis", lastName: "Ruiz" }, sessions: [],
+};
 
 function Hueco() {
   const { open } = useNewAppointmentDialog();
@@ -53,6 +67,17 @@ createRoot(document.getElementById("raiz")!).render(
       <NewAppointmentProvider apariencia="nueva">
         {w.__MODO__ === "agenda" ? (
           <AgendaConPlan />
+        ) : w.__MODO__ === "ventana" ? (
+          <VentanaVerPlan plan={PLAN} puedeEditar onCerrar={() => { w.__cerroVentana = true; }} onEditar={() => {}} />
+        ) : w.__MODO__ === "tarjeta" ? (
+          <PlanTratamiento
+            tratamientos={[PLAN]}
+            puedeEditar={false}
+            onNuevo={() => {}}
+            onVer={() => { w.__abrioPlan = (w.__abrioPlan ?? 0) + 1; }}
+            onEditar={() => {}}
+            onEliminar={() => {}}
+          />
         ) : (
           <div id="ventana-plan">
             <AgendarLoPendiente planId="plan1" onAbrirAgenda={() => { w.__abrioAgenda = true; }} />

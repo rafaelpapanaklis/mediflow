@@ -706,3 +706,7 @@
 @media (prefers-reduced-motion: reduce) {
   .barraRelleno { transition: none; }
 }
+
+/* «Agendar lo pendiente» en la tarjeta del plan (fase 2 · C). Vacío cuando el botón se esconde. */
+.planAgendar { display: flex; flex-wrap: wrap; margin-top: 10px; }
+.planAgendar:empty { display: none; }

@@ -8,6 +8,7 @@ import { esDescripcionDePlan, MARCA_PLAN } from "@/components/dashboard/plan-tra
 import { lineaDelCasoTraducida, type ResumenOrtoParaFicha } from "@/lib/orthodontics/resumen-para-ficha";
 import { RaizExpediente } from "./raiz";
 import { CuentaDelPlan, type CuentasDelPaciente } from "./cuenta-del-plan";
+import { AgendarLoPendiente } from "@/components/dashboard/plan-a-agenda/agendar-lo-pendiente";
 import s from "./expediente.module.css";
 
 /**
@@ -243,6 +244,13 @@ export function PlanTratamiento({
               {/* Un plan cancelado conserva su nota: su saldo se sigue viendo (y abonando). */}
               {cuentas !== undefined && (
                 <CuentaDelPlan cuenta={cuentas?.get(plan.id)} cargando={cargandoCuentas && !cuentas} onCobrar={onCobrarPlan} />
+              )}
+              {/* Fase 2 · C: «Agendar lo pendiente» (se esconde solo). La tarjeta entera abre el plan:
+                  ni el clic ni el teclado de aquí (ni de la hoja que abre) llegan a ella. */}
+              {plan.status === "ACTIVE" && (
+                <div className={s.planAgendar} onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+                  <AgendarLoPendiente planId={plan.id} />
+                </div>
               )}
             </div>
           );
