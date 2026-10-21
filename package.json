@@ -568,6 +568,7 @@
     "test:presupuesto-nuevo": "tsx --test src/components/dashboard/presupuesto-nuevo/__tests__/presupuesto-nuevo.test.ts",
     "test:document-templates": "tsx --test src/lib/document-templates/__tests__/document-templates.test.ts",
     "test:plantillas": "tsx --test src/app/dashboard/plantillas/__tests__/plantillas-pulido.test.ts",
+    "test:plantillas-guardar-clics": "tsx --tsconfig tsconfig.test.json --test src/app/dashboard/plantillas/__tests__/plantilla-guardar-chromium.test.ts",
     "test:hoja-carta": "tsx --test src/lib/documentos/__tests__/hoja-carta.test.ts",
     "test:editor-documento": "tsx --test src/components/dashboard/editor-documento/__tests__/html.test.ts src/components/dashboard/editor-documento/__tests__/ida-y-vuelta.test.ts",
     "test:editor-documento-clics": "tsx --tsconfig tsconfig.test.json --test src/components/dashboard/editor-documento/__tests__/clics-chromium.test.ts",
