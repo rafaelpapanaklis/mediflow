@@ -20,6 +20,7 @@ import { StorageUsageCard } from "./storage-usage-card";
 import { useLocale, useT } from "@/i18n/i18n-provider";
 import { textosDeFila, type BillingInvoiceRow } from "@/lib/billing/historial-facturas";
 import { ROPA_DESGLOSE, SuscripcionRediseno, type RopaDesglose } from "./bloques-rediseno/suscripcion";
+import { sufijoIvaTarjeta } from "./bloques-rediseno/sufijo-iva";
 import { fechaPanel } from "@/lib/formato-fecha-panel";
 
 export interface ClinicData {
@@ -789,7 +790,7 @@ export function SubscriptionTab({ clinic, rediseno = false, metodosPago }: Props
                 </div>
                 <div style={{ fontSize: 22, fontWeight: 800, color: "var(--brand)" }}>
                   ${miles(planPrice(plan))}
-                  <span style={{ fontSize: 11, fontWeight: 500, color: "var(--text-3)", marginLeft: 4 }}>{perIntervalSuffix}{sufijoIva(plan.id)}</span>
+                  <span style={{ fontSize: 11, fontWeight: 500, color: "var(--text-3)", marginLeft: 4 }}>{perIntervalSuffix}{sufijoIvaTarjeta(sufijoIva(plan.id) !== "", t("shell.subscriptionTab.sinIvaCorto"))}</span>
                 </div>
                 {!isCurrent && currentPlan && planPrice(plan) !== planPrice(currentPlan) && (
                   <div style={{ fontSize: 11, fontWeight: 600, color: planPrice(plan) > planPrice(currentPlan) ? "var(--brand)" : "var(--text-3)" }}>
