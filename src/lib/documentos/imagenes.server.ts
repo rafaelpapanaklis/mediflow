@@ -36,7 +36,6 @@ import {
   SIGNED_URL_TTL_SECONDS,
   createSignedFileUrl,
   getStorageObjectSize,
-  removeFileFromStorage,
   uploadFileToStorage,
 } from "@/lib/storage";
 import { insertarFilaBitacora } from "@/lib/movimientos-paciente/fila";
@@ -44,11 +43,13 @@ import { registrarSubidaRechazada, type CodigoRechazo } from "@/lib/uploads/vali
 import { IMAGEN_LADO_MAX_PX, IMAGEN_MAX_BYTES, IMAGEN_TIPOS } from "./limites-imagen";
 import {
   IMAGEN_MEGAPIXELES_MAX,
+  IMAGEN_MEGAPIXELES_MAX_SIN_REDUCIR,
   MENSAJES_IMAGEN,
   claveDeImagen,
   claveDeOriginal,
   claveEsDeLaClinica,
   clavesEnHtml,
+  esClinicaParaClave,
   esHeic,
   type CodigoImagen,
 } from "./imagenes";
@@ -121,11 +122,13 @@ export async function comprimirImagen(bytes: Buffer): Promise<ResultadoCompresio
   if (!detectado || !IMAGEN_TIPOS.includes(detectado.mime)) return fallo("tipo_no_permitido");
   if (esHeic(detectado.mime)) return fallo("heic_no_legible");
 
-  const entrada = () => sharp(bytes, { limitInputPixels: IMAGEN_MEGAPIXELES_MAX, failOn: "error" });
+  // JPEG se reduce al decodificar; PNG y WebP se decodifican enteros (ver imagenes.ts).
+  const tope = detectado.mime === "image/jpeg" ? IMAGEN_MEGAPIXELES_MAX : IMAGEN_MEGAPIXELES_MAX_SIN_REDUCIR;
+  const entrada = () => sharp(bytes, { limitInputPixels: tope, failOn: "error" });
   try {
     const meta = await entrada().metadata();
     if (!meta.width || !meta.height) return fallo("no_se_pudo_leer");
-    if (meta.width * meta.height > IMAGEN_MEGAPIXELES_MAX) return fallo("demasiados_pixeles");
+    if (meta.width * meta.height > tope) return fallo("demasiados_pixeles");
   } catch (e) {
     return fallo(/pixel limit/i.test(String((e as Error)?.message)) ? "demasiados_pixeles" : "no_se_pudo_leer");
   }
@@ -162,10 +165,15 @@ export async function firmarSubidaDeOriginal(clinicId: string): Promise<{ id: st
   return { id, signedUrl: data.signedUrl, token: data.token };
 }
 
-/** Borra el original de una subida directa. Best-effort: nunca lanza. */
+/** Adónde se aparta el original para procesarlo: una ruta que la URL firmada de subida ya no puede tocar. */
+const enProceso = (ruta: string) => `${ruta}.proc`;
+
+/** Borra el original de una subida directa (y su copia apartada). Best-effort: nunca lanza. */
 export async function descartarOriginal(clinicId: string, id: string): Promise<void> {
+  const ruta = claveDeOriginal(clinicId, id);
   try {
-    await removeFileFromStorage(claveDeOriginal(clinicId, id));
+    const { error } = await bucket().remove([ruta, enProceso(ruta)]);
+    if (error) throw new Error(error.message);
   } catch (e) {
     console.warn("[documentos/imagenes] no se pudo borrar el original:", (e as Error).message);
   }
@@ -174,31 +182,43 @@ export async function descartarOriginal(clinicId: string, id: string): Promise<v
 const esperar = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 export type ResultadoOriginal =
-  | { ok: true; clave: string; id: string; ancho: number; alto: number; bytesOriginal: number; bytesGuardados: number; codigo?: undefined }
-  | { ok: false; codigo: CodigoImagen | "no_esta"; clave?: undefined };
+  | { ok: true; webp: Buffer; ancho: number; alto: number; bytesOriginal: number; codigo?: undefined }
+  | { ok: false; codigo: CodigoImagen | "no_esta"; webp?: undefined };
 
 /**
- * Baja el original que subió el navegador, lo comprime y guarda el webp. El
- * original se borra SIEMPRE (haya salido bien o no): sin tabla que lo cuente,
- * un original olvidado sería espacio pagado e invisible.
+ * Baja el original que subió el navegador y lo comprime (guardar el webp lo
+ * hace la ruta, después de mirar la cuota). El original se borra SIEMPRE
+ * (haya salido bien o no): sin tabla que lo cuente, un original olvidado
+ * sería espacio pagado e invisible.
  *
  * El tamaño se le pregunta a Storage ANTES de bajar nada: la URL firmada no
  * limita lo que el cliente sube, y meter 2 GB en memoria tumbaría la función.
+ * Y antes de medir, el original se MUEVE a una ruta propia (`….proc`): la URL
+ * firmada (upsert, válida un buen rato) sigue pudiendo escribir en la ruta de
+ * subida, así que medir ahí y bajar después dejaría colar un segundo PUT de
+ * 2 GB entre las dos cosas.
  */
-export async function procesarOriginal(clinicId: string, id: string): Promise<ResultadoOriginal> {
+export async function comprimirOriginal(clinicId: string, id: string): Promise<ResultadoOriginal> {
   const ruta = claveDeOriginal(clinicId, id);
+  const apartado = enProceso(ruta);
   try {
-    // Justo después de un PUT grande, Storage puede tardar un instante en listarlo.
+    // Justo después de un PUT grande, Storage puede tardar un instante en verlo.
+    let movido = false;
+    for (let intento = 0; intento < 4 && !movido; intento++) {
+      movido = !(await bucket().move(ruta, apartado)).error;
+      if (!movido && intento < 3) await esperar(300 * (intento + 1));
+    }
+    if (!movido) return { ok: false, codigo: "no_esta" };
     let tamano: number | null = null;
     for (let intento = 0; intento < 4 && tamano === null; intento++) {
-      tamano = await getStorageObjectSize(ruta);
+      tamano = await getStorageObjectSize(apartado);
       if (tamano === null && intento < 3) await esperar(300 * (intento + 1));
     }
     if (tamano === null) return { ok: false, codigo: "no_esta" };
     if (tamano === 0) return { ok: false, codigo: "vacia" };
     if (tamano > IMAGEN_MAX_BYTES) return { ok: false, codigo: "muy_pesada" };
 
-    const { data, error } = await bucket().download(ruta);
+    const { data, error } = await bucket().download(apartado);
     if (error || !data) return { ok: false, codigo: "no_esta" };
     const bytes = Buffer.from(await data.arrayBuffer());
     // Defensa por si el objeto cambió entre la medida y la descarga.
@@ -206,8 +226,7 @@ export async function procesarOriginal(clinicId: string, id: string): Promise<Re
 
     const r = await comprimirImagen(bytes);
     if (!r.ok) return { ok: false, codigo: r.codigo };
-    const { id: idFinal, clave } = await guardarImagenComprimida(clinicId, r.webp);
-    return { ok: true, clave, id: idFinal, ancho: r.ancho, alto: r.alto, bytesOriginal: bytes.length, bytesGuardados: r.webp.length };
+    return { ok: true, webp: r.webp, ancho: r.ancho, alto: r.alto, bytesOriginal: bytes.length };
   } finally {
     await descartarOriginal(clinicId, id);
   }
@@ -220,7 +239,9 @@ export async function urlFirmadaDeImagen(clinicId: string, clave: string): Promi
   if (!claveEsDeLaClinica(clave, clinicId)) throw new ImagenNoEncontrada();
   try {
     return await createSignedFileUrl(clave, SIGNED_URL_TTL_SECONDS);
-  } catch {
+  } catch (e) {
+    // «No existe» es lo normal (imagen borrada); cualquier otra cosa es Storage caído y se tiene que ver en el log.
+    if (!/not.?found/i.test(String((e as Error)?.message))) console.error("[documentos/imagenes] firmar lectura:", e);
     throw new ImagenNoEncontrada();
   }
 }
@@ -250,9 +271,18 @@ export async function leerImagenDocumento(clinicId: string, clave: string): Prom
  * Una imagen que no se pudo copiar se queda con su clave vieja (se ve rota,
  * pero la copia de la plantilla no falla por ella). Las claves de cualquier
  * otra clínica no se tocan.
+ *
+ * ⚠️ Los dos ids son de confianza: `deClinicId` es el de la FILA de origen ya
+ * leída con su filtro de clínica (nunca un dato del cliente: con un id ajeno y
+ * un HTML a medida, esto copiaría imágenes de otra clínica) y `aClinicId` el
+ * de la sede que se está creando.
  */
 export async function copiarImagenesEntreClinicas(html: string, deClinicId: string, aClinicId: string): Promise<string> {
   if (deClinicId === aClinicId) return html;
+  if (!esClinicaParaClave(aClinicId)) {
+    console.warn("[documentos/imagenes] sede de destino sin carpeta posible, imágenes sin copiar:", aClinicId);
+    return html;
+  }
   let salida = html;
   for (const clave of clavesEnHtml(html)) {
     if (!claveEsDeLaClinica(clave, deClinicId)) continue;

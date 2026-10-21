@@ -73,9 +73,11 @@ async function abrir(t: { skip(m: string): void }, muestras: Record<string, Buff
     if (url.pathname.startsWith("/api/documentos/imagenes")) {
       const cuerpo = req.postDataBuffer();
       peticiones.push({ metodo, ruta: url.pathname, bytes: cuerpo?.length ?? 0 });
+      // Playwright no enseña el Content-Length que mandó Chromium: se repone.
+      const cabeceras = { ...req.headers(), ...(cuerpo ? { "content-length": String(cuerpo.length) } : {}) };
       const peticion = new Request(new URL(url.pathname + url.search, "http://localhost"), {
         method: metodo,
-        headers: req.headers(),
+        headers: cabeceras,
         body: cuerpo && metodo !== "GET" ? new Uint8Array(cuerpo) : undefined,
       }) as any;
       const res =
@@ -187,7 +189,12 @@ test("Chromium: un HEIC (Chrome no lo abre) → mensaje de HEIC sin subir nada; 
 
   const r3 = await a.subir("roto.jpg", "image/jpeg");
   assert.deepEqual([r3.ok, r3.codigo], [false, "no_se_pudo_leer"], JSON.stringify(r3));
-  assert.deepEqual(rutasDe(a.peticiones), ["POST /api/documentos/imagenes/original", "PUT bucket", "POST /api/documentos/imagenes/original/procesar"]);
+  assert.deepEqual(rutasDe(a.peticiones), [
+    "POST /api/documentos/imagenes/original",
+    "PUT bucket",
+    "POST /api/documentos/imagenes/original/procesar",
+    "DELETE /api/documentos/imagenes/original",
+  ]);
   assert.equal(bucket.objetos.size, 0, "el original se borró");
 });
 

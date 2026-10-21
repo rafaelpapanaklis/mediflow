@@ -23,7 +23,7 @@ import {
   registrarImagenGuardada,
   registrarImagenRechazada,
 } from "@/lib/documentos/imagenes.server";
-import { LIMITES, entrar, excedeTope, quienSube, respuestaDeCodigo } from "./_lib/entrada";
+import { LIMITES, entrar, excedeTope, quienSube, respuestaDeCodigo, sinEspacio } from "./_lib/entrada";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -41,9 +41,13 @@ export async function POST(req: NextRequest) {
 
   if (!almacenConfigurado()) return NextResponse.json({ error: "Almacenamiento no configurado" }, { status: 500 });
 
-  // Antes de leer el cuerpo: un POST de 2 GB no se mete en memoria para rechazarlo después.
-  const largo = Number(req.headers.get("content-length") ?? "0");
-  if (Number.isFinite(largo) && largo > IMAGEN_MAX_BYTES + MARGEN_MULTIPART) {
+  // Antes de leer el cuerpo: un POST de 2 GB no se mete en memoria para
+  // rechazarlo después. Sin Content-Length (cuerpo «chunked», que ningún
+  // navegador manda para un FormData) no se puede saber: fuera.
+  const cabecera = req.headers.get("content-length");
+  const largo = cabecera === null ? NaN : Number(cabecera);
+  if (!Number.isFinite(largo)) return NextResponse.json({ error: "Falta el tamaño de la petición." }, { status: 411 });
+  if (largo > IMAGEN_MAX_BYTES + MARGEN_MULTIPART) {
     await registrarImagenRechazada(quien, RUTA, "muy_pesada", "imagen");
     return respuestaDeCodigo("muy_pesada");
   }
@@ -68,6 +72,9 @@ export async function POST(req: NextRequest) {
     await registrarImagenRechazada(quien, RUTA, r.codigo, nombre);
     return respuestaDeCodigo(r.codigo);
   }
+
+  const lleno = await sinEspacio(ctx.clinicId, r.webp.length);
+  if (lleno) return lleno;
 
   let guardada: { id: string; clave: string };
   try {

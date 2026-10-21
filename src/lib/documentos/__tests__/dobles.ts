@@ -28,6 +28,7 @@ export const bucket = {
   borradas: [] as string[],
   firmasSubida: [] as string[],
   firmasLectura: [] as Array<{ ruta: string; ttl: number }>,
+  movidas: [] as Array<[string, string]>,
   /** Simula el retraso de Storage en listar un objeto recién subido. */
   listarFalla: 0,
   reiniciar() {
@@ -36,6 +37,7 @@ export const bucket = {
     this.borradas = [];
     this.firmasSubida = [];
     this.firmasLectura = [];
+    this.movidas = [];
     this.listarFalla = 0;
   },
 };
@@ -73,6 +75,14 @@ function cara(nombre: string) {
       if (!o) return { data: null, error: { message: "Object not found" } };
       return { data: new Blob([new Uint8Array(o.bytes)], { type: o.tipo }), error: null };
     },
+    async move(de: string, a: string) {
+      const o = bucket.objetos.get(de);
+      if (!o) return { data: null, error: { message: "Object not found" } };
+      bucket.objetos.set(a, o);
+      bucket.objetos.delete(de);
+      bucket.movidas.push([de, a]);
+      return { data: { message: "Successfully moved" }, error: null };
+    },
     async copy(de: string, a: string) {
       const o = bucket.objetos.get(de);
       if (!o) return { data: null, error: { message: "Object not found" } };
@@ -107,12 +117,20 @@ export const sesion = {
   ctx: null as null | { userId: string; clinicId: string; role: string; permissionsOverride: string[] },
   /** Si es número, el límite por usuario contesta 429 a partir de esa llamada. */
   limite: null as null | number,
+  /** Scopes del límite que contestan 429 siempre (cada paso tiene el suyo). */
+  bloqueados: new Set<string>(),
+  /** La clínica ya no tiene espacio en su plan: la cuota contesta 402. */
+  cuotaLlena: false,
+  llamadasCuota: [] as Array<{ clinicId: string; bytes: number }>,
   llamadasLimite: [] as Array<{ id?: string; scope?: string; limit: number }>,
   filas: [] as Array<Record<string, unknown>>,
   rechazos: [] as Array<Record<string, unknown>>,
   reiniciar() {
     this.ctx = { userId: "u-doc-a", clinicId: "clinica_a", role: "DOCTOR", permissionsOverride: [] };
     this.limite = null;
+    this.bloqueados = new Set();
+    this.cuotaLlena = false;
+    this.llamadasCuota = [];
     this.llamadasLimite = [];
     this.filas = [];
     this.rechazos = [];
@@ -135,13 +153,21 @@ const dobles: Record<string, unknown> = {
   "@/lib/failban": {
     persistentRateLimit: async (_req: unknown, o: { id?: string; scope?: string; limit: number }) => {
       sesion.llamadasLimite.push(o);
-      if (sesion.limite !== null && sesion.llamadasLimite.length > sesion.limite) {
+      if ((sesion.limite !== null && sesion.llamadasLimite.length > sesion.limite) || sesion.bloqueados.has(o.scope ?? "")) {
         return new Response(JSON.stringify({ error: "Demasiados intentos. Intenta de nuevo más tarde." }), { status: 429 });
       }
       return null;
     },
   },
   "@/lib/prisma": { prisma: prismaDoble },
+  "@/lib/storage-quota": {
+    storageQuotaError: async (clinicId: string, bytes: number) => {
+      sesion.llamadasCuota.push({ clinicId, bytes });
+      return sesion.cuotaLlena
+        ? new Response(JSON.stringify({ error: "Llegaste al límite de almacenamiento de tu plan." }), { status: 402 })
+        : null;
+    },
+  },
   "@/lib/admin/suplantacion": { desviarSiSuplantacion: async () => false },
   "@/lib/movimientos-paciente/fila": {
     insertarFilaBitacora: async (fila: Record<string, unknown>) => {

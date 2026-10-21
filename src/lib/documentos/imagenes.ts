@@ -33,12 +33,17 @@ export const RUTA_IMAGENES = "/api/documentos/imagenes";
 export const TOPE_CUERPO_RUTA = 4 * 1024 * 1024;
 
 /**
- * Tope de píxeles al decodificar en el servidor. No es un límite de producto
- * (ese es IMAGEN_MAX_BYTES): es el freno contra una «bomba» (un PNG de 40 MB de
- * un solo color puede declarar mil millones de píxeles). 250 MP deja entrar
- * las cámaras de 200 MP de los teléfonos y las de formato medio de 100 MP.
+ * Topes de píxeles al decodificar en el servidor. No son límites de producto
+ * (ese es IMAGEN_MAX_BYTES): son el freno contra una «bomba» (un PNG de menos
+ * de 1 MB de un solo color puede declarar cientos de millones de píxeles).
+ *
+ * JPEG: 250 MP, para que entren las cámaras de 200 MP de los teléfonos y las
+ * de formato medio de 100 MP; sharp lo reduce AL decodificar (1/2, 1/4, 1/8),
+ * así que casi no gasta memoria. PNG y WebP no se reducen al decodificar:
+ * 60 MP, el mismo tope que el resto de subidas del repo (validar-archivo.ts).
  */
 export const IMAGEN_MEGAPIXELES_MAX = 250_000_000;
+export const IMAGEN_MEGAPIXELES_MAX_SIN_REDUCIR = 60_000_000;
 
 const ID_IMAGEN = /^[0-9a-f]{32}$/;
 const ID_CLINICA = /^[A-Za-z0-9_-]{1,128}$/;
@@ -81,20 +86,16 @@ export function rutaDeImagen(clave: string): string {
 }
 
 /**
- * La clave a partir de los segmentos del catch-all `[...clave]`. Acepta la
- * clave codificada en un solo segmento (`documentos%2F…`) y también partida en
- * segmentos (si algún proxy decodificó el `%2F`). Se decodifica UNA vez: un
- * `%252F` queda con `%` y no pasa el patrón.
+ * La clave a partir de los segmentos del catch-all `[...clave]`, que Next YA
+ * entrega decodificados (cada segmento pasa por decodeURIComponent en su
+ * route-matcher). Aquí no se decodifica otra vez: la clave codificada en un
+ * solo segmento (`documentos%2F…`) llega como `documentos/…`, partida en
+ * segmentos (si un proxy decodificó el `%2F`) se une igual, y una doble
+ * codificación (`%252F`) llega con `%` y no pasa el patrón.
  */
 export function claveDesdeSegmentos(segmentos: string[] | string | undefined): string | null {
-  const crudo = Array.isArray(segmentos) ? segmentos.join("/") : segmentos ?? "";
-  if (!crudo || crudo.length > 300) return null;
-  let clave: string;
-  try {
-    clave = decodeURIComponent(crudo);
-  } catch {
-    return null;
-  }
+  const clave = Array.isArray(segmentos) ? segmentos.join("/") : segmentos ?? "";
+  if (!clave || clave.length > 300) return null;
   return leerClave(clave) ? clave : null;
 }
 

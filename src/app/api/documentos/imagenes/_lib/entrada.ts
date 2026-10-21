@@ -10,17 +10,22 @@ import { getAuthContext, type AuthContext } from "@/lib/auth-context";
 import { denyIfNotClinical, type ModoClinico } from "@/lib/auth/guardia-clinica";
 import { persistentRateLimit } from "@/lib/failban";
 import { extractAuditMeta } from "@/lib/audit";
+import { storageQuotaError } from "@/lib/storage-quota";
 import { MENSAJES_IMAGEN, esClinicaParaClave, type CodigoImagen } from "@/lib/documentos/imagenes";
 import { ESTADO_POR_CODIGO, type QuienSube } from "@/lib/documentos/imagenes.server";
 
 /**
  * Límites por usuario (ventana de 10 min). Un documento admite 40 imágenes:
- * subir 60 en 10 minutos es trabajo de verdad; más es un script. Ver cubre una
- * hoja con 40 imágenes abierta y recargada varias veces.
+ * subir 60 en 10 minutos es trabajo de verdad; más es un script. Cada paso del
+ * camino del original lleva el suyo: si compartieran cupo, el `procesar` (o la
+ * limpieza) de una subida ya hecha podría quedarse sin él y dejar el original
+ * huérfano en el bucket. Ver cubre una hoja con 40 imágenes recargada varias veces.
  */
 export const LIMITES = {
   subir: { scope: "documentos-imagenes-subir", limit: 60 },
-  original: { scope: "documentos-imagenes-original", limit: 60 },
+  firmar: { scope: "documentos-imagenes-firmar", limit: 60 },
+  procesar: { scope: "documentos-imagenes-procesar", limit: 60 },
+  descartar: { scope: "documentos-imagenes-descartar", limit: 200 },
   ver: { scope: "documentos-imagenes-ver", limit: 1200 },
 } as const;
 
@@ -52,6 +57,21 @@ export function quienSube(ctx: AuthContext, req: NextRequest): QuienSube {
 
 export function respuestaDeCodigo(codigo: CodigoImagen): Response {
   return NextResponse.json({ error: MENSAJES_IMAGEN[codigo], code: codigo }, { status: ESTADO_POR_CODIGO[codigo] });
+}
+
+/**
+ * La cuota de almacenamiento del plan, como el resto de subidas: si la clínica
+ * ya no tiene espacio, 402 con el mensaje de siempre. FALLA ABIERTO ante un
+ * error de la consulta (igual que uploads/sign): no se bloquea una imagen por
+ * un fallo de infraestructura.
+ */
+export async function sinEspacio(clinicId: string, bytes: number): Promise<Response | null> {
+  try {
+    return await storageQuotaError(clinicId, bytes);
+  } catch (e) {
+    console.error("[documentos/imagenes] no se pudo evaluar la cuota, se deja pasar:", e);
+    return null;
+  }
 }
 
 /** El mismo 404 para «no existe», «es de otra clínica» y «clave mal formada»: sin oráculo. */

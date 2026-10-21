@@ -29,7 +29,7 @@ export const dynamic = "force-dynamic";
 const RUTA = "/api/documentos/imagenes/original";
 
 export async function POST(req: NextRequest) {
-  const e = await entrar(req, "editar", LIMITES.original);
+  const e = await entrar(req, "editar", LIMITES.firmar);
   if (e.res) return e.res;
   const { ctx } = e;
   const quien = quienSube(ctx, req);
@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const e = await entrar(req, "editar", LIMITES.original);
+  const e = await entrar(req, "editar", LIMITES.descartar);
   if (e.res) return e.res;
   const id = new URL(req.url).searchParams.get("id");
   // Solo dentro de la carpeta de la clínica de la sesión: un id ajeno borra nada.

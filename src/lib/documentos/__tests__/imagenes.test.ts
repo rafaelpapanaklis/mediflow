@@ -83,8 +83,8 @@ function heic(): Buffer {
   return Buffer.concat([ftyp, Buffer.alloc(2048, 7)]);
 }
 
-/** PNG que DECLARA 30 000 × 30 000 px con un IDAT diminuto: una «bomba» de descompresión. */
-function pngBomba(): Buffer {
+/** PNG que DECLARA `lado` × `lado` px con un IDAT diminuto: una «bomba» de descompresión. */
+function pngBomba(lado = 30000): Buffer {
   const trozo = (tipo: string, datos: Buffer) => {
     const t = Buffer.from(tipo);
     const largo = Buffer.alloc(4);
@@ -94,8 +94,8 @@ function pngBomba(): Buffer {
     return Buffer.concat([largo, t, datos, crc]);
   };
   const ihdr = Buffer.alloc(13);
-  ihdr.writeUInt32BE(30000, 0);
-  ihdr.writeUInt32BE(30000, 4);
+  ihdr.writeUInt32BE(lado, 0);
+  ihdr.writeUInt32BE(lado, 4);
   ihdr[8] = 8; // profundidad
   ihdr[9] = 2; // RGB
   return Buffer.concat([
@@ -116,7 +116,11 @@ async function postImagen(bytes: Buffer, o: { tipo?: string; nombre?: string; en
   fd.append("archivo", new Blob([new Uint8Array(bytes)], { type: o.tipo ?? "image/jpeg" }), o.nombre ?? "foto.jpg");
   fd.append("nombre", o.nombre ?? "foto.jpg");
   if (o.enDocumento !== undefined) fd.append("enDocumento", String(o.enDocumento));
-  const res = await POST(new Request(URL_BASE, { method: "POST", body: fd, headers: o.cabeceras }) as any);
+  // Como lo manda un navegador: el multipart ya armado, con su Content-Length.
+  const armado = new Response(fd);
+  const cuerpo = new Uint8Array(await armado.arrayBuffer());
+  const cabeceras = { "content-type": armado.headers.get("content-type")!, "content-length": String(cuerpo.length), ...o.cabeceras };
+  const res = await POST(new Request(URL_BASE, { method: "POST", body: cuerpo, headers: cabeceras }) as any);
   return { status: res.status, body: await res.json() };
 }
 
@@ -132,9 +136,11 @@ async function procesar(cuerpo: Record<string, unknown>) {
   return { status: res.status, body: await res.json() };
 }
 
+/** `segmentos` como viajan en la URL; los params se los pasa decodificados, como hace el route-matcher de Next. */
 async function verImagen(segmentos: string[]) {
   const { GET } = await import("@/app/api/documentos/imagenes/[...clave]/route");
-  const res = await GET(new Request(`${URL_BASE}/${segmentos.join("/")}`) as any, { params: Promise.resolve({ clave: segmentos }) });
+  const params = { clave: segmentos.map((s) => decodeURIComponent(s)) };
+  const res = await GET(new Request(`${URL_BASE}/${segmentos.join("/")}`) as any, { params: Promise.resolve(params) });
   return { status: res.status, location: res.headers.get("location"), cache: res.headers.get("cache-control"), texto: await res.text() };
 }
 
@@ -179,10 +185,11 @@ test("contrato: claves mal formadas no se leen (../, otra extensión, subcarpeta
   ]) {
     assert.equal(leerClave(mala), null, mala);
   }
-  assert.equal(claveDesdeSegmentos([`documentos%252Fclinica_a%252F${id}.webp`]), null, "doble codificación");
+  // Los segmentos llegan YA decodificados por Next: aquí no se decodifica otra vez.
+  assert.equal(claveDesdeSegmentos([`documentos%2Fclinica_a%2F${id}.webp`]), null, "doble codificación (a Next le llegó %252F)");
   assert.equal(claveDesdeSegmentos(["documentos", "..", "clinica_a", `${id}.webp`]), null);
   assert.equal(claveDesdeSegmentos(["%E0%A4%A"]), null, "codificación rota");
-  assert.equal(claveDesdeSegmentos([`documentos%2Fclinica_a%2F${id}.webp`]), `documentos/clinica_a/${id}.webp`);
+  assert.equal(claveDesdeSegmentos([`documentos/clinica_a/${id}.webp`]), `documentos/clinica_a/${id}.webp`, "un segmento con %2F que Next decodificó");
   assert.equal(claveDesdeSegmentos(["documentos", "clinica_a", `${id}.webp`]), `documentos/clinica_a/${id}.webp`, "partida por un proxy");
   assert.equal(claveEsDeLaClinica(`documentos/clinica_a/${id}.webp`, "clinica_b"), false);
 });
@@ -312,7 +319,35 @@ test("POST: un JPEG roto y una «bomba» de 900 MP se rechazan sin guardar", asy
   const r2 = await postImagen(pngBomba(), { tipo: "image/png", nombre: "b.png" });
   assert.equal(r2.status, 422, JSON.stringify(r2.body));
   assert.equal(r2.body.code, "demasiados_pixeles");
+  // PNG no se reduce al decodificar: su tope es 60 MP (9 000 × 9 000 = 81 MP no pasa).
+  const r3 = await postImagen(pngBomba(9000), { tipo: "image/png", nombre: "c.png" });
+  assert.equal(r3.body.code, "demasiados_pixeles", JSON.stringify(r3.body));
   assert.equal(bucket.objetos.size, 0);
+});
+
+test("POST: sin Content-Length (cuerpo chunked) → 411 sin leer el cuerpo", async () => {
+  const { POST } = await import("@/app/api/documentos/imagenes/route");
+  const fd = new FormData();
+  fd.append("archivo", new Blob([new Uint8Array(await fotoJpeg(50, 50))], { type: "image/jpeg" }), "a.jpg");
+  const res = await POST(new Request(URL_BASE, { method: "POST", body: fd }) as any);
+  assert.equal(res.status, 411);
+  assert.equal(bucket.objetos.size, 0);
+});
+
+test("cuota del plan: sin espacio → 402 y nada se guarda (también por el camino del original, que se borra)", async () => {
+  sesion.cuotaLlena = true;
+  const r = await postImagen(await fotoJpeg(300, 300));
+  assert.equal(r.status, 402, JSON.stringify(r.body));
+  assert.equal(bucket.objetos.size, 0);
+  assert.equal(sesion.llamadasCuota[0]!.clinicId, "clinica_a");
+  assert.ok(sesion.llamadasCuota[0]!.bytes > 0 && sesion.llamadasCuota[0]!.bytes < 200_000, "cuenta lo que se GUARDA (el webp), no el original");
+
+  const foto = await fotoJpeg(300, 300);
+  const f = await firmarOriginal({ nombre: "a.jpg", tamano: foto.length, tipo: "image/jpeg" });
+  putFirmado(f.body.signedUrl, foto, "image/jpeg");
+  const p = await procesar({ id: f.body.id });
+  assert.equal(p.status, 402);
+  assert.equal(bucket.objetos.size, 0, "ni el webp ni el original");
 });
 
 test("POST: tope de 40 por documento (39 entra, 40 ya no)", async () => {
@@ -360,6 +395,11 @@ test("original: firma → PUT al bucket → procesar: 39.9 MB entra, sale webp �
   assert.match(p.body.clave, /^documentos\/clinica_a\/[0-9a-f]{32}\.webp$/);
   assert.notEqual(p.body.clave.includes(f.body.id), true, "la clave final es un id nuevo");
   assert.equal(bucket.objetos.has(`documentos/clinica_a/originales/${f.body.id}`), false, "original borrado");
+  // Se apartó a su ruta propia ANTES de medir y bajar: un segundo PUT con la
+  // misma URL firmada ya no puede cambiar lo que se procesa.
+  const orig = `documentos/clinica_a/originales/${f.body.id}`;
+  assert.deepEqual(bucket.movidas, [[orig, `${orig}.proc`]]);
+  assert.deepEqual(bucket.bajadas, [`${orig}.proc`]);
   const meta = await sharp(bucket.objetos.get(p.body.clave)!.bytes).metadata();
   assert.equal(meta.format, "webp");
   assert.ok(Math.max(meta.width!, meta.height!) <= 1600);
@@ -448,7 +488,7 @@ test("original: DELETE descarta solo dentro de la carpeta de la sesión", async 
   assert.equal(bucket.objetos.has(`documentos/clinica_a/originales/${id}`), false);
   assert.equal(bucket.objetos.has(`documentos/clinica_b/originales/${id}`), true);
   await DELETE(new Request(`${URL_BASE}/original?id=../x`, { method: "DELETE" }) as any);
-  assert.deepEqual(bucket.borradas, [`documentos/clinica_a/originales/${id}`]);
+  assert.deepEqual(bucket.borradas, [`documentos/clinica_a/originales/${id}`, `documentos/clinica_a/originales/${id}.proc`]);
 });
 
 // ─────────────────────────── 4 · GET /api/documentos/imagenes/[...clave] ───────────────────────────

@@ -14,11 +14,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { esIdDeImagen } from "@/lib/documentos/imagenes";
 import {
   almacenConfigurado,
-  procesarOriginal,
+  comprimirOriginal,
+  guardarImagenComprimida,
   registrarImagenGuardada,
   registrarImagenRechazada,
 } from "@/lib/documentos/imagenes.server";
-import { LIMITES, entrar, leerJson, quienSube, respuestaDeCodigo } from "../../_lib/entrada";
+import { LIMITES, entrar, leerJson, quienSube, respuestaDeCodigo, sinEspacio } from "../../_lib/entrada";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,7 +35,7 @@ const noLlego = () =>
   );
 
 export async function POST(req: NextRequest) {
-  const e = await entrar(req, "editar", LIMITES.original);
+  const e = await entrar(req, "editar", LIMITES.procesar);
   if (e.res) return e.res;
   const { ctx } = e;
   const quien = quienSube(ctx, req);
@@ -45,12 +46,17 @@ export async function POST(req: NextRequest) {
   const nombre = String(body.nombre ?? "").trim().slice(0, 120);
   if (!esIdDeImagen(body.id)) return noLlego();
 
-  let r: Awaited<ReturnType<typeof procesarOriginal>>;
-  try {
-    r = await procesarOriginal(ctx.clinicId, body.id);
-  } catch (err) {
+  const falloInterno = (err: unknown) => {
     console.error("[documentos/imagenes/original/procesar]:", err);
     return NextResponse.json({ error: "No se pudo guardar la imagen. Inténtalo otra vez." }, { status: 502 });
+  };
+
+  // Comprimir borra el original pase lo que pase (también si lanza).
+  let r: Awaited<ReturnType<typeof comprimirOriginal>>;
+  try {
+    r = await comprimirOriginal(ctx.clinicId, body.id);
+  } catch (err) {
+    return falloInterno(err);
   }
 
   if (!r.ok) {
@@ -59,15 +65,25 @@ export async function POST(req: NextRequest) {
     return respuestaDeCodigo(r.codigo);
   }
 
+  const lleno = await sinEspacio(ctx.clinicId, r.webp.length);
+  if (lleno) return lleno;
+
+  let guardada: { id: string; clave: string };
+  try {
+    guardada = await guardarImagenComprimida(ctx.clinicId, r.webp);
+  } catch (err) {
+    return falloInterno(err);
+  }
+
   await registrarImagenGuardada(quien, {
-    id: r.id,
-    clave: r.clave,
+    id: guardada.id,
+    clave: guardada.clave,
     camino: "original",
     bytesRecibidos: r.bytesOriginal,
-    bytesGuardados: r.bytesGuardados,
+    bytesGuardados: r.webp.length,
     ancho: r.ancho,
     alto: r.alto,
   });
 
-  return NextResponse.json({ clave: r.clave, ancho: r.ancho, alto: r.alto }, { status: 201 });
+  return NextResponse.json({ clave: guardada.clave, ancho: r.ancho, alto: r.alto }, { status: 201 });
 }

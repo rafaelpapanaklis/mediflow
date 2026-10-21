@@ -156,16 +156,22 @@ async function subirOriginal(file: File, { signal, onProgreso, enDocumento }: Op
   }
   onProgreso?.(92);
 
-  // El original ya está en el bucket: procesarlo no se cancela a medias (el
-  // servidor lo borra al terminar, salga bien o mal).
-  const proc = await fetch(`${RUTA_IMAGENES}/original/procesar`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ id, nombre: file.name }),
-  }).catch((e) => lanzarDeRed(e));
-  const imagen = await resultado({ estado: proc.status, texto: await proc.text() });
-  onProgreso?.(100);
-  return imagen;
+  // El original ya está en el bucket: procesarlo no se cancela a medias. El
+  // servidor lo borra al terminar, salga bien o mal; si la petición ni llegó
+  // a procesarlo (red, sesión vencida, límite), se descarta desde aquí.
+  try {
+    const proc = await fetch(`${RUTA_IMAGENES}/original/procesar`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, nombre: file.name }),
+    }).catch((e) => lanzarDeRed(e));
+    const imagen = await resultado({ estado: proc.status, texto: await proc.text() });
+    onProgreso?.(100);
+    return imagen;
+  } catch (e) {
+    await descartar();
+    throw e;
+  }
 }
 
 // ─────────────────────────── Comprimir en el navegador ───────────────────────────
@@ -179,8 +185,16 @@ async function comprimirEnNavegador(file: File): Promise<Blob | null> {
   let mapa: ImageBitmap;
   try {
     mapa = await createImageBitmap(file, { imageOrientation: "from-image" } as ImageBitmapOptions);
-  } catch {
-    return null;
+  } catch (e) {
+    // Un WebKit viejo (iOS 16) no conoce "from-image" y lanza TypeError por la
+    // opción, no por la foto: se reintenta sin opciones (ahí el navegador ya
+    // aplica el EXIF por su cuenta o la deja como viene).
+    if (!(e instanceof TypeError)) return null;
+    try {
+      mapa = await createImageBitmap(file);
+    } catch {
+      return null;
+    }
   }
   try {
     const { ancho, alto } = medidasFinales(mapa.width, mapa.height);

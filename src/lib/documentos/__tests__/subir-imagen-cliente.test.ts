@@ -49,7 +49,16 @@ const ORIGEN = "http://localhost";
 
 async function aHandler(metodo: string, url: string, init: { body?: BodyInit | null; headers?: HeadersInit }): Promise<Response> {
   const ruta = new URL(url, ORIGEN).pathname;
-  const req = new Request(new URL(url, ORIGEN), { method: metodo, body: init.body ?? null, headers: init.headers }) as any;
+  // Como un navegador: el multipart armado y con su Content-Length.
+  let body = init.body ?? null;
+  const headers = new Headers(init.headers);
+  if (body instanceof FormData) {
+    const armado = new Response(body);
+    body = new Uint8Array(await armado.arrayBuffer());
+    headers.set("content-type", armado.headers.get("content-type")!);
+  }
+  if (body !== null) headers.set("content-length", String(await largoDe(body)));
+  const req = new Request(new URL(url, ORIGEN), { method: metodo, body, headers }) as any;
   if (ruta === "/api/documentos/imagenes" && metodo === "POST") return (await import("@/app/api/documentos/imagenes/route")).POST(req);
   if (ruta === "/api/documentos/imagenes/original" && metodo === "POST") return (await import("@/app/api/documentos/imagenes/original/route")).POST(req);
   if (ruta === "/api/documentos/imagenes/original" && metodo === "DELETE") return (await import("@/app/api/documentos/imagenes/original/route")).DELETE(req);
@@ -58,7 +67,10 @@ async function aHandler(metodo: string, url: string, init: { body?: BodyInit | n
 }
 
 const largoDe = async (body: unknown): Promise<number> =>
-  body instanceof Blob ? body.size : body instanceof FormData ? (await new Response(body).arrayBuffer()).byteLength : String(body ?? "").length;
+  body instanceof Blob ? body.size
+  : body instanceof Uint8Array ? body.byteLength
+  : body instanceof FormData ? (await new Response(body).arrayBuffer()).byteLength
+  : Buffer.byteLength(String(body ?? ""));
 
 (globalThis as any).fetch = async (url: string, init: RequestInit = {}) => {
   nav.peticiones.push({ metodo: init.method ?? "GET", url, bytes: await largoDe(init.body) });
@@ -251,6 +263,29 @@ test("cancelar a media subida del original: SubidaImagenCancelada y el bucket qu
   await new Promise((r) => setTimeout(r, 20));
   assert.ok(nav.peticiones.some((p) => p.metodo === "DELETE" && p.url.startsWith("/api/documentos/imagenes/original?id=")));
   assert.equal(bucket.objetos.size, 0);
+});
+
+test("si procesar ni llega a correr (límite, sesión), el navegador descarta el original: no queda huérfano", async () => {
+  nav.decodifica = "no-abre";
+  sesion.bloqueados.add("documentos-imagenes-procesar");
+  await assert.rejects(subir(archivo(await foto(800, 600), "a.jpg", "image/jpeg")), { message: "Demasiados intentos. Intenta de nuevo más tarde." });
+  assert.ok(nav.peticiones.some((p) => p.metodo === "DELETE"), "se pidió descartar");
+  assert.equal(bucket.objetos.size, 0, "el original no se quedó en el bucket");
+});
+
+test("WebKit viejo: createImageBitmap rechaza la OPCIÓN (TypeError) → se reintenta sin opciones y entra por el camino normal", async () => {
+  const real = (globalThis as any).createImageBitmap;
+  (globalThis as any).createImageBitmap = async (f: Blob, o?: unknown) => {
+    if (o) throw new TypeError("The provided value 'from-image' is not a valid enum value of type ImageOrientation.");
+    return real(f);
+  };
+  try {
+    const r = await subir(archivo(await foto(2000, 1000), "a.jpg", "image/jpeg"));
+    assert.deepEqual({ ancho: r.ancho, alto: r.alto }, { ancho: 1600, alto: 800 });
+    assert.deepEqual(nav.peticiones.map((p) => p.url), ["/api/documentos/imagenes"]);
+  } finally {
+    (globalThis as any).createImageBitmap = real;
+  }
 });
 
 // ─────────────────────────── Rechazos sin subir nada ───────────────────────────
