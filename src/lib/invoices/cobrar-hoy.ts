@@ -198,3 +198,55 @@ export function pendientesPrevios(
   );
   return { cuantas: vivas.length, saldo: round2(vivas.reduce((s, f) => s + Number(f.balance ?? 0), 0)) };
 }
+
+/**
+ * «Cobrar hoy» de un paciente con plan de tratamiento (ws1-t12 · P6): lo de hoy es un ABONO a la
+ * nota de cobro del plan (decisión de Rafael, 20-oct-2026), no una nota nueva. El pago va a las
+ * notas del plan que siguen por cobrar, de la más vieja a la más nueva, por POST /api/invoices/:id
+ * («Registrar pago» de siempre: su folio de pago, su bitácora y su corte de Caja). Nunca más de lo
+ * que deben: el sobrante no tiene a qué nota ir (para eso está el anticipo).
+ */
+export interface NotaDelPlanPorCobrar {
+  invoiceId: string;
+  invoiceNumber: string;
+  status: string;
+  total: number;
+  paid: number;
+  /** Para el orden: la más vieja recibe primero. */
+  createdAt: string | Date;
+}
+
+export interface AbonoAlPlan {
+  reparto: Array<{ invoiceId: string; invoiceNumber: string; monto: number }>;
+  /** Lo que se abona en total (≤ lo pedido). */
+  abonado: number;
+  /** Lo que deben las notas del plan antes del abono. */
+  debe: number;
+  /** Lo que sigue debiendo el plan después. */
+  saldoQueda: number;
+  falta: "sin_nota" | "pago_invalido" | "pago_mayor" | null;
+}
+
+export function abonoAlPlan(notas: NotaDelPlanPorCobrar[], pagoPedido: number | string | null | undefined): AbonoAlPlan {
+  const abiertas = notas
+    .filter((n) => ["PENDING", "PARTIAL", "OVERDUE"].includes(String(n.status)) && round2((Number(n.total) || 0) - (Number(n.paid) || 0)) > 0)
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  const debe = round2(abiertas.reduce((s, n) => s + round2((Number(n.total) || 0) - (Number(n.paid) || 0)), 0));
+  const crudo = pagoPedido === "" || pagoPedido == null ? 0 : numero(pagoPedido);
+  const vacio = { reparto: [], abonado: 0, debe, saldoQueda: debe };
+  if (abiertas.length === 0) return { ...vacio, falta: "sin_nota" };
+  if (!Number.isFinite(crudo) || crudo <= 0) return { ...vacio, falta: "pago_invalido" };
+  const pedido = round2(crudo);
+  if (pedido > debe + 0.005) return { ...vacio, falta: "pago_mayor" };
+  let resta = pedido;
+  const reparto: AbonoAlPlan["reparto"] = [];
+  for (const n of abiertas) {
+    if (resta <= 0) break;
+    const monto = round2(Math.min(resta, round2((Number(n.total) || 0) - (Number(n.paid) || 0))));
+    if (monto <= 0) continue;
+    reparto.push({ invoiceId: n.invoiceId, invoiceNumber: n.invoiceNumber, monto });
+    resta = round2(resta - monto);
+  }
+  const abonado = round2(pedido - resta);
+  return { reparto, abonado, debe, saldoQueda: round2(Math.max(0, debe - abonado)), falta: null };
+}

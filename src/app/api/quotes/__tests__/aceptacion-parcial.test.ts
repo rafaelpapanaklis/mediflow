@@ -64,6 +64,9 @@ const candados = new Map<string, Promise<void>>();
 async function queryRawEn(soltar: Array<() => void> | null, strings: TemplateStringsArray, ...raw: any[]) {
   const sql = strings.join("?");
   const v = planos(raw);
+  // ws1-t12: las filas del plan (sql/plan-tratamiento-filas.sql) no están en este mundo: «Crear plan»
+  // sigue creando el plan de siempre, sin filas. Sus casos con filas viven en test:plan-v2.
+  if (sql.includes("to_regclass('public.treatment_plan_items')")) return [{ existe: false }];
   if (sql.includes("to_regclass")) {
     sondas.regclass++;
     return [{ existe: db.tablas }];

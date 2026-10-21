@@ -12,6 +12,9 @@ import { aceptacionImplicita, netoDeConceptos } from "@/lib/quotes/aceptacion";
 import { RECIBE_CITAS_WHERE } from "@/lib/agenda/roles-que-atienden";
 import { cuerpoDoctorNoRecibeCitasDe } from "@/lib/agenda/roles-que-atienden-db";
 import { doctorDelPlan, FRASE_ELEGIR_DOCTOR_DEL_PLAN } from "@/lib/quotes/doctor-del-plan";
+import { filasDesdeConceptos } from "@/lib/treatments/desde-presupuesto";
+import { repoFilas, tablaDeFilasExiste } from "@/lib/treatments/items-db";
+import { asegurarNotaDelPlan } from "@/lib/treatments/cobro.server";
 
 export const dynamic = "force-dynamic";
 
@@ -36,6 +39,11 @@ interface Params { params: Promise<{ id: string }> }
  * suma de precios de lista. Doctor: el que cumple «quién atiende» de la Agenda
  * (doctor-del-plan.ts); si nadie, 409 `{ elegirDoctor, doctores }` y la tarjeta
  * pide elegir y reenvía con `{ doctorId }`.
+ *
+ * ws1-t12 · P4: con la tabla de filas, el plan nace CON SUS FILAS (una por concepto aceptado, con su
+ * precio y su liga al concepto), no con un texto «Generado desde presupuesto…» sin detalle. Y como lo
+ * aceptado es el plan aceptado, nace también su nota de cobro con lo que el presupuesto todavía no
+ * cobró (cobro.server.ts; lo ya cobrado por «Se cobrará hoy» solo se liga, no se cobra otra vez).
  */
 export async function POST(req: NextRequest, props: Params) {
   const params = await props.params;
@@ -44,9 +52,11 @@ export async function POST(req: NextRequest, props: Params) {
 
   // Crea un TreatmentPlan ACTIVE del paciente (coste total y nº de sesiones):
   // es exactamente lo que protege "treatments.edit" — "Crear y editar planes
-  // de tratamiento". Se elige esa key y NO una billing.*: aquí no nace factura
-  // ni se quema folio, y recepción (que tiene treatments.edit por default)
-  // sigue pudiendo abrir el plan de un presupuesto aceptado, como hasta ahora.
+  // de tratamiento". Se elige esa key y NO una billing.*: recepción (que tiene
+  // treatments.edit por default) sigue pudiendo abrir el plan de un
+  // presupuesto aceptado, como hasta ahora. ws1-t12: con las filas del plan
+  // también nace su nota de cobro, y esa parte SÍ pide "billing.create" (sin
+  // ella el plan se crea igual y su nota queda para quien factura).
   const deniedPerm = denyIfMissingPermission(ctx, "treatments.edit");
   if (deniedPerm) return deniedPerm;
 
@@ -54,7 +64,7 @@ export async function POST(req: NextRequest, props: Params) {
     where: { id: params.id, clinicId: ctx.clinicId },
     include: {
       items: {
-        select: { id: true, phase: true, name: true, toothFdi: true, quantity: true, unitPrice: true, discount: true, lineTotal: true },
+        select: { id: true, phase: true, name: true, toothFdi: true, quantity: true, unitPrice: true, discount: true, lineTotal: true, procedureId: true },
         orderBy: { sortOrder: "asc" },
       },
     },
@@ -154,28 +164,64 @@ export async function POST(req: NextRequest, props: Params) {
   const endDate = new Date(startDate.getTime() + totalSessions * sessionIntervalDays * 24 * 60 * 60 * 1000);
   const nextExpectedDate = new Date(startDate.getTime() + sessionIntervalDays * 24 * 60 * 60 * 1000);
 
-  const plan = await prisma.treatmentPlan.create({
-    data: {
-      clinicId: ctx.clinicId,
-      patientId: quote.patientId,
-      doctorId,
-      name: quote.title.slice(0, 160),
-      description: `Generado desde presupuesto ${quote.folio}`,
-      totalSessions,
-      sessionIntervalDays,
-      // Lo aceptado con su parte del descuento global (no la suma de lineTotal).
-      totalCost: soloElResto || parcial
-        ? netoDeConceptos(acc.renglones ?? aceptacionImplicita(quote), items.map((i) => i.id))
-        : Number(quote.total) || 0,
-      status: "ACTIVE",
-      startDate,
-      endDate,
-      nextExpectedDate,
-    },
-    select: { id: true, name: true },
-  });
+  const datosDelPlan = {
+    clinicId: ctx.clinicId,
+    patientId: quote.patientId,
+    doctorId,
+    name: quote.title.slice(0, 160),
+    description: `Generado desde presupuesto ${quote.folio}`,
+    totalSessions,
+    sessionIntervalDays,
+    // Lo aceptado con su parte del descuento global (no la suma de lineTotal).
+    totalCost: soloElResto || parcial
+      ? netoDeConceptos(acc.renglones ?? aceptacionImplicita(quote), items.map((i) => i.id))
+      : Number(quote.total) || 0,
+    status: "ACTIVE" as const,
+    startDate,
+    endDate,
+    nextExpectedDate,
+  };
 
-  await prisma.quote.update({ where: { id: quote.id }, data: { treatmentPlanId: plan.id } });
+  // Plan, filas y liga del presupuesto juntos o nada. Sin la tabla, lo de siempre (plan sin filas).
+  const filas = (await tablaDeFilasExiste()) ? filasDesdeConceptos(items) : [];
+  const plan = filas.length === 0
+    ? await prisma.treatmentPlan.create({ data: datosDelPlan, select: { id: true, name: true } })
+    : await prisma.$transaction(async (tx) => {
+        // Doble clic: el presupuesto bloqueado y releído; el segundo ve el plan del primero.
+        await tx.$queryRaw`SELECT id FROM "quotes" WHERE id = ${quote.id} AND "clinicId" = ${ctx.clinicId} FOR UPDATE`;
+        const fresco = await tx.quote.findFirst({ where: { id: quote.id, clinicId: ctx.clinicId }, select: { treatmentPlanId: true } });
+        if (fresco?.treatmentPlanId) {
+          const ya = await tx.treatmentPlan.findFirst({ where: { id: fresco.treatmentPlanId, clinicId: ctx.clinicId }, select: { id: true, name: true } });
+          if (ya) return { ...ya, already: true as const };
+        }
+        const p = await tx.treatmentPlan.create({ data: datosDelPlan, select: { id: true, name: true } });
+        if (filas.length) {
+          const creadas = await repoFilas.insertar(tx, { clinicId: ctx.clinicId, planId: p.id, userId: ctx.userId, filas: filas.map((f) => f.fila) });
+          await repoFilas.ligarAConceptos(tx, {
+            clinicId: ctx.clinicId,
+            planId: p.id,
+            ligas: creadas.map((c, i) => ({ filaId: c.id, quoteItemId: filas[i]?.quoteItemId ?? null })),
+          });
+        }
+        await tx.quote.updateMany({ where: { id: quote.id, clinicId: ctx.clinicId }, data: { treatmentPlanId: p.id } });
+        return { ...p, already: false as const };
+      });
+  if ("already" in plan && plan.already) {
+    return NextResponse.json({ treatmentPlanId: plan.id, name: plan.name, already: true });
+  }
+  if (filas.length === 0) await prisma.quote.update({ where: { id: quote.id }, data: { treatmentPlanId: plan.id } });
+
+  let notaDelPlan: unknown = null;
+  if (filas.length && denyIfMissingPermission(ctx, "billing.create")) {
+    notaDelPlan = { estado: "sin_permiso" };
+  } else if (filas.length) {
+    try {
+      notaDelPlan = await asegurarNotaDelPlan({ clinicId: ctx.clinicId, planId: plan.id, userId: ctx.userId, origen: "desde_presupuesto" });
+    } catch (e) {
+      console.error("[presupuesto:crear-plan] no se pudo crear la nota de cobro del plan:", e);
+      notaDelPlan = { estado: "error" };
+    }
+  }
 
   await logAudit({
     clinicId: ctx.clinicId,
@@ -183,8 +229,11 @@ export async function POST(req: NextRequest, props: Params) {
     entityType: "treatment",
     entityId: plan.id,
     action: "create",
-    changes: { fromQuote: { before: null, after: quote.folio } },
+    changes: {
+      fromQuote: { before: null, after: quote.folio },
+      ...(filas.length ? { procedimientos: { before: null, after: filas.map((f) => f.fila.nombre) } } : {}),
+    },
   });
 
-  return NextResponse.json({ treatmentPlanId: plan.id, name: plan.name }, { status: 201 });
+  return NextResponse.json({ treatmentPlanId: plan.id, name: plan.name, filas: filas.length, notaDelPlan }, { status: 201 });
 }

@@ -10789,6 +10789,28 @@
       "fechaPorLlenar": "Fecha: ____ / ____ / ________",
       "pie": "Plan de tratamiento generado en DaleControl · {clinica}",
       "pagina": "Página {n} de {total}"
+    },
+    "filas": {
+      "faseNumero": "Fase {n}",
+      "error": {
+        "generico": "No se pudo guardar el procedimiento del plan.",
+        "filas_no_lista": "Los procedimientos del plan no llegaron como lista.",
+        "demasiadas_filas": "El plan pasa de 100 procedimientos. Divídelo en dos planes.",
+        "sin_nombre": "Un procedimiento no tiene nombre.",
+        "nombre_largo": "El nombre de un procedimiento pasa de 200 letras.",
+        "diente_invalido": "Un procedimiento trae un diente que no es FDI.",
+        "cara_invalida": "Un procedimiento trae una cara que no existe (usa M, O, D, V o L).",
+        "fase_invalida": "Un procedimiento trae una fase que no existe.",
+        "cantidad_invalida": "La cantidad va de 1 a 999, sin decimales.",
+        "precio_invalido": "El precio no es válido (de $0 a $10,000,000).",
+        "estado_invalido": "Un procedimiento nuevo solo puede entrar pendiente, en curso o hecho.",
+        "fila_desconocida": "Ese procedimiento ya no es de este plan. Recarga el plan e intenta de nuevo.",
+        "fila_repetida": "El mismo procedimiento viene dos veces.",
+        "fila_cancelada": "Ese procedimiento está cancelado. Si vuelve a hacer falta, agrégalo como nuevo.",
+        "fila_cobrada": "Ese procedimiento ya está en una nota de cobro: su nombre, cantidad y precio se ajustan en Facturación, y no se puede quitar del plan.",
+        "fila_hecha": "Ese procedimiento ya está hecho: no se quita del plan. Si fue un error, márcalo como pendiente.",
+        "fila_doble": "Otra persona acaba de cobrar este plan. Recarga e intenta de nuevo."
+      }
     }
   },
   "sabina": {
