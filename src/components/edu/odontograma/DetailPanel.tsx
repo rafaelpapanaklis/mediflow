@@ -49,7 +49,7 @@ const TYPE_NAMES: Record<string, Record<"es" | "en", string>> = {
  * y escriben el motivo debajo. Todo lo demás sigue siendo el original.
  */
 export function DetailPanel({
-  fdi, lang, numbering, record, brush,
+  fdi, lang, numbering, record, brush, eraser,
   onApply, onClose, onClearTooth, onNote, onRemove, onPick,
   canEdit = true, disabledReason = null,
 }: DetailPanelProps) {
@@ -167,6 +167,9 @@ export function DetailPanel({
               error, ni una palabra que dijera por qué. El motivo escrito
               vive al final del panel, que es donde ya estaba. */}
           <div className="odo-section-t">{t.surfaces}</div>
+          {/* sin hallazgo elegido, tocar una cara no marca nada: se dice.
+              En solo lectura no: ahí manda el motivo de abajo. */}
+          {canEdit && !brush && !eraser && <div className="odo-dt-pick" role="note">{t.pickFirst}</div>}
           <div className="odo-surf-grid">
             {surfaceLetters.map((letter) => {
               const col = surfaceColor(letter);
@@ -263,7 +266,8 @@ export function DetailPanel({
 /**
  * DetailPalette — compact specialty tabs + finding chips inside the panel.
  * Portado de design jsx/detail.jsx; reuses the shared ConditionSwatch.
- * Tampoco es 1:1: los chips llevan `disabled` desde N-14.
+ * Tampoco es 1:1: los chips llevan `disabled` desde N-14, y desde F1
+ * (ws1-t11) eligen en vez de alternar.
  */
 function DetailPalette({
   lang,
@@ -302,7 +306,12 @@ function DetailPalette({
             key={c.id}
             className={"odo-chip" + (brush === c.id ? " on" : "")}
             style={brush === c.id ? { borderColor: gc, boxShadow: `0 0 0 2px ${gc}33` } : {}}
-            onClick={() => onPick(c.id)}
+            // El panel ELIGE el hallazgo, no lo alterna: el `onPick` del
+            // contenedor (odontograma-screen.tsx) alterna, y volver a tocar
+            // aquí el que ya estaba elegido lo apagaba — la cara siguiente
+            // no marcaba nada (F1, como el dental en 359026243). La paleta
+            // principal sigue alternando.
+            onClick={() => { if (brush !== c.id) onPick(c.id); }}
             disabled={!canEdit}
             title={canEdit ? undefined : disabledReason ?? undefined}
           >
