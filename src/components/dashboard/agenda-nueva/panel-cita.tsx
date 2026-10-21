@@ -54,6 +54,7 @@ import { RanuraCita } from "@/components/specialties/orthodontics/agenda/RanuraC
 import { RanuraIndicaciones } from "@/components/indicaciones/ranura-indicaciones";
 import { esCitaOrtoConHoja } from "@/lib/orthodontics/agenda-constants";
 import { ocultarAnticipoPorMensualidad } from "@/lib/orthodontics/anticipo-control";
+import { paramsDeReagendar, type DatosDeReagendar } from "@/components/dashboard/plan-a-agenda/agendar-plan-datos";
 import { patchAppointmentStatus } from "@/lib/agenda/mutations";
 import { enviarConAvisoDeSobreagenda, type AvisoSobreagenda } from "@/lib/agenda/agenda-flexible";
 import { ConfirmarSobreagenda } from "./confirmar-sobreagenda";
@@ -695,7 +696,14 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
               <button
                 type="button"
                 className={s.accionSecundaria}
-                onClick={() =>
+                onClick={async () => {
+                  // ws1-t1 (plan fase 2 · P8): si la cita era de «Agendar lo pendiente», la nueva se
+                  // vuelve a llevar sus procedimientos del plan (si no, quedarían «por agendar»
+                  // aunque el paciente ya tenga cita). Si algo falla, se reagenda como siempre.
+                  const delPlan = await fetch(`/api/appointments/plan-pendiente?appointmentId=${encodeURIComponent(dto.id)}`, { credentials: "include" })
+                    .then((r) => (r.ok ? r.json() : null))
+                    .then((b: DatosDeReagendar | null) => paramsDeReagendar(b))
+                    .catch(() => null);
                   abrirNuevaCita({
                     initialPatient: cita.pacienteId
                       ? { id: cita.pacienteId, name: cita.nombrePaciente }
@@ -704,8 +712,9 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
                     initialReason: dto.reason ?? undefined,
                     initialSlot: { doctorId: dto.doctor?.id, resourceId: dto.resourceId },
                     openAgendaAfter: false,
-                  })
-                }
+                    ...(delPlan ?? {}),
+                  });
+                }}
               >
                 <CalendarClock size={18} strokeWidth={2} />
                 Reagendar

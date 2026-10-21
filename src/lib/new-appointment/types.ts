@@ -25,6 +25,16 @@ export interface OpenNewAppointmentParams {
   /** Día «AAAA-MM-DD» con el que abre (sin `initialSlot`). Por defecto, el de la agenda que se ve, o hoy. */
   initialDateISO?: string;
   initialReason?: string;
+  /**
+   * ws1-t1 (plan fase 2 · P8) — minutos con los que abre (la duración del tarifario de lo que se
+   * agenda). Cuenta como «elegida a mano»: ni la de ortodoncia ni la de pediatría la pisan.
+   */
+  initialDurationMin?: number;
+  /**
+   * ws1-t1 (plan fase 2 · P8) — «Agendar lo pendiente»: las filas del plan que el POST liga a la
+   * cita (`planItemIds`). `resumen` es lo que la ventana enseña («Resina 16 · Endodoncia 26»).
+   */
+  delPlan?: { planId: string; filaIds: string[]; resumen: string };
   openAgendaAfter?: boolean;
   redirectAfter?: string;
   onCreated?: (appt: { id: string; startsAt: string }) => void;

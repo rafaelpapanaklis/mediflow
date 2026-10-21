@@ -1,0 +1,291 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   «Agendar lo pendiente» (ws1-t1 · plan fase 2 · P8): el botón del plan y su
+   hoja. Vive FUERA de la agenda nueva (la monta la ventana del plan), así que
+   usa los tokens del panel: `--m2-*` (los trae `CLASES_MENU`, con su versión
+   oscura) y `--pr-*` de la ficha con un respaldo `--m2-*`. Nada de hex.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── El botón en el pie de la ventana del plan ── */
+
+.boton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 9px;
+  background: var(--m2-n2-fondo);
+  color: var(--m2-texto);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.boton:hover {
+  background: var(--m2-hover);
+}
+
+.boton:focus-visible,
+.casilla:focus-within,
+.botonPrincipal:focus-visible,
+.botonSecundario:focus-visible {
+  outline: none;
+  box-shadow: var(--m2-foco);
+}
+
+.listo {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12.5px;
+  color: var(--m2-texto-3);
+}
+
+/* ── La hoja ── */
+
+.velo {
+  position: fixed;
+  inset: 0;
+  z-index: 1100; /* encima de la ventana del plan */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: color-mix(in srgb, var(--m2-texto) 38%, transparent);
+}
+
+.hoja {
+  width: min(480px, 100%);
+  max-height: min(640px, calc(100dvh - 32px));
+  display: flex;
+  flex-direction: column;
+  border-radius: 12px;
+  background: var(--m2-n2-fondo);
+  color: var(--m2-texto);
+  box-shadow: 0 24px 64px color-mix(in srgb, var(--m2-texto) 22%, transparent);
+  font-family: var(--font-menu), system-ui, sans-serif;
+}
+
+.cabecera {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 18px 18px 6px;
+}
+
+.cabeceraIcono {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--m2-iniciales-fondo);
+  color: var(--m2-iniciales-texto);
+}
+
+.titulo {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.intro {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--m2-texto-3);
+}
+
+.cerrar {
+  margin-left: auto;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--m2-texto-3);
+  cursor: pointer;
+}
+
+.cerrar:hover {
+  background: var(--m2-hover);
+}
+
+.lista {
+  list-style: none;
+  margin: 0;
+  padding: 8px 18px;
+  overflow-y: auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.casilla {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 8px 12px;
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.casilla input {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  accent-color: var(--m2-activo);
+}
+
+.casillaElegida {
+  border-color: var(--m2-activo);
+  background: var(--m2-tarjeta-hover);
+}
+
+.casillaApagada {
+  cursor: default;
+  background: var(--m2-n1-fondo);
+}
+
+.casillaTextos {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.casillaNombre {
+  font-size: 13.5px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.casillaDato {
+  font-size: 12px;
+  color: var(--m2-texto-3);
+}
+
+.etiquetaAgendada {
+  align-self: flex-start;
+  max-width: 100%;
+  margin-top: 3px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 11px;
+  background: var(--pr-exito-suave, var(--m2-iniciales-fondo));
+  color: var(--pr-exito, var(--m2-iniciales-texto));
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.estado {
+  padding: 18px;
+  font-size: 13px;
+  color: var(--m2-texto-3);
+}
+
+.error {
+  color: var(--pr-peligro, var(--m2-texto));
+}
+
+.pie {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 18px 18px;
+  border-top: 1px solid var(--m2-borde);
+}
+
+.total {
+  flex: 1 1 100%;
+  font-size: 12.5px;
+  color: var(--m2-texto-3);
+}
+
+.pieBotones {
+  flex: 1 1 100%;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.total strong {
+  color: var(--m2-texto);
+}
+
+.botonPrincipal,
+.botonSecundario {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 38px;
+  padding: 0 14px;
+  border-radius: 9px;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.botonPrincipal {
+  border: 0;
+  background: var(--m2-cta-fondo);
+  color: var(--m2-cta-texto);
+}
+
+.botonPrincipal:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.botonSecundario {
+  border: 1px solid var(--m2-tarjeta-borde);
+  background: var(--m2-n2-fondo);
+  color: var(--m2-texto);
+}
+
+/* Teléfono (390): la hoja sube desde abajo y los botones van uno sobre otro. */
+@media (max-width: 560px) {
+  .velo {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .hoja {
+    width: 100%;
+    max-height: calc(100dvh - 48px);
+    border-radius: 12px 12px 0 0;
+  }
+
+  /* Uno sobre otro, el principal arriba: lado a lado, «Elegir hora en la agenda» no cabe a 390. */
+  .pieBotones {
+    flex-direction: column-reverse;
+  }
+
+  .pieBotones .botonPrincipal,
+  .pieBotones .botonSecundario {
+    width: 100%;
+  }
+}

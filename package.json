@@ -576,6 +576,8 @@
     "test:plan-consulta-toques": "tsx --test src/components/dashboard/plan-tratamiento-rediseno/__tests__/consulta-toques.test.ts",
     "test:plan-sin-doble-cobro": "tsx --test src/lib/treatments/__tests__/sin-doble-cobro.test.ts src/app/api/treatments/__tests__/sin-doble-cobro-api.test.ts",
     "test:plan-cobro-toques": "tsx --test src/components/dashboard/cobrar-hoy/__tests__/cobro-plan-toques.test.ts",
+    "test:plan-citas": "tsx --tsconfig tsconfig.test.json --test --experimental-test-module-mocks src/lib/treatments/__tests__/citas-del-plan.test.ts src/lib/treatments/__tests__/citas-del-plan-db.test.ts src/app/api/appointments/__tests__/cita-del-plan.test.ts src/app/api/cron/treatment-followup/__tests__/seguimiento-por-pendientes.test.ts src/app/api/appointments/__tests__/anticipo-cita-del-plan.test.ts",
+    "test:plan-citas-pantalla": "tsx --tsconfig tsconfig.test.json --test src/components/dashboard/agenda-nueva/__tests__/agendar-lo-pendiente-chromium.test.ts",
     "test:presupuesto-nuevo": "tsx --test src/components/dashboard/presupuesto-nuevo/__tests__/presupuesto-nuevo.test.ts",
     "test:document-templates": "tsx --test src/lib/document-templates/__tests__/document-templates.test.ts",
     "test:plantillas": "tsx --test src/app/dashboard/plantillas/__tests__/plantillas-pulido.test.ts",

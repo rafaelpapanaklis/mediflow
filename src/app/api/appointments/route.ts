@@ -76,6 +76,17 @@ import { buscarPacienteEmpalmado, juntarAvisos } from "@/lib/agenda/paciente-emp
 import { MARCA_SOBREAGENDADA, confirmacionValida, decidirSobreagenda } from "@/lib/agenda/agenda-flexible";
 import { leerAgendaFlexible } from "@/lib/agenda/agenda-flexible.server";
 import { buscarChoqueDeCita } from "@/lib/agenda/sobreagendar.server";
+import { ESTADO_HTTP_DE_CODIGO, leerPlanItemIds, problemaAlLigar, type CodigoDeCitaDelPlan } from "@/lib/treatments/citas-del-plan";
+import { citasDelPlanDisponible, leerFilasParaLigar, ligarFilasACita } from "@/lib/treatments/citas-del-plan-db";
+
+/** ws1-t1 (plan fase 2 · P8): las filas del plan no se pudieron ligar; la transacción se deshace. */
+class CitaDelPlanError extends Error {
+  readonly codigo: CodigoDeCitaDelPlan;
+  constructor(codigo: CodigoDeCitaDelPlan) {
+    super(codigo);
+    this.codigo = codigo;
+  }
+}
 
 const APPT_INCLUDE = {
   patient: { select: { id: true, firstName: true, lastName: true } },
@@ -256,6 +267,23 @@ export async function POST(req: NextRequest) {
   const validation = validateCreate(body);
   if (validation) {
     return NextResponse.json({ error: validation }, { status: 400 });
+  }
+
+  // ws1-t1 (plan fase 2 · P8) — «Agendar lo pendiente»: la cita es la de siempre, con TODAS sus
+  // reglas, y además liga las filas del plan que se eligieron. Sin `planItemIds` nada cambia.
+  // Sin el SQL de la liga no se crea la cita «a medias»: se dice y no se guarda nada.
+  const filasPedidas = leerPlanItemIds(body.planItemIds);
+  if (!filasPedidas.ok) {
+    return NextResponse.json({ error: filasPedidas.codigo }, { status: ESTADO_HTTP_DE_CODIGO[filasPedidas.codigo!] });
+  }
+  const planItemIds = filasPedidas.ids ?? [];
+  if (planItemIds.length > 0) {
+    // Ligar filas es tocar el plan: el permiso de editar planes, además del de agendar.
+    const sinPermisoPlan = denyIfMissingPermission(session.user, "treatments.edit");
+    if (sinPermisoPlan) return sinPermisoPlan;
+    if (!(await citasDelPlanDisponible(true))) {
+      return NextResponse.json({ error: "plan_citas_no_disponible" }, { status: ESTADO_HTTP_DE_CODIGO.plan_citas_no_disponible });
+    }
   }
 
   const startsAt = new Date(body.startsAt);
@@ -574,7 +602,21 @@ export async function POST(req: NextRequest) {
     // Auto-inclusión de visibilidad en la MISMA transacción que la cita: si el
     // paciente está restringido y el doctor no está en la lista, se agrega. Sin
     // esto quedaría "el doctor atiende a un paciente que no puede ver".
+    let filasLigadas: { id: string; planId: string }[] = [];
     const created = await prisma.$transaction(async (tx) => {
+      // ws1-t1 (P8): las filas, BLOQUEADAS, antes de crear la cita. De otra clínica no llegan; de
+      // otro paciente, hechas o ya agendadas en una cita viva → error y no queda cita.
+      if (planItemIds.length > 0) {
+        const filas = await leerFilasParaLigar(tx, session.clinic.id, planItemIds);
+        const problema = problemaAlLigar(
+          planItemIds,
+          filas,
+          { patientId: body.patientId, userId: session.user.id, esDoctor: session.user.role === "DOCTOR" },
+          new Date(),
+        );
+        if (problema) throw new CitaDelPlanError(problema);
+        filasLigadas = filas.map((f) => ({ id: f.id, planId: f.planId }));
+      }
       const appt = await tx.appointment.create({
         data: {
           clinicId: session.clinic.id,
@@ -614,6 +656,15 @@ export async function POST(req: NextRequest) {
           startsAt,
           endsAt,
         });
+      }
+      if (planItemIds.length > 0) {
+        const n = await ligarFilasACita(tx, {
+          clinicId: session.clinic.id,
+          appointmentId: appt.id,
+          ids: planItemIds,
+          userId: session.user.id,
+        });
+        if (n !== planItemIds.length) throw new CitaDelPlanError("plan_fila_no_pendiente");
       }
       await ensureUserCanSeePatient(tx, body.patientId, body.doctorId, session.clinic.id);
       return appt;
@@ -672,8 +723,28 @@ export async function POST(req: NextRequest) {
               },
             }
           : {}),
+        // ws1-t1 (P8): «Agendar lo pendiente» — qué filas del plan quedaron en esta cita.
+        ...(filasLigadas.length > 0 ? { delPlan: filasLigadas } : {}),
       },
     });
+
+    // ws1-t1 (P8): y en el plan, una fila de bitácora por plan tocado (sin nombres de
+    // procedimientos en el texto: Movimientos no lleva datos clínicos).
+    for (const planId of Array.from(new Set(filasLigadas.map((f) => f.planId)))) {
+      const ids = filasLigadas.filter((f) => f.planId === planId).map((f) => f.id);
+      await logMutation({
+        req,
+        clinicId: session.clinic.id,
+        userId: session.user.id,
+        entityType: "treatment",
+        entityId: planId,
+        action: "update",
+        patientId: created.patientId,
+        texto: `Agendó ${ids.length === 1 ? "1 procedimiento" : `${ids.length} procedimientos`} del plan de tratamiento`,
+        before: { filasAgendadas: [] },
+        after: { filasAgendadas: ids, citaId: created.id, citaInicio: created.startsAt },
+      });
+    }
 
     // Google Calendar (no lanza y no alarga la respuesta: la cita ya está guardada).
     await sincronizarCitaEnSegundoPlano(session.clinic.id, created.id);
@@ -703,10 +774,15 @@ export async function POST(req: NextRequest) {
         // WS1-T5 — `true` = se guardó sobreagendada (la pantalla lo dice).
         // Solo si quedó encima de OTRA cita: la comida sola no es «dos citas».
         ...(sobreagendada && choque ? { sobreagendada: true } : {}),
+        // ws1-t1 (P8): las filas del plan que quedaron ligadas a la cita.
+        ...(filasLigadas.length > 0 ? { planItemIds: filasLigadas.map((f) => f.id) } : {}),
       },
       { status: 201 },
     );
   } catch (err) {
+    if (err instanceof CitaDelPlanError) {
+      return NextResponse.json({ error: err.codigo }, { status: ESTADO_HTTP_DE_CODIGO[err.codigo] });
+    }
     if (isAppointmentOverlapError(err)) {
       const conflict = await findConflictingAppointment(
         session.clinic.id,
@@ -761,6 +837,8 @@ type CreateApptBody = CreateAppointmentInput & {
   durationMins?: number | null;
   /** WS1-T9: «Convertir en cita» este bloqueo de Google Calendar. */
   googleBloqueoId?: string | null;
+  /** ws1-t1 (plan fase 2 · P8): filas del plan que se agendan en esta cita. */
+  planItemIds?: unknown;
 };
 
 /**

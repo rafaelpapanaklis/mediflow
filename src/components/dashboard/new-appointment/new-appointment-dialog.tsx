@@ -62,6 +62,7 @@ import {
 } from "./apariencia";
 import nc from "./nueva-cita.module.css";
 import { llevarAlPrimerError } from "@/lib/formularios/primer-campo-con-error";
+import { esErrorDelPlan } from "@/components/dashboard/plan-a-agenda/agendar-plan-datos";
 
 const REASON_PRESET_KEYS = [
   "appointments.newApptDialog.presetGeneralConsult",
@@ -180,6 +181,8 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
   const doctorTocadoAMano = useRef(false);
   const [orthoDuracionSugerida, setOrthoDuracionSugerida] = useState<DuracionSugerida | null>(null);
   const duracionTocadaAMano = useRef(false);
+  // ws1-t1 (P8): la duración vino del plan («Agendar lo pendiente»): la de pediatría no la pisa.
+  const duracionDelPlan = useRef(false);
   // Los presets propios de ortodoncia NO pasan por `t()`: son el texto
   // exacto que queda en `Appointment.type` (ver clinic-settings-db.ts).
   const reasonPresets = orthoAppointmentReasons.length > 0
@@ -321,6 +324,17 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
     duracionTocadaAMano.current = false;
     doctorTocadoAMano.current = false;
     setOrthoDuracionSugerida(null);
+    // ws1-t1 (P8): la duración del tarifario de lo que se agenda del plan. Cuenta como elegida a
+    // mano: la sugerencia de ortodoncia o de pediatría no la pisa.
+    const minutosPedidos = params?.initialDurationMin;
+    duracionDelPlan.current = false;
+    if (typeof minutosPedidos === "number" && Number.isFinite(minutosPedidos) && minutosPedidos > 0) {
+      const m = Math.max(5, Math.min(480, Math.round(minutosPedidos)));
+      duracionTocadaAMano.current = true;
+      duracionDelPlan.current = true;
+      setDuration(m);
+      setCustomDurationInput((DURATION_PRESETS_MIN as readonly number[]).indexOf(m) === -1 ? String(m) : "");
+    }
 
     const initialSlot = params?.initialSlot;
     if (initialSlot?.startsAt) {
@@ -388,7 +402,8 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
           longerBlockSuggestion: body.longerBlockSuggestion ?? null,
           primaryGuardianName: body.primaryGuardianName ?? null,
         });
-        setDuration(body.recentFranklLow ? 60 : body.suggestedDurationMin);
+        // ws1-t1 (P8): la duración que vino del plan no se pisa.
+        if (!duracionDelPlan.current) setDuration(body.recentFranklLow ? 60 : body.suggestedDurationMin);
         if (body.primaryGuardianName) {
           setReason((current) =>
             current.trim().length === 0
@@ -553,11 +568,19 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
           ...(sobreagendar
             ? { sobreagendar: true, sobreagendarCita: sobreagendar.citaId, sobreagendarOtras: sobreagendar.otras }
             : {}),
+          // ws1-t1 (P8): «Agendar lo pendiente» — las filas del plan que se ligan a esta cita.
+          ...(params?.delPlan?.filaIds.length ? { planItemIds: params.delPlan.filaIds } : {}),
         }),
       });
 
       if (res.status === 409) {
         const body = (await res.json()) as AppointmentConflictError;
+        // ws1-t1 (P8): un 409 de las filas del plan no es un choque de horario.
+        if (esErrorDelPlan((body as { error?: unknown }).error)) {
+          toast.error(t(`planTratamiento.citas.error.${(body as { error: string }).error}`), { duration: 6000 });
+          setSubmitting(false);
+          return;
+        }
         // WS1-T5 — con la bandera el equipo puede sobreagendar: se pregunta
         // AHÍ MISMO y nada se ha guardado todavía.
         // Si ya se confirmó y el servidor vuelve a preguntar es que hay OTRA
@@ -603,6 +626,12 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
       }
       if (!res.ok) {
         const errBody = await res.json().catch(() => ({}));
+        // ws1-t1 (P8): las filas del plan (otra clínica, otro doctor, ya hechas): su frase.
+        if (esErrorDelPlan(errBody?.error)) {
+          toast.error(t(`planTratamiento.citas.error.${errBody.error}`), { duration: 6000 });
+          setSubmitting(false);
+          return;
+        }
         // Reglas del servidor (pasado, paciente archivado, motivo): su frase, no el código crudo.
         toast.error(
           bookingRuleMessage(errBody) ??
@@ -710,6 +739,18 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
               </div>
             ) : (
               <>
+                {/* ws1-t1 (P8): «Agendar lo pendiente» — qué procedimientos del plan quedan en esta cita. */}
+                {params?.delPlan?.filaIds.length ? (
+                  <div
+                    {...(nueva ? { className: nc.pediatria } : { style: pediatricBannerStyle })}
+                    role="note"
+                    data-cita-del-plan
+                  >
+                    <span {...(nueva ? { className: nc.pediatriaTexto } : { style: pediatricHintStyle })}>
+                      {t("planTratamiento.citas.delPlan", { resumen: params.delPlan.resumen })}
+                    </span>
+                  </div>
+                ) : null}
                 <Field label={t("appointments.newApptDialog.fieldPatient")} campo="patient">
                   <PatientSearchField
                     value={patient}

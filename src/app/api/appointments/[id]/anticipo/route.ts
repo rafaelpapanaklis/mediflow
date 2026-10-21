@@ -32,6 +32,7 @@ import { isWithin24hWindow } from "@/lib/inbox/send-core";
 import { buildSolicitudAnticipoPdf } from "@/lib/anticipos/solicitud-pdf";
 import { facturaOcupaLaCita } from "@/lib/invoices/cita-factura-cancelada";
 import { conceptoDeLaCita } from "@/lib/invoices/cobrar-hoy";
+import { filasAgendadasEnCita } from "@/lib/treatments/citas-del-plan-db";
 
 export const dynamic = "force-dynamic";
 
@@ -142,6 +143,19 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
   if (denied) return denied;
   const chk = await comprobarCita(ctx, params.id);
   if ("error" in chk) return chk.error;
+
+  // ws1-t1 (plan fase 2 · P8): una cita de «Agendar lo pendiente» se cobra en la nota de cobro del
+  // plan. Un anticipo aquí crearía la factura PROPIA de la cita con su concepto: el mismo
+  // procedimiento cobrado dos veces. El anticipo va como abono a la nota del plan.
+  if ((await filasAgendadasEnCita(ctx.clinicId, params.id)).length > 0) {
+    return NextResponse.json(
+      {
+        error: "Esta cita es del plan de tratamiento: se cobra en la nota del plan. Registra el anticipo como abono al plan («Abonar al plan» o «Cobrar hoy»).",
+        codigo: "cita_del_plan",
+      },
+      { status: 409 },
+    );
+  }
 
   const body = await req.json().catch(() => null);
   const monto = typeof body?.monto === "number" ? body.monto : NaN;

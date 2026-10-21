@@ -1,0 +1,123 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   La agenda nueva «agendando del plan» (ws1-t1 · plan fase 2 · P8): el aviso de
+   abajo («Agendando del plan de …»). Colores `--ag-*` de la agenda (el aviso
+   lleva `tokensAgenda` + `CLASES_MENU`). Nada de hex aquí. La hoja «Agendar lo
+   pendiente» del plan vive en `plan-a-agenda/` con sus propios estilos.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── El aviso de la agenda («Agendando del plan de …») ── */
+
+.aviso {
+  position: fixed;
+  left: 50%;
+  bottom: 20px;
+  z-index: 60;
+  transform: translateX(-50%);
+  width: min(640px, calc(100vw - 32px));
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--ag-borde-consulta);
+  border-radius: var(--ag-r-12);
+  background: var(--ag-superficie);
+  color: var(--ag-tinta);
+  box-shadow: var(--ag-sombra-desplegable);
+}
+
+.avisoTextos {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.avisoTitulo {
+  font-size: 13.5px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.avisoDetalle {
+  font-size: 12px;
+  color: var(--ag-texto-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.avisoBotones {
+  flex: none;
+  display: flex;
+  gap: 6px;
+}
+
+.cabeceraIcono {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--ag-r-8);
+  background: var(--ag-morado-tinte);
+  color: var(--ag-morado-texto);
+}
+
+.botonPrincipal,
+.botonSecundario {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 38px;
+  padding: 0 14px;
+  border-radius: var(--ag-r-9);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.botonPrincipal {
+  border: 0;
+  background: var(--ag-cta-fondo);
+  color: var(--ag-cta-texto);
+}
+
+.botonSecundario {
+  border: 1px solid var(--ag-borde-control);
+  background: var(--ag-superficie);
+  color: var(--ag-tinta);
+}
+
+.botonPrincipal:focus-visible,
+.botonSecundario:focus-visible {
+  outline: 2px solid var(--ag-morado);
+  outline-offset: 2px;
+}
+
+/* Teléfono (390): el aviso se parte en dos renglones. */
+@media (max-width: 560px) {
+  .aviso {
+    bottom: 12px;
+    flex-wrap: wrap;
+  }
+
+  .avisoTitulo,
+  .avisoDetalle {
+    white-space: normal;
+  }
+
+  .avisoBotones {
+    width: 100%;
+  }
+
+  .avisoBotones > button {
+    flex: 1 1 0;
+  }
+}

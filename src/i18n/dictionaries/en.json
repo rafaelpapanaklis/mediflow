@@ -10750,6 +10750,39 @@
       "esOtro": "It's a different procedure, not the plan's: charge it separately.",
       "consultaAlPlan": "Not on this visit's invoice because it's already in the treatment plan (charged on its invoice): {lista}."
     },
+    "citas": {
+      "boton": "Schedule what's pending",
+      "botonConN": "Schedule what's pending ({n})",
+      "todoAgendado": "Everything pending already has an appointment",
+      "titulo": "Schedule what's pending",
+      "intro": "Choose which procedures go in this appointment. The length comes from the fee schedule and you can change it when you pick the time.",
+      "minutos": "{n} min",
+      "sinDuracion": "{n} min (no length in the fee schedule)",
+      "yaAgendada": "Scheduled · {fecha}",
+      "ninguno": "Choose at least one procedure.",
+      "totalUno": "1 procedure · {min} min",
+      "total": "{n} procedures · {min} min",
+      "cancelar": "Cancel",
+      "elegirHora": "Pick a time in the schedule",
+      "prefijoMotivo": "Plan: ",
+      "delPlan": "From the treatment plan: {resumen}",
+      "aviso": {
+        "titulo": "Scheduling from {paciente}'s plan",
+        "ayuda": "tap a free slot in the schedule or pick the time.",
+        "elegirHora": "Pick a time",
+        "salir": "Exit",
+        "yaNoHay": "Those procedures already have an appointment or are no longer pending."
+      },
+      "error": {
+        "plan_citas_no_disponible": "Plan appointments aren't active in this clinic yet. The appointment wasn't saved.",
+        "plan_filas_invalidas": "The plan's procedures didn't arrive correctly. The appointment wasn't saved.",
+        "plan_fila_ajena": "One of the procedures doesn't belong to this patient. The appointment wasn't saved.",
+        "plan_no_activo": "That plan is paused, finished or abandoned: it can't be scheduled. The appointment wasn't saved.",
+      "plan_de_otro_doctor": "That plan belongs to another doctor: only their doctor can schedule it. The appointment wasn't saved.",
+        "plan_fila_no_pendiente": "One of the procedures is already done or was cancelled. The appointment wasn't saved.",
+        "plan_fila_ya_agendada": "One of the procedures already has an upcoming appointment. The appointment wasn't saved."
+      }
+    },
     "lista": {
       "titulo": "Treatment plans",
       "nuevo": "New treatment plan",
