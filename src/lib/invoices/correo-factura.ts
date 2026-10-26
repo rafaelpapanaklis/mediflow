@@ -39,6 +39,18 @@ export interface CorreoFacturaInput {
    * cuánto y dónde pagar en línea; sin él, sale el correo de siempre.
    */
   linkPago?: { url: string; monto: number } | null;
+  /**
+   * De `balance`, lo que el paciente aún no debe (26-oct, Rafael): tratamiento del plan por hacer o
+   * cuotas de ortodoncia por vencer. Va la misma línea que en el portal: «de esto, $X aún no lo debes».
+   */
+  aunNoSeDebe?: number;
+}
+
+/** La línea del portal y del correo (26-oct): cuánto del saldo aún no se debe. null = nada que decir. */
+export function lineaAunNoLoDebes(balance: number, aunNoSeDebe: number | null | undefined): string | null {
+  const n = Math.min(Math.max(0, Number(balance) || 0), Math.max(0, Number(aunNoSeDebe) || 0));
+  if (!(n > 0.005)) return null;
+  return `De este saldo, ${dinero(n)} es tratamiento por hacer o cuotas por vencer: aún no lo debes.`;
 }
 
 export interface CorreoFactura {
@@ -101,6 +113,7 @@ export function buildCorreoFactura(input: CorreoFacturaInput): CorreoFactura {
   const lineaLink = link ? `Paga ${dinero(link.monto)} en línea con Mercado Pago:` : null;
 
   const subject = `Tu nota ${input.invoiceNumber} — ${input.clinicName}`;
+  const aunNo = lineaAunNoLoDebes(input.balance, input.aunNoSeDebe);
 
   const text = [
     `Hola ${nombre}, te saludamos de ${input.clinicName}.`,
@@ -111,6 +124,7 @@ export function buildCorreoFactura(input: CorreoFacturaInput): CorreoFactura {
     `Total: ${dinero(input.total)}`,
     ...(input.paid > 0 ? [`Pagado: ${dinero(input.paid)}`] : []),
     `Saldo: ${dinero(input.balance)}`,
+    ...(aunNo ? [aunNo] : []),
     ...(frase ? ["", `Forma de pago acordada: ${frase}`] : []),
     ...(link ? ["", lineaLink as string, link.url] : []),
     "",
@@ -134,7 +148,8 @@ export function buildCorreoFactura(input: CorreoFacturaInput): CorreoFactura {
     </table>
     <p style="font-size: 16px; font-weight: 700; margin: 0 0 4px 0; text-align: right;">Total: ${e(dinero(input.total))}</p>
     ${input.paid > 0 ? `<p style="font-size: 13px; margin: 0 0 2px 0; text-align: right;">Pagado: ${e(dinero(input.paid))}</p>` : ""}
-    <p style="font-size: 13px; margin: 0 0 16px 0; text-align: right;">Saldo: ${e(dinero(input.balance))}</p>
+    <p style="font-size: 13px; margin: 0 0 ${aunNo ? "4px" : "16px"} 0; text-align: right;">Saldo: ${e(dinero(input.balance))}</p>
+    ${aunNo ? `<p style="font-size: 13px; line-height: 1.5; margin: 0 0 16px 0; text-align: right;">${e(aunNo)}</p>` : ""}
     ${frase ? `<p style="font-size: 14px; font-weight: 600; line-height: 1.5; margin: 0 0 16px 0;">Forma de pago acordada: ${e(frase)}</p>` : ""}
     ${link ? `<p style="font-size: 14px; line-height: 1.6; margin: 0 0 16px 0;">${e(lineaLink)}<br /><a href="${e(link.url)}" style="font-weight: 700; text-decoration: underline; word-break: break-all;">${e(link.url)}</a></p>` : ""}
     <p style="font-size: 14px; line-height: 1.6; margin: 0 0 22px 0;">${e(cierre)}</p>

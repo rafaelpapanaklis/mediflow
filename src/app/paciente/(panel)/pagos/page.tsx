@@ -21,6 +21,8 @@
 import { useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { usePacienteData } from "@/lib/patient-portal/use-paciente";
+import { lineaAunNoLoDebes } from "@/lib/invoices/correo-factura";
+import { esPagoPorAdelantado } from "@/lib/patient-portal/pago-mercadopago";
 import type { PacienteClinica, PacienteFactura, PacientePagosResponse } from "@/lib/patient-portal/types";
 import {
   PacienteCard,
@@ -234,6 +236,8 @@ function FacturaRow({
   // solo daría error: se dice «Paga en tu clínica».
   const pagableEnLinea = metodo !== null && f.balance >= MINIMO_LINK_MXN;
   const pagoMp = usePagoMercadoPago(f);
+  // 26-oct (Rafael): con saldo pero nada debido todavía, el pago en línea es por adelantado.
+  const porAdelantado = esPagoPorAdelantado(f);
 
   async function handlePagar() {
     setPaying(true);
@@ -242,7 +246,8 @@ function FacturaRow({
       const res = await fetch("/api/paciente/payments/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ invoiceId: f.id }),
+        // 26-oct: si aún no debe nada, el pago es POR ADELANTADO (el monto lo pone el servidor).
+        body: JSON.stringify({ invoiceId: f.id, ...(porAdelantado ? { adelanto: true } : {}) }),
       });
       const data = await res.json().catch(() => null);
       if (res.ok && data && data.url) {
@@ -271,6 +276,12 @@ function FacturaRow({
           {formatFecha(f.createdAt)}
           {clinicLabel ? ` · ${clinicLabel}` : ""}
         </div>
+        {/* 26-oct: lo aceptado sin hacer (o las cuotas que no vencen) no se debe todavía. */}
+        {saldoPendiente && (f.aunNoSeDebe ?? 0) > 0 && (
+          <div style={{ color: MUTED, fontSize: 13, marginTop: 2 }} data-aun-no-se-debe>
+            {lineaAunNoLoDebes(f.balance, f.aunNoSeDebe)}
+          </div>
+        )}
       </div>
       <Monto label="Total" value={formatMxn(f.total)} />
       <Monto label="Pagado" value={formatMxn(f.paid)} />
@@ -315,7 +326,7 @@ function FacturaRow({
                   opacity: paying ? 0.7 : 1,
                 }}
               >
-                {paying ? "Abriendo pago…" : "Pagar ahora"}
+                {paying ? "Abriendo pago…" : porAdelantado ? "Pagar por adelantado" : "Pagar ahora"}
               </button>
               {payError && (
                 <div role="alert" style={{ color: "#f87171", fontSize: 12, marginTop: 4 }}>

@@ -10,6 +10,10 @@
 // servidor (src/lib/factura-mp/servicio.server.ts). Mismo criterio que
 // /api/paciente/payments/checkout: la factura se busca por la clínica de la
 // SESIÓN, y el importe jamás viene del cliente.
+//
+// 26-oct (Rafael): el link cobra lo DEBIDO. Si el paciente aún no debe nada (plan por hacer, cuotas
+// por vencer), `?adelanto=1` pide el link POR ADELANTADO, por el saldo de la nota (lo calcula el
+// servidor: el cliente solo dice «adelanto», nunca cuánto).
 
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
@@ -72,7 +76,8 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
   const bloqueo = await comprobarFactura(ctx, params.id);
   if (bloqueo) return bloqueo;
 
-  const r = await obtenerLinkDeFactura({ clinicId: ctx.clinicId, invoiceId: params.id, userId: ctx.userId });
+  const adelanto = new URL(req.url).searchParams.get("adelanto") === "1";
+  const r = await obtenerLinkDeFactura({ clinicId: ctx.clinicId, invoiceId: params.id, userId: ctx.userId, adelanto });
   if (!r.ok || !r.link) {
     const code = r.error ?? "mp_fallo";
     const status = code === "no_encontrada" ? 404 : code === "mp_fallo" ? 502 : 409;
@@ -88,7 +93,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
       entityId: params.id,
       action: "update",
       before: { paymentLink: null },
-      after: { paymentLink: { via: "mercadopago", monto: r.link.monto, venceA: r.link.venceA } },
+      after: { paymentLink: { via: "mercadopago", monto: r.link.monto, venceA: r.link.venceA, ...(adelanto ? { adelanto: true } : {}) } },
     });
   }
   return NextResponse.json({ link: r.link, reutilizado: r.reutilizado });

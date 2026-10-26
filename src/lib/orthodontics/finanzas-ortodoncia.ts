@@ -11,6 +11,7 @@
 
 import type { OrthoTreatmentStatus } from "@prisma/client";
 import { diasEntre } from "./cobranza-modulo";
+import { exigibleDelCaso } from "./cobranza-caso";
 import type { ProduccionDeDoctor } from "./produccion";
 import { ACTIVE_PLAN_STATUSES, type OrthoCaseSummary } from "./specialty-kpis";
 
@@ -67,8 +68,13 @@ export interface TramoDeCartera {
 }
 
 export interface CarteraDeOrtodoncia {
-  /** Todo lo que falta por cobrar de los casos, en pesos. */
+  /**
+   * Lo que se DEBE de los casos, en pesos (decisión de Rafael, 26-oct-2026): en «Precio total a
+   * plazos», solo lo vencido; en «Pago por control», todo lo facturado sin pagar.
+   */
   porCobrar: number;
+  /** Lo de los planes a plazos que aún no vence: no es deuda todavía. */
+  porVencer: number;
   /** Lo que ya pasó de su fecha, en pesos. Es la suma de los tramos. */
   vencido: number;
   casosConAtraso: number;
@@ -99,10 +105,14 @@ export function carteraDeOrtodoncia(cases: OrthoCaseSummary[], hoy: string): Car
   const casosPorTramo = new Map<ClaveDeTramo, Set<string>>(TRAMOS.map((t) => [t.clave, new Set<string>()]));
   const conAtraso = new Set<string>();
   let porCobrarC = 0;
+  let porVencerC = 0;
 
   for (const c of cases) {
     if (!c.cobranza) continue;
-    porCobrarC += aCentavos(c.cobranza.saldoTotal);
+    // Sin extras: la cartera de Finanzas siempre fue lo del plan (cuotas, colocación y controles).
+    const exigible = exigibleDelCaso(c.cobranza, null);
+    porCobrarC += aCentavos(exigible.porCobrar);
+    porVencerC += aCentavos(exigible.porVencer);
     for (const q of c.cobranza.vencidas) {
       const faltaC = aCentavos(q.falta);
       if (faltaC <= 0) continue;
@@ -122,6 +132,7 @@ export function carteraDeOrtodoncia(cases: OrthoCaseSummary[], hoy: string): Car
   }));
   return {
     porCobrar: porCobrarC / 100,
+    porVencer: porVencerC / 100,
     vencido: tramos.reduce((s, t) => s + aCentavos(t.importe), 0) / 100,
     casosConAtraso: conAtraso.size,
     tramos,
@@ -188,5 +199,5 @@ export const BLOQUE_ORTODONCIA_INACTIVO: BloqueOrtodonciaFinanzas = {
   periodo: { cobrado: 0, reembolsado: 0, neto: 0 },
   porDoctor: [],
   casos: { activos: 0, enPausa: 0, terminados: 0, abandonados: 0, total: 0, tasaDeAbandono: null },
-  cartera: { porCobrar: 0, vencido: 0, casosConAtraso: 0, tramos: [] },
+  cartera: { porCobrar: 0, porVencer: 0, vencido: 0, casosConAtraso: 0, tramos: [] },
 };

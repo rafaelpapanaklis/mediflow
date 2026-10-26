@@ -54,6 +54,7 @@ import {
 } from "./comun";
 import { soloLectura } from "../engine-solo-lectura";
 import { facturaDeOrtodoncia, fraseNoAvisaOrtodoncia } from "./orto-candado";
+import { loQueAunNoSeDebe } from "@/lib/dinero/lo-que-se-debe.server";
 import { errorDelCuerpo, rechazoDeDinero } from "./respuestas";
 
 /** Los del handler: cobrables SIN el borrador. */
@@ -277,7 +278,7 @@ export async function prepararAviso(ctx: SabinaCtx, p: ParamsAviso): Promise<Sab
   });
   if (r.tipo === "aclarar") return { tipo: "aclarar", pregunta: r.pregunta, opciones: r.opciones };
   if (r.tipo === "no") return { tipo: "no_se_puede", frase: r.frase };
-  const f = r.valor;
+  let f = r.valor;
 
   // 🔴 Ortodoncia (ws1-t11): Sabina no cobra ortodoncia, y avisarle al paciente
   // de su saldo es cobrarle por otra puerta. Mismo candado que `cobrar_factura`.
@@ -292,6 +293,21 @@ export async function prepararAviso(ctx: SabinaCtx, p: ParamsAviso): Promise<Sab
     };
   }
   if (orto) return { tipo: "no_se_puede", frase: await fraseNoAvisaOrtodoncia(ctx, f, orto) };
+
+  // Nota de un plan de tratamiento (26-oct, Rafael): la ruta avisa solo lo que el paciente debe DE
+  // VERDAD (lo hecho menos lo pagado) y no avisa si aún no debe nada. La tarjeta enseña lo mismo.
+  const saldoCompleto = f.balance;
+  const aunNo = (await loQueAunNoSeDebe(ctx.clinicId, { ids: [f.id] })).porFactura[f.id] ?? 0;
+  if (aunNo > 0) {
+    const debe = Math.max(0, Math.round((f.balance - aunNo) * 100) / 100);
+    if (debe <= 0.005) {
+      return {
+        tipo: "no_se_puede",
+        frase: `La factura ${f.folio} es la nota de un plan de tratamiento y ${f.paciente.nombre} todavía no debe nada de ella: lo aceptado se cobra cuando se hace.`,
+      };
+    }
+    f = { ...f, balance: debe };
+  }
 
   const m = await mensajeDe(ctx, f);
   if (m.tipo === "no") return { tipo: "no_se_puede", frase: m.frase };
@@ -332,7 +348,11 @@ export async function prepararAviso(ctx: SabinaCtx, p: ParamsAviso): Promise<Sab
       frase: `Mandar a ${f.paciente.nombre} por WhatsApp el aviso de saldo de la factura ${f.folio}: ${dinero(f.balance)}.`,
       detalles: [
         { etiqueta: "Paciente", valor: `${pacienteConFolio(f.paciente)} · ${telefonoParcial(f.paciente.telefono) ?? ""}`.trim() },
-        { etiqueta: "Factura", valor: `${f.folio} · ${estadoDe(f.status)} · saldo ${dinero(f.balance)}` },
+        {
+          etiqueta: "Factura",
+          valor: `${f.folio} · ${estadoDe(f.status)} · saldo ${dinero(saldoCompleto)}` +
+            (aunNo > 0 ? ` (de eso, ${dinero(Math.min(saldoCompleto, aunNo))} aún no se debe)` : ""),
+        },
         { etiqueta: "Mensaje que recibe", valor: `«${m.texto}»` },
       ],
       avisos,

@@ -13,6 +13,7 @@
 // · Máximo 3-4 queries; NUNCA exponer campos fuera del contrato (types.ts).
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { loQueAunNoSeDebeDeFacturas } from "@/lib/dinero/lo-que-se-debe.server";
 import { getPatientPortalContext, pacienteUnauthorized } from "@/lib/patient-portal/guard";
 import { hayQueNombrarAlPaciente } from "@/lib/patient-portal/ortodoncia-portal";
 import type {
@@ -96,9 +97,13 @@ export async function GET() {
           patientId: { in: patientIds },
           status: { in: ["PENDING", "PARTIAL", "OVERDUE"] },
         },
-        select: { clinicId: true, balance: true },
+        select: { id: true, clinicId: true, balance: true },
       }),
     ]);
+    // Lo que debe DE VERDAD (26-oct, Rafael): de un plan de tratamiento, lo hecho menos lo pagado; de
+    // ortodoncia «Precio total a plazos», lo vencido. Lo aceptado y sin hacer no es un saldo.
+    const noSeDebe = await loQueAunNoSeDebeDeFacturas(invoices);
+    const exigible = (inv: { id: string; balance: number }) => Math.max(0, inv.balance - (noSeDebe.get(inv.id) ?? 0));
 
     const clinics: PacienteClinica[] = links.map((l) => ({
       clinicId: l.clinicId,
@@ -127,14 +132,14 @@ export async function GET() {
     // Suma de balances por clínica en JS (redondeo a 2 decimales).
     const pendingMap = new Map<string, number>();
     for (const inv of invoices) {
-      pendingMap.set(inv.clinicId, (pendingMap.get(inv.clinicId) || 0) + inv.balance);
+      pendingMap.set(inv.clinicId, (pendingMap.get(inv.clinicId) || 0) + exigible(inv));
     }
     const pendingByClinic = Array.from(pendingMap.entries()).map(([clinicId, amount]) => ({
       clinicId,
       amount: round2(amount),
     }));
     const pendingTotal = round2(
-      invoices.reduce((sum, inv) => sum + inv.balance, 0)
+      invoices.reduce((sum, inv) => sum + exigible(inv), 0)
     );
 
     const response: PacienteSummaryResponse = {

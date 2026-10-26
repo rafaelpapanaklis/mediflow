@@ -23,6 +23,7 @@
 
 import { buildAppointmentWhere } from "@/lib/auth-context";
 import { computeReceivables, receivableInvoiceWhere, type CajaDb } from "@/lib/caja";
+import { porHacerPorPaciente } from "@/lib/treatments/por-cobrar-db";
 import { round2 } from "@/lib/invoice-totals";
 import { relatedPatientVisibilityAnd } from "@/lib/patient-visibility";
 import { comoAuthContext, pesos, recortar, tienePermiso, visorDe, type Lista } from "./base";
@@ -60,6 +61,11 @@ export interface SeccionEscape {
 /** Lo que devuelve cada fuente: la sección ya armada y lo que dejó fuera ARCO. */
 export interface Fuente {
   seccion: SeccionEscape;
+  /**
+   * Solo `por_cobrar`: lo «por hacer» de las notas de plan que apartó (26-oct). `sin_agendar` NO lo
+   * resta de su trabajo aceptado: ese dinero aún no se hace y sigue contando allí.
+   */
+  porHacerPorFactura?: Record<string, number>;
   /**
    * Lo que se descartó por estar el paciente cancelado por ARCO.
    *
@@ -260,10 +266,16 @@ export async function seccionPorCobrar(
     }),
   ]);
 
+  // Notas de plan (26-oct): lo aceptado y sin hacer no se está escapando: no es deuda todavía. Sale
+  // de esta sección con lo que `computeReceivables` apartó (`porHacerPorFactura`) de esta población.
+  const porHacer = vencidas.porHacerPorFactura ?? {};
+  let porHacerTotal = 0;
+  for (const id of Object.keys(porHacer)) porHacerTotal += num(porHacer[id]);
+
   const hoy = inicioDeHoy(ctx.timezone).getTime();
-  const filas: FilaEscape[] = (filasCrudas as any[]).map((f) => {
+  const filas: FilaEscape[] = (filasCrudas as any[]).filter((f) => round2(num(f.balance) - num(porHacer[f.id])) > 0).map((f) => {
     const vencidaEl = f.dueDate ? new Date(f.dueDate) : null;
-    const saldo = round2(num(f.balance));
+    const saldo = round2(num(f.balance) - num(porHacer[f.id]));
     // Lo vencido de ESTA factura con la regla de `computeReceivables`: en una a
     // plazos puede ser solo una parte (las cuotas atrasadas), y una a plazos al
     // corriente no está vencida aunque su `dueDate` ya haya pasado.
@@ -301,9 +313,10 @@ export async function seccionPorCobrar(
     // `aproximado` significa una sola cosa en toda la herramienta: «el DINERO es
     // un suelo». Marcar aquí un recorte de lista haría que el resumen dijera «al
     // menos $X» de una cifra que es exacta.
-    seccion: armar(filas, "por_cobrar", total, false, num((resumen as any)?._sum?.balance)),
+    seccion: armar(filas, "por_cobrar", total, false, round2(Math.max(0, num((resumen as any)?._sum?.balance) - porHacerTotal))),
     archivados: { filas: num((arco as any)?._count), monto: round2(num((arco as any)?._sum?.balance)), exacto: true },
     vencido: round2(vencidas.vencido),
+    porHacerPorFactura: porHacer,
   };
 }
 
@@ -476,6 +489,8 @@ export async function seccionSinAgendar(
   conCita: Record<string, true>,
   puede: { verDinero: boolean; verPlanes: boolean },
   tope: number,
+  /** Lo «por hacer» de las notas de plan que `por_cobrar` ya apartó (`Fuente.porHacerPorFactura`). */
+  porHacerPorFactura: Record<string, number> = {},
 ): Promise<Fuente> {
   const vis = visibilidad(ctx);
   const auth = comoAuthContext(ctx);
@@ -617,8 +632,12 @@ export async function seccionSinAgendar(
       where: { ...wherePorCobrar(ctx, corte), patientId: { in: ids } },
       _sum: { balance: true },
     });
+    // Lo «por hacer» de sus notas de plan NO está en `por_cobrar` (26-oct): tampoco se resta aquí,
+    // así el dinero aceptado y sin hacer sigue contando como trabajo sin agendar. Sin notas de plan
+    // con algo por hacer, no consulta nada.
+    const { porPaciente: porHacer } = await porHacerPorPaciente(db as any, ctx.clinicId, porHacerPorFactura);
     for (const g of porPaciente as any[]) {
-      if (g.patientId) yaFacturado[g.patientId] = num(g._sum?.balance);
+      if (g.patientId) yaFacturado[g.patientId] = Math.max(0, num(g._sum?.balance) - (porHacer.get(g.patientId) ?? 0));
     }
   }
 

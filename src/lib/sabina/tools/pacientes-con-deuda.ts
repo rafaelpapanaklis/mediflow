@@ -33,6 +33,7 @@
 
 import { deudaInvoiceWhere } from "@/lib/dinero/ingresos.server";
 import { computeReceivables, type CajaDb } from "@/lib/caja";
+import { porHacerPorPaciente } from "@/lib/treatments/por-cobrar-db";
 import { patientVisibilityAnd, relatedPatientVisibilityAnd } from "@/lib/patient-visibility";
 import { round2 } from "@/lib/invoice-totals";
 import {
@@ -123,7 +124,24 @@ export const pacientesConDeuda = definirHerramienta<ParamsDeuda, DatosDeuda>({
       }),
     ]);
 
-    const ids = porPaciente.map((g: any) => g.patientId).filter(Boolean);
+    // Notas de plan (26-oct): lo aceptado y sin hacer no es deuda. Se resta, por paciente, lo «por
+    // hacer» que `computeReceivables` apartó de esas notas (solo las que entran en este `where`).
+    const { porPaciente: porHacer } = await porHacerPorPaciente(
+      db as any, ctx.clinicId, saldos.porHacerPorFactura ?? {},
+      (f) => (minimo > 0 ? f.balance >= minimo : f.balance > 0),
+    );
+    const restar = (patientId: string, saldo: number) => round2(Math.max(0, saldo - (porHacer.get(patientId) ?? 0)));
+    const porPacienteNeto = (porPaciente as any[])
+      .map((g: any) => ({ ...g, neto: restar(g.patientId, Number(g._sum?.balance ?? 0)) }))
+      .filter((g: any) => g.neto > 0)
+      .sort((a: any, b: any) => b.neto - a.neto);
+    let porHacerTotal = 0;
+    for (const v of Array.from(porHacer.values())) porHacerTotal += v;
+    // Pacientes que solo tenían lo aceptado sin hacer: ya no son deudores.
+    const sinDeuda = new Set((porPaciente as any[]).filter((g: any) => restar(g.patientId, Number(g._sum?.balance ?? 0)) <= 0).map((g: any) => g.patientId));
+    const deudoresTotal = Math.max(0, distintos.length - sinDeuda.size);
+
+    const ids = porPacienteNeto.map((g: any) => g.patientId).filter(Boolean);
     // Nombres: por el helper de visibilidad, nunca un `prisma.patient` pelado
     // (regla dura de @/lib/patient-visibility). `deletedAt` se SELECCIONA en vez
     // de filtrarse para que el total de arriba y esta lista sigan hablando de la
@@ -143,7 +161,7 @@ export const pacientesConDeuda = definirHerramienta<ParamsDeuda, DatosDeuda>({
     const porId: Record<string, any> = {};
     for (const p of pacientes) porId[p.id] = p;
 
-    const filas: DeudorFila[] = porPaciente.map((g: any) => {
+    const filas: DeudorFila[] = porPacienteNeto.map((g: any) => {
       const p = porId[g.patientId];
       return {
         paciente: p
@@ -152,14 +170,14 @@ export const pacientesConDeuda = definirHerramienta<ParamsDeuda, DatosDeuda>({
             : [p.firstName, p.lastName].filter(Boolean).join(" ").trim()
           : "Paciente privado",
         folio: p && !p.deletedAt ? p.patientNumber ?? null : null,
-        saldo: round2(g._sum?.balance ?? 0),
+        saldo: g.neto,
         facturas: g._count?._all ?? 0,
       };
     });
 
     return {
-      deudores: recortar(filas, distintos.length),
-      totalAdeudado: round2(sumaTotal?._sum?.balance ?? 0),
+      deudores: recortar(filas, deudoresTotal),
+      totalAdeudado: round2(Math.max(0, (sumaTotal?._sum?.balance ?? 0) - porHacerTotal)),
       totalVencido: round2(saldos.vencido),
       vencidoAlDia: inicioDeHoy(ctx.timezone).toISOString(),
     };

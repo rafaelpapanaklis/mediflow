@@ -72,6 +72,7 @@ async function abrir(chromium: { launch(o?: any): Promise<any> }, paquete: strin
     }
     if (url.pathname === "/api/treatments/plan1" && req.method() === "PATCH") return json(200, { success: true, items: (cuerpo?.itemIds ?? []).map((id: string) => ({ id, estado: "hecho" })) });
     if (url.pathname === "/api/treatments/plan1/nota-de-cobro") return json(201, { estado: "creada", nota: { id: "n1", invoiceNumber: "F-0101", total: 2050.5 } });
+    if (url.pathname === "/api/treatments/plan1/cerrar") return json(200, { ok: true, estado: "cerrado", notas: [], filasCanceladas: 1, saldoAFavor: 0, sinAjustar: [] });
     if (url.pathname === "/api/procedures") return json(200, TARIFARIO);
     if (url.pathname === "/api/caja/para-cobrar") return json(200, { register: { esMia: true }, whatsappConectado: false });
     if (url.pathname === "/api/agenda/doctors") return json(200, { doctors: [] });
@@ -222,17 +223,36 @@ test("a 390 px: Cobrar hoy (abono), Hoy en el sillón y la Cuenta del plan sin s
     ["hoy", "[data-hoy-plan]", "hoy-en-el-sillon-390.png"],
     ["cuenta", "[data-cuenta-plan]", "cuenta-del-plan-390.png"],
   ] as const) {
-    const { navegador, pagina } = await abrir(chromium, paquete, escena, { cuentas: () => [{ ...planConNota(), pagado: 500, saldo: 1550.5 }], viewport: movil });
+    // 26-oct: la resina está hecha ($1,250.50), la limpieza no ($800), y abonó $500.
+    const cuentas = () => [{ ...planConNota(), pagado: 500, saldo: 1550.5, aceptado: 2050.5, hecho: 1250.5, debe: 750.5, saldoAFavor: 0, porHacer: 800, vencido: 0 }];
+    const { navegador, pagina, pedidas } = await abrir(chromium, paquete, escena, { cuentas, viewport: movil });
     try {
       await pagina.waitForSelector(espera);
       if (escena === "cuenta") {
-        const texto = await pagina.textContent("[data-cuenta-plan]");
-        assert.match(texto ?? "", /Total del plan/);
-        assert.match(texto ?? "", /\$2,050\.50/);
-        assert.match(texto ?? "", /\$1,550\.50/);
-        assert.match(texto ?? "", /F-0101/);
+        const cifra = async (k: string) => (await pagina.textContent(`[data-cifra="${k}"]`)) ?? "";
+        assert.match(await cifra("aceptado"), /Plan aceptado\s*\$2,050\.50/);
+        assert.match(await cifra("hecho"), /Hecho\s*\$1,250\.50/);
+        assert.match(await cifra("pagado"), /Pagado\s*\$500\.00/);
+        assert.match(await cifra("debe"), /Debe\s*\$750\.50/);
+        assert.match(await cifra("por-hacer"), /Por hacer\s*\$800\.00/);
+        assert.match(await pagina.textContent("[data-cuenta-plan]") ?? "", /F-0101/);
         await pagina.click("[data-cuenta-plan-cobrar]");
         assert.equal(await pagina.evaluate(() => (window as any).__ABONAR__), true);
+        // «Cerrar plan»: confirmación en la tarjeta, con lo que pasará y el motivo obligatorio.
+        await pagina.click("[data-cuenta-plan-cerrar]");
+        await pagina.waitForSelector("[data-cuenta-plan-cierre]");
+        const aviso = (await pagina.textContent("[data-cuenta-plan-cierre]")) ?? "";
+        assert.match(aviso, /Lo que no se hizo \(\$800\.00\) sale de la nota/);
+        assert.match(aviso, /Sigue debiendo \$750\.50/);
+        assert.equal(await pagina.isDisabled("[data-cuenta-plan-confirmar]"), true, "sin motivo no se cierra");
+        await pagina.fill("[data-cuenta-plan-motivo]", "Ya no continuará");
+        await sinScrollHorizontal(pagina);
+        await foto(pagina, "cuenta-del-plan-cerrar-390.png");
+        await pagina.click("[data-cuenta-plan-confirmar]");
+        await pagina.waitForSelector("[data-cuenta-plan-cierre]", { state: "detached" });
+        const cierre = pedidas.find((p) => p.ruta === "/api/treatments/plan1/cerrar");
+        assert.equal(cierre?.metodo, "POST");
+        assert.deepEqual(cierre?.cuerpo, { motivo: "Ya no continuará" });
       }
       await sinScrollHorizontal(pagina);
       await foto(pagina, nombre);

@@ -26,6 +26,9 @@ import type { CondicionesPago } from "@/lib/quotes/condiciones-pago";
 import { getTzParts, tzLocalToUtc } from "@/lib/agenda/time-utils";
 import { cargarVencimientosDeCargosDeControl } from "@/lib/orthodontics/cobranza-controles-db";
 import { DEFAULT_INVOICE_TZ } from "@/lib/invoices/due-date";
+import { corteDeVencido, deudaDeNotaDelPlan } from "@/lib/treatments/por-cobrar";
+import { leerNotasDePlan, type LectorDeNotasDePlan } from "@/lib/treatments/por-cobrar-db";
+import { principalesPrecioTotal, type LectorDePrincipalesPrecioTotal } from "@/lib/orthodontics/principales-precio-total-db";
 import {
   FUENTES_CREDITO_QUE_SON_INGRESO,
   REEMBOLSO_A_SALDO_A_FAVOR,
@@ -314,6 +317,7 @@ export interface CajaState {
   receivableTotal?:  number;                 // POR COBRAR: todo lo que falta por cobrar
   overdueByInvoice?: Record<string, number>; // lo vencido de cada factura con algo vencido
   receivablesIncompleto?: boolean;           // true = se tocó el techo de lectura: las dos cifras son un mínimo
+  porHacerTotal?:    number;                 // POR HACER (ACEPTADO): de las notas de plan, lo aceptado sin hacer ni pagar
   /** ws1-t5 (F7): cobros en efectivo que ningún corte recoge (últimos 90 días). */
   fueraDeCorte?: CobroFueraDeCorte[];
 }
@@ -941,12 +945,29 @@ function hoyEnZonaClinica(now: Date, timezone: string): string {
 
 /** Los dos saldos de la clínica, con UNA sola definición para todo el panel. */
 export interface SaldosDeLaClinica {
-  /** POR COBRAR: todo lo que falta por cobrar de las facturas emitidas (ni borrador ni cancelada). */
+  /**
+   * POR COBRAR: todo lo que falta por cobrar de las facturas emitidas (ni borrador ni cancelada).
+   * De una NOTA DE PLAN (`invoices."treatmentPlanId"`), solo lo HECHO menos lo pagado (decisión de
+   * Rafael, 26-oct-2026; `lib/treatments/por-cobrar.ts`): lo aceptado sin hacer va en `porHacer`.
+   */
   porCobrar: number;
-  /** VENCIDO: la parte de lo por cobrar cuya fecha ya pasó (por cuota en las facturas a plazos). */
+  /** VENCIDO: la parte de lo por cobrar cuya fecha ya pasó (por cuota en las facturas a plazos; en una nota de plan, lo hecho hace más de 30 días). */
   vencido:   number;
   /** Lo vencido de cada factura que tiene algo vencido: `invoiceId` → pesos. */
   vencidoPorFactura: Record<string, number>;
+  /**
+   * POR HACER / POR VENCER: lo que salió de `porCobrar` porque todavía no se debe —de las notas de
+   * plan, lo aceptado que no se hace ni se paga; de la factura principal de un caso de ortodoncia en
+   * «Precio total a plazos», las cuotas que aún no vencen (26-oct). `porCobrar + porHacer` = la suma
+   * de saldos de siempre.
+   */
+  porHacer: number;
+  /** De `porHacer`, lo que es ortodoncia por vencer (para decirlo aparte). */
+  porVencerOrto: number;
+  /** `porHacer` de cada nota de plan que tiene algo por hacer: `invoiceId` → pesos (para quien suma saldos a mano). */
+  porHacerPorFactura: Record<string, number>;
+  /** `porHacer` de las notas emitidas HOY (Caja resta esto de «Por cobrar» del día). */
+  porHacerEmitidoHoy: number;
   /**
    * `true` solo si se tocó el techo de seguridad (`RECEIVABLES_MAX_PAGINAS` ×
    * `RECEIVABLES_PAGINA` facturas abiertas): las cifras son un MÍNIMO. Por
@@ -973,9 +994,21 @@ export interface OpcionesDeSaldos {
   /** Solo para pruebas: tamaño de tanda y techo de tandas. */
   pagina?:     number;
   maxPaginas?: number;
+  /**
+   * De dónde salen las notas de plan (`lib/treatments/por-cobrar-db.ts`). Por omisión, del mismo
+   * `db` si sabe hacer SQL crudo; un doble sin `$queryRaw` cuenta todo como antes.
+   */
+  leerNotasDePlan?: LectorDeNotasDePlan;
+  /**
+   * Qué facturas son la principal de un caso de ortodoncia «Precio total a plazos». Por omisión, solo
+   * con el cliente de siempre (`prisma`); un doble de prueba cuenta todo como antes.
+   */
+  leerPrincipalesPrecioTotal?: LectorDePrincipalesPrecioTotal;
 }
 
-const SALDOS_VACIOS = (): SaldosDeLaClinica => ({ porCobrar: 0, vencido: 0, vencidoPorFactura: {}, incompleto: false });
+const SALDOS_VACIOS = (): SaldosDeLaClinica => ({
+  porCobrar: 0, vencido: 0, vencidoPorFactura: {}, porHacer: 0, porVencerOrto: 0, porHacerPorFactura: {}, porHacerEmitidoHoy: 0, incompleto: false,
+});
 
 /**
  * «POR COBRAR» y «VENCIDO» de la clínica (fila 87 de la revisión de lógica de
@@ -1016,10 +1049,16 @@ export async function computeReceivables(
         ...(despuesDe ? [{ id: { gt: despuesDe } }] : []),
       ],
     },
-    select:  { id: true, balance: true, dueDate: true, total: true },
+    select:  { id: true, balance: true, dueDate: true, total: true, createdAt: true },
     orderBy: { id: "asc" },
     take:    pagina,
   });
+  const crudo = db as unknown as { $queryRaw?: unknown };
+  const lectorDePlan: LectorDeNotasDePlan | null =
+    opciones.leerNotasDePlan ??
+    (typeof crudo.$queryRaw === "function" ? (c, ids) => leerNotasDePlan(c, ids, db as unknown as typeof prisma) : null);
+  const lectorDeOrto: LectorDePrincipalesPrecioTotal | null =
+    opciones.leerPrincipalesPrecioTotal ?? (db === (prisma as unknown as CajaDb) ? principalesPrecioTotal : null);
 
   let tanda = await leerTanda(null);
   if (tanda.length === 0) return SALDOS_VACIOS();
@@ -1033,10 +1072,15 @@ export async function computeReceivables(
   const timezone = clinic?.timezone || DEFAULT_INVOICE_TZ;
   const hoy = hoyEnZonaClinica(now, timezone);
   const todayStart = tzLocalToUtc(hoy, 0, 0, timezone);
+  const corte = corteDeVencido(todayStart);
 
   let porCobrarC = 0;
   let vencidoC = 0;
+  let porHacerC = 0;
+  let porVencerOrtoC = 0;
+  let porHacerHoyC = 0;
   const vencidoPorFactura: Record<string, number> = {};
+  const porHacerPorFactura: Record<string, number> = {};
   let incompleto = false;
 
   for (let n = 1; ; n++) {
@@ -1049,13 +1093,39 @@ export async function computeReceivables(
           select: { id: true, payments: { select: { amount: true, method: true } } },
         })).map((i) => [i.id, i.payments]));
 
+    // Notas de plan: lo hecho menos lo pagado (tolerante: si no se leen, todo cuenta como antes).
+    const ids = tanda.map((f) => f.id);
+    const notasDePlan = lectorDePlan ? await lectorDePlan(clinicId, ids).catch(() => new Map()) : new Map();
+    // Ortodoncia «Precio total a plazos»: de su factura principal solo se debe lo vencido (26-oct).
+    const principalesOrto = lectorDeOrto ? await lectorDeOrto(clinicId, ids).catch(() => new Set<string>()) : new Set<string>();
+
     for (const f of tanda) {
-      porCobrarC += Math.round((f.balance ?? 0) * 100);
-      const v = overdueOfInvoice(
+      const dePlan = notasDePlan.get(f.id);
+      const deuda = dePlan ? deudaDeNotaDelPlan(dePlan.nota, dePlan.filas, corte) : null;
+      const delCalendario = overdueOfInvoice(
         { ...f, condiciones: porFactura.get(f.id), cobros: cobrosPorFactura.get(f.id) ?? [], vencimientoControl: vencimientosControl.get(f.id) ?? null },
         todayStart,
         hoy,
       );
+      const saldo = Math.max(0, f.balance ?? 0);
+      const esOrto = !deuda && principalesOrto.has(f.id);
+      const exigible = deuda ? deuda.debe : esOrto ? Math.min(saldo, delCalendario) : f.balance ?? 0;
+      porCobrarC += Math.round(exigible * 100);
+      // Lo que falta y aún no se debe (por hacer en la nota del plan; por vencer en ortodoncia): sale de
+      // «Por cobrar» y va a «Por hacer / por vencer».
+      const ph = deuda ? Math.min(deuda.porHacerSinPagar, saldo) : esOrto ? money(saldo - exigible) : 0;
+      if (ph > 0) {
+        porHacerC += Math.round(ph * 100);
+        if (esOrto) porVencerOrtoC += Math.round(ph * 100);
+        porHacerPorFactura[f.id] = money(ph);
+        const creada = (f as { createdAt?: Date | null }).createdAt;
+        if (creada && creada.getTime() >= todayStart.getTime()) porHacerHoyC += Math.round(ph * 100);
+      }
+      // Nota de plan: vence lo hecho hace más de 30 días; si además tiene cuotas acordadas, la cuota
+      // vencida también, pero nunca más de lo que debe por lo hecho.
+      const v = deuda
+        ? Math.min(deuda.debe, Math.max(deuda.vencido, esPlanAPlazos(porFactura.get(f.id)) ? delCalendario : 0))
+        : delCalendario;
       if (v > 0) {
         vencidoC += Math.round(v * 100);
         vencidoPorFactura[f.id] = money(v);
@@ -1072,7 +1142,16 @@ export async function computeReceivables(
     tanda = await leerTanda(tanda[tanda.length - 1].id);
     if (tanda.length === 0) break;
   }
-  return { porCobrar: porCobrarC / 100, vencido: vencidoC / 100, vencidoPorFactura, incompleto };
+  return {
+    porCobrar: porCobrarC / 100,
+    vencido: vencidoC / 100,
+    vencidoPorFactura,
+    porHacer: porHacerC / 100,
+    porVencerOrto: porVencerOrtoC / 100,
+    porHacerPorFactura,
+    porHacerEmitidoHoy: porHacerHoyC / 100,
+    incompleto,
+  };
 }
 
 /**
@@ -1111,9 +1190,11 @@ async function computeDayBilling(clinicId: string, todayStart: Date, now: Date, 
 
   return {
     billedToday:  billedAgg._sum.total    ?? 0,
-    pendingToday: pendingAgg._sum.balance ?? 0,
+    // Lo aceptado en un plan hoy y aún sin hacer no es «por cobrar» del día (nota de plan, 26-oct).
+    pendingToday: Math.max(0, (pendingAgg._sum.balance ?? 0) - (saldos.porHacerEmitidoHoy ?? 0)),
     overdueToday: saldos.vencido,
     receivableTotal:  saldos.porCobrar,
+    porHacerTotal:    saldos.porHacer ?? 0,
     overdueByInvoice: saldos.vencidoPorFactura,
     receivablesIncompleto: saldos.incompleto,
   };
@@ -1155,6 +1236,7 @@ export async function getCajaState(clinicId: string, opts: { timezone?: string |
     receivableTotal:  money(dayBilling.receivableTotal),
     overdueByInvoice: dayBilling.overdueByInvoice,
     receivablesIncompleto: dayBilling.receivablesIncompleto,
+    porHacerTotal:    money(dayBilling.porHacerTotal),
   };
 
   const asignados = reg ? await cobrosAsignados(clinicId, { cashRegisterId: reg.id }) : new Set<string>();

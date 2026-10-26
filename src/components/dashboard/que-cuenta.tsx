@@ -12,7 +12,7 @@ import { useT } from "@/i18n/i18n-provider";
 
 export type ClaveQueCuenta =
   | "ingresosPeriodo" | "ingresosPeriodoConReembolsos" | "gastosPeriodo" | "utilidad" | "utilidadConMargen"
-  | "efectivo" | "porDoctor" | "porCobrar" | "vencido" | "ortoCobrado" | "ortoVencido"
+  | "efectivo" | "porDoctor" | "porCobrar" | "vencido" | "porHacer" | "ortoCobrado" | "ortoVencido"
   | "reportesIngresos" | "reportesTicket" | "reportesConDeuda"
   | "crmLtv" | "crmCobrado" | "crmSaldo"
   | "costosIngresos" | "costosCostos" | "costosMargen"

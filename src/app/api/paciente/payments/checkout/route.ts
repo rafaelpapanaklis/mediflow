@@ -22,6 +22,8 @@ import {
   getClinicConnectAccount,
   createInvoiceCheckoutSession,
 } from "@/lib/patient-portal/online-payment";
+import { loQueAunNoSeDebe } from "@/lib/dinero/lo-que-se-debe.server";
+import { montoParaLink } from "@/lib/factura-mp/core";
 
 export const dynamic = "force-dynamic";
 
@@ -82,10 +84,28 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // 26-oct (Rafael): igual que el link de Mercado Pago (`montoParaLink`): se cobra lo DEBIDO; si aún no
+    // debe nada (tratamiento por hacer, cuotas por vencer) y pidió `adelanto`, el saldo de la nota (queda
+    // como abono). El cliente solo dice «adelanto»: el monto sale de aquí.
+    const noSeDebe = (await loQueAunNoSeDebe(invoice.clinicId, { ids: [invoice.id] })).porFactura[invoice.id] ?? 0;
+    const cuanto = montoParaLink({ sugerido: invoice.balance, saldo: invoice.balance, noSeDebe, adelanto: body?.adelanto === true });
+    if ("error" in cuanto) {
+      return NextResponse.json(
+        { code: "nada_debido", error: "Aún no debes nada de esta factura. Si quieres, puedes pagar por adelantado." },
+        { status: 409 },
+      );
+    }
+    if (cuanto.monto < MIN_ONLINE_AMOUNT_MXN) {
+      return NextResponse.json(
+        { error: `Lo que debes es menor al mínimo para pago en línea ($${MIN_ONLINE_AMOUNT_MXN} MXN). Paga en tu clínica.` },
+        { status: 400 },
+      );
+    }
+
     const session = await createInvoiceCheckoutSession({
       invoiceId: invoice.id,
       invoiceNumber: invoice.invoiceNumber,
-      amountMxn: invoice.balance,
+      amountMxn: cuanto.monto,
       clinicId: invoice.clinicId,
       clinicName: invoice.clinic?.name ?? "Tu clínica",
       destinationAccountId,

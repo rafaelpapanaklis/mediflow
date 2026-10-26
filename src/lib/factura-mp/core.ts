@@ -160,3 +160,17 @@ export function lineaLinkWhatsApp(url: string, monto: number): string {
 export function tituloDelCobro(invoiceNumber: string, clinica: string | null | undefined): string {
   return `Nota ${invoiceNumber} — ${clinica?.trim() || "consultorio"}`.slice(0, 250);
 }
+
+/**
+ * Por cuánto sale el link (26-oct, Rafael). Si el paciente DEBE algo, por lo debido —lo hecho sin pagar
+ * de una nota de plan, lo vencido de ortodoncia «Precio total»—, sin pasar de la mensualidad/lo vencido
+ * de siempre (`sugerido`). Si no debe nada todavía: con `adelanto`, por el saldo de la nota (queda como
+ * abono: «si quieren cobrar algo más, que también puedan»); sin él, `nada_debido`. Sin nada que no se
+ * deba (`noSeDebe` = 0), lo de siempre.
+ */
+export function montoParaLink(a: { sugerido: number; saldo: number; noSeDebe: number; adelanto?: boolean }): { monto: number } | { error: "nada_debido" } {
+  if (!(a.noSeDebe > 0)) return { monto: a.sugerido };
+  const debido = redondear2(Math.max(0, a.saldo - a.noSeDebe));
+  if (debido > 0.005) return { monto: redondear2(Math.min(a.sugerido, debido)) };
+  return a.adelanto ? { monto: a.saldo } : { error: "nada_debido" };
+}

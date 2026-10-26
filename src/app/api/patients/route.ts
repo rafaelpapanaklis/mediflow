@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { deudaInvoiceWhere } from "@/lib/dinero/ingresos.server";
+import { candidatasNoExigibles, loQueAunNoSeDebe, loQueAunNoSeDebePorPaciente, pacientesQueYaNoDeben } from "@/lib/dinero/lo-que-se-debe.server";
 import { Prisma, PatientStatus, Gender } from "@prisma/client";
 import { getAuthContext, buildPatientWhere } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
@@ -281,7 +282,7 @@ async function v2Handler(
       // igual que Finanzas, Reportes, CRM e Inicio.
       invoices: {
         where: deudaInvoiceWhere(ctx.clinicId),
-        select: { balance: true },
+        select: { id: true, balance: true },
       },
     },
     take: dbFetchTake,
@@ -293,7 +294,7 @@ async function v2Handler(
       primaryDoctor: { select: { id: true; firstName: true; lastName: true; color: true } };
       appointments: { select: { id: true; startsAt: true; status: true; type: true } };
       records: { select: { visitDate: true } };
-      invoices: { select: { balance: true } };
+      invoices: { select: { id: true; balance: true } };
     };
   }>>;
   try {
@@ -384,6 +385,24 @@ async function v2Handler(
     nextApptWeek,
   ] = statCounts;
 
+  // Lo que aún no se debe (decisiones de Rafael, 26-oct-2026): de una nota de plan, lo aceptado sin
+  // hacer; de ortodoncia «Precio total a plazos», lo que no vence. Lo mismo que Caja, Finanzas y la
+  // cabecera de la ficha. Solo se miran las facturas candidatas (notas de plan y principales de
+  // ortodoncia), leídas una vez; sin ellas, nada cambia.
+  const candidatas = await candidatasNoExigibles(ctx.clinicId);
+  const [deLaLista, deLosKpis] = candidatas.length
+    ? await Promise.all([
+        loQueAunNoSeDebe(ctx.clinicId, { candidatas, ids: rawPatients.flatMap((p) => p.invoices.map((i) => i.id)) }),
+        loQueAunNoSeDebe(ctx.clinicId, { candidatas, filtro: { patient: baseStatsWhere } }),
+      ])
+    : [null, null];
+  const noSeDebe = (id: string) => deLaLista?.porFactura[id] ?? 0;
+  // «Con deuda»: quien solo debía lo que aún no se debe deja de contar.
+  let sinDeudaDeVerdad = 0;
+  if (deLosKpis && deLosKpis.total > 0) {
+    sinDeudaDeVerdad = (await pacientesQueYaNoDeben(ctx.clinicId, await loQueAunNoSeDebePorPaciente(ctx.clinicId, deLosKpis))).size;
+  }
+
   const stats = {
     total: totalCount,
     active: activeCount,
@@ -397,8 +416,8 @@ async function v2Handler(
         : newThisMonth > 0
         ? 100
         : 0,
-    withDebt: distinctDebtPatients.length,
-    withDebtAmount: debtAggregate._sum.balance ?? 0,
+    withDebt: Math.max(0, distinctDebtPatients.length - sinDeudaDeVerdad),
+    withDebtAmount: Math.max(0, Math.round(((debtAggregate._sum.balance ?? 0) - (deLosKpis?.total ?? 0)) * 100) / 100),
     nextAppointmentsToday: nextApptToday,
     nextAppointmentsWeek: nextApptWeek,
   };
@@ -428,7 +447,8 @@ async function v2Handler(
   /* ─── enriquecer + filtrar/sort post-fetch ─── */
   const SIX_MONTHS_MS = 1000 * 60 * 60 * 24 * 180;
   const enriched = rawPatients.map((p) => {
-    const balance = p.invoices.reduce((sum, inv) => sum + (inv.balance ?? 0), 0);
+    // Lo que se debe de verdad (26-oct): saldo − lo que aún no se debe; las demás facturas, enteras.
+    const balance = Math.round(p.invoices.reduce((sum, inv) => sum + (inv.balance ?? 0) - noSeDebe(inv.id), 0) * 100) / 100;
     const nextAppointment = p.appointments[0]
       ? {
           id: p.appointments[0].id,

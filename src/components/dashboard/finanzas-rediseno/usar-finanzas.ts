@@ -34,7 +34,8 @@ export interface FinanzasResumen {
   porDoctor: DoctorRow[];
   /** ws1-t2: lo cobrado en el sistema anterior con fecha en el periodo. Aparte: no suma a `ingresos`. */
   historiaMigrada?: number;
-  saldos:    { porCobrar: number; vencido: number };
+  /** `porHacer`: de las notas de plan, lo aceptado sin hacer ni pagar (no es deuda; 26-oct). */
+  saldos:    { porCobrar: number; vencido: number; porHacer?: number };
 }
 export interface Gasto {
   id: string; date: string; category: string; amount: number; note: string | null;

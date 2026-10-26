@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { deudaInvoiceWhere, movimientosDelPeriodo } from "@/lib/dinero/ingresos.server";
+import { loQueAunNoSeDebe, loQueAunNoSeDebePorPaciente, pacientesQueYaNoDeben } from "@/lib/dinero/lo-que-se-debe.server";
 import { netoDelPeriodo } from "@/lib/dinero/ingresos";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import type { TFunction } from "@/i18n/t";
@@ -169,12 +170,18 @@ export async function cargarReportes(
   const serialized = JSON.parse(JSON.stringify({ topTypes, byStatus, resourcesByKind, topResources }));
 
   // KPIs para el cliente
+  // Lo que aún no se debe (26-oct, Rafael): de las notas de plan, lo aceptado sin hacer; de ortodoncia
+  // «Precio total a plazos», lo que no vence. Mismas cifras que Pacientes, Caja y Finanzas.
+  const noSeDebe = await safe(loQueAunNoSeDebe(clinicId), null);
+  const yaNoDeben = noSeDebe && noSeDebe.total > 0
+    ? await safe(loQueAunNoSeDebePorPaciente(clinicId, noSeDebe).then((m) => pacientesQueYaNoDeben(clinicId, m)), new Set<string>())
+    : new Set<string>();
   const patientStats = {
     total: totalPatients,
     newThisMonth,
     newPctDelta,
-    withDebt: debtCount,
-    withDebtAmount: Number(debtAggregate?._sum?.balance ?? 0),
+    withDebt: Math.max(0, debtCount - yaNoDeben.size),
+    withDebtAmount: Math.max(0, Math.round((Number(debtAggregate?._sum?.balance ?? 0) - (noSeDebe?.total ?? 0)) * 100) / 100),
     nextApptsToday,
     nextApptsWeek,
   };

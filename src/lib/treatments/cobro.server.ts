@@ -25,6 +25,10 @@ import { leerEstado } from "@/lib/quotes/cargos.server";
 import { aPesos, totalCentavos } from "./items";
 import { bloquearPlan, columnaNotaDelPlanExiste, repoFilas, tablaDeFilasExiste, FilaError } from "./items-db";
 import { cuentaDelPlan, planearNota, type CuentaDelPlan, type FacturaDeLaCuenta, type LineaDeNota, type NotaDelPlan, type PresupuestoDelPlan } from "./cobro";
+import { corteDeVencido, deudaDeNotaDelPlan } from "./por-cobrar";
+import { leerNotasDePlan } from "./por-cobrar-db";
+import { DEFAULT_INVOICE_TZ } from "@/lib/invoices/due-date";
+import { medianocheAnterior } from "@/lib/dinero/caja-core";
 import { leerPlan } from "./leer-plan";
 
 const dinero = (v: number) => new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(v);
@@ -350,7 +354,12 @@ const normalizar = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toL
  * `pagosDelPlan` (commit 36c1cbf5), las facturas de los presupuestos del plan (`quotes.invoiceId` y
  * `quote_charges`), sin repetir ninguna. null si el plan no es de esta clínica.
  */
-export async function leerCuentaDelPlan(args: { clinicId: string; planId: string }): Promise<CuentaDelPlan | null> {
+export async function leerCuentaDelPlan(args: {
+  clinicId: string;
+  planId: string;
+  /** Zona de la clínica si quien llama ya la tiene (varias cuentas en una petición: se lee una vez). */
+  timezone?: string | null;
+}): Promise<CuentaDelPlan | null> {
   const { clinicId, planId } = args;
   if (!clinicId || !planId) return null;
   const plan = await prisma.treatmentPlan.findFirst({
@@ -364,6 +373,7 @@ export async function leerCuentaDelPlan(args: { clinicId: string; planId: string
   const ids = new Set<string>();
   if (await columnaNotaDelPlanExiste()) for (const n of await notasDelPlan(prisma, clinicId, planId)) ids.add(n.id);
   const porColumna = ids.size;
+  const deColumna = new Set(ids);
 
   // La vía de antes: facturas de los presupuestos del plan.
   const quotes = await prisma.quote.findMany({
@@ -403,6 +413,23 @@ export async function leerCuentaDelPlan(args: { clinicId: string; planId: string
         createdAt: f.createdAt instanceof Date ? f.createdAt.toISOString() : String(f.createdAt ?? ""),
       }))
     : [];
+  // Notas ligadas por columna: lo hecho de cada una (26-oct). Las de la vía vieja cuentan enteras.
+  if (porColumna > 0 && facturas.length > 0) {
+    const leidas = await leerNotasDePlan(clinicId, facturas.map((f) => f.id));
+    if (leidas.size > 0) {
+      const zona = args.timezone
+        || (await prisma.clinic.findUnique({ where: { id: clinicId }, select: { timezone: true } }).catch(() => null))?.timezone
+        || DEFAULT_INVOICE_TZ;
+      const corte = corteDeVencido(medianocheAnterior(new Date(), zona));
+      for (const f of facturas) {
+        const l = leidas.get(f.id);
+        if (!l || l.planId !== planId) continue;
+        const d = deudaDeNotaDelPlan(l.nota, l.filas, corte);
+        f.hecho = d.hecho;
+        f.vencido = d.vencido;
+      }
+    }
+  }
   // Plan con filas: lo que falta por facturar son las filas sin nota viva (a su precio), y el total es
   // lo facturado más eso — así un descuento firmado no sale como «por facturar» (revisión ws1-t12).
   // Plan de texto: su costo, como siempre.
@@ -410,5 +437,9 @@ export async function leerCuentaDelPlan(args: { clinicId: string; planId: string
   const sinNota = filas.filter((f) => !(f.invoiceId && vivas.has(f.invoiceId)));
   const facturado = facturas.filter((f) => f.status !== "CANCELLED").reduce((a, f) => a + f.total, 0);
   const total = filas.length ? round2(facturado + aPesos(totalCentavos(sinNota))) : Number(plan.totalCost) || 0;
-  return cuentaDelPlan({ total, facturas, soloDelPlan });
+  // Facturas de la vía de antes (presupuesto) que aún deben: «Cerrar plan» no las toca (revisión t5, A5).
+  const facturasDeAntes = facturas
+    .filter((f) => !deColumna.has(f.id) && f.status !== "CANCELLED" && f.total - f.paid > 0.005)
+    .map((f) => f.invoiceNumber);
+  return { ...cuentaDelPlan({ total, facturas, soloDelPlan }), facturasDeAntes };
 }

@@ -187,6 +187,19 @@ export interface PlanConCuenta {
   saldo: number;
   /** Lo del plan que aún no está en ninguna nota (plan sin aceptar, o filas nuevas). */
   porFacturar: number;
+  /**
+   * Las cifras de la ficha (26-oct): aceptado (en sus notas), hecho, debe = hecho − pagado (o saldo a
+   * favor), lo aceptado por hacer y lo vencido (hecho hace más de 30 días). Opcionales: una respuesta
+   * de antes no las trae y la tarjeta pinta lo de siempre.
+   */
+  aceptado?: number;
+  hecho?: number;
+  debe?: number;
+  saldoAFavor?: number;
+  porHacer?: number;
+  vencido?: number;
+  /** Facturas de antes (presupuesto) que aún deben: «Cerrar plan» no las ajusta. */
+  facturasDeAntes?: string[];
   notas: Array<{ invoiceId: string; invoiceNumber: string; status: string; total: number; paid: number; createdAt: string }>;
   /** Filas vivas (para reconocer lo que la hoja va a cobrar). */
   filas: FilaParaEmparejar[];

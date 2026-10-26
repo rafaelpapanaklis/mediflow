@@ -32,6 +32,7 @@ import { contactoDelResponsableDeLaFactura } from "@/lib/orthodontics/responsabl
 import { destinatariosDeEnvio, esDestinoDeEnvio, type Destinatario } from "@/lib/invoices/destinatarios";
 import { leerCondicionesDeFacturas } from "@/lib/invoices/condiciones-pago-db";
 import { linkParaEnviar } from "@/lib/factura-mp/envio.server";
+import { loQueAunNoSeDebe } from "@/lib/dinero/lo-que-se-debe.server";
 
 export const dynamic = "force-dynamic";
 
@@ -124,6 +125,9 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     puedeCobrar: denyIfMissingPermission(ctx, "billing.charge") === null,
   });
 
+  // 26-oct (Rafael): la misma línea que el portal — cuánto del saldo aún no se debe. Tolerante: 0 si falla.
+  const aunNoSeDebe = (await loQueAunNoSeDebe(ctx.clinicId, { ids: [invoice.id] })).porFactura[invoice.id] ?? 0;
+
   const enviados: Destinatario[] = [];
   const fallos: Destinatario[] = [];
   for (const d of destinatarios) {
@@ -139,6 +143,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
       items: invoice.items,
       condiciones: porFactura.get(invoice.id) ?? null,
       linkPago: link,
+      aunNoSeDebe,
     });
     const { delivered } = await sendEmail({ to: d.valor, subject, html, text });
     (delivered ? enviados : fallos).push(d);

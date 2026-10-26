@@ -269,7 +269,7 @@ export const oportunidadesPerdidas = definirHerramienta<ParamsEscape, DatosEscap
     // `conCita`, que salió de la tanda 1.
     const [sinAgendar, sinContestar] = await Promise.all([
       necesitaCitas
-        ? seccionSinAgendar(db, ctx, ahora, corte, conCita, { verDinero, verPlanes }, TOPE_CANDIDATOS)
+        ? seccionSinAgendar(db, ctx, ahora, corte, conCita, { verDinero, verPlanes }, TOPE_CANDIDATOS, porCobrar?.porHacerPorFactura)
         : Promise.resolve(null),
       verAgenda && pedidas.includes("sin_contestar")
         ? // Sin espera: una solicitud sin contestar cuenta desde el primer día

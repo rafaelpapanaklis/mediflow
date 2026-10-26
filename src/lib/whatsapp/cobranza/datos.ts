@@ -180,7 +180,9 @@ export async function resumenDeSaldoDePaciente(
 
   let mejor: ResumenSaldo | null = null;
   let pendienteTotal = 0;
+  let vencidoTotal = 0;
   let algunaVencida = false;
+  let totalCuotasSinProxima = 0;
 
   for (const f of facturas) {
     const cuotas = calendarioDeCuotas(f.condiciones, f.total);
@@ -190,10 +192,14 @@ export async function resumenDeSaldoDePaciente(
     if (estado.pendiente <= 0) continue;
 
     pendienteTotal += estado.pendiente;
+    vencidoTotal += estado.importeVencido;
     if (estado.vencidas > 0) algunaVencida = true;
 
     const sig = estado.siguiente;
-    if (!sig) continue;
+    if (!sig) {
+      totalCuotasSinProxima = Math.max(totalCuotasSinProxima, estado.totalCuotas);
+      continue;
+    }
     // Gana la que vence antes. Una cuota sin fecha no le gana a ninguna con
     // fecha, pero sirve si no hay ninguna otra.
     const mejorFecha = mejor?.vencimiento ?? null;
@@ -215,10 +221,21 @@ export async function resumenDeSaldoDePaciente(
 
   if (!mejor) {
     // Hay deuda pero ninguna cuota por vencer (todo vencido, o plan sin
-    // fechas). No se inventa una próxima mensualidad que no existe.
-    return null;
+    // fechas). No se inventa una próxima mensualidad que no existe; pero lo
+    // vencido SÍ se dice (26-oct, Rafael: «debes» = lo vencido).
+    if (!(vencidoTotal > 0)) return null;
+    return {
+      vencimiento: null,
+      importeCuota: 0,
+      numeroCuota: 0,
+      esEnganche: false,
+      totalCuotas: totalCuotasSinProxima,
+      pendiente: redondea(pendienteTotal),
+      tieneVencidas: true,
+      vencido: redondea(vencidoTotal),
+    };
   }
-  return { ...mejor, pendiente: redondea(pendienteTotal), tieneVencidas: algunaVencida };
+  return { ...mejor, pendiente: redondea(pendienteTotal), tieneVencidas: algunaVencida, vencido: redondea(vencidoTotal) };
 }
 
 /** Dos decimales: sumar pesos en coma flotante deja colas de centavos. */

@@ -45,7 +45,8 @@ interface BillingTabProps {
   patientId: string;
   invoices: PatientBillingInvoice[];
   /** Totales YA calculados por el parent (los mismos del rail — sin queries nuevas). */
-  summary: { total: number; paid: number; balance: number };
+  /** `aunNoSeDebe` (26-oct): de `balance`, lo por hacer de planes y lo por vencer de ortodoncia. */
+  summary: { total: number; paid: number; balance: number; aunNoSeDebe?: number };
   facturApiEnabled: boolean;
   onNewInvoice: () => void;
   /** Click en la fila — abre el InvoiceDetailModal. */
@@ -104,6 +105,11 @@ export function BillingTab({
           <KpiCard label={t("patients.sideCards.paid")} value={fmtMXN(summary.paid)} icon={CheckCircle2} />
           <KpiCard label={t("patients.sideCards.pendingBalance")} value={fmtMXN(summary.balance)} icon={Clock} />
         </div>
+      )}
+      {!redesignOn && (summary.aunNoSeDebe ?? 0) > 0.005 && summary.balance > 0 && (
+        <p style={{ margin: "-6px 0 14px", fontSize: 12, color: "var(--text-3)" }} data-aun-no-se-debe>
+          {t("patients.sideCards.aunNoSeDebe", { monto: fmtMXN(Math.min(summary.balance, summary.aunNoSeDebe ?? 0)) })}
+        </p>
       )}
 
       <CardNew

@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { cachedByKey, claveDeClinica } from "@/lib/route-cache";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { loQueAunNoSeDebe, loQueAunNoSeDebePorPaciente, pacientesQueYaNoDeben } from "@/lib/dinero/lo-que-se-debe.server";
 
 /**
  * GET /api/analytics/patients-value
@@ -98,6 +99,14 @@ function getPatientsValue(clinicId: string): Promise<ValueResp> {
       // cartesiano que inflaría las sumas) y los unimos por paciente. Los
       // totales usan window aggregates sobre el set COMPLETO, evaluados antes
       // del LIMIT, así que no dependen del top ni del cap.
+      // Lo que aún no se debe (26-oct, Rafael): de las notas de plan, lo aceptado sin hacer; de
+      // ortodoncia «Precio total a plazos», lo que no vence. El saldo dice lo que se debe de verdad,
+      // igual que Pacientes, Reportes y Caja.
+      const noSeDebe = await loQueAunNoSeDebe(clinicId);
+      const noSeDebePorPaciente = noSeDebe.total > 0 ? await loQueAunNoSeDebePorPaciente(clinicId, noSeDebe) : new Map<string, number>();
+      const yaNoDeben = noSeDebePorPaciente.size > 0 ? await pacientesQueYaNoDeben(clinicId, noSeDebePorPaciente) : new Set<string>();
+      const saldoDe = (id: string, balance: unknown) => Math.max(0, Math.round((Number(balance) - (noSeDebePorPaciente.get(id) ?? 0)) * 100) / 100);
+
       const rows = await prisma.$queryRaw<RawRow[]>`
         WITH inv AS (
           SELECT "patientId",
@@ -158,7 +167,7 @@ function getPatientsValue(clinicId: string): Promise<ValueResp> {
         phone: r.phone,
         invoiced: Number(r.invoiced),
         paid: Number(r.paid),
-        balance: Number(r.balance),
+        balance: saldoDe(r.id, r.balance),
         visits: Number(r.visits),
         lastVisit: r.last_visit ? new Date(r.last_visit).toISOString() : null,
         nextAppointment: r.next_appt ? new Date(r.next_appt).toISOString() : null,
@@ -170,10 +179,10 @@ function getPatientsValue(clinicId: string): Promise<ValueResp> {
       const totals = {
         invoiced: first ? Number(first.t_invoiced) : 0,
         paid: totalPaid,
-        balance: first ? Number(first.t_balance) : 0,
+        balance: first ? Math.max(0, Math.round((Number(first.t_balance) - noSeDebe.total) * 100) / 100) : 0,
         patients: first ? Number(first.t_patients) : 0,
         payingPatients: paying,
-        owingPatients: first ? Number(first.t_owing) : 0,
+        owingPatients: first ? Math.max(0, Number(first.t_owing) - yaNoDeben.size) : 0,
         avgLtv: paying > 0 ? Math.round(totalPaid / paying) : 0,
       };
 

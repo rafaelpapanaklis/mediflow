@@ -3351,7 +3351,8 @@
       "waNoAccess": "You don't have access to the clinic Messages.",
       "viewBilling": "View billing",
       "invoiced": "Invoiced",
-      "moreInvoiced": "+{count} more invoiced"
+      "moreInvoiced": "+{count} more invoiced",
+      "aunNoSeDebe": "Of this, {monto} is still to do or not yet due (not owed yet)"
     },
     "soapEditor": {
       "editorAria": "Consultation notes editor",
@@ -10751,7 +10752,7 @@
       "botonNotaYAbono": "Create the invoice and pay {monto}",
       "faltaSinNota": "The plan has no open invoice.",
       "faltaAbono": "Enter how much is paid today.",
-      "faltaAbonoMayor": "The payment can't exceed what the plan owes ({saldo}).",
+      "faltaAbonoMayor": "The payment can't exceed what's left to pay on the accepted plan ({saldo}).",
       "errorNota": "Couldn't create the plan's invoice.",
       "notaCreada": "Plan invoice {folio} created.",
       "errorAbono": "The payment to invoice {folio} wasn't recorded: {motivo} Press again: what was already paid isn't repeated.",
@@ -10765,7 +10766,36 @@
       "esOtro": "It's a different procedure, not the plan's: charge it separately.",
       "citaDelPlan": "This appointment belongs to the plan «{plan}»: today's payment goes to its bill. Charging it here separately would charge it twice.",
       "citaDelPlanSinNombre": "This appointment belongs to a treatment plan: today's payment goes to its bill. Charging it here separately would charge it twice.",
-      "consultaAlPlan": "Not on this visit's invoice because it's already in the treatment plan (charged on its invoice): {lista}."
+      "consultaAlPlan": "Not on this visit's invoice because it's already in the treatment plan (charged on its invoice): {lista}.",
+      "aceptado": "Accepted plan",
+      "hecho": "Done",
+      "pagado": "Paid",
+      "debe": "Owes",
+      "saldoAFavor": "Credit balance",
+      "porHacer": "To do",
+      "vencidoDe": "Of what they owe, {monto} is overdue (done more than 30 days ago).",
+      "tambienAFavor": "Also, another note of this plan has {monto} paid in advance.",
+      "porHacerAyuda": "What is still to do isn't owed yet: it becomes debt once it's done. It can be paid in advance.",
+      "debeHoy": "Owes today (work done)",
+      "ayudaAdelanto": "For the work done they owe {debe}. You can take more, up to {saldo}: the extra is an advance on the plan.",
+      "cerrar": "Close plan",
+      "cerrarTitulo": "Close the plan “{plan}”?",
+      "cerrarQuita": "What wasn't done ({monto}) is removed from the note. The note keeps what was done: {hecho}.",
+      "cerrarNadaQueQuitar": "There is nothing left to do to remove from the note.",
+      "cerrarAFavor": "What was overpaid (about {monto}) stays as the patient's credit balance, for another plan or charge. To give it back instead, record it with Refund.",
+      "cerrarSigueDebiendo": "They still owe {monto} for work done.",
+      "cerrarAbandonado": "The plan becomes Abandoned. Nothing is deleted: it stays in the activity log with your reason.",
+      "cerrarMotivo": "Reason",
+      "cerrarMotivoPh": "E.g. the patient won't continue the treatment",
+      "cerrarVolver": "Back",
+      "cerrarConfirmar": "Close plan",
+      "cerrando": "Closing…",
+      "cerrarListo": "Plan “{plan}” closed. Its note now covers only what was done.",
+      "cerrarListoAFavor": "Plan “{plan}” closed. {monto} stays as the patient's credit balance.",
+      "cerrarError": "The plan couldn't be closed. Try again.",
+      "cerrarYaCerrado": "The plan “{plan}” was already closed: there was nothing else to adjust.",
+      "cerrarSinAjustar": "Invoice {folios} is from before the new plan: what it charges for undone work wasn't removed. Adjust it in Billing.",
+      "cerrarDeAntes": "Invoice {folios} is from before the new plan: what it charges for undone work is NOT removed when closing. Adjust it in Billing."
     },
     "citas": {
       "boton": "Schedule what's pending",
@@ -11327,10 +11357,13 @@
     "creadaConLink": "Mercado Pago link ready for {monto}",
     "creadaSinLink": "The invoice was created, but the Mercado Pago link didn't go through:",
     "avisoForma": "The patient gets a Mercado Pago link for the balance. When they pay, the payment is recorded automatically.",
-    "enviadoSinLink": "Sent without the Mercado Pago link:"
+    "enviadoSinLink": "Sent without the Mercado Pago link:",
+    "textoNadaDebido": "The patient doesn't owe anything on this note yet (work still to do or installments not yet due). To pay in advance, generate a link for the balance of {monto}: it's recorded as a partial payment.",
+    "generarAdelanto": "Advance payment link ({monto})"
   },
   "portalPagoMp": {
     "pagar": "Pay with Mercado Pago",
+    "pagarAdelanto": "Pay in advance with Mercado Pago",
     "preparando": "Preparing your link…",
     "titulo": "Pay {monto} with Mercado Pago",
     "abrir": "Open Mercado Pago",
@@ -11345,7 +11378,8 @@
       "sin_saldo": "This invoice has nothing left to pay.",
       "bajo_minimo": "The balance is below the minimum for online payment ({minimo}). Please pay at your clinic.",
       "sin_mp": "This clinic doesn't accept online payments yet. Please pay at your clinic.",
-      "mp_fallo": "Mercado Pago didn't respond. Please try again in a few minutes."
+      "mp_fallo": "Mercado Pago didn't respond. Please try again in a few minutes.",
+      "nada_debido": "You don't owe anything on this invoice yet. If you want, you can pay in advance."
     }
   },
   "anticiposPortal": {
@@ -11468,8 +11502,9 @@
     "utilidadConMargen": "Income − expenses for the same period · you keep {pct} %.",
     "efectivo": "Cash payments in the period, refunds not subtracted. Excludes payments brought from your previous system; cash a patient pays today on a migrated balance does count.",
     "porDoctor": "What was COLLECTED in the period, minus refunds, by payment date: to the invoice's doctor (if none, the appointment's; in orthodontics, whoever had the case). This is the commission base; the sum equals revenue. Without migrated data.",
-    "porCobrar": "Balance of every issued invoice (no drafts or cancelled ones), from any date, migrated ones included. Does not depend on the period.",
-    "vencido": "Of the receivables, what is past its date: past «Due on», overdue installments of payment plans and orthodontic charges (placement and check-ups, from the day they were created). An invoice with no date never becomes overdue. Includes the Orthodontics «Overdue».",
+    "porCobrar": "Balance of every issued invoice (no drafts or cancelled ones), from any date, migrated ones included. For a treatment plan note, only what's already done minus what's paid; for orthodontic “Total price in installments”, only what's overdue (the rest goes to “To do / not yet due”). Does not depend on the period.",
+    "vencido": "Of the receivables, what is past its date: past «Due on», overdue installments of payment plans and orthodontic charges (placement and check-ups, from the day they were created) and, in treatment plans, work done more than 30 days ago and still unpaid. An invoice with no date never becomes overdue. Includes the Orthodontics «Overdue».",
+    "porHacer": "What isn't owed yet: from accepted treatment plans, the work still to do and unpaid (it moves to “Receivable” once done), and from orthodontic “Total price in installments” cases, the installments not yet due (they move when due). Doesn't depend on the period.",
     "ortoCobrado": "Payments in the period to orthodontic case invoices, minus refunds. Excludes payments brought from your previous system. Without applied credit balance: that money counted on the day it was collected.",
     "ortoVencido": "Orthodontics only: installments, placement and check-ups past their date. Already included in the Balances «Overdue».",
     "reportesIngresos": "Payments recorded in each of the last 6 months, minus refunds, by payment date. A payment counts in the month it came in even if its invoice is later cancelled; a refund subtracts in the month it was given back. Excludes payments brought from your previous system; what a patient pays on a migrated balance does count.",

@@ -128,6 +128,9 @@ const TABLAS: Record<string, string> = {
   patient: "patients",
   user: "users",
   appointment: "appointments",
+  // Solo las pruebas que crean estas tablas (cerrar plan) las usan.
+  payment: "payments",
+  patientCredit: "patient_credits",
 };
 const JSONB = new Set(["items"]);
 const ENUMS: Record<string, Record<string, string>> = {
@@ -170,6 +173,11 @@ function compilarWhere(tabla: string, where: Record<string, any> | undefined, va
     if (val === null) partes.push(`${col} IS NULL`);
     else if (typeof val === "object" && !(val instanceof Date)) {
       if ("in" in val) partes.push(`${col}${enumCast} = ANY(${v(val.in)})`);
+      else if ("notIn" in val) partes.push(`NOT (${col}${enumCast} = ANY(${v(val.notIn)}))`);
+      else if (["gt", "gte", "lt", "lte"].some((o) => o in val)) {
+        const OP: Record<string, string> = { gt: ">", gte: ">=", lt: "<", lte: "<=" };
+        for (const [o, x] of Object.entries(val)) partes.push(`${col} ${OP[o]} ${v(x)}`);
+      }
       else if ("not" in val) partes.push(val.not === null ? `${col} IS NOT NULL` : `${col}${enumCast} IS DISTINCT FROM ${v(val.not)}`);
       else if ("equals" in val) partes.push(`${col}${enumCast} = ${v(val.equals)}`);
       else throw new Error(`where no soportado: ${k} ${JSON.stringify(val)}`);
@@ -296,7 +304,7 @@ export function prismaDePrueba(db: any, conn: any = db): any {
 
   const cliente: any = { ...crudo(conn) };
   for (const m of Object.keys(TABLAS)) cliente[m] = modelo(m, conn);
-  // payments y patientCredit no se usan en estas pruebas: un intento de usarlos es un error del arnés.
+  // payments y patientCredit: solo existen si la prueba crea sus tablas (cerrar plan); si no, usarlos falla.
   if (!(conn as any).__esTx) {
     let cola: Promise<unknown> = Promise.resolve();
     cliente.$transaction = (fn: (tx: any) => Promise<unknown>) => {

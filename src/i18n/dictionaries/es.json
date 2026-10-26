@@ -3351,7 +3351,8 @@
       "waNoAccess": "No tienes acceso a los Mensajes de la clínica.",
       "viewBilling": "Ver facturación",
       "invoiced": "Facturado",
-      "moreInvoiced": "+{count} facturadas más"
+      "moreInvoiced": "+{count} facturadas más",
+      "aunNoSeDebe": "De esto, {monto} es por hacer o por vencer (aún no se debe)"
     },
     "soapEditor": {
       "editorAria": "Editor de notas de consulta",
@@ -10751,7 +10752,7 @@
       "botonNotaYAbono": "Crear la nota y abonar {monto}",
       "faltaSinNota": "El plan no tiene una nota por cobrar.",
       "faltaAbono": "Escribe cuánto abona hoy.",
-      "faltaAbonoMayor": "El abono no puede pasar de lo que debe el plan ({saldo}).",
+      "faltaAbonoMayor": "El abono no puede pasar de lo que falta pagar del plan aceptado ({saldo}).",
       "errorNota": "No se pudo crear la nota de cobro del plan.",
       "notaCreada": "Nota de cobro {folio} del plan creada.",
       "errorAbono": "El abono a la nota {folio} no se registró: {motivo} Vuelve a pulsar: no se repite lo ya abonado.",
@@ -10765,7 +10766,36 @@
       "esOtro": "Es otro procedimiento, no el del plan: cobrarlo aparte.",
       "citaDelPlan": "Esta cita es del plan «{plan}»: lo de hoy se abona a su nota. Cobrarlo aquí aparte sería cobrarlo dos veces.",
       "citaDelPlanSinNombre": "Esta cita es del plan de tratamiento: lo de hoy se abona a su nota. Cobrarlo aquí aparte sería cobrarlo dos veces.",
-      "consultaAlPlan": "No va en la factura de esta consulta porque ya es del plan de tratamiento (se cobra en su nota): {lista}."
+      "consultaAlPlan": "No va en la factura de esta consulta porque ya es del plan de tratamiento (se cobra en su nota): {lista}.",
+      "aceptado": "Plan aceptado",
+      "hecho": "Hecho",
+      "pagado": "Pagado",
+      "debe": "Debe",
+      "saldoAFavor": "Saldo a favor",
+      "porHacer": "Por hacer",
+      "vencidoDe": "De lo que debe, {monto} ya venció (se hizo hace más de 30 días).",
+      "tambienAFavor": "Además, otra nota del plan lleva {monto} pagados por adelantado.",
+      "porHacerAyuda": "Lo que falta por hacer no se debe todavía: se vuelve deuda cuando se hace. Se puede abonar por adelantado.",
+      "debeHoy": "Debe hoy (lo hecho)",
+      "ayudaAdelanto": "Por lo hecho debe {debe}. Puedes abonar más, hasta {saldo}: lo de más es un adelanto del plan.",
+      "cerrar": "Cerrar plan",
+      "cerrarTitulo": "¿Cerrar el plan «{plan}»?",
+      "cerrarQuita": "Lo que no se hizo ({monto}) sale de la nota. La nota queda en lo hecho: {hecho}.",
+      "cerrarNadaQueQuitar": "No hay nada por hacer que quitar de la nota.",
+      "cerrarAFavor": "Lo pagado de más (unos {monto}) queda como saldo a favor del paciente, para otro plan o cobro. Si prefieres devolverlo, regístralo con Reembolsar.",
+      "cerrarSigueDebiendo": "Sigue debiendo {monto} de lo hecho.",
+      "cerrarAbandonado": "El plan pasa a Abandonado. Nada se borra: queda en la bitácora con tu motivo.",
+      "cerrarMotivo": "Motivo",
+      "cerrarMotivoPh": "Ej.: el paciente ya no continuará el tratamiento",
+      "cerrarVolver": "Volver",
+      "cerrarConfirmar": "Cerrar plan",
+      "cerrando": "Cerrando…",
+      "cerrarListo": "Plan «{plan}» cerrado. Su nota quedó en lo hecho.",
+      "cerrarListoAFavor": "Plan «{plan}» cerrado. {monto} quedan como saldo a favor del paciente.",
+      "cerrarError": "No se pudo cerrar el plan. Intenta de nuevo.",
+      "cerrarYaCerrado": "El plan «{plan}» ya estaba cerrado: no había nada más que ajustar.",
+      "cerrarSinAjustar": "La factura {folios} es de antes del plan nuevo: lo que cobra sin hacer no se quitó. Ajústala en Facturación.",
+      "cerrarDeAntes": "La factura {folios} es de antes del plan nuevo: lo que cobra sin hacer NO se quita al cerrar. Ajústala en Facturación."
     },
     "citas": {
       "boton": "Agendar lo pendiente",
@@ -11327,10 +11357,13 @@
     "creadaConLink": "Link de Mercado Pago listo por {monto}",
     "creadaSinLink": "La factura quedó creada, pero el link de Mercado Pago no salió:",
     "avisoForma": "Se le manda al paciente un link de Mercado Pago por el saldo. Cuando paga, el pago se registra solo.",
-    "enviadoSinLink": "Se envió sin el link de Mercado Pago:"
+    "enviadoSinLink": "Se envió sin el link de Mercado Pago:",
+    "textoNadaDebido": "El paciente aún no debe nada de esta nota (tratamiento por hacer o cuotas por vencer). Si quiere pagar por adelantado, genera un link por el saldo de {monto}: queda como abono.",
+    "generarAdelanto": "Link por adelantado ({monto})"
   },
   "portalPagoMp": {
     "pagar": "Pagar con Mercado Pago",
+    "pagarAdelanto": "Pagar por adelantado con Mercado Pago",
     "preparando": "Preparando tu link…",
     "titulo": "Paga {monto} con Mercado Pago",
     "abrir": "Abrir Mercado Pago",
@@ -11345,7 +11378,8 @@
       "sin_saldo": "Esta factura ya no tiene saldo por pagar.",
       "bajo_minimo": "El saldo es menor al mínimo para pagar en línea ({minimo}). Paga en tu clínica.",
       "sin_mp": "Esta clínica aún no acepta pagos en línea. Paga directamente en tu clínica.",
-      "mp_fallo": "Mercado Pago no respondió. Intenta de nuevo en unos minutos."
+      "mp_fallo": "Mercado Pago no respondió. Intenta de nuevo en unos minutos.",
+      "nada_debido": "Aún no debes nada de esta factura. Si quieres, puedes pagar por adelantado."
     }
   },
   "anticiposPortal": {
@@ -11468,8 +11502,9 @@
     "utilidadConMargen": "Ingresos − gastos del mismo periodo · te queda el {pct} %.",
     "efectivo": "Pagos en efectivo del periodo, sin restar reembolsos. Sin los pagos traídos de tu sistema anterior; el efectivo que un paciente paga hoy de un saldo migrado sí cuenta.",
     "porDoctor": "Lo COBRADO en el periodo, menos reembolsos, por fecha de cobro: al doctor de la factura (si no tiene, al de su cita; en ortodoncia, a quien llevaba el caso). Es la base de comisiones; la suma da los ingresos. Sin lo migrado.",
-    "porCobrar": "Saldo de todas las facturas emitidas (sin borradores ni canceladas), de cualquier fecha e incluidas las migradas. No depende del periodo.",
-    "vencido": "De lo por cobrar, lo que ya pasó su fecha: «Vence el» pasado, cuotas vencidas de planes a plazos y cargos de ortodoncia (colocación y controles, desde el día en que se crearon). Una factura sin fecha no vence. Incluye el «Vencido» de Ortodoncia.",
+    "porCobrar": "Saldo de todas las facturas emitidas (sin borradores ni canceladas), de cualquier fecha e incluidas las migradas. De una nota de plan de tratamiento, solo lo ya hecho menos lo pagado; de ortodoncia «Precio total a plazos», solo lo vencido (lo demás va en «Por hacer / por vencer»). No depende del periodo.",
+    "vencido": "De lo por cobrar, lo que ya pasó su fecha: «Vence el» pasado, cuotas vencidas de planes a plazos, cargos de ortodoncia (colocación y controles, desde el día en que se crearon) y, en planes de tratamiento, lo hecho hace más de 30 días sin pagar. Una factura sin fecha no vence. Incluye el «Vencido» de Ortodoncia.",
+    "porHacer": "Lo que todavía no se debe: de los planes de tratamiento aceptados, lo que falta por hacer y no está pagado (pasa a «Por cobrar» cuando se hace), y de ortodoncia «Precio total a plazos», las cuotas que aún no vencen (pasan cuando vencen). No depende del periodo.",
     "ortoCobrado": "Pagos del periodo a facturas de casos de ortodoncia, menos reembolsos. Sin los pagos traídos de tu sistema anterior. Sin el saldo a favor aplicado: ese dinero contó el día que se cobró.",
     "ortoVencido": "Solo ortodoncia: cuotas, colocación y controles pasados de fecha. Ya está sumado en el «Vencido» de Saldos.",
     "reportesIngresos": "Pagos registrados en cada uno de los últimos 6 meses, menos reembolsos, por fecha de cobro. Un cobro cuenta el mes en que entró aunque después se cancele su factura; un reembolso resta el mes en que se devolvió. Sin los pagos traídos de tu sistema anterior; lo que un paciente paga de un saldo migrado sí cuenta.",
