@@ -2,11 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Download, RefreshCw, AlertTriangle, Building2 } from "lucide-react";
+import { ArrowLeft, Download, RefreshCw, AlertTriangle, Building2, Lock } from "lucide-react";
 import { CLASES_MENU } from "@/components/dashboard/menu-dos-niveles/clases";
 import {
   PERIODOS,
   participacionPct,
+  sinCifras,
   type FilaSedeReporte,
   type Periodo,
   type ReporteConsolidado,
@@ -52,6 +53,8 @@ const TEXTOS = {
     activa: "Activa",
     suspendida: "Suspendida",
     fallo: "No se pudo leer esta sede: sus cifras no entran en los totales.",
+    conClave: "Sede con clave",
+    conClaveNota: "tiene clave de sede: entra a ella con su clave para ver sus cifras. No entra en los totales.",
     total: "Total",
     unaSede: "Solo tienes una sede. Cuando abras otra, aquí verás la comparativa.",
     sinSedes: "No hay sedes que mostrar.",
@@ -83,6 +86,8 @@ const TEXTOS = {
     activa: "Current",
     suspendida: "Suspended",
     fallo: "Could not read this location: its figures are not in the totals.",
+    conClave: "Location with passcode",
+    conClaveNota: "has a location passcode: enter it with its passcode to see its figures. Not included in the totals.",
     total: "Total",
     unaSede: "You only have one location. Once you open another, the comparison shows here.",
     sinSedes: "No locations to show.",
@@ -157,6 +162,7 @@ export function ReporteSedesClient({ inicial, hoyISO, locale }: Props) {
     periodo === "personalizado" ? { periodo, desde, hasta, formato: "csv" } : { periodo, formato: "csv" },
   ).toString()}`;
   const fallidas = sedes.filter((x) => x.fallo);
+  const conClave = sedes.filter((x) => x.conClave);
 
   return (
     <div className={`${CLASES_MENU} ${s.raiz}`} data-testid="reporte-sedes">
@@ -278,8 +284,13 @@ export function ReporteSedesClient({ inicial, hoyISO, locale }: Props) {
                 <AlertTriangle size={14} aria-hidden /> {fallidas.map((f) => f.nombre).join(", ")}: {tx.fallo}
               </p>
             )}
-            {sedes.some((x) => !x.fallo && x.ocupacion.pct === null) && (
-              <p className={s.notaPie}>{sedes.filter((x) => !x.fallo && x.ocupacion.pct === null).map((x) => x.nombre).join(", ")}: {tx.sinSillones}</p>
+            {conClave.length > 0 && (
+              <p className={s.notaPie} role="status">
+                <Lock size={12} aria-hidden /> {conClave.map((f) => f.nombre).join(", ")}: {tx.conClaveNota}
+              </p>
+            )}
+            {sedes.some((x) => !sinCifras(x) && x.ocupacion.pct === null) && (
+              <p className={s.notaPie}>{sedes.filter((x) => !sinCifras(x) && x.ocupacion.pct === null).map((x) => x.nombre).join(", ")}: {tx.sinSillones}</p>
             )}
           </>
         )}
@@ -309,12 +320,13 @@ function FilaSede({
   entero: Intl.NumberFormat;
   pct: (v: number | null) => string;
 }) {
-  if (sede.fallo) {
+  if (sede.fallo || sede.conClave) {
     return (
       <tr className={s.filaFallida}>
         <th scope="row" className={s.celdaSede}>
           <span className={s.nombreSede}>{sede.nombre}</span>
           {sede.esActiva && <span className={s.chip}>{tx.activa}</span>}
+          {sede.conClave && <span className={s.chip}>{tx.conClave}</span>}
         </th>
         <td className={s.num} colSpan={8}>—</td>
       </tr>

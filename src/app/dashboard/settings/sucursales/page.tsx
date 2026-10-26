@@ -7,6 +7,7 @@ import { getOwnedBranches, listPatientLinks } from "@/lib/branches";
 import { SucursalesClient } from "./sucursales-client";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { direccionDeRebotePorRol } from "@/lib/auth/aviso-denegado";
+import { sedesCerradasPara } from "@/lib/sede-clave/gate.server";
 
 export const metadata: Metadata = { title: "Sucursales — DaleControl" };
 
@@ -34,13 +35,21 @@ export default async function SucursalesSettingsPage() {
     menuDosNivelesEncendido(user.clinicId),
   ]);
   const links = await listPatientLinks(branches.map((b) => b.clinicId));
+  // ws1-t4: las sedes con clave que el dueño no ha tecleado en este navegador
+  // salen marcadas: sin «Cerrar sede» y sin poder compartir sus pacientes (el
+  // servidor lo vuelve a comprobar en /api/clinics/archivar y /links).
+  const cerradas = await sedesCerradasPara(
+    user.supabaseId,
+    branches.map((b) => b.clinicId).filter((id) => id !== user.clinicId),
+  );
+  const sedes = branches.map((b) => (cerradas.has(b.clinicId) ? { ...b, conClave: true } : b));
 
   return (
     // key por clínica: si el dueño cambia de sede con el switcher, la vista se
     // re-monta en vez de conservar el estado de la anterior.
     <SucursalesClient
       key={user.clinicId}
-      branches={branches}
+      branches={sedes}
       initialLinks={links}
       activeClinicId={user.clinicId}
       rediseno={rediseno}

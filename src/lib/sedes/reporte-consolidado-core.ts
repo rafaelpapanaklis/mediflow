@@ -42,6 +42,18 @@ export interface FilaSedeReporte {
   ticketPromedio: number | null;
   /** La consulta de ESTA sede falló: se marca y se dice, no se presenta como cero. */
   fallo?: boolean;
+  /**
+   * ws1-t4: la sede tiene «Clave de la sede» y quien mira no la ha tecleado en
+   * este navegador. Sale con su nombre y SIN cifras (todo en cero, no se
+   * consulta nada de ella) y no suma en los totales. El cobro y los cupos la
+   * siguen contando: esto es solo lo que se enseña.
+   */
+  conClave?: boolean;
+}
+
+/** Una sede cuyas cifras no se enseñan ni suman: falló, o tiene clave sin desbloquear. */
+export function sinCifras(s: Pick<FilaSedeReporte, "fallo" | "conClave">): boolean {
+  return !!s.fallo || !!s.conClave;
 }
 
 export interface TotalesReporte {
@@ -139,7 +151,7 @@ export function totalesDe(sedes: readonly FilaSedeReporte[]): TotalesReporte {
   let minutosOcupados = 0;
   let minutosDisponibles = 0;
   for (const s of sedes) {
-    if (s.fallo) continue;
+    if (sinCifras(s)) continue;
     t.ingresosNeto += s.ingresos.neto;
     t.cobrado += s.ingresos.cobrado;
     t.reembolsos += s.ingresos.reembolsos;
@@ -170,7 +182,7 @@ export function totalesDe(sedes: readonly FilaSedeReporte[]): TotalesReporte {
 
 /** Qué parte del total de ingresos pone cada sede (para la comparativa). */
 export function participacionPct(sede: FilaSedeReporte, totales: TotalesReporte): number | null {
-  if (sede.fallo || totales.ingresosNeto <= 0 || sede.ingresos.neto <= 0) return null;
+  if (sinCifras(sede) || totales.ingresosNeto <= 0 || sede.ingresos.neto <= 0) return null;
   return Math.round((sede.ingresos.neto / totales.ingresosNeto) * 1000) / 10;
 }
 
@@ -190,18 +202,18 @@ export function csvDelReporte(r: ReporteConsolidado): string {
   ];
   const filas = r.sedes.map((s) => [
     s.nombre,
-    s.fallo ? "sin datos (falló la consulta)" : s.suspendida ? "suspendida" : "activa",
-    s.fallo ? null : s.ingresos.neto,
-    s.fallo ? null : s.ingresos.cobrado,
-    s.fallo ? null : s.ingresos.reembolsos,
-    s.fallo ? null : s.ingresos.numeroDeCobros,
-    s.fallo ? null : s.ticketPromedio,
-    s.fallo ? null : s.citas.agendadas,
-    s.fallo ? null : s.citas.atendidas,
-    s.fallo ? null : s.citas.noShows,
-    s.fallo ? null : s.citas.tasaNoShowPct,
-    s.fallo ? null : s.pacientesNuevos,
-    s.fallo ? null : s.ocupacion.pct,
+    s.conClave ? "sede con clave" : s.fallo ? "sin datos (falló la consulta)" : s.suspendida ? "suspendida" : "activa",
+    sinCifras(s) ? null : s.ingresos.neto,
+    sinCifras(s) ? null : s.ingresos.cobrado,
+    sinCifras(s) ? null : s.ingresos.reembolsos,
+    sinCifras(s) ? null : s.ingresos.numeroDeCobros,
+    sinCifras(s) ? null : s.ticketPromedio,
+    sinCifras(s) ? null : s.citas.agendadas,
+    sinCifras(s) ? null : s.citas.atendidas,
+    sinCifras(s) ? null : s.citas.noShows,
+    sinCifras(s) ? null : s.citas.tasaNoShowPct,
+    sinCifras(s) ? null : s.pacientesNuevos,
+    sinCifras(s) ? null : s.ocupacion.pct,
   ]);
   const t = r.totales;
   filas.push([

@@ -10,6 +10,7 @@ import {
 import { persistentRateLimit } from "@/lib/failban";
 import { logMutation } from "@/lib/audit";
 import { logError } from "@/lib/safe-log";
+import { sedesCerradasPara } from "@/lib/sede-clave/gate.server";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -103,6 +104,16 @@ export async function POST(req: NextRequest) {
     if (owned.indexOf(clinicAId) === -1 || owned.indexOf(clinicBId) === -1) {
       return NextResponse.json(
         { error: "Alguna de las sedes no te pertenece." },
+        { status: 403 },
+      );
+    }
+
+    // ws1-t4: una sede con «Clave de la sede» no se vincula sin haber tecleado
+    // su clave en este navegador: compartir pacientes es ver los de ella.
+    const cerradas = await sedesCerradasPara(ctx.user.supabaseId, [clinicAId, clinicBId]);
+    if (cerradas.size > 0) {
+      return NextResponse.json(
+        { error: "Una de las sedes tiene clave. Entra a ella con su clave para compartir sus pacientes.", code: "sede_con_clave" },
         { status: 403 },
       );
     }

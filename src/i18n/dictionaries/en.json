@@ -11497,5 +11497,52 @@
         "gris": "Gray"
       }
     }
+  },
+  "sedeClave": {
+    "selectorConClave": "Location with passcode",
+    "conClave": "Location with passcode",
+    "conClaveDetalle": "This location has a passcode. Enter it with its passcode to see its numbers.",
+    "pantalla": {
+      "titulo": "This location has a passcode",
+      "subtitulo": "Enter the location passcode to continue. This browser won't ask you again for 72 hours.",
+      "abierta": "This location no longer asks you for a passcode in this browser.",
+      "irALaSede": "Go to this location",
+      "etiqueta": "Location passcode",
+      "entrar": "Enter",
+      "comprobando": "Checking…",
+      "olvido": "Forgot the passcode? Ask DaleControl support to reset it.",
+      "incorrecta": "That passcode is not correct. You have {restantes} attempts left.",
+      "bloqueo": "Too many attempts. Wait {minutos} min and try again.",
+      "error": "We couldn't check the passcode. Please try again.",
+      "errorCambio": "We couldn't switch locations. Please try again.",
+      "volver": "Go to another location",
+      "cerrarSesion": "Sign out"
+    },
+    "card": {
+      "titulo": "Location passcode",
+      "subtitulo": "Require a passcode to enter this location, on top of each person's password.",
+      "explicacion": "With the passcode on, nobody enters this location without typing it, not even the account owner. It's asked once every 72 hours in each browser. If it's forgotten, only DaleControl support can remove it.",
+      "activa": "On",
+      "inactiva": "Off",
+      "activar": "Turn on passcode",
+      "cambiar": "Change passcode",
+      "desactivar": "Turn off",
+      "actual": "Current passcode",
+      "nueva": "New passcode",
+      "nuevaPlaceholder": "At least {min} characters",
+      "confirmar": "Confirm the new passcode",
+      "activarConfirmar": "Turn on",
+      "cambiarConfirmar": "Save new passcode",
+      "desactivarConfirmar": "Yes, turn off",
+      "desactivarAviso": "Once it's off, anyone with access to this location can enter without a passcode, including the account owner.",
+      "cancelar": "Cancel",
+      "guardando": "Saving…",
+      "corta": "The passcode must be at least {min} characters.",
+      "distintas": "The two passcodes don't match.",
+      "error": "We couldn't save the passcode. Please try again.",
+      "activadaToast": "Location passcode turned on",
+      "cambiadaToast": "Location passcode changed",
+      "desactivadaToast": "Location passcode turned off"
+    }
   }
 }

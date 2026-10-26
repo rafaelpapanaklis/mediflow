@@ -18,8 +18,11 @@ import {
 } from "@/components/dashboard/configuracion-rediseno/piezas";
 import cr from "@/components/dashboard/configuracion-rediseno/configuracion.module.css";
 
+/** ws1-t4: `conClave` = la sede tiene clave y este navegador no la ha tecleado. */
+type SedeFila = OwnedBranchRow & { conClave?: boolean };
+
 interface Props {
-  branches: OwnedBranchRow[];
+  branches: SedeFila[];
   initialLinks: ClinicPatientLinkRow[];
   activeClinicId: string;
   /** REDISEÑO (ws1-t2): el MISMO interruptor `menu-dos-niveles` de la clínica,
@@ -30,8 +33,8 @@ interface Props {
 /** Un par de sedes con su estado de vínculo. */
 interface PairRow {
   key: string;
-  a: OwnedBranchRow;
-  b: OwnedBranchRow;
+  a: SedeFila;
+  b: SedeFila;
   linkId: string | null;
 }
 
@@ -46,7 +49,7 @@ interface PairRow {
 export function SucursalesClient({ branches: branchesIniciales, initialLinks, activeClinicId, rediseno = false }: Props) {
   const t = useT();
   const [links, setLinks] = useState<ClinicPatientLinkRow[]>(initialLinks);
-  const [branches, setBranches] = useState<OwnedBranchRow[]>(branchesIniciales);
+  const [branches, setBranches] = useState<SedeFila[]>(branchesIniciales);
   const cerrada = (id: string) => {
     setBranches((prev) => prev.filter((b) => b.clinicId !== id));
     setLinks((prev) => prev.filter((l) => l.clinicAId !== id && l.clinicBId !== id));
@@ -127,7 +130,7 @@ export function SucursalesClient({ branches: branchesIniciales, initialLinks, ac
                   key={b.clinicId}
                   icono={<Building2 size={14} strokeWidth={1.75} style={{ color: "var(--m2-texto-3)", flexShrink: 0 }} aria-hidden />}
                   titulo={b.clinicName}
-                  derecha={b.clinicId === activeClinicId ? <Insignia>{t("sidebar.current")}</Insignia> : <CerrarSede clinicId={b.clinicId} clinicName={b.clinicName} onCerrada={cerrada} />}
+                  derecha={b.clinicId === activeClinicId ? <Insignia>{t("sidebar.current")}</Insignia> : b.conClave ? <Insignia>{t("sedeClave.conClave")}</Insignia> : <CerrarSede clinicId={b.clinicId} clinicName={b.clinicName} onCerrada={cerrada} />}
                 />
               ))}
             </div>
@@ -142,15 +145,16 @@ export function SucursalesClient({ branches: branchesIniciales, initialLinks, ac
                 {pairs.map((pair) => {
                   const on = pair.linkId !== null;
                   const busy = busyKey === pair.key;
+                  const conClave = !!pair.a.conClave || !!pair.b.conClave;
                   return (
                     <BloqueFila
                       key={pair.key}
                       activo={on}
                       icono={<Users size={15} strokeWidth={1.75} style={{ color: "var(--m2-texto-3)", flexShrink: 0 }} aria-hidden />}
                       titulo={<>{pair.a.clinicName} <span style={{ color: "var(--m2-texto-3)", margin: "0 6px" }}>↔</span> {pair.b.clinicName}</>}
-                      sub={on ? t("settings.branches.stateShared") : t("settings.branches.stateIsolated")}
+                      sub={conClave ? t("sedeClave.conClaveDetalle") : on ? t("settings.branches.stateShared") : t("settings.branches.stateIsolated")}
                       derecha={
-                        <CasillaEtiqueta checked={on} disabled={busy} onChange={() => togglePair(pair)}>
+                        <CasillaEtiqueta checked={on} disabled={busy || conClave} onChange={() => togglePair(pair)}>
                           {t("settings.branches.sharePatients")}
                         </CasillaEtiqueta>
                       }
@@ -239,7 +243,12 @@ export function SucursalesClient({ branches: branchesIniciales, initialLinks, ac
                   {t("sidebar.current")}
                 </span>
               )}
-              {b.clinicId !== activeClinicId && (
+              {b.clinicId !== activeClinicId && b.conClave && (
+                <span style={{ marginLeft: "auto", fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-3)", flexShrink: 0 }}>
+                  {t("sedeClave.conClave")}
+                </span>
+              )}
+              {b.clinicId !== activeClinicId && !b.conClave && (
                 <CerrarSede clinicId={b.clinicId} clinicName={b.clinicName} onCerrada={cerrada} />
               )}
             </div>
@@ -270,6 +279,7 @@ export function SucursalesClient({ branches: branchesIniciales, initialLinks, ac
           {pairs.map((pair) => {
             const on = pair.linkId !== null;
             const busy = busyKey === pair.key;
+            const conClave = !!pair.a.conClave || !!pair.b.conClave;
             return (
               <div
                 key={pair.key}
@@ -290,7 +300,7 @@ export function SucursalesClient({ branches: branchesIniciales, initialLinks, ac
                   <span style={{ color: "var(--text-3)", margin: "0 6px" }}>↔</span>
                   <span style={{ fontWeight: 600 }}>{pair.b.clinicName}</span>
                   <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2 }}>
-                    {on ? t("settings.branches.stateShared") : t("settings.branches.stateIsolated")}
+                    {conClave ? t("sedeClave.conClaveDetalle") : on ? t("settings.branches.stateShared") : t("settings.branches.stateIsolated")}
                   </div>
                 </div>
                 <label
@@ -307,7 +317,7 @@ export function SucursalesClient({ branches: branchesIniciales, initialLinks, ac
                   <input
                     type="checkbox"
                     checked={on}
-                    disabled={busy}
+                    disabled={busy || conClave}
                     onChange={() => togglePair(pair)}
                     style={{ width: 16, height: 16, cursor: busy ? "wait" : "pointer" }}
                   />

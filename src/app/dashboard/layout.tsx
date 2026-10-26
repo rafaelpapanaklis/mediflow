@@ -55,6 +55,8 @@ import { AvisoPagoRechazado } from "@/components/dashboard/aviso-pago-rechazado"
 import { getBranchQuota } from "@/lib/branches";
 import { leerGrupoDePago } from "@/lib/billing/sedes-incluidas";
 import { HIDE_SUPPLY_MODULES } from "@/lib/hidden-modules";
+import { sedeCerradaPara, sedesConClave } from "@/lib/sede-clave/gate.server";
+import { RUTA_SEDE_CON_CLAVE } from "@/lib/sede-clave/constantes";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   // SIN el gate de 2FA a propósito (ws1-t8): este layout envuelve también las
@@ -140,6 +142,25 @@ export default async function DashboardLayout({ children }: { children: React.Re
     redirect(MUST_CHANGE_PASSWORD_PATH);
   }
   if (isPasswordChangeRoute) return minimalShell;
+
+  // ── Gate de la CLAVE DE LA SEDE (ws1-t4, AUTORITATIVO) ────────────
+  // Con la clave activa en la sede, NADIE —tampoco el SUPER_ADMIN— ve el panel
+  // de esa sede sin haberla tecleado en este navegador en las últimas 72 h.
+  // La regla es la de getAuthContext/getCurrentUser (@/lib/sede-clave/gate.server),
+  // así que la navegación suave tampoco se lo salta: las páginas cortan solas.
+  // ORDEN — después del 2FA y de la contraseña temporal (las dos son sobre la
+  // persona; la clave es sobre la sede) y ANTES del plan, con return propio: una
+  // sede con clave y el plan vencido primero se desbloquea y después cae en
+  // /dashboard/suspended. La pantalla de la clave se pinta con el layout
+  // mínimo: el panel de la sede no se enseña detrás. Si la sede activa está
+  // abierta, esa misma pantalla puede pedir la clave de OTRA sede (?sede=) y
+  // entonces sí va dentro del panel de la activa.
+  const isSedeClaveRoute = pathname.startsWith(RUTA_SEDE_CON_CLAVE);
+  const sedeCerrada = await sedeCerradaPara({ supabaseId: user.supabaseId, clinicId: clinic.id });
+  if (sedeCerrada && !isSedeClaveRoute) {
+    redirect(`${RUTA_SEDE_CON_CLAVE}?next=${encodeURIComponent(pathname || "/dashboard")}`);
+  }
+  if (sedeCerrada) return minimalShell;
 
   // ── Gating sin plan activo (sin modal bloqueante) ────────────────
   // Una clínica está sin acceso cuando trialEndsAt < now Y la suscripción
@@ -262,6 +283,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // (getUserClinics trae el rol POR clínica) y la config de planes va con caché
   // en memoria. Esto es sólo para PINTAR: el gate que manda es el de
   // POST /api/clinics, que recuenta contra la BD con el supabaseId de la sesión.
+  // Candado en el selector para las sedes con clave (ws1-t4). Solo PINTA: lo
+  // que manda es el 423 de /api/switch-clinic. Lee la lista en caché de 10 s.
+  const conClave = await sedesConClave(allClinics.map((c) => c.clinicId));
+  const clinicasDelSelector = allClinics.map((c) => (conClave.has(c.clinicId) ? { ...c, conClave: true } : c));
+
   const branchQuota = await getBranchQuota({
     clinic,
     isOwner: user.role === "SUPER_ADMIN",
@@ -286,7 +312,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
     clinicId: clinic.id,
     plan: clinic.plan,
     clinicCategory: (clinic as any).category ?? "OTHER",
-    allClinics,
+    allClinics: clinicasDelSelector,
     branches: {
       quota: branchQuota,
       defaults: {
