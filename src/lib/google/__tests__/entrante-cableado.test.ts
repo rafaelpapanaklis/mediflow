@@ -156,13 +156,20 @@ test("la ruta de alta: el bloqueo convertido no cuenta, la cita nace con el even
 test("marcarBloqueoConvertido: condicional; si otro ya lo convirtió, lanza (y la transacción se deshace)", async () => {
   const llamadas: any[] = [];
   const propio = { calendarId: "cal@group.calendar.google.com", googleEventId: "ev1" };
-  const tx = (cuenta: number, hermanos: { blockId: string; appointmentId: string | null }[] = []) => ({
+  const tx = (cuenta: number, hermanos: { blockId: string; appointmentId: string | null }[] = [], canceladas: string[] = []) => ({
     agendaBlockGoogle: {
       findFirst: async () => propio,
       findMany: async () => [{ blockId: "b1", appointmentId: null }, ...hermanos],
       updateMany: async (a: any) => { llamadas.push(["vinculo", a]); return { count: a.data.appointmentId ? cuenta : 1 }; },
     },
     agendaBlock: { updateMany: async (a: any) => { llamadas.push(["bloque", a]); return { count: 1 }; } },
+    // m1: solo las CANCELADAS de la clínica (el `where` lo comprueba abajo).
+    appointment: {
+      findMany: async (a: any) => {
+        llamadas.push(["citas", a]);
+        return (a.where.id.in as string[]).filter((id) => canceladas.includes(id)).map((id) => ({ id }));
+      },
+    },
   });
   const d = { clinicId: "c1", bloqueoId: "b1", appointmentId: "a1", userId: "u1", startsAt: new Date(1), endsAt: new Date(2), ahora: new Date(3) };
   await marcarBloqueoConvertido(tx(1), d);
@@ -179,6 +186,12 @@ test("marcarBloqueoConvertido: condicional; si otro ya lo convirtió, lanza (y l
   await assert.rejects(() => marcarBloqueoConvertido(tx(0), d), ConversionYaHecha);
   // H2: el de otro doctor del mismo evento ya es una cita → lanza; si no, se retira aquí mismo.
   await assert.rejects(() => marcarBloqueoConvertido(tx(1, [{ blockId: "b2", appointmentId: "a0" }]), d), ConversionYaHecha);
+  assert.deepEqual(llamadas.at(-1), ["citas", { where: { clinicId: "c1", id: { in: ["a0"] }, status: "CANCELLED" }, select: { id: true } }]);
+  // m1: si esa cita está CANCELADA, no cuenta: se convierte (y el vínculo de la cancelada no se toca).
+  llamadas.length = 0;
+  await marcarBloqueoConvertido(tx(1, [{ blockId: "b2", appointmentId: "a0" }], ["a0"]), d);
+  assert.equal(llamadas.filter((l) => l[0] === "vinculo" && l[1].where.blockId === "b2").length, 0);
+  assert.equal(llamadas.filter((l) => l[0] === "bloque").length, 1, "solo el suyo: el de la cancelada ya estaba retirado");
   llamadas.length = 0;
   await marcarBloqueoConvertido(tx(1, [{ blockId: "b2", appointmentId: null }]), d);
   assert.deepEqual(llamadas.at(-1), ["bloque", {
@@ -189,6 +202,7 @@ test("marcarBloqueoConvertido: condicional; si otro ya lo convirtió, lanza (y l
   const txMovido = {
     agendaBlockGoogle: { findFirst: async () => propio, findMany: async () => [], updateMany: async () => ({ count: 1 }) },
     agendaBlock: { updateMany: async () => ({ count: 0 }) },
+    appointment: { findMany: async () => [] },
   };
   await assert.rejects(() => marcarBloqueoConvertido(txMovido, d), BloqueoCambiado);
   const txSinVinculo = { ...txMovido, agendaBlockGoogle: { ...txMovido.agendaBlockGoogle, findFirst: async () => null } };

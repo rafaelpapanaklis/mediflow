@@ -194,8 +194,16 @@ export function rangoDeEvento(
   return { startsAt, endsAt, allDay };
 }
 
+/**
+ * El prefijo que la salida le pone al título de un evento de Google cuya cita
+ * (convertida) se canceló en DaleControl (`tituloCancelada`). Vive aquí, puro,
+ * para que el bloqueo que vuelve tras cancelar enseñe el título de verdad.
+ */
+export const PREFIJO_CANCELADA = "Cancelada en DaleControl · ";
+
 export function tituloDeEvento(ev: EventoGoogle): string {
-  const t = typeof ev.summary === "string" ? ev.summary.replace(/\s+/g, " ").trim() : "";
+  let t = typeof ev.summary === "string" ? ev.summary.replace(/\s+/g, " ").trim() : "";
+  while (t.startsWith(PREFIJO_CANCELADA)) t = t.slice(PREFIJO_CANCELADA.length).trim();
   return Array.from(t).slice(0, TITULO_MAX).join("");
 }
 
@@ -307,6 +315,20 @@ export const claveDeDoctor = (calendarId: string, doctorId: string) => `${calend
 export function calendarioDeLaClave(clave: string): string {
   const i = clave.indexOf(SEPARADOR_DOCTOR, Math.max(0, clave.indexOf("@")));
   return i < 0 ? clave : clave.slice(0, i);
+}
+/**
+ * La clave a la que se APARTA el vínculo de una cita convertida que luego se
+ * canceló (revisión t8 de la v3, m1): `<calendario>#cancelada:<citaId>`. Sigue
+ * ligado a SU cita (la salida le pone «Cancelada…» al título; si la reactivan,
+ * vuelve a ser la cita del evento) y deja libre la clave del doctor para que
+ * el bloqueo vuelva y se pueda convertir otra vez. No se borra nada.
+ */
+export const MARCA_CANCELADA = "cancelada:";
+export const claveCancelada = (calendarId: string, appointmentId: string) =>
+  `${calendarioDeLaClave(calendarId)}${SEPARADOR_DOCTOR}${MARCA_CANCELADA}${appointmentId}`;
+export function esClaveCancelada(clave: string): boolean {
+  const cal = calendarioDeLaClave(clave);
+  return clave.startsWith(cal + SEPARADOR_DOCTOR + MARCA_CANCELADA);
 }
 /** ¿Esa clave de vínculo es de ese calendario (la principal o la de un doctor)? */
 export function esClaveDelCalendario(clave: string, calendarId: string): boolean {

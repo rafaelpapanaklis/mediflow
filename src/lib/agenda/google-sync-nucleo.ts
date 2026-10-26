@@ -22,6 +22,7 @@
 
 import { tzLocalToUtc } from "@/lib/agenda/time-utils";
 import { esLaCuentaDelCalendario } from "@/lib/google-calendar-contenido";
+import { PREFIJO_CANCELADA } from "@/lib/google/entrante-core";
 import {
   borrarEvento,
   asegurarCalendarioDeClinica,
@@ -87,8 +88,8 @@ export interface CitaParaGoogle {
   } | null;
 }
 
-/** El prefijo del título de un evento de Google cuya cita se canceló en DaleControl. */
-export const PREFIJO_CANCELADA = "Cancelada en DaleControl · ";
+/** El prefijo del título de un evento de Google cuya cita se canceló en DaleControl (vive en `entrante-core`). */
+export { PREFIJO_CANCELADA };
 
 export function tituloCancelada(original: string): string {
   const t = (original ?? "").trim();

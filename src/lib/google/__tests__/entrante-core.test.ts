@@ -9,9 +9,11 @@ import {
   bloqueosSinMantener,
   claveDeDoctor,
   calendarioDeLaClave,
+  claveCancelada,
   decidirEventoPorDoctor,
   doctoresDelEvento,
   duenoDeLaCuenta,
+  esClaveCancelada,
   esClaveDelCalendario,
   firmaEquipo,
   SIN_MANTENER_RETIRA_MS,
@@ -31,6 +33,7 @@ import {
   puedeVerTitulo,
   rangoDeEvento,
   tocaCompleta,
+  tituloDeEvento,
   type EventoGoogle,
 } from "../entrante-core";
 
@@ -518,6 +521,20 @@ test("WS1-T3 v3 · H4: cada doctor CONSERVA su vínculo al cambiar los invitados
   // Dos vínculos del mismo doctor (de cuando la v2 repartía por orden): se queda el ACTIVO, el otro sigue retirado.
   const dos = [{ ...base, blockId: "b1", doctorId: "u-z", activo: false }, { ...base, blockId: "b3", clave: claveDeDoctor(CAL_CLINICA, "u-z"), doctorId: "u-z" }];
   assert.deepEqual(sinCambio(decidirEventoPorDoctor(ev(), { ...c, doctores: ["u-z"], existentes: dos })), []);
+});
+
+test("v4 · m1: la clave apartada de una cita cancelada y el título sin «Cancelada en DaleControl · »", () => {
+  const apartada = claveCancelada(claveDeDoctor(CAL_CLINICA, "u-jg"), "cita-1");
+  assert.equal(apartada, `${CAL_CLINICA}#cancelada:cita-1`, "a partir del calendario, sin el `#doctor`");
+  assert.equal(esClaveCancelada(apartada), true);
+  assert.equal(esClaveCancelada(CAL_CLINICA), false);
+  assert.equal(esClaveCancelada(claveDeDoctor(CAL_CLINICA, "u-jg")), false);
+  assert.equal(esClaveDelCalendario(apartada, CAL_CLINICA), true, "la entrada la sigue leyendo con el evento");
+  assert.equal(calendarioDeLaClave(apartada), CAL_CLINICA);
+  assert.equal(esClaveCancelada("es.mexican#holiday@group.v.calendar.google.com"), false);
+  assert.equal(tituloDeEvento(ev({ summary: "Cancelada en DaleControl · Valoración" })), "Valoración");
+  assert.equal(tituloDeEvento(ev({ summary: "Cancelada en DaleControl · Cancelada en DaleControl ·  Valoración" })), "Valoración");
+  assert.equal(tituloDeEvento(ev({ summary: "Valoración (Cancelada en DaleControl · no)" })), "Valoración (Cancelada en DaleControl · no)");
 });
 
 test("WS1-T3 v3 · H2: el calendario de una clave de vínculo (sin el `#<doctor>`; un `#` antes de la @ es del calendario)", () => {

@@ -30,6 +30,7 @@ import {
   decidirEventoPorDoctor,
   doctoresDelEvento,
   duenoDeLaCuenta,
+  esClaveCancelada,
   esEventoDeDaleControl,
   firmaEquipo,
   HORIZONTE_DIAS,
@@ -142,6 +143,12 @@ export interface PuertosEntrante {
   actualizarBloqueo(clinicId: string, blockId: string, d: DatosBloqueo): Promise<void>;
   inactivarBloqueo(clinicId: string, blockId: string, ahora: Date): Promise<void>;
   leerCita(clinicId: string, appointmentId: string): Promise<CitaDelVinculo | null>;
+  /**
+   * Aparta el vínculo de una cita convertida que se CANCELÓ a su clave
+   * `claveCancelada` (sigue ligado a su cita; no se borra nada). Solo si sigue
+   * con esa cita y no estaba apartado ya.
+   */
+  apartarVinculoCancelado(clinicId: string, blockId: string, appointmentId: string): Promise<void>;
   /**
    * Guarda los cambios SOLO si el vínculo sigue con la hora que se leyó
    * (`antes`): si la salida acaba de copiar otra hora (y la anotó), esta
@@ -434,6 +441,8 @@ async function procesarPagina(
     const id = ev.id as string;
     const vs = vinculos.get(id) ?? [];
     const convertidos = vs.filter((v) => !!v.appointmentId);
+    // Los vínculos cuya cita se CANCELÓ no cuentan como «ya es la cita» (m1).
+    const canceladas = new Set<string>();
 
     // ── Una cita convertida: se AVISA, la cita nunca se mueve ni se cancela sola.
     for (const v of convertidos) {
@@ -441,6 +450,7 @@ async function procesarPagina(
       let evento: EventoGoogle = ev;
       for (let intento = 0; intento < 2; intento++) {
         const leida = await p.leerCita(clinicId, vinculo.appointmentId as string);
+        if (intento === 0 && leida?.status === "CANCELLED") canceladas.add(v.blockId);
         // La cita ya va ligada a OTRO evento (se canceló, se reactivó y Google le
         // dio uno nuevo): lo que le pase al viejo no le avisa de nada (G7).
         const cita = leida && leida.googleEventId !== undefined && leida.googleEventId !== vinculo.googleEventId ? null : leida;
@@ -469,10 +479,19 @@ async function procesarPagina(
     }
     // El evento ya es una cita: los bloqueos de los demás doctores se retiran
     // (como cualquier evento de cita: no se cierra su propio hueco).
-    if (convertidos.length > 0) {
+    if (convertidos.some((v) => !canceladas.has(v.blockId))) {
       await retirar(vs);
       continue;
     }
+    // Todas sus citas se cancelaron: el evento vuelve a bloquear como uno más
+    // (revisión t8 de la v3, m1). El vínculo de cada cita cancelada se APARTA
+    // (`claveCancelada`): sigue ligado a su cita, y su clave queda libre para
+    // un bloqueo nuevo que se puede convertir otra vez. Si reactivan la cita,
+    // vuelve a ser «la cita del evento» y lo de arriba retira los demás.
+    for (const v of convertidos) {
+      if (!esClaveCancelada(v.calendarId ?? calendarId)) await p.apartarVinculoCancelado(clinicId, v.blockId, v.appointmentId as string);
+    }
+    const libres = vs.filter((v) => !v.appointmentId);
 
     // ── La serie entera se borró: Google puede mandar solo el evento «padre».
     if (ev.status === "cancelled" && !ev.recurringEventId && vs.length === 0 && !esDeCita(ev)) {
@@ -487,7 +506,7 @@ async function procesarPagina(
     }
 
     // ── Un bloqueo por doctor (regla 5): los invitados, o el dueño de la cuenta.
-    const existentes: BloqueoExistente[] = vs.map((v) => ({
+    const existentes: BloqueoExistente[] = libres.map((v) => ({
       blockId: v.blockId, clave: v.calendarId ?? calendarId, activo: v.activo, doctorId: v.doctorId, alcance: v.alcance ?? null,
       startsAt: v.startsAt, endsAt: v.endsAt, title: v.title, allDay: v.allDay,
     }));

@@ -50,6 +50,26 @@ export const CONVERTIR_MAX_HORAS = 12;
 const idValido = (s: unknown): s is string => typeof s === "string" && s.trim().length > 0;
 
 /**
+ * De esas citas, las CANCELADAS. El vínculo de una cita convertida que se
+ * canceló ya no cuenta como «el evento ya es una cita» (revisión t8 de la v3,
+ * m1): el bloqueo puede volver y convertirse otra vez. Una cita que no se
+ * encuentra sigue contando (por si acaso, como antes).
+ */
+async function citasCanceladas(
+  db: { appointment: { findMany(args: any): Promise<{ id: string }[]> } },
+  clinicId: string,
+  ids: readonly (string | null)[],
+): Promise<Set<string>> {
+  const con = ids.filter((x): x is string => !!x);
+  if (con.length === 0) return new Set();
+  const filas = await db.appointment.findMany({
+    where: { clinicId, id: { in: con }, status: "CANCELLED" },
+    select: { id: true },
+  });
+  return new Set(filas.map((f) => f.id));
+}
+
+/**
  * Los vínculos del MISMO evento en el mismo calendario: la clave principal y
  * la de cada doctor (`<calendario>#<doctorId>`, regla 5). `clinicId` siempre.
  */
@@ -101,14 +121,19 @@ export async function prepararConversionGoogle(
   if (quien?.role === "DOCTOR" && bloque.doctorId !== null && bloque.doctorId !== quien.userId) {
     return no(404, "google_block_not_found");
   }
-  if (vinculo.appointmentId) return no(409, "google_block_already_converted");
   // El bloqueo de OTRO doctor del mismo evento ya es una cita: dos citas con un
-  // evento se pisarían la hora en Google (revisión t8, H2).
-  const otraCita = await prisma.agendaBlockGoogle.findFirst({
+  // evento se pisarían la hora en Google (revisión t8, H2). Las citas
+  // CANCELADAS no cuentan (m1): ni la suya ni la de otro.
+  const conCita = await prisma.agendaBlockGoogle.findMany({
     where: { ...delMismoEvento(clinicId, vinculo), appointmentId: { not: null } },
-    select: { blockId: true },
+    select: { appointmentId: true },
+    take: 50,
   });
-  if (otraCita) return no(409, "google_block_already_converted");
+  const canceladas = await citasCanceladas(prisma, clinicId, conCita.map((v) => v.appointmentId));
+  if (conCita.some((v) => !canceladas.has(v.appointmentId as string))) return no(409, "google_block_already_converted");
+  // El suyo con su cita cancelada: espera a que la entrada lo aparte y el
+  // bloqueo vuelva (uno nuevo, el que se convierte); este sigue retirado.
+  if (vinculo.appointmentId) return no(409, "google_block_inactive");
   if (bloque.deletedAt) return no(409, "google_block_inactive");
   // Todo el día crearía una cita de 00:00 a 00:00 (G5).
   if (vinculo.allDay) return no(409, "google_block_all_day");
@@ -158,11 +183,13 @@ export interface TxConversion {
     updateMany(args: any): Promise<{ count: number }>;
   };
   agendaBlock: { updateMany(args: any): Promise<{ count: number }> };
+  appointment: { findMany(args: any): Promise<{ id: string }[]> };
 }
 
 /**
  * Dentro de la transacción del alta. Condicional: solo si nadie lo convirtió
- * antes (ni el bloqueo de otro doctor del mismo evento); si no, lanza
+ * antes (ni el bloqueo de otro doctor del mismo evento, salvo que esa cita
+ * esté cancelada: m1); si no, lanza
  * `ConversionYaHecha` y la transacción se deshace. Los bloqueos de los demás
  * doctores de ese evento se RETIRAN aquí mismo (deletedAt, no se borran): ya
  * no esperan a que la entrada vuelva a ver el evento (H2).
@@ -185,7 +212,8 @@ export async function marcarBloqueoConvertido(
   const hermanos = (
     await tx.agendaBlockGoogle.findMany({ where: evento, select: { blockId: true, appointmentId: true } })
   ).filter((h) => h.blockId !== d.bloqueoId);
-  if (hermanos.some((h) => !!h.appointmentId)) throw new ConversionYaHecha();
+  const canceladas = await citasCanceladas(tx, d.clinicId, hermanos.map((h) => h.appointmentId));
+  if (hermanos.some((h) => !!h.appointmentId && !canceladas.has(h.appointmentId))) throw new ConversionYaHecha();
   const r = await tx.agendaBlockGoogle.updateMany({
     where: { blockId: d.bloqueoId, clinicId: d.clinicId, appointmentId: null },
     data: {
@@ -207,9 +235,11 @@ export async function marcarBloqueoConvertido(
     data: { deletedAt: ahora, deletedById: d.userId },
   });
   if (b.count === 0) throw new BloqueoCambiado();
-  if (hermanos.length > 0) {
+  // Los de los demás doctores sin convertir (los de citas canceladas ya están retirados).
+  const sinConvertir = hermanos.filter((h) => !h.appointmentId);
+  if (sinConvertir.length > 0) {
     await tx.agendaBlock.updateMany({
-      where: { id: { in: hermanos.map((h) => h.blockId) }, clinicId: d.clinicId, kind: "GOOGLE", deletedAt: null },
+      where: { id: { in: sinConvertir.map((h) => h.blockId) }, clinicId: d.clinicId, kind: "GOOGLE", deletedAt: null },
       data: { deletedAt: ahora, deletedById: d.userId },
     });
   }

@@ -30,8 +30,10 @@ import {
   bloqueosSinMantener,
   calendarioImportable,
   canalPorRenovar,
+  claveCancelada,
   CREADOR_GOOGLE,
   direccionDelAviso,
+  esClaveCancelada,
   MOTIVO_GOOGLE,
   SEPARADOR_DOCTOR,
   avisoDeRetiro,
@@ -312,9 +314,23 @@ const puertos: PuertosEntrante = {
     if (eventIds.length === 0) return new Set();
     const citas = await prisma.appointment.findMany({
       where: { clinicId, googleCalendarEventId: { in: eventIds } },
-      select: { googleCalendarEventId: true },
+      select: { id: true, status: true, googleCalendarEventId: true },
     });
-    return new Set(citas.map((c) => c.googleCalendarEventId).filter((x): x is string => !!x));
+    // Una cita CONVERTIDA (vino de un evento de la clínica) que se canceló ya
+    // no hace del evento «el de una cita»: el evento vuelve a bloquear (m1).
+    // Las demás canceladas siguen contando (el eco de las citas de siempre).
+    const canceladas = citas.filter((c) => c.status === "CANCELLED").map((c) => c.id);
+    const convertidas = new Set<string>();
+    if (canceladas.length > 0) {
+      const vs = await prisma.agendaBlockGoogle.findMany({
+        where: { clinicId, appointmentId: { in: canceladas } },
+        select: { appointmentId: true },
+      });
+      for (const v of vs) if (v.appointmentId) convertidas.add(v.appointmentId);
+    }
+    return new Set(
+      citas.filter((c) => !convertidas.has(c.id)).map((c) => c.googleCalendarEventId).filter((x): x is string => !!x),
+    );
   },
 
   async crearBloqueo(clinicId, clave, googleEventId, d: DatosBloqueo) {
@@ -397,6 +413,19 @@ const puertos: PuertosEntrante = {
         where: { id: blockId, clinicId, kind: "GOOGLE", deletedAt: null },
         data: { deletedAt: ahora, deletedById: null },
       });
+    });
+  },
+
+  async apartarVinculoCancelado(clinicId, blockId, appointmentId) {
+    const v = await prisma.agendaBlockGoogle.findFirst({
+      where: { blockId, clinicId, appointmentId },
+      select: { calendarId: true },
+    });
+    if (!v || esClaveCancelada(v.calendarId)) return;
+    // Condicionado a la clave leída: si otra pasada lo apartó a la vez, nada.
+    await prisma.agendaBlockGoogle.updateMany({
+      where: { blockId, clinicId, appointmentId, calendarId: v.calendarId },
+      data: { calendarId: claveCancelada(v.calendarId, appointmentId) },
     });
   },
 

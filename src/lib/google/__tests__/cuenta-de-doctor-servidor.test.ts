@@ -280,3 +280,57 @@ test("v3 · H2: «Convertir en cita» el bloqueo de la Dra. D retira EN LA MISMA
   assert.equal(vJg.appointmentId, null);
   assert.equal(db.vinculos.filter((v) => v.clinicId === "c1" && v.googleEventId === "del-agente" && v.appointmentId).length, 1, "una sola cita por evento");
 });
+
+/* ═══ v4 · m1: la cita convertida que se cancela ═══════════════════════ */
+
+test("v4 · m1: recepción convierte por error el bloqueo del Dr. JG y CANCELA la cita → el de la Dra. D vuelve y se convierte; el de JG vuelve (nuevo) y también; nada se borra", async () => {
+  reiniciar();
+  rafaelClinica();
+  bandera("c1", { syncToken: null, lastFullSyncAt: null });
+  const invitados = [{ email: "d@gmail.com" }, { email: "jg@gmail.com" }];
+  await sincronizar([comida({ id: "del-agente", summary: "Valoración", attendees: invitados })]);
+  const delEvento = (doc: string) => db.bloques.filter((b) => b.doctorId === doc && db.vinculos.some((v) => v.blockId === b.id && v.googleEventId === "del-agente"));
+  const [bD] = delEvento("u-d");
+  const [bJg] = delEvento("u-jg");
+  const { prepararConversionGoogle, marcarBloqueoConvertido } = await import("../convertir.server");
+  const intento = (b: Fila) => ({ startsAt: b.startsAt, endsAt: b.endsAt, doctorId: b.doctorId });
+  const marcar = (b: Fila, cita: string) =>
+    prisma.$transaction((tx: any) => marcarBloqueoConvertido(tx, { clinicId: "c1", bloqueoId: b.id, appointmentId: cita, userId: "u-rec", startsAt: b.startsAt, endsAt: b.endsAt }));
+  const cita = (id: string, b: Fila, status = "SCHEDULED") =>
+    db.citas.push({ id, clinicId: "c1", status, startsAt: b.startsAt, endsAt: b.endsAt, googleCalendarEventId: "del-agente" });
+
+  // El error: convierte el de JG. El de D se retira (H2).
+  cita("cita-jg", bJg);
+  await marcar(bJg, "cita-jg");
+  assert.ok(bD.deletedAt instanceof Date);
+  assert.equal((await prepararConversionGoogle("c1", bD.id, undefined, intento(bD))).error, "google_block_already_converted");
+
+  // Cancela la cita de JG. Ya NO cuenta como «el evento ya es una cita»: el 409 de «ya convertido» se va
+  // (el bloqueo de D sigue retirado hasta que la entrada lo devuelva).
+  db.citas.find((c) => c.id === "cita-jg")!.status = "CANCELLED";
+  assert.equal((await prepararConversionGoogle("c1", bD.id, undefined, intento(bD))).error, "google_block_inactive");
+
+  // La salida le puso «Cancelada…» al título en Google: la entrada lo ve y devuelve los bloqueos.
+  await sincronizar([comida({ id: "del-agente", summary: "Cancelada en DaleControl · Valoración", updated: new Date().toISOString(), attendees: invitados })]);
+  const vJgViejo = db.vinculos.find((v) => v.blockId === bJg.id)!;
+  assert.equal(vJgViejo.appointmentId, "cita-jg", "el vínculo viejo sigue con SU cita");
+  assert.ok(String(vJgViejo.calendarId).includes("#cancelada:cita-jg"), "apartado");
+  assert.equal(bD.deletedAt, null, "el de D VUELVE (el mismo)");
+  const [bJg2] = delEvento("u-jg").filter((b) => b.deletedAt === null);
+  assert.ok(bJg2 && bJg2.id !== bJg.id, "JG tiene un bloqueo nuevo");
+  assert.equal(db.vinculos.find((v) => v.blockId === bJg2.id)!.title, "Valoración");
+  // El eco: la cita cancelada que vino de Google ya no hace del evento «el de una cita».
+  assert.equal(db.citas.length, 1);
+
+  // Ahora se puede convertir el de D…
+  assert.equal((await prepararConversionGoogle("c1", bD.id, undefined, intento(bD))).ok, true);
+  assert.equal((await prepararConversionGoogle("c1", bJg2.id, undefined, intento(bJg2))).ok, true, "…o el nuevo de JG");
+  // …el viejo de JG no (está retirado: el que vale es el nuevo).
+  assert.equal((await prepararConversionGoogle("c1", bJg.id, undefined, intento(bJg))).error, "google_block_inactive");
+  cita("cita-d", bD);
+  await marcar(bD, "cita-d");
+  assert.equal(db.vinculos.find((v) => v.blockId === bD.id)!.appointmentId, "cita-d");
+  assert.ok(bJg2.deletedAt instanceof Date, "y el nuevo de JG se retira en la misma transacción (H2)");
+  assert.equal(vJgViejo.appointmentId, "cita-jg", "la cita cancelada no se toca");
+  assert.equal(db.bloques.filter((b) => b.clinicId === "c1").length, 3, "nada se borra");
+});

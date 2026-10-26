@@ -7,7 +7,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { sincronizarEntrante, type PuertosEntrante, type VinculoLeido } from "../entrante-nucleo";
-import { esClaveDelCalendario, type EventoGoogle, type UsuarioClinica } from "../entrante-core";
+import { claveCancelada, esClaveCancelada, esClaveDelCalendario, type EventoGoogle, type UsuarioClinica } from "../entrante-core";
 
 const AHORA = new Date("2026-10-20T15:00:00Z");
 const CAL = "cal-clinica@group.calendar.google.com";
@@ -153,7 +153,13 @@ function montar(opts: { enabled?: boolean; conectada?: boolean; calendario?: str
       consultas.series++;
       return [...vinculos.values()].filter((v) => esClaveDelCalendario(v.calendarId, cal) && !!v.recurringEventId && series.includes(v.recurringEventId) && !v.appointmentId).map(leer);
     },
-    eventosDeCitas: async (_c, ids) => new Set([...citas.values()].map((c) => c.googleCalendarEventId).filter((x): x is string => !!x && ids.includes(x))),
+    // Como el servidor: una cita CONVERTIDA (con vínculo) que se canceló no hace del evento el de una cita (m1).
+    eventosDeCitas: async (_c, ids) => new Set(
+      [...citas.entries()]
+        .filter(([id, c]) => !(c.status === "CANCELLED" && [...vinculos.values()].some((v) => v.appointmentId === id)))
+        .map(([, c]) => c.googleCalendarEventId)
+        .filter((x): x is string => !!x && ids.includes(x)),
+    ),
     crearBloqueo: async (_c, cal, eventId, d) => {
       if ([...vinculos.values()].some((v) => v.calendarId === cal && v.googleEventId === eventId)) return; // índice único
       const id = `b${++n}`;
@@ -167,6 +173,10 @@ function montar(opts: { enabled?: boolean; conectada?: boolean; calendario?: str
     inactivarBloqueo: async (_c, id, ahora) => {
       const b = bloques.get(id)!;
       if (!b.deletedAt) b.deletedAt = ahora;
+    },
+    apartarVinculoCancelado: async (_c, id, cita) => {
+      const v = vinculos.get(id)!;
+      if (v.appointmentId === cita && !esClaveCancelada(v.calendarId)) v.calendarId = claveCancelada(v.calendarId, cita);
     },
     leerCita: async (_c, id) => {
       const c = citas.get(id);
@@ -503,6 +513,59 @@ test("WS1-T3 v2: convertir en cita el bloqueo de un doctor → los de los demás
   await sincronizarEntrante(a.p, "c1");
   assert.equal(activos(a.bloques).length, 0, "el de Luis también: el evento ya es la cita");
   assert.equal(a.bloques.size, 2, "nada se borra");
+});
+
+test("v4 · m1: la cita convertida se CANCELA → el evento vuelve a bloquear (el vínculo de la cita se aparta, no se borra); si la reactivan, vuelve a ser la cita", async () => {
+  const a = montar();
+  a.usuarios.push({ id: "doc-luis", email: "luis@clinica.mx", recibeCitas: true });
+  const invitados = [{ email: "ana@clinica.mx" }, { email: "luis@clinica.mx" }];
+  a.google.poner(evento("e1", { summary: "Valoración", attendees: invitados }));
+  await sincronizarEntrante(a.p, "c1");
+  // Recepción convierte por error el de Luis (lo que hace la ruta de alta + H2: el de Ana se retira).
+  const vLuis = [...a.vinculos.values()].find((v) => a.bloques.get(v.blockId)!.doctorId === "doc-luis")!;
+  const vAna = [...a.vinculos.values()].find((v) => a.bloques.get(v.blockId)!.doctorId === "doc-ana")!;
+  const claveLuis = vLuis.calendarId;
+  vLuis.appointmentId = "cita-luis";
+  a.bloques.get(vLuis.blockId)!.deletedAt = AHORA;
+  a.bloques.get(vAna.blockId)!.deletedAt = AHORA;
+  a.citas.set("cita-luis", { status: "SCHEDULED", startsAt: vLuis.eventStartsAt, endsAt: vLuis.eventEndsAt, googleCalendarEventId: "e1" });
+  // …y la cancela. La salida le pone «Cancelada en DaleControl · » al título en Google (y Google sube `updated`).
+  a.citas.get("cita-luis")!.status = "CANCELLED";
+  a.google.poner(evento("e1", { summary: "Cancelada en DaleControl · Valoración", updated: "2026-10-20T15:00:00Z", attendees: invitados }));
+  await sincronizarEntrante(a.p, "c1");
+
+  assert.equal(vLuis.appointmentId, "cita-luis", "sigue ligado a SU cita (salida, avisos, reactivar)");
+  assert.equal(vLuis.calendarId, claveCancelada(claveLuis, "cita-luis"), "apartado");
+  assert.ok(a.bloques.get(vLuis.blockId)!.deletedAt, "su bloqueo viejo sigue retirado");
+  assert.equal(a.bloques.get(vAna.blockId)!.deletedAt, null, "el de Ana VUELVE (el mismo)");
+  const nuevos = activos(a.bloques).filter((b) => b.id !== vAna.blockId);
+  assert.deepEqual(nuevos.map((b) => b.doctorId), ["doc-luis"], "y Luis tiene uno NUEVO, convertible");
+  const vNuevo = a.vinculos.get(nuevos[0].id)!;
+  assert.equal(vNuevo.appointmentId, null);
+  assert.equal(vNuevo.calendarId, claveLuis, "en la clave que era suya");
+  assert.equal(vNuevo.title, "Valoración", "sin «Cancelada en DaleControl · »");
+  assert.equal(a.bloques.size, 3, "nada se borra");
+
+  // Otra pasada igual: nada cambia (idempotente).
+  a.google.poner(evento("e1", { summary: "Cancelada en DaleControl · Valoración", updated: "2026-10-20T15:30:00Z", attendees: invitados }));
+  await sincronizarEntrante(a.p, "c1");
+  assert.equal(activos(a.bloques).length, 2);
+  assert.equal(a.bloques.size, 3);
+
+  // Reactivan la cita cancelada: vuelve a ser la cita del evento y los demás se retiran.
+  a.citas.get("cita-luis")!.status = "SCHEDULED";
+  a.google.poner(evento("e1", { summary: "Valoración", updated: "2026-10-20T16:00:00Z", attendees: invitados }));
+  await sincronizarEntrante(a.p, "c1");
+  assert.equal(activos(a.bloques).length, 0, "el evento vuelve a ser la cita");
+  assert.equal(a.bloques.size, 3);
+});
+
+test("v4 · m1: una cita que NO vino de Google (su propio evento) cancelada sigue siendo el eco: no bloquea", async () => {
+  const a = montar();
+  a.citas.set("cita-propia", { status: "CANCELLED", startsAt: new Date("2026-10-21T16:00:00Z"), endsAt: new Date("2026-10-21T17:00:00Z"), googleCalendarEventId: "viejo1" });
+  a.google.poner(evento("viejo1", { summary: "🏥 Limpieza — Juan P." }));
+  await sincronizarEntrante(a.p, "c1");
+  assert.equal(a.bloques.size, 0);
 });
 
 test("WS1-T3: la cuenta es el Google que conectó la doctora (users.googleCalendarEmail) → sus eventos la bloquean a ella", async () => {
