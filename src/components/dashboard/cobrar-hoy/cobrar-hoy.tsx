@@ -355,7 +355,8 @@ function CuerpoCobrarHoy({
             <button key={p.planId} type="button" role="radio" aria-checked={activo} className={`${c.metodo} ${activo ? c.metodoActivo : ""}`}
               onClick={() => elegir(m, p.planId)} disabled={guardando} data-cobrar-hoy-plan={p.planId}>
               {m === "abono"
-                ? t("planTratamiento.cobro.opcionAbono", { plan: p.nombre, saldo: fmtMXNdec(p.saldo) })
+                // «debe» = lo hecho menos lo pagado (26-oct); se puede abonar hasta lo aceptado (adelanto).
+                ? t("planTratamiento.cobro.opcionAbono", { plan: p.nombre, saldo: fmtMXNdec(p.debe ?? p.saldo) })
                 : t("planTratamiento.cobro.opcionNota", { plan: p.nombre, monto: fmtMXNdec(p.porFacturar) })}
             </button>
           );

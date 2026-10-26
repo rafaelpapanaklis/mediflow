@@ -898,6 +898,11 @@
   gap: 12px;
 }
 
+/* «Por hacer (aceptado)»: de ancho completo, debajo de los dos saldos. */
+.saldoAncho {
+  grid-column: 1 / -1;
+}
+
 @container finanzas (max-width: 420px) {
   .saldos {
     grid-template-columns: minmax(0, 1fr);

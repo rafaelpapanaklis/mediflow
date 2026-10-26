@@ -67,6 +67,12 @@ export async function GET(req: NextRequest) {
       soloDelPlan: cuenta.soloDelPlan,
       saldo: cuenta.saldo,
       porFacturar: cuenta.porFacturar,
+      aceptado: cuenta.aceptado,
+      hecho: cuenta.hecho,
+      debe: cuenta.debe,
+      saldoAFavor: cuenta.saldoAFavor,
+      porHacer: cuenta.porHacer,
+      vencido: cuenta.vencido,
       notas: cuenta.notas.map((n) => ({
         invoiceId: n.id, invoiceNumber: n.invoiceNumber, status: n.status, total: n.total, paid: n.paid, createdAt: n.createdAt ?? "",
       })),

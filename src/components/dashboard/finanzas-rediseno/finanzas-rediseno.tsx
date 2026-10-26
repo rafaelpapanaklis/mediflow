@@ -24,7 +24,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useMemo, type ReactNode } from "react";
 import {
-  AlertCircle, AlertTriangle, ArrowRight, Banknote, BarChart3, CalendarCheck,
+  AlertCircle, AlertTriangle, ArrowRight, Banknote, BarChart3, CalendarCheck, Hourglass,
   Pencil, PiggyBank, Plus, Receipt, RefreshCw, Trash2, TrendingDown, TrendingUp, Users,
   Wallet, X, type LucideIcon,
 } from "lucide-react";
@@ -537,6 +537,19 @@ export function FinanzasRediseno() {
                     <div className={`${s.kpiValor} ${vencido > 0 ? s.kpiValorPeligro : ""}`}>{fmtMXN(vencido)}</div>
                     <p className={s.kpiPista}><QueCuenta clave="vencido" /></p>
                   </Link>
+                  {/* Notas de plan: lo aceptado que aún no se hace sale de «Por cobrar» y se ve aquí. */}
+                  {(data.saldos?.porHacer ?? 0) > 0 && (
+                    <div className={`${s.saldo} ${s.saldoAncho}`} data-saldo-por-hacer>
+                      <div className={s.kpiArriba}>
+                        <span className={s.kpiEtiqueta}>Por hacer (aceptado)</span>
+                        <span className={s.kpiIcono}>
+                          <Hourglass size={16} strokeWidth={1.75} aria-hidden />
+                        </span>
+                      </div>
+                      <div className={s.kpiValor}>{fmtMXN(data.saldos?.porHacer ?? 0)}</div>
+                      <p className={s.kpiPista}><QueCuenta clave="porHacer" /></p>
+                    </div>
+                  )}
                 </div>
                 <Link href="/dashboard/caja?tab=facturas" className={s.enlaceInterno}>
                   Ver facturas en Caja <ArrowRight size={14} strokeWidth={2} aria-hidden />

@@ -243,7 +243,7 @@ export function PlanTratamiento({
               </div>
               {/* Un plan cancelado conserva su nota: su saldo se sigue viendo (y abonando). */}
               {cuentas !== undefined && (
-                <CuentaDelPlan cuenta={cuentas?.get(plan.id)} cargando={cargandoCuentas && !cuentas} onCobrar={onCobrarPlan} />
+                <CuentaDelPlan cuenta={cuentas?.get(plan.id)} cargando={cargandoCuentas && !cuentas} onCobrar={onCobrarPlan} puedeCerrar={puedeEditar} />
               )}
               {/* Fase 2 · C: «Agendar lo pendiente» (se esconde solo). La tarjeta entera abre el plan:
                   ni el clic ni el teclado de aquí (ni de la hoja que abre) llegan a ella. */}

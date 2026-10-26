@@ -61,7 +61,7 @@ export interface ResumenFinanzas {
   /** Lo cobrado en el sistema anterior con fecha en el periodo. APARTE: no suma a `ingresos`. */
   historiaMigrada: number;
   /** `null` solo si quien llama pidió `conSaldos: false` (Sabina, cuando no los necesita). La ruta siempre los pide. */
-  saldos: { porCobrar: number; vencido: number; incompleto: boolean } | null;
+  saldos: { porCobrar: number; vencido: number; porHacer: number; incompleto: boolean } | null;
 }
 
 /**
@@ -224,6 +224,8 @@ export async function calcularResumenFinanzas(
       ? {
           porCobrar: money(saldos.porCobrar),
           vencido:   money(saldos.vencido),
+          // Notas de plan: lo aceptado que aún no se hace (no es deuda todavía; 26-oct).
+          porHacer:  money(saldos.porHacer ?? 0),
           // true solo si la clínica pasa de 100 000 facturas abiertas: las dos
           // cifras son un mínimo y la pantalla lo dice (no se corta en silencio).
           incompleto: saldos.incompleto,

@@ -272,6 +272,12 @@ export interface FacturaDeLaCuenta {
   paid: number;
   /** ISO. Para abonar de la más vieja a la más nueva («Cobrar hoy»). */
   createdAt?: string;
+  /**
+   * Solo en las notas ligadas al plan por columna: cuánto de su total ya se HIZO y cuánto venció
+   * (`por-cobrar.ts`). Sin esto (factura de la vía vieja), la factura entera cuenta como hecha.
+   */
+  hecho?: number;
+  vencido?: number;
 }
 
 export interface CuentaDelPlan {
@@ -285,6 +291,18 @@ export interface CuentaDelPlan {
   saldo: number;
   /** Lo del plan que todavía no está en ninguna nota (filas sin nota, o el plan sin aceptar). */
   porFacturar: number;
+  /**
+   * Las cuatro cifras de la ficha (decisión de Rafael, 26-oct-2026): PLAN ACEPTADO (= facturado:
+   * lo que está en sus notas), HECHO, PAGADO y DEBE = lo hecho menos lo pagado de cada nota (o SALDO
+   * A FAVOR si pagó de más). POR HACER = lo aceptado que aún no se hace. `vencido`: lo hecho hace
+   * más de 30 días y sin pagar.
+   */
+  aceptado: number;
+  hecho: number;
+  debe: number;
+  saldoAFavor: number;
+  porHacer: number;
+  vencido: number;
   notas: FacturaDeLaCuenta[];
   /**
    * El dinero es de ESTE plan sin duda. Con la nota ligada por columna, sí. Por la vía vieja
@@ -301,12 +319,32 @@ export function cuentaDelPlan(args: { total: number; facturas: FacturaDeLaCuenta
   const pagado = round2(vivas.reduce((s, f) => s + (Number(f.paid) || 0), 0));
   const saldo = round2(vivas.reduce((s, f) => s + Math.max(0, (Number(f.total) || 0) - (Number(f.paid) || 0)), 0));
   const total = round2(Math.max(0, Number(args.total) || 0));
+  // Por nota: lo hecho (sin dato, la nota entera), y de ahí lo que debe o lo que lleva a favor.
+  let hecho = 0;
+  let debe = 0;
+  let saldoAFavor = 0;
+  let vencido = 0;
+  for (const f of vivas) {
+    const t = Number(f.total) || 0;
+    const p = Number(f.paid) || 0;
+    const h = round2(Math.min(t, Math.max(0, f.hecho ?? t)));
+    hecho += h;
+    debe += Math.max(0, round2(h - p));
+    saldoAFavor += Math.max(0, round2(p - h));
+    vencido += Math.max(0, Number(f.vencido) || 0);
+  }
   return {
     total,
     facturado,
     pagado,
     saldo,
     porFacturar: round2(Math.max(0, total - facturado)),
+    aceptado: facturado,
+    hecho: round2(hecho),
+    debe: round2(debe),
+    saldoAFavor: round2(saldoAFavor),
+    porHacer: round2(Math.max(0, facturado - hecho)),
+    vencido: round2(Math.min(debe, vencido)),
     notas: vivas,
     soloDelPlan: args.soloDelPlan ?? true,
   };

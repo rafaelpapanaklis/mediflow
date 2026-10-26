@@ -128,6 +128,9 @@ const TABLAS: Record<string, string> = {
   patient: "patients",
   user: "users",
   appointment: "appointments",
+  // Solo las pruebas que crean estas tablas (cerrar plan) las usan.
+  payment: "payments",
+  patientCredit: "patient_credits",
 };
 const JSONB = new Set(["items"]);
 const ENUMS: Record<string, Record<string, string>> = {
@@ -296,7 +299,7 @@ export function prismaDePrueba(db: any, conn: any = db): any {
 
   const cliente: any = { ...crudo(conn) };
   for (const m of Object.keys(TABLAS)) cliente[m] = modelo(m, conn);
-  // payments y patientCredit no se usan en estas pruebas: un intento de usarlos es un error del arnés.
+  // payments y patientCredit: solo existen si la prueba crea sus tablas (cerrar plan); si no, usarlos falla.
   if (!(conn as any).__esTx) {
     let cola: Promise<unknown> = Promise.resolve();
     cliente.$transaction = (fn: (tx: any) => Promise<unknown>) => {
