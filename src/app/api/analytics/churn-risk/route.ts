@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { loQueAunNoSeDebe, loQueAunNoSeDebePorPaciente } from "@/lib/dinero/lo-que-se-debe.server";
 
 /**
  * GET /api/analytics/churn-risk
@@ -69,6 +70,11 @@ function getChurnRisk(clinicId: string): Promise<ChurnResp> {
 
       // El filtro "en riesgo" replica exactamente reasons.length > 0 con
       // comparaciones en epoch ms (tz-safe). Solo vuelven los en riesgo.
+      // Lo que aún no se debe (26-oct, Rafael): un plan aceptado y sin hacer, o cuotas de ortodoncia
+      // que no vencen, no son «saldo alto». Solo puede BAJAR el saldo: nadie nuevo entra en riesgo.
+      const noSeDebe = await loQueAunNoSeDebe(clinicId);
+      const noSeDebePorPaciente = noSeDebe.total > 0 ? await loQueAunNoSeDebePorPaciente(clinicId, noSeDebe) : new Map<string, number>();
+
       const rows = await prisma.$queryRaw<RawChurn[]>`
         WITH appt AS (
           SELECT "patientId",
@@ -111,7 +117,7 @@ function getChurnRisk(clinicId: string): Promise<ChurnResp> {
       const atRisk: ChurnRow[] = rows
         .map((r) => {
           const lastVisitMs = r.last_visit ? new Date(r.last_visit).getTime() : null;
-          const balance = Number(r.balance);
+          const balance = Math.max(0, Math.round((Number(r.balance) - (noSeDebePorPaciente.get(r.id) ?? 0)) * 100) / 100);
           const recentNoShows = Number(r.recent_no_shows);
           const reasons: string[] = [];
           if (!r.has_upcoming) {

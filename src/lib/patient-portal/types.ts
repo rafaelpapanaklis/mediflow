@@ -235,6 +235,11 @@ export interface PacienteFactura {
   total: number; // MXN
   paid: number; // MXN
   balance: number; // MXN
+  /**
+   * De `balance`, lo que aún no se debe (26-oct): lo aceptado de un plan de tratamiento que todavía no
+   * se hace, o las cuotas de ortodoncia que no vencen. Sin dato = todo el saldo se debe.
+   */
+  aunNoSeDebe?: number;
   createdAt: string; // ISO
   dueDate: string | null;
   paidAt: string | null;

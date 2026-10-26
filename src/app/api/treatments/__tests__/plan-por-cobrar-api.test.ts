@@ -277,11 +277,14 @@ test("cerrar plan con adelanto: la nota se queda en lo hecho, lo de más queda c
   assert.ok(bitacora.some((b) => b.entityType === "invoice" && b.entityId === notaId && /Limpieza/.test(b.texto) && /ya no continuará/.test(b.texto)));
   assert.ok(bitacora.some((b) => b.entityType === "treatment" && b.entityId === planId && b.changes.status.after === "ABANDONED"));
 
-  // Ya cerrado: un segundo cierre no cambia nada (ni dinero ni filas).
+  // Ya cerrado: un segundo cierre no cambia nada (ni dinero, ni filas, ni bitácora) — revisión t5, A7.
+  const filasDeBitacora = bitacora.length;
   const otra = await cerrar(planId);
   assert.equal(otra.status, 200);
+  assert.equal(otra.body.estado, "ya_cerrado");
   assert.equal(otra.body.saldoAFavor, 0);
   assert.equal(otra.body.filasCanceladas, 0);
+  assert.equal(bitacora.length, filasDeBitacora, "sin filas nuevas en Movimientos");
   assert.equal((await base.db.query(`SELECT * FROM "patient_credits"`)).rows.length, 1);
 
   // Caja: ya no queda nada de ese plan por cobrar ni por hacer.
@@ -345,7 +348,7 @@ test("cerrar plan: motivo obligatorio, permisos, doctor ajeno, la otra clínica 
   assert.equal((await filas(planId)).filter((f: any) => f.estado === "cancelado").length, 0);
 });
 
-test("lista de Pacientes (v2): de la nota del plan se resta lo por hacer; las demás facturas, enteras", async (t) => {
+test("lo que aún no se debe (v3: Pacientes, ficha, Reportes, Inbox, portal): de la nota del plan, lo por hacer; las demás facturas, enteras", async (t) => {
   if (salta(t)) return;
   await usar();
   const { planId, notaId } = await planAceptado();
@@ -355,12 +358,58 @@ test("lista de Pacientes (v2): de la nota del plan se resta lo por hacer; las de
     `INSERT INTO "invoices" ("id", "clinicId", "patientId", "invoiceNumber", "items", "subtotal", "total", "balance", "status")
      VALUES ('extra', 'c1', 'pac-c1', 'F-EXTRA', '[]', 3000, 3000, 3000, 'PENDING')`,
   );
-  const { porHacerDeNotas } = await import("@/lib/treatments/por-cobrar-db");
-  const m = await porHacerDeNotas("c1", [{ id: notaId, balance: 1550.5 }, { id: "extra", balance: 3000 }]);
-  assert.deepEqual(Object.fromEntries(m), { [notaId]: 800 }, "saldo del paciente = 1,550.50 − 800 + 3,000 = lo hecho sin pagar + lo de fuera");
+  const { loQueAunNoSeDebe, candidatasNoExigibles } = await import("@/lib/dinero/lo-que-se-debe.server");
+  assert.deepEqual(await candidatasNoExigibles("c1"), [notaId], "solo la nota del plan es candidata");
+  const r = await loQueAunNoSeDebe("c1", { ids: [notaId, "extra"], timezone: "America/Mexico_City" });
+  assert.deepEqual(r.porFactura, { [notaId]: 800 }, "saldo del paciente que se debe = 1,550.50 − 800 + 3,000");
+  assert.equal(r.porHacer, 800);
+  assert.equal(r.porVencer, 0);
   // Con el tenant de otra clínica no encuentra la nota.
-  assert.equal((await porHacerDeNotas("c2", [{ id: notaId, balance: 1550.5 }])).size, 0);
+  assert.equal((await loQueAunNoSeDebe("c2", { ids: [notaId] })).total, 0);
   // Y la cuenta del plan dice lo mismo (debe 750.50 = 1,550.50 − 800).
   const c = await cuenta(planId);
   assert.equal(c.debe, 750.5);
+});
+
+test("cerrar un plan TERMINADO: ya_cerrado, no lo pasa a Abandonado ni escribe nada (revisión t5, A7)", async (t) => {
+  if (salta(t)) return;
+  await usar();
+  const { planId } = await planAceptado();
+  await base.db.query(`UPDATE "treatment_plans" SET "status" = 'COMPLETED' WHERE "id" = $1`, [planId]);
+  const antes = bitacora.length;
+  const r = await cerrar(planId);
+  assert.equal(r.status, 200);
+  assert.equal(r.body.estado, "ya_cerrado");
+  const plan = (await base.db.query(`SELECT "status"::text AS "status" FROM "treatment_plans" WHERE "id" = $1`, [planId])).rows[0];
+  assert.equal(plan.status, "COMPLETED");
+  assert.equal(bitacora.length, antes, "sin filas nuevas en Movimientos");
+  assert.equal((await filas(planId)).filter((f: any) => f.estado === "cancelado").length, 0);
+  const [n] = await notas(planId);
+  assert.equal(n.total, 2050.5, "la nota no se tocó");
+});
+
+test("cerrar con una factura de antes del plan (presupuesto): la confirmación y la respuesta lo dicen; esa factura no se toca (revisión t5, A5)", async (t) => {
+  if (salta(t)) return;
+  await usar();
+  const { POST } = await import("@/app/api/treatments/route");
+  const creado = await leer(await POST(pedir("/api/treatments", { patientId: "pac-c1", name: "Plan viejo", description: "▸ texto", items: ITEMS })));
+  const planId = creado.body.id as string;
+  // La vía de antes: el presupuesto del plan cobró la limpieza con su propia factura.
+  await base.db.query(
+    `INSERT INTO "invoices" ("id", "clinicId", "patientId", "invoiceNumber", "items", "subtotal", "total", "balance", "status")
+     VALUES ('vieja', 'c1', 'pac-c1', 'F-VIEJA', '[{"name":"Limpieza","quantity":1,"unitPrice":800}]', 800, 800, 800, 'PENDING')`,
+  );
+  await base.db.query(`INSERT INTO "quotes" ("id", "clinicId", "patientId", "folio", "title", "status", "invoiceId", "treatmentPlanId") VALUES ('q-viejo', 'c1', 'pac-c1', 'P-1', 'Plan viejo', 'ACCEPTED', 'vieja', $1)`, [planId]);
+  await base.db.query(`UPDATE "treatment_plan_items" SET "invoiceId" = 'vieja' WHERE "planId" = $1 AND "nombre" = 'Limpieza'`, [planId]);
+  const c = await cuenta(planId);
+  assert.deepEqual(c.facturasDeAntes, ["F-VIEJA"], "la confirmación lo avisa antes de cerrar");
+  const r = await cerrar(planId);
+  assert.equal(r.status, 200);
+  assert.deepEqual(r.body.sinAjustar, ["F-VIEJA"], "y la respuesta (el toast) lo dice");
+  const vieja = (await base.db.query(`SELECT * FROM "invoices" WHERE "id" = 'vieja'`)).rows[0];
+  assert.equal(vieja.balance, 800, "la factura de antes no se toca");
+  const fs = await filas(planId);
+  assert.equal(fs.find((f: any) => f.nombre === "Limpieza").estado, "pendiente", "su fila sigue ligada a esa factura");
+  assert.equal(fs.find((f: any) => f.nombre === "Resina").estado, "cancelado");
+  assert.ok(bitacora.some((b) => b.entityType === "treatment" && /F-VIEJA/.test(b.texto)));
 });

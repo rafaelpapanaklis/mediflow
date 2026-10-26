@@ -51,9 +51,13 @@ export async function GET(req: NextRequest) {
   const planes = (await planesDelPaciente(ctx.clinicId, paciente.id)).slice(0, MAX_PLANES);
   const filasPorPlan = await repoFilas.leerDePlanes(ctx.clinicId, planes.map((p) => p.id));
 
+  // La zona de la clínica, una vez por petición (revisión t5, A8): cada cuenta la necesita para su «vencido».
+  const zona = planes.length
+    ? (await prisma.clinic.findUnique({ where: { id: ctx.clinicId }, select: { timezone: true } }).catch(() => null))?.timezone ?? null
+    : null;
   const salida: PlanConCuenta[] = [];
   for (const p of planes) {
-    const cuenta = await leerCuentaDelPlan({ clinicId: ctx.clinicId, planId: p.id });
+    const cuenta = await leerCuentaDelPlan({ clinicId: ctx.clinicId, planId: p.id, timezone: zona });
     if (!cuenta) continue;
     const filas = filasPorPlan.get(p.id) ?? [];
     salida.push({
@@ -73,6 +77,7 @@ export async function GET(req: NextRequest) {
       saldoAFavor: cuenta.saldoAFavor,
       porHacer: cuenta.porHacer,
       vencido: cuenta.vencido,
+      facturasDeAntes: cuenta.facturasDeAntes ?? [],
       notas: cuenta.notas.map((n) => ({
         invoiceId: n.id, invoiceNumber: n.invoiceNumber, status: n.status, total: n.total, paid: n.paid, createdAt: n.createdAt ?? "",
       })),

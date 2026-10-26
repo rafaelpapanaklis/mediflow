@@ -8,8 +8,8 @@
 //
 // El ejecutor (`cerrar-plan.server.ts`) solo escribe lo que aquí se decide.
 
-import { round2, sumInvoiceItems } from "@/lib/invoice-totals";
-import { deudaDeNotaDelPlan, totalDeLineas, type FilaParaDeuda, type NotaParaDeuda } from "./por-cobrar";
+import { round2, spreadInvoiceDiscount, sumInvoiceItems } from "@/lib/invoice-totals";
+import { deudaDeNotaDelPlan, type FilaParaDeuda, type NotaParaDeuda } from "./por-cobrar";
 
 export const MAX_MOTIVO_CIERRE = 300;
 
@@ -43,7 +43,10 @@ const nombreDe = (it: any) => String(it?.name ?? it?.description ?? "Concepto");
 
 /**
  * Cómo queda una nota del plan al cerrarlo. null = no hay nada por hacer en ella (no cambia).
- * El descuento de la nota se reparte en proporción: lo que se queda conserva su parte.
+ * Lo que se queda conserva EXACTAMENTE su parte del descuento de la nota (la que le tocó con el
+ * reparto del timbrado, `spreadInvoiceDiscount`), y el total nuevo es el «Hecho» que la ficha
+ * prometió al confirmar, al centavo (revisión t5, A6: con el reparto proporcional quedaba a ±1¢ y
+ * una nota pagada justo quedaba PARCIAL por $0.01 o con $0.01 a favor).
  */
 export function ajustarNotaAlCerrar(nota: NotaParaDeuda, filas: ReadonlyMap<string, FilaParaDeuda>): AjusteDeNota | null {
   const d = deudaDeNotaDelPlan(nota, filas, null);
@@ -53,11 +56,10 @@ export function ajustarNotaAlCerrar(nota: NotaParaDeuda, filas: ReadonlyMap<stri
   const sale = new Set(salen.map((l) => l.indice));
   const quedan = items.filter((_, i) => !sale.has(i));
 
-  const subtotalAntes = sumInvoiceItems(items);
   const subtotal = sumInvoiceItems(quedan);
-  const descuentoAntes = round2(Math.max(0, Number(nota.discount) || 0));
-  const discount = subtotalAntes > 0 ? round2(Math.min(subtotal, (descuentoAntes * subtotal) / subtotalAntes)) : 0;
-  const total = quedan.length ? round2(totalDeLineas(quedan, discount, nota.taxRate, nota.taxIncluded)) : 0;
+  const parteDelDescuento = spreadInvoiceDiscount(items, round2(Math.max(0, Number(nota.discount) || 0)));
+  const discount = round2(Math.min(subtotal, items.reduce<number>((s, _, i) => (sale.has(i) ? s : s + (parteDelDescuento[i] ?? 0)), 0)));
+  const total = quedan.length ? d.hecho : 0;
   const pagado = round2(Math.max(0, Number(nota.paid) || 0));
   const aFavor = round2(Math.max(0, pagado - total));
   const paid = round2(pagado - aFavor);

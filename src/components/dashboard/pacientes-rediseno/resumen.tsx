@@ -63,7 +63,12 @@ export interface ResumenProps {
     source?: string | null;
   };
   /** `total` = lo facturado; `plan` (ws1-t2, F3) = costo de los planes de tratamiento ACTIVOS, aparte. */
-  finanzas: { total: number; pagado: number; saldo: number; credito: number; plan?: number };
+  /**
+   * `aunNoSeDebe` (26-oct): de `saldo`, lo aceptado en planes sin hacer y lo de ortodoncia que aún no
+   * vence (GET /api/patients/[id]/lo-que-aun-no-se-debe). Se dice aparte; el saldo sigue siendo el de
+   * las facturas (total − pagado).
+   */
+  finanzas: { total: number; pagado: number; saldo: number; credito: number; plan?: number; aunNoSeDebe?: number };
   citas: any[];
   facturas: any[];
   tratamientos: any[];
@@ -394,6 +399,11 @@ export function Resumen({
                     : t("pacientesRediseno.resumen.sinSaldo")}
                 </span>
               </div>
+              {(finanzas.aunNoSeDebe ?? 0) > 0.005 && finanzas.saldo > 0 && (
+                <div className={s.pie} style={{ marginTop: 3 }} data-aun-no-se-debe>
+                  <span>{t("patients.sideCards.aunNoSeDebe", { monto: formatCurrency(Math.min(finanzas.saldo, finanzas.aunNoSeDebe ?? 0)) })}</span>
+                </div>
+              )}
               {sinCargosVigentes ? (
                 <div className={s.pie} style={{ marginTop: 6 }} data-sin-cargos>
                   <span>

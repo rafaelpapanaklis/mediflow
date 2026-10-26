@@ -16,7 +16,6 @@ import { filasDeCobranza, resumenDeCobranza } from "../cobranza-modulo";
 import { carteraDeOrtodoncia } from "../finanzas-ortodoncia";
 import type { OrthoCaseSummary } from "../specialty-kpis";
 import { computeReceivables } from "@/lib/caja";
-import { porHacerSinPagarDelPaciente } from "@/lib/treatments/sin-doble-cobro";
 
 const ZONA = "America/Mexico_City";
 const AHORA = new Date("2026-09-28T16:00:00Z");
@@ -130,14 +129,4 @@ test("Caja / Finanzas → Saldos: la factura del tratamiento «Precio total» cu
   // Sin saber cuáles son de ortodoncia, todo como antes.
   const antes = await computeReceivables("cl-1", AHORA, db as any, async () => new Map(), { leerPrincipalesPrecioTotal: async () => new Set() });
   assert.equal(antes.porCobrar, 24700);
-});
-
-test("cabecera de la ficha: resta lo por hacer de las notas de plan (saldo − debe de cada plan)", () => {
-  assert.equal(porHacerSinPagarDelPaciente(null), 0);
-  const cuentas = new Map([
-    ["p1", { saldo: 1550.5, debe: 750.5 }],
-    ["p2", { saldo: 900, debe: 900 }], // factura de la vía de antes: entera en los dos
-    ["p3", { saldo: 300, debe: undefined }], // respuesta de antes: no se toca
-  ]);
-  assert.equal(porHacerSinPagarDelPaciente(cuentas), 800);
 });

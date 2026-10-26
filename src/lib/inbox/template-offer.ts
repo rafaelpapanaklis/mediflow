@@ -20,6 +20,7 @@
 // decir cuando ninguna sirve— sigue en lib/inbox/composer-templates.
 
 import { prisma } from "@/lib/prisma";
+import { loQueAunNoSeDebe } from "@/lib/dinero/lo-que-se-debe.server";
 import {
   INBOX_COMPOSER_KINDS,
   buildInboxTemplateOption,
@@ -165,23 +166,29 @@ async function loadTemplateFacts(args: {
     // un borrador no es un saldo exigible (mismo criterio que el aviso de saldo
     // de /api/invoices/[id]/send-whatsapp).
     args.canSeeBilling
-      ? prisma.invoice.aggregate({
+      ? prisma.invoice.findMany({
           where: {
             clinicId: args.clinicId,
             patientId: args.patientId,
             balance: { gt: 0 },
             status: { notIn: ["DRAFT", "CANCELLED"] },
           },
-          _sum: { balance: true },
+          select: { id: true, balance: true },
+          take: 500,
         })
       : Promise.resolve(null),
   ]);
+
+  // Lo que el paciente debe DE VERDAD (26-oct, Rafael): de una nota de plan, lo hecho menos lo pagado;
+  // de ortodoncia «Precio total a plazos», lo vencido. Un plan aceptado y sin hacer no se le cobra.
+  const saldo = (debt ?? []).reduce((s, f) => s + (f.balance ?? 0), 0);
+  const noSeDebe = debt?.length ? await loQueAunNoSeDebe(args.clinicId, { ids: debt.map((f) => f.id), timezone: base.timezone }) : null;
 
   return {
     ...base,
     upcoming: upcoming ?? null,
     lastPast: lastPast ?? null,
-    balance: debt?._sum?.balance ?? 0,
+    balance: Math.max(0, Math.round((saldo - (noSeDebe?.total ?? 0)) * 100) / 100),
   };
 }
 

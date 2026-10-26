@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { deudaInvoiceWhere } from "@/lib/dinero/ingresos.server";
-import { porHacerDeNotas } from "@/lib/treatments/por-cobrar-db";
+import { candidatasNoExigibles, loQueAunNoSeDebe, loQueAunNoSeDebePorPaciente, pacientesQueYaNoDeben } from "@/lib/dinero/lo-que-se-debe.server";
 import { Prisma, PatientStatus, Gender } from "@prisma/client";
 import { getAuthContext, buildPatientWhere } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
@@ -349,11 +349,10 @@ async function v2Handler(
         where: { AND: [deudaInvoiceWhere(ctx.clinicId), { patient: baseStatsWhere }] },
         _sum: { balance: true },
       }),
-      // Con su id y saldo (no `distinct`): la nota de un plan de tratamiento solo debe lo hecho
-      // menos lo pagado (26-oct), y eso se resta abajo por factura y por paciente.
       prisma.invoice.findMany({
         where: { AND: [deudaInvoiceWhere(ctx.clinicId), { patient: baseStatsWhere }] },
-        select: { id: true, patientId: true, balance: true },
+        select: { patientId: true },
+        distinct: ["patientId"],
       }),
       prisma.appointment.count({
         where: {
@@ -381,26 +380,28 @@ async function v2Handler(
     newThisMonth,
     newPrevMonth,
     debtAggregate,
-    facturasConDeuda,
+    distinctDebtPatients,
     nextApptToday,
     nextApptWeek,
   ] = statCounts;
 
-  // Notas de plan de tratamiento (decisión de Rafael, 26-oct-2026): de su saldo, lo aceptado sin hacer
-  // no es deuda. Lo mismo que dice la cuenta del plan en la ficha. Una sola lectura (las notas de
-  // plan de las facturas con saldo de la lista y de los KPIs); sin el SQL del plan, nada cambia.
-  const porHacer = await porHacerDeNotas(ctx.clinicId, [
-    ...rawPatients.flatMap((p) => p.invoices),
-    ...facturasConDeuda.map((i) => ({ id: i.id, balance: i.balance })),
-  ]);
-  const saldoPorPaciente = new Map<string, number>();
-  let porHacerDeLosKpis = 0;
-  for (const i of facturasConDeuda) {
-    const ph = porHacer.get(i.id) ?? 0;
-    porHacerDeLosKpis += ph;
-    saldoPorPaciente.set(i.patientId, (saldoPorPaciente.get(i.patientId) ?? 0) + (i.balance ?? 0) - ph);
+  // Lo que aún no se debe (decisiones de Rafael, 26-oct-2026): de una nota de plan, lo aceptado sin
+  // hacer; de ortodoncia «Precio total a plazos», lo que no vence. Lo mismo que Caja, Finanzas y la
+  // cabecera de la ficha. Solo se miran las facturas candidatas (notas de plan y principales de
+  // ortodoncia), leídas una vez; sin ellas, nada cambia.
+  const candidatas = await candidatasNoExigibles(ctx.clinicId);
+  const [deLaLista, deLosKpis] = candidatas.length
+    ? await Promise.all([
+        loQueAunNoSeDebe(ctx.clinicId, { candidatas, ids: rawPatients.flatMap((p) => p.invoices.map((i) => i.id)) }),
+        loQueAunNoSeDebe(ctx.clinicId, { candidatas, filtro: { patient: baseStatsWhere } }),
+      ])
+    : [null, null];
+  const noSeDebe = (id: string) => deLaLista?.porFactura[id] ?? 0;
+  // «Con deuda»: quien solo debía lo que aún no se debe deja de contar.
+  let sinDeudaDeVerdad = 0;
+  if (deLosKpis && deLosKpis.total > 0) {
+    sinDeudaDeVerdad = (await pacientesQueYaNoDeben(ctx.clinicId, await loQueAunNoSeDebePorPaciente(ctx.clinicId, deLosKpis))).size;
   }
-  const conDeuda = Array.from(saldoPorPaciente.values()).filter((v) => v > 0.005).length;
 
   const stats = {
     total: totalCount,
@@ -415,8 +416,8 @@ async function v2Handler(
         : newThisMonth > 0
         ? 100
         : 0,
-    withDebt: conDeuda,
-    withDebtAmount: Math.max(0, Math.round(((debtAggregate._sum.balance ?? 0) - porHacerDeLosKpis) * 100) / 100),
+    withDebt: Math.max(0, distinctDebtPatients.length - sinDeudaDeVerdad),
+    withDebtAmount: Math.max(0, Math.round(((debtAggregate._sum.balance ?? 0) - (deLosKpis?.total ?? 0)) * 100) / 100),
     nextAppointmentsToday: nextApptToday,
     nextAppointmentsWeek: nextApptWeek,
   };
@@ -446,8 +447,8 @@ async function v2Handler(
   /* ─── enriquecer + filtrar/sort post-fetch ─── */
   const SIX_MONTHS_MS = 1000 * 60 * 60 * 24 * 180;
   const enriched = rawPatients.map((p) => {
-    // Nota de plan: solo lo hecho menos lo pagado (26-oct); las demás facturas, su saldo de siempre.
-    const balance = Math.round(p.invoices.reduce((sum, inv) => sum + (inv.balance ?? 0) - (porHacer.get(inv.id) ?? 0), 0) * 100) / 100;
+    // Lo que se debe de verdad (26-oct): saldo − lo que aún no se debe; las demás facturas, enteras.
+    const balance = Math.round(p.invoices.reduce((sum, inv) => sum + (inv.balance ?? 0) - noSeDebe(inv.id), 0) * 100) / 100;
     const nextAppointment = p.appointments[0]
       ? {
           id: p.appointments[0].id,

@@ -271,6 +271,12 @@ function FacturaRow({
           {formatFecha(f.createdAt)}
           {clinicLabel ? ` · ${clinicLabel}` : ""}
         </div>
+        {/* 26-oct: lo aceptado sin hacer (o las cuotas que no vencen) no se debe todavía. */}
+        {saldoPendiente && (f.aunNoSeDebe ?? 0) > 0 && (
+          <div style={{ color: MUTED, fontSize: 13, marginTop: 2 }} data-aun-no-se-debe>
+            De este saldo, {formatMxn(f.aunNoSeDebe ?? 0)} es tratamiento por hacer o cuotas por vencer: aún no lo debes.
+          </div>
+        )}
       </div>
       <Monto label="Total" value={formatMxn(f.total)} />
       <Monto label="Pagado" value={formatMxn(f.paid)} />

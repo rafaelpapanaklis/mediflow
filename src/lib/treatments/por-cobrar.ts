@@ -19,7 +19,7 @@
 //  · VENCIDO: lo hecho y no pagado, a los `DIAS_PARA_VENCER` días de hecho. Lo pagado cubre primero
 //    lo que se hizo antes (el abono más viejo paga el trabajo más viejo).
 
-import { computeInvoiceTotal, invoiceLineBases, round2 } from "@/lib/invoice-totals";
+import { invoiceLineBases, round2 } from "@/lib/invoice-totals";
 import type { EstadoDeFila } from "./items";
 
 /** Lo hecho y no pagado cuenta como VENCIDO a los 30 días de hecho (decisión de Rafael, 26-oct). */
@@ -156,9 +156,4 @@ export function deudaDeNotaDelPlan(nota: NotaParaDeuda, filas: ReadonlyMap<strin
 /** Lo hecho antes de este instante ya venció: el inicio de HOY (zona de la clínica) menos 30 días. */
 export function corteDeVencido(inicioDeHoy: Date, dias: number = DIAS_PARA_VENCER): Date {
   return new Date(inicioDeHoy.getTime() - dias * DIA_MS);
-}
-
-/** Total de una lista de líneas como lo calcula la nota (para rearmarla al cerrar el plan). */
-export function totalDeLineas(items: unknown[], discount: number, taxRate: number | null, taxIncluded: boolean): number {
-  return computeInvoiceTotal(items, discount, taxRate, taxIncluded).total;
 }

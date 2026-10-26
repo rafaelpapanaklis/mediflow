@@ -3348,7 +3348,8 @@
       "waNoAccess": "You don't have access to the clinic Messages.",
       "viewBilling": "View billing",
       "invoiced": "Invoiced",
-      "moreInvoiced": "+{count} more invoiced"
+      "moreInvoiced": "+{count} more invoiced",
+      "aunNoSeDebe": "Of this, {monto} is still to do or not yet due (not owed yet)"
     },
     "soapEditor": {
       "editorAria": "Consultation notes editor",
@@ -10776,7 +10777,10 @@
       "cerrando": "Closing…",
       "cerrarListo": "Plan “{plan}” closed. Its note now covers only what was done.",
       "cerrarListoAFavor": "Plan “{plan}” closed. {monto} stays as the patient's credit balance.",
-      "cerrarError": "The plan couldn't be closed. Try again."
+      "cerrarError": "The plan couldn't be closed. Try again.",
+      "cerrarYaCerrado": "The plan “{plan}” was already closed: there was nothing else to adjust.",
+      "cerrarSinAjustar": "Invoice {folios} is from before the new plan: what it charges for undone work wasn't removed. Adjust it in Billing.",
+      "cerrarDeAntes": "Invoice {folios} is from before the new plan: what it charges for undone work is NOT removed when closing. Adjust it in Billing."
     },
     "citas": {
       "boton": "Schedule what's pending",

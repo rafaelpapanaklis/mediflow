@@ -76,7 +76,7 @@ import { AvisoPresupuestosMovidos, EnlaceAPresupuestos } from "@/components/dash
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { CODIGO_PLAN_CON_NOTA } from "@/lib/treatments/borrar-plan";
 import { useCuentasDelPaciente } from "@/components/dashboard/expediente-rediseno/cuenta-del-plan";
-import { porHacerSinPagarDelPaciente } from "@/lib/treatments/sin-doble-cobro";
+import { useLoQueAunNoSeDebe } from "@/components/dashboard/patient-detail/use-lo-que-aun-no-se-debe";
 import { cancelarCitaEnServidor, useCancelarCita } from "@/components/dashboard/agenda/cancelar-cita";
 import { planSinCosto } from "@/lib/treatments/plan-sin-costo";
 import { DentalForm }          from "@/components/clinical/dental-form";
@@ -614,9 +614,6 @@ export function PatientDetailClient({
   // relee al cambiar los planes, al cobrar y al marcar hechos (`refrescoCuentas`).
   const [refrescoCuentas, setRefrescoCuentas] = useState(0);
   const cuentasDePlanes = useCuentasDelPaciente(patient.id, canViewBilling && treatments.length > 0, `${treatments.length}:${refrescoCuentas}:${planesDelServidor.map((p: any) => p.id + p.updatedAt).join(",")}`);
-  // 26-oct (Rafael): el «Saldo» de la cabecera dice lo mismo que la cuenta del plan — de una nota de
-  // plan solo se debe lo hecho menos lo pagado. Mientras las cuentas no llegan, la suma de siempre.
-  const porHacerDePlanes = porHacerSinPagarDelPaciente(cuentasDePlanes.cuentas);
   const pediatricsState = derivePediatricsTabState({
     hasData:      Boolean(pediatricsData),
     moduleActive: pediatricsModuleActive,
@@ -1441,6 +1438,16 @@ export function PatientDetailClient({
       );
   }, [invoices]);
   const pctPaid  = totalPlan > 0 ? Math.round((totalPaid / totalPlan) * 100) : 0;
+  // 26-oct (Rafael): de una nota de plan solo se debe lo hecho menos lo pagado, y de ortodoncia
+  // «Precio total a plazos» lo vencido. La cabecera dice lo que se debe de verdad (lo mismo que
+  // Pacientes, Caja y la cuenta del plan); «Estado de cuenta» sigue con las facturas y dice aparte
+  // cuánto de su saldo aún no se debe. Se relee cuando cambian las facturas.
+  const aunNoSeDebe = useLoQueAunNoSeDebe(
+    patient.id,
+    canViewBilling && totalBalance > 0,
+    (invoices as any[]).map((inv) => `${inv.id}:${inv.balance}:${inv.status}`).join(","),
+  );
+  const saldoQueSeDebe = Math.max(0, Math.round((totalBalance - aunNoSeDebe) * 100) / 100);
   // ws1-t2 (F3 de la auditoría BEVADENT: «Total tratamiento $700 · 100% cubierto» con un plan de
   // $900): lo de arriba suma FACTURAS. El costo de los planes ACTIVOS va aparte, para que el
   // «Estado de cuenta» enseñe plan y facturado sin mezclarlos.
@@ -1975,7 +1982,7 @@ export function PatientDetailClient({
           lastVisitDate={lastAppt?.date ?? null}
           // H19: en ortodoncia, los controles firmados (aunque no tengan cita atendida) también son visitas.
           visitCount={Math.max(completedCount, orthoRedesignVM?.visitas?.total ?? 0)}
-          pendingBalance={Math.max(0, Math.round((totalBalance - porHacerDePlanes) * 100) / 100)}
+          pendingBalance={saldoQueSeDebe}
           portalUrl={portalLink}
           portalAccountStatus={portalStatus}
           invitingPortal={invitingPortal}
@@ -2239,6 +2246,7 @@ export function PatientDetailClient({
                 total: totalPlan,
                 pagado: totalPaid,
                 saldo: totalBalance,
+                aunNoSeDebe,
                 credito: creditBalance,
                 plan: totalPlanesActivos,
               }}
@@ -3747,7 +3755,7 @@ export function PatientDetailClient({
             <BillingTab
               patientId={patient.id}
               invoices={invoices}
-              summary={{ total: totalPlan, paid: totalPaid, balance: totalBalance }}
+              summary={{ total: totalPlan, paid: totalPaid, balance: totalBalance, aunNoSeDebe }}
               facturApiEnabled={facturApiEnabled}
               onNewInvoice={() => setShowNewInvoice(true)}
               onOpenInvoice={(inv) => setInvoiceDetailOpen(inv)}
@@ -3771,6 +3779,7 @@ export function PatientDetailClient({
               total: totalPlan,
               paid: totalPaid,
               balance: totalBalance,
+              aunNoSeDebe,
               credit: creditBalance,
               pct: pctPaid,
               plan: totalPlanesActivos,

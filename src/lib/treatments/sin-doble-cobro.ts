@@ -198,6 +198,8 @@ export interface PlanConCuenta {
   saldoAFavor?: number;
   porHacer?: number;
   vencido?: number;
+  /** Facturas de antes (presupuesto) que aún deben: «Cerrar plan» no las ajusta. */
+  facturasDeAntes?: string[];
   notas: Array<{ invoiceId: string; invoiceNumber: string; status: string; total: number; paid: number; createdAt: string }>;
   /** Filas vivas (para reconocer lo que la hoja va a cobrar). */
   filas: FilaParaEmparejar[];
@@ -248,20 +250,4 @@ export function conceptosQueYaSonDelPlan(conceptos: CosaCobrable[], planes: Plan
     out.push({ indice: m.indice, plan: nombreDe.get(m.planId) ?? "" });
   }
   return out;
-}
-
-/**
- * De las notas de los planes del paciente, lo aceptado que aún no se hace ni se paga (26-oct): no es
- * deuda. La cabecera de la ficha lo resta de la suma de saldos para decir lo mismo que la cuenta del
- * plan. Por plan es `saldo − debe` (una factura de la vía de antes cuenta entera en los dos). Sin
- * cuentas (aún no llegan, o sin permiso de ver dinero), 0: la suma de siempre.
- */
-export function porHacerSinPagarDelPaciente(cuentas: Iterable<Pick<PlanConCuenta, "saldo" | "debe">> | Map<string, Pick<PlanConCuenta, "saldo" | "debe">> | null | undefined): number {
-  if (!cuentas) return 0;
-  const lista = cuentas instanceof Map ? Array.from(cuentas.values()) : Array.from(cuentas);
-  let c = 0;
-  for (const p of lista) {
-    if (typeof p.debe === "number") c += Math.max(0, Math.round((p.saldo - p.debe) * 100));
-  }
-  return c / 100;
 }

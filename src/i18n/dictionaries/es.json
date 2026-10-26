@@ -3348,7 +3348,8 @@
       "waNoAccess": "No tienes acceso a los Mensajes de la clínica.",
       "viewBilling": "Ver facturación",
       "invoiced": "Facturado",
-      "moreInvoiced": "+{count} facturadas más"
+      "moreInvoiced": "+{count} facturadas más",
+      "aunNoSeDebe": "De esto, {monto} es por hacer o por vencer (aún no se debe)"
     },
     "soapEditor": {
       "editorAria": "Editor de notas de consulta",
@@ -10776,7 +10777,10 @@
       "cerrando": "Cerrando…",
       "cerrarListo": "Plan «{plan}» cerrado. Su nota quedó en lo hecho.",
       "cerrarListoAFavor": "Plan «{plan}» cerrado. {monto} quedan como saldo a favor del paciente.",
-      "cerrarError": "No se pudo cerrar el plan. Intenta de nuevo."
+      "cerrarError": "No se pudo cerrar el plan. Intenta de nuevo.",
+      "cerrarYaCerrado": "El plan «{plan}» ya estaba cerrado: no había nada más que ajustar.",
+      "cerrarSinAjustar": "La factura {folios} es de antes del plan nuevo: lo que cobra sin hacer no se quitó. Ajústala en Facturación.",
+      "cerrarDeAntes": "La factura {folios} es de antes del plan nuevo: lo que cobra sin hacer NO se quita al cerrar. Ajústala en Facturación."
     },
     "citas": {
       "boton": "Agendar lo pendiente",

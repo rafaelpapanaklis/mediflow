@@ -42,6 +42,7 @@ import { pagoDelMesDeFactura } from "@/lib/invoices/pago-del-mes";
 import { contactoDelResponsableDeLaFactura } from "@/lib/orthodontics/responsable-telefono-db";
 import { destinatariosDeEnvio, esDestinoDeEnvio, type Destinatario } from "@/lib/invoices/destinatarios";
 import { estadoDeCobro, fechaDeVencimientoHumana, startOfTodayInTz } from "@/lib/invoices/due-date";
+import { loQueAunNoSeDebe } from "@/lib/dinero/lo-que-se-debe.server";
 
 export const runtime = "nodejs"; // genera el PDF con @react-pdf
 export const dynamic = "force-dynamic";
@@ -116,6 +117,26 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
       { error: responsable ? motivo : "El paciente no tiene teléfono registrado. Agrégalo en su expediente para poder avisarle por WhatsApp." },
       { status: 409 },
     );
+  }
+
+  // Nota de un plan de tratamiento (26-oct, Rafael): el aviso de saldo dice lo que el paciente debe DE
+  // VERDAD —lo hecho menos lo pagado—, no el plan aceptado entero; si aún no debe nada, no se manda.
+  // (La cuota de ortodoncia no cambia: su aviso ya dice el pago del mes y el saldo total.)
+  let saldoDelAviso = invoice.balance;
+  if (!esFactura) {
+    const noSeDebe = await loQueAunNoSeDebe(ctx.clinicId, { ids: [invoice.id], timezone: invoice.clinic?.timezone });
+    if (noSeDebe.porHacer > 0) {
+      saldoDelAviso = Math.max(0, Math.round((invoice.balance - (noSeDebe.porFactura[invoice.id] ?? 0)) * 100) / 100);
+      if (saldoDelAviso <= 0.005) {
+        return NextResponse.json(
+          {
+            code: "nada_que_cobrar_aun",
+            error: "Esta nota es de un plan de tratamiento y el paciente todavía no debe nada: lo aceptado se cobra cuando se hace (o como abono, si él quiere adelantar).",
+          },
+          { status: 409 },
+        );
+      }
+    }
   }
 
   const clinic = invoice.clinic;
@@ -196,7 +217,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
       clinicName: clinic.name,
       clinicPhone,
       invoiceNumber: invoice.invoiceNumber,
-      balance: invoice.balance,
+      balance: saldoDelAviso,
       pagoDelMes,
       items: invoice.items,
       linkPago: link,

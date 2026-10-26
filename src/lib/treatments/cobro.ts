@@ -303,6 +303,11 @@ export interface CuentaDelPlan {
   saldoAFavor: number;
   porHacer: number;
   vencido: number;
+  /**
+   * Folios de facturas de la vía de antes (las del presupuesto, no ligadas por columna) que aún deben:
+   * «Cerrar plan» no las ajusta; la ficha lo avisa antes de confirmar (revisión t5, A5).
+   */
+  facturasDeAntes?: string[];
   notas: FacturaDeLaCuenta[];
   /**
    * El dinero es de ESTE plan sin duda. Con la nota ligada por columna, sí. Por la vía vieja

@@ -43,7 +43,8 @@ export interface NotaCerrada {
 export type ResultadoCierre =
   | {
       ok: true;
-      estado: "cerrado";
+      /** `ya_cerrado`: el plan ya estaba cerrado (o terminado) y no había nada que ajustar; no se escribió nada. */
+      estado: "cerrado" | "ya_cerrado";
       notas: NotaCerrada[];
       /** Filas por hacer que se cancelaron. */
       filasCanceladas: number;
@@ -140,6 +141,23 @@ export async function cerrarPlan(args: { clinicId: string; planId: string; userI
       const timbradas = ajustes.filter((x) => !!x.n.cfdiUuid).map((x) => x.n.invoiceNumber);
       if (timbradas.length) return { ok: false as const, codigo: "nota_timbrada" as const, folios: timbradas };
 
+      // Las filas por hacer: de una nota del plan (se ajusta) o sin nota. Las que cobra una factura de
+      // la vía de antes (presupuesto) no se tocan: esa factura no es del plan y se ajusta a mano.
+      const deNotas = new Set(notasSql.map((n) => n.id));
+      const porHacer = filasSql.filter((f) => f.estado === "pendiente" || f.estado === "en_curso");
+      const cancelables = porHacer.filter((f) => !f.invoiceId || deNotas.has(f.invoiceId));
+      const ajenas = Array.from(new Set(porHacer.filter((f) => f.invoiceId && !deNotas.has(f.invoiceId)).map((f) => f.invoiceId!)));
+      const sinAjustar = ajenas.length
+        ? (await tx.invoice.findMany({ where: { clinicId, id: { in: ajenas }, status: { not: "CANCELLED" } }, select: { invoiceNumber: true } })).map((i) => i.invoiceNumber)
+        : [];
+      const estadoAntes = String(actual?.status ?? plan.status);
+
+      // Revisión t5 (A7): un plan TERMINADO no se cierra, y uno ya cerrado sin nada que ajustar (segundo
+      // clic, otra pestaña, reintento) tampoco: `ya_cerrado`, sin escribir nada ni dejar bitácora.
+      if (estadoAntes === "COMPLETED" || (estadoAntes === "ABANDONED" && ajustes.length === 0 && cancelables.length === 0)) {
+        return { ok: true as const, estado: "ya_cerrado" as const, notas: [], filasCanceladas: 0, saldoAFavor: 0, sinAjustar, estadoAntes };
+      }
+
       const notas: NotaCerrada[] = [];
       let saldoAFavor = 0;
       for (const { n, a } of ajustes) {
@@ -227,12 +245,6 @@ export async function cerrarPlan(args: { clinicId: string; planId: string; userI
         }
       }
 
-      // Las filas por hacer: de una nota del plan (ya ajustada) o sin nota. Las que cobra una factura de
-      // la vía de antes (presupuesto) no se tocan: esa factura no es del plan y se ajusta a mano.
-      const deNotas = new Set(notasSql.map((n) => n.id));
-      const porHacer = filasSql.filter((f) => f.estado === "pendiente" || f.estado === "en_curso");
-      const cancelables = porHacer.filter((f) => !f.invoiceId || deNotas.has(f.invoiceId));
-      const ajenas = Array.from(new Set(porHacer.filter((f) => f.invoiceId && !deNotas.has(f.invoiceId)).map((f) => f.invoiceId!)));
       let filasCanceladas = 0;
       if (cancelables.length) {
         filasCanceladas = await tx.$executeRaw`
@@ -243,17 +255,17 @@ export async function cerrarPlan(args: { clinicId: string; planId: string; userI
              AND "id" IN (${Prisma.join(cancelables.map((f) => f.id))})
              AND "estado" IN ('pendiente', 'en_curso')`;
       }
-      const sinAjustar = ajenas.length
-        ? (await tx.invoice.findMany({ where: { clinicId, id: { in: ajenas }, status: { not: "CANCELLED" } }, select: { invoiceNumber: true } })).map((i) => i.invoiceNumber)
-        : [];
-
       await tx.treatmentPlan.updateMany({ where: { id: planId, clinicId }, data: { status: "ABANDONED" } });
-      return { ok: true as const, estado: "cerrado" as const, notas, filasCanceladas, saldoAFavor, sinAjustar, estadoAntes: String(actual?.status ?? plan.status) };
+      return { ok: true as const, estado: "cerrado" as const, notas, filasCanceladas, saldoAFavor, sinAjustar, estadoAntes };
     },
     { maxWait: 10_000, timeout: 20_000 },
   );
 
   if (!r.ok) return r;
+  if (r.estado === "ya_cerrado") {
+    const { estadoAntes: _y, ...igual } = r;
+    return igual;
+  }
 
   for (const n of r.notas) {
     const quitadas = n.quitadas.map((q) => `${q.nombre} (${dinero(q.importe)})`).join(", ");
@@ -287,6 +299,7 @@ export async function cerrarPlan(args: { clinicId: string; planId: string; userI
       `Cerró el plan de tratamiento «${plan.name}» (abandonado). ` +
       (r.filasCanceladas ? `${r.filasCanceladas} procedimiento${r.filasCanceladas === 1 ? "" : "s"} sin hacer cancelado${r.filasCanceladas === 1 ? "" : "s"}. ` : "") +
       (r.saldoAFavor > 0 ? `Saldo a favor: ${dinero(r.saldoAFavor)}. ` : "") +
+      (r.sinAjustar.length ? `Sin ajustar (factura de antes del plan, se ajusta en Facturación): ${r.sinAjustar.join(", ")}. ` : "") +
       `Motivo: ${motivo}`,
     entityType: "treatment",
     entityId: planId,
@@ -296,6 +309,7 @@ export async function cerrarPlan(args: { clinicId: string; planId: string; userI
       motivoCierre: { before: null, after: motivo },
       filasCanceladas: { before: null, after: r.filasCanceladas },
       ...(r.saldoAFavor > 0 ? { saldoAFavor: { before: null, after: r.saldoAFavor } } : {}),
+      ...(r.sinAjustar.length ? { facturasSinAjustar: { before: null, after: r.sinAjustar } } : {}),
     },
   });
 

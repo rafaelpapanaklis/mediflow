@@ -15,6 +15,7 @@
 //   (Configuración → Anticipos); apagado, esa clínica cae a Stripe o a null.
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { loQueAunNoSeDebeDeFacturas } from "@/lib/dinero/lo-que-se-debe.server";
 import { getPatientPortalContext, pacienteUnauthorized } from "@/lib/patient-portal/guard";
 import { getClinicConnectAccounts } from "@/lib/patient-portal/online-payment";
 import { cobroMpEnPortal } from "@/lib/patient-portal/pago-mercadopago.server";
@@ -149,6 +150,16 @@ export async function GET() {
         paidAt: inv.paidAt ? inv.paidAt.toISOString() : null,
       }));
 
+    // Lo que debe DE VERDAD (26-oct, Rafael): de un plan de tratamiento, lo hecho menos lo pagado; de
+    // ortodoncia «Precio total a plazos», lo vencido. Cada factura lo dice aparte (`aunNoSeDebe`).
+    const noSeDebe = await loQueAunNoSeDebeDeFacturas(
+      invoices.filter((inv) => PENDING_STATUSES.includes(inv.status)).map((inv) => ({ id: inv.id, clinicId: inv.clinicId })),
+    );
+    for (const inv of invoices) {
+      const n = noSeDebe.get(inv.id) ?? 0;
+      if (n > 0) inv.aunNoSeDebe = Math.min(inv.balance, n);
+    }
+
     // Totales en JS. CANCELLED no suma ni en pagado ni en pendiente.
     let paidTotal = 0;
     let pendingTotal = 0;
@@ -163,8 +174,8 @@ export async function GET() {
       paidTotal += inv.paid;
       entry.paid += inv.paid;
       if (PENDING_STATUSES.includes(inv.status)) {
-        pendingTotal += inv.balance;
-        entry.pending += inv.balance;
+        pendingTotal += inv.balance - (inv.aunNoSeDebe ?? 0);
+        entry.pending += inv.balance - (inv.aunNoSeDebe ?? 0);
       }
     }
 

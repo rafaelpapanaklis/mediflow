@@ -105,9 +105,16 @@ export function CuentaDelPlan({ cuenta, cargando, onCobrar, puedeCerrar }: {
         return;
       }
       const aFavor = Number(cuerpo?.saldoAFavor) || 0;
-      toast.success(aFavor > 0
-        ? t("planTratamiento.cobro.cerrarListoAFavor", { plan: cuenta.nombre, monto: fmtMXNdec(aFavor) })
-        : t("planTratamiento.cobro.cerrarListo", { plan: cuenta.nombre }));
+      const sinAjustar: string[] = Array.isArray(cuerpo?.sinAjustar) ? cuerpo.sinAjustar.filter((x: unknown) => typeof x === "string") : [];
+      if (cuerpo?.estado === "ya_cerrado") {
+        toast(t("planTratamiento.cobro.cerrarYaCerrado", { plan: cuenta.nombre }));
+      } else {
+        toast.success(aFavor > 0
+          ? t("planTratamiento.cobro.cerrarListoAFavor", { plan: cuenta.nombre, monto: fmtMXNdec(aFavor) })
+          : t("planTratamiento.cobro.cerrarListo", { plan: cuenta.nombre }));
+      }
+      // Revisión t5 (A5): lo que cobra una factura de antes del plan nuevo no se quitó: se dice.
+      if (sinAjustar.length) toast(t("planTratamiento.cobro.cerrarSinAjustar", { folios: sinAjustar.join(", ") }), { duration: 9000 });
       setCerrando(false);
       setMotivo("");
       router.refresh();
@@ -205,6 +212,11 @@ export function CuentaDelPlan({ cuenta, cargando, onCobrar, puedeCerrar }: {
                 ? <li>{t("planTratamiento.cobro.cerrarAFavor", { monto: fmtMXNdec(aFavor) })}</li>
                 : c.debe > 0.005 ? <li>{t("planTratamiento.cobro.cerrarSigueDebiendo", { monto: fmtMXNdec(c.debe) })}</li> : null;
             })()}
+            {(cuenta.facturasDeAntes ?? []).length > 0 && (
+              <li className={s.cuentaPlanAvisoPeligro} data-cuenta-plan-de-antes>
+                {t("planTratamiento.cobro.cerrarDeAntes", { folios: (cuenta.facturasDeAntes ?? []).join(", ") })}
+              </li>
+            )}
             <li>{t("planTratamiento.cobro.cerrarAbandonado")}</li>
           </ul>
           <label className={s.cuentaPlanCierreCampo}>
