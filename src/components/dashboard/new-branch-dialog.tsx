@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { X, Users, Copy, CheckCircle2, AlertTriangle } from "lucide-react";
+import { X, Users, Copy, CheckCircle2, AlertTriangle, Lock } from "lucide-react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { ButtonNew } from "@/components/ui/design-system/button-new";
 import toast from "react-hot-toast";
@@ -8,6 +8,7 @@ import { useLocale, useT } from "@/i18n/i18n-provider";
 import { DIRECTORY_CATEGORIES } from "@/lib/directory/types";
 import { esCategoriaFija } from "@/lib/clinic/categoria-fija";
 import { PATIENT_SHARING_ENABLED } from "@/lib/branches-shared";
+import type { AvisoCopia } from "@/lib/sede-clave/constantes";
 import type { BranchDefaults, BranchQuota, OwnedBranchRow } from "@/lib/branches-shared";
 import { copioAlgo, seccionesFallidas, SECCIONES_COPIA, type ResultadoCopia, type SeccionCopia, type NoCopiado } from "@/lib/branches/copia-sede-core";
 
@@ -24,6 +25,11 @@ const TEXTOS_COPIA = {
     creada: "Sucursal creada",
     copiadoDe: "Se copió de {origen}:",
     nadaQueCopiar: "Tu sede principal no tenía configuración que copiar: la sede nace con los valores de siempre.",
+    // ws1-t4 v2 · G1
+    avisos: {
+      principal_con_clave_desde_activa: "Tu sede principal tiene clave de sede: no se copió de ella. Se copió la configuración de la sede en la que estás.",
+      principal_con_clave_sin_copia: "Tu sede principal tiene clave de sede: no se copió su configuración y la sede nace con los valores de siempre.",
+    },
     fallo: "No se pudo copiar: {partes}. La sede existe; puedes configurarlas a mano.",
     conectar: "Falta conectar en la sede nueva:",
     entrar: "Entrar a la sede",
@@ -54,6 +60,10 @@ const TEXTOS_COPIA = {
     creada: "Location created",
     copiadoDe: "Copied from {origen}:",
     nadaQueCopiar: "Your main location had no settings to copy: the new one starts with the defaults.",
+    avisos: {
+      principal_con_clave_desde_activa: "Your main location has a location passcode, so nothing was copied from it. The settings were copied from the location you're in.",
+      principal_con_clave_sin_copia: "Your main location has a location passcode, so its settings were not copied and the new location starts with the defaults.",
+    },
     fallo: "Could not copy: {partes}. The location exists; you can set them up by hand.",
     conectar: "Still to connect at the new location:",
     entrar: "Open the location",
@@ -123,7 +133,7 @@ export function NewBranchDialog({ open, onClose, defaults, quota, onCreated }: P
   // M4 — copiar la configuración de la sede principal (marcado por defecto) y
   // el resultado de la copia, que se enseña ANTES de entrar a la sede nueva.
   const [copiar, setCopiar] = useState(true);
-  const [resultado, setResultado] = useState<{ nombre: string; copia: ResultadoCopia | null } | null>(null);
+  const [resultado, setResultado] = useState<{ nombre: string; copia: ResultadoCopia | null; aviso?: AvisoCopia | null } | null>(null);
   const [form, setForm] = useState({ name: "", category: defaults.category, city: defaults.city, state: defaults.state, phone: "" });
   const [nameError, setNameError] = useState(false);
   // FASE 2 — sedes existentes del dueño y cuáles compartirán pacientes con la
@@ -188,8 +198,10 @@ export function NewBranchDialog({ open, onClose, defaults, quota, onCreated }: P
       toast.success(t("sidebar.branches.created", { name: payload.name ?? form.name.trim() }));
       // Con copia, el diálogo dice primero qué se copió y qué falta conectar;
       // «Entrar a la sede» llama a onCreated. Sin copia, como siempre.
-      if (copiar && payload.copia) {
-        setResultado({ nombre: payload.name ?? form.name.trim(), copia: payload.copia as ResultadoCopia });
+      // ws1-t4 v2 · G1: también cuando no se copió de la principal por su clave.
+      const aviso: AvisoCopia | null = payload.avisoCopia === "principal_con_clave_desde_activa" || payload.avisoCopia === "principal_con_clave_sin_copia" ? payload.avisoCopia : null;
+      if (copiar && (payload.copia || aviso)) {
+        setResultado({ nombre: payload.name ?? form.name.trim(), copia: (payload.copia ?? null) as ResultadoCopia | null, aviso });
         return;
       }
       onCreated();
@@ -439,7 +451,7 @@ function ResumenCopia({
   tx,
   onEntrar,
 }: {
-  resultado: { nombre: string; copia: ResultadoCopia | null };
+  resultado: { nombre: string; copia: ResultadoCopia | null; aviso?: AvisoCopia | null };
   tx: TextosCopia;
   onEntrar: () => void;
 }) {
@@ -451,6 +463,12 @@ function ResumenCopia({
     <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
       <div className="modal__body" style={{ flex: 1, overflowY: "auto", minHeight: 0 }} data-testid="resumen-copia">
         <p style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)", margin: "0 0 10px" }}>{resultado.nombre}</p>
+        {resultado.aviso && (
+          <p role="status" data-testid="aviso-copia" style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 12, color: "var(--text-2)", margin: "0 0 12px", lineHeight: 1.45 }}>
+            <Lock size={14} style={{ flexShrink: 0, marginTop: 2 }} aria-hidden />
+            <span>{tx.avisos[resultado.aviso]}</span>
+          </p>
+        )}
         {copia && copioAlgo(copia) ? (
           <>
             <p style={{ fontSize: 12, color: "var(--text-2)", margin: "0 0 6px" }}>
@@ -465,7 +483,7 @@ function ResumenCopia({
               ))}
             </ul>
           </>
-        ) : (
+        ) : resultado.aviso ? null : (
           <p style={{ fontSize: 12, color: "var(--text-2)", margin: "0 0 14px" }}>{tx.nadaQueCopiar}</p>
         )}
         {fallidas.length > 0 && (

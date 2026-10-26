@@ -154,6 +154,12 @@ export interface DatosComparar {
    * haría creer que esa sede no facturó nada.
    */
   vencidas: string[];
+  /**
+   * ws1-t4: sedes propias con «Clave de la sede» que quien pregunta no ha
+   * tecleado en este navegador. Solo el nombre: ni una cifra, ni si está
+   * suspendida. Se dicen para no hacer creer que esa sede no facturó nada.
+   */
+  conClave: string[];
 }
 
 export const compararSedes = definirHerramienta<ParamsComparar, DatosComparar>({
@@ -213,6 +219,7 @@ export const compararSedes = definirHerramienta<ParamsComparar, DatosComparar>({
       totalSedes: visibles.total,
       truncado: visibles.truncado,
       vencidas: visibles.vencidas,
+      conClave: visibles.conClave ?? [],
     };
   },
 
@@ -331,8 +338,12 @@ function resumir(d: DatosComparar): string {
 
   if (d.sedes.length === 1) {
     const sola = d.sedes[0];
+    // ws1-t4: con hermanas cerradas por clave, «solo tienes una» sería falso.
+    const hayConClave = Array.isArray(d.conClave) && d.conClave.length > 0;
     return (
-      `Solo tienes una sede (${sola.nombre}), así que no hay con qué compararla. ` +
+      (hayConClave
+        ? `Solo puedo mirar tu sede activa (${sola.nombre}), así que no hay con qué compararla. `
+        : `Solo tienes una sede (${sola.nombre}), así que no hay con qué compararla. `) +
       `Del ${d.desde} al ${d.hasta} — ${cuerpoDeSede(sola) || "sin datos que mostrar"}.` +
       avisos(d)
     );
@@ -434,6 +445,16 @@ function avisos(d: DatosComparar): string {
     out.push(
       `Omití partes de ${donde}: el usuario SÍ tiene ese acceso, pero el Super Admin no te deja usarlo ` +
         `en su nombre. NO digas que no tiene acceso; di textualmente: "${frases.join(" ")}"`,
+    );
+  }
+
+  const conClave = Array.isArray(d.conClave) ? d.conClave : [];
+  if (conClave.length > 0) {
+    out.push(
+      `${conClave.join(" y ")}: ${conClave.length === 1 ? "esa sede tiene" : "esas sedes tienen"} clave de sede, ` +
+        `así que no ${conClave.length === 1 ? "la" : "las"} puedo mirar y no ` +
+        `${conClave.length === 1 ? "entra" : "entran"} en la comparación. Dilo así y NO inventes ni estimes ` +
+        `ninguna cifra de ${conClave.length === 1 ? "ella" : "ellas"}: para verla hay que entrar a esa sede con su clave.`,
     );
   }
 

@@ -15,6 +15,8 @@ import {
   TWO_FA_SETUP_PATH,
   TWO_FA_ROUTE_PREFIX,
 } from "@/lib/auth/two-factor-constants";
+import { sedeCerradaPara } from "@/lib/sede-clave/gate.server";
+import { RUTA_SEDE_CON_CLAVE } from "@/lib/sede-clave/core";
 
 // getSession/getCurrentUser/getUserClinics van memoizadas por request con
 // React cache(): layout, page y route handlers invocados in-process dentro
@@ -119,15 +121,40 @@ async function enforceApiPlanGate(clinic: unknown): Promise<void> {
   if (isApiPathBlockedForExpiredPlan(pathname)) redirect("/dashboard/suspended");
 }
 
+// Gate de la CLAVE DE LA SEDE de getCurrentUser (ws1-t4). Mismo criterio que
+// getAuthContext (@/lib/sede-clave/gate.server): con la clave activa y sin
+// desbloqueo vigente en este navegador, nadie usa la sede — tampoco el
+// SUPER_ADMIN. getCurrentUser no puede devolver null: se corta con redirect a
+// la pantalla de la clave, así el handler, la action o la página no corren.
+async function enforceSedeClaveGate(user: { supabaseId: string; clinicId: string }): Promise<void> {
+  if (await sedeCerradaPara({ supabaseId: user.supabaseId, clinicId: user.clinicId })) {
+    redirect(RUTA_SEDE_CON_CLAVE);
+  }
+}
+
 /**
- * getCurrentUser con TODOS sus gates: 2FA (siempre) y plan vencido (en /api).
- * Es la que usa todo el mundo.
+ * getCurrentUser con TODOS sus gates: 2FA (siempre), clave de la sede
+ * (siempre) y plan vencido (en /api). Es la que usa todo el mundo.
  */
 export const getCurrentUser = cache(async () => {
   const user = await resolverUsuarioActual();
-  // ORDEN: 2FA antes que plan. El 2FA es autenticación; el plan, comercial.
+  // ORDEN: 2FA, clave de la sede, plan. El 2FA es autenticación; la clave
+  // decide si esa persona entra a ESTA sede; el plan es comercial.
   await enforceTwoFactorGate(user);
+  await enforceSedeClaveGate(user);
   await enforceApiPlanGate(user.clinic);
+  return user;
+});
+
+/**
+ * ⚠ CON el 2FA pero SIN el gate de la clave de la sede (ws1-t4). Solo para la
+ * pantalla «Esta sede tiene clave» (/dashboard/sede-con-clave), que tiene que
+ * pintarse justo cuando la sede está cerrada. La lista de quién la usa la fija
+ * src/lib/sede-clave/__tests__/sede-clave.test.ts.
+ */
+export const getCurrentUserSinClaveDeSede = cache(async () => {
+  const user = await resolverUsuarioActual();
+  await enforceTwoFactorGate(user);
   return user;
 });
 

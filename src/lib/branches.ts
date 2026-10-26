@@ -5,6 +5,7 @@ import type { ClinicOverrideFields } from "@/lib/billing/plan-overrides";
 import { ACTIVE_SUBSCRIPTION_STATUSES } from "@/lib/plan-status";
 import { PATIENT_SHARING_ENABLED, normalizeClinicPair } from "@/lib/branches-shared";
 import type { BranchBlockedReason, BranchQuota } from "@/lib/branches-shared";
+import { sedesConClave } from "@/lib/sede-clave/gate.server";
 
 /**
  * MULTI-CLÍNICA · FASE 1 — reglas de cupo de SUCURSALES.
@@ -159,7 +160,15 @@ export async function getVisiblePatientClinicIds(clinicId: string): Promise<stri
     const other = link.clinicAId === clinicId ? link.clinicBId : link.clinicAId;
     if (other && ids.indexOf(other) === -1) ids.push(other);
   }
-  return ids;
+  if (ids.length === 1) return ids;
+
+  // ws1-t4: una sede vinculada que tiene «Clave de la sede» NO presta sus
+  // pacientes a las demás: sin su clave no se entra a ella, así que tampoco se
+  // leen desde fuera. Desde DENTRO de la sede con clave sí se siguen viendo los
+  // de las vinculadas (ella es `clinicId` y nunca se quita). Falla cerrado: si
+  // no se puede leer qué sedes tienen clave, solo la propia.
+  const conClave = await sedesConClave(ids.slice(1));
+  return conClave.size === 0 ? ids : ids.filter((id) => id === clinicId || !conClave.has(id));
 }
 
 /** Visibilidad + nombres de las sedes AJENAS, para pintar el badge de origen. */

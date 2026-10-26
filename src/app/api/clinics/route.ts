@@ -16,6 +16,7 @@ import {
 import { persistentRateLimit } from "@/lib/failban";
 import { logMutation } from "@/lib/audit";
 import { logError } from "@/lib/safe-log";
+import { origenDeCopiaParaSedeNueva, type AvisoCopia } from "@/lib/sede-clave/copia.server";
 import { DIRECTORY_CATEGORIES } from "@/lib/directory/types";
 import { categoriaDeSucursal } from "@/lib/clinic/categoria-fija";
 import { agendaActiveDeSedeNueva } from "@/lib/agenda/roles-que-atienden";
@@ -174,14 +175,31 @@ export async function POST(req: NextRequest) {
     // M4 — de qué sede se copia: la PRINCIPAL del dueño (la más antigua, por el
     // supabaseId de la sesión), no la activa. Si no se pidió copiar o no se
     // pudo leer, la sede nace como antes (horario L-V 9-18 y defaults).
+    //
+    // ws1-t4 v2 · G1: si la principal tiene «Clave de la sede» y quien crea no
+    // la ha tecleado en este navegador, NO se copia de ella: de la sede activa
+    // si esa no tiene clave, y si no, valores de siempre. `fuente` también
+    // decide de dónde se heredan las banderas de agenda y de Google (abajo).
     const copiar = data.copiarConfiguracion !== false;
     let origen: OrigenParaAlta | null = null;
-    if (copiar) {
+    let avisoCopia: AvisoCopia | null = null;
+    let fuente: { clinicId: string; nombre: string } | null = null;
+    try {
+      const decision = await origenDeCopiaParaSedeNueva({
+        supabaseId,
+        principal: await sedePrincipalDe(supabaseId),
+        activa: { clinicId: ctx.clinicId, nombre: ctx.clinic.name },
+      });
+      fuente = decision.origen;
+      avisoCopia = copiar ? decision.aviso : null;
+    } catch (e) {
+      logError("[api/clinics POST] decidir de qué sede se copia", e);
+    }
+    if (copiar && fuente) {
       try {
-        const principal = await sedePrincipalDe(supabaseId);
-        if (principal) origen = await leerOrigenParaAlta(principal);
+        origen = await leerOrigenParaAlta(fuente);
       } catch (e) {
-        logError("[api/clinics POST] leer la sede principal para copiar", e);
+        logError("[api/clinics POST] leer la sede de origen para copiar", e);
       }
     }
 
@@ -264,7 +282,7 @@ export async function POST(req: NextRequest) {
     // Agenda flexible: la sede hereda las banderas de la principal SIEMPRE, aunque el dueño
     // no haya marcado copiar la configuración (best-effort: nunca lanza).
     try {
-      const principalBanderas = origen ? { clinicId: origen.clinicId } : await sedePrincipalDe(supabaseId);
+      const principalBanderas = origen ? { clinicId: origen.clinicId } : fuente;
       if (principalBanderas) await heredarBanderasDeAgenda(principalBanderas.clinicId, clinic.id);
     } catch (e) {
       logError("[api/clinics POST] heredar banderas de la agenda", e);
@@ -315,7 +333,7 @@ export async function POST(req: NextRequest) {
     // configuración (mismo criterio que la agenda flexible; revisión t8, C4).
     // Solo la bandera: la conexión de Google es de cada sede. Nunca lanza.
     try {
-      const principalGoogle = origen ? { clinicId: origen.clinicId } : await sedePrincipalDe(supabaseId);
+      const principalGoogle = origen ? { clinicId: origen.clinicId } : fuente;
       if (principalGoogle) {
         await (await import("@/lib/google/bandera-sede.server")).heredarBanderaGoogle(principalGoogle.clinicId, clinic.id);
       }
@@ -352,6 +370,8 @@ export async function POST(req: NextRequest) {
       max: quota.max,
       // M4: lo que se copió (el diálogo lo enseña) y lo que hay que conectar aparte.
       copia,
+      // ws1-t4 v2 · G1: por qué no se copió de la principal (tiene clave).
+      avisoCopia,
     });
     writeActiveClinicCookie(response, clinic.id);
     return response;

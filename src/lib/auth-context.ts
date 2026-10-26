@@ -10,6 +10,8 @@ import { decidirDosPasos } from "@/lib/auth/two-factor-decision";
 import { bloqueaDosPasos } from "@/lib/auth/two-factor-gate";
 import { TWO_FA_CHALLENGE_PATH, TWO_FA_SETUP_PATH } from "@/lib/auth/two-factor-constants";
 import { estadoSuplantacionDe } from "@/lib/admin/suplantacion";
+import { sedeCerradaPara } from "@/lib/sede-clave/gate.server";
+import { RUTA_SEDE_CON_CLAVE } from "@/lib/sede-clave/core";
 
 export interface AuthContext {
   userId:       string;
@@ -46,6 +48,15 @@ export interface AuthContext {
  */
 export async function getAuthContext(): Promise<AuthContext | null> {
   const r = await resolverAuthContext();
+  if (r && esBloqueoSede(r)) {
+    // ws1-t4: la sede activa tiene clave y este navegador no la ha tecleado
+    // (o el desbloqueo caducó o la clave cambió). En /api, null → 401. En una
+    // server action o una PÁGINA se manda a la pantalla de la clave: si no, la
+    // página que hace `if (!ctx) redirect("/login")` mandaría al login a quien
+    // solo tiene que teclear la clave.
+    if ((await esServerAction()) || !(await esRutaApi())) redirect(RUTA_SEDE_CON_CLAVE);
+    return null;
+  }
   if (r && esBloqueo(r)) {
     // ws1-t8 · M1: en una SERVER ACTION (cabecera next-action) el null se
     // traduciría en un «No autorizado» genérico; mandar al reto es lo que el
@@ -59,17 +70,43 @@ export async function getAuthContext(): Promise<AuthContext | null> {
   return r as AuthContext | null;
 }
 
-type BloqueoDosPasos = { bloqueoDosPasos: "challenge" | "setup" };
+/**
+ * ⚠ SIN el gate de la clave de la sede NI el de plan vencido (ws1-t4). Solo
+ * para /api/sede-clave/*: la pantalla «Esta sede tiene clave» tiene que poder
+ * desbloquear una sede cerrada (si no, nadie entraría nunca), y una sede con
+ * clave y el plan vencido tiene que poder desbloquearse para llegar a la
+ * pantalla de pago. El 2FA SÍ se exige: la clave de la sede va después del
+ * segundo factor, nunca en su lugar. La lista de quién la usa la fija
+ * src/lib/sede-clave/__tests__/sede-clave.test.ts.
+ */
+export async function getAuthContextParaClaveDeSede(): Promise<AuthContext | null> {
+  const r = await resolverAuthContext({ paraClaveDeSede: true });
+  if (!r || esBloqueo(r) || esBloqueoSede(r)) return null;
+  return r;
+}
 
-function esBloqueo(r: AuthContext | BloqueoDosPasos): r is BloqueoDosPasos {
+type BloqueoDosPasos = { bloqueoDosPasos: "challenge" | "setup" };
+type BloqueoSedeClave = { bloqueoSedeClave: true };
+type Resolucion = AuthContext | BloqueoDosPasos | BloqueoSedeClave;
+
+function esBloqueo(r: Resolucion): r is BloqueoDosPasos {
   return "bloqueoDosPasos" in r;
+}
+
+function esBloqueoSede(r: Resolucion): r is BloqueoSedeClave {
+  return "bloqueoSedeClave" in r;
 }
 
 async function esServerAction(): Promise<boolean> {
   try { return !!(await headers()).get("next-action"); } catch { return false; }
 }
 
-async function resolverAuthContext(): Promise<AuthContext | BloqueoDosPasos | null> {
+/** ¿Es una ruta /api? Sin cabeceras (fuera de una petición) se trata como /api: no se redirige. */
+async function esRutaApi(): Promise<boolean> {
+  try { return ((await headers()).get("x-pathname") ?? "").startsWith("/api"); } catch { return true; }
+}
+
+async function resolverAuthContext(opciones: { paraClaveDeSede?: boolean } = {}): Promise<Resolucion | null> {
   try {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -169,6 +206,18 @@ async function resolverAuthContext(): Promise<AuthContext | BloqueoDosPasos | nu
     });
     if (bloqueaDosPasos(decision)) return { bloqueoDosPasos: decision };
 
+    // Gate de la CLAVE DE LA SEDE (ws1-t4). Después del 2FA (que decide QUIÉN
+    // es) y antes del plan. Con la clave activa, nadie —tampoco el SUPER_ADMIN—
+    // usa la sede sin haberla tecleado en este navegador en las últimas 72 h;
+    // «Ver como clínica» de /admin pasa. Sin sql/sede-clave.sql pegado no
+    // consulta nada y devuelve false. Ver @/lib/sede-clave/gate.server.
+    if (
+      !opciones.paraClaveDeSede &&
+      (await sedeCerradaPara({ supabaseId: finalUser.supabaseId, clinicId: finalUser.clinicId }))
+    ) {
+      return { bloqueoSedeClave: true };
+    }
+
     // Gate central de plan vencido a nivel API. Si la clínica está vencida
     // (trial expirado + suscripción no activa) y la request va a una ruta
     // /api NO exenta (allowlist de pago/auth en @/lib/plan-status), cortamos
@@ -179,7 +228,7 @@ async function resolverAuthContext(): Promise<AuthContext | BloqueoDosPasos | nu
     // gate aplica a TODOS los roles (un SUPER_ADMIN destraba desde /admin,
     // ruta con su propia auth, no cubierta por este check).
     const planExpired = isPlanExpired(finalUser.clinic);
-    if (planExpired) {
+    if (planExpired && !opciones.paraClaveDeSede) {
       const pathname = await (async () => {
         try { return (await headers()).get("x-pathname"); } catch { return null; }
       })();

@@ -32,6 +32,7 @@ import { evaluarSaludClinica, ETIQUETA_ESTADO_OPERATIVO, etiquetaSedeIncluida } 
 import { ClinicAiWalletCard, ClinicAiPaymentsCard } from "@/components/admin/clinic-ai-wallet-card";
 import type { SaldoIaClinicaDTO } from "@/lib/admin/saldo-ia-clinica";
 import { PlanOverridesCard, type PlanOverridesDTO } from "./plan-overrides-card";
+import { SedeClaveAdmin } from "./sede-clave-admin";
 import type { UsoClinica } from "@/lib/admin/uso-core";
 import { Chip } from "@/components/admin/rediseno/piezas";
 import { ResumenClinica } from "./resumen-clinica";
@@ -657,6 +658,8 @@ export function AdminClinicDetailClient({
             </CardNew>
 
             <PlanOverridesCard clinicId={clinic.id} plan={clinic.plan} initial={planOverrides} />
+            {/* ws1-t4: solo aparece si la sede tiene «Clave de la sede». */}
+            <SedeClaveAdmin clinicId={clinic.id} />
           </div>
 
           {/* Manager de cuenta — a quién le escribe esta clínica por WhatsApp.

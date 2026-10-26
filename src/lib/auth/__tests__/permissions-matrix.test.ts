@@ -342,7 +342,9 @@ test("READONLY solo recibe keys .view, y ninguna clínica (expediente, recetas, 
 
 test("SUPER_ADMIN y ADMIN tienen el catálogo entero; lo que es solo del dueño se gatea por ROL, no por interruptor", () => {
   assert.deepEqual([...ROLE_DEFAULT_PERMISSIONS.SUPER_ADMIN].sort(), [...ALL_PERMISSION_KEYS].sort());
-  assert.deepEqual([...ROLE_DEFAULT_PERMISSIONS.ADMIN].sort(), [...ALL_PERMISSION_KEYS].sort());
+  // ws1-t4: la única excepción es «Crear y cambiar la clave de la sede», que el
+  // ADMIN solo recibe si el dueño se la da (ver src/lib/sede-clave/core.ts).
+  assert.deepEqual([...ROLE_DEFAULT_PERMISSIONS.ADMIN].sort(), ALL_PERMISSION_KEYS.filter((k) => k !== "sede.clave").sort());
 });
 
 test("las descripciones del modal dicen lo que el interruptor hace (sin '(admin)' ni '(solo SUPER_ADMIN)' que ya no describen el gate)", () => {

@@ -6,6 +6,7 @@ import { persistentRateLimit } from "@/lib/failban";
 import { logMutation } from "@/lib/audit";
 import { logError } from "@/lib/safe-log";
 import { puedeCerrarSede, MENSAJE_NO_SE_PUEDE_CERRAR } from "@/lib/sede-cierre";
+import { sedesCerradasPara } from "@/lib/sede-clave/gate.server";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -40,6 +41,15 @@ export async function POST(req: NextRequest) {
     const veredicto = puedeCerrarSede({ clinicId, clinicIdActiva: ctx.clinicId, sedes });
     if ("motivo" in veredicto) {
       return NextResponse.json({ error: MENSAJE_NO_SE_PUEDE_CERRAR[veredicto.motivo], code: veredicto.motivo }, { status: veredicto.motivo === "NO_ES_TUYA" ? 403 : 409 });
+    }
+
+    // ws1-t4: una sede con «Clave de la sede» no se cierra desde fuera sin
+    // haber tecleado su clave en este navegador (vale para el dueño).
+    if ((await sedesCerradasPara(ctx.user.supabaseId, [clinicId])).has(clinicId)) {
+      return NextResponse.json(
+        { error: "Esta sede tiene clave. Entra a ella con su clave para poder cerrarla.", code: "SEDE_CON_CLAVE" },
+        { status: 403 },
+      );
     }
 
     await prisma.clinic.update({

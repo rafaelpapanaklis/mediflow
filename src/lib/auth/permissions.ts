@@ -143,6 +143,12 @@ export const ALL_PERMISSIONS = {
   "procedures.edit":      "Editar procedimientos",
   "clinicLayout.view":    "Ver Mi Clínica Visual",
   "clinicLayout.edit":    "Editar Mi Clínica Visual",
+  // ws1-t4 (25-oct-2026, Rafael): la «Clave de la sede» de Configuración →
+  // Seguridad. Con ella activa NADIE entra a la sede sin teclearla, tampoco el
+  // dueño. El SUPER_ADMIN la gestiona por ROL; un ADMIN solo con esta key, que
+  // a propósito NO va en ningún default (ni en el de ADMIN): se la da el dueño
+  // persona a persona desde Equipo → Permisos. Ver src/lib/sede-clave/core.ts.
+  "sede.clave":           "Crear y cambiar la clave de la sede",
   // Privacidad — solicitudes ARCO (acceso, rectificación, cancelación y
   // oposición) que llegan desde el aviso de privacidad. Ver y resolver van
   // juntas: quien atiende una solicitud tiene que leerla. A propósito NO acaba
@@ -191,7 +197,7 @@ export const PERMISSION_GROUPS: { title: string; keys: PermissionKey[] }[] = [
   { title: "Facturación",    keys: ["billing.view", "billing.create", "billing.charge", "billing.deposit", "billing.deposit.register", "billing.refund", "billing.edit"] },
   { title: "Reportes y TV",  keys: ["analytics.view", "reports.view", "expenses.edit", "tvModes.view", "tvModes.edit"] },
   { title: "Equipo",         keys: ["team.view", "team.edit"] },
-  { title: "Configuración",  keys: ["settings.view", "settings.edit", "landing.view", "landing.edit", "procedures.view", "procedures.edit", "clinicLayout.view", "clinicLayout.edit"] },
+  { title: "Configuración",  keys: ["settings.view", "settings.edit", "landing.view", "landing.edit", "procedures.view", "procedures.edit", "clinicLayout.view", "clinicLayout.edit", "sede.clave"] },
   { title: "Privacidad",     keys: ["arco.manage"] },
   { title: "Marketplace",    keys: ["marketplace.view"] },
   { title: "Especialidades", keys: ["specialties.pediatrics", "specialties.endodontics", "specialties.periodontics", "specialties.orthodontics", "specialties.implants"] },
@@ -234,7 +240,9 @@ export const PERMISSION_GROUPS: { title: string; keys: PermissionKey[] }[] = [
  */
 export const ROLE_DEFAULT_PERMISSIONS: Record<Role, PermissionKey[]> = {
   SUPER_ADMIN: [...ALL_PERMISSION_KEYS], // todo
-  ADMIN: [...ALL_PERMISSION_KEYS],       // todo (ver nota de team.edit arriba)
+  // todo (ver nota de team.edit arriba) MENOS "sede.clave" (ws1-t4): el admin
+  // que debe poder poner la clave de su sede la recibe a mano del dueño.
+  ADMIN: ALL_PERMISSION_KEYS.filter((k) => k !== "sede.clave"),
   DOCTOR: [
     "today.view",
     "agenda.view", "agenda.create", "agenda.edit", "agenda.delete",

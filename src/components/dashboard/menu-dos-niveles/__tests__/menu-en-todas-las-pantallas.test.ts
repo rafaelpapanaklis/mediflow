@@ -192,14 +192,16 @@ const nombreEtiqueta = (n: ts.Node): string | null =>
 const quitarParentesis = (n: ts.Expression): ts.Expression =>
   ts.isParenthesizedExpression(n) ? quitarParentesis(n.expression) : n;
 
-test("el layout: las únicas pantallas sin menú son las barreras de 2FA y de cambio de contraseña", () => {
+test("el layout: las únicas pantallas sin menú son las barreras de 2FA, de cambio de contraseña y de la clave de la sede", () => {
   const { fn } = funcionDelLayout();
   const returns: ts.ReturnStatement[] = [];
   recorrer(fn.body!, (n) => { if (ts.isReturnStatement(n)) returns.push(n); });
   assert.ok(returns.length >= 1);
 
   const tempranos = returns.slice(0, -1);
-  const permitidas = new Set(["isTwoFaRoute", "isPasswordChangeRoute"]);
+  // ws1-t4: «Esta sede tiene clave» es la tercera barrera previa al panel de
+  // esa sede (sin la clave no se enseña su panel detrás), igual que el 2FA.
+  const permitidas = new Set(["isTwoFaRoute", "isPasswordChangeRoute", "sedeCerrada"]);
   for (const r of tempranos) {
     const devuelve = r.expression?.getText();
     const si = r.parent && ts.isIfStatement(r.parent) ? r.parent : null;
@@ -211,7 +213,7 @@ test("el layout: las únicas pantallas sin menú son las barreras de 2FA y de ca
     );
     assert.ok(
       permitidas.has(condicion),
-      `el layout sale sin menú para «${condicion}». Solo 2FA y el cambio forzado de contraseña pueden (son barreras previas al panel).`,
+      `el layout sale sin menú para «${condicion}». Solo 2FA, el cambio forzado de contraseña y la clave de la sede pueden (son barreras previas al panel).`,
     );
   }
   assert.deepEqual(

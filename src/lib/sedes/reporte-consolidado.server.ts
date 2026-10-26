@@ -9,6 +9,7 @@ import { getPlanLimitsForClinic } from "@/lib/plans";
 import { cargarOcupacionDelPeriodo } from "@/lib/agenda/ocupacion-del-periodo.server";
 import { ESTADOS_AGENDADOS, ESTADOS_CUMPLIDOS } from "@/lib/sabina/tools/estados";
 import { isPlanExpired } from "@/lib/plan-status";
+import { sedesCerradasPara } from "@/lib/sede-clave/gate.server";
 import {
   dinero,
   sumarDiasISO,
@@ -65,8 +66,22 @@ export async function reporteConsolidadoDeSedes(args: {
     orderBy: { createdAt: "asc" },
   });
 
+  // ws1-t4: las sedes con «Clave de la sede» que esta persona no ha tecleado
+  // en este navegador salen con su nombre y SIN cifras: de ellas no se consulta
+  // nada. La activa nunca está aquí (si estuviera cerrada, la petición no habría
+  // llegado). Falla cerrado: sin poder leer las claves, todas las demás cuentan
+  // como cerradas.
+  const cerradas = await sedesCerradasPara(
+    args.supabaseId,
+    clinicas.map((c) => c.id).filter((id) => id !== args.clinicIdActiva),
+  );
+
   const sedes: FilaSedeReporte[] = [];
   for (const c of clinicas) {
+    if (cerradas.has(c.id)) {
+      sedes.push(filaConClave(c.id, c.name));
+      continue;
+    }
     try {
       sedes.push(await unaSede(c, args.rango, args.clinicIdActiva, ahora));
     } catch (e) {
@@ -127,6 +142,10 @@ async function unaSede(c: ClinicaFila, rango: RangoISO, clinicIdActiva: string, 
     ocupacion: { pct: ocupacion.porcentaje, minutosOcupados: ocupacion.minutosOcupados, minutosDisponibles: ocupacion.minutosDisponibles },
     ticketPromedio: ticketPromedio(ingresos.cobrado, numeroDeCobros),
   };
+}
+
+function filaConClave(clinicId: string, nombre: string): FilaSedeReporte {
+  return { ...filaFallida(clinicId, nombre, false), fallo: undefined, conClave: true };
 }
 
 function filaFallida(clinicId: string, nombre: string, esActiva: boolean): FilaSedeReporte {

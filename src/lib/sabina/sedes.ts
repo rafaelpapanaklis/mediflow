@@ -67,6 +67,7 @@ import { isPlanExpired } from "@/lib/plan-status";
 import { leerAjustesSabina, type DbAjustesSabina } from "./ajustes-sabina";
 import { overrideDeSabina, permisosDeSabina } from "./permisos-sabina";
 import { dbDe, exigirSesion } from "./tools/base";
+import { sedesCerradasPara } from "@/lib/sede-clave/gate.server";
 import type { SabinaCtx } from "./tipos";
 
 /**
@@ -120,6 +121,13 @@ export interface SedesVisibles {
    * sede no facturó nada, cuando lo que pasa es que está suspendida.
    */
   vencidas: string[];
+  /**
+   * ws1-t4: sedes propias con «Clave de la sede» que esta persona no ha
+   * tecleado en este navegador, por su nombre. Igual que las vencidas: no se
+   * miran (sin la clave no se entra a ellas desde el panel) y se dicen aparte,
+   * sin ninguna cifra.
+   */
+  conClave: string[];
 }
 
 /** Lo mínimo de una ficha `User` para derivar un ctx de sede. */
@@ -159,26 +167,34 @@ export async function sedesVisibles(ctx: SabinaCtx): Promise<SedesVisibles> {
   // en dos sedes (A3 ya lo permite) trabaja en la sede donde está parado y nada más: las hermanas
   // no se resuelven ni se nombran. Quien no es SUPER_ADMIN en la sede activa cae a «solo la activa».
   let hermanas: Ficha[] = [];
+  // ws1-t4: las hermanas con «Clave de la sede» sin desbloqueo vigente en este
+  // navegador. Es la MISMA regla del gate (@/lib/sede-clave/gate.server): sin la
+  // clave no se entra a esa sede desde el panel, así que tampoco se mira desde
+  // aquí. Si no se puede saber, sedesCerradasPara las da todas por cerradas.
+  let cerradas = new Set<string>();
   try {
-    hermanas = activa.role === "SUPER_ADMIN" ? await fichasHermanas(ctx, activa) : [];
+    const r = activa.role === "SUPER_ADMIN" ? await fichasHermanas(ctx, activa) : { supabaseId: "", fichas: [] };
+    hermanas = r.fichas;
+    if (hermanas.length > 0) cerradas = await sedesCerradasPara(r.supabaseId, hermanas.map((f) => f.clinicId));
   } catch {
     hermanas = [];
   }
   const fichas = [activa, ...hermanas];
 
   const recortadas = fichas.slice(0, TOPE_SEDES);
-  const armadas = await armarSedes(ctx, recortadas);
+  const armadas = await armarSedes(ctx, recortadas, cerradas);
 
   // Las suspendidas NO cuentan como sedes comparables: se dicen aparte, por su
   // nombre. Si contaran aquí, el aviso del recorte diría «van 2 de tus 3» y le
   // echaría al tope la culpa de algo que fue el plan vencido — dos avisos para
   // lo mismo, y uno de ellos falso en su causa.
-  const total = fichas.length - armadas.vencidas.length;
+  const total = fichas.length - armadas.vencidas.length - armadas.conClave.length;
   return {
     sedes: armadas.sedes,
     total,
     truncado: total > armadas.sedes.length,
     vencidas: armadas.vencidas,
+    conClave: armadas.conClave,
   };
 }
 
@@ -190,7 +206,7 @@ export async function sedesVisibles(ctx: SabinaCtx): Promise<SedesVisibles> {
  * posible es exactamente lo que el panel hace hoy, así que la degradación no se
  * nota y no puede enseñar de más.
  */
-async function fichasHermanas(ctx: SabinaCtx, activa: Ficha): Promise<Ficha[]> {
+async function fichasHermanas(ctx: SabinaCtx, activa: Ficha): Promise<{ supabaseId: string; fichas: Ficha[] }> {
   const db = dbDe(ctx);
 
   // 🔴 Quién es. El `supabaseId` NO está en el ctx, y no se le añade: se lee de
@@ -201,7 +217,7 @@ async function fichasHermanas(ctx: SabinaCtx, activa: Ficha): Promise<Ficha[]> {
     select: { supabaseId: true },
   });
   const supabaseId = typeof yo?.supabaseId === "string" ? yo.supabaseId.trim() : "";
-  if (!supabaseId) return [];
+  if (!supabaseId) return { supabaseId: "", fichas: [] };
 
   // El criterio, literal: fichas ACTIVAS de esta persona. `isActive` no es
   // decorativo — a quien se le desactiva la ficha de una sede se le está
@@ -218,7 +234,7 @@ async function fichasHermanas(ctx: SabinaCtx, activa: Ficha): Promise<Ficha[]> {
   const contieneLaActiva = filas.some(
     (f) => f && f.id === activa.userId && f.clinicId === activa.clinicId,
   );
-  if (!contieneLaActiva) return [];
+  if (!contieneLaActiva) return { supabaseId, fichas: [] };
 
   const vistas: string[] = [activa.clinicId];
   const out: Ficha[] = [];
@@ -239,20 +255,21 @@ async function fichasHermanas(ctx: SabinaCtx, activa: Ficha): Promise<Ficha[]> {
       permissionsOverride: Array.isArray(f.permissionsOverride) ? f.permissionsOverride : [],
     });
   }
-  return out;
+  return { supabaseId, fichas: out };
 }
 
 /** Resuelve nombre, zona y permisos de cada ficha, y arma su ctx. */
 async function armarSedes(
   ctx: SabinaCtx,
   fichas: Ficha[],
-): Promise<{ sedes: SedeVisible[]; vencidas: string[] }> {
+  cerradas: ReadonlySet<string>,
+): Promise<{ sedes: SedeVisible[]; vencidas: string[]; conClave: string[] }> {
   const db = dbDe(ctx);
   const ids = fichas.map((f) => f.clinicId);
   // `ids` nunca está vacío (siempre lleva la activa). El guard está igual
   // porque un `in: []` que alguien convirtiera en `undefined` refactorizando
   // devolvería el sistema entero.
-  if (ids.length === 0) return { sedes: [], vencidas: [] };
+  if (ids.length === 0) return { sedes: [], vencidas: [], conClave: [] };
 
   const clinicas = await db.clinic.findMany({
     where: { id: { in: ids } },
@@ -274,6 +291,7 @@ async function armarSedes(
 
   const out: SedeVisible[] = [];
   const vencidas: string[] = [];
+  const conClave: string[] = [];
   // En tandas: cada sede hermana cuesta una lectura del recorte de Sabina, y
   // la regla de la casa es menos de 7 consultas por `Promise.all`.
   for (let inicio = 0; inicio < fichas.length; inicio += TANDA) {
@@ -284,17 +302,18 @@ async function armarSedes(
       // sedes es seguro, y `truncado` hace que se diga que la lista no está
       // completa. Lo que no puede es tumbar la pregunta entera.
       tanda.map((f) =>
-        unaSede(ctx, f, porId[f.clinicId], f.clinicId === ctx.clinicId).catch(() => null),
+        unaSede(ctx, f, porId[f.clinicId], f.clinicId === ctx.clinicId, cerradas.has(f.clinicId)).catch(() => null),
       ),
     );
     for (let i = 0; i < resueltas.length; i++) {
       const r = resueltas[i];
       if (!r) continue;
-      if (r.vencida) vencidas.push(r.vencida);
+      if (r.conClave) conClave.push(r.conClave);
+      else if (r.vencida) vencidas.push(r.vencida);
       else if (r.sede) out.push(r.sede);
     }
   }
-  return { sedes: out, vencidas };
+  return { sedes: out, vencidas, conClave };
 }
 
 /** Lo que sale de resolver una ficha: una sede mirable, una vencida, o nada. */
@@ -302,6 +321,8 @@ interface SedeResuelta {
   sede?: SedeVisible;
   /** El nombre de una sede propia con el plan vencido, para poder decirlo. */
   vencida?: string;
+  /** ws1-t4: el nombre de una sede propia con clave sin desbloquear, para poder decirlo. */
+  conClave?: string;
 }
 
 /**
@@ -313,6 +334,7 @@ async function unaSede(
   ficha: Ficha,
   clinica: any,
   esActiva: boolean,
+  cerrada = false,
 ): Promise<SedeResuelta | null> {
   const nombreCrudo = typeof clinica?.name === "string" ? clinica.name.trim() : "";
   // La activa siempre se puede nombrar de algún modo: quien pregunta sabe en
@@ -337,6 +359,12 @@ async function unaSede(
   // así que tampoco se mira desde aquí: si no, esta herramienta sería la única
   // forma de leer una sede a la que hoy no se entra. Se devuelve su nombre para
   // poder decir que existe y que está suspendida.
+  // ws1-t4: la clave va ANTES del plan: de una sede con clave no se dice ni
+  // si está suspendida. Solo su nombre, y que tiene clave.
+  if (cerrada) {
+    return { conClave: nombre };
+  }
+
   if (isPlanExpired(clinica)) {
     return { vencida: nombre };
   }

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Building2, Loader2 } from "lucide-react";
 import toast from "react-hot-toast";
 import { avisoSedeIncluida } from "@/lib/billing/sedes-incluidas-core";
+import { RUTA_SEDE_CON_CLAVE, STATUS_SEDE_CON_CLAVE } from "@/lib/sede-clave/constantes";
 
 /**
  * M2 (ws1-t5) — pestaña Suscripción de una sede incluida: el plan lo paga otra clínica, así que no hay
@@ -26,6 +27,11 @@ export function SedeIncluidaAviso({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ clinicId: principalId }),
       });
+      // ws1-t4: la principal tiene «Clave de la sede»: se pide ahí antes de cambiar.
+      if (res.status === STATUS_SEDE_CON_CLAVE) {
+        window.location.href = `${RUTA_SEDE_CON_CLAVE}?sede=${encodeURIComponent(principalId)}&next=${encodeURIComponent("/dashboard/settings?tab=subscription")}`;
+        return;
+      }
       if (!res.ok) throw new Error();
       window.location.href = "/dashboard/settings?tab=subscription";
     } catch {

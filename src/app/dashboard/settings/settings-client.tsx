@@ -7,6 +7,7 @@ import { SedeIncluidaAviso } from "@/components/dashboard/sede-incluida-aviso";
 import type { MetodosDisponibles } from "@/lib/billing/metodos-de-pago";
 import { RemindersSection } from "./reminders-section";
 import { TwoFactorCard } from "@/components/dashboard/security/two-factor-card";
+import { SedeClaveCard } from "@/components/dashboard/security/sede-clave-card";
 import { CfdiReadinessCard } from "@/components/dashboard/settings/cfdi-readiness-card";
 // ws1-t4, vuelta 2 (F-01): «Facturar a empresas con retención», apagado por defecto.
 import { AjusteRetencionesCfdi } from "@/components/dashboard/settings/ajuste-retenciones-cfdi";
@@ -1598,6 +1599,8 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                   initialRequire2fa={!!(clinic as any)?.require2fa}
                   isAdmin={user.role === "ADMIN" || user.role === "SUPER_ADMIN"}
                 />
+                {/* ws1-t4: se pinta sola solo para el dueño o el admin con «sede.clave». */}
+                <SedeClaveCard />
                 <Seccion titulo={t("settings.client.accountInfoTitle")}>
                   <Filas>
                     <Fila etiqueta={t("settings.client.accountEmailLabel")}>{initUser.email}</Fila>
@@ -2612,6 +2615,8 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
             initialRequire2fa={!!(clinic as any)?.require2fa}
             isAdmin={user.role === "ADMIN" || user.role === "SUPER_ADMIN"}
           />
+          {/* ws1-t4: se pinta sola solo para el dueño o el admin con «sede.clave». */}
+          <SedeClaveCard />
           <div className="bg-card border border-border rounded-2xl p-6 shadow-card">
             <h2 className="text-base font-bold mb-4">{t("settings.client.accountInfoTitle")}</h2>
             <div className="space-y-2 text-sm">

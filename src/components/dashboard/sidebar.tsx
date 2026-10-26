@@ -21,6 +21,7 @@ import { useLocale, useT } from "@/i18n/i18n-provider";
 import { NewBranchDialog } from "@/components/dashboard/new-branch-dialog";
 import type { SidebarBranchInfo } from "@/lib/branches-shared";
 import { cerrarSesionPanel as cerrarSesionDelPanel } from "@/lib/auth/cerrar-sesion-panel";
+import { RUTA_SEDE_CON_CLAVE, STATUS_SEDE_CON_CLAVE } from "@/lib/sede-clave/constantes";
 
 import {
   NAV_ITEMS,
@@ -47,6 +48,8 @@ export interface SidebarClinicRef {
   clinicId: string;
   clinicName: string;
   plan?: ClinicPlan;
+  /** ws1-t4: la sede tiene «Clave de la sede» (solo pinta el candado). */
+  conClave?: boolean;
 }
 
 export interface SidebarProps {
@@ -894,6 +897,12 @@ export function ClinicSwitcher({
         credentials: "include",
         body: JSON.stringify({ clinicId: id }),
       });
+      // ws1-t4: la sede pide su clave. La sede activa NO cambió: se va a la
+      // pantalla de la clave de esa sede, que la desbloquea y entonces cambia.
+      if (res.status === STATUS_SEDE_CON_CLAVE) {
+        window.location.assign(`${RUTA_SEDE_CON_CLAVE}?sede=${encodeURIComponent(id)}`);
+        return;
+      }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       // La ruta actual puede apuntar a una entidad (paciente, factura, orden…)
       // de la sede anterior, inexistente en el nuevo tenant → el server haría
@@ -1058,6 +1067,14 @@ export function ClinicSwitcher({
                 <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {c.clinicName}
                 </span>
+                {c.conClave && !isCurrent && (
+                  <Lock
+                    size={12}
+                    strokeWidth={1.75}
+                    style={{ color: "var(--text-3)", flexShrink: 0 }}
+                    aria-label={t("sedeClave.selectorConClave")}
+                  />
+                )}
                 {isCurrent && (
                   <span
                     style={{

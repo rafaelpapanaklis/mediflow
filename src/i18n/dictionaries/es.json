@@ -11505,5 +11505,56 @@
         "gris": "Gris"
       }
     }
+  },
+  "sedeClave": {
+    "selectorConClave": "Sede con clave",
+    "conClave": "Sede con clave",
+    "conClaveDetalle": "Esta sede tiene clave. Entra a ella con su clave para ver sus cifras.",
+    "pantalla": {
+      "titulo": "Esta sede tiene clave",
+      "subtitulo": "Escribe la clave de la sede para entrar. En este navegador no se te volverá a pedir en 72 horas.",
+      "abierta": "Esta sede ya no te pide clave en este navegador.",
+      "irALaSede": "Entrar a la sede",
+      "etiqueta": "Clave de la sede",
+      "entrar": "Entrar",
+      "comprobando": "Comprobando…",
+      "olvido": "¿Olvidaste la clave? Pídele a soporte de DaleControl que la restablezca.",
+      "incorrecta": "La clave no es correcta. Te quedan {restantes} intentos.",
+      "bloqueo": "Demasiados intentos. Espera {minutos} min y vuelve a intentarlo.",
+      "error": "No pudimos comprobar la clave. Inténtalo de nuevo.",
+      "errorCambio": "No pudimos cambiarte de sede. Inténtalo de nuevo.",
+      "volver": "Ir a otra sede",
+      "cerrarSesion": "Cerrar sesión",
+      "sinComprobarTitulo": "No pudimos comprobar la clave de la sede",
+      "sinComprobar": "Hubo un problema al comprobar si esta sede tiene clave. Recarga la página en unos segundos.",
+      "recargar": "Recargar",
+      "enCurso": "Ya hay un intento en curso. Espera un momento y vuelve a intentarlo."
+    },
+    "card": {
+      "titulo": "Clave de la sede",
+      "subtitulo": "Pide una clave para entrar a esta sede, además de la contraseña de cada persona.",
+      "explicacion": "Con la clave activa nadie entra a esta sede sin escribirla, tampoco el dueño de la cuenta. Se pide una vez cada 72 horas en cada navegador. Si se olvida, solo soporte de DaleControl puede quitarla.",
+      "activa": "Activa",
+      "inactiva": "Desactivada",
+      "activar": "Activar clave",
+      "cambiar": "Cambiar clave",
+      "desactivar": "Desactivar",
+      "actual": "Clave actual",
+      "nueva": "Clave nueva",
+      "nuevaPlaceholder": "Mínimo {min} caracteres",
+      "confirmar": "Confirma la clave nueva",
+      "activarConfirmar": "Activar",
+      "cambiarConfirmar": "Guardar clave nueva",
+      "desactivarConfirmar": "Sí, desactivar",
+      "desactivarAviso": "Al desactivarla, cualquiera con acceso a esta sede podrá entrar sin clave, incluido el dueño de la cuenta.",
+      "cancelar": "Cancelar",
+      "guardando": "Guardando…",
+      "corta": "La clave debe tener al menos {min} caracteres.",
+      "distintas": "Las dos claves no coinciden.",
+      "error": "No pudimos guardar la clave. Inténtalo de nuevo.",
+      "activadaToast": "Clave de la sede activada",
+      "cambiadaToast": "Clave de la sede cambiada",
+      "desactivadaToast": "Clave de la sede desactivada"
+    }
   }
 }
