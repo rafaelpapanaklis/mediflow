@@ -76,3 +76,18 @@ test("portal (v5, N5): «Pagar por adelantado» solo cuando hay saldo y no se de
   assert.equal(esPagoPorAdelantado({ balance: 500 }), false, "factura normal");
   assert.equal(esPagoPorAdelantado({ balance: 0, aunNoSeDebe: 0 }), false, "sin saldo");
 });
+
+test("portal (v6): el botón en línea se decide por lo que se COBRARÍA; si lo debido no llega a $10, «paga en tu clínica»", async () => {
+  const { montoEnLineaDelPortal } = await import("@/lib/patient-portal/pago-mercadopago");
+  const { MINIMO_LINK_MXN } = await import("@/lib/factura-mp/core");
+  assert.equal(MINIMO_LINK_MXN, 10);
+  assert.equal(montoEnLineaDelPortal({ balance: 2050.5, aunNoSeDebe: 2045 }), 5.5, "debe $5.50: bajo el mínimo aunque el saldo no lo esté");
+  assert.ok(montoEnLineaDelPortal({ balance: 2050.5, aunNoSeDebe: 2045 }) < MINIMO_LINK_MXN);
+  assert.equal(montoEnLineaDelPortal({ balance: 2050.5, aunNoSeDebe: 800 }), 1250.5);
+  assert.equal(montoEnLineaDelPortal({ balance: 2050.5, aunNoSeDebe: 2050.5 }), 2050.5, "por adelantado: el saldo de la nota");
+  assert.equal(montoEnLineaDelPortal({ balance: 700 }), 700, "factura normal");
+  // La pantalla usa esto, no el saldo.
+  const { readFileSync } = await import("node:fs");
+  const pantalla = readFileSync("src/app/paciente/(panel)/pagos/page.tsx", "utf8");
+  assert.match(pantalla, /const pagableEnLinea = metodo !== null && montoEnLineaDelPortal\(f\) >= MINIMO_LINK_MXN;/);
+});

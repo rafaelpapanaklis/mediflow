@@ -22,7 +22,7 @@ import { useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { usePacienteData } from "@/lib/patient-portal/use-paciente";
 import { lineaAunNoLoDebes } from "@/lib/invoices/correo-factura";
-import { esPagoPorAdelantado } from "@/lib/patient-portal/pago-mercadopago";
+import { esPagoPorAdelantado, montoEnLineaDelPortal } from "@/lib/patient-portal/pago-mercadopago";
 import type { PacienteClinica, PacienteFactura, PacientePagosResponse } from "@/lib/patient-portal/types";
 import {
   PacienteCard,
@@ -234,7 +234,9 @@ function FacturaRow({
   const saldoPendiente = f.balance > 0 && f.status !== "CANCELLED";
   // Bajo el mínimo en línea (el mismo $10 de Stripe y de Mercado Pago) el botón
   // solo daría error: se dice «Paga en tu clínica».
-  const pagableEnLinea = metodo !== null && f.balance >= MINIMO_LINK_MXN;
+  // Se decide por lo que se COBRARÍA (lo debido, o el saldo si es por adelantado), no por el saldo: si lo
+  // debido no llega al mínimo en línea, «Paga en tu clínica» (revisión t5 de la v5).
+  const pagableEnLinea = metodo !== null && montoEnLineaDelPortal(f) >= MINIMO_LINK_MXN;
   const pagoMp = usePagoMercadoPago(f);
   // 26-oct (Rafael): con saldo pero nada debido todavía, el pago en línea es por adelantado.
   const porAdelantado = esPagoPorAdelantado(f);

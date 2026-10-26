@@ -77,6 +77,18 @@ export function esPagoPorAdelantado(f: { balance: number; aunNoSeDebe?: number |
 }
 
 /**
+ * Lo que cobraría el pago en línea de esta factura (la misma regla que el servidor, `montoParaLink`): lo
+ * debido, o el saldo de la nota si el pago es por adelantado. El portal decide con ESTO si enseña
+ * «Pagar» o «Paga en tu clínica» (revisión t5, v5): si lo debido no llega al mínimo en línea, el botón
+ * sobraba aunque el saldo sí llegara. (El servidor puede cobrar aún menos —la mensualidad de un plan a
+ * plazos—; si eso queda bajo el mínimo, contesta «paga en tu clínica».)
+ */
+export function montoEnLineaDelPortal(f: { balance: number; aunNoSeDebe?: number | null }): number {
+  if (esPagoPorAdelantado(f)) return Math.round(f.balance * 100) / 100;
+  return Math.max(0, Math.round((f.balance - Math.max(0, Number(f.aunNoSeDebe) || 0)) * 100) / 100);
+}
+
+/**
  * Textos del portal en español, ESPEJO EXACTO de `portalPagoMp` en
  * src/i18n/dictionaries/es.json (una prueba lo fija). El portal del paciente
  * todavía no monta I18nProvider: la pantalla usa `useTOptional()` y, sin
