@@ -16,12 +16,14 @@ export const runtime = "nodejs";
 /**
  * POST /api/sede-clave/desbloquear — la pantalla «Esta sede tiene clave» (ws1-t4).
  *
- * Body: { clave, clinicId?, next? }
+ * Body: { clave, clinicId?, next?, cambiarDeSede? }
  *   · sin `clinicId` (o el de la sede activa): desbloquea la sede activa, la que
  *     el layout mandó a esta pantalla tras el login o al caducar las 72 h;
  *   · con el `clinicId` de OTRA sede: es el selector de sedes. Se coteja contra
  *     las fichas ACTIVAS de esta persona (mismo criterio que /api/switch-clinic)
- *     y, si la clave es buena, además se cambia la sede activa.
+ *     y, si la clave es buena, además se cambia la sede activa — salvo
+ *     `cambiarDeSede: false` (v2: el candado del Reporte de sedes desbloquea la
+ *     sede para verla en el reporte sin sacar al dueño de la sede en la que está).
  *
  * Usa getAuthContextParaClaveDeSede: con el 2FA pasado, pero sin el gate de la
  * clave (si no, nadie desbloquearía nunca) ni el del plan (una sede con clave y
@@ -54,7 +56,7 @@ export async function POST(req: NextRequest) {
       if (!otra) return NextResponse.json({ error: "No tienes acceso a esa sede." }, { status: 403 });
       ficha = otra;
     }
-    const cambiaDeSede = ficha.clinicId !== ctx.clinicId;
+    const cambiaDeSede = ficha.clinicId !== ctx.clinicId && body?.cambiarDeSede !== false;
 
     const responderOk = async (version: number | null) => {
       const res = NextResponse.json({ ok: true, destino });
@@ -76,6 +78,7 @@ export async function POST(req: NextRequest) {
     }
     // La quitaron mientras la pantalla estaba abierta: ya se puede entrar.
     if (verif.motivo === "sin_clave") return responderOk(null);
+    if (verif.motivo === "en_curso") return NextResponse.json({ error: "Ya hay un intento en curso con esta clave. Espera un momento y vuelve a intentarlo.", code: "en_curso" }, { status: 429 });
 
     if (verif.motivo === "bloqueado") {
       const min = minutosHasta(verif.intentos.bloqueadoHasta ?? Date.now());

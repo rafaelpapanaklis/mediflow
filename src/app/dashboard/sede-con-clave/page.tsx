@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getCurrentUserSinClaveDeSede, getUserClinics } from "@/lib/auth";
-import { sedeCerradaPara } from "@/lib/sede-clave/gate.server";
+import { estadoGateSede } from "@/lib/sede-clave/gate.server";
 import { destinoSeguro } from "@/lib/sede-clave/core";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { RaizCuenta } from "@/components/dashboard/cuenta-rediseno/raiz";
@@ -33,7 +33,10 @@ export default async function SedeConClavePage(props: { searchParams: Promise<{ 
   const nombre = sede?.clinicName ?? (user.clinic as { name?: string } | null)?.name ?? "";
   const next = destinoSeguro(sp?.next);
 
-  const cerrada = await sedeCerradaPara({ supabaseId: user.supabaseId, clinicId });
+  // v2 (A1): «sin_comprobar» = la base no dejó leer la clave de esa sede; se
+  // dice eso (con «Recargar»), no «Esta sede tiene clave».
+  const gate = await estadoGateSede({ supabaseId: user.supabaseId, clinicId });
+  const cerrada = gate !== "libre";
   const esLaActiva = clinicId === user.clinicId;
   // Nada que pedir: la activa ya está abierta → al panel. Una hermana abierta
   // (desbloqueo vigente, o le quitaron la clave) se ofrece con un botón que
@@ -50,6 +53,7 @@ export default async function SedeConClavePage(props: { searchParams: Promise<{ 
       nombre={nombre}
       esLaActiva={esLaActiva}
       abierta={!cerrada}
+      sinComprobar={gate === "sin_comprobar"}
       otras={otras}
       next={next}
     />

@@ -13,6 +13,7 @@ import {
   type ReporteConsolidado,
 } from "@/lib/sedes/reporte-consolidado-core";
 import s from "./reporte-sedes.module.css";
+import { CuadroClave, type TextosCuadroClave } from "./cuadro-clave";
 
 /**
  * Reporte consolidado de sedes (ws1-t10, auditoría BEVADENT · M6). Habla el
@@ -54,7 +55,21 @@ const TEXTOS = {
     suspendida: "Suspendida",
     fallo: "No se pudo leer esta sede: sus cifras no entran en los totales.",
     conClave: "Sede con clave",
-    conClaveNota: "tiene clave de sede: entra a ella con su clave para ver sus cifras. No entra en los totales.",
+    conClaveNota: "tiene clave de sede: toca el candado y escribe su clave para ver sus cifras. Mientras, no entra en los totales.",
+    conClaveTocar: "Escribe la clave para ver esta sede",
+    cuadro: {
+      titulo: "Sede con clave",
+      texto: "Escribe la clave de la sede para verla en el reporte. No se te volverá a pedir en este navegador en 72 horas.",
+      etiqueta: "Clave de la sede",
+      entrar: "Ver la sede",
+      comprobando: "Comprobando…",
+      cancelar: "Cancelar",
+      incorrecta: "La clave no es correcta. Te quedan {restantes} intentos.",
+      bloqueo: "Demasiados intentos. Espera {minutos} min y vuelve a intentarlo.",
+      enCurso: "Ya hay un intento en curso. Espera un momento y vuelve a intentarlo.",
+      error: "No pudimos comprobar la clave. Inténtalo de nuevo.",
+      olvido: "¿Olvidaste la clave? Pídele a soporte de DaleControl que la restablezca.",
+    } as TextosCuadroClave,
     total: "Total",
     unaSede: "Solo tienes una sede. Cuando abras otra, aquí verás la comparativa.",
     sinSedes: "No hay sedes que mostrar.",
@@ -87,7 +102,21 @@ const TEXTOS = {
     suspendida: "Suspended",
     fallo: "Could not read this location: its figures are not in the totals.",
     conClave: "Location with passcode",
-    conClaveNota: "has a location passcode: enter it with its passcode to see its figures. Not included in the totals.",
+    conClaveNota: "has a location passcode: tap the lock and type its passcode to see its figures. Until then, it's not in the totals.",
+    conClaveTocar: "Type the passcode to see this location",
+    cuadro: {
+      titulo: "Location with passcode",
+      texto: "Type the location passcode to see it in the report. This browser won't ask again for 72 hours.",
+      etiqueta: "Location passcode",
+      entrar: "Show location",
+      comprobando: "Checking…",
+      cancelar: "Cancel",
+      incorrecta: "That passcode is not correct. You have {restantes} attempts left.",
+      bloqueo: "Too many attempts. Wait {minutos} min and try again.",
+      enCurso: "An attempt is already in progress. Wait a moment and try again.",
+      error: "We couldn't check the passcode. Please try again.",
+      olvido: "Forgot the passcode? Ask DaleControl support to reset it.",
+    } as TextosCuadroClave,
     total: "Total",
     unaSede: "You only have one location. Once you open another, the comparison shows here.",
     sinSedes: "No locations to show.",
@@ -114,6 +143,8 @@ export function ReporteSedesClient({ inicial, hoyISO, locale }: Props) {
   const [hasta, setHasta] = useState(inicial.hastaISO);
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // ws1-t4 v2: la sede con clave cuyo candado se tocó (su cuadro de clave).
+  const [pidiendo, setPidiendo] = useState<{ clinicId: string; nombre: string } | null>(null);
   const peticion = useRef(0);
   // La hora de «Generado» se pinta en el navegador (zona y formato del
   // visitante): calcularla en el servidor daba un texto distinto al hidratar.
@@ -259,7 +290,16 @@ export function ReporteSedesClient({ inicial, hoyISO, locale }: Props) {
                 </thead>
                 <tbody>
                   {sedes.map((sede) => (
-                    <FilaSede key={sede.clinicId} sede={sede} parte={participacionPct(sede, t)} tx={tx} pesos={pesos} entero={entero} pct={pct} />
+                    <FilaSede
+                      key={sede.clinicId}
+                      sede={sede}
+                      parte={participacionPct(sede, t)}
+                      tx={tx}
+                      pesos={pesos}
+                      entero={entero}
+                      pct={pct}
+                      onCandado={() => setPidiendo({ clinicId: sede.clinicId, nombre: sede.nombre })}
+                    />
                   ))}
                 </tbody>
                 {sedes.length > 1 && (
@@ -296,6 +336,19 @@ export function ReporteSedesClient({ inicial, hoyISO, locale }: Props) {
         )}
         {generadoTexto && <p className={s.notaPie}>{tx.generado.replace("{fecha}", generadoTexto)}</p>}
       </section>
+      {pidiendo && (
+        <CuadroClave
+          clinicId={pidiendo.clinicId}
+          nombre={pidiendo.nombre}
+          tx={tx.cuadro}
+          onCerrar={() => setPidiendo(null)}
+          onListo={() => {
+            setPidiendo(null);
+            // El mismo periodo, ya con la sede desbloqueada: sale completa (cifras y totales).
+            void cargar(periodo, desde, hasta);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -311,8 +364,9 @@ function Kpi({ etiqueta, valor, pista, hero, peligro }: { etiqueta: string; valo
 }
 
 function FilaSede({
-  sede, parte, tx, pesos, entero, pct,
+  sede, parte, tx, pesos, entero, pct, onCandado,
 }: {
+  onCandado: () => void;
   sede: FilaSedeReporte;
   parte: number | null;
   tx: Textos;
@@ -324,9 +378,17 @@ function FilaSede({
     return (
       <tr className={s.filaFallida}>
         <th scope="row" className={s.celdaSede}>
-          <span className={s.nombreSede}>{sede.nombre}</span>
-          {sede.esActiva && <span className={s.chip}>{tx.activa}</span>}
-          {sede.conClave && <span className={s.chip}>{tx.conClave}</span>}
+          {sede.conClave ? (
+            <button type="button" className={s.candado} onClick={onCandado} title={tx.conClaveTocar} data-testid="candado-sede">
+              <span className={s.nombreSede}>{sede.nombre}</span>
+              <span className={s.chip}><Lock size={10} aria-hidden /> {tx.conClave}</span>
+            </button>
+          ) : (
+            <>
+              <span className={s.nombreSede}>{sede.nombre}</span>
+              {sede.esActiva && <span className={s.chip}>{tx.activa}</span>}
+            </>
+          )}
         </th>
         <td className={s.num} colSpan={8}>—</td>
       </tr>

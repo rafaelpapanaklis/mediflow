@@ -13,3 +13,6 @@ export const RUTA_SEDE_CON_CLAVE = "/dashboard/sede-con-clave";
 export const CODIGO_SEDE_CON_CLAVE = "sede_con_clave";
 /** Status con el que /api/switch-clinic dice «esa sede pide clave». */
 export const STATUS_SEDE_CON_CLAVE = 423;
+
+/** v2 · G1: por qué la sede nueva no copió la configuración de la principal. */
+export type AvisoCopia = "principal_con_clave_desde_activa" | "principal_con_clave_sin_copia";

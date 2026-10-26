@@ -13,6 +13,8 @@ interface Props {
   esLaActiva: boolean;
   /** La sede ya no pide clave (desbloqueo vigente o se la quitaron): solo falta cambiar. */
   abierta: boolean;
+  /** v2: la base no dejó comprobar la clave de esta sede: se pide recargar, no la clave. */
+  sinComprobar?: boolean;
   otras: Array<{ clinicId: string; clinicName: string }>;
   next: string;
 }
@@ -24,7 +26,7 @@ interface Props {
  * los del menú. La decisión de quién entra la toma el servidor: esto solo
  * pregunta la clave y lleva a donde toque.
  */
-export function PantallaSedeConClave({ clinicId, nombre, esLaActiva, abierta, otras, next }: Props) {
+export function PantallaSedeConClave({ clinicId, nombre, esLaActiva, abierta, sinComprobar = false, otras, next }: Props) {
   const t = useT();
   const [clave, setClave] = useState("");
   const [ocupado, setOcupado] = useState(false);
@@ -47,6 +49,7 @@ export function PantallaSedeConClave({ clinicId, nombre, esLaActiva, abierta, ot
       if (!res.ok) {
         setClave("");
         if (data?.code === "bloqueo") setError(t("sedeClave.pantalla.bloqueo", { minutos: data?.minutos ?? 15 }));
+        else if (data?.code === "en_curso") setError(t("sedeClave.pantalla.enCurso"));
         else if (data?.code === "clave_incorrecta") setError(t("sedeClave.pantalla.incorrecta", { restantes: data?.restantes ?? 0 }));
         else setError(t("sedeClave.pantalla.error"));
         setOcupado(false);
@@ -93,17 +96,26 @@ export function PantallaSedeConClave({ clinicId, nombre, esLaActiva, abierta, ot
             <LockKeyhole size={20} strokeWidth={1.75} aria-hidden />
           </div>
           <h1 style={{ fontSize: 15, fontWeight: 600, color: "var(--text-1)", margin: 0 }}>
-            {t("sedeClave.pantalla.titulo")}
+            {sinComprobar ? t("sedeClave.pantalla.sinComprobarTitulo") : t("sedeClave.pantalla.titulo")}
           </h1>
           {nombre && (
             <p style={{ fontSize: 13, fontWeight: 600, color: "var(--text-2)", margin: 0 }}>{nombre}</p>
           )}
           <p style={{ fontSize: 12.5, color: "var(--text-3)", margin: 0 }}>
-            {abierta ? t("sedeClave.pantalla.abierta") : t("sedeClave.pantalla.subtitulo")}
+            {sinComprobar ? t("sedeClave.pantalla.sinComprobar") : abierta ? t("sedeClave.pantalla.abierta") : t("sedeClave.pantalla.subtitulo")}
           </p>
         </div>
 
-        {abierta ? (
+        {sinComprobar ? (
+          <button
+            type="button"
+            className="btn-new btn-new--primary"
+            style={{ width: "100%", height: 40, justifyContent: "center" }}
+            onClick={() => window.location.reload()}
+          >
+            {t("sedeClave.pantalla.recargar")}
+          </button>
+        ) : abierta ? (
           <button
             type="button"
             className="btn-new btn-new--primary"

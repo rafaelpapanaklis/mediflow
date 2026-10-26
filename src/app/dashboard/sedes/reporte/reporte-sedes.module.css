@@ -114,3 +114,27 @@
 .parteTexto { font-size: 12px; color: var(--m2-texto-2); vertical-align: middle; }
 .filaTotal th, .filaTotal td { border-top: 1px solid var(--m2-tarjeta-borde); font-weight: 650; }
 .filaFallida th, .filaFallida td { color: var(--m2-texto-3); }
+
+/* ── ws1-t4 v2: candado de la sede con clave y su cuadro rápido ──────── */
+.candado {
+  display: inline-flex; align-items: center; gap: 5px; max-width: 100%; padding: 0; border: 0; background: transparent;
+  color: inherit; font: inherit; font-weight: 600; text-align: left; cursor: pointer;
+}
+.candado .chip { display: inline-flex; align-items: center; gap: 4px; }
+@media (hover: hover) { .candado:hover .chip { background: var(--m2-iniciales-fondo); color: var(--m2-activo); } }
+.candado:focus-visible { outline: none; box-shadow: var(--m2-foco); border-radius: 6px; }
+.cuadroFondo {
+  position: fixed; inset: 0; z-index: 90; display: flex; align-items: center; justify-content: center; padding: 16px;
+  background: rgba(15, 10, 30, 0.55);
+}
+.cuadro {
+  width: 100%; max-width: 380px; padding: 16px 18px 18px; border: 1px solid var(--m2-tarjeta-borde); border-radius: 14px;
+  background: var(--m2-tarjeta); color: var(--m2-texto); box-shadow: var(--m2-sombra);
+}
+.cuadroCabeza { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
+.cuadroTitulo { display: inline-flex; align-items: center; gap: 7px; margin: 0; font-size: 15px; font-weight: 650; }
+.cuadroCerrar { display: inline-flex; padding: 4px; border: 0; border-radius: 8px; background: transparent; color: var(--m2-texto-3); cursor: pointer; }
+.cuadroCerrar:focus-visible { outline: none; box-shadow: var(--m2-foco); }
+.cuadroTexto { margin: 0 0 12px; font-size: 12.5px; line-height: 1.45; color: var(--m2-texto-2); }
+.cuadroForma { display: flex; flex-direction: column; gap: 6px; }
+.cuadroAcciones { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; flex-wrap: wrap; }

@@ -8,7 +8,7 @@ import bcrypt from "bcryptjs";
 import type { NextRequest } from "next/server";
 import { logMutation } from "@/lib/audit";
 import { estadoDeIntentos, type EstadoIntentos } from "./core";
-import { leerFilaClave, leerIntentos, registrarIntento } from "./estado.server";
+import { conCandadoDeIntentos, leerFilaClave, leerIntentos, purgarIntentosViejos, registrarIntento } from "./estado.server";
 
 const BCRYPT_ROUNDS = 10;
 /** Más largo que esto no es una clave de la sede: ni se compara (bcrypt cuesta). */
@@ -31,29 +31,41 @@ async function coincide(clave: unknown, hash: string): Promise<boolean> {
 // estrecha la unión por `ok`.
 export type Verificacion =
   | { ok: true; version: number; motivo?: undefined; intentos?: undefined }
-  | { ok: false; motivo: "sin_clave"; version?: undefined; intentos?: undefined }
+  | { ok: false; motivo: "sin_clave" | "en_curso"; version?: undefined; intentos?: undefined }
   | { ok: false; motivo: "bloqueado" | "incorrecta"; version: number; intentos: EstadoIntentos };
 
 /**
  * ¿Es `clave` la clave vigente de la sede? Lleva la cuenta por persona+sede
  * (y versión): con el bloqueo puesto ni se compara ni se registra; cada
  * comparación queda en `sede_clave_intentos` (sin la clave).
+ *
+ * v2 (revisión de t8, A2): leer los intentos, comparar y registrar va bajo un
+ * candado por persona + sede (`conCandadoDeIntentos`). Si ya hay un intento en
+ * curso de esa persona en esa sede, este ni se compara ni se registra
+ * (`en_curso`): una ráfaga de N peticiones compara una sola clave a la vez y el
+ * tope de 5 fallos se cumple.
  */
 export async function verificarClave(args: { clinicId: string; supabaseId: string; clave: unknown; ahora?: Date }): Promise<Verificacion> {
-  const ahora = args.ahora ?? new Date();
   const fila = await leerFilaClave(args.clinicId);
   if (!fila || !fila.claveHash) return { ok: false, motivo: "sin_clave" };
+  const hash = fila.claveHash;
 
-  const previos = await leerIntentos(args.clinicId, args.supabaseId, fila.version, ahora);
-  const antes = estadoDeIntentos(previos, ahora.getTime());
-  if (antes.bloqueadoHasta !== null) return { ok: false, motivo: "bloqueado", version: fila.version, intentos: antes };
+  const r = await conCandadoDeIntentos<Verificacion>(args.clinicId, args.supabaseId, async (db) => {
+    const ahora = args.ahora ?? new Date();
+    const previos = await leerIntentos(args.clinicId, args.supabaseId, fila.version, ahora, db);
+    const antes = estadoDeIntentos(previos, ahora.getTime());
+    if (antes.bloqueadoHasta !== null) return { ok: false, motivo: "bloqueado", version: fila.version, intentos: antes };
 
-  const ok = await coincide(args.clave, fila.claveHash);
-  await registrarIntento(args.clinicId, args.supabaseId, fila.version, ok);
-  if (ok) return { ok: true, version: fila.version };
+    const ok = await coincide(args.clave, hash);
+    await registrarIntento(args.clinicId, args.supabaseId, fila.version, ok, db);
+    if (ok) return { ok: true, version: fila.version };
 
-  const despues = estadoDeIntentos([...previos, { ok: false, en: ahora.getTime() }], ahora.getTime());
-  return { ok: false, motivo: "incorrecta", version: fila.version, intentos: despues };
+    const despues = estadoDeIntentos([...previos, { ok: false, en: ahora.getTime() }], ahora.getTime());
+    return { ok: false, motivo: "incorrecta", version: fila.version, intentos: despues };
+  });
+  // M5: de paso, las filas de intentos de más de 1 día (como mucho 1 vez por hora).
+  void purgarIntentosViejos();
+  return r ?? { ok: false, motivo: "en_curso" };
 }
 
 export type EventoClave =

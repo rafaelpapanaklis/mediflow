@@ -67,66 +67,117 @@ interface FilaIntento { clinicId: string; supabaseId: string; version: number; o
 const db = {
   tablas: true,
   falloLista: false,
+  /** v2: también falla la lectura de la fila de una sede por su llave primaria. */
+  falloFila: false,
+  /** v2: falla la sonda to_regclass. */
+  falloSonda: false,
+  /** v2: latencia de cada consulta (ms), como un viaje a la base. */
+  retraso: 0,
   claves: new Map<string, FilaClave>(),
   intentos: [] as FilaIntento[],
   consultas: [] as string[],
+  /** Candados de `pg_try_advisory_xact_lock` en uso (uno por transacción viva). */
+  candados: new Set<string>(),
+  /** Cuántas claves se compararon con bcrypt (= intentos registrados). */
 };
 
+async function consulta(strings: TemplateStringsArray, v: any[], candadosDeLaTx: string[] | null) {
+  const sql = strings.join("?").replace(/\s+/g, " ");
+  db.consultas.push(sql);
+  if (db.retraso) await new Promise((r) => setTimeout(r, db.retraso));
+  if (sql.includes("to_regclass")) {
+    if (db.falloSonda) throw new Error("pooler caído (sonda)");
+    return [{ existe: db.tablas }];
+  }
+  if (!db.tablas) throw Object.assign(new Error("relation does not exist"), { code: "42P01" });
+  if (sql.includes("pg_try_advisory_xact_lock")) {
+    if (!candadosDeLaTx) throw new Error("pg_advisory_xact_lock fuera de una transacción");
+    const llave = `${v[0]}|${v[1]}`;
+    if (db.candados.has(llave)) return [{ ok: false }];
+    db.candados.add(llave);
+    candadosDeLaTx.push(llave);
+    return [{ ok: true }];
+  }
+  if (sql.includes(`FROM "sede_claves" WHERE "claveHash" IS NOT NULL`)) {
+    if (db.falloLista) throw new Error("pooler caído");
+    return Array.from(db.claves.entries()).filter(([, f]) => f.claveHash).map(([clinicId, f]) => ({ clinicId, version: f.version }));
+  }
+  if (sql.includes(`SELECT "claveHash", "version" FROM "sede_claves"`)) {
+    if (db.falloFila) throw new Error("pooler caído (fila)");
+    const f = db.claves.get(v[0]);
+    return f ? [{ claveHash: f.claveHash, version: f.version }] : [];
+  }
+  if (sql.includes(`INSERT INTO "sede_claves"`)) {
+    const [clinicId, claveHash, por] = v;
+    const f = db.claves.get(clinicId);
+    if (f && f.claveHash) return [];
+    const version = f ? f.version + 1 : 1;
+    db.claves.set(clinicId, { claveHash, version, actualizadaPor: por });
+    return [{ version }];
+  }
+  if (sql.includes(`UPDATE "sede_claves"`) && sql.includes(`SET "claveHash" = ?`)) {
+    const [claveHash, por, clinicId, versionLeida] = v;
+    const f = db.claves.get(clinicId);
+    if (!f || !f.claveHash || f.version !== versionLeida) return [];
+    db.claves.set(clinicId, { claveHash, version: f.version + 1, actualizadaPor: por });
+    return [{ version: f.version + 1 }];
+  }
+  if (sql.includes(`UPDATE "sede_claves"`) && sql.includes(`SET "claveHash" = NULL`)) {
+    const [por, clinicId, versionLeida] = v;
+    const f = db.claves.get(clinicId);
+    if (!f || !f.claveHash) return [];
+    if (versionLeida !== undefined && f.version !== versionLeida) return [];
+    db.claves.set(clinicId, { claveHash: null, version: f.version + 1, actualizadaPor: por });
+    return [{ version: f.version + 1 }];
+  }
+  if (sql.includes(`FROM "sede_clave_intentos"`)) {
+    // = leerIntentos: desde el último acierto, los más NUEVOS primero, LIMIT.
+    const [clinicId, supabaseId, version, desde, , , , desde2, limite] = v;
+    const mias = db.intentos.filter((i) => i.clinicId === clinicId && i.supabaseId === supabaseId && i.version === version);
+    const ultimoOk = mias.filter((i) => i.ok).reduce<Date | null>((m, i) => (!m || i.createdAt > m ? i.createdAt : m), null);
+    const piso = ultimoOk ?? desde2;
+    return mias
+      .filter((i) => i.createdAt >= desde && i.createdAt >= piso)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .slice(0, limite)
+      .map((i) => ({ ok: i.ok, createdAt: i.createdAt }));
+  }
+  throw new Error(`SQL no previsto en la prueba: ${sql}`);
+}
+
+async function ejecucion(strings: TemplateStringsArray, v: any[]) {
+  const sql = strings.join("?").replace(/\s+/g, " ");
+  db.consultas.push(sql);
+  if (db.retraso) await new Promise((r) => setTimeout(r, db.retraso));
+  if (sql.includes(`INSERT INTO "sede_clave_intentos"`)) {
+    const [, clinicId, supabaseId, version, ok] = v;
+    db.intentos.push({ clinicId, supabaseId, version, ok, createdAt: new Date() });
+    return 1;
+  }
+  if (sql.includes(`DELETE FROM "sede_clave_intentos"`)) {
+    const antes = db.intentos.length;
+    const limite = Date.now() - 24 * 60 * 60 * 1000;
+    db.intentos = db.intentos.filter((i) => i.createdAt.getTime() >= limite);
+    return antes - db.intentos.length;
+  }
+  throw new Error(`SQL no previsto en la prueba: ${sql}`);
+}
+
 const prismaFalso: any = {
-  $queryRaw: async (strings: TemplateStringsArray, ...v: any[]) => {
-    const sql = strings.join("?").replace(/\s+/g, " ");
-    db.consultas.push(sql);
-    if (sql.includes("to_regclass")) return [{ existe: db.tablas }];
-    if (!db.tablas) throw Object.assign(new Error("relation does not exist"), { code: "42P01" });
-    if (sql.includes(`FROM "sede_claves" WHERE "claveHash" IS NOT NULL`)) {
-      if (db.falloLista) throw new Error("pooler caído");
-      return Array.from(db.claves.entries()).filter(([, f]) => f.claveHash).map(([clinicId, f]) => ({ clinicId, version: f.version }));
+  $queryRaw: (strings: TemplateStringsArray, ...v: any[]) => consulta(strings, v, null),
+  $executeRaw: (strings: TemplateStringsArray, ...v: any[]) => ejecucion(strings, v),
+  // Transacción interactiva: los candados viven lo que vive la transacción.
+  $transaction: async (fn: (tx: any) => Promise<unknown>) => {
+    const mios: string[] = [];
+    const tx = {
+      $queryRaw: (strings: TemplateStringsArray, ...v: any[]) => consulta(strings, v, mios),
+      $executeRaw: (strings: TemplateStringsArray, ...v: any[]) => ejecucion(strings, v),
+    };
+    try {
+      return await fn(tx);
+    } finally {
+      for (const k of mios) db.candados.delete(k);
     }
-    if (sql.includes(`SELECT "claveHash", "version" FROM "sede_claves"`)) {
-      const f = db.claves.get(v[0]);
-      return f ? [{ claveHash: f.claveHash, version: f.version }] : [];
-    }
-    if (sql.includes(`INSERT INTO "sede_claves"`)) {
-      const [clinicId, claveHash, por] = v;
-      const f = db.claves.get(clinicId);
-      if (f && f.claveHash) return [];
-      const version = f ? f.version + 1 : 1;
-      db.claves.set(clinicId, { claveHash, version, actualizadaPor: por });
-      return [{ version }];
-    }
-    if (sql.includes(`UPDATE "sede_claves"`) && sql.includes(`SET "claveHash" = ?`)) {
-      const [claveHash, por, clinicId, versionLeida] = v;
-      const f = db.claves.get(clinicId);
-      if (!f || !f.claveHash || f.version !== versionLeida) return [];
-      db.claves.set(clinicId, { claveHash, version: f.version + 1, actualizadaPor: por });
-      return [{ version: f.version + 1 }];
-    }
-    if (sql.includes(`UPDATE "sede_claves"`) && sql.includes(`SET "claveHash" = NULL`)) {
-      const [por, clinicId, versionLeida] = v;
-      const f = db.claves.get(clinicId);
-      if (!f || !f.claveHash) return [];
-      if (versionLeida !== undefined && f.version !== versionLeida) return [];
-      db.claves.set(clinicId, { claveHash: null, version: f.version + 1, actualizadaPor: por });
-      return [{ version: f.version + 1 }];
-    }
-    if (sql.includes(`FROM "sede_clave_intentos"`)) {
-      const [clinicId, supabaseId, version, desde] = v;
-      return db.intentos
-        .filter((i) => i.clinicId === clinicId && i.supabaseId === supabaseId && i.version === version && i.createdAt >= desde)
-        .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
-        .map((i) => ({ ok: i.ok, createdAt: i.createdAt }));
-    }
-    throw new Error(`SQL no previsto en la prueba: ${sql}`);
-  },
-  $executeRaw: async (strings: TemplateStringsArray, ...v: any[]) => {
-    const sql = strings.join("?").replace(/\s+/g, " ");
-    db.consultas.push(sql);
-    if (sql.includes(`INSERT INTO "sede_clave_intentos"`)) {
-      const [, clinicId, supabaseId, version, ok] = v;
-      db.intentos.push({ clinicId, supabaseId, version, ok, createdAt: new Date() });
-      return 1;
-    }
-    throw new Error(`SQL no previsto en la prueba: ${sql}`);
   },
   user: {
     findFirst: async ({ where }: any) => {
@@ -239,10 +290,15 @@ const CLAVE = "Sede3-secreta";
 const CLAVE_NUEVA = "OtraClave-99";
 
 beforeEach(async () => {
-  const { _olvidarEstado } = await import("../estado.server");
+  const { _olvidarEstado, _olvidarPurga } = await import("../estado.server");
   _olvidarEstado();
+  _olvidarPurga();
   db.tablas = true;
   db.falloLista = false;
+  db.falloFila = false;
+  db.falloSonda = false;
+  db.retraso = 0;
+  db.candados.clear();
   db.claves.clear();
   db.intentos = [];
   db.consultas = [];
@@ -703,15 +759,220 @@ test("«Ver como clínica» de /admin entra sin la clave", async () => {
   assert.equal(await getAuthContext(), null);
 });
 
-// ══════════════════ 9 · falla cerrado ══════════════════
+// ══════════════════ 9 · cuando la base falla (v2: revisión de t8) ══════════════════
 
-test("si las tablas existen pero la lista de claves no se puede leer, la sede se trata como cerrada", async () => {
+const estadoGate = async (sb: string, cli: string) =>
+  (await import("../gate.server")).estadoGateSede({ supabaseId: sb, clinicId: cli });
+
+test("T8-1 invertida · instancia fría y la lista no se lee: una clínica SIN clave entra (se lee su fila)", async () => {
+  db.falloLista = true;
+  como(SB_OTRO, CLI_OTRA); // una clínica de una sola sede que nunca activó nada
+  assert.equal((await getAuthContext())?.clinicId, CLI_OTRA, "getAuthContext en /api sigue funcionando");
+  ruta = "/dashboard";
+  assert.equal((await getCurrentUser()).clinicId, CLI_OTRA);
+  ruta = "/api/prueba";
+  const sw = await llamar(await rutaSwitch(), "/api/switch-clinic", { clinicId: CLI_OTRA });
+  assert.equal(sw.status, 200, "switch-clinic a una sede sin clave");
+  assert.ok(db.consultas.some((q) => q.includes(`SELECT "claveHash", "version" FROM "sede_claves"`)), "leyó la fila por su PK");
+});
+
+test("A1 · sin lista, una sede CON clave sigue cerrada (su fila lo dice)", async () => {
   await activarComoAdmin3();
   const { _olvidarEstado } = await import("../estado.server");
   _olvidarEstado();
   db.falloLista = true;
-  como(SB_ADMIN3, CLI_3);
+  como(SB_DUENO, CLI_3);
   assert.equal(await getAuthContext(), null);
+  assert.equal(await estadoGate(SB_DUENO, CLI_3), "cerrada");
+  como(SB_ADMIN3, CLI_3);
+  assert.equal((await getAuthContext())?.clinicId, CLI_3, "quien la desbloqueó sigue dentro");
+});
+
+test("A1 · si ni la lista ni la fila se leen: se corta con «no pudimos comprobar», no con «tiene clave»", async () => {
+  db.falloLista = true;
+  db.falloFila = true;
+  como(SB_OTRO, CLI_OTRA);
+  assert.equal(await estadoGate(SB_OTRO, CLI_OTRA), "sin_comprobar");
+  assert.equal(await getAuthContext(), null, "no se abre a ciegas");
+  const sw = await llamar(await rutaSwitch(), "/api/switch-clinic", { clinicId: CLI_OTRA });
+  assert.equal(sw.status, 503);
+  assert.equal(sw.body.code, "sede_sin_comprobar");
+  assert.match(sw.body.error, /No pudimos comprobar/);
+  // En cuanto la base responde, se abre solo.
+  db.falloLista = false;
+  db.falloFila = false;
+  assert.equal((await getAuthContext())?.clinicId, CLI_OTRA);
+});
+
+test("A1 · en las vistas de varias sedes solo cuenta como cerrada la sede que no se pudo comprobar", async () => {
+  await activarComoAdmin3();
+  const { _olvidarEstado } = await import("../estado.server");
+  _olvidarEstado();
+  db.falloLista = true;
+  const { sedesCerradasPara } = await import("../gate.server");
+  como(SB_DUENO, CLI_1);
+  assert.deepEqual([...(await sedesCerradasPara(SB_DUENO, [CLI_1, CLI_3]))], [CLI_3], "la principal (sin clave) no se cierra");
+});
+
+test("T8-2 invertida · la lista vieja vale como respaldo solo 5 min; después manda la fila", async () => {
+  como(SB_DUENO, CLI_1);
+  assert.notEqual(await getAuthContext(), null); // esta instancia lee la lista (vacía)
+  // Otra instancia activa la clave de la sede 3 (escribe en la base, no invalida esta memoria).
+  db.claves.set(CLI_3, { claveHash: "$2a$10$x", version: 1, actualizadaPor: "user:u-admin-3" });
+  db.falloLista = true;
+  const realNow = Date.now;
+  try {
+    Date.now = () => realNow() + 2 * 60 * 1000;
+    como(SB_DUENO, CLI_3);
+    assert.notEqual(await getAuthContext(), null, "a los 2 min aún vale la lista vieja (margen aceptado)");
+    Date.now = () => realNow() + 60 * 60 * 1000;
+    assert.equal(await getAuthContext(), null, "una hora después ya no: se lee la fila y la clave se exige");
+  } finally {
+    Date.now = realNow;
+  }
+});
+
+test("T8-3 invertida · una ráfaga de 20 claves malas en paralelo NO compara más de 5", async () => {
+  await activarComoAdmin3();
+  como(SB_DUENO, CLI_3);
+  const POST = await rutaDesbloquear();
+  const rs = await Promise.all(Array.from({ length: 20 }, () => llamar(POST, "/api/sede-clave/desbloquear", { clave: "mala-123456" })));
+  const comparadas = db.intentos.filter((i) => i.supabaseId === SB_DUENO).length;
+  assert.ok(comparadas >= 1 && comparadas <= 5, `comparadas=${comparadas}`);
+  assert.ok(rs.every((r) => r.status === 403 || r.status === 429), JSON.stringify(rs.map((r) => r.status)));
+  assert.ok(rs.some((r) => r.body?.code === "en_curso"), "las que llegan con otra en curso se rechazan sin comparar");
+  assert.equal(db.candados.size, 0, "ningún candado queda puesto");
+  // Y la cuenta sigue: de uno en uno, al quinto fallo se bloquea.
+  for (let i = 0; i < 8; i++) await llamar(POST, "/api/sede-clave/desbloquear", { clave: "mala-123456" });
+  assert.equal(db.intentos.filter((i) => i.supabaseId === SB_DUENO).length, 5, "el tope de 5 se cumple contando la ráfaga");
+});
+
+test("T8-4 invertida · 200 fallos viejos no esconden los nuevos: al quinto nuevo, bloqueo", async () => {
+  await activarComoAdmin3();
+  como(SB_DUENO, CLI_3);
+  const hace16 = Date.now() - 16 * 60 * 1000;
+  for (let i = 0; i < 200; i++) {
+    db.intentos.push({ clinicId: CLI_3, supabaseId: SB_DUENO, version: 1, ok: false, createdAt: new Date(hace16 + i) });
+  }
+  const POST = await rutaDesbloquear();
+  const estados: number[] = [];
+  for (let i = 0; i < 12; i++) estados.push((await llamar(POST, "/api/sede-clave/desbloquear", { clave: "mala-123456" })).status);
+  assert.deepEqual(estados.slice(0, 4), [403, 403, 403, 403]);
+  assert.equal(estados[4], 429, "el quinto fallo nuevo bloquea");
+  assert.ok(estados.slice(5).every((x) => x === 429), JSON.stringify(estados));
+});
+
+test("A3 · un acierto reinicia la cuenta aunque haya fallos antes", async () => {
+  await activarComoAdmin3();
+  como(SB_DUENO, CLI_1);
+  const POST = await rutaDesbloquear();
+  for (let i = 0; i < 4; i++) await llamar(POST, "/api/sede-clave/desbloquear", { clinicId: CLI_3, clave: "mala-123456" });
+  assert.equal((await llamar(POST, "/api/sede-clave/desbloquear", { clinicId: CLI_3, clave: CLAVE, cambiarDeSede: false })).status, 200);
+  const r = await llamar(POST, "/api/sede-clave/desbloquear", { clinicId: CLI_3, clave: "mala-123456" });
+  assert.equal(r.status, 403);
+  assert.equal(r.body.restantes, 4, "tras el acierto, de cero");
+});
+
+test("T8-5 invertida · 10 peticiones a la vez al caducar la caché hacen UNA lectura de la lista", async () => {
+  como(SB_OTRO, CLI_OTRA);
+  await getAuthContext(); // instancia caliente
+  db.consultas = [];
+  for (let i = 0; i < 10; i++) await getAuthContext();
+  assert.equal(db.consultas.length, 0, "caliente: 0 consultas extra");
+  const realNow = Date.now;
+  try {
+    const base = realNow();
+    Date.now = () => base + 11_000;
+    db.retraso = 150;
+    db.consultas = [];
+    await Promise.all(Array.from({ length: 10 }, () => getAuthContext()));
+    assert.equal(db.consultas.filter((q) => q.includes(`WHERE "claveHash" IS NOT NULL`)).length, 1);
+  } finally {
+    Date.now = realNow;
+    db.retraso = 0;
+  }
+});
+
+test("M2 · una lectura que tarda más que el tope cuenta como fallo (y se cae a la fila)", async () => {
+  const { TOPE_LECTURA_MS } = await import("../estado.server");
+  assert.ok(TOPE_LECTURA_MS <= 5_000, "tope corto");
+});
+
+test("M4 · si to_regclass falla, no se repite en cada petición durante unos segundos", async () => {
+  db.falloSonda = true;
+  como(SB_OTRO, CLI_OTRA);
+  for (let i = 0; i < 10; i++) assert.equal((await getAuthContext())?.clinicId, CLI_OTRA, "sin saber si hay tablas: como sin SQL");
+  assert.equal(db.consultas.filter((q) => q.includes("to_regclass")).length, 1);
+});
+
+test("M5 · al registrar un intento se purgan los de más de 1 día (como mucho una vez por hora)", async () => {
+  await activarComoAdmin3();
+  const viejo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
+  db.intentos.push({ clinicId: CLI_3, supabaseId: "sb-alguien", version: 1, ok: false, createdAt: viejo });
+  db.intentos.push({ clinicId: CLI_OTRA, supabaseId: "sb-otro-mas", version: 1, ok: true, createdAt: viejo });
+  como(SB_DUENO, CLI_1);
+  const POST = await rutaDesbloquear();
+  await llamar(POST, "/api/sede-clave/desbloquear", { clinicId: CLI_3, clave: "mala-123456" });
+  await new Promise((r) => setTimeout(r, 20)); // la purga va en segundo plano
+  assert.equal(db.intentos.filter((i) => i.createdAt.getTime() === viejo.getTime()).length, 0, "los de hace 2 días, fuera");
+  assert.equal(db.intentos.length, 1, "el de ahora se queda");
+  await llamar(POST, "/api/sede-clave/desbloquear", { clinicId: CLI_3, clave: "mala-123456" });
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(db.consultas.filter((q) => q.includes("DELETE FROM")).length, 1, "una purga por hora");
+  assert.ok(db.claves.get(CLI_3)?.claveHash, "la purga no toca las claves");
+});
+
+// ══════════════════ 9b · G1: copiar la configuración al crear una sede ══════════════════
+
+test("G1 · la sede nueva NO copia de la principal si tiene clave y no está desbloqueada", async () => {
+  const { origenDeCopiaParaSedeNueva } = await import("../copia.server");
+  const principal = { clinicId: CLI_3, nombre: "QA Sede 3 aislada" };
+  const activa = { clinicId: CLI_1, nombre: "Altabrisa" };
+  como(SB_DUENO, CLI_1);
+  assert.deepEqual(await origenDeCopiaParaSedeNueva({ supabaseId: SB_DUENO, principal, activa }), { origen: principal, aviso: null }, "sin clave, como siempre");
+
+  await activarComoAdmin3();
+  como(SB_DUENO, CLI_1);
+  assert.deepEqual(
+    await origenDeCopiaParaSedeNueva({ supabaseId: SB_DUENO, principal, activa }),
+    { origen: activa, aviso: "principal_con_clave_desde_activa" },
+    "con clave: de la sede activa",
+  );
+  // La activa también con clave (y el dueño dentro, desbloqueada): valores de siempre.
+  db.claves.set(CLI_1, { claveHash: "$2a$10$x", version: 1, actualizadaPor: null });
+  const { invalidarLista } = await import("../estado.server");
+  invalidarLista();
+  assert.deepEqual(
+    await origenDeCopiaParaSedeNueva({ supabaseId: SB_DUENO, principal, activa }),
+    { origen: null, aviso: "principal_con_clave_sin_copia" },
+  );
+  db.claves.delete(CLI_1);
+  invalidarLista();
+  // Con la principal desbloqueada en este navegador, se copia de ella.
+  await llamar(await rutaDesbloquear(), "/api/sede-clave/desbloquear", { clinicId: CLI_3, clave: CLAVE, cambiarDeSede: false });
+  assert.deepEqual(await origenDeCopiaParaSedeNueva({ supabaseId: SB_DUENO, principal, activa }), { origen: principal, aviso: null });
+});
+
+// ══════════════════ 9c · el candado del reporte de sedes ══════════════════
+
+test("reporte de sedes · desbloquear con el candado no cambia de sede y la sede sale completa (también en el CSV)", async () => {
+  await activarComoAdmin3();
+  como(SB_DUENO, CLI_1);
+  activasEscritas = [];
+  const r = await llamar(await rutaDesbloquear(), "/api/sede-clave/desbloquear", { clinicId: CLI_3, clave: CLAVE, cambiarDeSede: false });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.deepEqual(activasEscritas, [], "el dueño se queda en su sede");
+  const { reporteConsolidadoDeSedes } = await import("@/lib/sedes/reporte-consolidado.server");
+  const rep = await reporteConsolidadoDeSedes({
+    supabaseId: SB_DUENO, clinicIdActiva: CLI_1,
+    rango: { desdeISO: "2026-10-01", hastaISO: "2026-10-25", periodo: "este-mes" },
+  });
+  const s3 = rep.sedes.find((x) => x.clinicId === CLI_3)!;
+  assert.equal(s3.conClave, undefined);
+  assert.equal(s3.ingresos.neto, 987654);
+  assert.equal(rep.totales.ingresosNeto, 987654 * 2);
+  const { csvDelReporte } = await import("@/lib/sedes/reporte-consolidado-core");
+  assert.match(csvDelReporte(rep), /QA Sede 3 aislada,activa,987654/);
 });
 
 // ══════════════════ 10 · quién usa las salidas sin el gate ══════════════════
@@ -740,6 +1001,6 @@ test("el gate de la clave está en los dos caminos de la sesión y en el layout"
   for (const r of ["src/lib/auth-context.ts", "src/lib/auth.ts", "src/app/dashboard/layout.tsx", "src/app/api/switch-clinic/route.ts"]) {
     // Texto crudo: el quitacomentarios ingenuo se come código de auth.ts (un «/*» dentro de un «//»).
     const src = readFileSync(join(SRC, "..", r), "utf8");
-    assert.match(src, /await sedeCerradaPara\(\{/, `${r} no pregunta por la clave de la sede`);
+    assert.match(src, /await (sedeCerradaPara|estadoGateSede)\(\{/, `${r} no pregunta por la clave de la sede`);
   }
 });

@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { writeActiveClinicCookie } from "@/lib/active-clinic";
 import { applyTwoFactorLoginCookies } from "@/lib/auth/two-factor-cookie";
-import { sedeCerradaPara } from "@/lib/sede-clave/gate.server";
+import { estadoGateSede } from "@/lib/sede-clave/gate.server";
 import { CODIGO_SEDE_CON_CLAVE, STATUS_SEDE_CON_CLAVE } from "@/lib/sede-clave/constantes";
 
 /**
@@ -45,7 +45,16 @@ export async function POST(req: NextRequest) {
   });
   if (!dbUser) return NextResponse.json({ error: "No access to this clinic" }, { status: 403 });
 
-  if (await sedeCerradaPara({ supabaseId: user.id, clinicId: dbUser.clinicId })) {
+  const gate = await estadoGateSede({ supabaseId: user.id, clinicId: dbUser.clinicId });
+  if (gate === "sin_comprobar") {
+    // v2 (A1): la base no dejó comprobar ni la lista ni la fila de esa sede. No
+    // se cambia de sede, y se dice lo que pasa (no «tiene clave»).
+    return NextResponse.json(
+      { error: "No pudimos comprobar la clave de la sede. Recarga e inténtalo de nuevo.", code: "sede_sin_comprobar" },
+      { status: 503 },
+    );
+  }
+  if (gate === "cerrada") {
     return NextResponse.json(
       { error: "Esta sede tiene clave. Escríbela para entrar.", code: CODIGO_SEDE_CON_CLAVE, clinicId: dbUser.clinicId },
       { status: STATUS_SEDE_CON_CLAVE },

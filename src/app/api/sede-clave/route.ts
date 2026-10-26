@@ -53,6 +53,9 @@ function rechazoDeVerificacion(v: Verificacion): NextResponse {
   if (v.motivo === "sin_clave") {
     return NextResponse.json({ error: "Esta sede no tiene clave.", code: "sin_clave" }, { status: 409 });
   }
+  if (v.motivo === "en_curso") {
+    return NextResponse.json({ error: "Ya hay un intento en curso con esta clave. Espera un momento y vuelve a intentarlo.", code: "en_curso" }, { status: 429 });
+  }
   if (v.motivo === "bloqueado") {
     const min = minutosHasta(v.intentos.bloqueadoHasta ?? Date.now());
     return NextResponse.json(

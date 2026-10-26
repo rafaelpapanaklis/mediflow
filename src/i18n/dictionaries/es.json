@@ -11516,7 +11516,11 @@
       "error": "No pudimos comprobar la clave. Inténtalo de nuevo.",
       "errorCambio": "No pudimos cambiarte de sede. Inténtalo de nuevo.",
       "volver": "Ir a otra sede",
-      "cerrarSesion": "Cerrar sesión"
+      "cerrarSesion": "Cerrar sesión",
+      "sinComprobarTitulo": "No pudimos comprobar la clave de la sede",
+      "sinComprobar": "Hubo un problema al comprobar si esta sede tiene clave. Recarga la página en unos segundos.",
+      "recargar": "Recargar",
+      "enCurso": "Ya hay un intento en curso. Espera un momento y vuelve a intentarlo."
     },
     "card": {
       "titulo": "Clave de la sede",

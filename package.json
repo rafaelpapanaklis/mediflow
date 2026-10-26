@@ -134,7 +134,7 @@
     "test:2fa-handlers": "tsx --test src/lib/auth/__tests__/two-factor-handlers.test.ts",
     "test:2fa-intentos": "tsx --test src/lib/auth/__tests__/dos-pasos-intentos.test.ts",
     "test:2fa-toda-sesion": "tsx --test --experimental-test-module-mocks src/lib/auth/__tests__/dos-pasos-en-toda-sesion.test.ts",
-    "test:sede-clave": "tsx --test --experimental-test-module-mocks src/lib/sede-clave/__tests__/sede-clave.test.ts src/lib/sabina/tools/__tests__/comparar-sedes-clave.test.ts",
+    "test:sede-clave": "tsx --test --experimental-test-module-mocks src/lib/sede-clave/__tests__/sede-clave.test.ts src/lib/sabina/tools/__tests__/comparar-sedes-clave.test.ts src/app/api/clinics/__tests__/copia-sede-con-clave.test.ts",
     "test:patient-visibility": "tsx --test src/lib/__tests__/patient-visibility.test.ts",
     "test:public-slots": "tsx --test src/lib/public-booking/__tests__/slots.test.ts",
     "test:clinic-hours": "tsx --test src/lib/agenda/__tests__/clinic-hours.test.ts",

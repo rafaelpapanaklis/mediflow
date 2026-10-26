@@ -11516,7 +11516,11 @@
       "error": "We couldn't check the passcode. Please try again.",
       "errorCambio": "We couldn't switch locations. Please try again.",
       "volver": "Go to another location",
-      "cerrarSesion": "Sign out"
+      "cerrarSesion": "Sign out",
+      "sinComprobarTitulo": "We couldn't check the location passcode",
+      "sinComprobar": "Something went wrong while checking whether this location has a passcode. Reload the page in a few seconds.",
+      "recargar": "Reload",
+      "enCurso": "An attempt is already in progress. Wait a moment and try again."
     },
     "card": {
       "titulo": "Location passcode",

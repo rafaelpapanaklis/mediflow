@@ -19,7 +19,7 @@ import {
   sedeBloqueada,
   VIGENCIA_DESBLOQUEO_MS,
 } from "./core";
-import { estadoDeClave, sedesConClaveActiva, tablaExiste } from "./estado.server";
+import { estadoDeClave, estadosDeClaves, tablaExiste } from "./estado.server";
 
 const isProd = process.env.NODE_ENV === "production";
 
@@ -34,36 +34,47 @@ async function leerCookie(nombre: string): Promise<string | undefined> {
 }
 
 /**
- * ¿Esta persona, en ESTE navegador, tiene la sede cerrada por clave? `false`
- * sin tablas (función apagada), sin clave en la sede, con «Ver como clínica»
- * de /admin o con un desbloqueo vigente. Si no se puede saber si la sede tiene
- * clave, `true` (falla cerrado).
+ * Lo que el gate decide para una persona en una sede, en ESTE navegador:
+ *   · "libre"         → sin tablas (función apagada), sin clave en la sede, con
+ *                       «Ver como clínica» de /admin o con desbloqueo vigente;
+ *   · "cerrada"       → la sede tiene clave y no hay desbloqueo vigente;
+ *   · "sin_comprobar" → no se pudo leer ni la lista ni la fila de ESA sede
+ *                       (v2, A1): se corta, pero con «No pudimos comprobar la
+ *                       clave de la sede, recarga», nunca con «tiene clave».
  */
-export async function sedeCerradaPara(u: { supabaseId: string; clinicId: string }): Promise<boolean> {
-  if (!u?.supabaseId || !u?.clinicId) return true;
-  if (!(await tablaExiste())) return false;
+export type EstadoGate = "libre" | "cerrada" | "sin_comprobar";
+
+export async function estadoGateSede(u: { supabaseId: string; clinicId: string }): Promise<EstadoGate> {
+  if (!u?.supabaseId || !u?.clinicId) return "sin_comprobar";
+  if (!(await tablaExiste())) return "libre";
   let estado;
   try {
     estado = await estadoDeClave(u.clinicId);
   } catch {
-    return true;
+    return "sin_comprobar";
   }
-  if (!estado.activa) return false;
-  return sedeBloqueada({
+  if (!estado.activa) return "libre";
+  const cerrada = sedeBloqueada({
     estado,
     verComoAdmin: await hasValidVerComoCookie(u.supabaseId, u.clinicId),
     cookie: await leerCookie(nombreCookieDesbloqueo(u.supabaseId, u.clinicId)),
     supabaseId: u.supabaseId,
     clinicId: u.clinicId,
   });
+  return cerrada ? "cerrada" : "libre";
+}
+
+/** ¿Cerrada para esta persona en este navegador? (`cerrada` o `sin_comprobar`). */
+export async function sedeCerradaPara(u: { supabaseId: string; clinicId: string }): Promise<boolean> {
+  return (await estadoGateSede(u)) !== "libre";
 }
 
 /**
  * De estas sedes (de la MISMA persona), ¿cuáles tiene cerradas por clave en
  * este navegador? Para las vistas que juntan varias sedes: lo que sale aquí se
- * enseña como «Sede con clave», sin cifras, o se omite. Falla cerrado: si no se
- * puede leer el estado, TODAS cuentan como cerradas (la vista degrada a «solo
- * la sede activa», que es lo que el panel enseña sin esta función).
+ * enseña como «Sede con clave», sin cifras, o se omite. Si la lista no se puede
+ * leer, se mira la fila de cada sede (v2, A1); solo la sede que tampoco se
+ * pueda comprobar cuenta como cerrada (no todas).
  *
  * «Ver como clínica» NO abre las demás sedes: su prueba está atada a la sede
  * que se abrió desde /admin.
@@ -73,18 +84,17 @@ export async function sedesCerradasPara(supabaseId: string, clinicIds: readonly 
   if (ids.length === 0) return new Set();
   if (!supabaseId) return new Set(ids);
   if (!(await tablaExiste())) return new Set();
-  let mapa: Map<string, number>;
-  try {
-    mapa = await sedesConClaveActiva();
-  } catch {
-    return new Set(ids);
-  }
+  const estados = await estadosDeClaves(ids);
   const cerradas = new Set<string>();
   for (const clinicId of ids) {
-    const version = mapa.get(clinicId);
-    if (version === undefined) continue;
+    const estado = estados.get(clinicId);
+    if (estado === null || estado === undefined) {
+      cerradas.add(clinicId);
+      continue;
+    }
+    if (!estado.activa) continue;
     const cerrada = sedeBloqueada({
-      estado: { activa: true, version },
+      estado,
       verComoAdmin: await hasValidVerComoCookie(supabaseId, clinicId),
       cookie: await leerCookie(nombreCookieDesbloqueo(supabaseId, clinicId)),
       supabaseId,
@@ -96,21 +106,17 @@ export async function sedesCerradasPara(supabaseId: string, clinicIds: readonly 
 }
 
 /**
- * Las sedes de esta lista que tienen clave activa, sin mirar desbloqueos. Solo
- * para PINTAR un candado en el selector y para no compartir pacientes de una
- * sede con clave. Falla cerrado (todas) si no se puede leer.
+ * Las sedes de esta lista que tienen clave activa, sin mirar desbloqueos. Para
+ * PINTAR un candado en el selector, para no compartir pacientes de una sede con
+ * clave y para no copiar la configuración de la activa si tiene clave. Una sede
+ * que no se pueda comprobar cuenta como con clave.
  */
 export async function sedesConClave(clinicIds: readonly string[]): Promise<Set<string>> {
   const ids = Array.from(new Set((clinicIds ?? []).filter((x) => typeof x === "string" && x)));
   if (ids.length === 0) return new Set();
   if (!(await tablaExiste())) return new Set();
-  let mapa: Map<string, number>;
-  try {
-    mapa = await sedesConClaveActiva();
-  } catch {
-    return new Set(ids);
-  }
-  return new Set(ids.filter((id) => mapa.has(id)));
+  const estados = await estadosDeClaves(ids);
+  return new Set(ids.filter((id) => { const e = estados.get(id); return !e || e.activa; }));
 }
 
 // ── Escritura de la cookie (route handlers) ─────────────────────────────

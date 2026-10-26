@@ -17,9 +17,18 @@
 // Las rutas de la clave (activar, cambiar, desbloquear, restablecer) leen
 // SIEMPRE fresco.
 //
-// Si la lista no se puede leer (la tabla existe pero la consulta falla), se usa
-// la última conocida; sin ninguna, se FALLA CERRADO (`EstadoDesconocido`): el
-// gate trata la sede como bloqueada antes que abrirla sin saber.
+// ── CUANDO LA BASE FALLA (v2, revisión de t8: A1, M1, M2, M4) ───────────
+// · Una sola lectura de la lista en curso por instancia (promesa compartida) y
+//   con tope de tiempo: al caducar la caché, diez peticiones a la vez esperan
+//   la MISMA consulta (M2).
+// · Si la lista no se puede leer, se usa la última conocida solo si tiene
+//   menos de 5 min (M1). Pasado eso, o sin ninguna, se lee la fila de ESA sede
+//   por su llave primaria (A1). Solo si eso también falla se responde «no se
+//   pudo comprobar» (`EstadoDesconocido`), y el gate lo dice así: nunca como
+//   «Esta sede tiene clave». Una sede sin clave nunca se cierra porque falle la
+//   lectura de otras sedes.
+// · Un fallo de `to_regclass` se recuerda unos segundos (M4): con la base mal,
+//   no se le añade una consulta extra a cada petición.
 import { randomUUID } from "crypto";
 import { prisma } from "@/lib/prisma";
 import type { EstadoClave, Intento } from "./core";
@@ -27,10 +36,16 @@ import { VENTANA_FALLOS_MS, BLOQUEO_MS } from "./core";
 
 const REPREGUNTAR_MS = 2 * 60_000;
 export const VIDA_LISTA_MS = 10_000;
+/** M1: la lista vieja solo sirve de respaldo durante este tiempo. */
+export const EDAD_MAX_LISTA_VIEJA_MS = 5 * 60_000;
+/** M2: tope de una lectura de la lista o de una fila (después cuenta como fallo). */
+export const TOPE_LECTURA_MS = 3_000;
+/** M4: cuánto se recuerda que `to_regclass` falló. */
+export const RECORDAR_FALLO_SONDA_MS = 5_000;
 
-type Sonda = { existe: boolean; en: number };
+type Sonda = { existe: boolean; en: number; fallo?: boolean };
 type Lista = { mapa: Map<string, number>; en: number };
-type Memoria = { sonda?: Sonda; lista?: Lista };
+type Memoria = { sonda?: Sonda; lista?: Lista; enCurso?: Promise<Map<string, number>> | null };
 const CLAVE = Symbol.for("dalecontrol.sede-clave.estado");
 
 function memoria(): Memoria {
@@ -39,14 +54,15 @@ function memoria(): Memoria {
   return g[CLAVE]!;
 }
 
-/** Solo para las pruebas: olvida la sonda y la lista. */
+/** Solo para las pruebas: olvida la sonda, la lista y la lectura en curso. */
 export function _olvidarEstado(): void {
   const m = memoria();
   delete m.sonda;
   delete m.lista;
+  delete m.enCurso;
 }
 
-/** Error que el gate lee como «no sé si tiene clave» → cerrado. */
+/** Error que el gate lee como «no se pudo comprobar» → cerrado, con ese mensaje. */
 export class EstadoDesconocido extends Error {
   constructor(causa?: unknown) {
     super("sede-clave: no se pudo leer el estado de las claves");
@@ -55,27 +71,38 @@ export class EstadoDesconocido extends Error {
   }
 }
 
+/** La promesa, o un error si tarda más de `ms`. No cancela la consulta: solo deja de esperarla. */
+function conTope<T>(p: Promise<T>, ms: number = TOPE_LECTURA_MS): Promise<T> {
+  let t: ReturnType<typeof setTimeout> | undefined;
+  const tope = new Promise<never>((_, rechazar) => {
+    t = setTimeout(() => rechazar(new Error(`sede-clave: la base tardó más de ${ms} ms`)), ms);
+  });
+  return Promise.race([p, tope]).finally(() => { if (t) clearTimeout(t); });
+}
+
 /**
  * ¿Están las tablas? Una vez que existen se recuerda para siempre (no se
  * borran). Si no existen, se vuelve a preguntar a los 2 min o cuando se fuerza
  * (las rutas de la clave fuerzan, para que la función se encienda en cuanto se
- * pegue el SQL). Un error de la base al PREGUNTAR se lee como «no está» y no se
- * memoriza: es el patrón de la casa para «sin SQL todo sigue igual», y si la
- * base no responde la petición tampoco va a poder resolver la sesión.
+ * pegue el SQL). Un error de la base al PREGUNTAR se lee como «no está» (el
+ * patrón de la casa para «sin SQL todo sigue igual») y se recuerda 5 s (M4).
  */
 export async function tablaExiste(forzar = false): Promise<boolean> {
   const m = memoria();
   const s = m.sonda;
   if (s?.existe) return true;
-  if (s && !forzar && Date.now() - s.en < REPREGUNTAR_MS) return false;
+  const ahora = Date.now();
+  if (s?.fallo && ahora - s.en < RECORDAR_FALLO_SONDA_MS) return false;
+  if (s && !s.fallo && !forzar && ahora - s.en < REPREGUNTAR_MS) return false;
   try {
-    const r = await prisma.$queryRaw<{ existe: boolean }[]>`
+    const r = await conTope(prisma.$queryRaw<{ existe: boolean }[]>`
       SELECT (to_regclass('public.sede_claves') IS NOT NULL
-          AND to_regclass('public.sede_clave_intentos') IS NOT NULL) AS existe`;
+          AND to_regclass('public.sede_clave_intentos') IS NOT NULL) AS existe`);
     const existe = r[0]?.existe === true;
     m.sonda = { existe, en: Date.now() };
     return existe;
   } catch (e) {
+    m.sonda = { existe: false, en: Date.now(), fallo: true };
     console.warn("[sede-clave] no se pudo saber si existen las tablas:", e instanceof Error ? e.message : e);
     return false;
   }
@@ -92,31 +119,86 @@ async function leerLista(): Promise<Map<string, number>> {
 }
 
 /**
- * Las sedes con clave activa → versión. En caché 10 s (ver cabecera). Lanza
- * `EstadoDesconocido` si no se puede leer y no hay ninguna lista anterior.
- * Con las tablas sin crear devuelve un mapa vacío sin consultar nada.
+ * Las sedes con clave activa → versión. En caché 10 s (ver cabecera), con UNA
+ * lectura en curso por instancia. Si no se puede leer: la última lista si tiene
+ * menos de 5 min; si no, lanza `EstadoDesconocido` (y quien la llamó cae a la
+ * fila de cada sede). Con las tablas sin crear devuelve un mapa vacío sin
+ * consultar nada.
  */
 export async function sedesConClaveActiva(): Promise<Map<string, number>> {
   if (!(await tablaExiste())) return new Map();
   const m = memoria();
-  const ahora = Date.now();
-  if (m.lista && ahora - m.lista.en < VIDA_LISTA_MS) return m.lista.mapa;
+  if (m.lista && Date.now() - m.lista.en < VIDA_LISTA_MS) return m.lista.mapa;
+  if (!m.enCurso) {
+    const lectura = conTope(leerLista()).then((mapa) => {
+      m.lista = { mapa, en: Date.now() };
+      return mapa;
+    });
+    m.enCurso = lectura;
+    lectura.then(
+      () => { if (m.enCurso === lectura) m.enCurso = null; },
+      () => { if (m.enCurso === lectura) m.enCurso = null; },
+    );
+  }
   try {
-    const mapa = await leerLista();
-    m.lista = { mapa, en: ahora };
-    return mapa;
+    return await m.enCurso!;
   } catch (e) {
-    if (m.lista) return m.lista.mapa;
+    if (m.lista && Date.now() - m.lista.en < EDAD_MAX_LISTA_VIEJA_MS) return m.lista.mapa;
     throw new EstadoDesconocido(e);
   }
 }
 
-/** El estado de UNA sede según la lista en caché. */
+function deLaFila(f: FilaClave | null): EstadoClave {
+  return f && f.claveHash ? { activa: true, version: f.version } : { activa: false, version: f?.version ?? 0 };
+}
+
+/**
+ * El estado de UNA sede: de la lista en caché; si la lista no se puede leer, de
+ * su fila por la llave primaria (A1). Lanza `EstadoDesconocido` solo si las dos
+ * fallan.
+ */
 export async function estadoDeClave(clinicId: string): Promise<EstadoClave> {
   if (!clinicId) throw new EstadoDesconocido("sin clinicId");
-  const mapa = await sedesConClaveActiva();
-  const v = mapa.get(clinicId);
-  return v === undefined ? { activa: false, version: 0 } : { activa: true, version: v };
+  try {
+    const mapa = await sedesConClaveActiva();
+    const v = mapa.get(clinicId);
+    return v === undefined ? { activa: false, version: 0 } : { activa: true, version: v };
+  } catch {
+    try {
+      return deLaFila(await conTope(leerFilaClave(clinicId)));
+    } catch (e) {
+      throw new EstadoDesconocido(e);
+    }
+  }
+}
+
+/**
+ * El estado de varias sedes a la vez (vistas de varias sedes). Con la lista,
+ * sin consultas extra; sin ella, una fila por sede (son pocas: las del dueño).
+ * `null` = esa sede no se pudo comprobar.
+ */
+export async function estadosDeClaves(clinicIds: readonly string[]): Promise<Map<string, EstadoClave | null>> {
+  const out = new Map<string, EstadoClave | null>();
+  const ids = Array.from(new Set(clinicIds.filter((x) => typeof x === "string" && x)));
+  if (ids.length === 0) return out;
+  try {
+    const mapa = await sedesConClaveActiva();
+    for (const id of ids) {
+      const v = mapa.get(id);
+      out.set(id, v === undefined ? { activa: false, version: 0 } : { activa: true, version: v });
+    }
+    return out;
+  } catch {
+    // En serie: son las sedes de una persona y la base ya va mal.
+    for (const id of ids) {
+      try {
+        out.set(id, deLaFila(await conTope(leerFilaClave(id))));
+      } catch {
+        out.set(id, null);
+      }
+    }
+    return out;
+  }
 }
 
 /** Tras escribir: la siguiente lectura de esta instancia va a la base. */
@@ -204,22 +286,100 @@ export async function quitarClave(clinicId: string, por: string, versionLeida?: 
 
 // ── Intentos ───────────────────────────────────────────────────────────
 
-/** Los intentos recientes de esta persona en esta sede y versión (lo que cabe en una ventana + un bloqueo). */
-export async function leerIntentos(clinicId: string, supabaseId: string, version: number, ahora: Date = new Date()): Promise<Intento[]> {
+/** Lo mínimo de un cliente de Prisma para leer y escribir intentos (el global o el de una transacción). */
+type DbIntentos = Pick<typeof prisma, "$queryRaw" | "$executeRaw">;
+
+/** Más filas de las que caben en una ventana + un bloqueo sin que el propio bloqueo las corte. */
+const FILAS_DE_INTENTOS = 50;
+
+/**
+ * Los intentos recientes de esta persona en esta sede y versión, desde el
+ * ÚLTIMO acierto (A3): los más NUEVOS primero en SQL (`DESC LIMIT`), y aquí se
+ * devuelven de más viejo a más nuevo para `estadoDeIntentos`. Con `ASC LIMIT`
+ * una ráfaga vieja de cientos de filas escondía los fallos nuevos.
+ */
+export async function leerIntentos(
+  clinicId: string,
+  supabaseId: string,
+  version: number,
+  ahora: Date = new Date(),
+  db: DbIntentos = prisma,
+): Promise<Intento[]> {
   if (!clinicId || !supabaseId) throw new Error("sede-clave: faltan clinicId o supabaseId");
   const desde = new Date(ahora.getTime() - VENTANA_FALLOS_MS - BLOQUEO_MS - 60_000);
-  const filas = await prisma.$queryRaw<{ ok: boolean; createdAt: Date }[]>`
+  const filas = await db.$queryRaw<{ ok: boolean; createdAt: Date }[]>`
     SELECT "ok", "createdAt" FROM "sede_clave_intentos"
      WHERE "clinicId" = ${clinicId} AND "supabaseId" = ${supabaseId} AND "version" = ${version}
        AND "createdAt" >= ${desde}
-     ORDER BY "createdAt" ASC
-     LIMIT 200`;
-  return filas.map((f) => ({ ok: !!f.ok, en: new Date(f.createdAt).getTime() }));
+       AND "createdAt" >= COALESCE((
+             SELECT MAX("createdAt") FROM "sede_clave_intentos"
+              WHERE "clinicId" = ${clinicId} AND "supabaseId" = ${supabaseId} AND "version" = ${version} AND "ok" = true
+           ), ${desde})
+     ORDER BY "createdAt" DESC
+     LIMIT ${FILAS_DE_INTENTOS}`;
+  return filas.map((f) => ({ ok: !!f.ok, en: new Date(f.createdAt).getTime() })).reverse();
 }
 
-export async function registrarIntento(clinicId: string, supabaseId: string, version: number, ok: boolean): Promise<void> {
+export async function registrarIntento(
+  clinicId: string,
+  supabaseId: string,
+  version: number,
+  ok: boolean,
+  db: DbIntentos = prisma,
+): Promise<void> {
   if (!clinicId || !supabaseId) throw new Error("sede-clave: faltan clinicId o supabaseId");
-  await prisma.$executeRaw`
+  await db.$executeRaw`
     INSERT INTO "sede_clave_intentos" ("id", "clinicId", "supabaseId", "version", "ok", "createdAt")
     VALUES (${randomUUID()}, ${clinicId}, ${supabaseId}, ${version}, ${ok}, NOW())`;
+}
+
+/**
+ * A2 — todo lo de UN intento (leer, comparar, registrar) bajo un candado por
+ * persona + sede: `pg_try_advisory_xact_lock` dentro de una transacción. Si otro
+ * intento de la misma persona en la misma sede está en curso, NO se espera
+ * (no se retiene una conexión del pooler por cada petición de una ráfaga): se
+ * devuelve `null` y la ruta contesta «espera un momento», sin comparar ni
+ * registrar nada. Así el tope de 5 fallos se cumple también en ráfaga.
+ */
+export async function conCandadoDeIntentos<T>(
+  clinicId: string,
+  supabaseId: string,
+  fn: (db: DbIntentos) => Promise<T>,
+): Promise<T | null> {
+  if (!clinicId || !supabaseId) throw new Error("sede-clave: faltan clinicId o supabaseId");
+  return prisma.$transaction(
+    async (tx) => {
+      const r = await tx.$queryRaw<{ ok: boolean }[]>`
+        SELECT pg_try_advisory_xact_lock(hashtext(${clinicId} || '|' || ${supabaseId})) AS ok`;
+      if (r[0]?.ok !== true) return null;
+      return fn(tx as unknown as DbIntentos);
+    },
+    { maxWait: 3_000, timeout: 10_000 },
+  );
+}
+
+const PURGAR_CADA_MS = 60 * 60_000;
+const CLAVE_PURGA = Symbol.for("dalecontrol.sede-clave.purga");
+
+/**
+ * M5 — borra las filas de INTENTOS de más de 1 día (solo de esta tabla: nada de
+ * datos de clínicas). Sin cron: la llama la ruta al registrar un intento, como
+ * mucho una vez por hora por instancia. Nunca lanza.
+ */
+export async function purgarIntentosViejos(): Promise<void> {
+  const g = globalThis as unknown as Record<symbol, number | undefined>;
+  const ahora = Date.now();
+  if ((g[CLAVE_PURGA] ?? 0) > ahora - PURGAR_CADA_MS) return;
+  g[CLAVE_PURGA] = ahora;
+  try {
+    await prisma.$executeRaw`
+      DELETE FROM "sede_clave_intentos" WHERE "createdAt" < NOW() - INTERVAL '1 day'`;
+  } catch (e) {
+    console.warn("[sede-clave] no se pudieron purgar los intentos viejos:", e instanceof Error ? e.message : e);
+  }
+}
+
+/** Solo para las pruebas: que la próxima purga corra. */
+export function _olvidarPurga(): void {
+  delete (globalThis as unknown as Record<symbol, number | undefined>)[CLAVE_PURGA];
 }
