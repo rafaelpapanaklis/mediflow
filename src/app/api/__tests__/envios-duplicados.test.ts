@@ -312,6 +312,74 @@ test("resolve: reagendar aprobado dos veces a la vez mueve y notifica UNA vez", 
   assert.deepEqual(rs.map((r) => r.status).sort(), [200, 409]);
 });
 
+// WS1-T3 v6 (revisión t8 de la v5, N2) — aprobar una solicitud VIEJA de una cita
+// que ya se canceló (o no asistió) la revivía: el update ponía SCHEDULED sin
+// mirar su estado. Ahora: 409 «la cita ya no está activa» y la cita no se toca.
+function solicitudDeCambio() {
+  const cr = crs.get("r1")!;
+  cr.type = "RESCHEDULE";
+  cr.proposedStartsAt = new Date(Date.now() + 6 * 864e5);
+  cr.proposedEndsAt = new Date(Date.now() + 6 * 864e5 + 18e5);
+  return cr;
+}
+
+test("N2 · resolve: aprobar el cambio de horario de una cita CANCELADA → 409 «la cita ya no está activa»; no revive, no se mueve, nadie recibe aviso", async () => {
+  const cr = solicitudDeCambio();
+  appts.get("a1")!.status = "CANCELLED";
+  cr.appointment.status = "CANCELLED";
+  const antes = appts.get("a1")!.startsAt.getTime();
+  const r = await resolver("APPROVE");
+  assert.equal(r.status, 409);
+  assert.equal(r.body.error, "appointment_not_active");
+  assert.match(r.body.reason, /^La cita ya no está activa/);
+  assert.equal(appts.get("a1")!.status, "CANCELLED");
+  assert.equal(appts.get("a1")!.startsAt.getTime(), antes);
+  assert.equal(crs.get("r1")!.status, "PENDING", "sigue pendiente: se puede rechazar");
+  assert.equal(notificadas.length, 0);
+  // El panel enseña esa frase y deja la solicitud en la lista.
+  const { respuestaAl409 } = await import("@/components/dashboard/change-requests-409");
+  assert.deepEqual(respuestaAl409(r.body), { texto: r.body.reason, refrescar: false, resuelta: false });
+  // Y rechazarla sí se puede (cierra la solicitud vieja).
+  const rechazo = await resolver("REJECT");
+  assert.equal(rechazo.status, 200);
+  assert.equal(appts.get("a1")!.status, "CANCELLED");
+});
+
+test("N2 · resolve: una cita NO_SHOW tampoco se toca, ni para moverla ni para cancelarla", async () => {
+  appts.get("a1")!.status = "NO_SHOW";
+  crs.get("r1")!.appointment.status = "NO_SHOW";
+  const cancelar = await resolver("APPROVE"); // r1 es de tipo CANCEL
+  assert.equal(cancelar.status, 409);
+  assert.equal(cancelar.body.error, "appointment_not_active");
+  assert.equal(appts.get("a1")!.status, "NO_SHOW");
+  solicitudDeCambio();
+  const mover = await resolver("APPROVE");
+  assert.equal(mover.status, 409);
+  assert.equal(appts.get("a1")!.status, "NO_SHOW");
+  assert.equal(notificadas.length, 0);
+});
+
+test("N2 · resolve: a la vez — se leyó activa, pero se canceló antes del update → el update no casa (status notIn) y es 409; no revive", async () => {
+  solicitudDeCambio(); // la foto de la solicitud dice SCHEDULED…
+  appts.get("a1")!.status = "CANCELLED"; // …pero la cita ya se canceló
+  const antes = appts.get("a1")!.startsAt.getTime();
+  const r = await resolver("APPROVE");
+  assert.equal(r.status, 409);
+  assert.equal(r.body.error, "appointment_not_active");
+  assert.equal(appts.get("a1")!.status, "CANCELLED");
+  assert.equal(appts.get("a1")!.startsAt.getTime(), antes);
+  assert.equal(notificadas.length, 0);
+});
+
+test("N2 · resolve: el update de la cita va condicionado a la clínica de la sesión", async () => {
+  solicitudDeCambio();
+  appts.get("a1")!.clinicId = "c2";
+  const r = await resolver("APPROVE");
+  assert.equal(r.status, 409);
+  assert.equal(appts.get("a1")!.status, "SCHEDULED");
+  assert.equal(notificadas.length, 0);
+});
+
 // ═══════════════════════════════════════════════════════════════════════════
 // PATCH /appointments/[id]/status y DELETE /appointments/[id] (cancelar)
 // ═══════════════════════════════════════════════════════════════════════════

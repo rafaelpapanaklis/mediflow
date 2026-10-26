@@ -40,6 +40,28 @@ const SLOT_TAKEN_NOTE = "El horario propuesto ya no está disponible";
 const SLOT_TAKEN_IN_TX = "appointment_change_slot_taken_in_tx";
 // Sentinel: otra petición ya resolvió esta solicitud (M11, ws1-t10).
 const YA_RESUELTA = "appointment_change_ya_resuelta";
+// Sentinel: la cita se canceló o se marcó «no asistió» entre la lectura y el update.
+const CITA_NO_ACTIVA = "appointment_change_cita_no_activa";
+
+/**
+ * WS1-T3 v6 (revisión t8 de la v5, N2) — aprobar una solicitud VIEJA de una
+ * cita que ya se canceló (o no asistió) la revivía: el update ponía
+ * `SCHEDULED` sin mirar su estado (cancelar una cita no cierra sus
+ * solicitudes). Con Google, además, dejaba dos citas vivas con un evento.
+ * Aprobar ya no toca una cita muerta: 409 con su frase (el panel la enseña y
+ * la solicitud sigue pendiente, para rechazarla). Rechazar sí se puede.
+ */
+const ESTADOS_NO_ACTIVOS = ["CANCELLED", "NO_SHOW"] as const;
+const citaNoActiva = () =>
+  NextResponse.json(
+    {
+      error: "appointment_not_active",
+      reason:
+        "La cita ya no está activa (se canceló o se marcó como no asistió), así que no se puede aprobar este cambio. " +
+        "Rechaza la solicitud para cerrarla.",
+    },
+    { status: 409 },
+  );
 
 /**
  * M11 (ws1-t10): RECLAMAR la solicitud antes de mover nada o avisar. El
@@ -139,6 +161,9 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
 
   const now = new Date();
   const appointment = cr.appointment;
+  if (action === "APPROVE" && (ESTADOS_NO_ACTIVOS as readonly string[]).includes(appointment.status)) {
+    return citaNoActiva();
+  }
 
   // ── REJECT ──────────────────────────────────────────────────────
   if (action === "REJECT") {
@@ -176,14 +201,16 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
           resolvedAt: now,
         });
         if (!reclamada) throw new Error(YA_RESUELTA);
-        await tx.appointment.update({
-          where: { id: appointment.id },
+        // N2: solo si sigue activa (ver ESTADOS_NO_ACTIVOS); si no, se deshace el reclamo.
+        const cancelada = await tx.appointment.updateMany({
+          where: { id: appointment.id, clinicId: session.clinic.id, status: { notIn: [...ESTADOS_NO_ACTIVOS] } },
           data: {
             status: "CANCELLED",
             cancelledAt: now,
             cancelReason: cr.reason || "Cancelada a petición del paciente",
           },
         });
+        if (cancelada.count !== 1) throw new Error(CITA_NO_ACTIVA);
         // La cita se cancela: sus recordatorios pendientes también.
         await cancelPendingRemindersForAppointment(tx, {
           appointmentId: appointment.id,
@@ -195,6 +222,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
       if (err instanceof Error && err.message === YA_RESUELTA) {
         return NextResponse.json({ error: "not_pending" }, { status: 409 });
       }
+      if (err instanceof Error && err.message === CITA_NO_ACTIVA) return citaNoActiva();
       console.error("[resolve CR] APPROVE CANCEL error", err);
       return NextResponse.json({ error: "internal_error" }, { status: 500 });
     }
@@ -360,8 +388,9 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
         throw new Error(SLOT_TAKEN_IN_TX);
       }
 
-      await tx.appointment.update({
-        where: { id: appointment.id },
+      // N2: solo si sigue activa: una cita cancelada (o no asistida) no revive.
+      const movida = await tx.appointment.updateMany({
+        where: { id: appointment.id, clinicId: session.clinic.id, status: { notIn: [...ESTADOS_NO_ACTIVOS] } },
         data: {
           startsAt: proposedStartsAt,
           endsAt: proposedEndsAt,
@@ -369,6 +398,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
           confirmedAt: null,
         },
       });
+      if (movida.count !== 1) throw new Error(CITA_NO_ACTIVA);
       // WS1-T5 — si era una sobreagendada, en su hueco nuevo ya no lo es.
       await quitarMarcaDeSobreagenda(tx, appointment.id, session.clinic.id);
 
@@ -385,6 +415,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     if (err instanceof Error && err.message === YA_RESUELTA) {
       return NextResponse.json({ error: "not_pending" }, { status: 409 });
     }
+    if (err instanceof Error && err.message === CITA_NO_ACTIVA) return citaNoActiva();
     // Chocó dentro de la tx (re-check o constraint EXCLUDE) → auto-rechazo.
     if (
       (err instanceof Error && err.message === SLOT_TAKEN_IN_TX) ||

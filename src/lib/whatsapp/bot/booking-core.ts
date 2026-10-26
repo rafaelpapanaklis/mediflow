@@ -1423,6 +1423,15 @@ function rescheduleError(
   if (error === "not_found") {
     return done('Ya no encuentro esa cita. Si necesitas, escribe "agendar" para una nueva.', state.mode);
   }
+  // WS1-T3 v6 (N2) — la cita se canceló (o quedó como no asistida) mientras
+  // hablábamos: no se revive. Se le ofrece agendar una nueva.
+  if (error === "not_active") {
+    return done(
+      'Esa cita ya no está activa (se canceló o quedó como no asistida), así que no puedo moverla. ' +
+        'Si quieres, escribe "agendar" y te busco un horario nuevo. 😊',
+      state.mode,
+    );
+  }
   // WS1-T2 — el hueco de DESTINO se cerró mientras se elegía. Ver createError.
   if (error === "blocked") {
     state.step = "slot";

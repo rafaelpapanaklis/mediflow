@@ -28,6 +28,8 @@ const db = {
   resources: [] as Fila[],
   appointments: [] as Fila[],
   updates: [] as Fila[],
+  /** Algo que pasa justo antes del update del reagendado (otra pantalla que cancela a la vez). */
+  antesDeMover: null as (() => void) | null,
 };
 
 function a(hhmm: string, min = 30): { startsAt: Date; endsAt: Date } {
@@ -98,6 +100,16 @@ const prismaDoble: Fila = {
       if (fila) Object.assign(fila, data);
       return fila;
     },
+    // Como la base: solo las filas que casan con el where (clinicId, id y estado).
+    updateMany: async ({ where, data }: { where: Fila; data: Fila }) => {
+      db.antesDeMover?.();
+      const filas = citasQueCasan(where);
+      for (const fila of filas) {
+        db.updates.push({ id: fila.id, ...data });
+        Object.assign(fila, data);
+      }
+      return { count: filas.length };
+    },
   },
   $transaction: async (fn: (tx: Fila) => Promise<unknown>) => fn(prismaDoble),
 };
@@ -134,6 +146,7 @@ beforeEach(() => {
   db.resources = [];
   db.appointments = [];
   db.updates = [];
+  db.antesDeMover = null;
 });
 
 function cita(id: string, doctorId: string, hhmm: string, resourceId: string | null): Fila {
@@ -243,5 +256,38 @@ describe("#13 — sillones: no se ofrece una hora sin sillón libre y la cita se
     assert.equal(recursoLibre(recursos, [], startsAt, endsAt, TZ), "s1");
     assert.equal(recursoLibre(recursos, [], startsAt, endsAt, TZ, "s2"), "s2");
     assert.equal(recursoLibre(recursos, [{ resourceId: "s1", ...a("10:15") }, { resourceId: "s2", ...a("09:45") }], startsAt, endsAt, TZ), null);
+  });
+});
+
+describe("WS1-T3 v6 (revisión t8 de la v5, N2) — reagendar por el bot NO revive una cita cancelada o no asistida", () => {
+  it("la conversación de reagendar seguía abierta y la cita se canceló (o quedó «no asistió») → not_active, sin tocarla", async () => {
+    for (const status of ["CANCELLED", "NO_SHOW"]) {
+      db.appointments = [{ ...cita("mia", "docB", "09:00", null), status }];
+      db.updates = [];
+      const r = await svc.rescheduleBotAppointment({ clinicId: "c1", appointmentId: "mia", dateISO: DIA, time: "10:00" });
+      assert.deepEqual(r, { ok: false, error: "not_active" }, status);
+      assert.equal(db.updates.length, 0);
+      assert.equal(db.appointments[0].status, status, "sigue como estaba");
+    }
+  });
+
+  it("a la vez: la cita se cancela entre la lectura y el update → el update no casa (status notIn) y es not_active", async () => {
+    db.appointments = [cita("mia", "docB", "09:00", null)];
+    db.antesDeMover = () => {
+      db.appointments[0].status = "CANCELLED";
+    };
+    const r = await svc.rescheduleBotAppointment({ clinicId: "c1", appointmentId: "mia", dateISO: DIA, time: "10:00" });
+    assert.deepEqual(r, { ok: false, error: "not_active" });
+    assert.equal(db.appointments[0].status, "CANCELLED", "no revivió");
+    assert.equal(db.updates.length, 0);
+  });
+
+  it("una cita activa se reagenda como siempre (y el update lleva el clinicId: la de otra clínica no se toca)", async () => {
+    db.appointments = [cita("mia", "docB", "09:00", null), { ...cita("mia", "docB", "09:00", null), clinicId: "c2" }];
+    const r = await svc.rescheduleBotAppointment({ clinicId: "c1", appointmentId: "mia", dateISO: DIA, time: "10:00" });
+    assert.equal(r.ok, true);
+    assert.equal(db.appointments[0].status, "SCHEDULED");
+    assert.equal(db.appointments[0].startsAt.getTime(), a("10:00").startsAt.getTime());
+    assert.equal(db.appointments[1].startsAt.getTime(), a("09:00").startsAt.getTime(), "otra clínica, intacta");
   });
 });
