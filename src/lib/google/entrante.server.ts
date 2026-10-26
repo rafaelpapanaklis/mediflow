@@ -271,6 +271,8 @@ const puertos: PuertosEntrante = {
       email: u.email ?? null,
       correoGoogle: u.googleCalendarEmail ?? null,
       recibeCitas: puedeRecibirCitas(u),
+      // Con la agenda apagada sigue siendo «de la clínica» si la invitan (H3).
+      atiende: puedeRecibirCitas({ ...u, agendaActive: true }),
     }));
   },
 

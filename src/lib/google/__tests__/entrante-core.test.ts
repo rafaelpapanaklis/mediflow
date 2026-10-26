@@ -8,6 +8,7 @@ import assert from "node:assert/strict";
 import {
   bloqueosSinMantener,
   claveDeDoctor,
+  calendarioDeLaClave,
   decidirEventoPorDoctor,
   doctoresDelEvento,
   duenoDeLaCuenta,
@@ -405,9 +406,31 @@ test("WS1-T3 v2 · dos doctores invitados → un bloqueo para CADA uno (nunca to
   assert.deepEqual(quienes(conInvitados("rafaelpapanaklis@gmail.com", "d@gmail.com")), ["u-d", "u-rafa"]);
 });
 
-test("WS1-T3 v2 · el doctor que RECHAZÓ no se bloquea; si era el único doctor, el evento va al dueño de la cuenta", () => {
+test("WS1-T3 v3 · H3 (decisión A): el doctor que RECHAZÓ no se bloquea; si era el único doctor, NADIE (nunca el dueño de la cuenta)", () => {
   assert.deepEqual(quienes(conInvitados({ email: "d@gmail.com", responseStatus: "declined" }, "jg@gmail.com")), ["u-jg"]);
-  assert.deepEqual(quienes(conInvitados({ email: "d@gmail.com", responseStatus: "declined" }, PACIENTE)), ["u-rafa"]);
+  // El agente agenda «Paciente Juan» con la Dra. D y ella dice que no: a rafa papa no se le cierra esa hora.
+  assert.deepEqual(quienes(conInvitados({ email: "d@gmail.com", responseStatus: "declined" }, PACIENTE)), []);
+  assert.deepEqual(quienes(conInvitados({ email: "d@gmail.com", responseStatus: "declined" }, PACIENTE), null), []);
+  // Por el Google que conectó también cuenta como invitada.
+  assert.deepEqual(quienes(conInvitados({ email: "Jorge.Mar.Personal@gmail.com", responseStatus: "declined" })), []);
+  // Todos los invitados de la clínica rechazaron: nadie.
+  assert.deepEqual(quienes(conInvitados({ email: "d@gmail.com", responseStatus: "declined" }, { email: "jg@gmail.com", responseStatus: "declined" })), []);
+});
+
+test("WS1-T3 v3 · H3: un doctor con «Aparece en la agenda» APAGADA invitado → nadie (de vacaciones, sus eventos no pasan al dueño)", () => {
+  const sinAgenda = RAFAEL.map((u) => (u.id === "u-d" ? { ...u, recibeCitas: false, atiende: true } : u));
+  const de = (e: EventoGoogle) => doctoresDelEvento(e, sinAgenda, { dueno: "u-rafa", calendarId: CAL_CLINICA });
+  assert.deepEqual(de(conInvitados("d@gmail.com", PACIENTE)), []);
+  // Con otro doctor invitado que sí atiende, a ese.
+  assert.deepEqual(de(conInvitados("d@gmail.com", "jg@gmail.com")), ["u-jg"]);
+  // Recepción (su rol no atiende) o una cuenta dada de baja no son «de la clínica que atiende»: el dueño.
+  const otros = [...RAFAEL, { id: "u-baja", email: "baja@gmail.com", recibeCitas: false, atiende: false }];
+  const deOtros = (e: EventoGoogle) => doctoresDelEvento(e, otros, { dueno: "u-rafa", calendarId: CAL_CLINICA });
+  assert.deepEqual(deOtros(conInvitados("recepcion@rafael.mx")), ["u-rafa"]);
+  assert.deepEqual(deOtros(conInvitados("baja@gmail.com")), ["u-rafa"]);
+  // La huella cambia al apagar la agenda aunque `recibeCitas` ya lo dijera, y también con solo `atiende`.
+  const conAtiende = RAFAEL.map((u) => ({ ...u, atiende: u.recibeCitas }));
+  assert.notEqual(firmaEquipo(conAtiende, "x@gmail.com"), firmaEquipo(conAtiende.map((u) => (u.id === "u-d" ? { ...u, atiende: false } : u)), "x@gmail.com"));
 });
 
 test("WS1-T3 v2 · sin doctores invitados → el dueño de la cuenta (caso de Rafael: el paciente invitado no cuenta)", () => {
@@ -415,9 +438,9 @@ test("WS1-T3 v2 · sin doctores invitados → el dueño de la cuenta (caso de Ra
   assert.deepEqual(quienes(ev()), ["u-rafa"], "sin invitados");
   // Recepción, un laboratorio o alguien con nombre de doctor no son doctores.
   assert.deepEqual(quienes(conInvitados("recepcion@rafael.mx", "pedidos@laboratorio.mx", { email: PACIENTE, displayName: "Jorge Mar" })), ["u-rafa"]);
-  // Un doctor con la agenda apagada no recibe citas: no cuenta como invitado.
-  const sinAgenda = RAFAEL.map((u) => (u.id === "u-d" ? { ...u, recibeCitas: false } : u));
-  assert.deepEqual(doctoresDelEvento(conInvitados("d@gmail.com"), sinAgenda, { dueno: "u-rafa", calendarId: CAL_CLINICA }), ["u-rafa"]);
+  // Alguien que no atiende (`atiende` false: rol o cuenta de baja) no cuenta como invitado de la clínica.
+  const noAtiende = RAFAEL.map((u) => (u.id === "u-d" ? { ...u, recibeCitas: false, atiende: false } : u));
+  assert.deepEqual(doctoresDelEvento(conInvitados("d@gmail.com"), noAtiende, { dueno: "u-rafa", calendarId: CAL_CLINICA }), ["u-rafa"]);
 });
 
 test("WS1-T3 v2 · cuenta general y sin doctores invitados → NADIE (y nunca toda la clínica)", () => {
@@ -461,6 +484,47 @@ test("WS1-T3 v2 · un bloqueo por doctor: el 1.º en la clave del calendario (re
   );
   // El evento se cancela: se retiran todos.
   assert.ok(decidirEventoPorDoctor(ev({ status: "cancelled" }), { ...c, doctores: ["u-d", "u-jg"], existentes: alDia }).every((x) => x.decision.accion === "inactivar"));
+});
+
+test("WS1-T3 v3 · H4: cada doctor CONSERVA su vínculo al cambiar los invitados (ningún bloqueo cambia de columna)", () => {
+  const c = { zona: ZONA, ahora: AHORA, calendarId: CAL_CLINICA };
+  const r = rangoDeEvento(ev(), ZONA)!;
+  const base = { activo: true, alcance: null, startsAt: r.startsAt, endsAt: r.endsAt, title: "Junta con proveedor", allDay: false };
+  const sinCambio = (d: ReturnType<typeof decidirEventoPorDoctor>) => d.filter((x) => x.decision.accion !== "nada");
+
+  // Un evento solo de «u-z» (en la principal). El agente añade a «u-a», cuyo id va ANTES: el de u-z sigue siendo suyo
+  // (b1 no se mueve de columna) y a u-a se le crea el suyo.
+  const deZ = [{ ...base, blockId: "b1", doctorId: "u-z" }];
+  const d1 = decidirEventoPorDoctor(ev(), { ...c, doctores: ["u-a", "u-z"], existentes: deZ });
+  assert.deepEqual(sinCambio(d1).map((x) => [x.clave, x.decision.accion, x.decision.accion === "crear" ? x.decision.datos.doctorId : null]), [
+    [claveDeDoctor(CAL_CLINICA, "u-a"), "crear", "u-a"],
+  ]);
+
+  // Se quita a u-z: su bloqueo se RETIRA (no pasa a u-a), y el de u-a sigue igual.
+  const ambos = [{ ...base, blockId: "b1", doctorId: "u-z" }, { ...base, blockId: "b2", clave: claveDeDoctor(CAL_CLINICA, "u-a"), doctorId: "u-a" }];
+  assert.deepEqual(sinCambio(decidirEventoPorDoctor(ev(), { ...c, doctores: ["u-a"], existentes: ambos })).map((x) => x.decision), [
+    { accion: "inactivar", blockId: "b1" },
+  ]);
+
+  // Vuelve u-z: se REACTIVA el mismo b1 (ya era suyo), no se crea otro.
+  const retirado = [{ ...ambos[0], activo: false }, ambos[1]];
+  const d3 = sinCambio(decidirEventoPorDoctor(ev(), { ...c, doctores: ["u-a", "u-z"], existentes: retirado }));
+  assert.deepEqual(d3.map((x) => [x.decision.accion, x.decision.accion === "actualizar" ? x.decision.blockId : null]), [["actualizar", "b1"]]);
+
+  // Un doctor nuevo cuando la principal es de otro que ya no va: el nuevo NO se queda con ella (va a su `#`).
+  const d4 = sinCambio(decidirEventoPorDoctor(ev(), { ...c, doctores: ["u-b"], existentes: deZ }));
+  assert.deepEqual(d4.map((x) => [x.clave, x.decision.accion]), [[CAL_CLINICA, "inactivar"], [claveDeDoctor(CAL_CLINICA, "u-b"), "crear"]]);
+
+  // Dos vínculos del mismo doctor (de cuando la v2 repartía por orden): se queda el ACTIVO, el otro sigue retirado.
+  const dos = [{ ...base, blockId: "b1", doctorId: "u-z", activo: false }, { ...base, blockId: "b3", clave: claveDeDoctor(CAL_CLINICA, "u-z"), doctorId: "u-z" }];
+  assert.deepEqual(sinCambio(decidirEventoPorDoctor(ev(), { ...c, doctores: ["u-z"], existentes: dos })), []);
+});
+
+test("WS1-T3 v3 · H2: el calendario de una clave de vínculo (sin el `#<doctor>`; un `#` antes de la @ es del calendario)", () => {
+  assert.equal(calendarioDeLaClave(CAL_CLINICA), CAL_CLINICA);
+  assert.equal(calendarioDeLaClave(claveDeDoctor(CAL_CLINICA, "u-jg")), CAL_CLINICA);
+  assert.equal(calendarioDeLaClave("es.mexican#holiday@group.v.calendar.google.com"), "es.mexican#holiday@group.v.calendar.google.com");
+  assert.equal(calendarioDeLaClave("es.mexican#holiday@group.v.calendar.google.com#u-1"), "es.mexican#holiday@group.v.calendar.google.com");
 });
 
 test("WS1-T3 · D: lo que no cambia — el eco de las citas no bloquea, «disponible» tampoco, y el título solo a quien debe", () => {

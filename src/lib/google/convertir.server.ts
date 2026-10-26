@@ -6,7 +6,8 @@
  * ruta solo hace dos cosas más cuando le llega `googleBloqueoId`:
  *
  *   1. `prepararConversionGoogle` — comprueba que el bloqueo es GOOGLE, de la
- *      clínica de la sesión, sigue activo y no está convertido; que la hora
+ *      clínica de la sesión, sigue activo y no está convertido (ni el de otro
+ *      doctor del MISMO evento: una cita por evento, H2); que la hora
  *      pedida es EXACTAMENTE la del bloqueo (la hora la manda el servidor, no
  *      el navegador: si el evento se movió con el panel abierto → 409), que no
  *      es de todo el día ni dura más de `CONVERTIR_MAX_HORAS`, y que el doctor
@@ -14,8 +15,9 @@
  *      no cuenta como «hora bloqueada» (es justo el hueco que se ocupa).
  *   2. Dentro de la MISMA transacción del alta: la cita nace con
  *      `googleCalendarEventId` = el evento de Google, y `marcarBloqueoConvertido`
- *      deja el bloqueo retirado y el vínculo con `convertedAt` + `appointmentId`.
- *      Si otro lo convirtió a la vez, lanza y el alta se deshace entera.
+ *      deja el bloqueo retirado y el vínculo con `convertedAt` + `appointmentId`,
+ *      y retira los bloqueos de los demás doctores de ese evento (el evento ya
+ *      es la cita). Si otro lo convirtió a la vez, lanza y el alta se deshace entera.
  *
  * Con el id del evento ya en la cita, la sincronización de salida de siempre
  * (`sincronizarCitaEnSegundoPlano`) hace `events.patch` sobre ESE evento: no
@@ -32,12 +34,33 @@ import { puedeRecibirCitas } from "@/lib/agenda/roles-que-atienden";
 import { idEventoDeCita } from "@/lib/google-calendar";
 import { firmaSalidaConvertida, type SalidaConvertida } from "@/lib/agenda/google-sync-nucleo";
 import { tablasGoogleListas, tablasGoogleListasOLanzar } from "./tablas.server";
-import { avisoVigente, calendarioImportable, puedeVerTitulo, type AlcanceGoogle, type AvisoVigente } from "./entrante-core";
+import {
+  avisoVigente,
+  calendarioDeLaClave,
+  calendarioImportable,
+  puedeVerTitulo,
+  SEPARADOR_DOCTOR,
+  type AlcanceGoogle,
+  type AvisoVigente,
+} from "./entrante-core";
 
 /** Un evento más largo que esto no se convierte en UNA cita (G5). */
 export const CONVERTIR_MAX_HORAS = 12;
 
 const idValido = (s: unknown): s is string => typeof s === "string" && s.trim().length > 0;
+
+/**
+ * Los vínculos del MISMO evento en el mismo calendario: la clave principal y
+ * la de cada doctor (`<calendario>#<doctorId>`, regla 5). `clinicId` siempre.
+ */
+function delMismoEvento(clinicId: string, v: { calendarId: string; googleEventId: string }) {
+  const cal = calendarioDeLaClave(v.calendarId);
+  return {
+    clinicId,
+    googleEventId: v.googleEventId,
+    OR: [{ calendarId: cal }, { calendarId: { startsWith: cal + SEPARADOR_DOCTOR } }],
+  };
+}
 
 /** Lo que la ruta necesita saber. Un solo tipo con campos anulables (strict:false no estrecha uniones). */
 export interface ConversionPreparada {
@@ -70,7 +93,7 @@ export async function prepararConversionGoogle(
     }),
     prisma.agendaBlockGoogle.findFirst({
       where: { blockId: bloqueoId, clinicId },
-      select: { googleEventId: true, appointmentId: true, allDay: true },
+      select: { calendarId: true, googleEventId: true, appointmentId: true, allDay: true },
     }),
   ]);
   if (!bloque || bloque.kind !== "GOOGLE" || !vinculo) return no(404, "google_block_not_found");
@@ -79,6 +102,13 @@ export async function prepararConversionGoogle(
     return no(404, "google_block_not_found");
   }
   if (vinculo.appointmentId) return no(409, "google_block_already_converted");
+  // El bloqueo de OTRO doctor del mismo evento ya es una cita: dos citas con un
+  // evento se pisarían la hora en Google (revisión t8, H2).
+  const otraCita = await prisma.agendaBlockGoogle.findFirst({
+    where: { ...delMismoEvento(clinicId, vinculo), appointmentId: { not: null } },
+    select: { blockId: true },
+  });
+  if (otraCita) return no(409, "google_block_already_converted");
   if (bloque.deletedAt) return no(409, "google_block_inactive");
   // Todo el día crearía una cita de 00:00 a 00:00 (G5).
   if (vinculo.allDay) return no(409, "google_block_all_day");
@@ -122,19 +152,40 @@ export const ERRORES_DE_CONVERSION = ["google_block_already_converted", "google_
 
 /** La rendija de transacción que hace falta (un `tx` de Prisma la cumple). */
 export interface TxConversion {
-  agendaBlockGoogle: { updateMany(args: any): Promise<{ count: number }> };
+  agendaBlockGoogle: {
+    findFirst(args: any): Promise<{ calendarId: string; googleEventId: string } | null>;
+    findMany(args: any): Promise<{ blockId: string; appointmentId: string | null }[]>;
+    updateMany(args: any): Promise<{ count: number }>;
+  };
   agendaBlock: { updateMany(args: any): Promise<{ count: number }> };
 }
 
 /**
  * Dentro de la transacción del alta. Condicional: solo si nadie lo convirtió
- * antes; si no, lanza `ConversionYaHecha` y la transacción se deshace.
+ * antes (ni el bloqueo de otro doctor del mismo evento); si no, lanza
+ * `ConversionYaHecha` y la transacción se deshace. Los bloqueos de los demás
+ * doctores de ese evento se RETIRAN aquí mismo (deletedAt, no se borran): ya
+ * no esperan a que la entrada vuelva a ver el evento (H2).
  */
 export async function marcarBloqueoConvertido(
   tx: TxConversion,
   d: { clinicId: string; bloqueoId: string; appointmentId: string; userId: string; startsAt: Date; endsAt: Date; ahora?: Date },
 ): Promise<void> {
   const ahora = d.ahora ?? new Date();
+  const propio = await tx.agendaBlockGoogle.findFirst({
+    where: { blockId: d.bloqueoId, clinicId: d.clinicId },
+    select: { calendarId: true, googleEventId: true },
+  });
+  if (!propio) throw new BloqueoCambiado();
+  const evento = delMismoEvento(d.clinicId, propio);
+  // Candado sobre TODOS los vínculos del evento: si otro convierte a la vez el
+  // de otro doctor, esta transacción espera a la suya y la lectura de abajo
+  // (una sentencia nueva) ya ve su cita.
+  await tx.agendaBlockGoogle.updateMany({ where: evento, data: { updatedAt: ahora } });
+  const hermanos = (
+    await tx.agendaBlockGoogle.findMany({ where: evento, select: { blockId: true, appointmentId: true } })
+  ).filter((h) => h.blockId !== d.bloqueoId);
+  if (hermanos.some((h) => !!h.appointmentId)) throw new ConversionYaHecha();
   const r = await tx.agendaBlockGoogle.updateMany({
     where: { blockId: d.bloqueoId, clinicId: d.clinicId, appointmentId: null },
     data: {
@@ -156,6 +207,12 @@ export async function marcarBloqueoConvertido(
     data: { deletedAt: ahora, deletedById: d.userId },
   });
   if (b.count === 0) throw new BloqueoCambiado();
+  if (hermanos.length > 0) {
+    await tx.agendaBlock.updateMany({
+      where: { id: { in: hermanos.map((h) => h.blockId) }, clinicId: d.clinicId, kind: "GOOGLE", deletedAt: null },
+      data: { deletedAt: ahora, deletedById: d.userId },
+    });
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════

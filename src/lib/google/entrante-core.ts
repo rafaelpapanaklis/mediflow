@@ -27,11 +27,14 @@
  *     dirección del calendario de la clínica). `doctoresDelEvento`:
  *       1. Invita a personas de la clínica que reciben citas y no
  *          rechazaron → a CADA una (un bloqueo por doctor).
- *       2. No invita a ningún doctor → al dueño de la cuenta conectada
- *          (`duenoDeLaCuenta`), si recibe citas.
- *       3. Tampoco hay dueño que atienda → a nadie; la agenda y
+ *       2. Invita a alguien de la clínica que atiende pero ninguno queda
+ *          (rechazó, o tiene «Aparece en la agenda» apagada) → a NADIE
+ *          (revisión t8, H3: decisión A de Rafael del 26-oct-2026).
+ *       3. No invita a ninguna persona de la clínica que atienda → al dueño
+ *          de la cuenta conectada (`duenoDeLaCuenta`), si recibe citas.
+ *       4. Tampoco hay dueño que atienda → a nadie; la agenda y
  *          Configuración lo dicen (`sinDueno`).
- *       4. NUNCA a toda la clínica.
+ *       5. NUNCA a toda la clínica.
  *     Pacientes, externos y la dirección del propio calendario no cuentan.
  *
  * 🔴 EL TÍTULO NO VA EN `reason`. El bot de WhatsApp le dice al paciente el
@@ -205,6 +208,11 @@ export interface UsuarioClinica {
   correoGoogle?: string | null;
   /** ¿Sale en la agenda y recibe citas? (`puedeRecibirCitas`). */
   recibeCitas: boolean;
+  /**
+   * ¿Atiende? Rol que atiende y cuenta activa, SIN mirar «Aparece en la
+   * agenda» (`ATIENDE_WHERE`). Ausente = `recibeCitas`.
+   */
+  atiende?: boolean;
 }
 
 /**
@@ -246,8 +254,11 @@ export function duenoDeLaCuenta(
 /**
  * A quién bloquea UN evento del calendario de la clínica (ver la cabecera):
  * las personas de la clínica que reciben citas invitadas y que no
- * rechazaron, cada una; si no hay ninguna, el dueño de la cuenta conectada;
- * si tampoco, nadie (lista vacía). Nunca `null` = toda la clínica.
+ * rechazaron, cada una. Si invita a alguien de la clínica que atiende pero
+ * ninguno queda (rechazó o tiene la agenda apagada), a nadie: el evento era
+ * para esa persona, no para el dueño (H3, decisión A). Solo si no invita a
+ * nadie de la clínica que atienda, el dueño de la cuenta conectada; si
+ * tampoco, nadie (lista vacía). Nunca `null` = toda la clínica.
  *
  * Se reconoce a cada invitado por su correo de acceso o por el Google que
  * conectó. La dirección del propio calendario (el `…@group.calendar.google.com`
@@ -261,16 +272,21 @@ export function doctoresDelEvento(
   ctx: { dueno: string | null; calendarId?: string | null },
 ): string[] {
   const cal = correo(ctx.calendarId);
-  const atienden = usuarios.filter((u) => u.recibeCitas);
+  const atienden = usuarios.filter((u) => u.atiende ?? u.recibeCitas);
   const ids = new Set<string>();
+  let invitaAlguien = false;
   for (const a of ev.attendees ?? []) {
-    if (!a || a.self || a.resource || a.responseStatus === "declined") continue;
+    if (!a || a.self || a.resource) continue;
     const c = correo(a.email);
     if (!c || c === cal) continue;
-    for (const u of atienden) if (correo(u.email) === c || correo(u.correoGoogle) === c) ids.add(u.id);
+    for (const u of atienden) {
+      if (correo(u.email) !== c && correo(u.correoGoogle) !== c) continue;
+      invitaAlguien = true;
+      if (u.recibeCitas && a.responseStatus !== "declined") ids.add(u.id);
+    }
   }
-  if (ids.size > 0) return [...ids].sort();
-  return ctx.dueno && atienden.some((u) => u.id === ctx.dueno) ? [ctx.dueno] : [];
+  if (invitaAlguien) return [...ids].sort();
+  return ctx.dueno && usuarios.some((u) => u.id === ctx.dueno && u.recibeCitas) ? [ctx.dueno] : [];
 }
 
 /**
@@ -283,6 +299,15 @@ export function doctoresDelEvento(
  */
 export const SEPARADOR_DOCTOR = "#";
 export const claveDeDoctor = (calendarId: string, doctorId: string) => `${calendarId}${SEPARADOR_DOCTOR}${doctorId}`;
+/**
+ * El calendario de una clave de vínculo (le quita el `#<doctorId>`). El `#`
+ * del doctor va DESPUÉS del dominio: un calendario puede llevar `#` en su
+ * nombre (`es.mexican#holiday@…`).
+ */
+export function calendarioDeLaClave(clave: string): string {
+  const i = clave.indexOf(SEPARADOR_DOCTOR, Math.max(0, clave.indexOf("@")));
+  return i < 0 ? clave : clave.slice(0, i);
+}
 /** ¿Esa clave de vínculo es de ese calendario (la principal o la de un doctor)? */
 export function esClaveDelCalendario(clave: string, calendarId: string): boolean {
   return clave === calendarId || clave.startsWith(calendarId + SEPARADOR_DOCTOR);
@@ -297,14 +322,15 @@ export function esClaveDelCalendario(clave: string, calendarId: string): boolean
  * Lleva también la versión de la REGLA: al cambiarla cada clínica hace una
  * completa y los bloqueos que ya estaban se corrigen en la primera pasada.
  * Regla 4 (WS1-T3): nunca toda la clínica; regla 5: un bloqueo por cada
- * doctor invitado, o el dueño de la cuenta (`doctoresDelEvento`). Los que
+ * doctor invitado, o el dueño de la cuenta (`doctoresDelEvento`); regla 6
+ * (H3): si el invitado de la clínica rechazó, nadie (ya no el dueño). Los que
  * quedaban se reasignan o se retiran (deletedAt, sin borrar).
  */
-export const REGLA_ASIGNACION = "5";
+export const REGLA_ASIGNACION = "6";
 
 export function firmaEquipo(usuarios: readonly UsuarioClinica[], cuenta?: string | null): string {
   const filas = usuarios
-    .map((u) => [u.id, correo(u.email) ?? "", correo(u.correoGoogle) ?? "", u.recibeCitas ? "1" : "0"].join("|"))
+    .map((u) => [u.id, correo(u.email) ?? "", correo(u.correoGoogle) ?? "", u.recibeCitas ? "1" : "0", (u.atiende ?? u.recibeCitas) ? "1" : "0"].join("|"))
     .sort();
   // cyrb53: corto, estable y sin `crypto` (este archivo también corre en pruebas puras).
   let h1 = 0xdeadbeef;
@@ -440,19 +466,36 @@ export function decidirEvento(
 export type DecisionVinculo = { clave: string; decision: DecisionEvento };
 
 /**
- * Las decisiones de UN evento con un bloqueo por doctor (regla 5). El primer
- * doctor va en la clave principal (reutiliza el bloqueo que ya existía, de
- * toda la clínica o de otro doctor) y cada uno de los demás en la suya. Lo
- * que sobra (un doctor que ya no está invitado, o todos si ya no le toca a
- * nadie) se RETIRA, no se borra. Los vínculos de citas convertidas no entran
- * aquí (los atiende el aviso).
+ * Las decisiones de UN evento con un bloqueo por doctor (regla 5). Cada
+ * doctor CONSERVA el vínculo que ya era suyo (el activo antes que uno
+ * retirado): añadir o quitar invitados nunca cambia de columna el bloqueo de
+ * otro, y «Convertir en cita» abierto sobre él sigue valiendo (H4). Al que no
+ * tiene ninguno le toca la clave principal si nadie la usa, o la de toda la
+ * clínica de antes (sin doctor: se le REASIGNA, el mismo bloqueo); si no,
+ * `<calendario>#<doctorId>`. Lo que sobra (un doctor que ya no está
+ * invitado, o todos si ya no le toca a nadie) se RETIRA, no se borra. Los
+ * vínculos de citas convertidas no entran aquí (los atiende el aviso).
  */
 export function decidirEventoPorDoctor(
   ev: EventoGoogle,
   ctx: { zona: string; ahora: Date; calendarId: string; doctores: readonly string[]; existentes: readonly BloqueoExistente[] },
 ): DecisionVinculo[] {
+  const claveDe = (e: BloqueoExistente) => e.clave ?? ctx.calendarId;
   const quiero = new Map<string, string>();
-  ctx.doctores.forEach((d, i) => quiero.set(i === 0 ? ctx.calendarId : claveDeDoctor(ctx.calendarId, d), d));
+  const sinVinculo: string[] = [];
+  for (const d of ctx.doctores) {
+    const suyos = ctx.existentes.filter((e) => e.doctorId === d && !quiero.has(claveDe(e)));
+    // El activo primero; entre iguales, la principal (es la que ya existía).
+    const suyo = suyos.find((e) => e.activo && claveDe(e) === ctx.calendarId) ?? suyos.find((e) => e.activo)
+      ?? suyos.find((e) => claveDe(e) === ctx.calendarId) ?? suyos[0];
+    if (suyo) quiero.set(claveDe(suyo), d);
+    else sinVinculo.push(d);
+  }
+  for (const d of sinVinculo) {
+    const principal = ctx.existentes.find((e) => claveDe(e) === ctx.calendarId);
+    const libre = !quiero.has(ctx.calendarId) && (!principal || principal.doctorId === null);
+    quiero.set(libre ? ctx.calendarId : claveDeDoctor(ctx.calendarId, d), d);
+  }
   const out: DecisionVinculo[] = [];
   const vistas = new Set<string>();
   for (const e of ctx.existentes) {

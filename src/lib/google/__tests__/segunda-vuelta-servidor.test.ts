@@ -139,12 +139,15 @@ test("N-G2/WS1-T3: el equipo llega con su correo de acceso, el Google que conect
     { id: "u1", clinicId: "c1", email: "ana@clinica.mx", googleCalendarEmail: "ana.personal@gmail.com", firstName: "Ana", lastName: "López", role: "DOCTOR", isActive: true, agendaActive: true },
     { id: "u2", clinicId: "c1", email: "eva@clinica.mx", googleCalendarEmail: null, firstName: "Eva", lastName: "Soto", role: "RECEPTIONIST", isActive: true, agendaActive: true },
     { id: "u3", clinicId: "c2", email: "otra@clinica.mx", role: "DOCTOR", isActive: true },
+    { id: "u4", clinicId: "c1", email: "beto@clinica.mx", googleCalendarEmail: null, firstName: "Beto", lastName: "Paz", role: "DOCTOR", isActive: true, agendaActive: false },
   );
   const { _puertosEntrante } = await servidor();
   const us = await _puertosEntrante.leerUsuarios("c1");
-  assert.deepEqual(us.map((u) => u.id), ["u1", "u2"], "solo la clínica de la sesión");
-  assert.deepEqual(us[0], { id: "u1", email: "ana@clinica.mx", correoGoogle: "ana.personal@gmail.com", recibeCitas: true });
-  assert.equal(us[1].recibeCitas, false);
+  assert.deepEqual(us.map((u) => u.id), ["u1", "u2", "u4"], "solo la clínica de la sesión");
+  assert.deepEqual(us[0], { id: "u1", email: "ana@clinica.mx", correoGoogle: "ana.personal@gmail.com", recibeCitas: true, atiende: true });
+  assert.deepEqual([us[1].recibeCitas, us[1].atiende], [false, false], "recepción no atiende");
+  // H3: con la agenda apagada no recibe citas, pero sigue siendo alguien de la clínica que atiende.
+  assert.deepEqual([us[2].recibeCitas, us[2].atiende], [false, true]);
 });
 
 test("WS1-T3: el Gmail con el que se conectó la clínica ES del dueño que atiende y lo conectó (users.googleCalendarEmail); una cuenta dada de baja no recibe citas", async () => {

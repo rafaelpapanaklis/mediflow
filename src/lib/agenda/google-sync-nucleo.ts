@@ -328,14 +328,18 @@ export async function sincronizarCita(
     // WS1-T3 · eventos creados antes de que la cuenta dueña dejara de
     // invitarse: si el doctor (o el paciente) ES esa cuenta, la cita le sale
     // dos veces en su Google. Se le quita de los invitados sin avisar a nadie
-    // y sin tocar la cita. Solo entonces se lee el evento (una lectura más).
+    // y sin tocar la cita. Los invitados salen de la respuesta del propio
+    // parche: sin leer el evento otra vez (revisión t8, H5); un segundo
+    // parche solo si de verdad estaba invitada.
     // Si falla, la cita ya quedó al día: se reintenta en su siguiente cambio.
     const cuenta = clinica.cuentaEmail ?? null;
     const sobraInvitado = !!cuenta && [cita.doctorEmail, cita.patientEmail].some((c) => esLaCuentaDelCalendario(c, cuenta));
+    let invitados: Record<string, any>[] = [];
+    const alParchar = sobraInvitado ? (xs: Record<string, any>[]) => { invitados = xs; } : undefined;
     const quitarDuplicado = async (cid: string, eventId: string) => {
       if (!sobraInvitado || !cuenta) return;
       try {
-        await quitarInvitadoDuplicado(cal, { calendarId: cid, eventId, correo: cuenta });
+        await quitarInvitadoDuplicado(cal, { calendarId: cid, eventId, correo: cuenta, invitados });
       } catch (e) {
         p.log?.(`Google Calendar: no se pudo quitar el invitado duplicado de la cita ${appointmentId}`, e);
       }
@@ -343,7 +347,7 @@ export async function sincronizarCita(
 
     if (cita.googleEventId && !cita.desdeGoogle) {
       const cid = await asegurarCalendario();
-      const r = await parcharEvento(cal, datos(cid, cita.googleEventId));
+      const r = await parcharEvento(cal, datos(cid, cita.googleEventId), { alParchar });
       if (r === "ok") {
         await quitarDuplicado(cid, cita.googleEventId);
         return { estado: "actualizado" };
@@ -361,14 +365,14 @@ export async function sincronizarCita(
     let cid = await asegurarCalendario();
     let insertado: "creado" | "reanudado";
     try {
-      insertado = await insertarEvento(cal, datos(cid, eventId), { avisarInvitados: invitar });
+      insertado = await insertarEvento(cal, datos(cid, eventId), { avisarInvitados: invitar, alParchar });
     } catch (err) {
       // 404 al insertar = el calendario guardado ya no existe en Google: se crea uno nuevo y se repite una vez.
       // (Un 403 de permisos NO entra aquí: es un calendario fuera del alcance del permiso; cae en
       // clasificarYMarcar → «permisos» y la clínica ve «Reconectar».)
       if (estadoHttpDeError(err) !== 404) throw err;
       cid = await asegurarCalendario(true);
-      insertado = await insertarEvento(cal, datos(cid, eventId), { avisarInvitados: invitar });
+      insertado = await insertarEvento(cal, datos(cid, eventId), { avisarInvitados: invitar, alParchar });
     }
     // Ya existía (409): el parche no toca invitados, y quizá lo tenía invitado.
     if (insertado === "reanudado") await quitarDuplicado(cid, eventId);

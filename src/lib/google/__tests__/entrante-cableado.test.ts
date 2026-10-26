@@ -155,23 +155,44 @@ test("la ruta de alta: el bloqueo convertido no cuenta, la cita nace con el even
 
 test("marcarBloqueoConvertido: condicional; si otro ya lo convirtió, lanza (y la transacción se deshace)", async () => {
   const llamadas: any[] = [];
-  const tx = (cuenta: number) => ({
-    agendaBlockGoogle: { updateMany: async (a: any) => { llamadas.push(["vinculo", a]); return { count: cuenta }; } },
+  const propio = { calendarId: "cal@group.calendar.google.com", googleEventId: "ev1" };
+  const tx = (cuenta: number, hermanos: { blockId: string; appointmentId: string | null }[] = []) => ({
+    agendaBlockGoogle: {
+      findFirst: async () => propio,
+      findMany: async () => [{ blockId: "b1", appointmentId: null }, ...hermanos],
+      updateMany: async (a: any) => { llamadas.push(["vinculo", a]); return { count: a.data.appointmentId ? cuenta : 1 }; },
+    },
     agendaBlock: { updateMany: async (a: any) => { llamadas.push(["bloque", a]); return { count: 1 }; } },
   });
   const d = { clinicId: "c1", bloqueoId: "b1", appointmentId: "a1", userId: "u1", startsAt: new Date(1), endsAt: new Date(2), ahora: new Date(3) };
   await marcarBloqueoConvertido(tx(1), d);
-  assert.deepEqual(llamadas[0][1].where, { blockId: "b1", clinicId: "c1", appointmentId: null });
-  assert.equal(llamadas[0][1].data.appointmentId, "a1");
-  assert.deepEqual(llamadas[1][1].where, { id: "b1", clinicId: "c1", kind: "GOOGLE", deletedAt: null, startsAt: new Date(1), endsAt: new Date(2) });
-  assert.deepEqual(llamadas[1][1].data, { deletedAt: new Date(3), deletedById: "u1" }, "se retira, no se borra");
+  // H2: primero el candado sobre TODOS los vínculos del evento (la principal y las `#doctor`), de esta clínica.
+  assert.deepEqual(llamadas[0][1].where, {
+    clinicId: "c1", googleEventId: "ev1",
+    OR: [{ calendarId: propio.calendarId }, { calendarId: { startsWith: propio.calendarId + "#" } }],
+  });
+  assert.deepEqual(llamadas[1][1].where, { blockId: "b1", clinicId: "c1", appointmentId: null });
+  assert.equal(llamadas[1][1].data.appointmentId, "a1");
+  assert.deepEqual(llamadas[2][1].where, { id: "b1", clinicId: "c1", kind: "GOOGLE", deletedAt: null, startsAt: new Date(1), endsAt: new Date(2) });
+  assert.deepEqual(llamadas[2][1].data, { deletedAt: new Date(3), deletedById: "u1" }, "se retira, no se borra");
+  assert.equal(llamadas.length, 3, "sin hermanos no hay nada más que retirar");
   await assert.rejects(() => marcarBloqueoConvertido(tx(0), d), ConversionYaHecha);
+  // H2: el de otro doctor del mismo evento ya es una cita → lanza; si no, se retira aquí mismo.
+  await assert.rejects(() => marcarBloqueoConvertido(tx(1, [{ blockId: "b2", appointmentId: "a0" }]), d), ConversionYaHecha);
+  llamadas.length = 0;
+  await marcarBloqueoConvertido(tx(1, [{ blockId: "b2", appointmentId: null }]), d);
+  assert.deepEqual(llamadas.at(-1), ["bloque", {
+    where: { id: { in: ["b2"] }, clinicId: "c1", kind: "GOOGLE", deletedAt: null },
+    data: { deletedAt: new Date(3), deletedById: "u1" },
+  }]);
   // G8: si el evento se movió o se quitó entretanto, NO es «otro lo convirtió».
   const txMovido = {
-    agendaBlockGoogle: { updateMany: async () => ({ count: 1 }) },
+    agendaBlockGoogle: { findFirst: async () => propio, findMany: async () => [], updateMany: async () => ({ count: 1 }) },
     agendaBlock: { updateMany: async () => ({ count: 0 }) },
   };
   await assert.rejects(() => marcarBloqueoConvertido(txMovido, d), BloqueoCambiado);
+  const txSinVinculo = { ...txMovido, agendaBlockGoogle: { ...txMovido.agendaBlockGoogle, findFirst: async () => null } };
+  await assert.rejects(() => marcarBloqueoConvertido(txSinVinculo, d), BloqueoCambiado);
 });
 
 test("G5: «Convertir» rechaza todo el día, más de 12 h, otra hora que la del bloqueo y otro doctor (si el del bloqueo atiende)", () => {

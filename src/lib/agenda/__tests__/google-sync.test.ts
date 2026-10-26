@@ -679,7 +679,7 @@ test("WS1-T3: una cita YA copiada con el doctor-cuenta invitado → la siguiente
   assert.ok(parches.every((l) => l.args.sendUpdates === "none"), "sin correos a nadie");
   assert.deepEqual(Object.keys(parches.at(-1)!.args.requestBody), ["attendees"], "el parche de invitados solo toca invitados");
 
-  // La siguiente actualización ya no tiene nada que quitar: lee, pero no vuelve a parchar invitados.
+  // La siguiente actualización ya no tiene nada que quitar: no vuelve a parchar invitados.
   const antes = parches.length;
   w.citas.get("a1")!.startsAt = new Date("2026-10-16T19:00:00Z");
   w.citas.get("a1")!.endsAt = new Date("2026-10-16T19:30:00Z");
@@ -687,17 +687,39 @@ test("WS1-T3: una cita YA copiada con el doctor-cuenta invitado → la siguiente
   const nuevos = w.google.llamadas.filter((l) => l.op === "events.patch").slice(antes);
   assert.equal(nuevos.length, 1, "solo el de la hora");
   assert.equal("attendees" in nuevos[0].args.requestBody, false);
+  // H5 (revisión t8): nunca se lee el evento aparte; los invitados vienen en la respuesta del parche de la hora.
+  assert.equal(w.google.cuantas("events.get"), 0);
+});
+
+test("WS1-T3 v3 · H5: las citas del doctor-cuenta ya limpias cuestan UNA llamada a Google por cambio (el parche), no dos (sin events.get)", async () => {
+  const w = mundo({ clinicas: [clinica(C1, { cuentaEmail: RAFA })], citas: [conCita("a1", { doctorEmail: RAFA })] });
+  await sincronizarCita(w.puertos, C1, "a1");
+  const desde = w.google.llamadas.length;
+  for (const h of [18, 19, 20]) {
+    w.citas.get("a1")!.startsAt = new Date(`2026-10-16T${h}:00:00Z`);
+    w.citas.get("a1")!.endsAt = new Date(`2026-10-16T${h}:30:00Z`);
+    assert.deepEqual(await sincronizarCita(w.puertos, C1, "a1"), { estado: "actualizado" });
+  }
+  const ops = w.google.llamadas.slice(desde).map((l) => l.op).filter((op) => op.startsWith("events."));
+  assert.deepEqual(ops, ["events.patch", "events.patch", "events.patch"]);
 });
 
 test("WS1-T3: si quitar la invitación falla, la cita queda al día igual (se reintenta en su siguiente cambio)", async () => {
   const w = mundo({ clinicas: [clinica(C1)], citas: [conCita("a1", { doctorEmail: RAFA })] });
   await sincronizarCita(w.puertos, C1, "a1");
   w.clinicas.get(C1)!.cuentaEmail = RAFA;
-  w.google.fallar("events.get", errorGoogle(500, "backendError"));
+  // Falla el SEGUNDO parche (el de los invitados); el de la hora sale bien.
+  let parches = 0;
+  w.google.antes = async (op: string) => {
+    if (op === "events.patch" && ++parches === 2) throw errorGoogle(500, "backendError");
+  };
   w.citas.get("a1")!.startsAt = new Date("2026-10-16T18:00:00Z");
   w.citas.get("a1")!.endsAt = new Date("2026-10-16T18:30:00Z");
   assert.deepEqual(await sincronizarCita(w.puertos, C1, "a1"), { estado: "actualizado" });
+  assert.equal(parches, 2);
   assert.equal(w.caidas.length, 0, "no marca la conexión caída por esto");
+  assert.equal(w.citas.get("a1")!.startsAt.toISOString(), "2026-10-16T18:00:00.000Z");
+  w.google.antes = null;
   await sincronizarCita(w.puertos, C1, "a1");
   const calId = w.clinicas.get(C1)!.calendarId!;
   assert.deepEqual(w.google.eventoEn(calId, idEventoDeCita(C1, "a1"))!.attendees, [{ email: "ana@correo.mx" }]);
@@ -714,4 +736,5 @@ test("WS1-T3: «Sincronizar citas futuras» que reencuentra un evento viejo (409
   const calId = w.clinicas.get(C1)!.calendarId!;
   assert.deepEqual(w.google.eventoEn(calId, idEventoDeCita(C1, "a1"))!.attendees, [{ email: "ana@correo.mx" }]);
   assert.ok(w.google.llamadas.filter((l) => l.op === "events.patch").every((l) => l.args.sendUpdates === "none"));
+  assert.equal(w.google.cuantas("events.get"), 0, "H5: los invitados salen de la respuesta del parche del 409");
 });
