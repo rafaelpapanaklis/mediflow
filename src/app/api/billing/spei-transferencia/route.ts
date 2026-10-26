@@ -7,6 +7,7 @@ import { PLAN_IDS } from "@/lib/billing/plans";
 import { isPlanExpired } from "@/lib/plan-status";
 import { logAudit, extractAuditMeta } from "@/lib/audit";
 import { SpeiError, crearSolicitudSpei, solicitudPendienteDe } from "@/lib/billing/spei-directo";
+import { isClinicBillingAdmin, notClinicBillingAdminResponse } from "@/lib/billing/authz";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,6 +30,10 @@ const BodySchema = z.object({
  */
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
+  // Declarar un pago del plan es del dueño (SUPER_ADMIN), igual que el checkout. El GET de abajo es solo lectura.
+  if (!isClinicBillingAdmin(user.role)) {
+    return NextResponse.json(notClinicBillingAdminResponse(), { status: 403 });
+  }
 
   let body: unknown;
   try {

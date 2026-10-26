@@ -54,6 +54,12 @@ interface Props {
    * la pestaña es exactamente la de siempre.
    */
   rediseno?: boolean;
+  /**
+   * ADMIN que no es el dueño (decisión de Rafael, 26-oct-2026): ve el plan, el estado, el método vigente y
+   * el historial, pero sin ningún botón que pague, cambie el plan o el método, abra el portal o cancele
+   * (el servidor ya lo rechaza con 403, isClinicBillingAdmin). En su lugar, «Solo el dueño de la cuenta…».
+   */
+  soloLectura?: boolean;
 }
 
 // Un solo tipo para la ruta y la pantalla (antes había dos copias a mano).
@@ -127,7 +133,7 @@ function paypalLinkFor(plan: PlanId): string | null {
   return url && url.length > 0 ? url : null;
 }
 
-export function SubscriptionTab({ clinic, rediseno = false, metodosPago }: Props) {
+export function SubscriptionTab({ clinic, rediseno = false, metodosPago, soloLectura = false }: Props) {
   const t = useT();
   const locale = useLocale();
   const router = useRouter();
@@ -547,14 +553,15 @@ export function SubscriptionTab({ clinic, rediseno = false, metodosPago }: Props
           ivaDe: (id: PlanId) => sufijoIva(id) !== "",
           porcentajePrueba: pct,
           pruebaVencida: trialExpired,
-          mostrarActivar: (!subscriptionActive || manualPeriodExpired) && !pagoRechazado,
+          soloLectura: soloLectura ? t("shell.subscriptionTab.soloDueno") : null,
+          mostrarActivar: (!subscriptionActive || manualPeriodExpired) && !pagoRechazado && !soloLectura,
           subtituloActivar,
           onActivar: () => router.push("/dashboard/suspended"),
           pagoRechazado: pagoRechazado
             ? {
                 titulo: t("shell.subscriptionTab.paymentFailedTitle"),
                 texto: t("shell.subscriptionTab.paymentFailedNotice", { fecha: suspensionLabel }),
-                panel: <PagoPendiente puedePagar plan={clinic.plan} suspendida={false} />,
+                panel: <PagoPendiente puedePagar={!soloLectura} plan={clinic.plan} suspendida={false} />,
               }
             : null,
           tieneSuscripcionStripe: hasStripeSubscription,
@@ -675,6 +682,12 @@ export function SubscriptionTab({ clinic, rediseno = false, metodosPago }: Props
           </div>
         )}
 
+        {soloLectura && (
+          <p role="note" data-suscripcion-solo-lectura style={{ fontSize: 12.5, color: "var(--text-2)", margin: 0, padding: "10px 12px", borderRadius: 10, border: "1px solid var(--border-soft, hsl(var(--border)))" }}>
+            {t("shell.subscriptionTab.soloDueno")}
+          </p>
+        )}
+
         {pagoRechazado && (
           <div
             role="alert"
@@ -692,7 +705,7 @@ export function SubscriptionTab({ clinic, rediseno = false, metodosPago }: Props
                 {t("shell.subscriptionTab.paymentFailedNotice", { fecha: suspensionLabel })}
               </div>
             </div>
-            <PagoPendiente puedePagar plan={clinic.plan} suspendida={false} />
+            <PagoPendiente puedePagar={!soloLectura} plan={clinic.plan} suspendida={false} />
           </div>
         )}
 
@@ -708,7 +721,7 @@ export function SubscriptionTab({ clinic, rediseno = false, metodosPago }: Props
             dónde renovar). Lleva a la pantalla de pago existente
             (/dashboard/suspended) con tarjeta/SPEI/OXXO, preseleccionando el
             plan actual de la clínica. Permite pagar ANTES de expirar. */}
-        {(!subscriptionActive || manualPeriodExpired) && !pagoRechazado && (
+        {(!subscriptionActive || manualPeriodExpired) && !pagoRechazado && !soloLectura && (
           <div
             style={{
               display: "flex", alignItems: "center", justifyContent: "space-between",
@@ -739,6 +752,7 @@ export function SubscriptionTab({ clinic, rediseno = false, metodosPago }: Props
       </section>
 
       {/* ── Cambiar plan ─────────────────────────────────────────── */}
+      {!soloLectura && (
       <section className="bg-card border border-border rounded-2xl p-6" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <Sparkles size={14} aria-hidden style={{ color: "var(--brand)" }} />
@@ -835,6 +849,7 @@ export function SubscriptionTab({ clinic, rediseno = false, metodosPago }: Props
           })}
         </div>
       </section>
+      )}
 
       {/* ── Método de pago ───────────────────────────────────────── */}
       <section className="bg-card border border-border rounded-2xl p-6" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -869,6 +884,7 @@ export function SubscriptionTab({ clinic, rediseno = false, metodosPago }: Props
         })()}
 
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {!soloLectura && (
           <button
             type="button"
             onClick={() => setPaymentModalOpen(true)}
@@ -878,7 +894,14 @@ export function SubscriptionTab({ clinic, rediseno = false, metodosPago }: Props
             <CreditCard size={12} aria-hidden />
             {t("shell.subscriptionTab.changePaymentMethod")}
           </button>
-          {!localCancelRequested ? (
+          )}
+          {soloLectura ? (
+            localCancelRequested && (
+              <div style={{ padding: "6px 12px", borderRadius: 8, background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.3)", fontSize: 12, color: "#fca5a5", fontWeight: 500 }}>
+                {t("shell.subscriptionTab.cancellationRequestedBadge")}
+              </div>
+            )
+          ) : !localCancelRequested ? (
             <button
               type="button"
               onClick={() => setCancelOpen(true)}
@@ -910,7 +933,7 @@ export function SubscriptionTab({ clinic, rediseno = false, metodosPago }: Props
               {t("shell.subscriptionTab.invoiceHistory")}
             </h2>
           </div>
-          {hasStripeCustomer && (
+          {hasStripeCustomer && !soloLectura && (
             <button
               type="button"
               onClick={() => setPaymentModalOpen(true)}
@@ -995,7 +1018,7 @@ export function SubscriptionTab({ clinic, rediseno = false, metodosPago }: Props
                             {t("shell.subscriptionTab.receipt")}
                           </a>
                         )}
-                        {inv.paymentUrl && (
+                        {inv.paymentUrl && !soloLectura && (
                           <a
                             href={inv.paymentUrl}
                             target="_blank"

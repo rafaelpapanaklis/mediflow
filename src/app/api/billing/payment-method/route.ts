@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { isClinicBillingAdmin, notClinicBillingAdminResponse } from "@/lib/billing/authz";
+import { notClinicBillingAdminResponse, puedeVerSuscripcion } from "@/lib/billing/authz";
 import { getLiveSubscriptionSnapshot, type StripeLivePaymentMethod } from "@/lib/admin/stripe-payment-method";
 
 export const runtime = "nodejs";
@@ -26,7 +26,8 @@ export interface PaymentMethodResponse {
  */
 export async function GET() {
   const user = await getCurrentUser();
-  if (!isClinicBillingAdmin(user.role)) {
+  // Solo lectura (lo que dice Stripe hoy): dueño y administradores. Cambiarlo (portal) es solo del dueño.
+  if (!puedeVerSuscripcion(user.role)) {
     return NextResponse.json(notClinicBillingAdminResponse(), { status: 403 });
   }
   if (!user.clinicId) {

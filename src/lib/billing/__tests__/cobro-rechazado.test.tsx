@@ -188,9 +188,9 @@ test("Configuración › Suscripción: «Pago rechazado» sale antes que «En pr
   const tab = sinComentarios(leer("src/components/dashboard/subscription-tab.tsx"));
   assert.match(tab, /const pagoRechazado = isPaymentFailed\(clinic\.subscriptionStatus\) && !trialExpired/);
   assert.ok(tab.indexOf("statusPaymentFailed") < tab.indexOf("statusTrial"), "«Pago rechazado» se evalúa antes que «En prueba»");
-  assert.match(tab, /<PagoPendiente puedePagar plan=\{clinic\.plan\}/);
-  assert.match(tab, /\(!subscriptionActive \|\| manualPeriodExpired\) && !pagoRechazado/, "el «Activa tu plan» de siempre no se pinta encima");
-  assert.match(tab, /mostrarActivar: \(!subscriptionActive \|\| manualPeriodExpired\) && !pagoRechazado/);
+  assert.match(tab, /<PagoPendiente puedePagar=\{!soloLectura\} plan=\{clinic\.plan\}/);
+  assert.match(tab, /\(!subscriptionActive \|\| manualPeriodExpired\) && !pagoRechazado && !soloLectura/, "el «Activa tu plan» de siempre no se pinta encima");
+  assert.match(tab, /mostrarActivar: \(!subscriptionActive \|\| manualPeriodExpired\) && !pagoRechazado && !soloLectura/);
   const redis = sinComentarios(leer("src/components/dashboard/bloques-rediseno/suscripcion.tsx"));
   assert.match(redis, /m\.pagoRechazado && \(/);
   assert.match(redis, /\{m\.pagoRechazado\.panel\}/);
@@ -198,14 +198,12 @@ test("Configuración › Suscripción: «Pago rechazado» sale antes que «En pr
 
 /* ── Aviso rojo por rol ────────────────────────────────────────────────── */
 
-test("aviso rojo: solo con cobro rechazado y acceso vivo; el botón es solo del dueño y del administrador", () => {
+test("aviso rojo: solo con cobro rechazado y acceso vivo; el botón es solo del dueño (26-oct-2026: el ADMIN ya no paga)", () => {
   const ahora = new Date(T0.getTime() + HORA);
   const base = { subscriptionStatus: "past_due", trialEndsAt: finDeGracia(T0), ahora };
-  for (const rol of ["SUPER_ADMIN", "ADMIN"]) {
-    const a = avisoDePagoRechazado({ ...base, rol });
-    assert.deepEqual([a.visible, a.visible && a.puedePagar], [true, true], rol);
-  }
-  for (const rol of ["DOCTOR", "RECEPTIONIST", "ASSISTANT", null]) {
+  const duenio = avisoDePagoRechazado({ ...base, rol: "SUPER_ADMIN" });
+  assert.deepEqual([duenio.visible, duenio.visible && duenio.puedePagar], [true, true]);
+  for (const rol of ["ADMIN", "DOCTOR", "RECEPTIONIST", "ASSISTANT", null]) {
     const a = avisoDePagoRechazado({ ...base, rol });
     assert.deepEqual([a.visible, a.visible && a.puedePagar], [true, false], String(rol));
   }
@@ -511,21 +509,22 @@ function vista(sobre: Record<string, unknown> = {}, idioma: "es" | "en" = "es") 
   );
 }
 
-test("botones por rol: dueño/admin ven los dos; los demás no ven ninguno ni se les pide nada", () => {
+test("botones por rol: el dueño ve los dos; los demás (ADMIN incluido) no ven ninguno ni se les pide nada", () => {
   const admin = vista();
   assert.match(admin, /data-accion="pagar-plan"[^>]*>.*Pagar mi plan/s);
   assert.match(admin, /data-accion="subir-plan"[^>]*>.*Cambiar a un plan más grande y pagar/s);
   assert.match(admin, /\$689\.00 MXN/);
   const otro = vista({ puedePagar: false });
   assert.doesNotMatch(otro, /<button/);
-  assert.match(otro, /Pídele al dueño o administrador de la clínica que pague el plan\./);
+  assert.match(otro, /Pídele al dueño de la cuenta que pague el plan\./);
   // Sin un plan más grande al cual subir, solo «Pagar mi plan».
   const tope = vista({ lectura: { tipo: "listo", datos: { ...PENDIENTE, opcionesSubir: [] } } });
   assert.match(tope, /Pagar mi plan/);
   assert.doesNotMatch(tope, /plan más grande/);
   // La pantalla server solo monta el componente con el rol real de la sesión, y el componente no consulta si no puede pagar.
   const pagina = sinComentarios(leer("src/app/dashboard/suspended/page.tsx"));
-  assert.match(pagina, /puedePagar=\{isClinicBillingAdmin\(user\.role\)\}/);
+  assert.match(pagina, /const puedePagar = isClinicBillingAdmin\(user\.role\);/);
+  assert.match(pagina, /<PagoPendiente puedePagar=\{puedePagar\}/);
   assert.match(sinComentarios(leer("src/components/dashboard/pago-pendiente.tsx")), /if \(!puedePagar\) return;/);
 });
 
@@ -561,11 +560,11 @@ test("404 / error / cargando / sin pendiente: aviso «no disponible» con el pag
 test("pantallas: en suspendida con tarjeta viva las tarjetas de plan se esconden y entran los dos botones; en Suscripción van en el aviso rojo", () => {
   const pagina = sinComentarios(leer("src/app/dashboard/suspended/page.tsx"));
   assert.match(pagina, /conDosBotones = suspendidaPorFalta && tarjetaRechazadaViva\(clinic\)/);
-  assert.equal((pagina.match(/\{!conDosBotones && \(|\{conDosBotones \? null : \(/g) ?? []).length, 2, "las tarjetas de plan, en los dos diseños");
-  assert.match(pagina, /<PagoPendiente puedePagar=\{isClinicBillingAdmin\(user\.role\)\} plan=\{clinic\.plan\} suspendida tarjetas=\{tarjetasDeRespaldo\} \/>/);
-  assert.match(pagina, /sinPagar=\{conDosBotones\}/);
+  assert.equal((pagina.match(/\{!conDosBotones && puedePagar && \(|\{conDosBotones \|\| !puedePagar \? null : \(/g) ?? []).length, 2, "las tarjetas de plan, en los dos diseños (y solo para el dueño)");
+  assert.match(pagina, /\{conDosBotones && puedePagar && \(\s*<PagoPendiente puedePagar=\{puedePagar\} plan=\{clinic\.plan\} suspendida tarjetas=\{tarjetasDeRespaldo\} \/>/);
+  assert.match(pagina, /sinPagar=\{conDosBotones \|\| !puedePagar\}/);
   const tab = sinComentarios(leer("src/components/dashboard/subscription-tab.tsx"));
-  assert.equal((tab.match(/<PagoPendiente puedePagar plan=\{clinic\.plan\} suspendida=\{false\} \/>/g) ?? []).length, 2, "diseño nuevo y de siempre");
+  assert.equal((tab.match(/<PagoPendiente puedePagar=\{!soloLectura\} plan=\{clinic\.plan\} suspendida=\{false\} \/>/g) ?? []).length, 2, "diseño nuevo y de siempre");
   assert.match(sinComentarios(leer("src/components/dashboard/bloques-rediseno/suscripcion.tsx")), /\{m\.pagoRechazado\.panel\}/);
   // Y las tarjetas no se tocan: sin suscripción viva (nueva o cancelada) siguen mandando al checkout de siempre.
   assert.match(sinComentarios(leer("src/app/dashboard/suspended/suspended-client.tsx")), /"\/api\/billing\/checkout"/);
@@ -1050,4 +1049,134 @@ test("M7 «Subir» (t2) y el bloqueo de change-plan comparten UN solo texto verd
   const { MENSAJES } = require("../pago-pendiente");
   assert.equal(MENSAJES.cobroEnPausa, MENSAJE_PLAN_PREPAGADO);
   assert.match(MENSAJE_PLAN_PREPAGADO, /^Tu plan ya está pagado por ahora, así que no podemos cambiártelo desde aquí\./);
+});
+
+/* ── Solo el dueño paga, cambia o cancela el plan (ws1-t2, decisión de Rafael del 26-oct-2026) ─────── */
+
+describe("solo el dueño toca la suscripción; el ADMIN la ve en solo lectura", () => {
+  const es = getDict("es") as any;
+  const en = getDict("en") as any;
+  /* eslint-disable @typescript-eslint/no-require-imports */
+  const { SuscripcionRediseno } = require("../../../components/dashboard/bloques-rediseno/suscripcion");
+  const { PideAlDueno } = require("../../../app/dashboard/suspended/pide-al-dueno");
+  const { fichaDelDuenoProtegida } = require("../../../app/dashboard/team/acciones-sobre-dueno");
+  /* eslint-enable @typescript-eslint/no-require-imports */
+  const nada = () => {};
+  const PLAN = { id: "PRO", name: "Profesional", priceMxn: 689, priceMxnAnnual: 5370, features: ["Agenda"], cfdiMonthly: 50, cfdiOverageCents: 0 };
+  const PLAN2 = { ...PLAN, id: "CLINIC", name: "Clínica", priceMxn: 1489, priceMxnAnnual: 11610 };
+
+  function suscripcion(soloLectura: string | null, sobre: Record<string, unknown> = {}) {
+    const m = {
+      clinic: { id: "c1", plan: "PRO" },
+      estadoTexto: "Activo", estadoTono: "exito", lineaPlan: "Plan Profesional", pagadoHasta: null,
+      enPrueba: false, finPrueba: null, diasRestantes: 0, totalDiasPrueba: 14,
+      pruebaVista: { tipo: "normal", barra: false, fecha: false }, ivaDe: () => true, porcentajePrueba: 0, pruebaVencida: false,
+      soloLectura, mostrarActivar: soloLectura === null, pagoRechazado: null, subtituloActivar: "x", onActivar: nada,
+      tieneSuscripcionStripe: true, tieneClienteStripe: true, planes: [PLAN, PLAN2], planActualId: "PRO", planActual: PLAN,
+      anual: false, precioDe: (p: typeof PLAN) => p.priceMxn, sufijoIntervalo: "/mes", beneficiosDe: (p: typeof PLAN) => p.features,
+      cambiando: null, onElegirPlan: nada, onCambiarMetodo: nada, metodoPago: { kind: "card", brand: "visa", last4: "4242" },
+      cancelacionPedida: false, onPedirCancelar: nada,
+      facturas: [{ id: "in_1", kind: "subscription", date: "2026-10-01T00:00:00.000Z", amount: 689, currency: "MXN", status: "pending", source: "stripe", topupVia: null, paymentUrl: "https://pago.example/in_1", downloadUrl: null, receiptUrl: null, description: "Plan" }],
+      stripeNoDisponible: false, cancelarAbierto: false, onCerrarCancelar: nada, onConfirmarCancelar: nada, cancelando: false,
+      planAConfirmar: null, onCerrarConfirmar: nada, onAplicarPlan: nada, previewCargando: false, pagarYCambiar: false, cuerpoConfirmar: null,
+      formatFecha: (d: Date) => d.toISOString().slice(0, 10), formatMoney: (n: number) => `$${n}`,
+      cfdi: null, almacenamiento: null, modalPago: null,
+      ...sobre,
+    };
+    return renderToStaticMarkup(
+      <I18nProvider locale="es" dict={es}>
+        <SuscripcionRediseno m={m} />
+      </I18nProvider>,
+    );
+  }
+
+  it("rediseño: el ADMIN ve plan, estado y método, el aviso del dueño y ningún botón que pague, cambie o cancele", () => {
+    const st = es.shell.subscriptionTab;
+    const admin = suscripcion(st.soloDueno);
+    assert.match(admin, /data-suscripcion-solo-lectura[^>]*>Solo el dueño de la cuenta puede cambiar o pagar el plan\./);
+    assert.match(admin, /Plan Profesional/);
+    assert.match(admin, /4242/, "el método vigente se sigue viendo");
+    for (const boton of [st.changeToThisPlan, st.changePaymentMethod, st.cancelSubscription, st.activateCta, st.stripePortal, st.changePlanTitle]) {
+      assert.ok(!admin.includes(boton), `no debe salir «${boton}»`);
+    }
+    assert.doesNotMatch(admin, /pago\.example/, "ni el «Pagar» de una factura abierta");
+    // Si el dueño ya pidió cancelar, el ADMIN lo ve (sin poder deshacerlo ni repetirlo).
+    assert.ok(suscripcion(st.soloDueno, { cancelacionPedida: true }).includes(st.cancellationRequestedBadge));
+
+    const duenio = suscripcion(null);
+    assert.doesNotMatch(duenio, /data-suscripcion-solo-lectura/);
+    for (const boton of [st.changeToThisPlan, st.changePaymentMethod, st.cancelSubscription, st.activateCta, st.stripePortal]) {
+      assert.ok(duenio.includes(boton), `el dueño sí ve «${boton}»`);
+    }
+    assert.match(duenio, /pago\.example/);
+  });
+
+  it("pestaña de siempre: cada botón de cobro, cambio o cancelación va detrás de !soloLectura", () => {
+    const tab = sinComentarios(leer("src/components/dashboard/subscription-tab.tsx"));
+    assert.match(tab, /soloLectura = false \}: Props\)/, "por defecto, el dueño (nadie pierde nada sin pedirlo)");
+    assert.match(tab, /soloLectura: soloLectura \? t\("shell\.subscriptionTab\.soloDueno"\) : null/);
+    assert.match(tab, /\{soloLectura && \(\s*<p role="note" data-suscripcion-solo-lectura/);
+    assert.match(tab, /\{!soloLectura && \(\s*<section className="bg-card[^"]*"[^>]*>\s*<div[^>]*>\s*<Sparkles/, "«Cambiar plan» entero");
+    assert.match(tab, /\{!soloLectura && \(\s*<button\s+type="button"\s+onClick=\{\(\) => setPaymentModalOpen\(true\)\}\s+className="btn-new btn-new--secondary/, "«Cambiar método de pago»");
+    assert.match(tab, /\{soloLectura \? \(\s*localCancelRequested && \(/, "«Cancelar suscripción» solo para el dueño");
+    assert.match(tab, /\{hasStripeCustomer && !soloLectura && \(/, "portal de Stripe");
+    assert.match(tab, /\{inv\.paymentUrl && !soloLectura && \(/, "«Pagar» de la factura");
+    const settings = sinComentarios(leer("src/app/dashboard/settings/settings-client.tsx"));
+    assert.equal((settings.match(/<SubscriptionTab [^>]*soloLectura=\{!isClinicBillingAdmin\(initUser\.role\)\} \/>/g) ?? []).length, 2, "rediseño y de siempre");
+  });
+
+  it("suspendida: quien no es el dueño ve «Pídele al dueño que pague», sin tarjetas ni botón de pagar, y con salida", () => {
+    const pagina = sinComentarios(leer("src/app/dashboard/suspended/page.tsx"));
+    assert.match(pagina, /const pideAlDueno = puedePagar \? null : \(\s*<PideAlDueno/);
+    assert.equal((pagina.match(/\{pideAlDueno\}/g) ?? []).length, 2, "en los dos diseños");
+    assert.doesNotMatch(pagina, /redirect\([^)]*suspended/, "nunca se redirige a sí misma: sin bucle");
+
+    const caja = renderToStaticMarkup(
+      <I18nProvider locale="es" dict={es}>
+        <PideAlDueno titulo={es.pages.suspended.pideAlDuenoTitulo} texto={es.pages.suspended.pideAlDuenoTexto} yaPago={es.pages.suspended.pideAlDuenoYaPago} />
+      </I18nProvider>,
+    );
+    assert.match(caja, /Pídele al dueño que pague/);
+    assert.match(caja, /href="\/dashboard"/, "«Ya pagó» lleva al panel: si ya entró el pago, entra");
+    assert.doesNotMatch(caja, /<button/);
+
+    // Las acciones de abajo pierden «Pagar ahora» pero conservan el ticket y el manager.
+    const acciones = renderToStaticMarkup(
+      <I18nProvider locale="es" dict={es}>
+        <AccionesSuspendida plan="PRO" clinicName="BEVADENT" managerWhatsapp="529990000000" sinPagar />
+      </I18nProvider>,
+    );
+    assert.doesNotMatch(acciones, /data-accion="pagar"/);
+    assert.match(acciones, /data-accion="ticket"/);
+    assert.match(acciones, /data-accion="manager"/);
+  });
+
+  it("Equipo: a un ADMIN no le salen «Editar», «Desactivar» ni «Eliminar» en la tarjeta del dueño", () => {
+    assert.equal(fichaDelDuenoProtegida({ rolDelMiembro: "SUPER_ADMIN", rolDeQuienMira: "ADMIN" }), true);
+    assert.equal(fichaDelDuenoProtegida({ rolDelMiembro: "SUPER_ADMIN", rolDeQuienMira: "DOCTOR" }), true);
+    assert.equal(fichaDelDuenoProtegida({ rolDelMiembro: "SUPER_ADMIN", rolDeQuienMira: "SUPER_ADMIN" }), false, "entre dueños, igual que hoy");
+    for (const rol of ["ADMIN", "DOCTOR", "RECEPTIONIST", "ASSISTANT"]) {
+      assert.equal(fichaDelDuenoProtegida({ rolDelMiembro: rol, rolDeQuienMira: "ADMIN" }), false, rol);
+    }
+    const equipo = sinComentarios(leer("src/app/dashboard/team/team-client.tsx"));
+    assert.match(equipo, /const duenoProtegido = fichaDelDuenoProtegida\(\{ rolDelMiembro: m\.role, rolDeQuienMira: currentUserRole \}\);/);
+    assert.match(equipo, /\{!duenoProtegido && \(\s*<ButtonNew variant="secondary" icon=\{<Edit [^>]*\/>\} onClick=\{\(\) => openEdit\(m\)\}>/);
+    assert.match(equipo, /\{m\.id !== currentUserId && !duenoProtegido && \(\s*<div[^>]*>\s*<ButtonNew[^>]*\s+onClick=\{\(\) => toggleActive\(m\)\}/);
+    assert.equal((equipo.match(/openEdit\(m\)/g) ?? []).length, 1, "no hay otro camino a «Editar»");
+    assert.equal((equipo.match(/deleteMember\(m\)/g) ?? []).length, 1, "ni a «Eliminar»");
+    // Comprar usuarios extra (subir de plan desde Equipo) también es solo del dueño.
+    assert.match(sinComentarios(leer("src/app/dashboard/team/page.tsx")), /puedeSubir: isClinicBillingAdmin\(user\.role\)/);
+  });
+
+  it("textos: es y en con las mismas claves nuevas, tú y sin «administrador» en lo del dueño", () => {
+    assert.equal(es.shell.subscriptionTab.soloDueno, "Solo el dueño de la cuenta puede cambiar o pagar el plan.");
+    assert.equal(en.shell.subscriptionTab.soloDueno, "Only the account owner can change or pay for the plan.");
+    for (const k of ["pideAlDuenoTitulo", "pideAlDuenoTexto", "pideAlDuenoYaPago"]) {
+      assert.ok(es.pages.suspended[k] && en.pages.suspended[k], k);
+    }
+    assert.equal(es.pages.suspended.pideAlDuenoTitulo, "Pídele al dueño que pague");
+    const nuevo = JSON.stringify([es.shell.subscriptionTab.soloDueno, es.shell.pagoPendiente.soloDueno, es.pages.suspended.pideAlDuenoTitulo, es.pages.suspended.pideAlDuenoTexto, es.pages.suspended.pideAlDuenoYaPago]);
+    assert.doesNotMatch(nuevo, /\b(vos|tenés|podés|pagá|pedile|pedíle)\b/i);
+    assert.doesNotMatch(nuevo, /administrador/i);
+  });
 });

@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Building, User, Clock, Shield, Receipt, Bot, CalendarCheck, ExternalLink, Zap, CreditCard, Bell, MessageCircle, Handshake, ImagePlus, Trash2, Lock } from "lucide-react";
 import { SubscriptionTab } from "@/components/dashboard/subscription-tab";
+import { isClinicBillingAdmin } from "@/lib/billing/authz";
 import { SedeIncluidaAviso } from "@/components/dashboard/sede-incluida-aviso";
 import type { MetodosDisponibles } from "@/lib/billing/metodos-de-pago";
 import { RemindersSection } from "./reminders-section";
@@ -832,7 +833,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
           <Contenido>
 
             {/* ── SUSCRIPCIÓN ── */}
-            {tab === "subscription" && isAdminUser && (sedeIncluida ? <SedeIncluidaAviso {...sedeIncluida} /> : <SubscriptionTab clinic={clinic} rediseno metodosPago={metodosPago} />)}
+            {tab === "subscription" && isAdminUser && (sedeIncluida ? <SedeIncluidaAviso {...sedeIncluida} /> : <SubscriptionTab clinic={clinic} rediseno metodosPago={metodosPago} soloLectura={!isClinicBillingAdmin(initUser.role)} />)}
 
             {/* ── CLÍNICA ── */}
             {tab === "clinica" && ve("clinica") && (
@@ -1617,7 +1618,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
         <div style={{ flex: "1 1 480px", minWidth: 0 }}>
 
       {/* ── SUSCRIPCIÓN ── */}
-      {tab === "subscription" && isAdminUser && (sedeIncluida ? <SedeIncluidaAviso {...sedeIncluida} /> : <SubscriptionTab clinic={clinic} metodosPago={metodosPago} />)}
+      {tab === "subscription" && isAdminUser && (sedeIncluida ? <SedeIncluidaAviso {...sedeIncluida} /> : <SubscriptionTab clinic={clinic} metodosPago={metodosPago} soloLectura={!isClinicBillingAdmin(initUser.role)} />)}
 
       {/* ── CLÍNICA ── */}
       {tab === "clinica" && ve("clinica") && (

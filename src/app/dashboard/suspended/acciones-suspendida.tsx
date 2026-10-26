@@ -25,7 +25,10 @@ export function AccionesSuspendida({
   clinicName: string;
   /** E.164 sin «+» del manager asignado, o null si no tiene. */
   managerWhatsapp: string | null;
-  /** Con la tarjeta rechazada, «Pagar mi plan» y «Cambiar a un plan más grande y pagar» (PagoPendiente) ya cubren el pago. */
+  /**
+   * Sin botón de pagar: con la tarjeta rechazada, «Pagar mi plan» y «Cambiar a un plan más grande y pagar»
+   * (PagoPendiente) ya cubren el pago; y quien no es el dueño no paga (ve «Pídele al dueño que pague»).
+   */
   sinPagar?: boolean;
 }) {
   const t = useT();

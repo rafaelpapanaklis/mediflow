@@ -696,13 +696,14 @@ test("subir: plan igual o más chico → 400, sin tocar Stripe", async () => {
 });
 
 test("subir: sin permiso → 403 sin tocar Stripe", async () => {
-  for (const role of ["DOCTOR", "RECEPTIONIST", "ASSISTANT", null]) {
+  // 26-oct-2026: el ADMIN tampoco (solo el dueño paga o sube de plan).
+  for (const role of ["ADMIN", "DOCTOR", "RECEPTIONIST", "ASSISTANT", null]) {
     const m = montar();
     m.deps.role = role;
     assert.equal((await subirYPagar(m.deps, "PRO")).status, 403);
     assert.equal(m.llamadas.length, 0);
   }
-  assert.equal((await subirYPagar(montar({ role: "ADMIN" }).deps, "PRO")).status, 200);
+  assert.equal((await subirYPagar(montar({ role: "SUPER_ADMIN" }).deps, "PRO")).status, 200);
 });
 
 test("subir: sin pendiente → 409; sedes que bloquean → 409 y no se anula nada", async () => {

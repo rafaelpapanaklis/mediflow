@@ -16,7 +16,7 @@ import { usePagarAhora } from "./pagar-ahora";
 import s from "./pago-pendiente.module.css";
 
 /**
- * Los DOS botones de una clínica con la tarjeta rechazada (solo dueño/administrador de facturación):
+ * Los DOS botones de una clínica con la tarjeta rechazada (solo el dueño, isClinicBillingAdmin):
  *   A. «Pagar mi plan» — cobra lo pendiente del plan actual.
  *   B. «Cambiar a un plan más grande y pagar» — solo planes más grandes; anula lo pendiente y cobra el plan
  *      nuevo completo, a precio de lista (sin la promo del primer mes).
@@ -227,7 +227,7 @@ export function PagoPendiente({
   const [cobrando, setCobrando] = useState(false);
 
   useEffect(() => {
-    // Quien no es dueño/administrador no consulta nada: la ruta tampoco le contestaría.
+    // Quien no es el dueño no consulta nada: la ruta tampoco le contestaría.
     if (!puedePagar) return;
     let vivo = true;
     void leerPagoPendiente().then((l) => {

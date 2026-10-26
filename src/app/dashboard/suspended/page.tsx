@@ -8,6 +8,7 @@ import { isFirstContract } from "@/lib/billing/first-month-promo";
 import { enlaceDeContratacion } from "@/lib/billing/sin-promo.server";
 import { SuspendedPlanCards, type PlanCardData } from "./suspended-client";
 import { SedeIncluidaSuspendida } from "./sede-incluida";
+import { PideAlDueno } from "./pide-al-dueno";
 import { leerGrupoDePago } from "@/lib/billing/sedes-incluidas";
 import { localeFromClinic, serverTForLocale } from "@/i18n/server";
 import { getCurrentUser } from "@/lib/auth";
@@ -151,6 +152,17 @@ export default async function SuspendedPage(
   // con los dos botones de PagoPendiente. Las tarjetas de plan de hoy mandarían al portal sin respetar el
   // plan, así que NO se pintan; sin suscripción viva (cuenta nueva o cancelada) siguen como siempre.
   const conDosBotones = suspendidaPorFalta && tarjetaRechazadaViva(clinic);
+  // Pagar o reactivar el plan es SOLO del dueño (decisión de Rafael, 26-oct-2026; el checkout, SPEI y el pago
+  // pendiente responden 403 a los demás). Quien no lo es ve «Pídele al dueño que pague» en lugar de las tarjetas
+  // y conserva el ticket, el manager y la vuelta al login: nunca se queda sin salida.
+  const puedePagar = isClinicBillingAdmin(user.role);
+  const pideAlDueno = puedePagar ? null : (
+    <PideAlDueno
+      titulo={t("pages.suspended.pideAlDuenoTitulo")}
+      texto={t("pages.suspended.pideAlDuenoTexto")}
+      yaPago={t("pages.suspended.pideAlDuenoYaPago")}
+    />
+  );
   const sinAcceso = isPlanExpired(clinic);
   // ¿Hay IVA configurado para cobrar con tarjeta/OXXO? Sin él, el checkout responde 503 (no cobra sin IVA):
   // la pantalla lo dice y no deja pulsar. SPEI no depende de esto (siempre suma el 16 %).
@@ -177,14 +189,14 @@ export default async function SuspendedPage(
   ) : null;
   const acciones = suspendidaPorFalta ? (
     <>
-      {conDosBotones && (
-        <PagoPendiente puedePagar={isClinicBillingAdmin(user.role)} plan={clinic.plan} suspendida tarjetas={tarjetasDeRespaldo} />
+      {conDosBotones && puedePagar && (
+        <PagoPendiente puedePagar={puedePagar} plan={clinic.plan} suspendida tarjetas={tarjetasDeRespaldo} />
       )}
       <AccionesSuspendida
         plan={clinic.plan}
         clinicName={clinic.name}
         managerWhatsapp={managerAsignado?.manager.whatsappE164 ?? null}
-        sinPagar={conDosBotones}
+        sinPagar={conDosBotones || !puedePagar}
       />
     </>
   ) : null;
@@ -243,8 +255,9 @@ export default async function SuspendedPage(
             titulo={heading}
             texto={isReactivation ? subcopy : subtitulo}
           />
+          {pideAlDueno}
           {acciones}
-          {!conDosBotones && (
+          {!conDosBotones && puedePagar && (
             <SuspendedPlanCards
               plans={planesAMostrar}
               currentPlan={enlace ? enlace.plan : currentPlan}
@@ -308,9 +321,10 @@ export default async function SuspendedPage(
           </p>
         </div>
 
+        {pideAlDueno}
         {acciones}
-        {/* Con la tarjeta rechazada y viva, los dos botones de arriba ocupan su lugar. */}
-        {conDosBotones ? null : (
+        {/* Con la tarjeta rechazada y viva, los dos botones de arriba ocupan su lugar; sin ser el dueño, el aviso de arriba. */}
+        {conDosBotones || !puedePagar ? null : (
         <SuspendedPlanCards
           plans={planesAMostrar}
           currentPlan={enlace ? enlace.plan : currentPlan}

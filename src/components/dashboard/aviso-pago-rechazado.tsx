@@ -9,9 +9,9 @@ import { usePagarAhora } from "./pagar-ahora";
  * (la gracia de 24 h; ver @/lib/billing/cobro-rechazado). Lo monta el layout de /dashboard, así que sale
  * igual con el menú de siempre que con el de dos niveles, en escritorio y en celular (la fila se parte).
  *
- * Dueño o administrador de facturación: la hora de suspensión y el botón de pagar. Los demás roles: el
- * mismo aviso SIN botón y con «Avisa al dueño de la clínica» (no pueden pagar: /api/billing/portal y el
- * cambio de plan exigen dueño/admin). La hora ya llega formateada en la zona de la clínica.
+ * El dueño (SUPER_ADMIN): la hora de suspensión y el botón de pagar. Los demás roles, ADMIN incluido: el
+ * mismo aviso SIN botón y con «Avisa al dueño de la clínica» (no pueden pagar: /api/billing/portal, el
+ * checkout y el cambio de plan exigen al dueño). La hora ya llega formateada en la zona de la clínica.
  *
  * No se puede cerrar: mientras no se pague, es lo más importante de la pantalla.
  */

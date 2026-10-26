@@ -217,9 +217,9 @@ test("pickPurchasedInterval: null cuando ninguna fila registra la compra", () =>
 
 // ── Quién puede cambiar el plan ─────────────────────────────────────────────
 
-test("isClinicBillingAdmin: solo dueño/admin de la clínica", () => {
+test("isClinicBillingAdmin: solo el dueño de la clínica (decisión de Rafael, 26-oct-2026)", () => {
   assert.equal(isClinicBillingAdmin("SUPER_ADMIN"), true);
-  assert.equal(isClinicBillingAdmin("ADMIN"), true);
+  assert.equal(isClinicBillingAdmin("ADMIN"), false);
   // Recepción tiene billing.charge (cobrar a PACIENTES) y aun así no contrata plan.
   for (const role of ["RECEPTIONIST", "DOCTOR", "ASSISTANT", "VIEWER", ""]) {
     assert.equal(isClinicBillingAdmin(role), false, `role=${role}`);

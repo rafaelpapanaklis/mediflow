@@ -117,7 +117,7 @@ let POST: (req: any) => Promise<Response>;
 before(async () => {
   dobles.set(path.join(RAIZ, "src/lib/prisma.ts"), { prisma: prismaDoble });
   dobles.set(path.join(RAIZ, "src/lib/auth.ts"), {
-    getCurrentUser: async () => ({ id: "u1", email: "u@ejemplo.mx", clinicId: "cA" }),
+    getCurrentUser: async () => ({ id: "u1", role: "SUPER_ADMIN", email: "u@ejemplo.mx", clinicId: "cA" }),
   });
   dobles.set(path.join(RAIZ, "src/lib/stripe.ts"), {
     getStripeSafe: () => stripeDoble,

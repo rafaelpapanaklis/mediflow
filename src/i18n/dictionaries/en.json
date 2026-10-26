@@ -1449,6 +1449,7 @@
       "speiHelp": "In the transfer reference, write your clinic's name. After your payment is confirmed, your access is reactivated within a maximum of 24 business hours."
     },
     "subscriptionTab": {
+      "soloDueno": "Only the account owner can change or pay for the plan.",
       "cancelRequestedToast": "Cancellation request recorded",
       "cancelRequestError": "Error recording cancellation",
       "errChangePlan": "Couldn't change the plan",
@@ -1681,7 +1682,7 @@
       "errorLectura": "We couldn't calculate what's pending. Try again or contact support.",
       "pagoRecibido": "Payment received. We're reactivating your access…",
       "errorCobro": "We couldn't process the charge. Try again or contact support.",
-      "soloDueno": "Ask the clinic owner or an administrator to pay the plan.",
+      "soloDueno": "Ask the account owner to pay the plan.",
       "terminarCambio": "Finish the change to {plan} and pay",
       "cambioNoDisponible": "We couldn't prepare the plan change. Use \"Update card / pay\" or contact support.",
       "cambioEnCursoMonto": "You still need to finish the change to {plan}: {monto}"
@@ -9853,6 +9854,9 @@
       "endTimeLabel": "End time *"
     },
     "suspended": {
+      "pideAlDuenoTitulo": "Ask the owner to pay",
+      "pideAlDuenoTexto": "Only the account owner can pay for or reactivate the plan. As soon as they pay, you can sign back in with your same account.",
+      "pideAlDuenoYaPago": "They paid: go to the dashboard",
       "planExpiredTitle": "Activate your plan",
       "planExpiredDescription": "Your access to the dashboard is blocked. Activate your plan to use DaleControl: appointments, records, and billing.",
       "renewPlanCta": "Activate plan ↓",

@@ -309,7 +309,7 @@ export const claves = {
 
 export const MENSAJES = {
   sinPendiente: "No tienes ningún pago pendiente.",
-  sinPermiso: "Solo el dueño o un administrador de la clínica puede pagar o cambiar el plan.",
+  sinPermiso: "Solo el dueño de la cuenta puede cambiar o pagar el plan.",
   planNoMasGrande: "Solo puedes subir a un plan más grande que el que tienes.",
   stripeNoContesto: MENSAJES_CHECKOUT.proveedorNoContesto,
   cambioEnCurso: "Ya hay un cambio de plan en curso, espera unos segundos.",
