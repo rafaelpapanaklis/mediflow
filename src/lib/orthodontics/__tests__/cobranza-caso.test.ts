@@ -192,7 +192,10 @@ test("cobranzaDelCasoUnificada: modo PRECIO_TOTAL se comporta EXACTAMENTE como c
     ahora: new Date("2026-02-10T12:00:00Z"),
     zonaHoraria: "America/Mexico_City",
   });
-  assert.deepEqual(unificado, directo);
+  // 26-oct: el unificado además dice su modo (para «solo se debe lo vencido»); lo demás, idéntico.
+  const { modo, ...resto } = unificado!;
+  assert.equal(modo, "PRECIO_TOTAL");
+  assert.deepEqual(resto, directo);
 });
 
 test("cobranzaDelCasoUnificada: modo PAGO_POR_CONTROL sin colocación todavía, solo controles", () => {
@@ -266,7 +269,9 @@ test("cobranzaDelCasoUnificada: modo ausente/desconocido cae a PRECIO_TOTAL (cas
     zonaHoraria: "America/Mexico_City",
   });
   const directo = cobranzaDelCaso({ ...facturaPrincipal, saldoAFavorPrevio: 0, ahora: new Date("2026-02-10T12:00:00Z"), zonaHoraria: "America/Mexico_City" });
-  assert.deepEqual(r, directo);
+  const { modo, ...resto } = r!;
+  assert.equal(modo, "PRECIO_TOTAL");
+  assert.deepEqual(resto, directo);
 });
 
 // ronda 3 (ws1-t2) — H7: Caja/Hoy solo mostraban la cuota vencida más vieja

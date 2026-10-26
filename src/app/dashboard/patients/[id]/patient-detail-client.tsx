@@ -76,6 +76,7 @@ import { AvisoPresupuestosMovidos, EnlaceAPresupuestos } from "@/components/dash
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { CODIGO_PLAN_CON_NOTA } from "@/lib/treatments/borrar-plan";
 import { useCuentasDelPaciente } from "@/components/dashboard/expediente-rediseno/cuenta-del-plan";
+import { porHacerSinPagarDelPaciente } from "@/lib/treatments/sin-doble-cobro";
 import { cancelarCitaEnServidor, useCancelarCita } from "@/components/dashboard/agenda/cancelar-cita";
 import { planSinCosto } from "@/lib/treatments/plan-sin-costo";
 import { DentalForm }          from "@/components/clinical/dental-form";
@@ -613,6 +614,9 @@ export function PatientDetailClient({
   // relee al cambiar los planes, al cobrar y al marcar hechos (`refrescoCuentas`).
   const [refrescoCuentas, setRefrescoCuentas] = useState(0);
   const cuentasDePlanes = useCuentasDelPaciente(patient.id, canViewBilling && treatments.length > 0, `${treatments.length}:${refrescoCuentas}:${planesDelServidor.map((p: any) => p.id + p.updatedAt).join(",")}`);
+  // 26-oct (Rafael): el «Saldo» de la cabecera dice lo mismo que la cuenta del plan — de una nota de
+  // plan solo se debe lo hecho menos lo pagado. Mientras las cuentas no llegan, la suma de siempre.
+  const porHacerDePlanes = porHacerSinPagarDelPaciente(cuentasDePlanes.cuentas);
   const pediatricsState = derivePediatricsTabState({
     hasData:      Boolean(pediatricsData),
     moduleActive: pediatricsModuleActive,
@@ -1971,7 +1975,7 @@ export function PatientDetailClient({
           lastVisitDate={lastAppt?.date ?? null}
           // H19: en ortodoncia, los controles firmados (aunque no tengan cita atendida) también son visitas.
           visitCount={Math.max(completedCount, orthoRedesignVM?.visitas?.total ?? 0)}
-          pendingBalance={totalBalance}
+          pendingBalance={Math.max(0, Math.round((totalBalance - porHacerDePlanes) * 100) / 100)}
           portalUrl={portalLink}
           portalAccountStatus={portalStatus}
           invitingPortal={invitingPortal}

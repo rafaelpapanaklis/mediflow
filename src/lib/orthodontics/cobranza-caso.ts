@@ -33,7 +33,7 @@ import {
   type CuotaConEstado,
   type EstadoCuota,
 } from "@/lib/invoices/plan-de-pagos";
-import { normalizarOrthoBillingMode } from "./billing-mode";
+import { normalizarOrthoBillingMode, type OrthoBillingMode } from "./billing-mode";
 
 export interface CobranzaDelCasoInput {
   /**
@@ -86,6 +86,11 @@ export interface CobranzaDelCaso {
   pagadoDeMas?: number;
   /** "YYYY-MM-DD" de la próxima cuota que aún no vence, o `null` si no queda ninguna (plan saldado o sin fechas). */
   proximoVencimiento: string | null;
+  /**
+   * El modo de cobro del caso, si lo resolvió `cobranzaDelCasoUnificada`. En «Precio total a plazos»
+   * solo lo VENCIDO es por cobrar (decisión de Rafael, 26-oct-2026; `exigibleDelCaso`).
+   */
+  modo?: OrthoBillingMode;
 }
 
 /** Resumen de cobranza de un caso, listo para pintar. Determinista: mismo input, mismo resultado. */
@@ -389,7 +394,7 @@ export function cobranzaDelCasoUnificada(input: CobranzaUnificadaInput): Cobranz
 
   if (modo === "PRECIO_TOTAL") {
     if (!input.facturaPrincipal) return null;
-    return cobranzaDeLaPrincipal(input.facturaPrincipal, input.saldoAFavorPrevio, input.ahora, input.zonaHoraria);
+    return { ...cobranzaDeLaPrincipal(input.facturaPrincipal, input.saldoAFavorPrevio, input.ahora, input.zonaHoraria), modo };
   }
 
   const colocacion = input.facturaPrincipal
@@ -403,7 +408,7 @@ export function cobranzaDelCasoUnificada(input: CobranzaUnificadaInput): Cobranz
   // aparte (`saldoAFavorPaciente`, `PanelDeCobro.saldoAFavor`), y así Pacientes
   // y Cobranza dicen «sin plan» los dos (ws1-t4).
   if (!combinado) return null;
-  return { ...combinado, saldoAFavor: aPesos(aCentavos(combinado.saldoAFavor) + aCentavos(input.saldoAFavorPrevio)) };
+  return { ...combinado, saldoAFavor: aPesos(aCentavos(combinado.saldoAFavor) + aCentavos(input.saldoAFavorPrevio)), modo };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -445,4 +450,31 @@ export function deudaDelCaso(
     facturado: aPesos(cuotas.reduce((s, q) => s + aCentavos(q.importe), 0)),
     pagado: aPesos(cuotas.reduce((s, q) => s + aCentavos(q.abonado), 0)),
   };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LO QUE SE DEBE YA (decisión de Rafael, 26-oct-2026): en «Precio total a
+// plazos» el caso solo DEBE lo vencido según su calendario de cuotas; lo que
+// aún no vence es «por vencer», no deuda. Lo usan «Por cobrar» de Cobranza de
+// ortodoncia y de Finanzas (y Caja, por `computeReceivables`). En «Pago por
+// control» cada control se factura al hacerse: todo lo facturado se debe, como
+// siempre. Los extras (reposiciones…) no tienen fecha: se deben.
+// `deudaDelCaso` no cambia: sigue siendo «lo que le falta por pagar».
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface ExigibleDelCaso {
+  /** Lo que se debe hoy: lo vencido del plan (o todo lo facturado en «pago por control») + extras. */
+  porCobrar: number;
+  /** Lo del plan que aún no vence (solo «Precio total a plazos»). */
+  porVencer: number;
+}
+
+export function exigibleDelCaso(
+  cobranza: CobranzaDelCaso | null,
+  extras: { monto: number; cantidad: number } | null | undefined,
+): ExigibleDelCaso {
+  const deuda = deudaDelCaso(cobranza, extras);
+  if (cobranza?.modo !== "PRECIO_TOTAL") return { porCobrar: deuda.porCobrar, porVencer: 0 };
+  const porVencerC = Math.max(0, aCentavos(deuda.delPlan) - aCentavos(deuda.vencido));
+  return { porCobrar: aPesos(aCentavos(deuda.porCobrar) - porVencerC), porVencer: aPesos(porVencerC) };
 }

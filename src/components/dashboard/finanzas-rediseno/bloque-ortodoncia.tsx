@@ -142,6 +142,8 @@ function Cuerpo({ datos }: { datos: BloqueOrtodonciaFinanzas }) {
             <p className={s.cifraPista}>
               {cartera.vencido > 0 ? `${plural(cartera.casosConAtraso, "caso con atraso", "casos con atraso")} · ` : ""}
               de {fmtMXN(cartera.porCobrar)} por cobrar
+              {/* 26-oct: en «Precio total a plazos» lo que aún no vence no es deuda: va aparte. */}
+              {(cartera.porVencer ?? 0) > 0 ? ` · ${fmtMXN(cartera.porVencer ?? 0)} por vencer` : ""}
             </p>
             <p className={s.cifraPista}><QueCuenta clave="ortoVencido" /></p>
           </div>

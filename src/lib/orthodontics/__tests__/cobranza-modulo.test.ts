@@ -329,6 +329,8 @@ test("sin casos: lista vacía y resumen en cero", () => {
     sinPlan: 0,
     total: 0,
     extras: 0,
+    exigible: 0,
+    porVencerDelPlan: 0,
   });
 });
 

@@ -537,11 +537,12 @@ export function FinanzasRediseno() {
                     <div className={`${s.kpiValor} ${vencido > 0 ? s.kpiValorPeligro : ""}`}>{fmtMXN(vencido)}</div>
                     <p className={s.kpiPista}><QueCuenta clave="vencido" /></p>
                   </Link>
-                  {/* Notas de plan: lo aceptado que aún no se hace sale de «Por cobrar» y se ve aquí. */}
+                  {/* Lo que aún no se debe sale de «Por cobrar» y se ve aquí: lo aceptado en planes y sin hacer,
+                      y las cuotas de ortodoncia «Precio total» que aún no vencen (26-oct). */}
                   {(data.saldos?.porHacer ?? 0) > 0 && (
                     <div className={`${s.saldo} ${s.saldoAncho}`} data-saldo-por-hacer>
                       <div className={s.kpiArriba}>
-                        <span className={s.kpiEtiqueta}>Por hacer (aceptado)</span>
+                        <span className={s.kpiEtiqueta}>Por hacer / por vencer</span>
                         <span className={s.kpiIcono}>
                           <Hourglass size={16} strokeWidth={1.75} aria-hidden />
                         </span>

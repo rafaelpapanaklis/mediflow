@@ -16,7 +16,7 @@
 
 import type { OrthoTreatmentStatus } from "@prisma/client";
 import { ACTIVE_PLAN_STATUSES, type OrthoCaseSummary } from "./specialty-kpis";
-import { deudaDelCaso } from "./cobranza-caso";
+import { deudaDelCaso, exigibleDelCaso } from "./cobranza-caso";
 
 /** Una mensualidad «por vencer» es la que vence de hoy a siete días: la misma ventana que la lista de Caja. */
 export const HORIZONTE_POR_VENCER_DIAS = 7;
@@ -61,6 +61,14 @@ export interface FilaCobranza {
    * (ws1-t4, revisión final, fallo 1). Los extras van además aparte en `extrasPendientes`.
    */
   porCobrar: number;
+  /**
+   * Lo que se DEBE ya (decisión de Rafael, 26-oct-2026; `exigibleDelCaso`): en «Precio total a
+   * plazos», solo lo vencido + extras; en «Pago por control», igual que `porCobrar`. Es la columna
+   * «Por cobrar» de la pantalla. Sin dato (quien arma la fila a mano) = `porCobrar`.
+   */
+  exigible?: number;
+  /** Lo del plan que aún no vence («Precio total a plazos»): no es deuda todavía. */
+  porVencerDelPlan?: number;
   cuotasPagadas: number;
   cuotasTotales: number;
   /** #80: lo que debe en extras (reposiciones, retenedores…) — aparte de las mensualidades. */
@@ -81,6 +89,10 @@ export interface ResumenDeCobranza {
   porVencer: { casos: number; importe: number };
   /** Todo lo que falta por cobrar de todos los casos (extras incluidos), en pesos. */
   porCobrar: number;
+  /** De eso, lo que se debe ya (vencido + extras en «Precio total»; todo en «Pago por control»). */
+  exigible?: number;
+  /** Y lo que aún no vence de los planes a plazos. `exigible + porVencerDelPlan = porCobrar`. */
+  porVencerDelPlan?: number;
   alCorriente: number;
   sinPlan: number;
   total: number;
@@ -125,8 +137,11 @@ export function filasDeCobranza(cases: OrthoCaseSummary[], hoy: string): FilaCob
   for (const c of cases) {
     const casoActivo = ACTIVE_PLAN_STATUSES.includes(c.status);
     const deuda = deudaDelCaso(c.cobranza, c.extrasPendientes);
+    const exigible = exigibleDelCaso(c.cobranza, c.extrasPendientes);
     const extrasPendientes = deuda.extras;
     const base = {
+      exigible: exigible.porCobrar,
+      porVencerDelPlan: exigible.porVencer,
       extrasPendientes,
       extrasCantidad: c.extrasPendientes?.cantidad ?? 0,
       responsableNombre: c.responsableNombre ?? null,
@@ -214,6 +229,8 @@ export function resumenDeCobranza(filas: FilaCobranza[]): ResumenDeCobranza {
   let vencidoC = 0;
   let porVencerC = 0;
   let porCobrarC = 0;
+  let exigibleC = 0;
+  let porVencerDelPlanC = 0;
   let extrasC = 0;
   const r: ResumenDeCobranza = {
     vencido: { casos: 0, cuotas: 0, importe: 0 },
@@ -225,6 +242,8 @@ export function resumenDeCobranza(filas: FilaCobranza[]): ResumenDeCobranza {
   };
   for (const f of filas) {
     porCobrarC += aCentavos(f.porCobrar);
+    exigibleC += aCentavos(f.exigible ?? f.porCobrar);
+    porVencerDelPlanC += aCentavos(f.porVencerDelPlan ?? 0);
     extrasC += aCentavos(f.extrasPendientes ?? 0);
     if (f.situacion === "vencido") {
       r.vencido.casos += 1;
@@ -242,6 +261,8 @@ export function resumenDeCobranza(filas: FilaCobranza[]): ResumenDeCobranza {
   r.vencido.importe = aPesos(vencidoC);
   r.porVencer.importe = aPesos(porVencerC);
   r.porCobrar = aPesos(porCobrarC);
+  r.exigible = aPesos(exigibleC);
+  r.porVencerDelPlan = aPesos(porVencerDelPlanC);
   r.extras = aPesos(extrasC);
   return r;
 }

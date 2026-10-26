@@ -138,8 +138,11 @@ export function VistaCobranza({
     },
     {
       id: "todos",
-      valor: fmtMoney(resumen.porCobrar),
-      etiqueta: `Por cobrar en total · ${resumen.total} caso${resumen.total === 1 ? "" : "s"}`,
+      // 26-oct (Rafael): en «Precio total a plazos» solo se debe lo vencido; lo demás va como «por vencer».
+      valor: fmtMoney(resumen.exigible ?? resumen.porCobrar),
+      etiqueta:
+        `Por cobrar · ${resumen.total} caso${resumen.total === 1 ? "" : "s"}` +
+        ((resumen.porVencerDelPlan ?? 0) > 0 ? ` · ${fmtMoney(resumen.porVencerDelPlan ?? 0)} por vencer` : ""),
       icono: Wallet,
       tono: "violeta",
     },
@@ -374,7 +377,10 @@ export function VistaCobranza({
                           </>
                         ) : (
                           <>
-                            <span className={s.importe}>{fmtMoney(f.porCobrar)}</span>
+                            <span className={s.importe}>{fmtMoney(f.exigible ?? f.porCobrar)}</span>
+                            {(f.porVencerDelPlan ?? 0) > 0 ? (
+                              <div className={s.detalle} data-por-vencer>y {fmtMoney(f.porVencerDelPlan ?? 0)} por vencer</div>
+                            ) : null}
                             <div className={s.detalle}>
                               {f.cuotasPagadas} de {f.cuotasTotales} pago{f.cuotasTotales === 1 ? "" : "s"} cubierto
                               {f.cuotasTotales === 1 ? "" : "s"}

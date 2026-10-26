@@ -9,7 +9,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { columnaNotaDelPlanExiste, tablaDeFilasExiste } from "./items-db";
 import type { EstadoDeFila } from "./items";
-import type { FilaParaDeuda, NotaParaDeuda } from "./por-cobrar";
+import { deudaDeNotaDelPlan, type FilaParaDeuda, type NotaParaDeuda } from "./por-cobrar";
 
 type DbCrudo = Pick<typeof prisma, "$queryRaw">;
 
@@ -154,4 +154,30 @@ export async function porHacerPorPaciente(
     porPaciente.set(f.patientId, Math.round(((porPaciente.get(f.patientId) ?? 0) + ph) * 100) / 100);
   }
   return { porPaciente, porFactura };
+}
+
+/**
+ * De unas facturas con saldo, cuánto de ese saldo es lo «por hacer» de una nota de plan (aceptado,
+ * sin hacer y sin pagar; `por-cobrar.ts`). Lo usa quien suma saldos por paciente (la lista de
+ * Pacientes) para decir lo mismo que la cuenta del plan: saldo − esto = lo hecho menos lo pagado.
+ * Solo las notas de plan salen del mapa; sin el SQL del plan, o si algo falla, mapa vacío.
+ */
+export async function porHacerDeNotas(
+  clinicId: string,
+  facturas: Array<{ id: string; balance: number | null }>,
+  db: DbCrudo = prisma,
+): Promise<Map<string, number>> {
+  const salida = new Map<string, number>();
+  const conSaldo = facturas.filter((f) => (Number(f.balance) || 0) > 0);
+  if (!clinicId || conSaldo.length === 0) return salida;
+  const leidas = await leerNotasDePlan(clinicId, conSaldo.map((f) => f.id), db);
+  if (leidas.size === 0) return salida;
+  // El vencido no importa aquí (solo cuánto es por hacer): sin corte.
+  for (const f of conSaldo) {
+    const l = leidas.get(f.id);
+    if (!l) continue;
+    const ph = Math.min(deudaDeNotaDelPlan(l.nota, l.filas, null).porHacerSinPagar, Number(f.balance) || 0);
+    if (ph > 0) salida.set(f.id, Math.round(ph * 100) / 100);
+  }
+  return salida;
 }

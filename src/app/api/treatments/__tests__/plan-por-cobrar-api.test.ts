@@ -344,3 +344,23 @@ test("cerrar plan: motivo obligatorio, permisos, doctor ajeno, la otra clínica 
   assert.equal(plan.status, "ACTIVE", "con la nota timbrada no se cierra nada");
   assert.equal((await filas(planId)).filter((f: any) => f.estado === "cancelado").length, 0);
 });
+
+test("lista de Pacientes (v2): de la nota del plan se resta lo por hacer; las demás facturas, enteras", async (t) => {
+  if (salta(t)) return;
+  await usar();
+  const { planId, notaId } = await planAceptado();
+  await hecho(planId, "Resina", 2);
+  await pagar(notaId, 500);
+  await base.db.query(
+    `INSERT INTO "invoices" ("id", "clinicId", "patientId", "invoiceNumber", "items", "subtotal", "total", "balance", "status")
+     VALUES ('extra', 'c1', 'pac-c1', 'F-EXTRA', '[]', 3000, 3000, 3000, 'PENDING')`,
+  );
+  const { porHacerDeNotas } = await import("@/lib/treatments/por-cobrar-db");
+  const m = await porHacerDeNotas("c1", [{ id: notaId, balance: 1550.5 }, { id: "extra", balance: 3000 }]);
+  assert.deepEqual(Object.fromEntries(m), { [notaId]: 800 }, "saldo del paciente = 1,550.50 − 800 + 3,000 = lo hecho sin pagar + lo de fuera");
+  // Con el tenant de otra clínica no encuentra la nota.
+  assert.equal((await porHacerDeNotas("c2", [{ id: notaId, balance: 1550.5 }])).size, 0);
+  // Y la cuenta del plan dice lo mismo (debe 750.50 = 1,550.50 − 800).
+  const c = await cuenta(planId);
+  assert.equal(c.debe, 750.5);
+});
