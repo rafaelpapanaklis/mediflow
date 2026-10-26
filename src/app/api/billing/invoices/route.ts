@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getStripeSafe } from "@/lib/stripe";
 import { sinActivacionManual } from "@/lib/billing/pagos-reales";
+import { notClinicBillingAdminResponse, puedeVerSuscripcion } from "@/lib/billing/authz";
 import {
   esPagoStripe,
   filaDeRecarga,
@@ -41,9 +42,16 @@ interface BillingInvoicesResponse {
  * lo mismo: nunca arroja 500 por Stripe.
  *
  * Multi-tenant: clinicId de la sesión, todas las queries scoped.
+ *
+ * Solo lectura: el dueño y los administradores (`puedeVerSuscripcion`, como la pestaña
+ * «Suscripción» que lo pinta). Antes no miraba el rol y cualquier usuario de la clínica
+ * leía el historial con un fetch a mano. Pagar una factura sigue siendo solo del dueño.
  */
 export async function GET() {
   const user = await getCurrentUser();
+  if (!puedeVerSuscripcion(user.role)) {
+    return NextResponse.json(notClinicBillingAdminResponse(), { status: 403 });
+  }
   const clinicId = user.clinicId;
   // `clinicId: undefined` no filtra nada en Prisma: sin clínica, no se consulta.
   if (!clinicId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

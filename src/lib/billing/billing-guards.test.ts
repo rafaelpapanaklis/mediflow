@@ -81,6 +81,7 @@ const CHECKOUT = "src/app/api/billing/checkout/route.ts";
 const SPEI = "src/app/api/billing/spei-transferencia/route.ts";
 const CANCELAR = "src/app/api/clinic/subscription/cancel-request/route.ts";
 const METODO = "src/app/api/billing/payment-method/route.ts";
+const FACTURAS = "src/app/api/billing/invoices/route.ts";
 
 // [qué, ruta, handler, guard]: lo que cobra o cambia exige al dueño; lo que solo lee, dueño o ADMIN.
 const GUARDAS: Array<[string, string, "GET" | "POST", string]> = [
@@ -92,6 +93,7 @@ const GUARDAS: Array<[string, string, "GET" | "POST", string]> = [
   ["pedir la cancelación", CANCELAR, "POST", "isClinicBillingAdmin(ctx.role)"],
   ["preview GET (solo lectura)", PREVIEW, "GET", "puedeVerSuscripcion(user.role)"],
   ["método de pago vigente (solo lectura)", METODO, "GET", "puedeVerSuscripcion(user.role)"],
+  ["historial de facturas (solo lectura)", FACTURAS, "GET", "puedeVerSuscripcion(user.role)"],
 ];
 
 for (const [label, rel, metodo, guard] of GUARDAS) {
@@ -114,7 +116,7 @@ test("las lecturas no abren la puerta a cobrar: cada handler que cobra usa isCli
 
 test("todas las rutas de suscripción usan la MISMA fuente de autorización", () => {
   // Duplicar el criterio es cómo se desincronizaron antes el preview y el cobro.
-  for (const rel of [CHANGE_PLAN, PREVIEW, PORTAL, CHECKOUT, SPEI, CANCELAR, METODO]) {
+  for (const rel of [CHANGE_PLAN, PREVIEW, PORTAL, CHECKOUT, SPEI, CANCELAR, METODO, FACTURAS]) {
     assert.match(read(rel), /from "@\/lib\/billing\/authz"/, `${rel}: no importa authz`);
   }
 });
