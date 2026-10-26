@@ -149,9 +149,10 @@ const prismaFalso = {
       e.citasActualizadas.push(args);
       return {};
     },
+    updateMany: async (args: any) => escribirCita(args),
   },
   $transaction: async (fn: any) =>
-    fn({ appointment: { update: async (args: any) => (e.citasActualizadas.push(args), {}) } }),
+    fn({ appointment: { update: async (args: any) => (e.citasActualizadas.push(args), {}), updateMany: async (args: any) => escribirCita(args) } }),
   $executeRaw: (strings: TemplateStringsArray) => {
     e.sqlCrudo.push(strings.join("?"));
     return Promise.resolve(1);
@@ -310,6 +311,19 @@ function recordatorio(over: Partial<any> = {}) {
     appointment: { id: "cita1", status: "SCHEDULED", patientId: "pac1", startsAt: new Date("2026-10-08T16:00:00Z") },
     ...over,
   };
+}
+
+/**
+ * WS1-T3 v7: la respuesta al recordatorio escribe con `updateMany` condicionado
+ * (clínica y estado que admite respuesta). Como la base: solo escribe si casa;
+ * la cita de estas pruebas está SCHEDULED, como la del recordatorio.
+ */
+function escribirCita(args: any) {
+  const w = args.where ?? {};
+  const casa = w.clinicId === CLINICA.id && (!w.status?.in || w.status.in.includes("SCHEDULED"));
+  if (!casa) return { count: 0 };
+  e.citasActualizadas.push(args);
+  return { count: 1 };
 }
 
 const RECIBI = "Recibí tu archivo, en un momento te atiende una persona.";

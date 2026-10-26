@@ -89,7 +89,11 @@ test("schema.prisma: tablas aparte, sin relaciones nuevas en Clinic ni columnas 
 
 test("C4: una sede nueva hereda la bandera de la sede PRINCIPAL del dueño SIEMPRE (como la agenda), no solo al copiar", () => {
   const r = leer("src/app/api/clinics/route.ts");
-  assert.match(r, /const principalGoogle = origen \? \{ clinicId: origen\.clinicId \} : await sedePrincipalDe\(supabaseId\);/);
+  // ws1-t4 v2 · G1: sin copia, la fuente es la principal del dueño, o la sede activa si la principal tiene clave.
+  // `fuente` se decide ANTES y FUERA del `if (copiar …)`, así que la herencia sigue corriendo siempre.
+  assert.match(r, /const principalGoogle = origen \? \{ clinicId: origen\.clinicId \} : fuente;/);
+  assert.match(r, /principal: await sedePrincipalDe\(supabaseId\)/);
+  assert.ok(r.indexOf("fuente = decision.origen") > 0 && r.indexOf("fuente = decision.origen") < r.indexOf("if (copiar && fuente)"));
   assert.match(r, /heredarBanderaGoogle\(principalGoogle\.clinicId, clinic\.id\)/);
   // Fuera del `if (origen …)` de la copia: corre aunque no se marque «copiar configuración».
   const bloque = r.slice(r.indexOf("const principalGoogle"));
