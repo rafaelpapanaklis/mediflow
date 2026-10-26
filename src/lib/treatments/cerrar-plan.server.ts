@@ -38,6 +38,8 @@ export interface NotaCerrada {
   despues: { total: number; paid: number; status: string };
   quitadas: Array<{ nombre: string; importe: number }>;
   aFavor: number;
+  /** El descuento global no cuadraba al centavo y pasó a las líneas que se quedan (con IVA aparte, raro). */
+  descuentoALasLineas?: boolean;
 }
 
 export type ResultadoCierre =
@@ -233,6 +235,7 @@ export async function cerrarPlan(args: { clinicId: string; planId: string; userI
           despues: cancelada ? { total: Number(n.total) || 0, paid: 0, status: "CANCELLED" } : { total: aj.total, paid: aj.paid, status: aj.status },
           quitadas: aj.quitadas.map((q) => ({ nombre: q.nombre, importe: q.importe })),
           aFavor: aj.aFavor,
+          descuentoALasLineas: aj.descuentoALasLineas,
         });
         // Las hechas que se quedan, en su nueva línea.
         if (!cancelada && aj.lineaNueva.size) {
@@ -277,6 +280,7 @@ export async function cerrarPlan(args: { clinicId: string; planId: string; userI
         `Cerró el plan «${plan.name}»: la nota ${n.invoiceNumber} queda en lo hecho (${dinero(n.despues.status === "CANCELLED" ? 0 : n.despues.total)}). ` +
         `Quitó lo no hecho: ${quitadas}.` +
         (n.aFavor > 0 ? ` ${dinero(n.aFavor)} pagados de más quedan como saldo a favor.` : "") +
+        (n.descuentoALasLineas ? " El descuento de la nota pasó a sus conceptos (cada uno con su parte) para que cuadre al centavo con el IVA." : "") +
         ` Motivo: ${motivo}`,
       entityType: "invoice",
       entityId: n.invoiceId,

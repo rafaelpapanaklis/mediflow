@@ -68,3 +68,11 @@ test("correo de la nota: la misma línea que el portal («de esto, $X aún no lo
   assert.equal(lineaAunNoLoDebes(100, 0), null);
   assert.equal(lineaAunNoLoDebes(100, 300), lineaAunNoLoDebes(100, 100), "nunca más que el saldo");
 });
+
+test("portal (v5, N5): «Pagar por adelantado» solo cuando hay saldo y no se debe nada; si debe algo, se paga lo debido", async () => {
+  const { esPagoPorAdelantado } = await import("@/lib/patient-portal/pago-mercadopago");
+  assert.equal(esPagoPorAdelantado({ balance: 2050.5, aunNoSeDebe: 2050.5 }), true, "plan aceptado sin hacer");
+  assert.equal(esPagoPorAdelantado({ balance: 1550.5, aunNoSeDebe: 800 }), false, "debe $750.50: se paga eso");
+  assert.equal(esPagoPorAdelantado({ balance: 500 }), false, "factura normal");
+  assert.equal(esPagoPorAdelantado({ balance: 0, aunNoSeDebe: 0 }), false, "sin saldo");
+});

@@ -24,9 +24,10 @@ import {
   cobroMpDisponible,
   estadoDelLink,
   obtenerLinkDeFactura,
+  TEXTO_ERROR_LINK,
   type DepsFacturaMp,
 } from "../servicio.server";
-import { METODO_MERCADO_PAGO, lineaLinkWhatsApp, refDeFactura } from "../core";
+import { METODO_MERCADO_PAGO, lineaLinkWhatsApp, montoParaLink, refDeFactura } from "../core";
 import { buildPaymentNotice } from "../../invoices/payment-notice";
 import { buildCorreoFactura } from "../../invoices/correo-factura";
 import { normalizarCondiciones } from "../../quotes/condiciones-pago";
@@ -605,11 +606,12 @@ describe("el link de una factura a plazos, por lo vencido/la mensualidad (H68/F9
   });
   it("el saldo a cobrar es la mensualidad/lo vencido, y solo cae al saldo completo sin condiciones a plazos", () => {
     assert.match(src, /const sugerido = montoSugeridoDeCobro\(condicionesPorFactura\.get\(invoiceId\) \?\? null, inv\.total, inv\.paid, hoy\)\s*\n\s*\|\| saldoPorCobrar\(inv\);/);
-    // …y nunca más que lo debido (26-oct, revisión t5 N3).
-    assert.match(src, /const saldo = debido === null \? sugerido : redondear2\(Math\.min\(sugerido, debido\)\);/);
+    // …y nunca más que lo debido, salvo adelanto pedido (26-oct, revisión t5 N3/N5): `montoParaLink`.
+    assert.match(src, /const cuanto = montoParaLink\(\{ sugerido, saldo: saldoPorCobrar\(inv\), noSeDebe, adelanto: args\.adelanto === true \}\);/);
+    assert.match(src, /const saldo = cuanto\.monto;/);
   });
   it("el mínimo del link ($10 MXN) se comprueba sobre el monto YA ajustado, no sobre el saldo completo", () => {
-    const iSaldo = src.indexOf("const saldo = debido === null ? sugerido");
+    const iSaldo = src.indexOf("const saldo = cuanto.monto;");
     const iMinimo = src.indexOf("if (saldo < MINIMO_LINK_MXN)");
     assert.ok(iSaldo > 0 && iMinimo > iSaldo, "el mínimo se comprueba DESPUÉS de calcular `saldo`, y sobre esa variable");
   });
@@ -630,12 +632,53 @@ describe("el link cobra solo lo debido (nota de plan / ortodoncia por vencer)", 
     assert.equal(e.mp.preferencias[0].opts.items[0].unit_price, 200);
   });
 
-  it("si aún no se debe nada, no hay link (como una factura sin saldo)", async () => {
+  it("si aún no se debe nada, no hay link de cobro: `nada_debido` (no «ya no tiene saldo») — t5 N4", async () => {
     const e = escenario();
     const r = await obtenerLinkDeFactura({ clinicId: "c1", invoiceId: "f1", userId: "u1" }, { ...e.deps, aunNoSeDebe: async () => 1000 });
     assert.equal(r.ok, false);
-    assert.equal(r.error, "sin_saldo");
+    assert.equal(r.error, "nada_debido");
+    assert.match(TEXTO_ERROR_LINK.nada_debido, /aún no debe nada/);
+    assert.match(TEXTO_ERROR_LINK.nada_debido, /por adelantado/);
     assert.equal(e.mp.preferencias.length, 0);
+  });
+
+  it("…pero si quiere pagar por adelantado, el link sale por el saldo de la nota (N5, decisión de Rafael)", async () => {
+    const e = escenario();
+    const r = await obtenerLinkDeFactura({ clinicId: "c1", invoiceId: "f1", userId: "u1", adelanto: true }, { ...e.deps, aunNoSeDebe: async () => 1000 });
+    assert.ok(r.ok && r.link);
+    assert.equal(r.link!.monto, 1000, "el saldo de la nota (total − pagado)");
+  });
+
+  it("si DEBE algo, `adelanto` no cambia nada: el link es por lo debido", async () => {
+    const e = escenario();
+    const r = await obtenerLinkDeFactura({ clinicId: "c1", invoiceId: "f1", userId: "u1", adelanto: true }, { ...e.deps, aunNoSeDebe: async () => 800 });
+    assert.equal(r.link!.monto, 200);
+  });
+
+  it("el detalle de la nota (estadoDelLink) enseña lo DEBIDO y reconoce el link por lo debido como vigente (t5 N4)", async () => {
+    const e = escenario();
+    const deps = { ...e.deps, aunNoSeDebe: async () => 800 };
+    const creado = await obtenerLinkDeFactura({ clinicId: "c1", invoiceId: "f1", userId: "u1" }, deps);
+    const estado = await estadoDelLink({ clinicId: "c1", invoiceId: "f1" }, deps);
+    assert.equal(estado.saldo, 200);
+    assert.equal(estado.motivo, null);
+    assert.equal(estado.link?.url, creado.link?.url, "el link de $200 es el vigente");
+  });
+
+  it("estadoDelLink sin nada debido: motivo `nada_debido` y ofrece el adelanto por el saldo de la nota", async () => {
+    const e = escenario();
+    const estado = await estadoDelLink({ clinicId: "c1", invoiceId: "f1" }, { ...e.deps, aunNoSeDebe: async () => 1000 });
+    assert.equal(estado.motivo, "nada_debido");
+    assert.equal(estado.adelanto, 1000);
+    assert.equal(estado.link, null);
+  });
+
+  it("montoParaLink: la regla, sola", () => {
+    assert.deepEqual(montoParaLink({ sugerido: 1000, saldo: 1000, noSeDebe: 0 }), { monto: 1000 });
+    assert.deepEqual(montoParaLink({ sugerido: 300, saldo: 1000, noSeDebe: 600 }), { monto: 300 }, "nunca más que la mensualidad de siempre");
+    assert.deepEqual(montoParaLink({ sugerido: 1000, saldo: 1000, noSeDebe: 600 }), { monto: 400 });
+    assert.deepEqual(montoParaLink({ sugerido: 1000, saldo: 1000, noSeDebe: 1000 }), { error: "nada_debido" });
+    assert.deepEqual(montoParaLink({ sugerido: 250, saldo: 1000, noSeDebe: 1000, adelanto: true }), { monto: 1000 });
   });
 
   it("con un doble de base y sin decir nada, no se pregunta a la base de verdad: el link de siempre", async () => {

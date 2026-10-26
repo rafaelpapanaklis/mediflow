@@ -8,7 +8,7 @@
 //
 // El ejecutor (`cerrar-plan.server.ts`) solo escribe lo que aquí se decide.
 
-import { itemDiscount, round2, spreadInvoiceDiscount, sumInvoiceItems } from "@/lib/invoice-totals";
+import { computeInvoiceTotal, itemDiscount, round2, spreadInvoiceDiscount, sumInvoiceItems } from "@/lib/invoice-totals";
 import { deudaDeNotaDelPlan, type FilaParaDeuda, type NotaParaDeuda } from "./por-cobrar";
 
 export const MAX_MOTIVO_CIERRE = 300;
@@ -28,6 +28,11 @@ export interface AjusteDeNota {
   quitadas: Array<{ indice: number; nombre: string; importe: number; filaId: string | null }>;
   subtotal: number;
   discount: number;
+  /**
+   * true = el descuento global no cuadraba al centavo y pasó a las líneas que se quedan (cada una con su
+   * parte). Casi nunca: solo con IVA aparte y un redondeo de 1¢. La bitácora lo dice.
+   */
+  descuentoALasLineas: boolean;
   total: number;
   /** Lo pagado que pasa a saldo a favor (lo pagado de más sobre el nuevo total). */
   aFavor: number;
@@ -57,20 +62,28 @@ export function ajustarNotaAlCerrar(nota: NotaParaDeuda, filas: ReadonlyMap<stri
   const quedan = items.filter((_, i) => !sale.has(i));
 
   const parteDelDescuento = spreadInvoiceDiscount(items, round2(Math.max(0, Number(nota.discount) || 0)));
-  // Revisión t5 (sospecha 1): la nota guardada tiene que recalcularse EXACTAMENTE a su total (el
-  // editor y el timbrado recalculan). Repartir de nuevo el descuento global entre menos líneas mueve el
-  // IVA redondeado 1¢; así que cada línea que se queda lleva SU parte del descuento de la nota como
-  // descuento propio, y el descuento global queda en 0: cada línea conserva su base y su IVA exactos.
-  const quedanConSuParte = items
-    .map((it, i) => ({ it, i }))
-    .filter(({ i }) => !sale.has(i))
-    .map(({ it, i }) => {
-      const parte = parteDelDescuento[i] ?? 0;
-      return parte > 0 ? { ...(it as object), discount: round2(itemDiscount(it) + parte) } : it;
-    });
-  const subtotalFinal = sumInvoiceItems(quedanConSuParte);
-  const discount = 0;
+  // La nota guardada tiene que recalcularse EXACTAMENTE a su total (el editor y el timbrado recalculan;
+  // revisión t5, sospecha 1), y el PDF y el detalle deben seguir enseñando el descuento GLOBAL como
+  // estaba (sospecha de la v4). Primero: descuento global = la suma de las partes que les tocaban a las
+  // líneas que se quedan. Si así la nota recalculada da lo «Hecho» al centavo (siempre con IVA incluido
+  // o sin IVA; casi siempre con IVA aparte), se queda así. Si no —el IVA redondeado por línea se movió
+  // 1¢ al repartir de nuevo—, cada línea que se queda lleva su parte como descuento propio y el global
+  // queda en 0 (`descuentoALasLineas`), que sí cuadra siempre.
   const total = quedan.length ? d.hecho : 0;
+  const globalQueSeQueda = round2(Math.min(sumInvoiceItems(quedan), items.reduce<number>((s, _, i) => (sale.has(i) ? s : s + (parteDelDescuento[i] ?? 0)), 0)));
+  const cuadraConGlobal = !quedan.length
+    || Math.abs(round2(computeInvoiceTotal(quedan, globalQueSeQueda, nota.taxRate, nota.taxIncluded).total) - total) < 0.005;
+  const quedanFinal = cuadraConGlobal
+    ? quedan
+    : items
+        .map((it, i) => ({ it, i }))
+        .filter(({ i }) => !sale.has(i))
+        .map(({ it, i }) => {
+          const parte = parteDelDescuento[i] ?? 0;
+          return parte > 0 ? { ...(it as object), discount: round2(itemDiscount(it) + parte) } : it;
+        });
+  const subtotalFinal = sumInvoiceItems(quedanFinal);
+  const discount = cuadraConGlobal ? globalQueSeQueda : 0;
   const pagado = round2(Math.max(0, Number(nota.paid) || 0));
   const aFavor = round2(Math.max(0, pagado - total));
   const paid = round2(pagado - aFavor);
@@ -86,10 +99,11 @@ export function ajustarNotaAlCerrar(nota: NotaParaDeuda, filas: ReadonlyMap<stri
   });
 
   return {
-    items: quedanConSuParte,
+    items: quedanFinal,
     quitadas: salen.map((l) => ({ indice: l.indice, nombre: nombreDe(items[l.indice]), importe: l.importe, filaId: l.filaId })),
     subtotal: subtotalFinal,
     discount,
+    descuentoALasLineas: !cuadraConGlobal && globalQueSeQueda > 0,
     total,
     aFavor,
     paid,

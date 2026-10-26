@@ -11342,10 +11342,13 @@
     "creadaConLink": "Mercado Pago link ready for {monto}",
     "creadaSinLink": "The invoice was created, but the Mercado Pago link didn't go through:",
     "avisoForma": "The patient gets a Mercado Pago link for the balance. When they pay, the payment is recorded automatically.",
-    "enviadoSinLink": "Sent without the Mercado Pago link:"
+    "enviadoSinLink": "Sent without the Mercado Pago link:",
+    "textoNadaDebido": "The patient doesn't owe anything on this note yet (work still to do or installments not yet due). To pay in advance, generate a link for the balance of {monto}: it's recorded as a partial payment.",
+    "generarAdelanto": "Advance payment link ({monto})"
   },
   "portalPagoMp": {
     "pagar": "Pay with Mercado Pago",
+    "pagarAdelanto": "Pay in advance with Mercado Pago",
     "preparando": "Preparing your link…",
     "titulo": "Pay {monto} with Mercado Pago",
     "abrir": "Open Mercado Pago",
@@ -11360,7 +11363,8 @@
       "sin_saldo": "This invoice has nothing left to pay.",
       "bajo_minimo": "The balance is below the minimum for online payment ({minimo}). Please pay at your clinic.",
       "sin_mp": "This clinic doesn't accept online payments yet. Please pay at your clinic.",
-      "mp_fallo": "Mercado Pago didn't respond. Please try again in a few minutes."
+      "mp_fallo": "Mercado Pago didn't respond. Please try again in a few minutes.",
+      "nada_debido": "You don't owe anything on this invoice yet. If you want, you can pay in advance."
     }
   },
   "anticiposPortal": {

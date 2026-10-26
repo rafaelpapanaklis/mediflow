@@ -83,7 +83,9 @@ export async function POST(req: NextRequest) {
 
     // clinicId de la factura ya validada contra la sesión, nunca del cliente.
     if (!(await cobroMpEnPortal(invoice.clinicId))) return error("sin_mp", 409);
-    const r = await obtenerLinkDeFactura({ clinicId: invoice.clinicId, invoiceId: invoice.id, userId: null });
+    // 26-oct (Rafael): el link cobra lo DEBIDO; si aún no debe nada y pidió `adelanto`, por el saldo de la
+    // nota (queda como abono). El cliente solo dice «adelanto»: el monto lo pone el servidor.
+    const r = await obtenerLinkDeFactura({ clinicId: invoice.clinicId, invoiceId: invoice.id, userId: null, adelanto: body?.adelanto === true });
     if (!r.ok || !r.link) {
       switch (r.error) {
         case "sin_mp":
@@ -92,6 +94,8 @@ export async function POST(req: NextRequest) {
           return error("no_encontrada", 404);
         case "bajo_minimo":
           return error("bajo_minimo", 400);
+        case "nada_debido":
+          return error("nada_debido", 409);
         case "estado":
         case "sin_saldo":
           // La cobraron (o la cancelaron) entre la lectura de arriba y el candado.

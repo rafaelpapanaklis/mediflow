@@ -67,7 +67,9 @@ test("v4 · N2: el aviso de la nota de ortodoncia dice lo vencido y el total apa
 
 test("v4 · N3: el correo de la nota lleva la línea del portal y su link cobra solo lo debido", () => {
   assert.match(leer("src/app/api/invoices/[id]/send-email/route.ts"), /aunNoSeDebe,\n\s*\}\);/);
-  assert.match(leer("src/lib/factura-mp/servicio.server.ts"), /if \(debido !== null && debido <= 0\.005\) return fallo\("sin_saldo"\);/);
+  // v5 (N4/N5): un solo cálculo del monto (`montoParaLink`) para el POST, el GET y Stripe.
+  assert.match(leer("src/lib/factura-mp/servicio.server.ts"), /const cuanto = montoParaLink\(\{ sugerido, saldo: saldoPorCobrar\(inv\), noSeDebe, adelanto: args\.adelanto === true \}\);/);
+  assert.match(leer("src/app/api/paciente/payments/checkout/route.ts"), /montoParaLink\(\{ sugerido: invoice\.balance, saldo: invoice\.balance, noSeDebe, adelanto: body\?\.adelanto === true \}\)/);
 });
 
 test("A8: la lista de Pacientes ya no trae todas las facturas con deuda de la clínica", () => {

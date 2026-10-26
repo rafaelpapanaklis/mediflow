@@ -71,3 +71,22 @@ test("cerrar (fuzz t5, coherencia): la nota guardada se recalcula EXACTAMENTE a 
   }
   assert.deepEqual(malos.slice(0, 3), []);
 });
+
+test("cerrar (fuzz, v5): con IVA incluido (o sin IVA) el descuento se queda GLOBAL siempre; por línea solo si con IVA aparte no cuadraba", () => {
+  let porLinea = 0;
+  let conDescuento = 0;
+  for (const { nota, filas } of [...notasAlAzar(11, 5000), ...notasAlAzar(7, 3000)]) {
+    const a = ajustarNotaAlCerrar(nota, filas);
+    if (!a || !a.items.length || !(nota.discount > 0)) continue;
+    conDescuento++;
+    if (a.descuentoALasLineas) {
+      porLinea++;
+      assert.equal(nota.taxIncluded, false, "solo con IVA aparte");
+      assert.equal(a.discount, 0);
+    } else {
+      assert.ok(a.discount > 0, "el descuento global se conserva");
+    }
+  }
+  assert.ok(conDescuento > 1000);
+  assert.ok(porLinea / conDescuento < 0.02, `por línea en ${porLinea} de ${conDescuento}`);
+});

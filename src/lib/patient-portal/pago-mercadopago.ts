@@ -64,7 +64,17 @@ export interface LinkDePagoPortal {
 }
 
 /** `code` de los errores de esa ruta (la pantalla lo traduce). */
-export type ErrorPagoPortal = "peticion" | "no_encontrada" | "sin_saldo" | "bajo_minimo" | "sin_mp" | "mp_fallo";
+export type ErrorPagoPortal = "peticion" | "no_encontrada" | "sin_saldo" | "bajo_minimo" | "sin_mp" | "mp_fallo" | "nada_debido";
+
+/**
+ * ¿El pago en línea de esta factura sería POR ADELANTADO? (26-oct, Rafael): tiene saldo, pero aún no
+ * debe nada de él (tratamiento por hacer o cuotas por vencer). Entonces el portal ofrece «Pagar por
+ * adelantado» por el saldo de la nota (queda como abono), igual con Mercado Pago y con Stripe; si debe
+ * algo, el pago es por lo debido.
+ */
+export function esPagoPorAdelantado(f: { balance: number; aunNoSeDebe?: number | null }): boolean {
+  return f.balance > 0 && (Number(f.aunNoSeDebe) || 0) >= f.balance - 0.005;
+}
 
 /**
  * Textos del portal en español, ESPEJO EXACTO de `portalPagoMp` en
@@ -75,6 +85,7 @@ export type ErrorPagoPortal = "peticion" | "no_encontrada" | "sin_saldo" | "bajo
  */
 export const TEXTOS_PAGO_MP_ES = {
   pagar: "Pagar con Mercado Pago",
+  pagarAdelanto: "Pagar por adelantado con Mercado Pago",
   preparando: "Preparando tu link…",
   titulo: "Paga {monto} con Mercado Pago",
   abrir: "Abrir Mercado Pago",
@@ -90,6 +101,7 @@ export const TEXTOS_PAGO_MP_ES = {
     bajo_minimo: "El saldo es menor al mínimo para pagar en línea ({minimo}). Paga en tu clínica.",
     sin_mp: "Esta clínica aún no acepta pagos en línea. Paga directamente en tu clínica.",
     mp_fallo: "Mercado Pago no respondió. Intenta de nuevo en unos minutos.",
+    nada_debido: "Aún no debes nada de esta factura. Si quieres, puedes pagar por adelantado.",
   },
 };
 

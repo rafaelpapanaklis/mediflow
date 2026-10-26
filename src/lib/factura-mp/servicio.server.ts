@@ -38,6 +38,7 @@ import {
   evaluarPagoDeFactura,
   linkReutilizable,
   linkVigente,
+  montoParaLink,
   motivoSinLink,
   refDeFactura,
   saldoPorCobrar,
@@ -123,7 +124,8 @@ export async function cobroMpDisponible(clinicId: string, over?: Partial<DepsFac
 
 // ── 2. El link ──────────────────────────────────────────────────────────────
 
-export type ErrorLink = "sin_mp" | "no_encontrada" | MotivoSinLink | "mp_fallo";
+/** `nada_debido` (26-oct): tiene saldo, pero aún no se debe nada de él; se puede pagar por adelantado. */
+export type ErrorLink = "sin_mp" | "no_encontrada" | MotivoSinLink | "mp_fallo" | "nada_debido";
 
 export interface LinkDeFactura {
   url: string;
@@ -148,7 +150,9 @@ export const TEXTO_ERROR_LINK: Record<ErrorLink, string> = {
   sin_saldo: "La factura ya no tiene saldo por cobrar.",
   bajo_minimo: "El saldo es menor al mínimo para cobrar en línea ($10 MXN).",
   mp_fallo: "Mercado Pago no pudo generar el link. Intenta de nuevo en unos minutos.",
+  nada_debido: "El paciente aún no debe nada de esta nota (tratamiento por hacer o cuotas por vencer). Si quiere, puede pagar por adelantado.",
 };
+
 
 function fallo(error: ErrorLink): ResultadoLink {
   return { ok: false, error, link: null, reutilizado: false };
@@ -170,7 +174,13 @@ function fallo(error: ErrorLink): ResultadoLink {
  *   bloquea a quien está registrando un pago en caja.
  */
 export async function obtenerLinkDeFactura(
-  args: { clinicId: string; invoiceId: string; userId?: string | null },
+  args: {
+    clinicId: string;
+    invoiceId: string;
+    userId?: string | null;
+    /** El paciente aún no debe nada y quiere pagar por adelantado: el link sale por el saldo de la nota. */
+    adelanto?: boolean;
+  },
   over?: Partial<DepsFacturaMp>,
 ): Promise<ResultadoLink> {
   const d = deps(over);
@@ -212,11 +222,10 @@ export async function obtenerLinkDeFactura(
         const hoy = hoyEnZona(ahora, inv.clinic?.timezone || "America/Mexico_City");
         const sugerido = montoSugeridoDeCobro(condicionesPorFactura.get(invoiceId) ?? null, inv.total, inv.paid, hoy)
           || saldoPorCobrar(inv);
-        // 26-oct (Rafael): el link cobra solo lo DEBIDO —de una nota de plan, lo hecho menos lo pagado;
-        // de ortodoncia «Precio total», lo vencido—. Si aún no se debe nada, no hay link.
-        const debido = noSeDebe > 0 ? redondear2(Math.max(0, saldoPorCobrar(inv) - noSeDebe)) : null;
-        if (debido !== null && debido <= 0.005) return fallo("sin_saldo");
-        const saldo = debido === null ? sugerido : redondear2(Math.min(sugerido, debido));
+        // 26-oct (Rafael): el link cobra lo DEBIDO; si aún no se debe nada, solo por adelantado (`montoParaLink`).
+        const cuanto = montoParaLink({ sugerido, saldo: saldoPorCobrar(inv), noSeDebe, adelanto: args.adelanto === true });
+        if ("error" in cuanto) return fallo(cuanto.error);
+        const saldo = cuanto.monto;
         if (saldo < MINIMO_LINK_MXN) return fallo("bajo_minimo");
 
         const pendientes = await tx.invoicePaymentLink.findMany({
@@ -315,6 +324,11 @@ export interface EstadoLink {
   saldo: number;
   /** Por qué no se puede hacer link (null = sí se puede). */
   motivo: ErrorLink | null;
+  /**
+   * Con `motivo = nada_debido`: por cuánto saldría un link POR ADELANTADO (el saldo de la nota). null
+   * en los demás casos. Así la pantalla ofrece «Link por adelantado» en vez de decir «sin saldo».
+   */
+  adelanto?: number | null;
 }
 
 /** Lo que el detalle de la factura enseña. Solo lee: no crea nada en MP. */
@@ -328,24 +342,41 @@ export async function estadoDelLink(
   if (!(await cobroMpDisponible(args.clinicId, d))) return vacio;
   const inv = await d.db.invoice.findFirst({
     where: { id: args.invoiceId, clinicId: args.clinicId },
-    select: { status: true, total: true, paid: true },
+    select: { status: true, total: true, paid: true, clinic: { select: { timezone: true } } },
   });
   if (!inv) return { disponible: true, link: null, habiaLink: false, saldo: 0, motivo: "no_encontrada" };
-  const saldo = saldoPorCobrar(inv);
-  const motivo = motivoSinLink(inv);
   const ahora = d.ahora();
-  const ultimo = motivo
+  // Revisión t5 (N4): lo que enseña y contra lo que compara el link vigente es EL MISMO monto que
+  // cobraría el POST (`montoParaLink`): lo debido, no el saldo entero.
+  let motivo: ErrorLink | null = motivoSinLink(inv);
+  let saldo = saldoPorCobrar(inv);
+  let adelanto: number | null = null;
+  if (!motivo) {
+    const { porFactura: condiciones } = await leerCondicionesDeFacturas(d.db as any, { clinicId: args.clinicId, invoiceIds: [args.invoiceId] });
+    const hoy = hoyEnZona(ahora, (inv as { clinic?: { timezone?: string | null } | null }).clinic?.timezone || "America/Mexico_City");
+    const sugerido = montoSugeridoDeCobro(condiciones.get(args.invoiceId) ?? null, inv.total, inv.paid, hoy) || saldo;
+    const noSeDebe = await d.aunNoSeDebe(args.clinicId, args.invoiceId).catch(() => 0);
+    const cuanto = montoParaLink({ sugerido, saldo, noSeDebe });
+    if ("error" in cuanto) {
+      motivo = cuanto.error;
+      adelanto = saldo;
+    } else {
+      saldo = cuanto.monto;
+    }
+  }
+  const ultimo = motivo && motivo !== "nada_debido"
     ? null
     : await d.db.invoicePaymentLink.findFirst({
         where: { invoiceId: args.invoiceId, clinicId: args.clinicId, status: "PENDING" },
         orderBy: { createdAt: "desc" },
         select: { amount: true, status: true, expiresAt: true, checkoutUrl: true },
       });
+  const esperado = motivo === "nada_debido" ? adelanto ?? 0 : saldo;
   const link =
-    ultimo && ultimo.checkoutUrl && linkVigente(ultimo, ahora) && aCentavos(ultimo.amount) === aCentavos(saldo)
+    ultimo && ultimo.checkoutUrl && linkVigente(ultimo, ahora) && aCentavos(ultimo.amount) === aCentavos(esperado)
       ? { url: ultimo.checkoutUrl, monto: redondear2(ultimo.amount), venceA: ultimo.expiresAt.toISOString() }
       : null;
-  return { disponible: true, link, habiaLink: !!ultimo, saldo, motivo };
+  return { disponible: true, link, habiaLink: !!ultimo, saldo, motivo, adelanto };
 }
 
 /**

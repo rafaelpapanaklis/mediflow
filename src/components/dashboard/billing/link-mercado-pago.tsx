@@ -79,9 +79,10 @@ export function useCobroMercadoPago(activo: boolean): boolean {
 }
 
 /** Pide (o reutiliza) el link. Nunca lanza: `error` trae el motivo del servidor. */
-export async function pedirLinkDePago(invoiceId: string): Promise<{ link: LinkDePago | null; error: string | null }> {
+export async function pedirLinkDePago(invoiceId: string, adelanto = false): Promise<{ link: LinkDePago | null; error: string | null }> {
   try {
-    const res = await fetch(`/api/invoices/${invoiceId}/link-pago`, { method: "POST" });
+    // `adelanto`: el paciente aún no debe nada y paga por adelantado; el monto lo pone el servidor.
+    const res = await fetch(`/api/invoices/${invoiceId}/link-pago${adelanto ? "?adelanto=1" : ""}`, { method: "POST" });
     const out = await res.json().catch(() => ({}));
     if (!res.ok || !out?.link) return { link: null, error: typeof out?.error === "string" ? out.error : null };
     return { link: out.link as LinkDePago, error: null };
@@ -146,6 +147,8 @@ export function LinkMercadoPago({ invoiceId, modo, sugerido = false, bloqueado =
   const [puedeGenerar, setPuedeGenerar] = useState(false);
   // Tuvo un link que ya no sirve (el saldo cambió): se sigue cobrando por MP.
   const [habiaLink, setHabiaLink] = useState(false);
+  // 26-oct: el paciente aún no debe nada; se ofrece el link POR ADELANTADO por este monto.
+  const [adelanto, setAdelanto] = useState<number | null>(null);
   const [generando, setGenerando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -163,8 +166,11 @@ export function LinkMercadoPago({ invoiceId, modo, sugerido = false, bloqueado =
         setHabiaLink(d?.habiaLink === true);
         setSaldo(Number(d?.saldo) || 0);
         setPuedeGenerar(d?.disponible === true && !d?.motivo);
-        // Por qué no se puede (sin saldo, bajo el mínimo…), dicho por el servidor.
-        setError(d?.disponible === true && d?.motivo && typeof d?.motivoTexto === "string" ? d.motivoTexto : null);
+        const porAdelantado = d?.disponible === true && d?.motivo === "nada_debido" && Number(d?.adelanto) > 0 ? Number(d.adelanto) : null;
+        setAdelanto(porAdelantado);
+        // Por qué no se puede (sin saldo, bajo el mínimo…), dicho por el servidor. «Aún no debe nada» no
+        // es un error: la pantalla ofrece el link por adelantado.
+        setError(d?.disponible === true && d?.motivo && d?.motivo !== "nada_debido" && typeof d?.motivoTexto === "string" ? d.motivoTexto : null);
         alCambiar?.(d?.link ?? null);
       })
       .catch(() => { if (vivo) setDisponible(false); })
@@ -173,10 +179,10 @@ export function LinkMercadoPago({ invoiceId, modo, sugerido = false, bloqueado =
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [invoiceId]);
 
-  const generar = useCallback(async () => {
+  const generar = useCallback(async (porAdelantado = false) => {
     setGenerando(true);
     setError(null);
-    const r = await pedirLinkDePago(invoiceId);
+    const r = await pedirLinkDePago(invoiceId, porAdelantado);
     setGenerando(false);
     if (r.link) {
       setLink(r.link);
@@ -186,13 +192,15 @@ export function LinkMercadoPago({ invoiceId, modo, sugerido = false, bloqueado =
     }
   }, [invoiceId, alCambiar, t]);
 
+  const conAdelanto = adelanto !== null && !link;
+
   const copiar = useCallback(async () => {
     if (!link) return;
     if (await copiarAlPortapapeles(link.url)) toast.success(t("facturaMp.copiado"));
     else toast.error(t("facturaMp.copiarFallo"));
   }, [link, t]);
 
-  if (modo === "detalle" && (cargando || !disponible || (!link && !((sugerido || habiaLink) && puedeGenerar)))) return null;
+  if (modo === "detalle" && (cargando || !disponible || (!link && !conAdelanto && !((sugerido || habiaLink) && puedeGenerar)))) return null;
 
   return (
     <section className={s.bloque} aria-label={t("facturaMp.titulo")} data-link-mercadopago={modo}>
@@ -221,6 +229,21 @@ export function LinkMercadoPago({ invoiceId, modo, sugerido = false, bloqueado =
           </div>
           <p className={s.ayuda}>{t("facturaMp.vigente", { fecha: formatDate(link.venceA) })}</p>
         </>
+      ) : conAdelanto ? (
+        <>
+          {/* 26-oct (Rafael): no debe nada todavía, pero si quiere pagar algo más, también puede. */}
+          <p className={s.texto} data-link-adelanto>{t("facturaMp.textoNadaDebido", { monto: fmtMXNdec(adelanto ?? 0) })}</p>
+          <div className={s.acciones}>
+            <ButtonNew
+              variant="secondary"
+              icon={generando ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <Link2 size={14} aria-hidden />}
+              onClick={() => generar(true)}
+              disabled={bloqueado || generando}
+            >
+              {generando ? t("facturaMp.generando") : t("facturaMp.generarAdelanto", { monto: fmtMXNdec(adelanto ?? 0) })}
+            </ButtonNew>
+          </div>
+        </>
       ) : (
         <>
           <p className={s.texto}>{t("facturaMp.textoSinLink", { monto: fmtMXNdec(saldo) })}</p>
@@ -228,7 +251,7 @@ export function LinkMercadoPago({ invoiceId, modo, sugerido = false, bloqueado =
             <ButtonNew
               variant="primary"
               icon={generando ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <Link2 size={14} aria-hidden />}
-              onClick={generar}
+              onClick={() => generar()}
               disabled={bloqueado || generando || !puedeGenerar}
             >
               {generando ? t("facturaMp.generando") : t("facturaMp.generar")}

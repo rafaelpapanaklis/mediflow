@@ -23,6 +23,7 @@ import { formatMxn, formatFecha } from "@/components/paciente/ui";
 import type { PacienteFactura } from "@/lib/patient-portal/types";
 import {
   TEXTOS_PAGO_MP_ES,
+  esPagoPorAdelantado,
   esUrlDeMercadoPago,
   varsErrorPortal,
   type ErrorPagoPortal,
@@ -32,7 +33,7 @@ import {
 const TEXT = "rgba(255,255,255,0.92)";
 const MUTED = "rgba(255,255,255,0.55)";
 
-const CODIGOS: ErrorPagoPortal[] = ["peticion", "no_encontrada", "sin_saldo", "bajo_minimo", "sin_mp", "mp_fallo"];
+const CODIGOS: ErrorPagoPortal[] = ["peticion", "no_encontrada", "sin_saldo", "bajo_minimo", "sin_mp", "mp_fallo", "nada_debido"];
 
 /** `t` del panel si hay I18nProvider; el portal todavía no lo monta → español. */
 function useTextos() {
@@ -46,6 +47,8 @@ export interface PagoMercadoPago {
   link: LinkDePagoPortal | null;
   pidiendo: boolean;
   error: string | null;
+  /** Aún no debe nada: el pago sería por adelantado (el botón lo dice). */
+  porAdelantado?: boolean;
   pedir: () => void;
   ocultar: () => void;
 }
@@ -72,7 +75,8 @@ export function usePagoMercadoPago(f: PacienteFactura): PagoMercadoPago {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
-        body: JSON.stringify({ invoiceId: f.id }),
+        // 26-oct: si aún no debe nada, el pago es POR ADELANTADO (el monto lo pone el servidor).
+        body: JSON.stringify({ invoiceId: f.id, ...(esPagoPorAdelantado(f) ? { adelanto: true } : {}) }),
       });
       if (res.status === 401) {
         window.location.assign(`/paciente/login?next=${encodeURIComponent(window.location.pathname)}`);
@@ -103,6 +107,7 @@ export function usePagoMercadoPago(f: PacienteFactura): PagoMercadoPago {
     link,
     pidiendo,
     error,
+    porAdelantado: esPagoPorAdelantado(f),
     pedir: () => void pedir(),
     ocultar: () => {
       setGuardado(null);
@@ -152,7 +157,7 @@ export function BotonMercadoPago({ pago }: { pago: PagoMercadoPago }) {
           <IconoMercadoPago size={14} />
         </span>
         <span style={{ minWidth: 0 }}>
-          {pago.pidiendo ? t("portalPagoMp.preparando") : t("portalPagoMp.pagar")}
+          {pago.pidiendo ? t("portalPagoMp.preparando") : pago.porAdelantado ? t("portalPagoMp.pagarAdelanto") : t("portalPagoMp.pagar")}
         </span>
       </button>
       {pago.error && (
