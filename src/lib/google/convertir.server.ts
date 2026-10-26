@@ -246,6 +246,55 @@ export async function marcarBloqueoConvertido(
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// REACTIVAR UNA CITA CANCELADA CUYO EVENTO YA ES OTRA CITA (revisión t8 de la v4, N1)
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * Una cita convertida que se canceló deja volver el bloqueo, y ese bloqueo se
+ * puede convertir en OTRA cita con el mismo evento (m1). Si luego reactivan la
+ * vieja, habría dos citas vivas con un evento: la hora de una pisaría la de la
+ * otra en Google (H2). Reactivarla en ese caso es un 409.
+ */
+export class EventoYaEsOtraCita extends Error {
+  constructor() {
+    super("google_event_taken");
+  }
+}
+
+/** La rendija que hace falta (el `prisma` de siempre o un `tx` de Prisma la cumplen). */
+export interface DbEventoDeCita {
+  appointment: { findFirst(args: any): Promise<{ id: string } | null> };
+  agendaBlockGoogle: { updateMany(args: any): Promise<{ count: number }> };
+}
+
+/**
+ * ¿Otra cita NO cancelada de la clínica ya va ligada a ese evento de Google?
+ * `candado` (dentro de la transacción de la reactivación): antes bloquea los
+ * vínculos del evento, como `marcarBloqueoConvertido`. Así, si a la vez
+ * alguien convierte el bloqueo, una de las dos espera a la otra y ve su cita.
+ * El evento propio de la cita (`idEventoDeCita`) es solo suyo: ni se consulta.
+ */
+export async function otraCitaConElEvento(
+  db: DbEventoDeCita,
+  d: { clinicId: string; appointmentId: string; googleEventId: string | null },
+  opts: { candado?: boolean } = {},
+): Promise<boolean> {
+  if (!idValido(d.clinicId) || !idValido(d.appointmentId) || !idValido(d.googleEventId)) return false;
+  if (d.googleEventId === idEventoDeCita(d.clinicId, d.appointmentId)) return false;
+  if (opts.candado && (await tablasGoogleListas())) {
+    await db.agendaBlockGoogle.updateMany({
+      where: { clinicId: d.clinicId, googleEventId: d.googleEventId },
+      data: { updatedAt: new Date() },
+    });
+  }
+  const otra = await db.appointment.findFirst({
+    where: { clinicId: d.clinicId, googleCalendarEventId: d.googleEventId, id: { not: d.appointmentId }, status: { not: "CANCELLED" } },
+    select: { id: true },
+  });
+  return !!otra;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // LO QUE VE EL PANEL DEL BLOQUEO
 // ═══════════════════════════════════════════════════════════════════════
 

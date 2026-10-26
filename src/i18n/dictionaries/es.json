@@ -1749,6 +1749,7 @@
       "retiro_google": "Hubo un error al leer tu calendario de Google. Lo seguimos intentando cada 5 minutos; si el aviso sigue mañana, escríbenos.",
       "retiro_reponiendo": "Google ya contesta y la agenda se está poniendo al día con tu calendario: en unos minutos vuelven a cerrarse. Si el aviso sigue mañana, escríbenos.",
       "sinDueno": "Los eventos de Google Calendar que no invitan a un doctor no bloquean a nadie: la cuenta de Google conectada no es de ningún doctor que reciba citas (su correo no es el de nadie con «Aparece en la agenda»). Invita al doctor al evento con su correo, o conecta Google con la cuenta de un doctor. Nunca se cierra toda la clínica: para eso usa Configuración → Horarios y bloqueos.",
+      "eventoYaEsOtraCita": "Ese evento de Google ya es otra cita. Esta no se puede reactivar: quedarían dos citas ligadas al mismo evento. Si la otra cita es el error, cancélala primero; si no, agenda una cita nueva.",
       "sobreagendar": {
         "titulo": "Estás sobreagendando",
         "cuerpoDoctor": "Este doctor ya tiene una cita a esa hora ({paciente}, {hora}). Estás sobreagendando: las dos citas quedarán al mismo tiempo. ¿Seguro?",

@@ -19,6 +19,7 @@ import { registrarMovimientoDelPaciente } from "@/lib/movimientos-paciente/regis
 import { textoCita } from "@/lib/movimientos-paciente/textos";
 import { zonaDeClinica } from "@/lib/movimientos-paciente/zona";
 import { sincronizarCitaEnSegundoPlano } from "@/lib/agenda/google-sync";
+import { localeFromClinic, serverTForLocale } from "@/i18n/server";
 import { sendReviewInvitation } from "@/lib/reviews/invite";
 import {
   MOTIVO_RECORDATORIOS_ADELANTO,
@@ -60,7 +61,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
 
   const existing = await prisma.appointment.findFirst({
     where: { id: params.id, clinicId: session.clinic.id },
-    select: { id: true, status: true, startsAt: true, endsAt: true, doctorId: true, patientId: true, resourceId: true, overrideReason: true, overriddenBy: true, overriddenAt: true },
+    select: { id: true, status: true, startsAt: true, endsAt: true, doctorId: true, patientId: true, resourceId: true, overrideReason: true, overriddenBy: true, overriddenAt: true, googleCalendarEventId: true },
   });
   if (!existing) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
@@ -120,6 +121,23 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
       { error: "invalid_transition", reason: check.error },
       { status: 409 },
     );
+  }
+
+  // WS1-T3 (revisión t8 de la v4, N1) — reactivar una cita CANCELADA cuyo
+  // evento de Google ya es otra cita viva (la convirtieron otra vez mientras
+  // estaba cancelada) dejaría dos citas con un evento. 409 con el motivo en el
+  // idioma de la clínica (las pantallas que reactivan enseñan `reason`). Se
+  // mira aquí, antes del «¿Seguro?» de sobreagendar, y otra vez dentro de la
+  // transacción (con candado: puede estar convirtiéndose a la vez).
+  const reactivaConGoogle = existing.status === "CANCELLED" && body.status !== "CANCELLED" && !!existing.googleCalendarEventId;
+  const eventoDeCita = { clinicId: session.clinic.id, appointmentId: params.id, googleEventId: existing.googleCalendarEventId };
+  const eventoYaEsOtraCita = async () => {
+    const clinica = await prisma.clinic.findUnique({ where: { id: session.clinic.id }, select: { locale: true } });
+    const { t } = serverTForLocale(localeFromClinic(clinica));
+    return NextResponse.json({ error: "google_event_taken", reason: t("agenda.google.eventoYaEsOtraCita") }, { status: 409 });
+  };
+  if (reactivaConGoogle && (await (await import("@/lib/google/convertir.server")).otraCitaConElEvento(prisma, eventoDeCita))) {
+    return eventoYaEsOtraCita();
   }
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -269,6 +287,10 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
       },
     });
     if (reclamo.count !== 1) return null;
+    if (reactivaConGoogle) {
+      const g = await import("@/lib/google/convertir.server");
+      if (await g.otraCitaConElEvento(tx, eventoDeCita, { candado: true })) throw new g.EventoYaEsOtraCita();
+    }
     const row = await tx.appointment.findFirst({
       where: { id: params.id, clinicId: session.clinic.id },
       include: APPT_INCLUDE,
@@ -294,6 +316,8 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
     return row;
   });
   } catch (err) {
+    // N1: otra cita tomó el evento de Google mientras tanto (la transacción se deshizo).
+    if (err instanceof Error && err.message === "google_event_taken") return eventoYaEsOtraCita();
     // Otra cita entró en ese hueco entre la lectura y la escritura (el no-solape de la base manda).
     // WS1-T5 (revisión t8, A3) — al reabrir, otra cita entró en el hueco
     // entre la revisión de arriba y la escritura. Un 409 claro, no un 500; al
