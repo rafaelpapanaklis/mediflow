@@ -161,6 +161,22 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
 
   const now = new Date();
   const appointment = cr.appointment;
+  // WS1-T3 v7 (pregunta 7 de la revisión t8 de la v6) — pidió CANCELAR una cita
+  // que ya está cancelada: lo que pedía ya pasó. La solicitud se cierra sola
+  // (aprobada) y la cita NO se toca (ni su motivo ni su fecha de cancelación).
+  // Sin aviso: al cancelarla ya se le avisó por su camino.
+  if (action === "APPROVE" && cr.type === "CANCEL" && appointment.status === "CANCELLED") {
+    const reclamada = await reclamarSolicitud(prisma, {
+      id: cr.id,
+      clinicId: session.clinic.id,
+      status: "APPROVED",
+      resolvedById: session.user.id,
+      resolvedAt: now,
+      resolutionNote: note || "La cita ya estaba cancelada.",
+    });
+    if (!reclamada) return NextResponse.json({ error: "not_pending" }, { status: 409 });
+    return NextResponse.json({ ok: true, status: "APPROVED", yaCancelada: true });
+  }
   if (action === "APPROVE" && (ESTADOS_NO_ACTIVOS as readonly string[]).includes(appointment.status)) {
     return citaNoActiva();
   }

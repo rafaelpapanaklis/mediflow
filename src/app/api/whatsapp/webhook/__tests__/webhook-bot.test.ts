@@ -58,6 +58,8 @@ const e = {
   hilo: { id: "th1", botActive: true as boolean, botState: null as unknown },
   recordatorios: [] as any[],
   citasActualizadas: [] as any[],
+  /** WS1-T3 v7 — el estado REAL de la cita al escribir (la clínica pudo cambiarlo tras la lectura). */
+  estadoDeLaCita: "SCHEDULED",
   sqlCrudo: [] as string[],
   enviados: [] as Array<{ to: string; body: string; interactive?: any }>,
   interactivoFalla: null as Error | null,
@@ -156,9 +158,10 @@ const prismaFalso = {
       e.citasActualizadas.push(args);
       return {};
     },
+    updateMany: async (args: any) => escribirCita(args),
   },
   $transaction: async (fn: any) =>
-    fn({ appointment: { update: async (args: any) => (e.citasActualizadas.push(args), {}) } }),
+    fn({ appointment: { update: async (args: any) => (e.citasActualizadas.push(args), {}), updateMany: async (args: any) => escribirCita(args) } }),
   $executeRaw: (strings: TemplateStringsArray) => {
     e.sqlCrudo.push(strings.join("?"));
     return Promise.resolve(1);
@@ -240,6 +243,7 @@ beforeEach(() => {
   e.hilo = { id: "th1", botActive: true, botState: null };
   e.recordatorios = [];
   e.citasActualizadas = [];
+  e.estadoDeLaCita = "SCHEDULED";
   e.sqlCrudo = [];
   e.enviados = [];
   e.envioFalla = null;
@@ -579,5 +583,35 @@ describe("ws1-t3 — respuestas del bot con botones", () => {
     await tocar(toque("bk.confirm.si", "✅ Sí", "wamid.x"));
     assert.equal(e.turnos.length, 0);
     assert.ok(e.enviados.at(-1)?.body.includes("ya vencieron"));
+  });
+});
+
+/** Como la base: el `updateMany` solo escribe si la cita casa con su `where` (clínica y estado). */
+function escribirCita(args: any) {
+  const w = args.where ?? {};
+  const casa = w.clinicId === CLINICA.id && (!w.status?.in || w.status.in.includes(e.estadoDeLaCita));
+  if (!casa) return { count: 0 };
+  e.citasActualizadas.push(args);
+  return { count: 1 };
+}
+
+// ── WS1-T3 v7 (revisión t8 de la v6) ────────────────────────────────────────
+describe("WS1-T3 v7 — la clínica cambió la cita justo cuando el paciente contestaba", () => {
+  it("«confirmo» cuando la cita ya se canceló: no la revive, no dice «confirmada», le explica", async () => {
+    e.recordatorios = [recordatorio()];
+    e.estadoDeLaCita = "CANCELLED";
+    await enviar("confirmo");
+    assert.equal(e.citasActualizadas.length, 0);
+    assert.ok(e.enviados.at(-1)?.body.includes("ya no está activa"));
+    assert.ok(!e.enviados.some((m) => m.body.includes("*confirmada*")));
+  });
+
+  it("«❌ Cancelar» cuando la clínica ya le marcó la llegada: no la cancela encima, no dice «cancelada»", async () => {
+    e.recordatorios = [recordatorio()];
+    e.estadoDeLaCita = "CHECKED_IN";
+    await tocar(toque("rec.cancelar:rec1", "❌ Cancelar"));
+    assert.equal(cancelo(), false);
+    assert.ok(e.enviados.at(-1)?.body.includes("ya no está activa"));
+    assert.ok(!e.enviados.some((m) => m.body.includes("ha sido *cancelada*")));
   });
 });

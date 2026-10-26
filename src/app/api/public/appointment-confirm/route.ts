@@ -15,6 +15,16 @@ import { sincronizarCitaEnSegundoPlano } from "@/lib/agenda/google-sync";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+/**
+ * WS1-T3 v7 (revisión t8 de la v6) — confirmar o cancelar va condicionado al
+ * estado que se leyó: si la cita cambió en ese instante (la cancelaron, la
+ * marcaron no-show), no se toca y se contesta su estado actual, sin efectos.
+ */
+async function sinCambio(appt: { id: string; clinicId: string; status: string }) {
+  const ahora = await prisma.appointment.findFirst({ where: { id: appt.id, clinicId: appt.clinicId }, select: { status: true } });
+  return NextResponse.json({ status: ahora?.status ?? appt.status, changed: false });
+}
+
 export async function POST(req: NextRequest) {
   const limited = rateLimit(req, 10, 60_000);
   if (limited) return limited;
@@ -44,10 +54,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "espera_anticipo" }, { status: 409 });
     }
     if (appt.status === "PENDING" || appt.status === "SCHEDULED") {
-      await prisma.appointment.update({
-        where: { id: appt.id },
+      const r = await prisma.appointment.updateMany({
+        where: { id: appt.id, clinicId: appt.clinicId, status: appt.status },
         data: { status: "CONFIRMED", confirmedAt: now },
       });
+      if (r.count !== 1) return sinCambio(appt);
       await registrarMovimientoExterno({
         actor: "public",
         clinicId: appt.clinicId,
@@ -74,14 +85,15 @@ export async function POST(req: NextRequest) {
     appt.status === "SCHEDULED" ||
     appt.status === "CONFIRMED"
   ) {
-    await prisma.appointment.update({
-      where: { id: appt.id },
+    const r = await prisma.appointment.updateMany({
+      where: { id: appt.id, clinicId: appt.clinicId, status: appt.status },
       data: {
         status: "CANCELLED",
         cancelledAt: now,
         cancelReason: "Canceló desde el enlace de confirmación",
       },
     });
+    if (r.count !== 1) return sinCambio(appt);
     // Google Calendar: la cita quedó cancelada, el evento se borra. No lanza.
     await sincronizarCitaEnSegundoPlano(appt.clinicId, appt.id);
     // H15 (ws1-t4): si su factura tiene dinero, queda «pendiente de decidir».

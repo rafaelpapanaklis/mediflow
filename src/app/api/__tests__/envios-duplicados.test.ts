@@ -345,6 +345,24 @@ test("N2 · resolve: aprobar el cambio de horario de una cita CANCELADA → 409 
   assert.equal(appts.get("a1")!.status, "CANCELLED");
 });
 
+test("v7 · resolve: aprobar la CANCELACIÓN de una cita que ya está cancelada cierra la solicitud sola (aprobada), sin tocar la cita ni avisar otra vez", async () => {
+  const cita = appts.get("a1")!;
+  Object.assign(cita, { status: "CANCELLED", cancelReason: "La clínica la canceló", cancelledAt: new Date("2026-10-20T10:00:00Z") });
+  crs.get("r1")!.appointment.status = "CANCELLED"; // r1 es de tipo CANCEL
+  const r = await resolver("APPROVE");
+  assert.equal(r.status, 200);
+  assert.deepEqual(r.body, { ok: true, status: "APPROVED", yaCancelada: true });
+  assert.equal(crs.get("r1")!.status, "APPROVED");
+  assert.equal(crs.get("r1")!.resolutionNote, "La cita ya estaba cancelada.");
+  assert.equal(cita.cancelReason, "La clínica la canceló", "la cita no se toca");
+  assert.equal(cita.cancelledAt.toISOString(), "2026-10-20T10:00:00.000Z");
+  assert.equal(notificadas.length, 0, "ya se le avisó al cancelarla");
+  // Otra vez (doble clic): la solicitud ya no está pendiente.
+  const otra = await resolver("APPROVE");
+  assert.equal(otra.status, 409);
+  assert.equal(otra.body.error, "not_pending");
+});
+
 test("N2 · resolve: una cita NO_SHOW tampoco se toca, ni para moverla ni para cancelarla", async () => {
   appts.get("a1")!.status = "NO_SHOW";
   crs.get("r1")!.appointment.status = "NO_SHOW";

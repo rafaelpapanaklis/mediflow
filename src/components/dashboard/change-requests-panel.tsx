@@ -148,11 +148,15 @@ export function ChangeRequestsPanel(props: { onResolved?: () => void }): React.J
         }
       }
       if (!res.ok) throw new Error(`resolve_failed_${res.status}`);
+      // WS1-T3 v7 — la cita ya estaba cancelada: la solicitud se cerró sola.
+      const resuelta = (await res.json().catch(() => null)) as { yaCancelada?: boolean } | null;
 
       toast.success(
-        action === "APPROVE"
-          ? req.type === "CANCEL" ? "Cancelación aprobada" : "Cambio de horario aprobado"
-          : "Solicitud rechazada",
+        resuelta?.yaCancelada
+          ? "La cita ya estaba cancelada: la solicitud quedó cerrada"
+          : action === "APPROVE"
+            ? req.type === "CANCEL" ? "Cancelación aprobada" : "Cambio de horario aprobado"
+            : "Solicitud rechazada",
       );
       void mutate();
       onResolved?.();

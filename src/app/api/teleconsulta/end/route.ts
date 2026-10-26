@@ -73,11 +73,18 @@ export async function POST(req: NextRequest) {
       appointment.startsAt,
     );
 
-    if (check.ok) {
-      await prisma.appointment.update({
-        where: { id: appointmentId },
-        data: { status: "COMPLETED", completedAt: now },
-      });
+    // WS1-T3 v7 (revisión t8 de la v6) — con el estado que se leyó: si en
+    // este instante la cancelaron o la marcaron no-show, se queda como quedó
+    // (como el caso de arriba: `statusChanged: false`, sin bitácora ni reseña).
+    const cerrada =
+      check.ok &&
+      (
+        await prisma.appointment.updateMany({
+          where: { id: appointment.id, clinicId: ctx.clinicId, status: appointment.status },
+          data: { status: "COMPLETED", completedAt: now },
+        })
+      ).count === 1;
+    if (cerrada) {
 
       // NOM-024: las otras dos puertas a COMPLETED dejan rastro; ésta no
       // escribía nada. clinicId SIEMPRE de la sesión (multi-tenant).
@@ -99,7 +106,7 @@ export async function POST(req: NextRequest) {
       // No se cambia el status, pero queda rastro de que se colgó: si no, este
       // caso sería invisible en la bitácora.
       console.warn(
-        `[teleconsulta/end] cita ${appointmentId} colgada en estado ${appointment.status}: ${check.error}`,
+        `[teleconsulta/end] cita ${appointmentId} colgada en estado ${appointment.status}: ${check.ok ? "cambió de estado mientras tanto" : check.error}`,
       );
     }
 
@@ -119,8 +126,8 @@ export async function POST(req: NextRequest) {
       success: true,
       // `false` = la cita NO quedó COMPLETED porque su estado ya no lo permitía
       // (cancelada, no-show, o ya cerrada). La llamada terminó igual.
-      statusChanged: check.ok,
-      ...(check.ok ? {} : { reason: check.error }),
+      statusChanged: cerrada,
+      ...(cerrada ? {} : { reason: check.ok ? "La cita cambió de estado mientras tanto; no se marcó como completada." : check.error }),
     });
   } catch (error) {
     console.error("Error ending teleconsulta:", error);

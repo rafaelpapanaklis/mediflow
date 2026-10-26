@@ -181,3 +181,70 @@ describe("#7 — externalId de las respuestas del bot", () => {
     assert.equal(parseSystemKind("sys:bot:wamid.ABC"), null);
   });
 });
+
+// WS1-T3 v7 (revisión t8 de la v6) — CONFIRMAR/CANCELAR a un recordatorio
+// justo cuando la clínica cancelaba la cita (o le marcaba la llegada).
+describe("respuesta a un recordatorio: no revive ni cancela encima una cita que cambió", () => {
+  const cita = (status: string, clinicId = "c1") => ({ id: "a1", clinicId, status });
+  function base(filas: { id: string; clinicId: string; status: string }[]) {
+    const wheres: any[] = [];
+    const appointment = {
+      updateMany: async ({ where, data }: any) => {
+        wheres.push(where);
+        const xs = filas.filter((f) => f.id === where.id && f.clinicId === where.clinicId && where.status.in.includes(f.status));
+        for (const f of xs) Object.assign(f, data);
+        return { count: xs.length };
+      },
+    };
+    return { wheres, db: { appointment, $transaction: async (fn: any) => fn({ appointment }) } };
+  }
+  const d = { clinicId: "c1", appointmentId: "a1", ahora: new Date("2026-10-26T12:00:00Z") };
+
+  it("confirmar: viva → CONFIRMED; cancelada o no-show en ese instante → false y la cita no cambia", async () => {
+    const { confirmarCitaDelRecordatorio } = await import("../respuesta-recordatorio-cita");
+    const viva = [cita("SCHEDULED")];
+    assert.equal(await confirmarCitaDelRecordatorio(base(viva).db, d), true);
+    assert.equal(viva[0].status, "CONFIRMED");
+    for (const muerta of ["CANCELLED", "NO_SHOW", "CHECKED_IN", "COMPLETED"]) {
+      const filas = [cita(muerta)];
+      assert.equal(await confirmarCitaDelRecordatorio(base(filas).db, d), false, muerta);
+      assert.equal(filas[0].status, muerta);
+    }
+  });
+
+  it("cancelar: solo si sigue viva, y los recordatorios en cola solo se cancelan si de verdad se canceló", async () => {
+    const { cancelarCitaDelRecordatorio } = await import("../respuesta-recordatorio-cita");
+    const recordatorios: string[] = [];
+    const alCancelar = async () => { recordatorios.push("cancelados"); };
+    const llegando = [cita("CHECKED_IN")];
+    assert.equal(await cancelarCitaDelRecordatorio(base(llegando).db, d, alCancelar), false);
+    assert.equal(llegando[0].status, "CHECKED_IN", "no se cancela una cita en curso");
+    assert.deepEqual(recordatorios, []);
+    const viva = [cita("CONFIRMED")];
+    const b = base(viva);
+    assert.equal(await cancelarCitaDelRecordatorio(b.db, d, alCancelar), true);
+    assert.equal(viva[0].status, "CANCELLED");
+    assert.deepEqual(recordatorios, ["cancelados"]);
+    assert.equal(b.wheres[0].clinicId, "c1", "con el clinicId");
+  });
+
+  it("tenant: la cita de otra clínica con el mismo id no se toca", async () => {
+    const { confirmarCitaDelRecordatorio } = await import("../respuesta-recordatorio-cita");
+    const filas = [cita("SCHEDULED", "c2")];
+    assert.equal(await confirmarCitaDelRecordatorio(base(filas).db, d), false);
+    assert.equal(filas[0].status, "SCHEDULED");
+  });
+
+  it("el webhook usa esas dos y, si no tocaron la cita, solo avisa al paciente (sin Google, sin dinero, sin «confirmada»)", () => {
+    const src = readFileSync(path.join(process.cwd(), "src/app/api/whatsapp/webhook/route.ts"), "utf8");
+    const rama = src.slice(src.indexOf("} else if (reminder) {"), src.indexOf('} else if (reply === "ask_cancel")'));
+    assert.match(rama, /cancelarCitaDelRecordatorio\(prisma, laCita,/);
+    assert.match(rama, /confirmarCitaDelRecordatorio\(prisma, laCita\)/);
+    assert.doesNotMatch(rama, /appointment\.update\(/, "ninguna escritura sin condición");
+    const cancelar = rama.slice(rama.indexOf("cancelarCitaDelRecordatorio"));
+    assert.ok(cancelar.indexOf("if (!cancelada)") < cancelar.indexOf("sincronizarCitaEnSegundoPlano"), "sale antes de Google");
+    assert.ok(cancelar.indexOf("if (!cancelada)") < cancelar.indexOf("marcarPendienteSiHayDinero"));
+    const confirmar = rama.slice(rama.indexOf("confirmarCitaDelRecordatorio"));
+    assert.ok(confirmar.indexOf("avisarYaNoActiva") < confirmar.indexOf("está *confirmada*"));
+  });
+});
