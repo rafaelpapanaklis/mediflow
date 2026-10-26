@@ -11,7 +11,7 @@
        (el modal guarda el conjunto completo, visible u oculto).
      · «Marketplace: Ver marketplace de módulos» solo mostraba/ocultaba una
        entrada «Próximamente» del menú. Contratar un módulo (Ortodoncia) NO pasa
-       por ese permiso: lo decide `canPurchaseModules(role)` en el servidor. Se oculta.
+       por ese permiso: lo decide `canPurchaseModules(role)` en el servidor (solo el dueño). Se oculta.
      · «Acceso al módulo de Ortodoncia» se queda: es el interruptor por persona.
      · «Usar default del rol» salía apagado en quien tenía un override IGUAL al
        default del rol (el alta ya guarda un override completo cuando se elige

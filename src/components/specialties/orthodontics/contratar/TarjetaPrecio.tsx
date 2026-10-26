@@ -6,8 +6,8 @@
 // (`resumirPrecios`).
 //
 // El botón llama a POST /api/marketplace/module-checkout (ws1-t2) con el ciclo
-// elegido y manda a la clínica a Stripe. Quien no es dueño ni administrador no
-// ve el botón; el endpoint, además, se lo niega (403).
+// elegido y manda a la clínica a Stripe. Quien no es el dueño de la cuenta
+// (SUPER_ADMIN) no ve el botón; el endpoint, además, se lo niega (403).
 
 import { useId, useState } from "react";
 import { CreditCard, Lock, LockOpen, RefreshCw, Users } from "lucide-react";
@@ -175,8 +175,8 @@ export function TarjetaPrecio({
         <div className={s.sinPermiso} role="note">
           <Lock size={16} strokeWidth={1.9} aria-hidden />
           <div>
-            <strong>Pídeselo al administrador de tu clínica</strong>
-            Solo el dueño o un administrador puede contratar módulos. Aquí puedes ver el precio y lo que incluye para
+            <strong>Pídeselo al dueño de la cuenta</strong>
+            Solo el dueño de la cuenta puede contratar módulos. Aquí puedes ver el precio y lo que incluye para
             enseñárselo.
           </div>
         </div>

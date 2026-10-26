@@ -183,7 +183,7 @@ test("el botón llama al checkout de ws1-t2 con el ciclo elegido y vuelve a esta
   assert.match(tarjeta, /fetch\("\/api\/marketplace\/module-checkout"/);
   assert.match(tarjeta, /moduleKey: ORTHODONTICS_MODULE_KEY,\s*billing: ciclo,\s*method: "card",\s*origin: "contratar",/);
   assert.match(tarjeta, /\) : puedeContratar \? \(/, "sin permiso no hay botón");
-  assert.match(tarjeta, /Pídeselo al administrador/);
+  assert.match(tarjeta, /Pídeselo al dueño de la cuenta/);
 });
 
 // ── 3. El candado ────────────────────────────────────────────────────
@@ -196,10 +196,9 @@ test("candado: clínica dental, con plan vigente y sin el módulo", () => {
   assert.deepEqual(modulosConCandado({ ...c, planVencido: true }), [], "suspendida: su menú es el reducido");
 });
 
-test("contrata el dueño o un administrador; los demás ven el precio pero no el botón", () => {
+test("contrata solo el dueño de la cuenta; los demás (ADMIN incluido) ven el precio pero no el botón", () => {
   assert.equal(puedeContratarModulos("SUPER_ADMIN"), true);
-  assert.equal(puedeContratarModulos("ADMIN"), true);
-  for (const r of ["DOCTOR", "RECEPTIONIST", "READONLY", "ACCOUNTANT", "", null, undefined]) {
+  for (const r of ["ADMIN", "DOCTOR", "RECEPTIONIST", "READONLY", "ACCOUNTANT", "", null, undefined]) {
     assert.equal(puedeContratarModulos(r), false, String(r));
   }
 });

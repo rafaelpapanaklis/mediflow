@@ -18,6 +18,8 @@
  * `src/components/dashboard/sidebar-nav.ts` (a dónde lleva el candado).
  */
 
+import { isClinicBillingAdmin } from "@/lib/billing/authz";
+
 /**
  * La página donde se contrata el módulo.
  *
@@ -94,11 +96,12 @@ export function modulosConCandado(e: {
 
 /**
  * La misma regla que la pestaña «Suscripción» de Configuración
- * (`settings-client.tsx`): dueño o administrador. Los demás ven el precio y
- * lo que incluye, pero no el botón.
+ * (`isClinicBillingAdmin`): solo el dueño de la cuenta (SUPER_ADMIN), decisión
+ * de Rafael del 26-oct-2026. Los demás, ADMIN incluido, ven el precio y lo que
+ * incluye, pero no el botón.
  */
 export function puedeContratarModulos(role: string | null | undefined): boolean {
-  return role === "SUPER_ADMIN" || role === "ADMIN";
+  return isClinicBillingAdmin(role);
 }
 
 /* ── 4. El precio, leído de la base ──────────────────────────────────── */

@@ -37,7 +37,7 @@ const BodySchema = z.object({
  * de Sprint 2, que sigue sin checkout — ver src/lib/marketplace/pricing.ts).
  *
  * - Auth: getCurrentUser. Multi-tenant: clinicId SIEMPRE de la sesión.
- * - Solo dueño o administrador (`canPurchaseModules`); los demás, 403.
+ * - Solo el dueño de la cuenta (`canPurchaseModules` = SUPER_ADMIN); los demás, 403.
  * - `origin`: a dónde vuelve después del checkout ("marketplace" por defecto;
  *   "contratar" = la página propia del módulo). Ver
  *   `resolveModuleCheckoutReturnUrls`.
@@ -68,12 +68,12 @@ export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
   const clinicId = user.clinicId;
 
-  // Solo el dueño o un administrador compromete a la clínica a un cobro
-  // (ws1-t3, decisión de Rafael del 28-sep-2026). Va antes de leer el cuerpo y
+  // Solo el dueño compromete a la clínica a un cobro (ws1-t3, 28-sep-2026; desde
+  // el 26-oct-2026 ya no un ADMIN: «solo el super-admin renueva, cancela, etc.»). Va antes de leer el cuerpo y
   // de tocar Stripe: a quien no puede comprar no se le crea ni el cliente.
   if (!canPurchaseModules(user.role)) {
     return NextResponse.json(
-      { error: "Solo el dueño o un administrador de la clínica puede contratar módulos. Pídeselo a tu administrador.", code: "solo_administrador" },
+      { error: "Solo el dueño de la cuenta puede contratar módulos. Pídeselo al dueño.", code: "solo_administrador" },
       { status: 403 },
     );
   }

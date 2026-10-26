@@ -14,6 +14,8 @@
  *   - src/app/api/marketplace/module-cancel/route.ts (pide la cancelación)
  */
 
+import { isClinicBillingAdmin } from "@/lib/billing/authz";
+
 export type ModuleBillingCycle = "monthly" | "annual";
 export type ModulePaymentMethod = "card" | "spei" | "oxxo";
 export type ClinicModuleStatus = "active" | "paused" | "cancelled";
@@ -370,13 +372,14 @@ export function resolveActivationConflict(
 /* ── 7. Quién puede comprar ────────────────────────────────────────────── */
 
 /**
- * Comprar un módulo compromete un cobro recurrente a la clínica: solo su
- * dueño o un administrador, la misma regla que la pestaña «Suscripción» de
- * Configuración. Antes el endpoint no lo comprobaba y cualquier usuario de la
- * clínica podía abrir un checkout.
+ * Comprar un módulo compromete un cobro recurrente a la clínica: la misma regla
+ * que la pestaña «Suscripción» de Configuración (`isClinicBillingAdmin`). Desde
+ * el 26-oct-2026 («solo el super-admin renueva, cancela, etc.») es SOLO el dueño
+ * (SUPER_ADMIN); antes también un ADMIN. Antes aún el endpoint no lo comprobaba
+ * y cualquier usuario de la clínica podía abrir un checkout.
  */
 export function canPurchaseModules(role: string | null | undefined): boolean {
-  return role === "SUPER_ADMIN" || role === "ADMIN";
+  return isClinicBillingAdmin(role);
 }
 
 /* ── 8. ¿Esta factura de Stripe es de un módulo? (ws1-t5, 28-sep-2026) ──── */

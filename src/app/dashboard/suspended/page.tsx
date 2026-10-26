@@ -109,17 +109,30 @@ export default async function SuspendedPage(
   // tres salidas que funcionan sin acceso (pagar, ticket de soporte, manager). Una cuenta que aún tiene
   // acceso y llegó aquí por su cuenta (para renovar) conserva el copy de siempre.
   const suspendidaPorFalta = isReactivation && isPlanExpired(clinic);
+  // Pagar o reactivar el plan es SOLO del dueño (decisión de Rafael, 26-oct-2026; el checkout, SPEI y el pago
+  // pendiente responden 403 a los demás). Quien no lo es ve «Pídele al dueño que pague» en lugar de las tarjetas,
+  // un encabezado que no le pide pagar, y siempre el ticket, el manager y la vuelta al login: nunca sin salida.
+  const puedePagar = isClinicBillingAdmin(user.role);
+  // Quien no paga y SÍ tiene acceso no tiene nada que hacer aquí (el dueño sí: puede venir a renovar): al panel.
+  // Mismo criterio que el layout (isPlanExpired), así que /dashboard no lo devuelve aquí: sin bucle.
+  if (!puedePagar && !isPlanExpired(clinic)) redirect("/dashboard");
   const pillText = suspendidaPorFalta
     ? t("pages.suspended.pillSuspended")
+    : !puedePagar ? t("pages.suspended.pillSinAcceso")
     : isReactivation ? "Tu panel está en pausa" : "Último paso";
   const heading = suspendidaPorFalta
     ? t("pages.suspended.suspendedTitle")
+    : !puedePagar ? t("pages.suspended.sinAccesoTitulo")
     : isReactivation ? "Reactiva tu plan" : "Último paso: activa tu cuenta";
-  const subcopy = suspendidaPorFalta
+  const subcopy = !puedePagar
+    ? t("pages.suspended.sinAccesoTexto")
+    : suspendidaPorFalta
     ? t("pages.suspended.suspendedBody")
     : isReactivation
       ? "Tu acceso se pausó por un pago pendiente. Reactívalo para continuar."
       : "";
+  // Con ticket, manager y (si paga) «Pagar ahora»: la suspendida por falta de pago, y cualquier pantalla de quien no paga.
+  const conAcciones = suspendidaPorFalta || !puedePagar;
 
   // REDISEÑO — el MISMO interruptor por clínica que enciende el menú de dos
   // niveles (`clinic_feature_flags`, bandera `menu-dos-niveles`), no uno propio.
@@ -144,7 +157,7 @@ export default async function SuspendedPage(
     // al cobrar; aquí solo se refleja en pantalla (si falla la lectura, se muestra con IVA: lo prudente).
     exencionIvaDeClinica(clinic).catch(() => null),
     // El manager asignado a ESTA clínica (nunca el catálogo): getAccountManagerForClinic no lanza.
-    suspendidaPorFalta
+    conAcciones
       ? getAccountManagerForClinic(user.clinicId, { locale: localeFromClinic(clinic) })
       : Promise.resolve(null),
   ]);
@@ -152,10 +165,6 @@ export default async function SuspendedPage(
   // con los dos botones de PagoPendiente. Las tarjetas de plan de hoy mandarían al portal sin respetar el
   // plan, así que NO se pintan; sin suscripción viva (cuenta nueva o cancelada) siguen como siempre.
   const conDosBotones = suspendidaPorFalta && tarjetaRechazadaViva(clinic);
-  // Pagar o reactivar el plan es SOLO del dueño (decisión de Rafael, 26-oct-2026; el checkout, SPEI y el pago
-  // pendiente responden 403 a los demás). Quien no lo es ve «Pídele al dueño que pague» en lugar de las tarjetas
-  // y conserva el ticket, el manager y la vuelta al login: nunca se queda sin salida.
-  const puedePagar = isClinicBillingAdmin(user.role);
   const pideAlDueno = puedePagar ? null : (
     <PideAlDueno
       titulo={t("pages.suspended.pideAlDuenoTitulo")}
@@ -187,7 +196,7 @@ export default async function SuspendedPage(
         : {})}
     />
   ) : null;
-  const acciones = suspendidaPorFalta ? (
+  const acciones = conAcciones ? (
     <>
       {conDosBotones && puedePagar && (
         <PagoPendiente puedePagar={puedePagar} plan={clinic.plan} suspendida tarjetas={tarjetasDeRespaldo} />
@@ -234,7 +243,8 @@ export default async function SuspendedPage(
                 : null
             }
             avisoRechazo={
-              rechazoSpei && !pendienteSpei && sinAcceso
+              // «Inténtalo de nuevo o paga con tarjeta» es para quien paga.
+              rechazoSpei && !pendienteSpei && sinAcceso && puedePagar
                 ? `Tu transferencia (${rechazoSpei.reference}) no se pudo confirmar${
                     rechazoSpei.rejectReason ? `: ${rechazoSpei.rejectReason}` : "."
                   } Puedes intentarlo de nuevo o pagar con tarjeta.`
@@ -253,7 +263,7 @@ export default async function SuspendedPage(
             reactivacion={isReactivation}
             pildora={pillText}
             titulo={heading}
-            texto={isReactivation ? subcopy : subtitulo}
+            texto={isReactivation || !puedePagar ? subcopy : subtitulo}
           />
           {pideAlDueno}
           {acciones}
@@ -317,7 +327,7 @@ export default async function SuspendedPage(
           </div>
           <h1 className="text-4xl font-extrabold tracking-tight md:text-[40px]">{heading}</h1>
           <p className="max-w-[560px] text-base leading-relaxed text-muted-foreground">
-            {isReactivation ? subcopy : subtitulo}
+            {isReactivation || !puedePagar ? subcopy : subtitulo}
           </p>
         </div>
 

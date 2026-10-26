@@ -1151,6 +1151,23 @@ describe("solo el dueño toca la suscripción; el ADMIN la ve en solo lectura", 
     assert.match(acciones, /data-accion="manager"/);
   });
 
+  it("suspendida sin ser por falta de pago (prueba vencida, cuenta nueva): quien no paga también tiene ticket y manager, y un encabezado que no le pide pagar", () => {
+    const pagina = sinComentarios(leer("src/app/dashboard/suspended/page.tsx"));
+    assert.match(pagina, /const conAcciones = suspendidaPorFalta \|\| !puedePagar;/);
+    assert.match(pagina, /const acciones = conAcciones \? \(/, "las acciones ya no dependen solo de la suspendida por falta de pago");
+    assert.match(pagina, /conAcciones\s*\?\s*getAccountManagerForClinic\(user\.clinicId/, "y el manager se lee en ese mismo caso");
+    assert.match(pagina, /: !puedePagar \? t\("pages\.suspended\.sinAccesoTitulo"\)/);
+    assert.match(pagina, /: !puedePagar \? t\("pages\.suspended\.pillSinAcceso"\)/);
+    assert.match(pagina, /const subcopy = !puedePagar\s*\?\s*t\("pages\.suspended\.sinAccesoTexto"\)/);
+    assert.equal((pagina.match(/isReactivation \|\| !puedePagar \? subcopy : subtitulo/g) ?? []).length, 2, "en los dos diseños, sin «Elige cómo pagar tu plan»");
+    assert.match(pagina, /if \(!puedePagar && !isPlanExpired\(clinic\)\) redirect\("\/dashboard"\);/, "con acceso, al panel (mismo criterio que el layout)");
+    assert.match(pagina, /rechazoSpei && !pendienteSpei && sinAcceso && puedePagar/);
+    for (const k of ["pillSinAcceso", "sinAccesoTitulo", "sinAccesoTexto"]) {
+      assert.ok(es.pages.suspended[k] && en.pages.suspended[k], k);
+      assert.doesNotMatch(es.pages.suspended[k], /\bpag(a|ar|ue|o)\b|activa/i, `${k} no le pide pagar`);
+    }
+  });
+
   it("Equipo: a un ADMIN no le salen «Editar», «Desactivar» ni «Eliminar» en la tarjeta del dueño", () => {
     assert.equal(fichaDelDuenoProtegida({ rolDelMiembro: "SUPER_ADMIN", rolDeQuienMira: "ADMIN" }), true);
     assert.equal(fichaDelDuenoProtegida({ rolDelMiembro: "SUPER_ADMIN", rolDeQuienMira: "DOCTOR" }), true);
