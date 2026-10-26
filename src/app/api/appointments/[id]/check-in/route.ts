@@ -81,16 +81,20 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     zona: zona ?? session.clinic.timezone ?? "America/Mexico_City",
     userId: session.user.id,
   });
+  let reclamada = false;
   try {
-    await prisma.$transaction(async (tx) => {
-      await tx.appointment.update({
-        where: { id: params.id },
+    reclamada = await prisma.$transaction(async (tx) => {
+      // WS1-T3 v7 (revisión t8 de la v6) — con el estado que se leyó arriba: si
+      // se canceló (o cambió) en este instante, no se toca y no hay efectos.
+      const r = await tx.appointment.updateMany({
+        where: { id: params.id, clinicId: session.clinic.id, status: existing.status },
         data: {
           status: "CHECKED_IN",
           checkedInAt: now,
           ...(adelanto?.datos ?? {}),
         },
       });
+      if (r.count !== 1) return false;
       if (adelanto) {
         await cancelPendingRemindersForAppointment(tx, {
           appointmentId: params.id,
@@ -98,6 +102,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
           reason: MOTIVO_RECORDATORIOS_ADELANTO,
         });
       }
+      return true;
     });
   } catch (err) {
     if (adelanto && isAppointmentOverlapError(err)) {
@@ -107,6 +112,12 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
       );
     }
     throw err;
+  }
+  if (!reclamada) {
+    return NextResponse.json(
+      { error: "invalid_transition", reason: "La cita cambió de estado mientras tanto. Recarga e intenta de nuevo." },
+      { status: 409 },
+    );
   }
 
   if (adelanto) {

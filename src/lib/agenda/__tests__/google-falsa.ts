@@ -5,7 +5,8 @@
 //     borrado/cancelado— contesta 409, como Google.
 //   · events.patch MEZCLA: solo cambia lo que va en el cuerpo; un evento
 //     inexistente da 404. (Por eso mover una cita con patch conserva invitados
-//     y recordatorios.)
+//     y recordatorios.) Y, como Google, devuelve el evento ENTERO ya parchado
+//     (con sus invitados).
 //   · events.update REEMPLAZA el evento entero (lo que hacía el código viejo):
 //     existe aquí para poder demostrar que ya nadie lo llama (contador).
 //   · events.delete no quita el evento, lo deja `status: cancelled`; borrar dos
@@ -110,7 +111,7 @@ export class GoogleFalsa implements ClienteCalendar {
       const e = this.eventos.get(k);
       if (!e) throw errorGoogle(404, "notFound", "Not Found");
       Object.assign(e, structuredClone(p.requestBody)); // mezcla: lo que no va, se queda
-      return { data: { id: p.eventId } };
+      return { data: structuredClone(e) };
     },
     /** Lee el evento tal como está (también uno borrado: `cancelled`), o 404. */
     get: async (p: { calendarId: string; eventId: string }) => {

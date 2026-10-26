@@ -55,6 +55,7 @@ test("ningún archivo nuevo que escriba una cita CANCELLED se queda sin sincroni
   // Quien ponga `status: "CANCELLED"` en una cita debe llamar a la sincronización o estar aquí con su razón.
   const EXENTOS: Record<string, string> = {
     "src/lib/anticipos/servicio.server.ts": "lo hace el cron con la dependencia alCancelarCita (ver src/app/api/cron/anticipos/route.ts)",
+    "src/lib/whatsapp/respuesta-recordatorio-cita.ts": "la escritura condicionada del recordatorio (WS1-T3 v7); el webhook que la llama sincroniza (src/app/api/whatsapp/webhook/route.ts)",
     "src/lib/barber/whatsapp.ts": "citas de barbería: no se sincronizan con Google Calendar",
     "src/app/dashboard/analytics/page.tsx": "solo lee",
   };

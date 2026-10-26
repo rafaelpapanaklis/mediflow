@@ -13,7 +13,9 @@
 //   3) Idempotente: si ya está CONFIRMED → { ok:true, changed:false }.
 //   4) Solo confirmable si status ∈ [PENDING, SCHEDULED]; otro → 409.
 //   5) No confirmar una cita que ya pasó (startsAt <= ahora) → 410.
-//   6) update status=CONFIRMED, confirmedAt=now → { ok:true, changed:true }.
+//   6) update status=CONFIRMED, confirmedAt=now → { ok:true, changed:true },
+//      condicionado al estado leído (WS1-T3 v7): si se canceló en ese
+//      instante, 409 not_confirmable con su estado y sin movimiento.
 //
 // Rate-limit por IP+ruta. clinicId/patientId SIEMPRE de la cita verificada.
 
@@ -72,10 +74,14 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     return NextResponse.json({ error: "expired" }, { status: 410 });
   }
 
-  await prisma.appointment.update({
-    where: { id: appt.id },
+  const r = await prisma.appointment.updateMany({
+    where: { id: appt.id, clinicId: appt.clinicId, status: appt.status },
     data: { status: "CONFIRMED", confirmedAt: now },
   });
+  if (r.count !== 1) {
+    const ahora = await prisma.appointment.findFirst({ where: { id: appt.id, clinicId: appt.clinicId }, select: { status: true } });
+    return NextResponse.json({ error: "not_confirmable", status: ahora?.status ?? appt.status }, { status: 409 });
+  }
 
   await registrarMovimientoExterno({
     actor: "patient",

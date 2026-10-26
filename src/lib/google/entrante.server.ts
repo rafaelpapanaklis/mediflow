@@ -30,10 +30,14 @@ import {
   bloqueosSinMantener,
   calendarioImportable,
   canalPorRenovar,
+  claveCancelada,
   CREADOR_GOOGLE,
   direccionDelAviso,
+  esClaveCancelada,
   MOTIVO_GOOGLE,
+  SEPARADOR_DOCTOR,
   avisoDeRetiro,
+  duenoDeLaCuenta,
   TTL_CANAL_S,
   type CausaRetiro,
   type DatosBloqueo,
@@ -106,6 +110,7 @@ async function leerConexion(clinicId: string) {
       googleCalendarToken: true,
       googleRefreshToken: true,
       googleClinicCalendarId: true,
+      googleCalendarEmail: true,
     },
   });
   if (!c) return null;
@@ -115,6 +120,7 @@ async function leerConexion(clinicId: string) {
     refreshToken: c.googleRefreshToken,
     calendarId: c.googleClinicCalendarId,
     timezone: c.timezone,
+    cuentaEmail: c.googleCalendarEmail ?? null,
   };
 }
 
@@ -124,6 +130,7 @@ async function leerConexion(clinicId: string) {
 
 const SELECT_VINCULO = {
   blockId: true,
+  calendarId: true,
   googleEventId: true,
   recurringEventId: true,
   title: true,
@@ -150,6 +157,7 @@ async function vinculosConBloqueo(clinicId: string, filas: any[]): Promise<Vincu
     if (!b) continue;
     out.push({
       blockId: f.blockId,
+      calendarId: f.calendarId,
       googleEventId: f.googleEventId,
       recurringEventId: f.recurringEventId ?? null,
       activo: b.deletedAt === null,
@@ -168,6 +176,14 @@ async function vinculosConBloqueo(clinicId: string, filas: any[]): Promise<Vincu
   }
   return out;
 }
+
+/**
+ * Los vínculos de ESE calendario: la clave principal y las de cada doctor
+ * (`<calendario>#<doctorId>`, regla 5). El `#` no sale en ids de Google.
+ */
+const delCalendario = (calendarId: string) => ({
+  OR: [{ calendarId }, { calendarId: { startsWith: calendarId + SEPARADOR_DOCTOR } }],
+});
 
 const esUnicoRepetido = (e: unknown) => (e as { code?: string })?.code === "P2002";
 const PAGINA_RETIRAR = 1000;
@@ -244,38 +260,22 @@ const puertos: PuertosEntrante = {
   guardarAccessToken,
 
   async leerUsuarios(clinicId) {
-    // TODAS las personas de la clínica (también recepción, dados de baja y con
-    // la agenda apagada): si el invitado es una de ellas, el bloqueo es suyo y
-    // no cierra la clínica entera (revisión t8, G1).
-    // Con el Gmail con el que conectó Google y el nombre: reconocen a la
-    // doctora invitada con su correo personal o con una cuenta vieja (N-G2).
-    // El Gmail con el que se conectó la CLÍNICA no es «otro correo» de quien
-    // lo conectó: si no, todo evento con ese Gmail cerraría solo su agenda.
-    const [us, clinica] = await Promise.all([
-      prisma.user.findMany({
-        where: { clinicId },
-        select: {
-          id: true, email: true, googleCalendarEmail: true, firstName: true, lastName: true,
-          role: true, isActive: true, agendaActive: true,
-        },
-        orderBy: { id: "asc" },
-        take: 1000,
-      }),
-      prisma.clinic.findUnique({ where: { id: clinicId }, select: { googleCalendarEmail: true } }),
-    ]);
-    const deLaClinica = clinica?.googleCalendarEmail?.trim().toLowerCase() || null;
-    return us.map((u) => {
-      const otro = u.googleCalendarEmail?.trim().toLowerCase() || null;
-      return {
-        id: u.id,
-        email: u.email ?? null,
-        otrosCorreos: otro && otro !== deLaClinica ? [otro] : [],
-        recibeCitas: puedeRecibirCitas(u),
-        rol: u.role,
-        nombre: `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim() || null,
-        activo: u.isActive !== false,
-      };
+    // TODAS las personas de la clínica: `duenoDeLaCuenta` busca entre las que
+    // reciben citas la que entra con la cuenta conectada (o la conectó).
+    const us = await prisma.user.findMany({
+      where: { clinicId },
+      select: { id: true, email: true, googleCalendarEmail: true, role: true, isActive: true, agendaActive: true },
+      orderBy: { id: "asc" },
+      take: 1000,
     });
+    return us.map((u) => ({
+      id: u.id,
+      email: u.email ?? null,
+      correoGoogle: u.googleCalendarEmail ?? null,
+      recibeCitas: puedeRecibirCitas(u),
+      // Con la agenda apagada sigue siendo «de la clínica» si la invitan (H3).
+      atiende: puedeRecibirCitas({ ...u, agendaActive: true }),
+    }));
   },
 
   async calendarioEnOtraClinica(clinicId, calendarId) {
@@ -294,7 +294,7 @@ const puertos: PuertosEntrante = {
   async leerVinculos(clinicId, calendarId, eventIds) {
     if (eventIds.length === 0) return [];
     const filas = await prisma.agendaBlockGoogle.findMany({
-      where: { clinicId, calendarId, googleEventId: { in: eventIds } },
+      where: { clinicId, ...delCalendario(calendarId), googleEventId: { in: eventIds } },
       select: SELECT_VINCULO,
     });
     return vinculosConBloqueo(clinicId, filas);
@@ -303,7 +303,7 @@ const puertos: PuertosEntrante = {
   async leerVinculosDeSeries(clinicId, calendarId, recurringEventIds) {
     if (recurringEventIds.length === 0) return [];
     const filas = await prisma.agendaBlockGoogle.findMany({
-      where: { clinicId, calendarId, recurringEventId: { in: recurringEventIds }, appointmentId: null },
+      where: { clinicId, ...delCalendario(calendarId), recurringEventId: { in: recurringEventIds }, appointmentId: null },
       select: SELECT_VINCULO,
       take: 2000,
     });
@@ -314,12 +314,26 @@ const puertos: PuertosEntrante = {
     if (eventIds.length === 0) return new Set();
     const citas = await prisma.appointment.findMany({
       where: { clinicId, googleCalendarEventId: { in: eventIds } },
-      select: { googleCalendarEventId: true },
+      select: { id: true, status: true, googleCalendarEventId: true },
     });
-    return new Set(citas.map((c) => c.googleCalendarEventId).filter((x): x is string => !!x));
+    // Una cita CONVERTIDA (vino de un evento de la clínica) que se canceló ya
+    // no hace del evento «el de una cita»: el evento vuelve a bloquear (m1).
+    // Las demás canceladas siguen contando (el eco de las citas de siempre).
+    const canceladas = citas.filter((c) => c.status === "CANCELLED").map((c) => c.id);
+    const convertidas = new Set<string>();
+    if (canceladas.length > 0) {
+      const vs = await prisma.agendaBlockGoogle.findMany({
+        where: { clinicId, appointmentId: { in: canceladas } },
+        select: { appointmentId: true },
+      });
+      for (const v of vs) if (v.appointmentId) convertidas.add(v.appointmentId);
+    }
+    return new Set(
+      citas.filter((c) => !convertidas.has(c.id)).map((c) => c.googleCalendarEventId).filter((x): x is string => !!x),
+    );
   },
 
-  async crearBloqueo(clinicId, calendarId, googleEventId, d: DatosBloqueo) {
+  async crearBloqueo(clinicId, clave, googleEventId, d: DatosBloqueo) {
     try {
       await prisma.$transaction(async (tx) => {
         const b = await tx.agendaBlock.create({
@@ -339,7 +353,8 @@ const puertos: PuertosEntrante = {
           data: {
             blockId: b.id,
             clinicId,
-            calendarId,
+            // El calendario, o `<calendario>#<doctorId>` del 2.º doctor en adelante (`claveDeDoctor`).
+            calendarId: clave,
             googleEventId,
             recurringEventId: d.recurringEventId,
             title: d.title,
@@ -398,6 +413,19 @@ const puertos: PuertosEntrante = {
         where: { id: blockId, clinicId, kind: "GOOGLE", deletedAt: null },
         data: { deletedAt: ahora, deletedById: null },
       });
+    });
+  },
+
+  async apartarVinculoCancelado(clinicId, blockId, appointmentId) {
+    const v = await prisma.agendaBlockGoogle.findFirst({
+      where: { blockId, clinicId, appointmentId },
+      select: { calendarId: true },
+    });
+    if (!v || esClaveCancelada(v.calendarId)) return;
+    // Condicionado a la clave leída: si otra pasada lo apartó a la vez, nada.
+    await prisma.agendaBlockGoogle.updateMany({
+      where: { blockId, clinicId, appointmentId, calendarId: v.calendarId },
+      data: { calendarId: claveCancelada(v.calendarId, appointmentId) },
     });
   },
 
@@ -723,8 +751,14 @@ export async function estadoEntranteParaPantalla(clinicId: string): Promise<{
    * Configuración lo dicen con qué hacer (tercera vuelta, N3-G2).
    */
   retiro: { desde: string; causa: CausaRetiro; zona: string } | null;
+  /**
+   * La cuenta de Google conectada no es de nadie que reciba citas (cuenta
+   * general): sus eventos no bloquean a nadie (WS1-T3). La agenda y
+   * Configuración lo dicen con qué hacer.
+   */
+  sinDueno: boolean;
 }> {
-  const vacio = { encendida: false, conectada: false, error: null, ultimaSync: null, ultimoIntento: null, retiro: null };
+  const vacio = { encendida: false, conectada: false, error: null, ultimaSync: null, ultimoIntento: null, retiro: null, sinDueno: false };
   if (!idValido(clinicId)) return vacio;
   try {
     if (!(await tablasGoogleListas())) return vacio;
@@ -760,13 +794,16 @@ export async function estadoEntranteParaPantalla(clinicId: string): Promise<{
     // Conexión CAÍDA (Google la rechazó; se guarda el token): ni se leen los
     // eventos ni se copian las citas. La pantalla lo dice tal cual (G3).
     const caida = !!c && !c.enabled && !!c.refreshToken;
+    const conectada = !!(c?.enabled && c.refreshToken);
+    const sinDueno = conectada && duenoDeLaCuenta(c?.cuentaEmail, await puertos.leerUsuarios(clinicId)) === null;
     return {
       encendida: true,
-      conectada: !!(c?.enabled && c.refreshToken),
+      conectada,
       error: caida ? "conexion_caida" : f.lastError ?? null,
       ultimaSync: f.lastSyncAt ? f.lastSyncAt.toISOString() : null,
       ultimoIntento: intentos.length ? new Date(Math.max(...intentos)).toISOString() : null,
       retiro: aviso ? { desde: aviso.desde.toISOString(), causa: aviso.causa, zona: c?.timezone || "America/Mexico_City" } : null,
+      sinDueno,
     };
   } catch {
     return vacio;

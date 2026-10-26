@@ -75,6 +75,8 @@ interface EstadoPantalla {
   cambios?: boolean;
   /** Los eventos de Google ya no cierran la agenda (N3-G2). */
   retiro?: RetiroPantalla | null;
+  /** La cuenta conectada no es de nadie que reciba citas: sus eventos no bloquean a nadie (WS1-T3). */
+  sinDueno?: boolean;
 }
 
 function leerEstado(raw: unknown): EstadoPantalla | null {
@@ -86,6 +88,7 @@ function leerEstado(raw: unknown): EstadoPantalla | null {
     error: typeof r.error === "string" ? r.error : null,
     cambios: r.cambios === true,
     retiro: leerRetiro(r.retiro),
+    sinDueno: r.sinDueno === true,
   };
 }
 

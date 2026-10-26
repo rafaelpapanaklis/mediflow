@@ -485,6 +485,12 @@ export async function createBotAppointment(params: {
 
 export type RescheduleErrorCode =
   | "not_found"
+  /**
+   * WS1-T3 v6 (revisión t8 de la v5, N2) — la cita ya no está activa (se
+   * canceló o se marcó «no asistió» mientras la conversación seguía abierta):
+   * reagendarla la revivía. Ya no se toca.
+   */
+  | "not_active"
   | "outside_hours"
   /** WS1-T2 — el hueco de destino está cerrado por un bloqueo de agenda. */
   | "blocked"
@@ -499,6 +505,9 @@ export interface RescheduleResult {
   appointmentId?: string;
   error?: RescheduleErrorCode;
 }
+
+/** Sentinel: la cita dejó de estar activa entre la lectura y el update (N2). */
+const CITA_NO_ACTIVA = "bot_reschedule_cita_no_activa";
 
 /** Mueve una cita existente (mismo doctor y duración) replicando PATCH /api/appointments. */
 export async function rescheduleBotAppointment(params: {
@@ -526,6 +535,7 @@ export async function rescheduleBotAppointment(params: {
     },
   });
   if (!existing) return { ok: false, error: "not_found" };
+  if (existing.status === "CANCELLED" || existing.status === "NO_SHOW") return { ok: false, error: "not_active" };
   // WS1-T5 — una cita apartada cuyo anticipo venció ya no es de nadie: moverla
   // la «reviviría» vencida y la agenda seguiría tratándola como hueco libre.
   if (apartadoVencido(existing)) return { ok: false, error: "not_found" };
@@ -582,8 +592,9 @@ export async function rescheduleBotAppointment(params: {
     // del texto: si el update entra y la reprogramación no, al paciente le
     // llega la hora anterior. Antes esto no estaba en transacción.
     await prisma.$transaction(async (tx) => {
-      await tx.appointment.update({
-        where: { id: existing.id },
+      // N2: solo si sigue activa (se pudo cancelar entre la lectura y aquí).
+      const movida = await tx.appointment.updateMany({
+        where: { id: existing.id, clinicId, status: { notIn: ["CANCELLED", "NO_SHOW"] } },
         data: {
           startsAt,
           endsAt,
@@ -597,6 +608,7 @@ export async function rescheduleBotAppointment(params: {
             : {}),
         },
       });
+      if (movida.count !== 1) throw new Error(CITA_NO_ACTIVA);
       if (existing.startsAt.getTime() !== startsAt.getTime()) {
         await applyReminderReschedule(tx, {
           appointmentId: existing.id,
@@ -610,6 +622,7 @@ export async function rescheduleBotAppointment(params: {
     await sincronizarCitaEnSegundoPlano(clinicId, existing.id);
     return { ok: true, appointmentId: existing.id };
   } catch (err) {
+    if (err instanceof Error && err.message === CITA_NO_ACTIVA) return { ok: false, error: "not_active" };
     if (isOverlapError(err)) return { ok: false, error: "overlap" };
     console.error("[bot-booking-service] reschedule failed", err);
     return { ok: false, error: "failed" };

@@ -41,6 +41,12 @@ export const reiniciar = () => {
   db.usuarios = [];
 };
 
+/** Las columnas anulables que la base deja en NULL si el alta no las manda. */
+const NULOS_AL_CREAR: Record<string, Fila> = {
+  agendaBlock: { deletedAt: null, deletedById: null },
+  agendaBlockGoogle: { eventDeletedAt: null, appointmentId: null, convertedAt: null, avisoTipo: null },
+};
+
 /** Lo justo de `where` de Prisma que usan estas funciones. */
 export function cumple(f: Fila, w: Fila | undefined): boolean {
   if (!w) return true;
@@ -54,6 +60,7 @@ export function cumple(f: Fila, w: Fila | undefined): boolean {
       if ("gt" in v) return val != null && val > v.gt;
       if ("gte" in v) return val != null && val >= v.gte;
       if ("lt" in v) return val != null && val < v.lt;
+      if ("startsWith" in v) return typeof val === "string" && val.startsWith(v.startsWith);
       return true;
     }
     if (v instanceof Date) return val instanceof Date && val.getTime() === v.getTime();
@@ -89,6 +96,14 @@ export function tabla(nombre: string, filas: () => Fila[]) {
       const r = filas().filter((f) => cumple(f, a.where));
       for (const f of r) Object.assign(f, a.data);
       return { count: r.length };
+    },
+    // Altas (la entrada crea el bloqueo y su vínculo): a la tabla, con id si
+    // no lo trae y los NULL de la base en lo que no se manda.
+    create: async (a: Fila) => {
+      llamadas.push({ op: `${nombre}.create`, args: a, tx: enTransaccion > 0 });
+      const f = { id: `${nombre}-${filas().length + 1}`, ...(NULOS_AL_CREAR[nombre] ?? {}), ...a.data };
+      filas().push(f);
+      return elegir(f, a.select);
     },
     count: async (a: Fila = {}) => filas().filter((f) => cumple(f, a.where)).length,
     groupBy: async (a: Fila) => {
@@ -140,6 +155,12 @@ export const prisma: Fila = {
   // El callback de OAuth guarda la conexión con SQL crudo.
   $executeRawUnsafe: async (sql: string, ...vals: unknown[]) => {
     llamadas.push({ op: "$executeRawUnsafe", args: sql });
+    if (sql.startsWith("UPDATE users")) {
+      const u = db.usuarios.find((x) => x.id === vals[3]);
+      if (!u) return 0;
+      Object.assign(u, { googleCalendarToken: vals[0], googleRefreshToken: vals[1], googleCalendarEmail: vals[2], googleCalendarEnabled: true });
+      return 1;
+    }
     if (sql.startsWith("UPDATE clinics")) {
       const f = db.clinics.get(vals[4] as string);
       if (!f) return 0;
@@ -177,6 +198,15 @@ export function clinica(id: string, x: Fila = {}) {
     id, timezone: "America/Mexico_City", googleCalendarEnabled: true, googleCalendarToken: "at",
     googleRefreshToken: "rt", googleClinicCalendarId: CAL, ...x,
   });
+}
+/**
+ * La clínica conectada con la cuenta de Google de una doctora que recibe
+ * citas: sus eventos la bloquean a ella (WS1-T3). Sin dueña, ningún evento
+ * bloquea a nadie y la completa retira lo que quedaba.
+ */
+export function duena(clinicId: string, correo = "dra@clinica.mx") {
+  db.clinics.get(clinicId)!.googleCalendarEmail = correo;
+  db.usuarios.push({ id: `dra-${clinicId}`, clinicId, email: correo, googleCalendarEmail: correo, role: "DOCTOR", isActive: true, agendaActive: true });
 }
 export function bandera(clinicId: string, x: Fila = {}) {
   db.imports.set(clinicId, {

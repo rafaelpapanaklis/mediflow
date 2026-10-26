@@ -152,6 +152,8 @@ interface GcalClinica {
   invitarPaciente: boolean;
   /** false = falta aplicar sql/ws1-t12-google-calendar-estado.sql: el ajuste de invitación no se puede guardar. */
   tablaDisponible: boolean;
+  /** La dirección del calendario de la clínica para agendar desde otro Google (WS1-T3); null = la agenda no lo lee. */
+  direccion?: string | null;
 }
 
 const GCAL_SIN_DATOS: GcalClinica = { estado: "no_conectado", email: null, caidoDesde: null, motivo: null, invitarPaciente: true, tablaDisponible: false };
@@ -646,6 +648,17 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
       setUser((u: any) => ({ ...u, googleCalendarEnabled:false, googleCalendarEmail:null }));
     } catch { toast.error(t("settings.client.gcalDisconnectErrorToast")); }
     finally { setGcalBusy(""); }
+  }
+
+  /** WS1-T3: copia la dirección del calendario de la clínica (agendar desde otro Google). */
+  async function copiarDireccionGcal() {
+    if (!gcal.direccion) return;
+    try {
+      await navigator.clipboard.writeText(gcal.direccion);
+      toast.success(t("settings.client.gcalDireccionCopied"));
+    } catch {
+      toast.error(t("settings.client.gcalDireccionCopyError"));
+    }
   }
 
   async function alternarInvitarPaciente(invitar: boolean) {
@@ -1381,6 +1394,21 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                       />
                       <p className={cr.campoAyuda} style={{ fontSize: 13 }}>{t("settings.client.gcalPrivacyNote")}</p>
                     </>
+                  )}
+                  {/* WS1-T3: agendar desde OTRO Google (un agente invita al doctor y a esta dirección). */}
+                  {isAdminUser && gcalConnected && gcal.direccion && (
+                    <Campo
+                      etiqueta={t("settings.client.gcalDireccionTitle")}
+                      htmlFor="gcal-direccion"
+                      ayuda={<>{t("settings.client.gcalDireccionLinea1")}<br />{t("settings.client.gcalDireccionLinea2")}</>}
+                    >
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        <div style={{ flex: "1 1 220px", minWidth: 0 }}>
+                          <Entrada id="gcal-direccion" value={gcal.direccion} readOnly aria-readonly="true" onFocus={(e) => e.currentTarget.select()} />
+                        </div>
+                        <Boton corto onClick={copiarDireccionGcal}>{t("settings.client.gcalDireccionCopy")}</Boton>
+                      </div>
+                    </Campo>
                   )}
                   {isAdminUser ? (
                     <>
@@ -2362,6 +2390,18 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                   </label>
                   <p className="text-sm text-muted-foreground">{t("settings.client.gcalPrivacyNote")}</p>
                 </>
+              )}
+              {/* WS1-T3: agendar desde OTRO Google (un agente invita al doctor y a esta dirección). */}
+              {isAdminUser && gcalConnected && gcal.direccion && (
+                <div className="space-y-2">
+                  <label htmlFor="gcal-direccion-clasica" className="text-sm font-semibold">{t("settings.client.gcalDireccionTitle")}</label>
+                  <div className="flex flex-wrap gap-2">
+                    <Input id="gcal-direccion-clasica" value={gcal.direccion} readOnly aria-readonly="true" className="min-w-0 flex-1" onFocus={(e) => e.currentTarget.select()} />
+                    <Button variant="outline" onClick={copiarDireccionGcal}>{t("settings.client.gcalDireccionCopy")}</Button>
+                  </div>
+                  <p className="text-sm text-muted-foreground">{t("settings.client.gcalDireccionLinea1")}</p>
+                  <p className="text-sm text-muted-foreground">{t("settings.client.gcalDireccionLinea2")}</p>
+                </div>
               )}
               {isAdminUser ? (
                 <>

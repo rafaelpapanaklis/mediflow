@@ -176,6 +176,31 @@ describe("bot booking — reagendar", () => {
     assert.equal(moved[0].appointmentId, "apptOld");
     assert.match(r4.reply ?? "", /reagendada/);
   });
+
+  it("WS1-T3 v6 (N2): la cita se canceló mientras hablábamos → un texto amable, sin reagendar nada, y ofrece agendar una nueva", async () => {
+    const deps = makeDeps({
+      getUpcomingAppointmentsForPatient: async () => [
+        {
+          id: "apptOld",
+          doctorId: "doc1",
+          startsAt: new Date("2026-06-20T15:00:00Z"),
+          endsAt: new Date("2026-06-20T15:30:00Z"),
+          type: "Limpieza",
+          doctor: { firstName: "Ana", lastName: "García" },
+        },
+      ],
+      rescheduleBotAppointment: async () => ({ ok: false, error: "not_active" }),
+    });
+    const c = makeConvo(makeConfig(), deps, { id: "patP", phone: "5215512345678" });
+    await c.say("reagendar mi cita");
+    await c.say("mañana");
+    await c.say("1");
+    const r = await c.say("sí");
+    assert.match(r.reply ?? "", /^Esa cita ya no está activa/);
+    assert.match(r.reply ?? "", /agendar/);
+    assert.doesNotMatch(r.reply ?? "", /reagendada|No pude reagendar/);
+    assert.notEqual(r.handoff, true);
+  });
 });
 
 describe("bot booking — entradas no entendidas", () => {

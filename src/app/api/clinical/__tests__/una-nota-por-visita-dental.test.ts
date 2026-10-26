@@ -51,10 +51,18 @@ const prismaFalso: any = {
         c.startsAt >= where.startsAt.gte && c.startsAt < where.startsAt.lt,
       ).map((c) => proyecta(c, select));
     },
-    findFirst: async ({ where, select }: any) => {
+    findFirst: async ({ where, select, include }: any) => {
       if (where?.clinicId !== CLINICA) throw new Error("cita SIN clinicId");
       const c = CITAS.find((x) => x.id === where.id && x.clinicId === where.clinicId);
+      if (c && include) return { ...c, patient: { id: c.patientId, firstName: "Elena", lastName: "Cinco" }, doctor: { id: c.doctorId, firstName: "Ana", lastName: "Ruiz" } };
       return c ? proyecta(c, select) : null;
+    },
+    // «Completar consulta» cierra con el estado leído (WS1-T3 v7): como la base, solo si casa.
+    updateMany: async ({ where, data }: any) => {
+      if (where?.clinicId !== CLINICA) throw new Error("updateMany de cita SIN clinicId");
+      const c = CITAS.find((x) => x.id === where.id && x.clinicId === where.clinicId && (!where.status || x.status === where.status));
+      if (c) Object.assign(c, data);
+      return { count: c ? 1 : 0 };
     },
     update: async ({ where, data }: any) => {
       const c = CITAS.find((x) => x.id === where.id)!;

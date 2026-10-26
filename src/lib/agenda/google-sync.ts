@@ -38,7 +38,7 @@ const puertos: PuertosEnBloque = {
       select: {
         id: true, name: true, address: true, timezone: true,
         googleCalendarEnabled: true, googleCalendarToken: true,
-        googleRefreshToken: true, googleClinicCalendarId: true,
+        googleRefreshToken: true, googleClinicCalendarId: true, googleCalendarEmail: true,
       },
     });
     if (!c) return null;
@@ -47,6 +47,7 @@ const puertos: PuertosEnBloque = {
       enabled: c.googleCalendarEnabled === true,
       accessToken: c.googleCalendarToken, refreshToken: c.googleRefreshToken,
       calendarId: c.googleClinicCalendarId,
+      cuentaEmail: c.googleCalendarEmail ?? null,
     };
   },
 

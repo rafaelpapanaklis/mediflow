@@ -58,6 +58,7 @@ import { cancelPendingRemindersForAppointment } from "@/lib/reminders/reschedule
 import type { BotHistoryItem } from "@/lib/whatsapp/bot/types";
 import { Prisma } from "@prisma/client";
 import { WA_REMINDER_STATUS } from "@/lib/whatsapp/reminder-status";
+import { cancelarCitaDelRecordatorio, confirmarCitaDelRecordatorio } from "@/lib/whatsapp/respuesta-recordatorio-cita";
 import { marcarPendienteSiHayDinero } from "@/lib/anticipos/cita-cancelada.server";
 import { anotarRespuestaARecordatorio } from "@/lib/whatsapp/bot/movimientos-bot";
 import { sincronizarCitaEnSegundoPlano } from "@/lib/agenda/google-sync";
@@ -115,6 +116,11 @@ const MEDIA_RECEIVED_MSG = "Recibí tu archivo, en un momento te atiende una per
 // pendiente (ya contestado, o la cita cambió). No se actúa sobre OTRA cita.
 const REMINDER_BUTTON_STALE_MSG =
   "Ese recordatorio ya no está pendiente. Si necesitas cambiar o cancelar tu cita, escríbenos por aquí. 🙏";
+
+// WS1-T3 v7 (revisión t8 de la v6) — contestó CONFIRMAR/CANCELAR justo cuando
+// la clínica cancelaba la cita (o la marcaba): no se toca y se le dice.
+const REMINDER_APPT_NOT_ACTIVE_MSG =
+  "Esa cita ya no está activa, así que no hice ningún cambio. Si necesitas una cita nueva, escríbenos por aquí. 🙏";
 
 // ws1-t3 (botones) — tocó una opción de una lista o de unos botones que ya no
 // son los últimos que le mandó el bot (o el agendado ya venció).
@@ -619,21 +625,28 @@ async function procesarMensajeEntrante(value: any, msg: any): Promise<void> {
     // normal hacia el bot / el staff en vez de quedarse muda aquí.
     if (notified) return;
   } else if (reminder) {
+    // WS1-T3 v7 — las dos respuestas solo tocan la cita si sigue en un estado
+    // que admite respuesta (el mismo filtro con que se eligió el recordatorio).
+    const laCita = { clinicId: clinic.id, appointmentId: reminder.appointmentId!, ahora: new Date() };
+    const avisarYaNoActiva = async () => {
+      await recordReminderReply(reminder.id, text, { close: true });
+      await enviarYRegistrar({ clinic, threadId: thread.id, to: from, body: REMINDER_APPT_NOT_ACTIVE_MSG, origen: "reminder" });
+    };
     if (reply === "cancel") {
-      await prisma.$transaction(async (tx) => {
-        await tx.appointment.update({
-          where: { id: reminder.appointmentId! },
-          data:  { status: "CANCELLED", cancelledAt: new Date(), cancelReason: "Cancelado por paciente vía WhatsApp" },
-        });
-        // El paciente canceló: los avisos que quedaran en cola para esa cita
-        // ya no tienen sentido. El SENT al que está contestando no se toca
-        // (queda con patientReply/repliedAt, abajo).
-        await cancelPendingRemindersForAppointment(tx, {
+      // El paciente canceló: los avisos que quedaran en cola para esa cita
+      // ya no tienen sentido. El SENT al que está contestando no se toca
+      // (queda con patientReply/repliedAt, abajo).
+      const cancelada = await cancelarCitaDelRecordatorio(prisma, laCita, (tx) =>
+        cancelPendingRemindersForAppointment(tx, {
           appointmentId: reminder.appointmentId!,
           clinicId: clinic.id,
           reason: "Cancelado: el paciente canceló la cita por WhatsApp",
-        });
-      });
+        }),
+      );
+      if (!cancelada) {
+        await avisarYaNoActiva();
+        return;
+      }
       await recordReminderReply(reminder.id, text, { close: true });
       if (reminder.appointment) await anotarRespuestaARecordatorio({ clinicId: clinic.id, cita: reminder.appointment, accion: "cancel" });
       // Google Calendar: la cita quedó cancelada, el evento se borra. No lanza.
@@ -650,10 +663,10 @@ async function procesarMensajeEntrante(value: any, msg: any): Promise<void> {
       });
       return;
     } else if (reply === "confirm") {
-      await prisma.appointment.update({
-        where: { id: reminder.appointmentId },
-        data:  { status: "CONFIRMED", confirmedAt: new Date() },
-      });
+      if (!(await confirmarCitaDelRecordatorio(prisma, laCita))) {
+        await avisarYaNoActiva();
+        return;
+      }
       await recordReminderReply(reminder.id, text, { close: true });
       if (reminder.appointment) await anotarRespuestaARecordatorio({ clinicId: clinic.id, cita: reminder.appointment, accion: "confirm" });
 

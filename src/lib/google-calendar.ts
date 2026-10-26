@@ -89,7 +89,8 @@ export function getAuthUrl(userId: string) {
 export interface ClienteCalendar {
   events: {
     insert(p: { calendarId: string; sendUpdates?: string; requestBody: Record<string, any> }): Promise<{ data: { id?: string | null } }>;
-    patch(p: { calendarId: string; eventId: string; sendUpdates?: string; requestBody: Record<string, any> }): Promise<{ data: { id?: string | null } }>;
+    /** Devuelve el evento ENTERO tal como quedó (con sus `attendees`). */
+    patch(p: { calendarId: string; eventId: string; sendUpdates?: string; requestBody: Record<string, any> }): Promise<{ data: { id?: string | null; attendees?: Record<string, any>[] | null } }>;
     delete(p: { calendarId: string; eventId: string; sendUpdates?: string }): Promise<unknown>;
     /** WS1-T9: leer cómo está AHORA un evento de la clínica antes de tocarle la hora. */
     get?(p: { calendarId: string; eventId: string }): Promise<{ data: Record<string, any> }>;
@@ -278,7 +279,13 @@ export async function parcharEvento(
    * marca de DaleControl. `titulo` = cambiarle el título a ese (p. ej. quitar
    * «Cancelada en DaleControl · » al reactivar); null/ausente = no tocarlo.
    */
-  opts: { conservarContenido?: boolean; titulo?: string | null; restaurar?: boolean } = {},
+  opts: {
+    conservarContenido?: boolean;
+    titulo?: string | null;
+    restaurar?: boolean;
+    /** Los invitados que tiene el evento tras el parche (la respuesta trae el evento entero; WS1-T3, H5). */
+    alParchar?: (invitados: Record<string, any>[]) => void;
+  } = {},
 ): Promise<"ok" | "no_existe"> {
   const { description, location, summary, extendedProperties, ...horario } = cuerpoBase(d);
   // En una convertida, «confirmed» solo para RESTAURARLA (`restaurar`): un evento «tentativo» de la clínica se queda así.
@@ -286,12 +293,13 @@ export async function parcharEvento(
     ? { ...horario, ...(typeof opts.titulo === "string" ? { summary: opts.titulo } : {}), ...(opts.restaurar ? { status: "confirmed" } : {}) }
     : { ...horario, summary, description, location, extendedProperties, status: "confirmed" };
   try {
-    await cal.events.patch({
+    const r = await cal.events.patch({
       calendarId: d.calendarId,
       eventId: d.eventId,
       sendUpdates: "none",
       requestBody: cuerpo,
     });
+    opts.alParchar?.(Array.isArray(r?.data?.attendees) ? r.data.attendees : []);
     return "ok";
   } catch (err) {
     if (esNoExiste(err)) return "no_existe";
@@ -328,12 +336,13 @@ export async function parcharTitulo(
  * con `parcharEvento` y devuelve `reanudado`.
  *
  * `avisarInvitados`: false en la sincronización en bloque, para no mandar a
- * cada paciente un correo de invitación por cita de golpe.
+ * cada paciente un correo de invitación por cita de golpe. `alParchar`: los
+ * invitados del evento que ya existía (solo en `reanudado`).
  */
 export async function insertarEvento(
   cal: ClienteCalendar,
   d: DatosEvento,
-  opts: { avisarInvitados: boolean },
+  opts: { avisarInvitados: boolean; alParchar?: (invitados: Record<string, any>[]) => void },
 ): Promise<"creado" | "reanudado"> {
   try {
     await cal.events.insert({
@@ -356,9 +365,39 @@ export async function insertarEvento(
     return "creado";
   } catch (err) {
     if (estadoHttpDeError(err) !== 409) throw err;
-    const r = await parcharEvento(cal, d);
+    const r = await parcharEvento(cal, d, { alParchar: opts.alParchar });
     if (r === "no_existe") throw err;
     return "reanudado";
+  }
+}
+
+/**
+ * WS1-T3 · quita de los invitados de un evento la cuenta DUEÑA del calendario
+ * (la cita ya está en su Google: la invitación la duplicaba). Solo si esa
+ * cuenta está entre `invitados` (los que devolvió el parche de la cita: sin
+ * leer el evento otra vez, H5) lo parcha con los demás invitados TAL CUAL
+ * (con su respuesta), sin avisar a nadie: ni correo de cancelación ni se
+ * toca nada más del evento. Para los eventos creados antes de esta regla.
+ */
+export async function quitarInvitadoDuplicado(
+  cal: ClienteCalendar,
+  d: { calendarId: string; eventId: string; correo: string; invitados: readonly Record<string, any>[] },
+): Promise<"quitado" | "no_estaba" | "no_existe"> {
+  const correo = d.correo.trim().toLowerCase();
+  const invitados = d.invitados;
+  const quedan = invitados.filter((a) => String(a?.email ?? "").trim().toLowerCase() !== correo);
+  if (quedan.length === invitados.length) return "no_estaba";
+  try {
+    await cal.events.patch({
+      calendarId: d.calendarId,
+      eventId: d.eventId,
+      sendUpdates: "none",
+      requestBody: { attendees: quedan },
+    });
+    return "quitado";
+  } catch (err) {
+    if (esNoExiste(err)) return "no_existe";
+    throw err;
   }
 }
 

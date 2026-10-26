@@ -169,14 +169,21 @@ export async function PATCH(req: NextRequest, props: Params) {
   const prevSpec = (note?.specialtyData ?? {}) as Record<string, unknown>;
 
   const updated = await prisma.$transaction(async (tx) => {
-    const appt = await tx.appointment.update({
-      where: { id: params.id },
+    // WS1-T3 v7 (revisión t8 de la v6) — con el estado que se leyó arriba: si
+    // la cita se canceló (o cambió) en este instante, no se cierra ni se firma.
+    const r = await tx.appointment.updateMany({
+      where: { id: params.id, clinicId: session.clinic.id, status: existing.status },
       data: { status: "COMPLETED", completedAt },
+    });
+    if (r.count !== 1) return null;
+    const appt = await tx.appointment.findFirst({
+      where: { id: params.id, clinicId: session.clinic.id },
       include: {
         patient: { select: { id: true, firstName: true, lastName: true } },
         doctor:  { select: { id: true, firstName: true, lastName: true } },
       },
     });
+    if (!appt) return null;
     if (willSign && note) {
       const currentSpec = (note.specialtyData ?? {}) as Record<string, unknown>;
       await tx.medicalRecord.update({
@@ -192,6 +199,12 @@ export async function PATCH(req: NextRequest, props: Params) {
     }
     return appt;
   });
+  if (!updated) {
+    return NextResponse.json(
+      { error: "invalid_transition", reason: "La cita cambió de estado mientras tanto. Recarga e intenta de nuevo." },
+      { status: 409 },
+    );
+  }
 
   // ws1-t1: si era la cita de un walk-in, su fila deja de estar «En atención».
   await cerrarFilaDeLaCita({ clinicId: session.clinic.id, appointmentId: params.id, estado: "COMPLETED", ahora: completedAt });

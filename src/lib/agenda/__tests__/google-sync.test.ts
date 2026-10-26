@@ -620,3 +620,121 @@ test("calendario guardado que Google ya no tiene (404): se crea uno nuevo y se g
   assert.notEqual(w.clinicas.get(C1)!.calendarId, "borrado");
   assert.equal(w.caidas.length, 0);
 });
+
+// ── WS1-T3: una cita, UNA vez en el Google de cada persona ──────────────────
+// La clínica de Rafael está conectada con el Gmail de «rafa papa», que además
+// atiende: la cita «Limpieza — das D.» le salía dos veces en su Google (la
+// copia en el calendario de la clínica, en SU cuenta, y la invitación a su
+// correo como doctor). La cuenta dueña del calendario nunca se invita.
+
+const RAFA = "rafaelpapanaklis@gmail.com";
+
+test("WS1-T3: el doctor ES la cuenta conectada → la cita nueva no lo invita (ya la ve en el calendario de la clínica); el paciente sí", async () => {
+  const w = mundo({ clinicas: [clinica(C1, { cuentaEmail: "RafaelPapanaklis@gmail.com" })], citas: [conCita("a1", { doctorEmail: RAFA })] });
+  assert.deepEqual(await sincronizarCita(w.puertos, C1, "a1"), { estado: "creado" });
+  const calId = w.clinicas.get(C1)!.calendarId!;
+  assert.deepEqual(w.google.eventoEn(calId, idEventoDeCita(C1, "a1"))!.attendees, [{ email: "ana@correo.mx" }]);
+  assert.equal(w.google.cuantas("events.get"), 0, "una cita nueva no necesita leer nada");
+  // Y si el paciente es esa cuenta (Rafael probándose a sí mismo), tampoco.
+  const w2 = mundo({ clinicas: [clinica(C1, { cuentaEmail: RAFA })], citas: [conCita("a2", { doctorEmail: RAFA, patientEmail: RAFA })] });
+  await sincronizarCita(w2.puertos, C1, "a2");
+  const ev2 = w2.google.eventoEn(w2.clinicas.get(C1)!.calendarId!, idEventoDeCita(C1, "a2"))!;
+  assert.deepEqual(ev2.attendees, []);
+  assert.equal(w2.google.llamadas.find((l) => l.op === "events.insert")!.args.sendUpdates, "none", "nadie a quien avisar");
+});
+
+test("WS1-T3: un doctor que NO es la cuenta conectada se sigue invitando como siempre (y no se lee nada de más)", async () => {
+  const w = mundo({ clinicas: [clinica(C1, { cuentaEmail: RAFA })], citas: [conCita("a1", { doctorEmail: "d@gmail.com" })] });
+  await sincronizarCita(w.puertos, C1, "a1");
+  const calId = w.clinicas.get(C1)!.calendarId!;
+  assert.deepEqual(w.google.eventoEn(calId, idEventoDeCita(C1, "a1"))!.attendees, [{ email: "d@gmail.com" }, { email: "ana@correo.mx" }]);
+  w.citas.get("a1")!.startsAt = new Date("2026-10-16T18:00:00Z");
+  w.citas.get("a1")!.endsAt = new Date("2026-10-16T18:30:00Z");
+  await sincronizarCita(w.puertos, C1, "a1");
+  assert.equal(w.google.cuantas("events.get"), 0, "sin duplicado posible: no se lee el evento");
+});
+
+test("WS1-T3: una cita YA copiada con el doctor-cuenta invitado → la siguiente actualización le QUITA la invitación sin avisar a nadie y sin borrar nada", async () => {
+  // Como la dejó el código de antes: el evento con rafa invitado (y el paciente, que ya aceptó).
+  const w = mundo({ clinicas: [clinica(C1)], citas: [conCita("a1", { doctorEmail: RAFA })] });
+  await sincronizarCita(w.puertos, C1, "a1");
+  const calId = w.clinicas.get(C1)!.calendarId!;
+  const id = idEventoDeCita(C1, "a1");
+  const ev = w.google.eventoEn(calId, id)!;
+  assert.deepEqual(ev.attendees, [{ email: RAFA }, { email: "ana@correo.mx" }], "así quedaba antes: dos veces en el Google de rafa");
+  (ev.attendees as Record<string, unknown>[])[1].responseStatus = "accepted";
+
+  // Desde ahora la clínica sabe con qué cuenta está conectada; Rafael mueve la cita.
+  w.clinicas.get(C1)!.cuentaEmail = RAFA;
+  w.citas.get("a1")!.startsAt = new Date("2026-10-16T18:00:00Z");
+  w.citas.get("a1")!.endsAt = new Date("2026-10-16T18:30:00Z");
+  assert.deepEqual(await sincronizarCita(w.puertos, C1, "a1"), { estado: "actualizado" });
+
+  const despues = w.google.eventoEn(calId, id)!;
+  assert.deepEqual(despues.attendees, [{ email: "ana@correo.mx", responseStatus: "accepted" }], "fuera rafa; el paciente intacto, con su respuesta");
+  assert.equal(despues.status, "confirmed", "la cita sigue en Google");
+  assert.equal(despues.start.dateTime, "2026-10-16T12:00:00-06:00", "y a su hora nueva");
+  assert.equal(w.google.cuantas("events.delete"), 0);
+  const parches = w.google.llamadas.filter((l) => l.op === "events.patch");
+  assert.ok(parches.every((l) => l.args.sendUpdates === "none"), "sin correos a nadie");
+  assert.deepEqual(Object.keys(parches.at(-1)!.args.requestBody), ["attendees"], "el parche de invitados solo toca invitados");
+
+  // La siguiente actualización ya no tiene nada que quitar: no vuelve a parchar invitados.
+  const antes = parches.length;
+  w.citas.get("a1")!.startsAt = new Date("2026-10-16T19:00:00Z");
+  w.citas.get("a1")!.endsAt = new Date("2026-10-16T19:30:00Z");
+  await sincronizarCita(w.puertos, C1, "a1");
+  const nuevos = w.google.llamadas.filter((l) => l.op === "events.patch").slice(antes);
+  assert.equal(nuevos.length, 1, "solo el de la hora");
+  assert.equal("attendees" in nuevos[0].args.requestBody, false);
+  // H5 (revisión t8): nunca se lee el evento aparte; los invitados vienen en la respuesta del parche de la hora.
+  assert.equal(w.google.cuantas("events.get"), 0);
+});
+
+test("WS1-T3 v3 · H5: las citas del doctor-cuenta ya limpias cuestan UNA llamada a Google por cambio (el parche), no dos (sin events.get)", async () => {
+  const w = mundo({ clinicas: [clinica(C1, { cuentaEmail: RAFA })], citas: [conCita("a1", { doctorEmail: RAFA })] });
+  await sincronizarCita(w.puertos, C1, "a1");
+  const desde = w.google.llamadas.length;
+  for (const h of [18, 19, 20]) {
+    w.citas.get("a1")!.startsAt = new Date(`2026-10-16T${h}:00:00Z`);
+    w.citas.get("a1")!.endsAt = new Date(`2026-10-16T${h}:30:00Z`);
+    assert.deepEqual(await sincronizarCita(w.puertos, C1, "a1"), { estado: "actualizado" });
+  }
+  const ops = w.google.llamadas.slice(desde).map((l) => l.op).filter((op) => op.startsWith("events."));
+  assert.deepEqual(ops, ["events.patch", "events.patch", "events.patch"]);
+});
+
+test("WS1-T3: si quitar la invitación falla, la cita queda al día igual (se reintenta en su siguiente cambio)", async () => {
+  const w = mundo({ clinicas: [clinica(C1)], citas: [conCita("a1", { doctorEmail: RAFA })] });
+  await sincronizarCita(w.puertos, C1, "a1");
+  w.clinicas.get(C1)!.cuentaEmail = RAFA;
+  // Falla el SEGUNDO parche (el de los invitados); el de la hora sale bien.
+  let parches = 0;
+  w.google.antes = async (op: string) => {
+    if (op === "events.patch" && ++parches === 2) throw errorGoogle(500, "backendError");
+  };
+  w.citas.get("a1")!.startsAt = new Date("2026-10-16T18:00:00Z");
+  w.citas.get("a1")!.endsAt = new Date("2026-10-16T18:30:00Z");
+  assert.deepEqual(await sincronizarCita(w.puertos, C1, "a1"), { estado: "actualizado" });
+  assert.equal(parches, 2);
+  assert.equal(w.caidas.length, 0, "no marca la conexión caída por esto");
+  assert.equal(w.citas.get("a1")!.startsAt.toISOString(), "2026-10-16T18:00:00.000Z");
+  w.google.antes = null;
+  await sincronizarCita(w.puertos, C1, "a1");
+  const calId = w.clinicas.get(C1)!.calendarId!;
+  assert.deepEqual(w.google.eventoEn(calId, idEventoDeCita(C1, "a1"))!.attendees, [{ email: "ana@correo.mx" }]);
+});
+
+test("WS1-T3: «Sincronizar citas futuras» que reencuentra un evento viejo (409 → se reanuda) también le quita el invitado duplicado, sin correos", async () => {
+  const w = mundo({ clinicas: [clinica(C1)], citas: [conCita("a1", { doctorEmail: RAFA })] });
+  await sincronizarCita(w.puertos, C1, "a1");
+  // El id no se guardó (alta a medias): «Sincronizar citas futuras» lo vuelve a intentar.
+  w.citas.get("a1")!.googleEventId = null;
+  w.clinicas.get(C1)!.cuentaEmail = RAFA;
+  const r = await sincronizarFuturas(w.puertos, C1, { ahora: new Date("2026-10-01T00:00:00Z") });
+  assert.equal(r.creadas, 1);
+  const calId = w.clinicas.get(C1)!.calendarId!;
+  assert.deepEqual(w.google.eventoEn(calId, idEventoDeCita(C1, "a1"))!.attendees, [{ email: "ana@correo.mx" }]);
+  assert.ok(w.google.llamadas.filter((l) => l.op === "events.patch").every((l) => l.args.sendUpdates === "none"));
+  assert.equal(w.google.cuantas("events.get"), 0, "H5: los invitados salen de la respuesta del parche del 409");
+});

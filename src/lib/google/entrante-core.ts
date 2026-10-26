@@ -20,12 +20,22 @@
  *     a sí misma su propio hueco: el eco. El título «🏥 … — …» o el pie
  *     «Agendado desde DaleControl» solos NO bastan: un evento duplicado a mano
  *     en Google los copia y debe cerrar la agenda (segunda vuelta t8, N-G6).
- *   · ¿De quién es el bloqueo? De la persona de la clínica cuyo correo
- *     aparece entre los invitados (`asignarEvento`). Si TODOS los invitados
- *     son de la clínica y ninguno recibe citas (recepción, un doctor dado de
- *     baja), el bloqueo queda a nombre de uno de ellos y no cierra a nadie
- *     más. Sin invitados, con un correo que no se sabe de quién es o con
- *     varios doctores: de toda la clínica, y el panel dice por qué (`alcance`).
+ *   · ¿A quién bloquea? (WS1-T3, decisiones de Rafael del 21-oct-2026:
+ *     «NO quiero que se cierre toda la clínica nunca desde Google Calendar…
+ *     para eso tenemos Bloquear horarios», y el agente de marketing que
+ *     agenda para el Dr. X desde SU Google invitando al Dr. X y a la
+ *     dirección del calendario de la clínica). `doctoresDelEvento`:
+ *       1. Invita a personas de la clínica que reciben citas y no
+ *          rechazaron → a CADA una (un bloqueo por doctor).
+ *       2. Invita a alguien de la clínica que atiende pero ninguno queda
+ *          (rechazó, o tiene «Aparece en la agenda» apagada) → a NADIE
+ *          (revisión t8, H3: decisión A de Rafael del 26-oct-2026).
+ *       3. No invita a ninguna persona de la clínica que atienda → al dueño
+ *          de la cuenta conectada (`duenoDeLaCuenta`), si recibe citas.
+ *       4. Tampoco hay dueño que atienda → a nadie; la agenda y
+ *          Configuración lo dicen (`sinDueno`).
+ *       5. NUNCA a toda la clínica.
+ *     Pacientes, externos y la dirección del propio calendario no cuentan.
  *
  * 🔴 EL TÍTULO NO VA EN `reason`. El bot de WhatsApp le dice al paciente el
  * `reason` de un día cerrado (`bot-booking-service.ts`), y el título de un
@@ -38,7 +48,6 @@
  */
 
 import { tzLocalToUtc } from "@/lib/agenda/time-utils";
-import { ROLES_QUE_ATIENDEN } from "@/lib/agenda/roles-que-atienden";
 
 /** El `reason` de todo bloqueo GOOGLE. Genérico a propósito (ver arriba). */
 export const MOTIVO_GOOGLE = "Ocupado (Google)";
@@ -185,213 +194,170 @@ export function rangoDeEvento(
   return { startsAt, endsAt, allDay };
 }
 
+/**
+ * El prefijo que la salida le pone al título de un evento de Google cuya cita
+ * (convertida) se canceló en DaleControl (`tituloCancelada`). Vive aquí, puro,
+ * para que el bloqueo que vuelve tras cancelar enseñe el título de verdad.
+ */
+export const PREFIJO_CANCELADA = "Cancelada en DaleControl · ";
+
 export function tituloDeEvento(ev: EventoGoogle): string {
-  const t = typeof ev.summary === "string" ? ev.summary.replace(/\s+/g, " ").trim() : "";
+  let t = typeof ev.summary === "string" ? ev.summary.replace(/\s+/g, " ").trim() : "";
+  while (t.startsWith(PREFIJO_CANCELADA)) t = t.slice(PREFIJO_CANCELADA.length).trim();
   return Array.from(t).slice(0, TITULO_MAX).join("");
 }
 
-/** Una persona de la clínica (cualquier rol, activa o no) con su correo. */
+/** Una persona de la clínica (cualquier rol, activa o no) con sus correos. */
 export interface UsuarioClinica {
   id: string;
+  /** Su correo de acceso (`users.email`). */
   email: string | null;
-  /**
-   * Otros correos suyos: la cuenta de Google con la que conectó
-   * (`users.googleCalendarEmail`, p. ej. el Gmail personal de la doctora).
-   * Solo sirven para reconocer a quien RECIBE citas: el Gmail de la clínica
-   * que conectó recepción no convierte un evento en «de recepción».
-   */
-  otrosCorreos?: (string | null)[];
-  /** ¿Sale en la agenda y recibe citas? (`RECIBE_CITAS_WHERE`). */
+  /** La cuenta de Google con la que conectó (`users.googleCalendarEmail`). */
+  correoGoogle?: string | null;
+  /** ¿Sale en la agenda y recibe citas? (`puedeRecibirCitas`). */
   recibeCitas: boolean;
-  /** El rol (desempate y cuentas viejas de un doctor). */
-  rol?: string | null;
-  /** Nombre y apellido (para reconocer una cuenta vieja de la misma persona). */
-  nombre?: string | null;
-  /** La cuenta está activa (`users.isActive`). Ausente = sí. */
-  activo?: boolean;
+  /**
+   * ¿Atiende? Rol que atiende y cuenta activa, SIN mirar «Aparece en la
+   * agenda» (`ATIENDE_WHERE`). Ausente = `recibeCitas`.
+   */
+  atiende?: boolean;
 }
 
-/** Por qué un bloqueo es de toda la clínica. `null` = es de una persona. */
+/**
+ * Por qué un bloqueo VIEJO era de toda la clínica (la regla de antes, por
+ * invitados). Desde la regla 4 ningún evento cierra toda la clínica: solo
+ * quedan en filas viejas, y la primera pasada las reasigna o las retira.
+ */
 export type AlcanceGoogle = "sin_invitados" | "no_reconocido" | "varios";
 
-const TITULOS_DE_NOMBRE = /^(dra|dr|doctora|doctor|lic|licda|mtra|mtro|c\.?d|cd)\.?\s+/;
-
-/** «Dra. María  Ruiz» → «maria ruiz» (sin acentos, sin título, espacios simples). */
-export function normalizarNombre(s: string | null | undefined): string {
-  let t = (s ?? "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9ñ.\s]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  t = t.replace(TITULOS_DE_NOMBRE, "");
-  return t.replace(/\./g, " ").replace(/\s+/g, " ").trim();
-}
-
-const esRolQueAtiende = (rol: string | null | undefined) => (ROLES_QUE_ATIENDEN as readonly string[]).includes(rol ?? "");
+const correo = (s: string | null | undefined) => s?.trim().toLowerCase() || null;
 
 /**
- * Con el correo repetido (una cuenta de baja y la nueva): manda quien recibe
- * citas; luego un DOCTOR (segunda vuelta t8, N-G5); a igualdad, el id menor
- * (que no dependa del orden de la consulta).
+ * ¿De quién es la cuenta de Google conectada a la clínica?
+ * (`clinics.googleCalendarEmail`; WS1-T3, decisión de Rafael del 21-oct-2026)
+ *
+ * De la persona de la clínica que RECIBE citas (`puedeRecibirCitas`: un
+ * superadmin con «Aparece en la agenda» también) cuyo correo es esa cuenta:
+ * primero por su correo de acceso (`users.email`) y, si nadie entra con
+ * ella, por la cuenta de Google que conectó (`users.googleCalendarEmail`).
+ * Tiene que ser UNA sola persona: si son varias no se sabe de quién es.
+ *
+ * `null` = cuenta GENERAL (recepción, un Gmail de la clínica, alguien que no
+ * atiende): los eventos de Google no bloquean a nadie, y la agenda y
+ * Configuración lo dicen (`sinDueno`).
  */
-function gana(u: UsuarioClinica, previo: UsuarioClinica | undefined): boolean {
-  if (!previo) return true;
-  if (u.recibeCitas !== previo.recibeCitas) return u.recibeCitas;
-  const d = (x: UsuarioClinica) => x.rol === "DOCTOR";
-  if (d(u) !== d(previo)) return d(u);
-  return u.id < previo.id;
+export function duenoDeLaCuenta(
+  cuenta: string | null | undefined,
+  usuarios: readonly UsuarioClinica[],
+): string | null {
+  const c = correo(cuenta);
+  if (!c) return null;
+  const atienden = usuarios.filter((u) => u.recibeCitas);
+  const porAcceso = atienden.filter((u) => correo(u.email) === c);
+  if (porAcceso.length > 0) return porAcceso.length === 1 ? porAcceso[0].id : null;
+  const porGoogle = atienden.filter((u) => correo(u.correoGoogle) === c);
+  return porGoogle.length === 1 ? porGoogle[0].id : null;
 }
 
 /**
- * De quién es el bloqueo (revisión t8, G1, y segunda vuelta, N-G2). Se buscan
- * los invitados entre TODAS las personas de la clínica:
+ * A quién bloquea UN evento del calendario de la clínica (ver la cabecera):
+ * las personas de la clínica que reciben citas invitadas y que no
+ * rechazaron, cada una. Si invita a alguien de la clínica que atiende pero
+ * ninguno queda (rechazó o tiene la agenda apagada), a nadie: el evento era
+ * para esa persona, no para el dueño (H3, decisión A). Solo si no invita a
+ * nadie de la clínica que atienda, el dueño de la cuenta conectada; si
+ * tampoco, nadie (lista vacía). Nunca `null` = toda la clínica.
  *
- *   · Un solo doctor que recibe citas → suyo. También si llega por su otro
- *     correo (el Gmail con el que conectó Google), por una cuenta vieja suya
- *     (dada de baja, con su mismo nombre). El nombre que Google muestra de
- *     un correo que no es de nadie NO cuenta (N3-G4). Los invitados de fuera
- *     (un laboratorio, un proveedor) no le quitan el evento.
- *   · Varios doctores que reciben citas → toda la clínica («varios»).
- *   · Ningún doctor que reciba citas y TODOS los invitados son de la clínica
- *     (recepción, un doctor con la agenda apagada) → a nombre de uno de
- *     ellos: no cierra la agenda de nadie más. Una cuenta DADA DE BAJA de
- *     alguien que atendía, si su nombre no es de nadie de hoy, cuenta como
- *     «no se sabe de quién es» (puede ser la cuenta vieja de la doctora).
- *   · Ningún doctor que reciba citas y un correo que no se sabe de quién es
- *     (el Gmail personal de la doctora junto a recepción) → toda la clínica
- *     («no_reconocido»). Nunca «no cierra a nadie» sin saber de quién es.
- *   · Los que rechazaron la invitación cuentan solo si los que no la
- *     rechazaron no dicen nada: un «Quirófano» al que la Dra. dijo que no
- *     sigue siendo de ella, no de toda la clínica.
- *   · Sin invitados → toda la clínica («sin_invitados»).
- *
- * El propio calendario (`self`) y las salas (`resource`) no son invitados.
+ * Se reconoce a cada invitado por su correo de acceso o por el Google que
+ * conectó. La dirección del propio calendario (el `…@group.calendar.google.com`
+ * que el agente invita para que el evento entre aquí), el calendario mismo
+ * (`self`) y las salas (`resource`) no son personas. Un nombre visible nunca
+ * basta: solo el correo. Ordenados por id (estable entre pasadas).
  */
-export function asignarEvento(
+export function doctoresDelEvento(
   ev: EventoGoogle,
   usuarios: readonly UsuarioClinica[],
-): { doctorId: string | null; alcance: AlcanceGoogle | null } {
-  const invitados = (ev.attendees ?? []).filter(
-    (a) => a && !a.self && !a.resource && typeof a.email === "string" && a.email.trim(),
-  );
-  if (invitados.length === 0) return { doctorId: null, alcance: "sin_invitados" };
-
-  const porCorreo = new Map<string, UsuarioClinica>();
-  const poner = (correo: string | null | undefined, u: UsuarioClinica) => {
-    const c = correo?.trim().toLowerCase();
-    if (c && gana(u, porCorreo.get(c))) porCorreo.set(c, u);
-  };
-  for (const u of usuarios) poner(u.email, u);
-  // Otros correos: solo de quien atiende, y solo si son de UNA persona (un
-  // Gmail compartido no dice de quién es). El correo principal de otra
-  // persona manda sobre el «otro correo» de alguien.
-  const duenosDeOtro = new Map<string, Set<string>>();
-  for (const u of usuarios) {
-    if (!u.recibeCitas) continue;
-    for (const c of u.otrosCorreos ?? []) {
-      const k = c?.trim().toLowerCase();
-      if (k) duenosDeOtro.set(k, (duenosDeOtro.get(k) ?? new Set()).add(u.id));
+  ctx: { dueno: string | null; calendarId?: string | null },
+): string[] {
+  const cal = correo(ctx.calendarId);
+  const atienden = usuarios.filter((u) => u.atiende ?? u.recibeCitas);
+  const ids = new Set<string>();
+  let invitaAlguien = false;
+  for (const a of ev.attendees ?? []) {
+    if (!a || a.self || a.resource) continue;
+    const c = correo(a.email);
+    if (!c || c === cal) continue;
+    for (const u of atienden) {
+      if (correo(u.email) !== c && correo(u.correoGoogle) !== c) continue;
+      invitaAlguien = true;
+      if (u.recibeCitas && a.responseStatus !== "declined") ids.add(u.id);
     }
   }
-  for (const [k, ids] of duenosDeOtro) {
-    if (ids.size !== 1 || porCorreo.has(k)) continue;
-    const u = usuarios.find((x) => x.id === [...ids][0]);
-    if (u) porCorreo.set(k, u);
-  }
-
-  // Los que reciben citas, por nombre (solo si el nombre es de UNA persona).
-  // Solo para reconocer una cuenta VIEJA de la clínica (su correo es de aquí),
-  // nunca el nombre visible de un invitado (N3-G4).
-  const atiendePorNombre = new Map<string, UsuarioClinica | null>();
-  for (const u of usuarios) {
-    if (!u.recibeCitas) continue;
-    const n = normalizarNombre(u.nombre);
-    if (!n || !n.includes(" ")) continue;
-    atiendePorNombre.set(n, atiendePorNombre.has(n) ? null : u);
-  }
-  const porNombre = (nombre: string | null | undefined) => {
-    const n = normalizarNombre(nombre);
-    return (n && atiendePorNombre.get(n)) || null;
-  };
-
-  const evaluar = (soloQueAceptan: boolean) => {
-    const atienden = new Map<string, UsuarioClinica>();
-    const otros = new Map<string, UsuarioClinica>();
-    let desconocidos = 0;
-    for (const a of invitados) {
-      if (soloQueAceptan === (a.responseStatus === "declined")) continue;
-      let u: UsuarioClinica | null = porCorreo.get((a.email as string).trim().toLowerCase()) ?? null;
-      // Una cuenta vieja (o con la agenda apagada) de quien hoy atiende con otra cuenta.
-      if (u && !u.recibeCitas && esRolQueAtiende(u.rol)) {
-        const actual = porNombre(u.nombre);
-        // Una cuenta DADA DE BAJA de alguien que atendía y cuyo nombre no es de
-        // nadie de hoy: puede ser la cuenta vieja de la doctora con otro nombre
-        // («María Ruiz» → «María Ruiz Gómez»). No se sabe de quién es.
-        u = actual ?? (u.activo === false ? null : u);
-      }
-      // Un correo que no es de nadie NO se empareja por el nombre que muestra
-      // Google: un paciente que se llame igual que la doctora le quitaría el
-      // bloqueo al doctor de verdad (tercera vuelta, N3-G4). Solo el correo.
-      if (!u) desconocidos++;
-      else (u.recibeCitas ? atienden : otros).set(u.id, u);
-    }
-    return { atienden: [...atienden.values()], otros: [...otros.values()], desconocidos };
-  };
-
-  // Un desconocido en un grupo anterior (los que NO rechazaron) también
-  // cuenta: «recepción rechazó + el Gmail de la Dra. sin responder» no es de
-  // recepción.
-  let huboDesconocidos = false;
-  for (const g of [evaluar(true), evaluar(false)]) {
-    if (g.atienden.length > 1) return { doctorId: null, alcance: "varios" };
-    if (g.atienden.length === 1) {
-      return huboDesconocidos ? { doctorId: null, alcance: "no_reconocido" } : { doctorId: g.atienden[0].id, alcance: null };
-    }
-    if (g.otros.length > 0) {
-      // Alguien de la clínica, nadie que atienda. Si además hay un correo que
-      // no se sabe de quién es, podría ser el del doctor: toda la clínica.
-      if (g.desconocidos > 0 || huboDesconocidos) return { doctorId: null, alcance: "no_reconocido" };
-      const [primero] = [...g.otros].sort((a, b) => (a.id < b.id ? -1 : 1));
-      return { doctorId: primero.id, alcance: null };
-    }
-    huboDesconocidos = huboDesconocidos || g.desconocidos > 0;
-    // Nadie de la clínica en este grupo: se mira el siguiente.
-  }
-  return { doctorId: null, alcance: "no_reconocido" };
+  if (invitaAlguien) return [...ids].sort();
+  return ctx.dueno && usuarios.some((u) => u.id === ctx.dueno && u.recibeCitas) ? [ctx.dueno] : [];
 }
 
 /**
- * La «huella» del equipo tal como la ve `asignarEvento`. Si cambia (entra una
- * doctora, alguien enciende «Aparece en la agenda», cambia un correo), la
- * siguiente pasada es COMPLETA y reasigna los eventos que ya estaban; antes
- * seguían con el dueño viejo hasta una semana (segunda vuelta t8, N-G5).
- *
- * Lleva también la versión de la REGLA de `asignarEvento`: al cambiarla
- * (N3-G4: el nombre visible ya no asigna), cada clínica hace una completa y
- * los bloqueos que ya estaban mal asignados se corrigen en la primera pasada.
+ * La clave del vínculo de cada doctor con el evento (`agenda_block_google.calendarId`).
+ * El índice único es (clínica, calendario, evento): un evento, un vínculo. Con
+ * un bloqueo por doctor, el PRIMER doctor usa el calendario tal cual (los
+ * bloqueos que ya existían siguen siendo el mismo) y cada uno de los demás
+ * `<calendario>#<doctorId>`. El `googleEventId` es SIEMPRE el del evento real:
+ * «Convertir en cita» y la salida no cambian. Sin SQL ni columnas nuevas.
  */
-export const REGLA_ASIGNACION = "3";
+export const SEPARADOR_DOCTOR = "#";
+export const claveDeDoctor = (calendarId: string, doctorId: string) => `${calendarId}${SEPARADOR_DOCTOR}${doctorId}`;
+/**
+ * El calendario de una clave de vínculo (le quita el `#<doctorId>`). El `#`
+ * del doctor va DESPUÉS del dominio: un calendario puede llevar `#` en su
+ * nombre (`es.mexican#holiday@…`).
+ */
+export function calendarioDeLaClave(clave: string): string {
+  const i = clave.indexOf(SEPARADOR_DOCTOR, Math.max(0, clave.indexOf("@")));
+  return i < 0 ? clave : clave.slice(0, i);
+}
+/**
+ * La clave a la que se APARTA el vínculo de una cita convertida que luego se
+ * canceló (revisión t8 de la v3, m1): `<calendario>#cancelada:<citaId>`. Sigue
+ * ligado a SU cita (la salida le pone «Cancelada…» al título; si la reactivan,
+ * vuelve a ser la cita del evento) y deja libre la clave del doctor para que
+ * el bloqueo vuelva y se pueda convertir otra vez. No se borra nada.
+ */
+export const MARCA_CANCELADA = "cancelada:";
+export const claveCancelada = (calendarId: string, appointmentId: string) =>
+  `${calendarioDeLaClave(calendarId)}${SEPARADOR_DOCTOR}${MARCA_CANCELADA}${appointmentId}`;
+export function esClaveCancelada(clave: string): boolean {
+  const cal = calendarioDeLaClave(clave);
+  return clave.startsWith(cal + SEPARADOR_DOCTOR + MARCA_CANCELADA);
+}
+/** ¿Esa clave de vínculo es de ese calendario (la principal o la de un doctor)? */
+export function esClaveDelCalendario(clave: string, calendarId: string): boolean {
+  return clave === calendarId || clave.startsWith(calendarId + SEPARADOR_DOCTOR);
+}
 
-export function firmaEquipo(usuarios: readonly UsuarioClinica[]): string {
+/**
+ * La «huella» del equipo tal como la ve `duenoDeLaCuenta`. Si cambia (alguien
+ * enciende «Aparece en la agenda», cambia un correo, se reconecta con otra
+ * cuenta), la siguiente pasada es COMPLETA y reasigna los eventos que ya
+ * estaban; antes seguían con el dueño viejo hasta una semana (N-G5).
+ *
+ * Lleva también la versión de la REGLA: al cambiarla cada clínica hace una
+ * completa y los bloqueos que ya estaban se corrigen en la primera pasada.
+ * Regla 4 (WS1-T3): nunca toda la clínica; regla 5: un bloqueo por cada
+ * doctor invitado, o el dueño de la cuenta (`doctoresDelEvento`); regla 6
+ * (H3): si el invitado de la clínica rechazó, nadie (ya no el dueño). Los que
+ * quedaban se reasignan o se retiran (deletedAt, sin borrar).
+ */
+export const REGLA_ASIGNACION = "6";
+
+export function firmaEquipo(usuarios: readonly UsuarioClinica[], cuenta?: string | null): string {
   const filas = usuarios
-    .map((u) =>
-      [
-        u.id,
-        (u.email ?? "").trim().toLowerCase(),
-        (u.otrosCorreos ?? []).map((c) => (c ?? "").trim().toLowerCase()).filter(Boolean).sort().join(","),
-        u.recibeCitas ? "1" : "0",
-        u.activo === false ? "0" : "1",
-        u.rol ?? "",
-        normalizarNombre(u.nombre),
-      ].join("|"),
-    )
+    .map((u) => [u.id, correo(u.email) ?? "", correo(u.correoGoogle) ?? "", u.recibeCitas ? "1" : "0", (u.atiende ?? u.recibeCitas) ? "1" : "0"].join("|"))
     .sort();
   // cyrb53: corto, estable y sin `crypto` (este archivo también corre en pruebas puras).
   let h1 = 0xdeadbeef;
   let h2 = 0x41c6ce57;
-  const texto = [`regla ${REGLA_ASIGNACION}`, ...filas].join("\n");
+  const texto = [`regla ${REGLA_ASIGNACION}`, `cuenta ${correo(cuenta) ?? ""}`, ...filas].join("\n");
   for (let i = 0; i < texto.length; i++) {
     const ch = texto.charCodeAt(i);
     h1 = Math.imul(h1 ^ ch, 2654435761);
@@ -400,11 +366,6 @@ export function firmaEquipo(usuarios: readonly UsuarioClinica[]): string {
   h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
   h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
   return `${filas.length}-${(h2 >>> 0).toString(16).padStart(8, "0")}${(h1 >>> 0).toString(16).padStart(8, "0")}`;
-}
-
-/** Compatibilidad: solo el doctor (las pruebas viejas y quien no necesita el porqué). */
-export function doctorDelEvento(ev: EventoGoogle, usuarios: readonly UsuarioClinica[]): string | null {
-  return asignarEvento(ev, usuarios).doctorId;
 }
 
 /**
@@ -430,6 +391,8 @@ export function fechaGoogle(s: string | null | undefined): Date | null {
 /** Lo que ya hay en la base para ese evento (un bloqueo SIN convertir). */
 export interface BloqueoExistente {
   blockId: string;
+  /** La clave del vínculo (`claveDeDoctor`); ausente = la principal. */
+  clave?: string;
   activo: boolean;
   doctorId: string | null;
   alcance?: AlcanceGoogle | null;
@@ -464,6 +427,8 @@ const mismoInstante = (a: Date, b: Date) => a.getTime() === b.getTime();
 /**
  * La decisión para UN evento del calendario de la clínica.
  *
+ *   · Sin doctor (`doctoresDelEvento` no dio nadie para este vínculo) → se
+ *     retira el que hubiera (los de toda la clínica de antes, sin borrarse).
  *   · De DaleControl (eco) → si por lo que sea había un bloqueo, se retira; si no, nada.
  *   · No ocupa (cancelado / disponible / sin fecha legible) → se retira el que hubiera.
  *   · Ocupa y no hay bloqueo → se crea, salvo que ya terminó o queda fuera del horizonte.
@@ -475,22 +440,23 @@ export function decidirEvento(
     zona: string;
     ahora: Date;
     existente: BloqueoExistente | null;
-    usuarios: readonly UsuarioClinica[];
+    /** El doctor de ESTE bloqueo (`doctoresDelEvento`); null = no le toca a nadie. */
+    doctorId: string | null;
   },
 ): DecisionEvento {
   const { existente } = ctx;
   const retirar = (): DecisionEvento =>
     existente && existente.activo ? { accion: "inactivar", blockId: existente.blockId } : { accion: "nada" };
 
+  if (!ctx.doctorId) return retirar();
   if (esEventoDeDaleControl(ev)) return retirar();
   if (!eventoOcupa(ev)) return retirar();
   const rango = rangoDeEvento(ev, ctx.zona);
   if (!rango) return retirar();
 
-  const quien = asignarEvento(ev, ctx.usuarios);
   const datos: DatosBloqueo = {
-    doctorId: quien.doctorId,
-    alcance: quien.alcance,
+    doctorId: ctx.doctorId,
+    alcance: null,
     startsAt: rango.startsAt,
     endsAt: rango.endsAt,
     allDay: rango.allDay,
@@ -516,6 +482,55 @@ export function decidirEvento(
     existente.title === datos.title &&
     existente.allDay === datos.allDay;
   return igual ? { accion: "nada" } : { accion: "actualizar", blockId: existente.blockId, datos };
+}
+
+/** Lo que hay que hacer con UN vínculo del evento (`clave` para crearlo). */
+export type DecisionVinculo = { clave: string; decision: DecisionEvento };
+
+/**
+ * Las decisiones de UN evento con un bloqueo por doctor (regla 5). Cada
+ * doctor CONSERVA el vínculo que ya era suyo (el activo antes que uno
+ * retirado): añadir o quitar invitados nunca cambia de columna el bloqueo de
+ * otro, y «Convertir en cita» abierto sobre él sigue valiendo (H4). Al que no
+ * tiene ninguno le toca la clave principal si nadie la usa, o la de toda la
+ * clínica de antes (sin doctor: se le REASIGNA, el mismo bloqueo); si no,
+ * `<calendario>#<doctorId>`. Lo que sobra (un doctor que ya no está
+ * invitado, o todos si ya no le toca a nadie) se RETIRA, no se borra. Los
+ * vínculos de citas convertidas no entran aquí (los atiende el aviso).
+ */
+export function decidirEventoPorDoctor(
+  ev: EventoGoogle,
+  ctx: { zona: string; ahora: Date; calendarId: string; doctores: readonly string[]; existentes: readonly BloqueoExistente[] },
+): DecisionVinculo[] {
+  const claveDe = (e: BloqueoExistente) => e.clave ?? ctx.calendarId;
+  const quiero = new Map<string, string>();
+  const sinVinculo: string[] = [];
+  for (const d of ctx.doctores) {
+    const suyos = ctx.existentes.filter((e) => e.doctorId === d && !quiero.has(claveDe(e)));
+    // El activo primero; entre iguales, la principal (es la que ya existía).
+    const suyo = suyos.find((e) => e.activo && claveDe(e) === ctx.calendarId) ?? suyos.find((e) => e.activo)
+      ?? suyos.find((e) => claveDe(e) === ctx.calendarId) ?? suyos[0];
+    if (suyo) quiero.set(claveDe(suyo), d);
+    else sinVinculo.push(d);
+  }
+  for (const d of sinVinculo) {
+    const principal = ctx.existentes.find((e) => claveDe(e) === ctx.calendarId);
+    const libre = !quiero.has(ctx.calendarId) && (!principal || principal.doctorId === null);
+    quiero.set(libre ? ctx.calendarId : claveDeDoctor(ctx.calendarId, d), d);
+  }
+  const out: DecisionVinculo[] = [];
+  const vistas = new Set<string>();
+  for (const e of ctx.existentes) {
+    const clave = e.clave ?? ctx.calendarId;
+    vistas.add(clave);
+    const doctorId = quiero.get(clave) ?? null;
+    out.push({ clave, decision: decidirEvento(ev, { zona: ctx.zona, ahora: ctx.ahora, existente: e, doctorId }) });
+  }
+  for (const [clave, doctorId] of quiero) {
+    if (vistas.has(clave)) continue;
+    out.push({ clave, decision: decidirEvento(ev, { zona: ctx.zona, ahora: ctx.ahora, existente: null, doctorId }) });
+  }
+  return out;
 }
 
 // ═══════════════════════════════════════════════════════════════════════

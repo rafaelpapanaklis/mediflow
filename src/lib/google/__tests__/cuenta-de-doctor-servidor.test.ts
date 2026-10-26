@@ -1,0 +1,336 @@
+/**
+ * Google Calendar → agenda (WS1-T3, 21-oct-2026): un evento de Google bloquea
+ * SOLO al dueño de la cuenta conectada, nunca a toda la clínica (decisión de
+ * Rafael). Se EJECUTA la entrada contra la base de mentira (los puertos reales
+ * de `entrante.server.ts`) con una Google falsa:
+ *
+ *   · El caso de Rafael: la clínica está conectada con el Gmail de «rafa
+ *     papa» (SUPER_ADMIN que atiende); un «Evento Social - Comida» con un
+ *     PACIENTE invitado cierra solo su agenda, no la de los 4.
+ *   · v2: el agente de marketing invita al Dr. y a la dirección del
+ *     calendario → solo ese Dr.; varios doctores → un bloqueo cada uno.
+ *   · Cuenta general (recepción): no bloquea a nadie, y la pantalla lo dice.
+ *   · E: los bloqueos que la regla anterior dejó de toda la clínica se
+ *     reasignan (el mismo bloqueo) o se retiran (deletedAt), sin borrar.
+ *
+ * `npm run test:google-entrante`
+ */
+import { test, mock } from "node:test";
+import assert from "node:assert/strict";
+import { activos, bandera, bloqueo, CAL, clinica, conGoogle, db, deGoogle, hace, prisma, reiniciar, type Fila } from "./base-de-mentira";
+
+(mock as any).module("@/lib/prisma", { namedExports: { prisma } });
+
+const servidor = () => import("../entrante.server");
+
+const RAFA = "rafaelpapanaklis@gmail.com";
+
+/** «Rafael Clinica»: rafa papa (SUPER_ADMIN que atiende), tres doctores sin Google propio y recepción. */
+function rafaelClinica(cuenta: string | null = RAFA) {
+  clinica("c1", { googleCalendarEmail: cuenta });
+  db.usuarios.push(
+    { id: "u-rafa", clinicId: "c1", email: RAFA, googleCalendarEmail: RAFA, role: "SUPER_ADMIN", isActive: true, agendaActive: true },
+    { id: "u-d", clinicId: "c1", email: "d@gmail.com", googleCalendarEmail: null, role: "DOCTOR", isActive: true, agendaActive: true },
+    { id: "u-jg", clinicId: "c1", email: "jg@gmail.com", googleCalendarEmail: null, role: "DOCTOR", isActive: true, agendaActive: true },
+    { id: "u-jm", clinicId: "c1", email: "jorgemar@gmail.com", googleCalendarEmail: null, role: "DOCTOR", isActive: true, agendaActive: true },
+    { id: "u-rec", clinicId: "c1", email: "recepcion.rafaelclinica@gmail.com", googleCalendarEmail: null, role: "RECEPTIONIST", isActive: true, agendaActive: true },
+  );
+}
+
+const manana = (h: number) => {
+  const d = new Date(Date.now() + 24 * 3_600_000);
+  d.setUTCHours(h, 0, 0, 0);
+  return d;
+};
+const comida = (x: Fila = {}) => ({
+  id: "comida1", status: "confirmed", summary: "Evento Social - Comida", updated: hace(1).toISOString(),
+  start: { dateTime: manana(19).toISOString() }, end: { dateTime: manana(21).toISOString() },
+  attendees: [{ email: "paciente.juan@hotmail.com", responseStatus: "needsAction" }],
+  ...x,
+});
+
+async function sincronizar(items: Fila[]) {
+  const g = await conGoogle(async () => ({ data: { items, nextSyncToken: "s1" } }));
+  try {
+    const { sincronizarCalendarioEntrante } = await servidor();
+    return { r: await sincronizarCalendarioEntrante("c1"), pedidas: g.pedidas };
+  } finally {
+    g.restaurar();
+  }
+}
+const vivos = () => db.bloques.filter((b) => b.deletedAt === null);
+
+test("caso de Rafael: cuenta de la clínica = rafa papa, invitado un PACIENTE → solo la agenda de rafa papa (antes: «no_reconocido», los 4 doctores)", async () => {
+  reiniciar();
+  rafaelClinica();
+  bandera("c1", { syncToken: null, lastFullSyncAt: null });
+  const { r } = await sincronizar([comida()]);
+  assert.equal(r.estado, "ok");
+  assert.equal(vivos().length, 1);
+  assert.equal(vivos()[0].doctorId, "u-rafa", "solo rafa papa");
+  assert.equal(vivos()[0].reason, "Ocupado (Google)", "el título nunca va al motivo (el bot lo lee)");
+  assert.equal(db.vinculos[0].alcance, null);
+  assert.equal(db.vinculos[0].title, "Evento Social - Comida");
+});
+
+test("caso de Rafael sin invitados → solo rafa papa; invitando a OTROS doctores → un bloqueo para cada invitado (nunca toda la clínica)", async () => {
+  reiniciar();
+  rafaelClinica();
+  bandera("c1", { syncToken: null, lastFullSyncAt: null });
+  await sincronizar([
+    comida({ id: "sin-invitados", attendees: undefined }),
+    comida({ id: "con-doctores", attendees: [{ email: "D@gmail.com" }, { email: "jg@gmail.com", responseStatus: "accepted" }, { email: "jorgemar@gmail.com", responseStatus: "declined" }] }),
+  ]);
+  const de = (ev: string) => db.vinculos.filter((v) => v.googleEventId === ev).map((v) => db.bloques.find((b) => b.id === v.blockId)!.doctorId).sort();
+  assert.deepEqual(de("sin-invitados"), ["u-rafa"]);
+  assert.deepEqual(de("con-doctores"), ["u-d", "u-jg"], "jorgemar rechazó: no");
+  assert.ok(vivos().every((b) => b.doctorId !== null));
+});
+
+test("v2 · el agente de marketing (sin cuenta en DaleControl) agenda desde SU Google invitando al Dr. D y a la dirección del calendario de la clínica → solo el Dr. D", async () => {
+  reiniciar();
+  rafaelClinica();
+  bandera("c1", { syncToken: null, lastFullSyncAt: null });
+  await sincronizar([
+    comida({
+      id: "del-agente", summary: "Valoración — Juan P.",
+      attendees: [
+        { email: "agente.mkt@gmail.com", organizer: true, responseStatus: "accepted" },
+        { email: "d@gmail.com", responseStatus: "needsAction" },
+        { email: CAL, self: true, responseStatus: "accepted" },
+        { email: "paciente.juan@hotmail.com" },
+      ],
+    }),
+  ]);
+  assert.deepEqual(vivos().map((b) => b.doctorId), ["u-d"], "ni rafa (el dueño), ni el agente, ni el paciente");
+});
+
+test("cuenta GENERAL (Gmail de recepción) sin doctores invitados → no se bloquea a nadie, y la agenda y Configuración lo dicen (sinDueno); con un doctor invitado, a él", async () => {
+  reiniciar();
+  rafaelClinica("recepcion.rafaelclinica@gmail.com");
+  bandera("c1", { syncToken: null, lastFullSyncAt: null });
+  await sincronizar([comida({ attendees: undefined }), comida({ id: "con-doctor", attendees: [{ email: "jg@gmail.com" }] })]);
+  assert.deepEqual(vivos().map((b) => b.doctorId), ["u-jg"], "solo el del doctor invitado; el otro, nadie (ni toda la clínica)");
+  const { estadoEntranteParaPantalla } = await servidor();
+  assert.equal((await estadoEntranteParaPantalla("c1")).sinDueno, true);
+});
+
+test("la cuenta de un doctor → la pantalla NO dice «sinDueno»; Google desconectado tampoco (ahí manda el otro aviso)", async () => {
+  reiniciar();
+  rafaelClinica();
+  bandera("c1");
+  const { estadoEntranteParaPantalla } = await servidor();
+  assert.equal((await estadoEntranteParaPantalla("c1")).sinDueno, false);
+  db.clinics.get("c1")!.googleRefreshToken = null;
+  db.clinics.get("c1")!.googleCalendarEmail = "recepcion.rafaelclinica@gmail.com";
+  assert.equal((await estadoEntranteParaPantalla("c1")).sinDueno, false);
+});
+
+test("cuenta conectada por un doctor-admin que atiende (su googleCalendarEmail = esa cuenta, entra con otro correo) → sus eventos lo bloquean a él", async () => {
+  reiniciar();
+  rafaelClinica("consultorio.rafael@gmail.com");
+  // El callback le puso a rafa papa la cuenta que conectó: es «el correo que tiene ligado Google Calendar».
+  db.usuarios.find((u) => u.id === "u-rafa")!.googleCalendarEmail = "consultorio.rafael@gmail.com";
+  bandera("c1", { syncToken: null, lastFullSyncAt: null });
+  await sincronizar([comida()]);
+  assert.deepEqual(vivos().map((b) => b.doctorId), ["u-rafa"]);
+});
+
+test("E: el bloqueo que la regla anterior dejó de toda la clínica se REASIGNA en la siguiente pasada (completa aunque Google no cambió; mismo bloqueo, nada se borra)", async () => {
+  reiniciar();
+  rafaelClinica();
+  const b = deGoogle("b-comida", "comida1");
+  b.startsAt = manana(19);
+  b.endsAt = manana(21);
+  Object.assign(db.vinculos[0], { alcance: "no_reconocido", title: "Evento Social - Comida", eventStartsAt: b.startsAt, eventEndsAt: b.endsAt });
+  // La fila como la dejó la regla 3: con syncToken y su firma (otra).
+  bandera("c1", { syncToken: "tok-viejo", lastFullSyncAt: hace(1), equipoFirma: "4-regla3cualquiera" });
+  const { r, pedidas } = await sincronizar([comida()]);
+  assert.equal(r.estado === "ok" && r.completa, true);
+  assert.ok(pedidas[0].timeMin, "completa (con fechas), no con el syncToken viejo");
+  assert.equal(pedidas[0].syncToken, undefined);
+  assert.deepEqual(activos(), ["b-comida"], "el mismo bloqueo, sin duplicar");
+  assert.equal(db.bloques.length, 1);
+  assert.equal(b.doctorId, "u-rafa");
+  assert.equal(db.vinculos[0].alcance, null);
+  assert.equal(db.imports.get("c1")!.syncToken, "s1");
+  assert.equal(db.imports.get("c1")!.calendarId, CAL);
+});
+
+test("E: con una cuenta general, los de toda la clínica que quedaban se RETIRAN (deletedAt), no se borran; al conectar la de un doctor vuelven a él", async () => {
+  reiniciar();
+  rafaelClinica("recepcion.rafaelclinica@gmail.com");
+  const b = deGoogle("b-comida", "comida1");
+  b.startsAt = manana(19);
+  b.endsAt = manana(21);
+  Object.assign(db.vinculos[0], { eventStartsAt: b.startsAt, eventEndsAt: b.endsAt });
+  bandera("c1", { syncToken: "tok-viejo", lastFullSyncAt: hace(1), equipoFirma: "4-regla3cualquiera" });
+  await sincronizar([comida()]);
+  assert.equal(db.bloques.length, 1, "no se borra");
+  assert.ok(b.deletedAt instanceof Date, "retirado");
+  // Se reconecta con la cuenta de rafa papa: la huella cambia, completa, y el MISMO bloqueo vuelve, suyo.
+  db.clinics.get("c1")!.googleCalendarEmail = RAFA;
+  const { pedidas } = await sincronizar([comida()]);
+  assert.ok(pedidas[0].timeMin, "completa");
+  assert.equal(db.bloques.length, 1);
+  assert.equal(b.deletedAt, null);
+  assert.equal(b.doctorId, "u-rafa");
+});
+
+test("D: los eventos de las citas de DaleControl siguen sin importarse con la cuenta de un doctor (el eco)", async () => {
+  reiniciar();
+  rafaelClinica();
+  bandera("c1", { syncToken: null, lastFullSyncAt: null });
+  await sincronizar([
+    comida({ id: "dc" + "a".repeat(40), summary: "🏥 Limpieza — das D." }),
+    comida({ id: "marcado1", extendedProperties: { private: { dalecontrolClinicId: "c1" } } }),
+  ]);
+  assert.equal(db.bloques.length, 0);
+});
+
+/* ═══ v3 · arreglos de la revisión de t8 ═══════════════════════════════ */
+
+test("v3 · H3 (decisión A): el agente agenda con la Dra. D y ella RECHAZA → no se bloquea a nadie (ni a rafa papa, dueño de la cuenta)", async () => {
+  reiniciar();
+  rafaelClinica();
+  bandera("c1", { syncToken: null, lastFullSyncAt: null });
+  await sincronizar([
+    comida({ id: "rechazado", summary: "Paciente Juan", attendees: [{ email: "agente.mkt@gmail.com", organizer: true }, { email: "d@gmail.com", responseStatus: "declined" }, { email: CAL, self: true }] }),
+    comida({ id: "sin-doctores", attendees: [{ email: "paciente.juan@hotmail.com" }] }),
+  ]);
+  assert.deepEqual(vivos().map((b) => b.doctorId), ["u-rafa"], "solo el que no invita a nadie de la clínica va al dueño");
+  assert.equal(db.vinculos.filter((v) => v.googleEventId === "rechazado").length, 0);
+});
+
+test("v3 · H3: la Dra. D con «Aparece en la agenda» APAGADA (de vacaciones): sus eventos no pasan al dueño; los que ya tenía rafa por eso se retiran", async () => {
+  reiniciar();
+  rafaelClinica();
+  db.usuarios.find((u) => u.id === "u-d")!.agendaActive = false;
+  // Lo que dejó la regla 5: el evento de D (apagada) cayó en rafa papa.
+  const b = deGoogle("b-vac", "vacaciones");
+  b.startsAt = manana(19);
+  b.endsAt = manana(21);
+  b.doctorId = "u-rafa";
+  Object.assign(db.vinculos[0], { alcance: null, eventStartsAt: b.startsAt, eventEndsAt: b.endsAt });
+  bandera("c1", { syncToken: "tok-viejo", lastFullSyncAt: hace(1), equipoFirma: "5-reglaanterior" });
+  const { pedidas } = await sincronizar([comida({ id: "vacaciones", attendees: [{ email: "d@gmail.com" }] })]);
+  assert.ok(pedidas[0].timeMin, "la regla 6 hace una completa");
+  assert.ok(b.deletedAt instanceof Date, "retirado, no borrado");
+  assert.equal(db.bloques.length, 1);
+  assert.equal(vivos().length, 0);
+});
+
+test("v3 · H4: el agente AÑADE a la Dra. D (id menor) a un evento que era solo del Dr. JG → el bloqueo de JG sigue siendo el mismo y en su columna", async () => {
+  reiniciar();
+  rafaelClinica();
+  bandera("c1", { syncToken: null, lastFullSyncAt: null });
+  await sincronizar([comida({ id: "junta", attendees: [{ email: "jg@gmail.com" }] })]);
+  const deJg = vivos()[0];
+  assert.equal(deJg.doctorId, "u-jg");
+  await sincronizar([comida({ id: "junta", updated: new Date().toISOString(), attendees: [{ email: "d@gmail.com" }, { email: "jg@gmail.com" }] })]);
+  assert.equal(deJg.doctorId, "u-jg", "no se movió de columna");
+  assert.equal(deJg.deletedAt, null);
+  assert.deepEqual(vivos().map((x) => x.doctorId).sort(), ["u-d", "u-jg"]);
+  assert.equal(db.bloques.length, 2);
+  // Y al quitar a JG, su bloqueo se retira (no pasa a D).
+  await sincronizar([comida({ id: "junta", updated: new Date(Date.now() + 1000).toISOString(), attendees: [{ email: "d@gmail.com" }] })]);
+  assert.ok(deJg.deletedAt instanceof Date);
+  assert.equal(deJg.doctorId, "u-jg");
+  assert.deepEqual(vivos().map((x) => x.doctorId), ["u-d"]);
+});
+
+test("v3 · H2: «Convertir en cita» el bloqueo de la Dra. D retira EN LA MISMA transacción el del Dr. JG (mismo evento), y el de JG ya no se convierte (409)", async () => {
+  reiniciar();
+  rafaelClinica();
+  bandera("c1", { syncToken: null, lastFullSyncAt: null });
+  await sincronizar([
+    comida({ id: "del-agente", attendees: [{ email: "d@gmail.com" }, { email: "jg@gmail.com" }] }),
+    comida({ id: "otro-de-jg", start: { dateTime: manana(15).toISOString() }, end: { dateTime: manana(16).toISOString() }, attendees: [{ email: "jg@gmail.com" }] }),
+  ]);
+  const deEvento = (ev: string, doc: string) => db.bloques.find((b) => b.doctorId === doc && db.vinculos.some((v) => v.blockId === b.id && v.googleEventId === ev))!;
+  const bD = deEvento("del-agente", "u-d");
+  const bJg = deEvento("del-agente", "u-jg");
+  const otro = deEvento("otro-de-jg", "u-jg");
+  // Otra clínica con el mismo id de evento y calendario: no se toca.
+  bloqueo("b-c2", "c2", { doctorId: "x" });
+  db.vinculos.push({ blockId: "b-c2", clinicId: "c2", calendarId: CAL, googleEventId: "del-agente", appointmentId: null });
+
+  const { prepararConversionGoogle, marcarBloqueoConvertido, ConversionYaHecha } = await import("../convertir.server");
+  const intento = (b: Fila) => ({ startsAt: b.startsAt, endsAt: b.endsAt, doctorId: b.doctorId });
+  assert.equal((await prepararConversionGoogle("c1", bJg.id, undefined, intento(bJg))).ok, true, "antes de convertir el de D, sí");
+
+  const marcar = (b: Fila, cita: string) =>
+    prisma.$transaction((tx: any) => marcarBloqueoConvertido(tx, { clinicId: "c1", bloqueoId: b.id, appointmentId: cita, userId: "u-rec", startsAt: b.startsAt, endsAt: b.endsAt }));
+  await marcar(bD, "cita-d");
+  assert.ok(bD.deletedAt instanceof Date);
+  assert.ok(bJg.deletedAt instanceof Date, "el de JG se retira YA, no en la siguiente pasada");
+  assert.equal(bJg.deletedById, "u-rec");
+  assert.equal(otro.deletedAt, null, "otro evento de JG sigue");
+  assert.equal(db.bloques.find((b) => b.id === "b-c2")!.deletedAt, null, "otra clínica, intacta");
+  assert.equal(db.bloques.length, 4, "nada se borra");
+
+  const r = await prepararConversionGoogle("c1", bJg.id, undefined, intento(bJg));
+  assert.deepEqual([r.ok, r.status, r.error], [false, 409, "google_block_already_converted"]);
+
+  // A la vez: el segundo ya pasó la comprobación de fuera (su bloqueo seguía activo).
+  // En la transacción ve la cita del primero, lanza, y no queda nada a medias.
+  bJg.deletedAt = null;
+  await assert.rejects(() => marcar(bJg, "cita-jg"), ConversionYaHecha);
+  const vJg = db.vinculos.find((v) => v.blockId === bJg.id)!;
+  assert.equal(vJg.appointmentId, null);
+  assert.equal(db.vinculos.filter((v) => v.clinicId === "c1" && v.googleEventId === "del-agente" && v.appointmentId).length, 1, "una sola cita por evento");
+});
+
+/* ═══ v4 · m1: la cita convertida que se cancela ═══════════════════════ */
+
+test("v4 · m1: recepción convierte por error el bloqueo del Dr. JG y CANCELA la cita → el de la Dra. D vuelve y se convierte; el de JG vuelve (nuevo) y también; nada se borra", async () => {
+  reiniciar();
+  rafaelClinica();
+  bandera("c1", { syncToken: null, lastFullSyncAt: null });
+  const invitados = [{ email: "d@gmail.com" }, { email: "jg@gmail.com" }];
+  await sincronizar([comida({ id: "del-agente", summary: "Valoración", attendees: invitados })]);
+  const delEvento = (doc: string) => db.bloques.filter((b) => b.doctorId === doc && db.vinculos.some((v) => v.blockId === b.id && v.googleEventId === "del-agente"));
+  const [bD] = delEvento("u-d");
+  const [bJg] = delEvento("u-jg");
+  const { prepararConversionGoogle, marcarBloqueoConvertido } = await import("../convertir.server");
+  const intento = (b: Fila) => ({ startsAt: b.startsAt, endsAt: b.endsAt, doctorId: b.doctorId });
+  const marcar = (b: Fila, cita: string) =>
+    prisma.$transaction((tx: any) => marcarBloqueoConvertido(tx, { clinicId: "c1", bloqueoId: b.id, appointmentId: cita, userId: "u-rec", startsAt: b.startsAt, endsAt: b.endsAt }));
+  const cita = (id: string, b: Fila, status = "SCHEDULED") =>
+    db.citas.push({ id, clinicId: "c1", status, startsAt: b.startsAt, endsAt: b.endsAt, googleCalendarEventId: "del-agente" });
+
+  // El error: convierte el de JG. El de D se retira (H2).
+  cita("cita-jg", bJg);
+  await marcar(bJg, "cita-jg");
+  assert.ok(bD.deletedAt instanceof Date);
+  assert.equal((await prepararConversionGoogle("c1", bD.id, undefined, intento(bD))).error, "google_block_already_converted");
+
+  // Cancela la cita de JG. Ya NO cuenta como «el evento ya es una cita»: el 409 de «ya convertido» se va
+  // (el bloqueo de D sigue retirado hasta que la entrada lo devuelva).
+  db.citas.find((c) => c.id === "cita-jg")!.status = "CANCELLED";
+  assert.equal((await prepararConversionGoogle("c1", bD.id, undefined, intento(bD))).error, "google_block_inactive");
+
+  // La salida le puso «Cancelada…» al título en Google: la entrada lo ve y devuelve los bloqueos.
+  await sincronizar([comida({ id: "del-agente", summary: "Cancelada en DaleControl · Valoración", updated: new Date().toISOString(), attendees: invitados })]);
+  const vJgViejo = db.vinculos.find((v) => v.blockId === bJg.id)!;
+  assert.equal(vJgViejo.appointmentId, "cita-jg", "el vínculo viejo sigue con SU cita");
+  assert.ok(String(vJgViejo.calendarId).includes("#cancelada:cita-jg"), "apartado");
+  assert.equal(bD.deletedAt, null, "el de D VUELVE (el mismo)");
+  const [bJg2] = delEvento("u-jg").filter((b) => b.deletedAt === null);
+  assert.ok(bJg2 && bJg2.id !== bJg.id, "JG tiene un bloqueo nuevo");
+  assert.equal(db.vinculos.find((v) => v.blockId === bJg2.id)!.title, "Valoración");
+  // El eco: la cita cancelada que vino de Google ya no hace del evento «el de una cita».
+  assert.equal(db.citas.length, 1);
+
+  // Ahora se puede convertir el de D…
+  assert.equal((await prepararConversionGoogle("c1", bD.id, undefined, intento(bD))).ok, true);
+  assert.equal((await prepararConversionGoogle("c1", bJg2.id, undefined, intento(bJg2))).ok, true, "…o el nuevo de JG");
+  // …el viejo de JG no (está retirado: el que vale es el nuevo).
+  assert.equal((await prepararConversionGoogle("c1", bJg.id, undefined, intento(bJg))).error, "google_block_inactive");
+  cita("cita-d", bD);
+  await marcar(bD, "cita-d");
+  assert.equal(db.vinculos.find((v) => v.blockId === bD.id)!.appointmentId, "cita-d");
+  assert.ok(bJg2.deletedAt instanceof Date, "y el nuevo de JG se retira en la misma transacción (H2)");
+  assert.equal(vJgViejo.appointmentId, "cita-jg", "la cita cancelada no se toca");
+  assert.equal(db.bloques.filter((b) => b.clinicId === "c1").length, 3, "nada se borra");
+});

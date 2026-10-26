@@ -14,6 +14,8 @@ import { getServerT } from "@/i18n/server";
 import { isFacturapiLive } from "@/lib/facturapi-env";
 import { stripClinicSecrets } from "@/lib/clinic-secrets";
 import { estadoConexionGoogle, leerAjustesGoogle } from "@/lib/google-calendar-estado";
+import { banderaGoogleEncendida } from "@/lib/google/entrante.server";
+import { calendarioImportable } from "@/lib/google/entrante-core";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { leerCuentaSpei } from "@/lib/billing/spei-directo";
 import { ivaParaCobro } from "@/lib/billing/iva-cobro";
@@ -75,6 +77,12 @@ export default async function SettingsPage(props: Props) {
   // con la fila completa, porque el refresh token ya no viaja al navegador;
   // leerAjustesGoogle nunca lanza (sin la tabla nueva: invita al paciente, como siempre).
   const ajustesGoogle = await leerAjustesGoogle(user.clinicId);
+  // WS1-T3: la dirección del calendario de la clínica, para agendar desde OTRO
+  // Google (un agente invita al doctor y a esta dirección). Solo si la
+  // agenda lee ese calendario (bandera encendida y calendario propio).
+  const calendarioClinica = (clinic as any)?.googleClinicCalendarId ?? null;
+  const direccionAgendar =
+    calendarioImportable(calendarioClinica) && (await banderaGoogleEncendida(user.clinicId)) ? (calendarioClinica as string) : null;
   const gcalClinica = {
     estado: estadoConexionGoogle(clinic as any, ajustesGoogle),
     email: (clinic as any)?.googleCalendarEmail ?? null,
@@ -82,6 +90,7 @@ export default async function SettingsPage(props: Props) {
     motivo: ajustesGoogle.motivo,
     invitarPaciente: ajustesGoogle.invitarPaciente,
     tablaDisponible: ajustesGoogle.tablaDisponible,
+    direccion: direccionAgendar,
   };
 
   // C-114: estado de la reserva web (sin el SQL: abierta y sin interruptor).

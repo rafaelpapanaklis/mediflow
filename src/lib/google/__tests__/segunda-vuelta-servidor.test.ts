@@ -24,9 +24,9 @@
  */
 import { test, mock } from "node:test";
 import assert from "node:assert/strict";
-import { firmaEquipo } from "../entrante-core";
+import { duenoDeLaCuenta, firmaEquipo } from "../entrante-core";
 import {
-  activos, AHORA, antesDeTomarTurno, bandera, bloqueo, clinica, conGoogle, correrCron, db, deGoogle, enGoogle,
+  activos, AHORA, antesDeTomarTurno, bandera, bloqueo, clinica, conGoogle, correrCron, db, deGoogle, duena, enGoogle,
   cortes, hace, llamadas, prisma, reiniciar, trasSoltar, type Fila,
 } from "./base-de-mentira";
 
@@ -133,31 +133,37 @@ test("N-G8: la completa revisa TODOS los bloqueos (más de 2000), por páginas y
 
 /* ═══ N-G2: lo que la entrada sabe del equipo ═════════════════════════════ */
 
-test("N-G2: el equipo llega con el Gmail con el que cada quien conectó Google, su rol y su nombre", async () => {
+test("N-G2/WS1-T3: el equipo llega con su correo de acceso, el Google que conectó y si recibe citas (solo la clínica de la sesión)", async () => {
   reiniciar();
   db.usuarios.push(
     { id: "u1", clinicId: "c1", email: "ana@clinica.mx", googleCalendarEmail: "ana.personal@gmail.com", firstName: "Ana", lastName: "López", role: "DOCTOR", isActive: true, agendaActive: true },
     { id: "u2", clinicId: "c1", email: "eva@clinica.mx", googleCalendarEmail: null, firstName: "Eva", lastName: "Soto", role: "RECEPTIONIST", isActive: true, agendaActive: true },
     { id: "u3", clinicId: "c2", email: "otra@clinica.mx", role: "DOCTOR", isActive: true },
+    { id: "u4", clinicId: "c1", email: "beto@clinica.mx", googleCalendarEmail: null, firstName: "Beto", lastName: "Paz", role: "DOCTOR", isActive: true, agendaActive: false },
   );
   const { _puertosEntrante } = await servidor();
   const us = await _puertosEntrante.leerUsuarios("c1");
-  assert.deepEqual(us.map((u) => u.id), ["u1", "u2"], "solo la clínica de la sesión");
-  assert.deepEqual(us[0], { id: "u1", email: "ana@clinica.mx", otrosCorreos: ["ana.personal@gmail.com"], recibeCitas: true, rol: "DOCTOR", nombre: "Ana López", activo: true });
-  assert.equal(us[1].recibeCitas, false);
+  assert.deepEqual(us.map((u) => u.id), ["u1", "u2", "u4"], "solo la clínica de la sesión");
+  assert.deepEqual(us[0], { id: "u1", email: "ana@clinica.mx", correoGoogle: "ana.personal@gmail.com", recibeCitas: true, atiende: true });
+  assert.deepEqual([us[1].recibeCitas, us[1].atiende], [false, false], "recepción no atiende");
+  // H3: con la agenda apagada no recibe citas, pero sigue siendo alguien de la clínica que atiende.
+  assert.deepEqual([us[2].recibeCitas, us[2].atiende], [false, true]);
 });
 
-test("N-G2: el Gmail con el que se conectó la CLÍNICA no es «otro correo» de quien lo conectó (el dueño que atiende)", async () => {
+test("WS1-T3: el Gmail con el que se conectó la clínica ES del dueño que atiende y lo conectó (users.googleCalendarEmail); una cuenta dada de baja no recibe citas", async () => {
   reiniciar();
   clinica("c1", { googleCalendarEmail: "Clinica.Salamanca@gmail.com" });
   db.usuarios.push(
     { id: "u1", clinicId: "c1", email: "dueno@clinica.mx", googleCalendarEmail: "clinica.salamanca@gmail.com", firstName: "Juan", lastName: "Paz", role: "SUPER_ADMIN", isActive: true, agendaActive: true },
-    { id: "u2", clinicId: "c1", email: "vieja@clinica.mx", googleCalendarEmail: null, firstName: "Ana", lastName: "López", role: "DOCTOR", isActive: false, agendaActive: true },
+    { id: "u2", clinicId: "c1", email: "vieja@clinica.mx", googleCalendarEmail: "clinica.salamanca@gmail.com", firstName: "Ana", lastName: "López", role: "DOCTOR", isActive: false, agendaActive: true },
   );
   const { _puertosEntrante } = await servidor();
   const us = await _puertosEntrante.leerUsuarios("c1");
-  assert.deepEqual(us[0].otrosCorreos, []);
-  assert.equal(us[1].activo, false);
+  assert.equal(us[0].correoGoogle, "clinica.salamanca@gmail.com");
+  assert.equal(us[1].recibeCitas, false);
+  const conexion = await _puertosEntrante.leerConexion("c1");
+  assert.equal(conexion?.cuentaEmail, "Clinica.Salamanca@gmail.com");
+  assert.equal(duenoDeLaCuenta(conexion?.cuentaEmail, us), "u1");
 });
 
 /* ═══ N-G9 / N-G10: el vínculo para la salida ═════════════════════════════ */
@@ -339,6 +345,7 @@ test("N3-G1: Google SANO y el cron un día sin correr (última buena hace 30 h) 
 test("N3-G1: Google SANO y toca la completa → retira SOLO lo que ya no existe en Google", async () => {
   reiniciar();
   clinica("c1");
+  duena("c1"); // la completa reasigna lo que sigue ocupado a ella (WS1-T3)
   bandera("c1", { lastSyncAt: hace(30), lastFullSyncAt: hace(24 * 8), equipoFirma: firmaEquipo([]) });
   const b1 = deGoogle("b1", "e1");
   deGoogle("b2", "e2"); // borrado en Google
@@ -389,6 +396,7 @@ test("N3-G1: Google FALLA un día y otra pasada toma el turno justo entonces →
 test("N3-G1: tras el retiro, una pasada tardía guarda SU token… y aun así la siguiente es COMPLETA y vuelve a cerrar lo que sigue ocupado", async () => {
   reiniciar();
   clinica("c1");
+  duena("c1"); // la completa reasigna lo que sigue ocupado a ella (WS1-T3)
   bandera("c1", { lastSyncAt: hace(30), lastError: "google", equipoFirma: firmaEquipo([]) });
   const b1 = deGoogle("b1", "e1");
   deGoogle("b2", "e2");
@@ -452,6 +460,7 @@ test("N3-G2: el aviso sale cuando el cron RETIRA de verdad (no antes), con la fe
   const { estadoEntranteParaPantalla } = await servidor();
   reiniciar();
   clinica("c1", { timezone: "America/Tijuana" });
+  duena("c1");
   bandera("c1", { lastSyncAt: hace(30), lastFullSyncAt: hace(30), lastError: "google", equipoFirma: firmaEquipo([]) });
   const b1 = deGoogle("b1", "e1");
   deGoogle("b2", "e2");
