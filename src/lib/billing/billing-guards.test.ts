@@ -19,7 +19,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { isClinicBillingAdmin, notClinicBillingAdminResponse } from "./authz";
+import { isClinicBillingAdmin, notClinicBillingAdminResponse, puedeVerSuscripcion } from "./authz";
 
 const read = (rel: string) => readFileSync(path.join(process.cwd(), rel), "utf8");
 
@@ -29,66 +29,94 @@ const PORTAL = "src/app/api/billing/portal/route.ts";
 
 // ── Quién puede tocar la suscripción ────────────────────────────────────────
 
-test("solo dueño/admin de la clínica puede cambiar el plan", () => {
+// Decisión de Rafael (26-oct-2026): «Solo el super-admin puede renovar, cancelar, etc.».
+test("solo el dueño (SUPER_ADMIN) puede pagar, cambiar o cancelar el plan; un ADMIN ya no", () => {
   assert.equal(isClinicBillingAdmin("SUPER_ADMIN"), true);
-  assert.equal(isClinicBillingAdmin("ADMIN"), true);
+  assert.equal(isClinicBillingAdmin("ADMIN"), false);
 });
 
 test("ningún otro rol pasa, ni siquiera quien cobra en caja", () => {
   // RECEPTIONIST tiene billing.charge (facturación de PACIENTES): no es lo mismo
   // que contratar el plan de la clínica.
-  for (const role of ["RECEPTIONIST", "DOCTOR", "ASSISTANT", "VIEWER", "READONLY", "OWNER", "admin", ""]) {
+  for (const role of ["ADMIN", "RECEPTIONIST", "DOCTOR", "ASSISTANT", "VIEWER", "READONLY", "OWNER", "admin", "super_admin", ""]) {
     assert.equal(isClinicBillingAdmin(role), false, `role=${role}`);
   }
   assert.equal(isClinicBillingAdmin(null), false);
   assert.equal(isClinicBillingAdmin(undefined), false);
 });
 
-test("el 403 trae un código estable para que el panel lo distinga", () => {
+test("ver la suscripción en solo lectura: dueño y ADMIN; nadie más", () => {
+  assert.equal(puedeVerSuscripcion("SUPER_ADMIN"), true);
+  assert.equal(puedeVerSuscripcion("ADMIN"), true);
+  for (const role of ["RECEPTIONIST", "DOCTOR", "ASSISTANT", "VIEWER", "admin", "", null, undefined]) {
+    assert.equal(puedeVerSuscripcion(role), false, `role=${String(role)}`);
+  }
+});
+
+test("el 403 trae un código estable y dice que es cosa del dueño", () => {
   const body = notClinicBillingAdminResponse();
   assert.equal(body.code, "FORBIDDEN_NOT_CLINIC_ADMIN");
-  assert.ok(body.error.length > 0);
+  assert.equal(body.error, "Solo el dueño de la cuenta puede cambiar o pagar el plan.");
 });
 
 // ── El guard corre ANTES de cualquier efecto ────────────────────────────────
 
-/** Posición del primer efecto observable de la ruta (BD, Stripe o body). */
+/** El cuerpo de un handler exportado (`GET`/`POST`), hasta el siguiente handler o el final del archivo. */
+function handler(source: string, metodo: "GET" | "POST"): string {
+  const inicio = source.indexOf(`export async function ${metodo}(`);
+  assert.ok(inicio >= 0, `no hay handler ${metodo}`);
+  const siguiente = source.indexOf("export async function ", inicio + 10);
+  return source.slice(inicio, siguiente >= 0 ? siguiente : source.length);
+}
+
+/** Posición del primer efecto observable del handler (BD, Stripe, body o lecturas que consultan). */
 function firstSideEffectIndex(source: string): number {
-  const marks = ["prisma.", "stripe.", "getStripeSafe(", "req.json("];
+  const marks = ["prisma.", "stripe.", "getStripeSafe(", "req.json(", "leerGrupoDePago(", "crearSolicitudSpei("];
   const found = marks.map((m) => source.indexOf(m)).filter((i) => i >= 0);
   assert.ok(found.length > 0, "la ruta no tiene ningún efecto reconocible");
   return Math.min.apply(null, found);
 }
 
-for (const [label, rel, guards] of [
-  ["change-plan (COBRA)", CHANGE_PLAN, 1],
-  ["preview (GET + POST)", PREVIEW, 2],
-  ["portal de Stripe (cancela/cambia tarjeta)", PORTAL, 1],
-] as Array<[string, string, number]>) {
-  test(`${label}: exige admin antes de tocar BD, Stripe o el body`, () => {
-    const source = read(rel);
-    const guardAt = source.indexOf("isClinicBillingAdmin(user.role)");
-    assert.ok(guardAt > 0, `${rel}: falta el check de rol`);
-    assert.ok(
-      source.indexOf("status: 403") > 0,
-      `${rel}: el check existe pero no responde 403`,
-    );
-    assert.ok(
-      guardAt < firstSideEffectIndex(source),
-      `${rel}: el check de rol corre DESPUÉS de un efecto secundario`,
-    );
-  });
+const CHECKOUT = "src/app/api/billing/checkout/route.ts";
+const SPEI = "src/app/api/billing/spei-transferencia/route.ts";
+const CANCELAR = "src/app/api/clinic/subscription/cancel-request/route.ts";
+const METODO = "src/app/api/billing/payment-method/route.ts";
+const FACTURAS = "src/app/api/billing/invoices/route.ts";
 
-  test(`${label}: el guard está en TODOS sus handlers (${guards})`, () => {
-    const source = read(rel);
-    const hits = source.split("isClinicBillingAdmin(user.role)").length - 1;
-    assert.equal(hits, guards, `${rel}: se esperaban ${guards} checks de rol`);
+// [qué, ruta, handler, guard]: lo que cobra o cambia exige al dueño; lo que solo lee, dueño o ADMIN.
+const GUARDAS: Array<[string, string, "GET" | "POST", string]> = [
+  ["change-plan (COBRA)", CHANGE_PLAN, "POST", "isClinicBillingAdmin(user.role)"],
+  ["preview POST (simula un cambio)", PREVIEW, "POST", "isClinicBillingAdmin(user.role)"],
+  ["portal de Stripe (cancela/cambia tarjeta)", PORTAL, "POST", "isClinicBillingAdmin(user.role)"],
+  ["checkout (pagar/activar el plan)", CHECKOUT, "POST", "isClinicBillingAdmin(user.role)"],
+  ["SPEI «ya transferí»", SPEI, "POST", "isClinicBillingAdmin(user.role)"],
+  ["pedir la cancelación", CANCELAR, "POST", "isClinicBillingAdmin(ctx.role)"],
+  ["preview GET (solo lectura)", PREVIEW, "GET", "puedeVerSuscripcion(user.role)"],
+  ["método de pago vigente (solo lectura)", METODO, "GET", "puedeVerSuscripcion(user.role)"],
+  ["historial de facturas (solo lectura)", FACTURAS, "GET", "puedeVerSuscripcion(user.role)"],
+];
+
+for (const [label, rel, metodo, guard] of GUARDAS) {
+  test(`${label}: ${guard} antes de tocar BD, Stripe o el body, con 403`, () => {
+    const cuerpo = handler(read(rel), metodo);
+    const guardAt = cuerpo.indexOf(guard);
+    assert.ok(guardAt > 0, `${rel} ${metodo}: falta ${guard}`);
+    assert.ok(cuerpo.indexOf("status: 403") > guardAt, `${rel} ${metodo}: el check existe pero no responde 403`);
+    assert.ok(guardAt < firstSideEffectIndex(cuerpo), `${rel} ${metodo}: el check de rol corre DESPUÉS de un efecto secundario`);
   });
 }
 
+test("las lecturas no abren la puerta a cobrar: cada handler que cobra usa isClinicBillingAdmin, ninguno puedeVerSuscripcion", () => {
+  for (const [rel, metodo] of [[CHANGE_PLAN, "POST"], [PREVIEW, "POST"], [PORTAL, "POST"], [CHECKOUT, "POST"], [SPEI, "POST"], [CANCELAR, "POST"]] as const) {
+    assert.doesNotMatch(handler(read(rel), metodo), /puedeVerSuscripcion\(/, `${rel} ${metodo}`);
+  }
+  // El cancelar de antes aceptaba a cualquier ADMIN con ctx.isAdmin.
+  assert.doesNotMatch(read(CANCELAR), /ctx\.isAdmin/);
+});
+
 test("todas las rutas de suscripción usan la MISMA fuente de autorización", () => {
   // Duplicar el criterio es cómo se desincronizaron antes el preview y el cobro.
-  for (const rel of [CHANGE_PLAN, PREVIEW, PORTAL]) {
+  for (const rel of [CHANGE_PLAN, PREVIEW, PORTAL, CHECKOUT, SPEI, CANCELAR, METODO, FACTURAS]) {
     assert.match(read(rel), /from "@\/lib\/billing\/authz"/, `${rel}: no importa authz`);
   }
 });

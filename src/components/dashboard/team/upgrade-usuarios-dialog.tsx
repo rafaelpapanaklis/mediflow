@@ -17,7 +17,7 @@ import type { PlanSubida } from "@/lib/team/cupo-usuarios-shared";
  * próxima de Stripe con el prorrateo, o la cotización manual) y
  * /api/billing/change-plan (always_invoice: cobra solo la diferencia de los días
  * que quedan). Nada se cobra hasta pulsar «Confirmar» con el monto a la vista.
- * Solo el dueño/admin (isClinicBillingAdmin) ve las opciones de subida.
+ * Solo el dueño (isClinicBillingAdmin, SUPER_ADMIN) ve las opciones de subida; un ADMIN ve «Pídele al dueño…».
  */
 
 interface Linea { description: string; amount: number }

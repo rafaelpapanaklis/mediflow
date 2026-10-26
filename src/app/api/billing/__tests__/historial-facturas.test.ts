@@ -76,7 +76,7 @@ function modelo(nombre: keyof typeof tablas) {
   },
 });
 
-let sesion: { clinicId: string | undefined } = { clinicId: "c1" };
+let sesion: { clinicId: string | undefined; role?: string } = { clinicId: "c1", role: "SUPER_ADMIN" };
 (mock as any).module("@/lib/auth", {
   namedExports: { getCurrentUser: async () => sesion },
 });
@@ -157,7 +157,7 @@ const filaLocal29 = {
 beforeEach(() => {
   consultas.length = 0;
   llamadasStripe.length = 0;
-  sesion = { clinicId: "c1" };
+  sesion = { clinicId: "c1", role: "SUPER_ADMIN" };
   tablas = {
     clinic: [
       { id: "c1", stripeCustomerId: "cus_bevadent" },
@@ -380,8 +380,23 @@ test("B · si Stripe no da los recibos, la recarga sale igual, solo que sin bot�
 });
 
 test("sin clínica en la sesión no se consulta nada (clinicId: undefined no filtra)", async () => {
-  sesion = { clinicId: undefined };
+  sesion = { clinicId: undefined, role: "SUPER_ADMIN" };
   const { status } = await historial();
   assert.equal(status, 401);
   assert.equal(consultas.length, 0);
+});
+
+test("leer el historial: el dueño y un ADMIN sí; los demás roles, 403 sin consultar la base ni Stripe", async () => {
+  sesion = { clinicId: "c1", role: "ADMIN" };
+  assert.equal((await historial()).status, 200, "un ADMIN lo ve (solo lectura)");
+  for (const role of ["DOCTOR", "RECEPTIONIST", "ASSISTANT", "READONLY", undefined]) {
+    consultas.length = 0;
+    llamadasStripe.length = 0;
+    sesion = { clinicId: "c1", role };
+    const { status, body } = await historial();
+    assert.equal(status, 403, String(role));
+    assert.equal((body as any).code, "FORBIDDEN_NOT_CLINIC_ADMIN");
+    assert.equal(consultas.length, 0, `${String(role)}: no se consulta la base`);
+    assert.equal(llamadasStripe.length, 0, `${String(role)}: ni Stripe`);
+  }
 });

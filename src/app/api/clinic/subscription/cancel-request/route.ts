@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getAuthContext } from "@/lib/auth-context";
 import { leerGrupoDePago } from "@/lib/billing/sedes-incluidas";
 import { avisoSedeIncluida } from "@/lib/billing/sedes-incluidas-core";
+import { isClinicBillingAdmin, notClinicBillingAdminResponse } from "@/lib/billing/authz";
 
 /**
  * Marca la clínica como "cancelRequested" — no cancela inmediatamente,
@@ -12,8 +13,9 @@ import { avisoSedeIncluida } from "@/lib/billing/sedes-incluidas-core";
 export async function POST() {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
-  if (!ctx.isAdmin) {
-    return NextResponse.json({ error: "Solo administradores pueden cancelar" }, { status: 403 });
+  // Cancelar es solo del dueño (SUPER_ADMIN), decisión de Rafael del 26-oct-2026; antes bastaba un ADMIN.
+  if (!isClinicBillingAdmin(ctx.role)) {
+    return NextResponse.json(notClinicBillingAdminResponse(), { status: 403 });
   }
 
   try {

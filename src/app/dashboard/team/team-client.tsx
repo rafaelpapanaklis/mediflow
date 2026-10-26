@@ -33,6 +33,7 @@ import {
 import { SelectorDeRol } from "./selector-de-rol";
 import { AccesoCaja } from "./acceso-caja";
 import { cajaQueViaja, motivoCajaFija, seccionCajaVisible, type MotivoCajaFija } from "./caja-miembro";
+import { fichaDelDuenoProtegida } from "./acciones-sobre-dueno";
 import { especialidadParaElSelector, opcionFueraDeLista } from "@/lib/team/especialidad-equipo";
 import { agendaActiveAlCrear } from "@/lib/agenda/roles-que-atienden";
 
@@ -1296,6 +1297,8 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
           {filtered.map(m => {
             const fullName = `${m.firstName} ${m.lastName}`;
             const roleCfg = ROLE_TONE[m.role] ?? ROLE_TONE.DOCTOR;
+            // Un ADMIN no edita, desactiva ni elimina al dueño (el servidor ya responde 403).
+            const duenoProtegido = fichaDelDuenoProtegida({ rolDelMiembro: m.role, rolDeQuienMira: currentUserRole });
             return (
               <div key={m.id} className="card transition-[box-shadow,transform] duration-[var(--dur-1)] ease-[var(--ease)] hover:shadow-[var(--shadow-2)] hover:-translate-y-px" style={{ padding: 20, opacity: m.isActive ? 1 : 0.45 }}>
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center" }}>
@@ -1365,9 +1368,11 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
 
                   {/* Actions */}
                   <div style={{ display: "flex", gap: 6, marginTop: 14, justifyContent: "center", flexWrap: "wrap" }}>
+                    {!duenoProtegido && (
                     <ButtonNew variant="secondary" icon={<Edit size={16} strokeWidth={1.75} />} onClick={() => openEdit(m)}>
                       {t("common.edit")}
                     </ButtonNew>
+                    )}
                     {/* Permisos: solo visible para SUPER_ADMIN, y NO sobre otros
                      *  SUPER_ADMIN (defensa contra lock-out cruzado en endpoint).
                      *  Sobre el propio user igual lo permitimos — útil para
@@ -1408,7 +1413,7 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
 
                   {/* Desactivar / Eliminar: fila propia y con texto (antes eran dos
                    *  iconos sueltos pegados a Horario, sin decir qué hacían). */}
-                  {m.id !== currentUserId && (
+                  {m.id !== currentUserId && !duenoProtegido && (
                     <div style={{ display: "flex", gap: 6, marginTop: 8, justifyContent: "center", flexWrap: "wrap" }}>
                       <ButtonNew
                         variant="ghost"

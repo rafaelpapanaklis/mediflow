@@ -240,10 +240,9 @@ test("vuelta del checkout: un módulo sin página de contratar vuelve a Marketpl
 });
 
 // ── 7. Quién puede comprar (ws1-t3) ─────────────────────────────────────
-test("comprar un módulo: solo el dueño o un administrador", () => {
+test("comprar o cancelar un módulo: solo el dueño de la cuenta (26-oct-2026: ya no un ADMIN)", () => {
   assert.equal(canPurchaseModules("SUPER_ADMIN"), true);
-  assert.equal(canPurchaseModules("ADMIN"), true);
-  for (const r of ["DOCTOR", "RECEPTIONIST", "READONLY", "", null, undefined]) {
+  for (const r of ["ADMIN", "DOCTOR", "RECEPTIONIST", "READONLY", "", null, undefined]) {
     assert.equal(canPurchaseModules(r), false, String(r));
   }
 });

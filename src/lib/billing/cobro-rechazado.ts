@@ -1,5 +1,6 @@
 import { ACTIVE_SUBSCRIPTION_STATUSES, PAYMENT_FAILED_STATUSES, isPlanExpired } from "@/lib/plan-status";
 import { fechaHoraPanel } from "@/lib/formato-fecha-panel";
+import { isClinicBillingAdmin } from "./authz";
 
 /**
  * COBRO RECHAZADO DEL PLAN — reglas puras (ws1-t1, 19-oct-2026).
@@ -424,7 +425,7 @@ export function eraClinicaPagadora(estadoAntes: string | null | undefined): bool
   return e !== null && (ACTIVE_SUBSCRIPTION_STATUSES.has(e) || PAYMENT_FAILED_STATUSES.has(e));
 }
 
-/** Quién ve el botón de pagar en el aviso: dueño o administrador (misma regla que el cambio de plan). */
+/** Quién ve el botón de pagar en el aviso: solo el dueño (misma regla que el cambio de plan, isClinicBillingAdmin). */
 export type AvisoPagoRechazado =
   | { visible: false }
   | { visible: true; accesoHasta: Date; puedePagar: boolean };
@@ -443,7 +444,7 @@ export function avisoDePagoRechazado(args: {
   if (estado === null || !PAYMENT_FAILED_STATUSES.has(estado)) return { visible: false };
   const acceso = aFecha(args.trialEndsAt);
   if (!acceso || acceso.getTime() <= args.ahora.getTime()) return { visible: false };
-  return { visible: true, accesoHasta: acceso, puedePagar: args.rol === "ADMIN" || args.rol === "SUPER_ADMIN" };
+  return { visible: true, accesoHasta: acceso, puedePagar: isClinicBillingAdmin(args.rol) };
 }
 
 /**

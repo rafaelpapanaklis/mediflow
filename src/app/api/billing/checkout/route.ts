@@ -17,6 +17,7 @@ import { enlaceDeContratacion } from "@/lib/billing/sin-promo.server";
 import { ivaParaPagoDeClinica } from "@/lib/billing/iva-cobro";
 import { exencionIvaDeClinica } from "@/lib/billing/iva-clinica";
 import { logAudit, extractAuditMeta } from "@/lib/audit";
+import { isClinicBillingAdmin, notClinicBillingAdminResponse } from "@/lib/billing/authz";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -38,7 +39,8 @@ const BodySchema = z.object({
  * Crea una Stripe Checkout Session para que la clínica del usuario
  * activo renueve/active su suscripción a la plataforma DaleControl.
  *
- * - Auth: getCurrentUser (cualquier rol logueado).
+ * - Auth: getCurrentUser + solo el dueño (SUPER_ADMIN, isClinicBillingAdmin): pagar el plan
+ *   es del dueño (decisión de Rafael, 26-oct-2026). Antes cobraba con cualquier rol logueado.
  * - Multi-tenant: clinicId siempre se toma del contexto, NUNCA del body.
  * - Precio: tomado del módulo `lib/billing/plans` (single source of
  *   truth). Se crea con `price_data` dinámico para no requerir Price IDs
@@ -50,6 +52,9 @@ const BodySchema = z.object({
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
   const clinicId = user.clinicId;
+  if (!isClinicBillingAdmin(user.role)) {
+    return NextResponse.json(notClinicBillingAdminResponse(), { status: 403 });
+  }
 
   let body: unknown;
   try {

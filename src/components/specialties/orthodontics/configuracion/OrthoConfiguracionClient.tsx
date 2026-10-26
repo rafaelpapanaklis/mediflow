@@ -48,7 +48,7 @@ export interface OrthoConfiguracionClientProps {
   opcionesDelPlan?: OpcionesDeLaClinica;
   /**
    * La tarjeta "Suscripción" (ws1-t2, 28-sep-2026) — `null` si no hay nada
-   * que cancelar desde aquí: sin permiso (no dueño/administrador), módulo
+   * que cancelar desde aquí: sin permiso (no es el dueño de la cuenta), módulo
    * activado por soporte ("admin"), pagado con SPEI/OXXO (sin suscripción
    * que cancelar), o ya cancelado. El servidor ya decidió todo esto
    * (`canRequestModuleCancellation` + `canPurchaseModules`); aquí solo se

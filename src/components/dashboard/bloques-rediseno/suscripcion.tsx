@@ -52,6 +52,11 @@ export interface ModeloSuscripcion {
   ivaDe: (id: PlanId) => boolean;
   porcentajePrueba: number;
   pruebaVencida: boolean;
+  /**
+   * ADMIN que no es el dueño: el texto «Solo el dueño de la cuenta puede cambiar o pagar el plan.» y la
+   * pestaña sin botones que paguen, cambien el plan o el método, abran el portal o cancelen. null = el dueño.
+   */
+  soloLectura: string | null;
   mostrarActivar: boolean;
   /** Cobro del plan rechazado con el acceso aún vivo: aviso rojo con la hora de suspensión y los dos botones de pago (`panel`). */
   pagoRechazado: { titulo: string; texto: string; panel: ReactNode } | null;
@@ -180,6 +185,12 @@ export function SuscripcionRediseno({ m }: { m: ModeloSuscripcion }) {
           </Aviso>
         )}
 
+        {m.soloLectura && (
+          <Aviso tono="neutro" icono={<Info size={14} strokeWidth={1.75} aria-hidden />}>
+            <span data-suscripcion-solo-lectura>{m.soloLectura}</span>
+          </Aviso>
+        )}
+
         {m.pagoRechazado && (
           <div className={s.activar} role="alert" data-tono="peligro">
             <div className={s.activarTextos}>
@@ -205,6 +216,7 @@ export function SuscripcionRediseno({ m }: { m: ModeloSuscripcion }) {
       </Seccion>
 
       {/* ── Cambiar plan ─────────────────────────────────────────── */}
+      {!m.soloLectura && (
       <Seccion
         titulo={t("shell.subscriptionTab.changePlanTitle")}
         subtitulo={
@@ -264,6 +276,7 @@ export function SuscripcionRediseno({ m }: { m: ModeloSuscripcion }) {
           })}
         </div>
       </Seccion>
+      )}
 
       {/* ── Método de pago ───────────────────────────────────────── */}
       <Seccion
@@ -304,6 +317,13 @@ export function SuscripcionRediseno({ m }: { m: ModeloSuscripcion }) {
           );
         })()}
 
+        {m.soloLectura ? (
+          m.cancelacionPedida && (
+            <div className={s.acciones}>
+              <Insignia tono="peligro" punto>{t("shell.subscriptionTab.cancellationRequestedBadge")}</Insignia>
+            </div>
+          )
+        ) : (
         <div className={s.acciones}>
           <Boton corto onClick={m.onCambiarMetodo}>
             <CreditCard size={13} aria-hidden />
@@ -317,6 +337,7 @@ export function SuscripcionRediseno({ m }: { m: ModeloSuscripcion }) {
             <Insignia tono="peligro" punto>{t("shell.subscriptionTab.cancellationRequestedBadge")}</Insignia>
           )}
         </div>
+        )}
       </Seccion>
 
       {/* ── Facturación CFDI (cupo del mes + excedente + adeudo) ──── */}
@@ -330,7 +351,7 @@ export function SuscripcionRediseno({ m }: { m: ModeloSuscripcion }) {
         titulo={t("shell.subscriptionTab.invoiceHistory")}
         icono={<Receipt size={16} strokeWidth={1.75} aria-hidden />}
         extra={
-          m.tieneClienteStripe ? (
+          m.tieneClienteStripe && !m.soloLectura ? (
             <Boton corto onClick={m.onCambiarMetodo}>
               {t("shell.subscriptionTab.stripePortal")} <ExternalLink size={12} aria-hidden />
             </Boton>
@@ -408,7 +429,7 @@ export function SuscripcionRediseno({ m }: { m: ModeloSuscripcion }) {
                               {t("shell.subscriptionTab.receipt")}
                             </a>
                           )}
-                          {inv.paymentUrl && (
+                          {inv.paymentUrl && !m.soloLectura && (
                             <a
                               href={inv.paymentUrl}
                               target="_blank"

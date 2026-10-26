@@ -26,7 +26,7 @@ const BodySchema = z.object({ moduleKey: z.string().min(1) });
  * con SPEI/OXXO (pago único, sin suscripción) no tiene nada que cancelar
  * aquí — `canRequestModuleCancellation` lo rechaza con un mensaje claro.
  *
- * Solo dueño o administrador (`canPurchaseModules`, misma regla que el
+ * Solo el dueño de la cuenta (`canPurchaseModules` = SUPER_ADMIN, misma regla que el
  * checkout) — cancelar un cobro recurrente compromete a la clínica igual
  * que contratarlo. La pantalla ya esconde el botón a los demás roles; esto
  * es la comprobación real, en el servidor.
@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
 
   if (!canPurchaseModules(user.role)) {
     return NextResponse.json(
-      { error: "Solo el dueño o un administrador de la clínica puede cancelar módulos. Pídeselo a tu administrador.", code: "solo_administrador" },
+      { error: "Solo el dueño de la cuenta puede cancelar módulos. Pídeselo al dueño.", code: "solo_administrador" },
       { status: 403 },
     );
   }

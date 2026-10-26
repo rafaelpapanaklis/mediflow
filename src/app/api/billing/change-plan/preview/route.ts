@@ -26,7 +26,7 @@ import {
 } from "@/lib/billing/proration";
 import { buildManualUpgradeQuote } from "@/lib/billing/manual-upgrade";
 import { desgloseConIva } from "@/lib/billing/iva-cobro";
-import { isClinicBillingAdmin, notClinicBillingAdminResponse } from "@/lib/billing/authz";
+import { isClinicBillingAdmin, notClinicBillingAdminResponse, puedeVerSuscripcion } from "@/lib/billing/authz";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -61,7 +61,8 @@ export interface ChangePlanPreview {
  */
 export async function GET() {
   const user = await getCurrentUser();
-  if (!isClinicBillingAdmin(user.role)) {
+  // Solo lectura: el ADMIN también ve el intervalo y la próxima fecha (simular un cambio, abajo, es del dueño).
+  if (!puedeVerSuscripcion(user.role)) {
     return NextResponse.json(notClinicBillingAdminResponse(), { status: 403 });
   }
 
