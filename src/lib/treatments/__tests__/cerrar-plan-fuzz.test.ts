@@ -59,15 +59,15 @@ test("cerrar (fuzz t5): quien pagó EXACTAMENTE lo hecho queda PAGADA, sin centa
   assert.deepEqual(malos.slice(0, 3), []);
 });
 
-test("cerrar (fuzz): el descuento que se queda es la parte de las líneas que se quedan, y la nota se puede recalcular", () => {
-  let lejos = 0;
-  for (const { nota, filas } of notasAlAzar(11, 3000)) {
+test("cerrar (fuzz t5, coherencia): la nota guardada se recalcula EXACTAMENTE a su total (v4)", () => {
+  // Prueba de t5 (`a-cerrar-coherencia`): antes 3 de 3,366 a 1¢ con el IVA aparte. El editor de
+  // facturas y el timbrado recalculan: el total guardado tiene que salir igual al centavo.
+  const malos: unknown[] = [];
+  for (const { nota, filas } of [...notasAlAzar(11, 5000), ...notasAlAzar(7, 3000)]) {
     const a = ajustarNotaAlCerrar(nota, filas);
     if (!a || !a.items.length) continue;
-    assert.ok(a.discount >= 0 && a.discount <= a.subtotal + 0.005);
-    // El editor de facturas recalcula con su propio reparto: a lo más unos centavos de IVA por línea.
     const recalculado = computeInvoiceTotal(a.items, a.discount, nota.taxRate, nota.taxIncluded).total;
-    if (Math.abs(recalculado - a.total) > 0.005 * (a.items.length + 1)) lejos++;
+    if (Math.abs(recalculado - a.total) > 0.005) malos.push({ guardado: a.total, recalculado, taxIncluded: nota.taxIncluded });
   }
-  assert.equal(lejos, 0);
+  assert.deepEqual(malos.slice(0, 3), []);
 });

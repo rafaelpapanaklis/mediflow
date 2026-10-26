@@ -599,18 +599,48 @@ describe("el link de una factura a plazos, por lo vencido/la mensualidad (H68/F9
   const src = readFileSync(join(__dirname, "..", "servicio.server.ts"), "utf8");
   it("lee las condiciones de la factura antes de fijar el monto a cobrar", () => {
     const iCondiciones = src.indexOf("leerCondicionesDeFacturas(tx,");
-    const iSaldo = src.indexOf("const saldo = montoSugeridoDeCobro(");
+    // 26-oct: el sugerido (mensualidad/lo vencido) se limita después a lo debido (`saldo`).
+    const iSaldo = src.indexOf("const sugerido = montoSugeridoDeCobro(");
     assert.ok(iCondiciones > 0 && iSaldo > iCondiciones, "las condiciones se leen ANTES de calcular el saldo a cobrar");
   });
   it("el saldo a cobrar es la mensualidad/lo vencido, y solo cae al saldo completo sin condiciones a plazos", () => {
-    assert.match(src, /const saldo = montoSugeridoDeCobro\(condicionesPorFactura\.get\(invoiceId\) \?\? null, inv\.total, inv\.paid, hoy\)\s*\n\s*\|\| saldoPorCobrar\(inv\);/);
+    assert.match(src, /const sugerido = montoSugeridoDeCobro\(condicionesPorFactura\.get\(invoiceId\) \?\? null, inv\.total, inv\.paid, hoy\)\s*\n\s*\|\| saldoPorCobrar\(inv\);/);
+    // …y nunca más que lo debido (26-oct, revisión t5 N3).
+    assert.match(src, /const saldo = debido === null \? sugerido : redondear2\(Math\.min\(sugerido, debido\)\);/);
   });
   it("el mínimo del link ($10 MXN) se comprueba sobre el monto YA ajustado, no sobre el saldo completo", () => {
-    const iSaldo = src.indexOf("const saldo = montoSugeridoDeCobro(");
+    const iSaldo = src.indexOf("const saldo = debido === null ? sugerido");
     const iMinimo = src.indexOf("if (saldo < MINIMO_LINK_MXN)");
     assert.ok(iSaldo > 0 && iMinimo > iSaldo, "el mínimo se comprueba DESPUÉS de calcular `saldo`, y sobre esa variable");
   });
   it("`hoy` respeta la zona horaria de la clínica de la factura, no UTC a secas", () => {
     assert.match(src, /const hoy = hoyEnZona\(ahora, inv\.clinic\?\.timezone \|\| "America\/Mexico_City"\);/);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 26-oct (Rafael), revisión t5 N3: el link cobra solo lo DEBIDO. De una nota de plan, lo hecho menos lo
+// pagado; de ortodoncia «Precio total», lo vencido. Lo que aún no se debe no entra en el link.
+describe("el link cobra solo lo debido (nota de plan / ortodoncia por vencer)", () => {
+  it("de $1,000 por pagar, $800 aún no se deben: el link es por $200", async () => {
+    const e = escenario();
+    const r = await obtenerLinkDeFactura({ clinicId: "c1", invoiceId: "f1", userId: "u1" }, { ...e.deps, aunNoSeDebe: async () => 800 });
+    assert.ok(r.ok && r.link);
+    assert.equal(r.link!.monto, 200);
+    assert.equal(e.mp.preferencias[0].opts.items[0].unit_price, 200);
+  });
+
+  it("si aún no se debe nada, no hay link (como una factura sin saldo)", async () => {
+    const e = escenario();
+    const r = await obtenerLinkDeFactura({ clinicId: "c1", invoiceId: "f1", userId: "u1" }, { ...e.deps, aunNoSeDebe: async () => 1000 });
+    assert.equal(r.ok, false);
+    assert.equal(r.error, "sin_saldo");
+    assert.equal(e.mp.preferencias.length, 0);
+  });
+
+  it("con un doble de base y sin decir nada, no se pregunta a la base de verdad: el link de siempre", async () => {
+    const e = escenario();
+    const { r } = await linkDeF1(e);
+    assert.equal(r.link!.monto, 1000);
   });
 });

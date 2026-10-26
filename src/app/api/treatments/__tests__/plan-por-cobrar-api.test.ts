@@ -360,6 +360,10 @@ test("lo que aún no se debe (v3: Pacientes, ficha, Reportes, Inbox, portal): de
   );
   const { loQueAunNoSeDebe, candidatasNoExigibles } = await import("@/lib/dinero/lo-que-se-debe.server");
   assert.deepEqual(await candidatasNoExigibles("c1"), [notaId], "solo la nota del plan es candidata");
+  // v4 (t5, sospecha 3): con ids, solo esas (en el propio SQL), no las de toda la clínica.
+  assert.deepEqual(await candidatasNoExigibles("c1", ["extra"]), []);
+  assert.deepEqual(await candidatasNoExigibles("c1", [notaId, "extra"]), [notaId]);
+  assert.deepEqual(await candidatasNoExigibles("c1", []), []);
   const r = await loQueAunNoSeDebe("c1", { ids: [notaId, "extra"], timezone: "America/Mexico_City" });
   assert.deepEqual(r.porFactura, { [notaId]: 800 }, "saldo del paciente que se debe = 1,550.50 − 800 + 3,000");
   assert.equal(r.porHacer, 800);

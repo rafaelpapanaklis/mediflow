@@ -10,7 +10,7 @@
 // consultas ligeras, y `computeReceivables` acotado a ellas. Tolerante: si algo no se puede leer,
 // nada se resta (todo cuenta como antes). Toda consulta lleva el `clinicId` de quien llama.
 
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { computeReceivables, receivableInvoiceWhere } from "@/lib/caja";
 import { columnaNotaDelPlanExiste } from "@/lib/treatments/items-db";
@@ -32,15 +32,24 @@ const NADA = (): LoQueAunNoSeDebe => ({ porFactura: {}, porHacer: 0, porVencer: 
  * facturas principales de casos de ortodoncia vivos. Quien hace varias preguntas en la misma
  * petición la lee una vez y la pasa.
  */
-export async function candidatasNoExigibles(clinicId: string): Promise<string[]> {
+export async function candidatasNoExigibles(clinicId: string, soloDeEstas?: string[]): Promise<string[]> {
   if (!clinicId) return [];
+  // Quien pregunta por unas facturas (un paciente, una nota) no lee las de toda la clínica (t5, sospecha 3).
+  const pedidas = soloDeEstas ? Array.from(new Set(soloDeEstas.filter(Boolean))) : null;
+  if (pedidas && pedidas.length === 0) return [];
   const ids = new Set<string>();
   try {
     if (await columnaNotaDelPlanExiste()) {
-      const notas = await prisma.$queryRaw<Array<{ id: string }>>`
-        SELECT "id" FROM "invoices"
-         WHERE "clinicId" = ${clinicId} AND "treatmentPlanId" IS NOT NULL AND "balance" > 0
-           AND "status"::text NOT IN ('DRAFT', 'CANCELLED')`;
+      const notas = pedidas
+        ? await prisma.$queryRaw<Array<{ id: string }>>`
+            SELECT "id" FROM "invoices"
+             WHERE "clinicId" = ${clinicId} AND "id" IN (${Prisma.join(pedidas)})
+               AND "treatmentPlanId" IS NOT NULL AND "balance" > 0
+               AND "status"::text NOT IN ('DRAFT', 'CANCELLED')`
+        : await prisma.$queryRaw<Array<{ id: string }>>`
+            SELECT "id" FROM "invoices"
+             WHERE "clinicId" = ${clinicId} AND "treatmentPlanId" IS NOT NULL AND "balance" > 0
+               AND "status"::text NOT IN ('DRAFT', 'CANCELLED')`;
       for (const n of notas) ids.add(n.id);
     }
   } catch (e) {
@@ -48,7 +57,7 @@ export async function candidatasNoExigibles(clinicId: string): Promise<string[]>
   }
   try {
     const casos = await prisma.orthodonticTreatmentPlan.findMany({
-      where: { clinicId, invoiceId: { not: null }, deletedAt: null },
+      where: { clinicId, invoiceId: pedidas ? { in: pedidas } : { not: null }, deletedAt: null },
       select: { invoiceId: true },
     });
     for (const c of casos) if (c.invoiceId) ids.add(c.invoiceId);
@@ -75,7 +84,7 @@ export async function loQueAunNoSeDebe(
   // `clinicId` vacío no filtra nada: se corta antes de consultar.
   if (!clinicId) return NADA();
   try {
-    let candidatas = opciones.candidatas ?? (await candidatasNoExigibles(clinicId));
+    let candidatas = opciones.candidatas ?? (await candidatasNoExigibles(clinicId, opciones.ids));
     if (opciones.ids) {
       const pedidas = new Set(opciones.ids);
       candidatas = candidatas.filter((id) => pedidas.has(id));

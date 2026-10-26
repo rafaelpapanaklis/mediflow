@@ -66,6 +66,11 @@ export interface PaymentNoticeInput {
    * (`pagoDelMes`) no se usa: la cuota ya dice lo de este mes.
    */
   cobro?: { estado: EstadoDeCobro; vence: string | null } | null;
+  /**
+   * Ortodoncia «Precio total a plazos» (26-oct, Rafael): `balance` es lo VENCIDO («debes») y esto, el
+   * saldo total del tratamiento, va como dato aparte. Mismas cifras que el Inbox y el bot.
+   */
+  saldoTotalDelTratamiento?: number | null;
 }
 
 export interface PaymentNotice {
@@ -92,9 +97,14 @@ export function buildPaymentNotice(input: PaymentNoticeInput): PaymentNotice {
   const pagoDelMes = input.pagoDelMes != null && input.pagoDelMes > 0 && input.pagoDelMes < input.balance - 0.005 ? input.pagoDelMes : null;
   const cobro = pagoDelMes == null && input.cobro ? input.cobro : null;
   const queEs = cobro?.estado === "vencido" ? "un saldo vencido" : cobro?.estado === "por_pagar" ? "un pago por realizar" : "un saldo pendiente";
-  const cifras = pagoDelMes != null
-    ? `${input.aNombreDe ? "El pago de este mes es" : "Tu pago de este mes es"} de ${fmtMXN(pagoDelMes)} (saldo total ${amount})`
-    : `${input.aNombreDe ? "Hay" : "Tienes"} ${queEs} de ${amount}`;
+  const totalTratamiento = input.saldoTotalDelTratamiento != null && input.saldoTotalDelTratamiento > input.balance + 0.005
+    ? input.saldoTotalDelTratamiento
+    : null;
+  const cifras = totalTratamiento != null
+    ? `${input.aNombreDe ? "Hay" : "Tienes"} un saldo vencido de ${amount} (saldo total del tratamiento ${fmtMXN(totalTratamiento)})`
+    : pagoDelMes != null
+      ? `${input.aNombreDe ? "El pago de este mes es" : "Tu pago de este mes es"} de ${fmtMXN(pagoDelMes)} (saldo total ${amount})`
+      : `${input.aNombreDe ? "Hay" : "Tienes"} ${queEs} de ${amount}`;
   const vence = cobro?.vence ? ` ${cobro.estado === "vencido" ? "Venció" : "Vence"} el ${cobro.vence}.` : "";
   const body =
     `Hola ${patientName}, te saludamos de ${input.clinicName}. ` +

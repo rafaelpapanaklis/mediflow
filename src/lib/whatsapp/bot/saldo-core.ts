@@ -88,6 +88,11 @@ export interface ResumenSaldo {
   /** Ya venció alguna cuota y sigue debiendo. */
   tieneVencidas: boolean;
   /**
+   * Lo VENCIDO sin pagar, en pesos (26-oct, Rafael: «debes» = lo vencido; el saldo total es un dato
+   * aparte). Opcional: un resumen sin este campo se contesta como antes.
+   */
+  vencido?: number;
+  /**
    * ws1-t1 (Ortodoncia conectada al bot) — "YYYY-MM-DD" de la próxima cita
    * "Control de ortodoncia" del paciente, o `undefined`/`null` cuando no
    * tiene ninguna (o no es paciente de ortodoncia). Opcional a propósito: los
@@ -359,7 +364,24 @@ export function textoDelSaldo(
   const hayCobranza = r.vencimiento !== null || r.pendiente > 0 || r.tieneVencidas;
   const lineas: string[] = [];
 
-  if (hayCobranza) {
+  if (hayCobranza && r.vencido !== undefined) {
+    // «Debes» es lo vencido; la próxima cuota y el saldo total, datos aparte. Lo mismo que dicen el
+    // aviso de la nota y el Inbox.
+    lineas.push(
+      r.vencido > 0
+        ? `Debes *${fmt.importe(r.vencido)}* de pagos atrasados. Si ya lo pagaste, mándanos tu comprobante.`
+        : "Por ahora no debes nada: vas al corriente.",
+    );
+    if (r.vencimiento) {
+      const cual = r.esEnganche
+        ? "tu *enganche*"
+        : r.totalCuotas > 0
+          ? `tu *mensualidad ${r.numeroCuota} de ${r.totalCuotas}*`
+          : "tu *próxima mensualidad*";
+      lineas.push(`${cap(cual)} es de *${fmt.importe(r.importeCuota)}* y vence el *${fmt.fecha(r.vencimiento)}*.`);
+    }
+    if (r.pendiente > 0) lineas.push(`Tu saldo total es de *${fmt.importe(r.pendiente)}*.`);
+  } else if (hayCobranza) {
     const cual = r.esEnganche
       ? "tu *enganche*"
       : r.totalCuotas > 0
@@ -380,7 +402,8 @@ export function textoDelSaldo(
     lineas.push(`Tu próximo *control de ortodoncia* es el *${fmt.fecha(r.proximoControl)}*.`);
   }
 
-  if (hayCobranza) {
+  // Con «debes» ya se dijo qué hacer si pagó (y «vas al corriente» no necesita disculpa).
+  if (hayCobranza && r.vencido === undefined) {
     lineas.push("Si ya pagaste, no hagas caso a este mensaje. 🙌");
   }
   return lineas.join("\n");

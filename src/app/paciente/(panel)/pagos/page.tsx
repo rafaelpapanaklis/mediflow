@@ -21,6 +21,7 @@
 import { useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { usePacienteData } from "@/lib/patient-portal/use-paciente";
+import { lineaAunNoLoDebes } from "@/lib/invoices/correo-factura";
 import type { PacienteClinica, PacienteFactura, PacientePagosResponse } from "@/lib/patient-portal/types";
 import {
   PacienteCard,
@@ -274,7 +275,7 @@ function FacturaRow({
         {/* 26-oct: lo aceptado sin hacer (o las cuotas que no vencen) no se debe todavía. */}
         {saldoPendiente && (f.aunNoSeDebe ?? 0) > 0 && (
           <div style={{ color: MUTED, fontSize: 13, marginTop: 2 }} data-aun-no-se-debe>
-            De este saldo, {formatMxn(f.aunNoSeDebe ?? 0)} es tratamiento por hacer o cuotas por vencer: aún no lo debes.
+            {lineaAunNoLoDebes(f.balance, f.aunNoSeDebe)}
           </div>
         )}
       </div>

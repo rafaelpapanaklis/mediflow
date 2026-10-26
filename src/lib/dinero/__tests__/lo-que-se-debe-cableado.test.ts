@@ -46,6 +46,30 @@ test("A2: «Estado de cuenta» (lateral, Resumen y Facturación) dice aparte cu�
   ]) assert.match(leer(f), /patients\.sideCards\.aunNoSeDebe/, f);
 });
 
+test("v4 · N1: la cabecera se relee también cuando cambian las cuentas de los planes («marcar hecho»)", () => {
+  const ficha = leer("src/app/dashboard/patients/[id]/patient-detail-client.tsx");
+  const desde = ficha.indexOf("const aunNoSeDebe = useLoQueAunNoSeDebe(");
+  const llamada = ficha.slice(desde, ficha.indexOf(");", desde));
+  assert.match(llamada, /refrescoCuentas/);
+  assert.match(llamada, /planesDelServidor/);
+});
+
+test("v4 · sospecha 2: un plan TERMINADO no enseña «Cerrar plan»", () => {
+  assert.match(leer("src/components/dashboard/expediente-rediseno/cuenta-del-plan.tsx"), /cuenta\.estado !== "COMPLETED" && \(c\.porHacer > 0\.005/);
+});
+
+test("v4 · N2: el aviso de la nota de ortodoncia dice lo vencido y el total aparte; el bot, «Debes» = lo vencido", () => {
+  const ruta = leer("src/app/api/invoices/[id]/send-whatsapp/route.ts");
+  assert.match(ruta, /saldoTotalDelTratamiento,/);
+  assert.match(ruta, /if \(aunNo > 0\)/, "ya no solo las notas de plan: también ortodoncia");
+  assert.match(leer("src/lib/whatsapp/cobranza/datos.ts"), /vencido: redondea\(vencidoTotal\)/);
+});
+
+test("v4 · N3: el correo de la nota lleva la línea del portal y su link cobra solo lo debido", () => {
+  assert.match(leer("src/app/api/invoices/[id]/send-email/route.ts"), /aunNoSeDebe,\n\s*\}\);/);
+  assert.match(leer("src/lib/factura-mp/servicio.server.ts"), /if \(debido !== null && debido <= 0\.005\) return fallo\("sin_saldo"\);/);
+});
+
 test("A8: la lista de Pacientes ya no trae todas las facturas con deuda de la clínica", () => {
   const ruta = leer("src/app/api/patients/route.ts");
   assert.doesNotMatch(ruta, /select: \{ id: true, patientId: true, balance: true \},\n\s*\}\),/);

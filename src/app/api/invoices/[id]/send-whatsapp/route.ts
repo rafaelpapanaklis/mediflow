@@ -119,19 +119,25 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     );
   }
 
-  // Nota de un plan de tratamiento (26-oct, Rafael): el aviso de saldo dice lo que el paciente debe DE
-  // VERDAD —lo hecho menos lo pagado—, no el plan aceptado entero; si aún no debe nada, no se manda.
-  // (La cuota de ortodoncia no cambia: su aviso ya dice el pago del mes y el saldo total.)
+  // El aviso de saldo dice lo que el paciente debe DE VERDAD (26-oct, Rafael), lo mismo que el Inbox y
+  // el bot: de una nota de plan, lo hecho menos lo pagado; de ortodoncia «Precio total a plazos», lo
+  // vencido —y aparte, como dato, el saldo total del tratamiento—. Si aún no debe nada, no se manda.
   let saldoDelAviso = invoice.balance;
+  let saldoTotalDelTratamiento: number | null = null;
   if (!esFactura) {
     const noSeDebe = await loQueAunNoSeDebe(ctx.clinicId, { ids: [invoice.id], timezone: invoice.clinic?.timezone });
-    if (noSeDebe.porHacer > 0) {
-      saldoDelAviso = Math.max(0, Math.round((invoice.balance - (noSeDebe.porFactura[invoice.id] ?? 0)) * 100) / 100);
+    const aunNo = noSeDebe.porFactura[invoice.id] ?? 0;
+    if (aunNo > 0) {
+      saldoDelAviso = Math.max(0, Math.round((invoice.balance - aunNo) * 100) / 100);
+      const esOrtodoncia = noSeDebe.porVencer > 0;
+      if (esOrtodoncia) saldoTotalDelTratamiento = invoice.balance;
       if (saldoDelAviso <= 0.005) {
         return NextResponse.json(
           {
             code: "nada_que_cobrar_aun",
-            error: "Esta nota es de un plan de tratamiento y el paciente todavía no debe nada: lo aceptado se cobra cuando se hace (o como abono, si él quiere adelantar).",
+            error: esOrtodoncia
+              ? "El paciente no tiene pagos vencidos del tratamiento: lo que falta aún no vence, así que no hay saldo que avisar."
+              : "Esta nota es de un plan de tratamiento y el paciente todavía no debe nada: lo aceptado se cobra cuando se hace (o como abono, si él quiere adelantar).",
           },
           { status: 409 },
         );
@@ -184,13 +190,14 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
   // El texto sale de lib/invoices/payment-notice: Sabina enseña ESE MISMO texto en
   // su tarjeta antes de que alguien confirme el envío.
   // Factura a plazos: el texto dice «Tu pago de este mes es $X (saldo total $Y)».
-  const pagoDelMes = esFactura ? null : await pagoDelMesDeFactura(prisma, {
+  // En ortodoncia «Precio total» ya no: «debes» es lo vencido y el saldo total va aparte (26-oct).
+  const pagoDelMes = esFactura || saldoTotalDelTratamiento !== null ? null : await pagoDelMesDeFactura(prisma, {
     clinicId: ctx.clinicId, invoiceId: invoice.id, total: invoice.total, paid: invoice.paid, zonaHoraria: clinic.timezone,
   });
 
   // ws1-t4 (8c): «pago por realizar» (vence el …) o «saldo vencido», con el criterio único
   // de lib/invoices/due-date (el del filtro «Vencidas»), en la zona de la clínica.
-  const estado = esFactura ? null : estadoDeCobro(invoice, startOfTodayInTz(clinic.timezone ?? ""));
+  const estado = esFactura || saldoTotalDelTratamiento !== null ? null : estadoDeCobro(invoice, startOfTodayInTz(clinic.timezone ?? ""));
   const cobro = estado ? { estado, vence: fechaDeVencimientoHumana(invoice.dueDate, clinic.timezone ?? "") } : null;
 
   // Comprobante PDF — solo sale con la ventana abierta (en modo plantilla el
@@ -218,6 +225,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
       clinicPhone,
       invoiceNumber: invoice.invoiceNumber,
       balance: saldoDelAviso,
+      saldoTotalDelTratamiento,
       pagoDelMes,
       items: invoice.items,
       linkPago: link,

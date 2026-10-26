@@ -166,10 +166,12 @@ test("cerrar plan con todo hecho: la nota no cambia (null)", () => {
   assert.equal(ajustarNotaAlCerrar(nota(PLAN), filas(fila("r", "hecho", dia(1)), fila("e", "hecho", dia(1)), fila("c", "hecho", dia(1)))), null);
 });
 
-test("cerrar plan: el descuento de la nota se reparte en proporción a lo que se queda", () => {
+test("cerrar plan: lo que se queda lleva SU parte del descuento de la nota como descuento propio (v4)", () => {
   const n = { ...nota(PLAN), discount: 1800, total: 16200 };
   const a = ajustarNotaAlCerrar(n, filas(fila("r", "hecho", dia(1)), fila("e", "pendiente"), fila("c", "pendiente")))!;
-  assert.equal(a.discount, 300);
+  assert.equal(a.discount, 0, "el descuento global pasa a las líneas que se quedan");
+  assert.equal((a.items[0] as any).discount, 300, "a la resina le tocaban $300 de los $1,800");
+  assert.equal(a.subtotal, 2700);
   assert.equal(a.total, 2700);
 });
 

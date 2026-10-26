@@ -87,7 +87,8 @@ export function CuentaDelPlan({ cuenta, cargando, onCobrar, puedeCerrar }: {
   if (!cuentaConAlgo(cuenta)) return null;
   const notas = cuenta.notas.map((n) => n.invoiceNumber).filter(Boolean);
   const c = cifrasDeLaCuenta(cuenta);
-  const conCierre = !!puedeCerrar && cuenta.conFilas && (c.porHacer > 0.005 || (cuenta.estado !== "ABANDONED" && cuenta.estado !== "COMPLETED"));
+  // Un plan TERMINADO no se cierra (el servidor contesta `ya_cerrado`): sin botón (t5, sospecha 2).
+  const conCierre = !!puedeCerrar && cuenta.conFilas && cuenta.estado !== "COMPLETED" && (c.porHacer > 0.005 || cuenta.estado !== "ABANDONED");
   const motivoListo = motivo.replace(/\s+/g, " ").trim().length >= 3;
 
   async function cerrar() {

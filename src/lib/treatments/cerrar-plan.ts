@@ -8,7 +8,7 @@
 //
 // El ejecutor (`cerrar-plan.server.ts`) solo escribe lo que aquí se decide.
 
-import { round2, spreadInvoiceDiscount, sumInvoiceItems } from "@/lib/invoice-totals";
+import { itemDiscount, round2, spreadInvoiceDiscount, sumInvoiceItems } from "@/lib/invoice-totals";
 import { deudaDeNotaDelPlan, type FilaParaDeuda, type NotaParaDeuda } from "./por-cobrar";
 
 export const MAX_MOTIVO_CIERRE = 300;
@@ -56,9 +56,20 @@ export function ajustarNotaAlCerrar(nota: NotaParaDeuda, filas: ReadonlyMap<stri
   const sale = new Set(salen.map((l) => l.indice));
   const quedan = items.filter((_, i) => !sale.has(i));
 
-  const subtotal = sumInvoiceItems(quedan);
   const parteDelDescuento = spreadInvoiceDiscount(items, round2(Math.max(0, Number(nota.discount) || 0)));
-  const discount = round2(Math.min(subtotal, items.reduce<number>((s, _, i) => (sale.has(i) ? s : s + (parteDelDescuento[i] ?? 0)), 0)));
+  // Revisión t5 (sospecha 1): la nota guardada tiene que recalcularse EXACTAMENTE a su total (el
+  // editor y el timbrado recalculan). Repartir de nuevo el descuento global entre menos líneas mueve el
+  // IVA redondeado 1¢; así que cada línea que se queda lleva SU parte del descuento de la nota como
+  // descuento propio, y el descuento global queda en 0: cada línea conserva su base y su IVA exactos.
+  const quedanConSuParte = items
+    .map((it, i) => ({ it, i }))
+    .filter(({ i }) => !sale.has(i))
+    .map(({ it, i }) => {
+      const parte = parteDelDescuento[i] ?? 0;
+      return parte > 0 ? { ...(it as object), discount: round2(itemDiscount(it) + parte) } : it;
+    });
+  const subtotalFinal = sumInvoiceItems(quedanConSuParte);
+  const discount = 0;
   const total = quedan.length ? d.hecho : 0;
   const pagado = round2(Math.max(0, Number(nota.paid) || 0));
   const aFavor = round2(Math.max(0, pagado - total));
@@ -75,9 +86,9 @@ export function ajustarNotaAlCerrar(nota: NotaParaDeuda, filas: ReadonlyMap<stri
   });
 
   return {
-    items: quedan,
+    items: quedanConSuParte,
     quitadas: salen.map((l) => ({ indice: l.indice, nombre: nombreDe(items[l.indice]), importe: l.importe, filaId: l.filaId })),
-    subtotal,
+    subtotal: subtotalFinal,
     discount,
     total,
     aFavor,

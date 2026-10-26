@@ -29,6 +29,7 @@ import { leerCondicionesDeFacturas } from "@/lib/invoices/condiciones-pago-db";
 import { montoSugeridoDeCobro } from "@/lib/invoices/plan-de-pagos";
 import { hoyEnZona } from "@/lib/whatsapp/cobranza/sweep";
 import { avisarCambioDeFactura } from "@/lib/cobro-automatico/gancho";
+import { loQueAunNoSeDebe } from "@/lib/dinero/lo-que-se-debe.server";
 import {
   ESTADOS_DE_REVERSO,
   METODO_MERCADO_PAGO,
@@ -55,6 +56,11 @@ export interface DepsFacturaMp {
   consultarPago: (token: string, paymentId: string) => Promise<MercadoPagoPayment | null>;
   ahora: () => Date;
   baseUrl: () => string | null;
+  /**
+   * Cuánto del saldo de la factura aún no se debe (26-oct, Rafael): lo por hacer de una nota de plan
+   * o lo por vencer de ortodoncia «Precio total». El link cobra solo lo debido.
+   */
+  aunNoSeDebe: (clinicId: string, invoiceId: string) => Promise<number>;
 }
 
 export const depsReales: DepsFacturaMp = {
@@ -68,10 +74,14 @@ export const depsReales: DepsFacturaMp = {
   consultarPago: (token, paymentId) => getPayment(token, paymentId, { throwOnAuthError: true }),
   ahora: () => new Date(),
   baseUrl: urlBaseApp,
+  aunNoSeDebe: async (clinicId, invoiceId) => (await loQueAunNoSeDebe(clinicId, { ids: [invoiceId] })).porFactura[invoiceId] ?? 0,
 };
 
 function deps(over?: Partial<DepsFacturaMp>): DepsFacturaMp {
-  return over ? { ...depsReales, ...over } : depsReales;
+  if (!over) return depsReales;
+  // Con otra base (un doble de prueba) no se pregunta a la de verdad qué se debe.
+  const aunNoSeDebe = over.aunNoSeDebe ?? (over.db && over.db !== depsReales.db ? async () => 0 : depsReales.aunNoSeDebe);
+  return { ...depsReales, ...over, aunNoSeDebe };
 }
 
 /** Tabla o columna que todavía no existe (el SQL va por detrás del deploy). */
@@ -172,6 +182,9 @@ export async function obtenerLinkDeFactura(
   const cred = await d.credencial(clinicId);
   if (!cred || !base) return fallo("sin_mp");
 
+  // Fuera del candado (solo lee): lo que aún no se debe de esta factura. Tolerante: 0 si falla.
+  const noSeDebe = await d.aunNoSeDebe(clinicId, invoiceId).catch(() => 0);
+
   let viejos: { mpPreferenceId: string | null }[] = [];
   let resultado: ResultadoLink;
   try {
@@ -197,8 +210,13 @@ export async function obtenerLinkDeFactura(
           clinicId, invoiceIds: [invoiceId],
         });
         const hoy = hoyEnZona(ahora, inv.clinic?.timezone || "America/Mexico_City");
-        const saldo = montoSugeridoDeCobro(condicionesPorFactura.get(invoiceId) ?? null, inv.total, inv.paid, hoy)
+        const sugerido = montoSugeridoDeCobro(condicionesPorFactura.get(invoiceId) ?? null, inv.total, inv.paid, hoy)
           || saldoPorCobrar(inv);
+        // 26-oct (Rafael): el link cobra solo lo DEBIDO —de una nota de plan, lo hecho menos lo pagado;
+        // de ortodoncia «Precio total», lo vencido—. Si aún no se debe nada, no hay link.
+        const debido = noSeDebe > 0 ? redondear2(Math.max(0, saldoPorCobrar(inv) - noSeDebe)) : null;
+        if (debido !== null && debido <= 0.005) return fallo("sin_saldo");
+        const saldo = debido === null ? sugerido : redondear2(Math.min(sugerido, debido));
         if (saldo < MINIMO_LINK_MXN) return fallo("bajo_minimo");
 
         const pendientes = await tx.invoicePaymentLink.findMany({

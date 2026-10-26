@@ -1441,11 +1441,13 @@ export function PatientDetailClient({
   // 26-oct (Rafael): de una nota de plan solo se debe lo hecho menos lo pagado, y de ortodoncia
   // «Precio total a plazos» lo vencido. La cabecera dice lo que se debe de verdad (lo mismo que
   // Pacientes, Caja y la cuenta del plan); «Estado de cuenta» sigue con las facturas y dice aparte
-  // cuánto de su saldo aún no se debe. Se relee cuando cambian las facturas.
+  // cuánto de su saldo aún no se debe. Se relee cuando cambian las facturas Y cuando cambian las
+  // cuentas de los planes («marcar hecho» no cambia ninguna factura, pero sí lo que se debe — t5, N1).
   const aunNoSeDebe = useLoQueAunNoSeDebe(
     patient.id,
     canViewBilling && totalBalance > 0,
-    (invoices as any[]).map((inv) => `${inv.id}:${inv.balance}:${inv.status}`).join(","),
+    `${refrescoCuentas}|${planesDelServidor.map((p: any) => p.id + p.updatedAt).join(",")}|` +
+      (invoices as any[]).map((inv) => `${inv.id}:${inv.balance}:${inv.status}`).join(","),
   );
   const saldoQueSeDebe = Math.max(0, Math.round((totalBalance - aunNoSeDebe) * 100) / 100);
   // ws1-t2 (F3 de la auditoría BEVADENT: «Total tratamiento $700 · 100% cubierto» con un plan de
