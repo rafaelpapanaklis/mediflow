@@ -29,6 +29,10 @@
 //   lectura de otras sedes.
 // · Un fallo de `to_regclass` se recuerda unos segundos (M4): con la base mal,
 //   no se le añade una consulta extra a cada petición.
+// · v3 (m2): lo mismo con el fallo de la lista y con la fila de cada sede: una
+//   sola consulta de fila en vuelo por sede y su resultado recordado 5 s.
+// · v3 (m1): `invalidarLista()` sube una generación; una lectura que estaba en
+//   vuelo cuando se escribió una clave no se guarda como lista fresca.
 import { randomUUID } from "crypto";
 import { prisma } from "@/lib/prisma";
 import type { EstadoClave, Intento } from "./core";
@@ -42,10 +46,29 @@ export const EDAD_MAX_LISTA_VIEJA_MS = 5 * 60_000;
 export const TOPE_LECTURA_MS = 3_000;
 /** M4: cuánto se recuerda que `to_regclass` falló. */
 export const RECORDAR_FALLO_SONDA_MS = 5_000;
+/**
+ * v3 (m2): con la base caída, cuánto se recuerda que la lista falló y el
+ * resultado (o el fallo) de la fila de cada sede. Así cada petición no deja su
+ * propia consulta colgando en el pooler: una por sede cada 5 s como mucho.
+ */
+export const RECORDAR_FALLO_BASE_MS = 5_000;
+/** Tope de sedes recordadas (las del dueño activo; se vacía si crece). */
+const MAX_FILAS_RECORDADAS = 500;
 
 type Sonda = { existe: boolean; en: number; fallo?: boolean };
 type Lista = { mapa: Map<string, number>; en: number };
-type Memoria = { sonda?: Sonda; lista?: Lista; enCurso?: Promise<Map<string, number>> | null };
+type FilaRecordada = { p: Promise<FilaClave | null>; hasta: number | null };
+type Memoria = {
+  sonda?: Sonda;
+  lista?: Lista;
+  enCurso?: Promise<Map<string, number>> | null;
+  /** v3 (m1): sube con cada invalidación; una lectura empezada antes no escribe. */
+  generacion?: number;
+  /** v3 (m2): cuándo falló por última vez la lista. */
+  falloListaEn?: number;
+  /** v3 (m2): la fila de cada sede leída como respaldo, deduplicada y recordada. */
+  filas?: Map<string, FilaRecordada>;
+};
 const CLAVE = Symbol.for("dalecontrol.sede-clave.estado");
 
 function memoria(): Memoria {
@@ -60,6 +83,9 @@ export function _olvidarEstado(): void {
   delete m.sonda;
   delete m.lista;
   delete m.enCurso;
+  delete m.generacion;
+  delete m.falloListaEn;
+  delete m.filas;
 }
 
 /** Error que el gate lee como «no se pudo comprobar» → cerrado, con ese mensaje. */
@@ -129,23 +155,70 @@ export async function sedesConClaveActiva(): Promise<Map<string, number>> {
   if (!(await tablaExiste())) return new Map();
   const m = memoria();
   if (m.lista && Date.now() - m.lista.en < VIDA_LISTA_MS) return m.lista.mapa;
+  // v3 (m2): la lista acaba de fallar → no se relanza en cada petición.
+  if (!m.enCurso && m.falloListaEn !== undefined && Date.now() - m.falloListaEn < RECORDAR_FALLO_BASE_MS) {
+    if (m.lista && Date.now() - m.lista.en < EDAD_MAX_LISTA_VIEJA_MS) return m.lista.mapa;
+    throw new EstadoDesconocido("la lista falló hace un momento");
+  }
   if (!m.enCurso) {
-    const lectura = conTope(leerLista()).then((mapa) => {
-      m.lista = { mapa, en: Date.now() };
-      return mapa;
-    });
+    // v3 (m1): si mientras tanto alguien invalida (escribió una clave en esta
+    // instancia), lo que trae esta lectura ya es viejo: se devuelve a quien la
+    // esperaba, pero NO se guarda como lista fresca.
+    const generacion = m.generacion ?? 0;
+    const lectura = conTope(leerLista()).then(
+      (mapa) => {
+        if ((m.generacion ?? 0) === generacion) {
+          m.lista = { mapa, en: Date.now() };
+          delete m.falloListaEn;
+        }
+        return mapa;
+      },
+      (e) => {
+        m.falloListaEn = Date.now();
+        throw e;
+      },
+    );
     m.enCurso = lectura;
     lectura.then(
       () => { if (m.enCurso === lectura) m.enCurso = null; },
       () => { if (m.enCurso === lectura) m.enCurso = null; },
     );
   }
+  const enVuelo = m.enCurso!;
   try {
-    return await m.enCurso!;
+    return await enVuelo;
   } catch (e) {
     if (m.lista && Date.now() - m.lista.en < EDAD_MAX_LISTA_VIEJA_MS) return m.lista.mapa;
     throw new EstadoDesconocido(e);
   }
+}
+
+/**
+ * v3 (m2): la fila de UNA sede como respaldo cuando la lista no se lee: una
+ * sola consulta en vuelo por sede y su resultado (o su fallo) recordado 5 s.
+ * `conTope` deja de esperar a los 3 s pero no puede cancelar la consulta; lo
+ * que evita que se acumulen es que no se lance otra mientras tanto.
+ */
+function filaDeRespaldo(clinicId: string): Promise<FilaClave | null> {
+  const m = memoria();
+  if (!m.filas) m.filas = new Map();
+  const ahora = Date.now();
+  const r = m.filas.get(clinicId);
+  if (r && (r.hasta === null || ahora < r.hasta)) return r.p;
+  if (m.filas.size >= MAX_FILAS_RECORDADAS) m.filas.clear();
+  const generacion = m.generacion ?? 0;
+  const p = conTope(leerFilaClave(clinicId));
+  const recordada: FilaRecordada = { p, hasta: null };
+  m.filas.set(clinicId, recordada);
+  const vence = () => {
+    if ((m.generacion ?? 0) !== generacion) {
+      if (m.filas?.get(clinicId) === recordada) m.filas.delete(clinicId);
+      return;
+    }
+    recordada.hasta = Date.now() + RECORDAR_FALLO_BASE_MS;
+  };
+  p.then(vence, vence);
+  return p;
 }
 
 function deLaFila(f: FilaClave | null): EstadoClave {
@@ -165,7 +238,7 @@ export async function estadoDeClave(clinicId: string): Promise<EstadoClave> {
     return v === undefined ? { activa: false, version: 0 } : { activa: true, version: v };
   } catch {
     try {
-      return deLaFila(await conTope(leerFilaClave(clinicId)));
+      return deLaFila(await filaDeRespaldo(clinicId));
     } catch (e) {
       throw new EstadoDesconocido(e);
     }
@@ -192,7 +265,7 @@ export async function estadosDeClaves(clinicIds: readonly string[]): Promise<Map
     // En serie: son las sedes de una persona y la base ya va mal.
     for (const id of ids) {
       try {
-        out.set(id, deLaFila(await conTope(leerFilaClave(id))));
+        out.set(id, deLaFila(await filaDeRespaldo(id)));
       } catch {
         out.set(id, null);
       }
@@ -201,9 +274,19 @@ export async function estadosDeClaves(clinicIds: readonly string[]): Promise<Map
   }
 }
 
-/** Tras escribir: la siguiente lectura de esta instancia va a la base. */
+/**
+ * Tras escribir: la siguiente lectura de esta instancia va a la base. v3 (m1):
+ * sube la generación, así una lectura que ya estaba en vuelo no vuelve a
+ * guardar como fresca la lista de antes del cambio; y olvida las filas
+ * recordadas y la lectura en curso.
+ */
 export function invalidarLista(): void {
-  delete memoria().lista;
+  const m = memoria();
+  m.generacion = (m.generacion ?? 0) + 1;
+  delete m.lista;
+  m.enCurso = null;
+  delete m.falloListaEn;
+  m.filas?.clear();
 }
 
 // ── Lecturas frescas (rutas de la clave) ───────────────────────────────

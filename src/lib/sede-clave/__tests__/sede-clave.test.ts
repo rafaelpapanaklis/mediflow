@@ -82,9 +82,16 @@ const db = {
 };
 
 async function consulta(strings: TemplateStringsArray, v: any[], candadosDeLaTx: string[] | null) {
+  // La base «lee» al recibir la consulta y la respuesta tarda en volver: lo que
+  // cambie mientras tanto no sale en esta respuesta (v3, m1).
+  const resultado = consultaYa(strings, v, candadosDeLaTx);
+  if (db.retraso) await new Promise((r) => setTimeout(r, db.retraso));
+  return resultado;
+}
+
+function consultaYa(strings: TemplateStringsArray, v: any[], candadosDeLaTx: string[] | null) {
   const sql = strings.join("?").replace(/\s+/g, " ");
   db.consultas.push(sql);
-  if (db.retraso) await new Promise((r) => setTimeout(r, db.retraso));
   if (sql.includes("to_regclass")) {
     if (db.falloSonda) throw new Error("pooler caído (sonda)");
     return [{ existe: db.tablas }];
@@ -798,10 +805,17 @@ test("A1 · si ni la lista ni la fila se leen: se corta con «no pudimos comprob
   assert.equal(sw.status, 503);
   assert.equal(sw.body.code, "sede_sin_comprobar");
   assert.match(sw.body.error, /No pudimos comprobar/);
-  // En cuanto la base responde, se abre solo.
+  // En cuanto la base responde, se abre solo (pasados los 5 s en que se recuerda el fallo).
   db.falloLista = false;
   db.falloFila = false;
-  assert.equal((await getAuthContext())?.clinicId, CLI_OTRA);
+  const realNow = Date.now;
+  try {
+    const base = realNow();
+    Date.now = () => base + 6_000;
+    assert.equal((await getAuthContext())?.clinicId, CLI_OTRA);
+  } finally {
+    Date.now = realNow;
+  }
 });
 
 test("A1 · en las vistas de varias sedes solo cuenta como cerrada la sede que no se pudo comprobar", async () => {
@@ -920,6 +934,64 @@ test("M5 · al registrar un intento se purgan los de más de 1 día (como mucho 
   await new Promise((r) => setTimeout(r, 20));
   assert.equal(db.consultas.filter((q) => q.includes("DELETE FROM")).length, 1, "una purga por hora");
   assert.ok(db.claves.get(CLI_3)?.claveHash, "la purga no toca las claves");
+});
+
+test("m1 (v3) · una lectura de la lista en vuelo no pisa la invalidación de una clave recién escrita", async () => {
+  const est = await import("../estado.server");
+  como(SB_DUENO, CLI_3);
+  assert.equal(await estadoGate(SB_DUENO, CLI_3), "libre"); // instancia caliente (sonda y lista)
+  const realNow = Date.now;
+  try {
+    const base = realNow();
+    Date.now = () => base + 11_000; // caducó la caché de 10 s
+    db.retraso = 100;
+    const enVuelo = est.sedesConClaveActiva(); // lee la lista SIN clave y tarda 100 ms
+    await new Promise((r) => setTimeout(r, 10));
+    // Mientras tanto, en ESTA instancia, el admin activa la clave (escribe + invalida).
+    db.claves.set(CLI_3, { claveHash: "$2a$10$x", version: 1, actualizadaPor: "user:u-admin-3" });
+    est.invalidarLista();
+    assert.equal((await enVuelo).has(CLI_3), false, "la lectura en vuelo trae lo de antes");
+    db.retraso = 0;
+    assert.equal(await estadoGate(SB_DUENO, CLI_3), "cerrada", "pero no se guardó: la clave se exige ya, sin esperar 10 s");
+  } finally {
+    Date.now = realNow;
+    db.retraso = 0;
+  }
+});
+
+test("m2 (v3) · con la lista caída, la fila de cada sede se lee una vez (en vuelo y 5 s después), no una por petición", async () => {
+  await activarComoAdmin3();
+  const { _olvidarEstado } = await import("../estado.server");
+  _olvidarEstado();
+  db.falloLista = true;
+  db.retraso = 50;
+  db.consultas = [];
+  como(SB_OTRO, CLI_OTRA);
+  await Promise.all(Array.from({ length: 10 }, () => getAuthContext()));
+  for (let i = 0; i < 10; i++) await getAuthContext();
+  const filas = db.consultas.filter((q) => q.includes(`SELECT "claveHash", "version" FROM "sede_claves"`)).length;
+  const listas = db.consultas.filter((q) => q.includes(`WHERE "claveHash" IS NOT NULL`)).length;
+  assert.equal(filas, 1, `consultas de fila = ${filas}`);
+  assert.equal(listas, 1, `lecturas de la lista = ${listas}`);
+  // Con la base caída del todo, el fallo también se recuerda: «no se pudo comprobar» sin otra consulta.
+  db.retraso = 0;
+  db.falloFila = true;
+  _olvidarEstado();
+  db.consultas = [];
+  for (let i = 0; i < 10; i++) assert.equal(await estadoGate(SB_DUENO, CLI_3), "sin_comprobar");
+  assert.equal(db.consultas.filter((q) => q.includes(`SELECT "claveHash", "version" FROM "sede_claves"`)).length, 1);
+  // Pasados los 5 s, se vuelve a intentar (y si la base ya responde, se abre/cierra según la clave).
+  db.falloFila = false;
+  db.falloLista = false;
+  const realNow = Date.now;
+  try {
+    const base = realNow();
+    Date.now = () => base + 6_000;
+    assert.equal(await estadoGate(SB_DUENO, CLI_3), "cerrada");
+    assert.equal(await estadoGate(SB_OTRO, CLI_OTRA), "libre");
+  } finally {
+    Date.now = realNow;
+  }
 });
 
 // ══════════════════ 9b · G1: copiar la configuración al crear una sede ══════════════════
