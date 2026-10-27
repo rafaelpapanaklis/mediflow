@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { queryAuditLogs } from "@/lib/admin/audit";
+import { sedesAjenasPara, taparFilaDeBitacora } from "@/lib/admin/audit-sedes-ajenas";
 
 export const dynamic = "force-dynamic";
 
@@ -26,5 +27,8 @@ export async function GET(req: NextRequest) {
     pageSize: parseInt(sp.get("pageSize") || "50", 10) || 50,
   });
 
-  return NextResponse.json(result);
+  // ws1-t4 v8: lo que una fila diga de otra sede del dueño a la que quien mira no tiene acceso
+  // (nombre, slug, id) sale como «otra sede». Las filas de la base no se tocan.
+  const ajenas = await sedesAjenasPara(ctx.clinicId, ctx.user?.supabaseId);
+  return NextResponse.json({ ...result, rows: result.rows.map((r) => taparFilaDeBitacora(r, ajenas)) });
 }

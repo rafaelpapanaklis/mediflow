@@ -23,6 +23,7 @@ let cerradas = new Set<string>();
 let leidas: string[] = [];
 let copiadasDe: string[] = [];
 let banderasDe: string[] = [];
+let bitacora: any[] = [];
 
 beforeEach(() => {
   conClave = new Set();
@@ -30,6 +31,7 @@ beforeEach(() => {
   leidas = [];
   copiadasDe = [];
   banderasDe = [];
+  bitacora = [];
 });
 
 const prismaStub: any = {
@@ -62,7 +64,7 @@ const dobles: Record<string, unknown> = {
   "@/lib/billing/plan-overrides": { inheritedOverridesData: () => ({}) },
   "@/lib/active-clinic": { writeActiveClinicCookie: () => undefined },
   "@/lib/failban": { persistentRateLimit: async () => null },
-  "@/lib/audit": { logMutation: async () => undefined },
+  "@/lib/audit": { logMutation: async (a: any) => { bitacora.push(a); } },
   "@/lib/google/bandera-sede.server": { heredarBanderaGoogle: async (de: string) => { banderasDe.push(`google:${de}`); } },
   "@/lib/branches": {
     getBranchQuota: async () => ({ canCreate: true, used: 2, max: null }),
@@ -145,4 +147,19 @@ test("G1 · sin «copiar»: no se copia nada, sin aviso, y las banderas no salen
   assert.deepEqual(copiadasDe, []);
   assert.equal(r.body.avisoCopia, null);
   assert.ok(banderasDe.every((b) => b.endsWith(ACTIVA.id)), `banderas: ${banderasDe}`);
+});
+
+test("🔴 v8 (M-1 de t8): el detalle del alta va a la bitácora de la sede NUEVA; en la activa, solo el id", async () => {
+  const r = await crearSede();
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const altas = bitacora.filter((b) => b.entityType === "clinic" && b.action === "create" && b.entityId === "c-nueva");
+  assert.equal(altas.length, 2);
+  const enLaActiva = altas.find((b) => b.clinicId === ACTIVA.id);
+  const enLaNueva = altas.find((b) => b.clinicId === "c-nueva");
+  assert.deepEqual(enLaActiva.after, { sedeNueva: "c-nueva" }, "ni nombre, ni slug, ni plan en la sede desde la que se creó");
+  assert.ok(!JSON.stringify(enLaActiva).includes("Centro Dental Nueva"));
+  assert.equal(enLaNueva.after.name, "Centro Dental Nueva");
+  assert.equal(enLaNueva.after.slug, "c-nueva");
+  assert.equal(enLaNueva.after.branchOf, ACTIVA.id);
+  assert.equal(enLaNueva.userId, "u-nuevo", "firma la ficha del dueño en la sede nueva");
 });

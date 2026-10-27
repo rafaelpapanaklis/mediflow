@@ -341,11 +341,22 @@ export async function POST(req: NextRequest) {
       logError("[api/clinics POST] heredar la bandera de Google", e);
     }
 
-    // Auditoría en la clínica DESDE la que se creó (ahí vive el actor).
+    // ws1-t4 v8 (M-1 de t8): el detalle del alta va a la bitácora de la sede NUEVA, firmado por
+    // la ficha del dueño ahí. En la sede desde la que se creó solo queda el id: sus admins no
+    // tienen por qué tener acceso a la nueva (ni leer su nombre, slug ni plan en Auditoría).
     await logMutation({
       req,
       clinicId: ctx.clinicId,
       userId: ctx.userId,
+      entityType: "clinic",
+      entityId: clinic.id,
+      action: "create",
+      after: { sedeNueva: clinic.id },
+    });
+    await logMutation({
+      req,
+      clinicId: clinic.id,
+      userId: clinic.users[0]?.id ?? ctx.userId,
       entityType: "clinic",
       entityId: clinic.id,
       action: "create",
