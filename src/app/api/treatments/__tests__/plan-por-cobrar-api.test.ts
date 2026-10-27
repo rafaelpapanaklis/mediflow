@@ -703,6 +703,52 @@ test("v11: quién puede — treatments.edit (el doctor, en sus planes) y SUPER_A
   assert.equal((await deshacer()).status, 404);
 });
 
+test("v13: lo que dice la tarjeta con las respuestas REALES de la ruta — 403 sin código y plan sin nota (n1, n2)", async (t) => {
+  if (salta(t)) return;
+  await usar();
+  const { marcarHecho, deshacerHecho, errorDeHecho, ayudaHablaDeDebe } = await import("@/lib/treatments/marcar-hecho-cliente");
+  const { getDict } = await import("@/i18n/dictionaries");
+  const { makeT } = await import("@/i18n/t");
+  const en = makeT(getDict("en"));
+  const errEn = (getDict("en") as any).planTratamiento.hecho.error;
+  // El fetch de la tarjeta, contestado por el PATCH real.
+  const porLaRuta = (planId: string) => async (_url: string, init?: RequestInit) => {
+    const { PATCH } = await import("@/app/api/treatments/[id]/route");
+    await base.db.exec(`ALTER TABLE "procedure_catalog" ADD COLUMN IF NOT EXISTS "code" text`);
+    return PATCH(pedir(`/api/treatments/${planId}`, JSON.parse(String(init?.body)), "PATCH"), params(planId));
+  };
+
+  // n1: plan creado y SIN aceptar → sus filas no tienen nota; la cuenta dice debe 0 sin cuotas, pero la
+  // ayuda no promete «Debe» (y de verdad «Hecho» no lo mueve).
+  const { POST } = await import("@/app/api/treatments/route");
+  const sinAceptar = (await leer(await POST(pedir("/api/treatments", { patientId: "pac-c1", name: "Sin aceptar", description: "▸ texto", items: ITEMS })))).body.id as string;
+  const filasSin = await filas(sinAceptar);
+  assert.ok(filasSin.every((f: any) => f.invoiceId === null));
+  const c = await cuenta(sinAceptar);
+  assert.equal(c.aCuotas, false);
+  assert.equal(ayudaHablaDeDebe(!c.aCuotas, filasSin), false);
+  assert.equal((await marcarHecho(sinAceptar, [filasSin[0].id], null, porLaRuta(sinAceptar))).ok, true);
+  assert.equal((await cuenta(sinAceptar)).debe, 0, "«Hecho» no crea cobros");
+  // Aceptado: sí.
+  const { planId } = await planAceptado();
+  assert.equal(ayudaHablaDeDebe(!(await cuenta(planId)).aCuotas, await filas(planId)), true);
+
+  // n2: recepción sin el permiso → la ruta contesta 403 SIN código; la tarjeta dice «permiso», no «couldn't be marked».
+  const resina = (await filas(planId)).find((f: any) => f.nombre === "Resina");
+  Object.assign(ctx, { userId: "rec-c1", role: "RECEPTIONIST", isDoctor: false, permissionsOverride: ["treatments.view"] });
+  const m = await marcarHecho(planId, [resina.id], null, porLaRuta(planId));
+  assert.deepEqual({ ok: m.ok, status: m.status, codigo: m.codigo }, { ok: false, status: 403, codigo: undefined });
+  assert.equal(errorDeHecho(en, m, "marcar"), errEn.sin_permiso);
+  const d = await deshacerHecho(planId, resina.id, porLaRuta(planId));
+  assert.equal(d.status, 403);
+  assert.equal(errorDeHecho(en, d, "deshacer"), errEn.sin_permiso);
+  // Con código (deshacer algo que no está hecho → 409 no_esta_hecha), su texto.
+  Object.assign(ctx, { userId: "doc-c1", role: "ADMIN", permissionsOverride: null });
+  const d2 = await deshacerHecho(planId, resina.id, porLaRuta(planId));
+  assert.equal(d2.codigo, "no_esta_hecha");
+  assert.equal(errorDeHecho(en, d2, "deshacer"), errEn.no_esta_hecha);
+});
+
 test("v11: plan cerrado (Abandonado) — no se marca ni se deshace", async (t) => {
   if (salta(t)) return;
   await usar();

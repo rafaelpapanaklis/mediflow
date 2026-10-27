@@ -18,7 +18,7 @@ import toast from "react-hot-toast";
 import { CheckCircle2, Circle, RotateCcw } from "lucide-react";
 import { useLocale, useT } from "@/i18n/i18n-provider";
 import { fechaPanel } from "@/lib/formato-fecha-panel";
-import { avisoDeDeshacer, avisoDeHecho, deshacerHecho, errorDeHecho, ESTADOS_DE_PLAN_SIN_HECHO, marcarHecho } from "@/lib/treatments/marcar-hecho-cliente";
+import { avisoDeDeshacer, avisoDeHecho, ayudaHablaDeDebe, deshacerHecho, errorDeHecho, ESTADOS_DE_PLAN_SIN_HECHO, marcarHecho } from "@/lib/treatments/marcar-hecho-cliente";
 import { CONDITIONS } from "@/components/dashboard/odontogram-v2/data";
 import type { FilaDto } from "@/lib/treatments/items";
 import s from "./expediente.module.css";
@@ -81,6 +81,8 @@ export function ProcedimientosDelPlan({ planId, estadoDelPlan, filas, puede, deb
   if (vivas.length === 0) return null;
   const cerrado = ESTADOS_DE_PLAN_SIN_HECHO.includes(estadoDelPlan);
   const conBotones = puede && !cerrado;
+  // v13 (t5, n1): «pasa a Debe» solo si lo que falta por hacer ya está en una nota de cobro.
+  const conDebe = ayudaHablaDeDebe(debeSigueLoHecho, vivas);
 
   async function marcar(f: FilaDto) {
     if (ocupada) return;
@@ -88,7 +90,7 @@ export function ProcedimientosDelPlan({ planId, estadoDelPlan, filas, puede, deb
     try {
       const r = await marcarHecho(planId, [f.id], null);
       if (!r.ok) {
-        toast.error(errorDeHecho(t, r));
+        toast.error(errorDeHecho(t, r, "marcar"));
         return;
       }
       onFilas(vivas.map((x) => (x.id === f.id ? { ...x, estado: "hecho", hechoEn: new Date().toISOString() } : x)));
@@ -106,7 +108,7 @@ export function ProcedimientosDelPlan({ planId, estadoDelPlan, filas, puede, deb
     try {
       const r = await deshacerHecho(planId, f.id);
       if (!r.ok) {
-        toast.error(errorDeHecho(t, r));
+        toast.error(errorDeHecho(t, r, "deshacer"));
         return;
       }
       const vuelve = r.estado === "en_curso" ? "en_curso" : "pendiente";
@@ -167,8 +169,8 @@ export function ProcedimientosDelPlan({ planId, estadoDelPlan, filas, puede, deb
         })}
       </ul>
       {conBotones && vivas.some((f) => f.estado !== "hecho") && (
-        <p className={s.cuentaPlanAyuda} data-procedimientos-ayuda={debeSigueLoHecho ? "debe" : "odontograma"}>
-          {t(debeSigueLoHecho ? "planTratamiento.hecho.ayudaTarjeta" : "planTratamiento.hecho.ayudaTarjetaSinDebe")}
+        <p className={s.cuentaPlanAyuda} data-procedimientos-ayuda={conDebe ? "debe" : "odontograma"}>
+          {t(conDebe ? "planTratamiento.hecho.ayudaTarjeta" : "planTratamiento.hecho.ayudaTarjetaSinDebe")}
         </p>
       )}
       {puede && cerrado && <p className={s.cuentaPlanAyuda} data-procedimientos-cerrado>{t("planTratamiento.hecho.planCerrado")}</p>}
