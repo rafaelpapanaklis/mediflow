@@ -2638,7 +2638,8 @@
     "consult": {
       "draftCreateFailed": "No se pudo crear borrador",
       "completedSigned": "Consulta completada y firmada",
-      "completeFailed": "No se pudo completar"
+      "completeFailed": "No se pudo completar",
+      "completeSlow": "La consulta está tardando en completarse. Revisa tu conexión: si en un momento no se cierra, vuelve a pulsar «Completar consulta»."
     },
     "attach": {
       "success": "Archivo adjunto",
@@ -10758,6 +10759,7 @@
       "pagado": "Pagado",
       "debe": "Debe",
       "saldoAFavor": "Saldo a favor",
+      "pagadoPorAdelantado": "Pagado por adelantado",
       "porHacer": "Por hacer",
       "vencidoDe": "De lo que debe, {monto} ya venció (se hizo hace más de 30 días).",
       "tambienAFavor": "Además, otra nota del plan lleva {monto} pagados por adelantado.",

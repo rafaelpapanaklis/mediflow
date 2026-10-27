@@ -159,9 +159,13 @@ export function CuentaDelPlan({ cuenta, cargando, onCobrar, puedeCerrar, onCambi
           <dt>{t("planTratamiento.cobro.pagado")}</dt>
           <dd className={s.cuentaPlanExito}>{fmtMXNdec(c.pagado)}</dd>
         </div>
+        {/* v9 (revisión t5 de la v8, M1): lo pagado de más sobre lo hecho SIGUE EN LA NOTA del plan: es un adelanto,
+            no saldo a favor (eso es solo el libro `patient_credits`, lo que se descuenta de otra factura). Pasa al
+            libro al «Cerrar plan», y entonces aquí da 0 y sale como saldo a favor en «Estado de cuenta». Igual
+            que «De lo por hacer, $X ya están pagados» de «Estado de cuenta». */}
         {c.saldoAFavor > 0.005 && c.debe <= 0.005 ? (
-          <div data-cifra="saldo-a-favor">
-            <dt>{t("planTratamiento.cobro.saldoAFavor")}</dt>
+          <div data-cifra="pagado-por-adelantado">
+            <dt>{t("planTratamiento.cobro.pagadoPorAdelantado")}</dt>
             <dd className={s.cuentaPlanExito}>{fmtMXNdec(c.saldoAFavor)}</dd>
           </div>
         ) : (

@@ -175,9 +175,9 @@ test("v8 · V1 (caso de la QA): plan $2,600, $800 hecho, $1,000 pagado → debe 
 test("v8 · V2: «Completar consulta» una sola a la vez (ref + botones desactivados) y sin guardar dos veces", () => {
   const ficha = leer("src/app/dashboard/patients/[id]/patient-detail-client.tsx");
   const desde = ficha.indexOf("const handleEndConsult = useCallback(");
-  const guardia = ficha.slice(desde, ficha.indexOf("}, []);", desde));
+  const guardia = ficha.slice(desde, ficha.indexOf("}, [t]);", desde));
   assert.match(guardia, /if \(completandoConsultaRef\.current\) return;\n\s*completandoConsultaRef\.current = true;\n\s*setCompletandoConsulta\(true\);/);
-  assert.match(guardia, /finally \{\n\s*completandoConsultaRef\.current = false;\n\s*setCompletandoConsulta\(false\);/);
+  assert.match(guardia, /finally \{\n\s*if \(tope\) clearTimeout\(tope\);\n\s*completandoConsultaRef\.current = false;\n\s*setCompletandoConsulta\(false\);/);
   assert.match(ficha, /cerrarConsultaRef\.current = cerrarConsulta;/);
   assert.match(ficha, /onClose=\{\(\) => handleEndConsult\(\)\}\n\s*ocupado=\{completandoConsulta\}/);
   const barra = leer("src/components/dashboard/patient-detail/consult-bar.tsx");
@@ -198,4 +198,30 @@ test("v8 · V3 y sospecha 1: el motivo de la barra cuenta; vitales, exploración
   assert.match(ficha, /barraEnLaNota = !!r\?\.ok;/);
   assert.match(ficha, /const motivoODiagnostico = barraEnLaNota && !!\(borrador\.subjective\.trim\(\) \|\| borrador\.assessment\.trim\(\)\);/);
   assert.match(ficha, /guardarConsulta\(\{ motivoODiagnostico \}\)/);
+});
+
+test("v9 · M1: la Cuenta del plan llama «Pagado por adelantado» a lo pagado de más sobre lo hecho; «saldo a favor» es solo el libro", () => {
+  const tarjeta = leer("src/components/dashboard/expediente-rediseno/cuenta-del-plan.tsx");
+  assert.match(tarjeta, /<div data-cifra="pagado-por-adelantado">\n\s*<dt>\{t\("planTratamiento\.cobro\.pagadoPorAdelantado"\)\}<\/dt>/);
+  assert.doesNotMatch(tarjeta, /planTratamiento\.cobro\.saldoAFavor/, "ningún «Saldo a favor» para dinero que sigue en la nota");
+  const es = JSON.parse(leer("src/i18n/dictionaries/es.json"));
+  const en = JSON.parse(leer("src/i18n/dictionaries/en.json"));
+  assert.equal(es.planTratamiento.cobro.pagadoPorAdelantado, "Pagado por adelantado");
+  assert.equal(en.planTratamiento.cobro.pagadoPorAdelantado, "Paid in advance");
+  // Lo que dice lo mismo en «Estado de cuenta» y la ayuda de la tarjeta: «pagados por adelantado», no «a favor».
+  assert.match(es.patients.sideCards.pagadoDeLoPorHacer, /ya están pagados/);
+  assert.match(es.planTratamiento.cobro.tambienAFavor, /pagados por adelantado/);
+  assert.doesNotMatch(es.planTratamiento.cobro.ayudaAdelanto, /a favor/);
+});
+
+test("v9 · observación 1: «Completar consulta» tiene tope: pasado, suelta los botones y avisa", () => {
+  const ficha = leer("src/app/dashboard/patients/[id]/patient-detail-client.tsx");
+  assert.match(ficha, /const TOPE_COMPLETAR_CONSULTA_MS = 90_000;/);
+  const desde = ficha.indexOf("const handleEndConsult = useCallback(");
+  const guardia = ficha.slice(desde, ficha.indexOf("}, [t]);", desde));
+  assert.match(guardia, /Promise\.race\(\[/);
+  assert.match(guardia, /setTimeout\(\(\) => resolver\("tarda"\), TOPE_COMPLETAR_CONSULTA_MS\)/);
+  assert.match(guardia, /if \(resultado === "tarda"\) toast\.error\(t\("patients\.consult\.completeSlow"\)/);
+  const es = JSON.parse(leer("src/i18n/dictionaries/es.json"));
+  assert.ok(es.patients.consult.completeSlow);
 });

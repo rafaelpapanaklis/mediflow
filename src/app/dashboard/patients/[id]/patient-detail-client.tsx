@@ -222,6 +222,8 @@ const ImplantsTab = dynamicImport(
 // lógica de detección y los renders condicionales abajo.
 /** Un solo aviso «Iniciando consulta…» aunque se pulse desde la cabecera y desde Ortodoncia. */
 const TOAST_INICIANDO_CONSULTA = "iniciando-consulta";
+/** v9: tope de «Completar consulta» (guardado + cierre) antes de soltar los botones y avisar. */
+const TOPE_COMPLETAR_CONSULTA_MS = 90_000;
 
 function detectSpecialty(_raw: string) {
   return "dental";
@@ -1805,18 +1807,27 @@ export function PatientDetailClient({
   // el SOAP llaman aquí; desde la v7 antes de `/complete` va el guardado entero del formulario (segundos), y un
   // segundo clic en ese rato firmaba el borrador sin lo del formulario o lo guardaba dos veces (otra nota
   // suelta y otro borrador de cobro). La ref corta en seco; el estado desactiva los botones mientras corre.
+  // v9 (revisión t5 de la v8, observación 1): `fetch` no tiene tope; una petición que no contesta dejaba
+  // «Completar» y la X desactivados hasta recargar. Pasado `TOPE_COMPLETAR_CONSULTA_MS` la guardia se suelta y
+  // se avisa (el guardado del formulario en curso se sigue reutilizando: no se duplica la nota).
   const completandoConsultaRef = useRef(false);
   const handleEndConsult = useCallback(async (draft?: SoapDraft) => {
     if (completandoConsultaRef.current) return;
     completandoConsultaRef.current = true;
     setCompletandoConsulta(true);
+    let tope: ReturnType<typeof setTimeout> | undefined;
     try {
-      await cerrarConsultaRef.current(draft);
+      const resultado = await Promise.race([
+        cerrarConsultaRef.current(draft).then(() => "listo" as const),
+        new Promise<"tarda">((resolver) => { tope = setTimeout(() => resolver("tarda"), TOPE_COMPLETAR_CONSULTA_MS); }),
+      ]);
+      if (resultado === "tarda") toast.error(t("patients.consult.completeSlow"), { duration: 10000 });
     } finally {
+      if (tope) clearTimeout(tope);
       completandoConsultaRef.current = false;
       setCompletandoConsulta(false);
     }
-  }, []);
+  }, [t]);
   const cerrarConsultaRef = useRef<(draft?: SoapDraft) => Promise<void>>(async () => {});
 
   // C-65 (segunda auditoría): `draft` = lo que el SOAP manda al pulsar «Firmar y completar». Sin él se leía el estado

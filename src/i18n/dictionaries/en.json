@@ -2638,7 +2638,8 @@
     "consult": {
       "draftCreateFailed": "Could not create draft",
       "completedSigned": "Consultation completed and signed",
-      "completeFailed": "Could not complete"
+      "completeFailed": "Could not complete",
+      "completeSlow": "Completing the consultation is taking a while. Check your connection: if it doesn't close shortly, press «Complete consultation» again."
     },
     "attach": {
       "success": "File attached",
@@ -10758,6 +10759,7 @@
       "pagado": "Paid",
       "debe": "Owes",
       "saldoAFavor": "Credit balance",
+      "pagadoPorAdelantado": "Paid in advance",
       "porHacer": "To do",
       "vencidoDe": "Of what they owe, {monto} is overdue (done more than 30 days ago).",
       "tambienAFavor": "Also, another note of this plan has {monto} paid in advance.",
