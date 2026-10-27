@@ -89,6 +89,8 @@ async function ticketSpei(body: unknown) {
 const ADMIN = {
   userId: "u1",
   clinicId: "c1",
+  role: "ADMIN",
+  permissionsOverride: [] as string[],
   isAdmin: true,
   user: { firstName: "Ana", lastName: "Pérez" },
   clinic: { name: "BEVADENT", locale: "es" },
@@ -187,12 +189,28 @@ test("D · sin monto válido no se abre ticket (soporte tendría que volver a pr
   assert.equal(tickets.length, 0);
 });
 
-test("D · solo administradores, y con sesión", async () => {
-  ctx = { ...ADMIN, isAdmin: false };
+test("D · solo con el permiso «Recargar Saldo IA», y con sesión", async () => {
+  ctx = { ...ADMIN, role: "DOCTOR", isAdmin: false };
   assert.equal((await ticketSpei({ amountCents: 50000 })).status, 403);
   ctx = null;
   assert.equal((await ticketSpei({ amountCents: 50000 })).status, 401);
   assert.equal(tickets.length, 0);
+});
+
+test("D · el permiso «Recargar Saldo IA» abre la recarga a quien se le dé, y el dueño siempre", async () => {
+  // Un DOCTOR con el permiso en su override, sí.
+  ctx = { ...ADMIN, role: "DOCTOR", isAdmin: false, permissionsOverride: ["agenda.view", "aiWallet.topup"] };
+  assert.equal((await ticketSpei({ amountCents: 50000 })).status, 201);
+  // Un ADMIN al que se lo quitaron (override sin la llave), no; el 403 dice a quién pedirlo.
+  ctx = { ...ADMIN, permissionsOverride: ["agenda.view"] };
+  const negado = await ticketSpei({ amountCents: 50000 });
+  assert.equal(negado.status, 403);
+  assert.equal(negado.body.code, "SIN_PERMISO_RECARGA_SALDO_IA");
+  assert.match(negado.body.error, /Pídeselo a quien tenga el permiso «Recargar Saldo IA»/);
+  // El dueño, aunque su override no lo traiga.
+  ctx = { ...ADMIN, role: "SUPER_ADMIN", permissionsOverride: ["agenda.view"] };
+  assert.equal((await ticketSpei({ amountCents: 50000 })).status, 201);
+  assert.equal(tickets.length, 2);
 });
 
 test("D · el comprobante no se borra: sigue siendo el segundo paso", () => {

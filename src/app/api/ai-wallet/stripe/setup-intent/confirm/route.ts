@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { getAuthContext } from "@/lib/auth-context";
+import { puedeRecargarSaldoIa, sinPermisoDeRecarga } from "@/lib/ai-wallet/permiso-recarga";
 import { getStripeSafe, stripeUnavailableResponse } from "@/lib/stripe";
 import { saveCardFromSetupIntent } from "@/lib/ai-billing/recharge";
 
@@ -13,12 +14,13 @@ const BodySchema = z.object({ setupIntentId: z.string().min(1) });
  * POST /api/ai-wallet/stripe/setup-intent/confirm  { setupIntentId }
  *
  * Tras confirmar la tarjeta en el cliente, persiste el PaymentMethod en el
- * monedero (AiWallet.stripePaymentMethodId). Solo admin. clinicId de la sesión.
+ * monedero (AiWallet.stripePaymentMethodId). Quien tenga «Recargar Saldo IA» (el dueño siempre). clinicId de la sesión.
  */
 export async function POST(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
-  if (!ctx.isAdmin) return NextResponse.json({ error: "Solo administradores" }, { status: 403 });
+  // Recargar es de quien tenga «Recargar Saldo IA» (Equipo → Permisos); el dueño siempre.
+  if (!puedeRecargarSaldoIa(ctx)) return NextResponse.json(sinPermisoDeRecarga(), { status: 403 });
 
   if (!getStripeSafe()) return NextResponse.json(stripeUnavailableResponse(), { status: 503 });
 

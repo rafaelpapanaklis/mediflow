@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
+import { puedeRecargarSaldoIa, sinPermisoDeRecarga } from "@/lib/ai-wallet/permiso-recarga";
 import { createTicket } from "@/lib/support/service";
 import { SupportError } from "@/lib/support/types";
 import { redactarSolicitudSpei } from "@/lib/ai-wallet/spei-solicitud";
@@ -21,13 +22,14 @@ export const dynamic = "force-dynamic";
  * de la sesión y el monto se valida con los mismos topes que el comprobante.
  *
  * No toca dinero: no crea recargas, no toca el monedero.
- * clinicId SIEMPRE de la sesión, jamás del body. Solo administradores, como
- * el resto de la tarjeta «Recargar saldo».
+ * clinicId SIEMPRE de la sesión, jamás del body. Quien tenga «Recargar Saldo IA» (el dueño
+ * siempre), como el resto de la tarjeta «Recargar saldo».
  */
 export async function POST(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
-  if (!ctx.isAdmin) return NextResponse.json({ error: "Solo administradores" }, { status: 403 });
+  // Recargar es de quien tenga «Recargar Saldo IA» (Equipo → Permisos); el dueño siempre.
+  if (!puedeRecargarSaldoIa(ctx)) return NextResponse.json(sinPermisoDeRecarga(), { status: 403 });
 
   const body = await req.json().catch(() => null);
   const amountCents = montoSpeiValido(body?.amountCents);

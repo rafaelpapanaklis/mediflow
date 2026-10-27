@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
+import { puedeRecargarSaldoIa } from "@/lib/ai-wallet/permiso-recarga";
 import { prisma } from "@/lib/prisma";
 import { getOrCreateWallet } from "@/lib/ai-billing/wallet";
 import { filtroRecargas, filtroSpeiEnRevision, juntarRecargas } from "./recargas";
@@ -65,6 +66,8 @@ export async function GET() {
       autoRechargeAmountCents: wallet.autoRechargeAmountCents,
       hasPaymentMethod: !!wallet.stripePaymentMethodId,
       isAdmin: ctx.isAdmin,
+      // Recargar (y la auto-recarga) es de quien tenga «Recargar Saldo IA»; el dueño siempre. Ver el saldo, de todos.
+      puedeRecargar: puedeRecargarSaldoIa(ctx),
       usage: usageEvents.map((e) => ({
         id: e.id,
         feature: e.feature,

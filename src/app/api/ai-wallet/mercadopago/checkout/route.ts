@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
+import { puedeRecargarSaldoIa, sinPermisoDeRecarga } from "@/lib/ai-wallet/permiso-recarga";
 import { prisma } from "@/lib/prisma";
 import { env } from "@/env";
 import { createPreference } from "@/lib/mercadopago";
@@ -22,7 +23,8 @@ const MAX_TOPUP_CENTS = 5_000_000; // $50,000.00 MXN
 export async function POST(req: NextRequest) {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
-  if (!ctx.isAdmin) return NextResponse.json({ error: "Solo administradores" }, { status: 403 });
+  // Recargar es de quien tenga «Recargar Saldo IA» (Equipo → Permisos); el dueño siempre.
+  if (!puedeRecargarSaldoIa(ctx)) return NextResponse.json(sinPermisoDeRecarga(), { status: 403 });
 
   // Sin token de plataforma, Mercado Pago no es un método disponible (la
   // pantalla ni lo ofrece): se dice así, antes de tocar nada, en vez de un 500.
