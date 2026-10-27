@@ -46,7 +46,7 @@ interface BillingTabProps {
   invoices: PatientBillingInvoice[];
   /** Totales YA calculados por el parent (los mismos del rail — sin queries nuevas). */
   /** `balance` (v7) = lo que se debe de verdad; `aunNoSeDebe` (aparte): lo por hacer de planes y lo por vencer de ortodoncia. */
-  summary: { total: number; paid: number; balance: number; aunNoSeDebe?: number; pagadoDeLoPorHacer?: number };
+  summary: { total: number; paid: number; balance: number; aunNoSeDebe?: number; pagadoDeLoPorHacer?: number; cuotasPorVencer?: number };
   facturApiEnabled: boolean;
   onNewInvoice: () => void;
   /** Click en la fila — abre el InvoiceDetailModal. */
@@ -112,6 +112,11 @@ export function BillingTab({
           {(summary.pagadoDeLoPorHacer ?? 0) > 0.005 && (
             <> · {t("patients.sideCards.pagadoDeLoPorHacer", { monto: fmtMXN(summary.pagadoDeLoPorHacer ?? 0) })}</>
           )}
+        </p>
+      )}
+      {!redesignOn && (summary.cuotasPorVencer ?? 0) > 0.005 && (
+        <p style={{ margin: "-6px 0 14px", fontSize: 12, color: "var(--text-3)" }} data-cuotas-por-vencer>
+          {t("patients.sideCards.cuotasPorVencer", { monto: fmtMXN(summary.cuotasPorVencer ?? 0) })}
         </p>
       )}
 

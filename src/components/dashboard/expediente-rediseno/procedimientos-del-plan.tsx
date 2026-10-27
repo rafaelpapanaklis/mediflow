@@ -18,7 +18,8 @@ import toast from "react-hot-toast";
 import { CheckCircle2, Circle, RotateCcw } from "lucide-react";
 import { useLocale, useT } from "@/i18n/i18n-provider";
 import { fechaPanel } from "@/lib/formato-fecha-panel";
-import { deshacerHecho, ESTADOS_DE_PLAN_SIN_HECHO, marcarHecho } from "@/lib/treatments/marcar-hecho-cliente";
+import { avisoDeDeshacer, avisoDeHecho, deshacerHecho, errorDeHecho, ESTADOS_DE_PLAN_SIN_HECHO, marcarHecho } from "@/lib/treatments/marcar-hecho-cliente";
+import { CONDITIONS } from "@/components/dashboard/odontogram-v2/data";
 import type { FilaDto } from "@/lib/treatments/items";
 import s from "./expediente.module.css";
 
@@ -52,9 +53,15 @@ export function useFilasDePlanes(patientId: string | undefined, clave: unknown):
 const nombreDe = (f: Pick<FilaDto, "nombre" | "dientes" | "caras">) =>
   `${f.nombre}${f.dientes.length ? ` ${f.dientes.join(", ")}` : ""}${f.caras.length ? ` (${f.caras.join("")})` : ""}`;
 
-export function ProcedimientosDelPlan({ planId, estadoDelPlan, filas, puede, onFilas, onCambio }: {
+export function ProcedimientosDelPlan({ planId, estadoDelPlan, filas, puede, debeSigueLoHecho = false, onFilas, onCambio }: {
   planId: string;
   estadoDelPlan: string;
+  /**
+   * v12 (t5, m2): solo si se SABE que el plan cobra lo hecho (cuenta leída y sin cuotas acordadas) la
+   * ayuda dice que lo hecho pasa a «Debe». Con cuotas manda la mensualidad (v10) y sin ver dinero no
+   * se habla de «Debe»: solo del odontograma.
+   */
+  debeSigueLoHecho?: boolean;
   filas: FilaDto[] | undefined;
   /** `treatments.edit` o SUPER_ADMIN (el servidor lo vuelve a mirar). */
   puede: boolean;
@@ -66,6 +73,10 @@ export function ProcedimientosDelPlan({ planId, estadoDelPlan, filas, puede, onF
   const t = useT();
   const locale = useLocale();
   const [ocupada, setOcupada] = useState<string | null>(null);
+  const nombreDeHallazgo = (id: string) => {
+    const c = CONDITIONS.find((x) => x.id === id);
+    return c ? (locale === "en" ? c.en : c.es) : id;
+  };
   const vivas = (filas ?? []).filter((f) => f.estado !== "cancelado");
   if (vivas.length === 0) return null;
   const cerrado = ESTADOS_DE_PLAN_SIN_HECHO.includes(estadoDelPlan);
@@ -77,11 +88,12 @@ export function ProcedimientosDelPlan({ planId, estadoDelPlan, filas, puede, onF
     try {
       const r = await marcarHecho(planId, [f.id], null);
       if (!r.ok) {
-        toast.error(r.error ?? t("planTratamiento.hecho.error.generico"));
+        toast.error(errorDeHecho(t, r));
         return;
       }
       onFilas(vivas.map((x) => (x.id === f.id ? { ...x, estado: "hecho", hechoEn: new Date().toISOString() } : x)));
-      toast.success(r.mensaje ?? t("planTratamiento.hecho.resultado.aplicado"));
+      // v12 (t5, m3): en el idioma de la pantalla, por lo que pasó (no el texto español del servidor).
+      toast.success(avisoDeHecho(t, r));
       onCambio?.();
     } finally {
       setOcupada(null);
@@ -94,12 +106,12 @@ export function ProcedimientosDelPlan({ planId, estadoDelPlan, filas, puede, onF
     try {
       const r = await deshacerHecho(planId, f.id);
       if (!r.ok) {
-        toast.error(r.error ?? t("planTratamiento.hecho.error.generico"));
+        toast.error(errorDeHecho(t, r));
         return;
       }
       const vuelve = r.estado === "en_curso" ? "en_curso" : "pendiente";
       onFilas(vivas.map((x) => (x.id === f.id ? { ...x, estado: vuelve, hechoEn: null } : x)));
-      toast.success(r.mensaje ?? t(`planTratamiento.hecho.deshecho.${vuelve}`), { duration: 8000 });
+      toast.success(avisoDeDeshacer(t, r, nombreDeHallazgo), { duration: 8000 });
       onCambio?.();
     } finally {
       setOcupada(null);
@@ -154,7 +166,11 @@ export function ProcedimientosDelPlan({ planId, estadoDelPlan, filas, puede, onF
           );
         })}
       </ul>
-      {conBotones && vivas.some((f) => f.estado !== "hecho") && <p className={s.cuentaPlanAyuda}>{t("planTratamiento.hecho.ayudaTarjeta")}</p>}
+      {conBotones && vivas.some((f) => f.estado !== "hecho") && (
+        <p className={s.cuentaPlanAyuda} data-procedimientos-ayuda={debeSigueLoHecho ? "debe" : "odontograma"}>
+          {t(debeSigueLoHecho ? "planTratamiento.hecho.ayudaTarjeta" : "planTratamiento.hecho.ayudaTarjetaSinDebe")}
+        </p>
+      )}
       {puede && cerrado && <p className={s.cuentaPlanAyuda} data-procedimientos-cerrado>{t("planTratamiento.hecho.planCerrado")}</p>}
     </div>
   );

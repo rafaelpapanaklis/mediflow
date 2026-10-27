@@ -571,6 +571,44 @@ test("A9: nota con cuotas acordadas — Caja, ficha, Cuenta del plan, bot y link
   assert.equal((await loQueAunNoSeDebe("c2", { ids: [notaId] })).total, 0);
 });
 
+test("v12 · m1: «Además» de la ficha — con cuotas, solo lo que aún no vence y sin «ya pagados»; sin cuotas, el «Por hacer» de la tarjeta (v8)", async (t) => {
+  if (salta(t)) return;
+  await usar();
+  const { hoyEnZona } = await import("@/lib/fechas/hoy-en-zona");
+  const { GET: FICHA } = await import("@/app/api/patients/[id]/lo-que-aun-no-se-debe/route");
+  const invoiceDePrueba = prismaVivo.invoice;
+  prismaVivo.invoice = {
+    ...invoiceDePrueba,
+    findMany: async (a: any = {}) => {
+      const filas = await invoiceDePrueba.findMany(a);
+      if (!a?.select?.payments) return filas;
+      return Promise.all(filas.map(async (f: any) => ({
+        ...f,
+        payments: (await base.db.query(`SELECT "amount", "method" FROM "payments" WHERE "invoiceId" = $1`, [f.id])).rows,
+      })));
+    },
+  };
+  // Plan A con 3 mensualidades (2 vencidas) y $500; plan B sin cuotas y $300. Nada hecho en ninguno.
+  const A = await planAceptado();
+  await conCuotas(A.notaId, { numPagos: 3, primerPago: hoyEnZona(new Date(Date.now() - 40 * 86_400_000), "America/Mexico_City") });
+  await pagar(A.notaId, 500);
+  const B = await planAceptado();
+  await pagar(B.notaId, 300);
+  const r = await leer(await FICHA(pedir("/api/patients/pac-c1/lo-que-aun-no-se-debe", undefined, "GET"), params("pac-c1")));
+  assert.equal(r.status, 200);
+  // Lo que pinta la ficha (patient-detail-client): «Además, $X por hacer…», «De lo por hacer, $Y ya pagados»
+  // y «Además, $Z de cuotas que aún no vencen».
+  const cuotas = Math.min(r.body.total, r.body.porVencerCuotas);
+  const porHacerCompleto = Math.round((r.body.total - cuotas + r.body.adelanto) * 100) / 100;
+  assert.equal(cuotas, 683.5, "plan A: $1,550.50 de saldo − $867 vencidos");
+  assert.equal(r.body.adelanto, 300, "solo el plan sin cuotas: los $500 del plan A no son «ya pagados» de lo por hacer");
+  assert.equal(porHacerCompleto, (await cuenta(B.planId)).porHacer, "sin cuotas, como v8: el «Por hacer» de su tarjeta");
+  assert.equal(porHacerCompleto, 2050.5);
+  // Y lo que se debe no cambia: plan A debe la cuota vencida, el B nada.
+  const saldo = (await notas(A.planId)).concat(await notas(B.planId)).reduce((x, n) => x + Number(n.balance), 0);
+  assert.equal(Math.round((saldo - r.body.total) * 100) / 100, 867);
+});
+
 test("A9: sin cuotas acordadas (un solo pago) sigue la regla de lo hecho", async (t) => {
   if (salta(t)) return;
   await usar();

@@ -3351,7 +3351,8 @@
       "invoiced": "Facturado",
       "moreInvoiced": "+{count} facturadas más",
       "aunNoSeDebe": "Además, {monto} por hacer o por vencer (aún no se debe)",
-      "pagadoDeLoPorHacer": "De lo por hacer, {monto} ya están pagados"
+      "pagadoDeLoPorHacer": "De lo por hacer, {monto} ya están pagados",
+      "cuotasPorVencer": "Además, {monto} de cuotas que aún no vencen"
     },
     "soapEditor": {
       "editorAria": "Editor de notas de consulta",
@@ -11002,6 +11003,7 @@
       "marcarAria": "Marcar «{nombre}» como hecho",
       "deshacerAria": "Deshacer «hecho» de «{nombre}»",
       "ayudaTarjeta": "Al marcar un procedimiento como hecho, su importe pasa a «Debe» y el odontograma se actualiza. Se puede deshacer.",
+      "ayudaTarjetaSinDebe": "Al marcar un procedimiento como hecho, el odontograma se actualiza. Se puede deshacer.",
       "planCerrado": "Plan cerrado: ya no se marcan procedimientos.",
       "deshacer": "Deshacer",
       "resultado": {

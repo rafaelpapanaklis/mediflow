@@ -50,14 +50,15 @@ test("A2: «Estado de cuenta» (lateral, Resumen y Facturación) dice aparte cu�
 
 test("v7 (QA de t12): «Estado de cuenta» (Resumen, lateral y Facturación) dice lo que se DEBE, no el saldo de la nota", () => {
   const ficha = leer("src/app/dashboard/patients/[id]/patient-detail-client.tsx");
-  assert.match(ficha, /saldo: saldoQueSeDebe,\n\s*aunNoSeDebe: porHacerCompleto,\n\s*pagadoDeLoPorHacer: adelantoEnPlanes,\n\s*credito: creditBalance,/, "Resumen");
-  assert.match(ficha, /balance: saldoQueSeDebe,\n\s*aunNoSeDebe: porHacerCompleto,\n\s*pagadoDeLoPorHacer: adelantoEnPlanes,\n\s*credit: creditBalance,/, "lateral");
-  assert.match(ficha, /summary=\{\{ total: totalPlan, paid: totalPaid, balance: saldoQueSeDebe, aunNoSeDebe: porHacerCompleto, pagadoDeLoPorHacer: adelantoEnPlanes \}\}/, "Facturación");
+  assert.match(ficha, /saldo: saldoQueSeDebe,\n\s*aunNoSeDebe: porHacerCompleto,\n\s*pagadoDeLoPorHacer: adelantoEnPlanes,\n\s*cuotasPorVencer,\n\s*credito: creditBalance,/, "Resumen");
+  assert.match(ficha, /balance: saldoQueSeDebe,\n\s*aunNoSeDebe: porHacerCompleto,\n\s*pagadoDeLoPorHacer: adelantoEnPlanes,\n\s*cuotasPorVencer,\n\s*credit: creditBalance,/, "lateral");
+  assert.match(ficha, /summary=\{\{ total: totalPlan, paid: totalPaid, balance: saldoQueSeDebe, aunNoSeDebe: porHacerCompleto, pagadoDeLoPorHacer: adelantoEnPlanes, cuotasPorVencer \}\}/, "Facturación");
   assert.doesNotMatch(ficha, /saldo: totalBalance|balance: totalBalance/, "ningún «Estado de cuenta» con la suma de saldos");
   assert.doesNotMatch(ficha, /hasBalance=\{totalBalance > 0\}/, "la pestaña Facturación no se pinta «con deuda» por lo que aún no se debe");
   // v8 (t5, V1): saldo a favor = SOLO el libro; lo adelantado de un plan es «de lo por hacer, ya pagado».
   assert.doesNotMatch(ficha, /creditBalance \+ adelantoEnPlanes/);
-  assert.match(ficha, /const porHacerCompleto = Math\.round\(\(aunNoSeDebe \+ adelantoEnPlanes\) \* 100\) \/ 100;/);
+  // v12 (t5, m1): sin las cuotas por vencer, que van aparte.
+  assert.match(ficha, /const porHacerCompleto = Math\.round\(\(aunNoSeDebe - cuotasPorVencer \+ adelantoEnPlanes\) \* 100\) \/ 100;/);
   for (const f of [
     "src/components/dashboard/patient-detail/side-cards.tsx",
     "src/components/dashboard/pacientes-rediseno/resumen.tsx",
@@ -296,12 +297,102 @@ test("v11 · «Hecho» en la tarjeta del plan: misma acción que la consulta, re
   };
   const ok = await deshacerHecho("p 1", "f1", responde(200, {
     success: true, item: { id: "f1" }, estado: "en_curso", mensaje: "Listo.",
-    odontograma: { conflictos: [{ mensaje: "Diente 16: no se devolvió." }] },
+    odontograma: { conflictos: [{ mensaje: "Diente 16: no se devolvió." }] }, // sin motivo: no es un conflicto que se sepa decir
   }));
-  assert.deepEqual(ok, { ok: true, status: 200, estado: "en_curso", mensaje: "Listo. Diente 16: no se devolvió." });
+  // v12 (t5, m3): datos, no el texto español del servidor (la tarjeta lo dice en su idioma).
+  assert.deepEqual(ok, { ok: true, status: 200, estado: "en_curso" });
   assert.equal(pedidos[0].url, "/api/treatments/p%201");
   assert.deepEqual(JSON.parse(pedidos[0].body), { action: "deshacer_hecho", itemId: "f1" });
-  assert.deepEqual(await deshacerHecho("p", "f1", responde(409, { error: "Este plan está cerrado.", code: "plan_cerrado" })), { ok: false, status: 409, error: "Este plan está cerrado." });
+  assert.deepEqual(await deshacerHecho("p", "f1", responde(409, { error: "Este plan está cerrado.", code: "plan_cerrado" })), { ok: false, status: 409, error: "Este plan está cerrado.", codigo: "plan_cerrado" });
   assert.equal((await deshacerHecho("p", "f1", responde(200, { success: true }))).noDisponible, true);
+});
+
+test("v12 · m3: los avisos de «Hecho» / «Deshacer» de la tarjeta salen en el idioma de la pantalla, no en el español del servidor", async () => {
+  const { avisoDeHecho, avisoDeDeshacer, errorDeHecho, marcarHecho, deshacerHecho, CODIGOS_DE_HECHO, RESULTADOS_DE_HECHO } = await import("@/lib/treatments/marcar-hecho-cliente");
+  const { getDict } = await import("@/i18n/dictionaries");
+  const { makeT } = await import("@/i18n/t");
+  const en = makeT(getDict("en"));
+  const es = makeT(getDict("es"));
+  const dicEn = JSON.parse(leer("src/i18n/dictionaries/en.json")).planTratamiento.hecho;
+  // Cada estado, motivo y código tiene su texto en los dos idiomas.
+  for (const d of [dicEn, JSON.parse(leer("src/i18n/dictionaries/es.json")).planTratamiento.hecho]) {
+    for (const k of RESULTADOS_DE_HECHO) assert.ok(d.resultado[k], `resultado.${k}`);
+    for (const k of CODIGOS_DE_HECHO) assert.ok(d.error[k], `error.${k}`);
+  }
+
+  // Marcar: el servidor manda su texto en español; la tarjeta usa el estado.
+  const r = await marcarHecho("p", ["f1"], null, async () => new Response(JSON.stringify({
+    success: true, items: [{ id: "f1", estado: "hecho" }],
+    odontograma: [{ itemId: "f1", estado: "sin_cambio", mensaje: "Hecho. Este procedimiento no cambia el odontograma." }],
+  }), { status: 200 }));
+  assert.deepEqual(r, { ok: true, status: 200, resultado: "sin_cambio" });
+  assert.equal(avisoDeHecho(en, r), dicEn.resultado.sin_cambio);
+  assert.equal(avisoDeHecho(en, {}), dicEn.resultado.aplicado);
+  assert.equal(avisoDeHecho(en, { resultado: "raro" }), dicEn.resultado.aplicado);
+
+  // Deshacer: estado + conflictos como datos → frase en inglés, con el hallazgo en inglés.
+  const d = await deshacerHecho("p", "f1", async () => new Response(JSON.stringify({
+    success: true, item: { id: "f1" }, estado: "pendiente", mensaje: "Listo: el procedimiento vuelve a pendiente…",
+    odontograma: { conflictos: [{ motivo: "cambio_posterior", toothNumber: 16, conditionId: "caries", nota: null, mensaje: "Diente 16: …" }] },
+  }), { status: 200 }));
+  assert.deepEqual(d.conflictos, [{ motivo: "cambio_posterior", toothNumber: 16, conditionId: "caries", nota: null }]);
+  const frase = avisoDeDeshacer(en, d, () => "Caries");
+  assert.equal(frase, `${dicEn.deshecho.pendiente} ${en("planTratamiento.hecho.conflicto.cambio_posterior", { diente: "16", hallazgo: "Caries", nota: "" })}`);
+  assert.doesNotMatch(frase, /Listo|Diente/);
+  assert.equal(avisoDeDeshacer(en, { estado: "en_curso" }, (x) => x), dicEn.deshecho.en_curso);
+
+  // Errores por código; uno desconocido, el genérico.
+  assert.equal(errorDeHecho(en, { codigo: "plan_cerrado" }), dicEn.error.plan_cerrado);
+  assert.equal(errorDeHecho(es, { codigo: "plan_cerrado" }), "Este plan está cerrado: ya no se marcan ni se deshacen procedimientos.");
+  assert.equal(errorDeHecho(en, { codigo: "otro" }), dicEn.error.generico);
+
+  // La tarjeta no enseña el texto del servidor: ni `mensaje` ni `error`.
+  const bloque = leer("src/components/dashboard/expediente-rediseno/procedimientos-del-plan.tsx");
+  assert.match(bloque, /toast\.success\(avisoDeHecho\(t, r\)\);/);
+  assert.match(bloque, /toast\.success\(avisoDeDeshacer\(t, r, nombreDeHallazgo\), \{ duration: 8000 \}\);/);
+  assert.equal((bloque.match(/toast\.error\(errorDeHecho\(t, r\)\);/g) ?? []).length, 2);
+  assert.doesNotMatch(bloque, /r\.mensaje|r\.error/);
+  // El servidor usa la misma lista de códigos.
+  assert.match(leer("src/lib/treatments/aplicar-hecho.server.ts"), /const CODIGOS_HECHO = CODIGOS_DE_HECHO;/);
+});
+
+test("v12 · m2: con cuotas (o sin ver dinero) la ayuda de «Procedimientos» no dice que lo hecho pasa a «Debe»", () => {
+  const tarjeta = leer("src/components/dashboard/expediente-rediseno/plan-tratamiento.tsx");
+  assert.match(tarjeta, /debeSigueLoHecho=\{!!cuentas\?\.get\(plan\.id\) && !cuentas\.get\(plan\.id\)!\.aCuotas\}/);
+  const bloque = leer("src/components/dashboard/expediente-rediseno/procedimientos-del-plan.tsx");
+  assert.match(bloque, /debeSigueLoHecho = false/, "por omisión, sin hablar de «Debe»");
+  assert.match(bloque, /t\(debeSigueLoHecho \? "planTratamiento\.hecho\.ayudaTarjeta" : "planTratamiento\.hecho\.ayudaTarjetaSinDebe"\)/);
+  for (const idioma of ["es", "en"]) {
+    const h = JSON.parse(leer(`src/i18n/dictionaries/${idioma}.json`)).planTratamiento.hecho;
+    assert.match(h.ayudaTarjeta, idioma === "es" ? /«Debe»/ : /“Owes”/);
+    assert.doesNotMatch(h.ayudaTarjetaSinDebe, /Debe|Owes/);
+    assert.match(h.ayudaTarjetaSinDebe, idioma === "es" ? /odontograma se actualiza\. Se puede deshacer\.$/ : /odontogram is updated\. It can be undone\.$/);
+  }
+});
+
+test("v12 · m1: con cuotas, «Además» de la ficha dice solo las cuotas que aún no vencen, sin «ya pagados»; sin cuotas, como v8", () => {
+  const ficha = leer("src/app/dashboard/patients/[id]/patient-detail-client.tsx");
+  assert.match(ficha, /const \{ total: aunNoSeDebe, adelanto: adelantoEnPlanes, cuotas: cuotasPorVencer, porFactura: aunNoSeDebePorFactura \} = useLoQueAunNoSeDebe\(/);
+  assert.match(ficha, /const porHacerCompleto = Math\.round\(\(aunNoSeDebe - cuotasPorVencer \+ adelantoEnPlanes\) \* 100\) \/ 100;/);
+  // Los tres sitios que lo pintan reciben las cuotas aparte.
+  assert.equal((ficha.match(/pagadoDeLoPorHacer: adelantoEnPlanes,\n\s*cuotasPorVencer,/g) ?? []).length, 2);
+  assert.match(ficha, /pagadoDeLoPorHacer: adelantoEnPlanes, cuotasPorVencer \}\}/);
+  for (const archivo of [
+    "src/components/dashboard/pacientes-rediseno/resumen.tsx",
+    "src/components/dashboard/patient-detail/side-cards.tsx",
+    "src/components/dashboard/patient-detail/billing-tab.tsx",
+  ]) {
+    const x = leer(archivo);
+    assert.match(x, /data-cuotas-por-vencer/, archivo);
+    assert.match(x, /t\("patients\.sideCards\.cuotasPorVencer", \{ monto: /, archivo);
+  }
+  // El adelanto («ya pagados») no cuenta las notas con cuotas.
+  const ayudante = leer("src/lib/dinero/lo-que-se-debe.server.ts");
+  assert.match(ayudante, /if \(esPlanAPlazos\(condiciones\.get\(id\)\)\) continue;/);
+  assert.match(leer("src/app/api/patients/[id]/lo-que-aun-no-se-debe/route.ts"), /porVencerCuotas: r\.porVencerCuotas,/);
+  const es = JSON.parse(leer("src/i18n/dictionaries/es.json")).patients.sideCards;
+  const en = JSON.parse(leer("src/i18n/dictionaries/en.json")).patients.sideCards;
+  assert.equal(es.cuotasPorVencer, "Además, {monto} de cuotas que aún no vencen");
+  assert.equal(en.cuotasPorVencer, "Plus {monto} in installments not yet due");
 });
 

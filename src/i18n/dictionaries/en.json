@@ -3351,7 +3351,8 @@
       "invoiced": "Invoiced",
       "moreInvoiced": "+{count} more invoiced",
       "aunNoSeDebe": "Plus {monto} still to do or not yet due (not owed yet)",
-      "pagadoDeLoPorHacer": "Of what's still to do, {monto} is already paid"
+      "pagadoDeLoPorHacer": "Of what's still to do, {monto} is already paid",
+      "cuotasPorVencer": "Plus {monto} in installments not yet due"
     },
     "soapEditor": {
       "editorAria": "Consultation notes editor",
@@ -11002,6 +11003,7 @@
       "marcarAria": "Mark “{nombre}” as done",
       "deshacerAria": "Undo “done” for “{nombre}”",
       "ayudaTarjeta": "When a procedure is marked done, its amount moves to “Owes” and the odontogram is updated. It can be undone.",
+      "ayudaTarjetaSinDebe": "When a procedure is marked done, the odontogram is updated. It can be undone.",
       "planCerrado": "Closed plan: procedures can no longer be marked.",
       "deshacer": "Undo",
       "resultado": {

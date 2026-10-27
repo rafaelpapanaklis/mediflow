@@ -269,6 +269,7 @@ export function PlanTratamiento({
                 estadoDelPlan={plan.status}
                 filas={filasDePlanes.filas.get(plan.id)}
                 puede={puedeMarcarHecho}
+                debeSigueLoHecho={!!cuentas?.get(plan.id) && !cuentas.get(plan.id)!.aCuotas}
                 onFilas={(filas) => filasDePlanes.poner(plan.id, filas)}
                 onCambio={() => onCuentaCambio?.([])}
               />

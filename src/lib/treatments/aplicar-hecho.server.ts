@@ -38,7 +38,7 @@ import { CONDITIONS } from "@/components/dashboard/odontogram-v2/data";
 import { filaDto, type DbDeFilas, type EstadoDeFila, type FilaDelPlan } from "./items";
 import { bloquearPlan, FilaError, repoFilas, tablaDeFilasExiste } from "./items-db";
 import { columnaOdontogramaHechoExiste, leerRegistro, type RegistroHecho } from "./aplicar-hecho-db";
-import { ESTADOS_DE_PLAN_SIN_HECHO } from "./marcar-hecho-cliente";
+import { CODIGOS_DE_HECHO, ESTADOS_DE_PLAN_SIN_HECHO } from "./marcar-hecho-cliente";
 
 const NOTA = "__note__";
 /** Tope de filas por clic (un plan real marca 1–6 a la vez). */
@@ -332,10 +332,7 @@ export async function deshacerHecho(args: {
 
 // ── La acción HTTP (la llama PATCH /api/treatments/[id]) ───────────────────────────────────────
 
-const CODIGOS_HECHO = [
-  "sin_filas", "demasiadas_filas", "fila_desconocida", "fila_cancelada", "no_esta_hecha",
-  "cita_invalida", "sin_filas_en_plan", "sin_permiso_odontograma", "plan_cerrado",
-] as const;
+const CODIGOS_HECHO = CODIGOS_DE_HECHO;
 export type CodigoDeHecho = (typeof CODIGOS_HECHO)[number];
 
 export function mensajeDeHecho(codigo: string, locale: "es" | "en" = "es"): string {

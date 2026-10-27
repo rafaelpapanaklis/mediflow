@@ -69,7 +69,7 @@ export interface ResumenProps {
    * dice aparte, completo (v8: el «Por hacer» de la Cuenta del plan); `pagadoDeLoPorHacer` = de eso, lo ya
    * pagado por adelantado. `credito` = saldo a favor: solo el libro (`patient_credits`).
    */
-  finanzas: { total: number; pagado: number; saldo: number; credito: number; plan?: number; aunNoSeDebe?: number; pagadoDeLoPorHacer?: number };
+  finanzas: { total: number; pagado: number; saldo: number; credito: number; plan?: number; aunNoSeDebe?: number; pagadoDeLoPorHacer?: number; cuotasPorVencer?: number };
   citas: any[];
   facturas: any[];
   tratamientos: any[];
@@ -408,6 +408,12 @@ export function Resumen({
               {(finanzas.pagadoDeLoPorHacer ?? 0) > 0.005 && (
                 <div className={s.pie} style={{ marginTop: 3 }} data-pagado-de-lo-por-hacer>
                   <span>{t("patients.sideCards.pagadoDeLoPorHacer", { monto: formatCurrency(finanzas.pagadoDeLoPorHacer ?? 0) })}</span>
+                </div>
+              )}
+              {/* v12 (t5, m1): con cuotas acordadas manda la mensualidad: solo lo que aún no vence, sin «ya pagados». */}
+              {(finanzas.cuotasPorVencer ?? 0) > 0.005 && (
+                <div className={s.pie} style={{ marginTop: 3 }} data-cuotas-por-vencer>
+                  <span>{t("patients.sideCards.cuotasPorVencer", { monto: formatCurrency(finanzas.cuotasPorVencer ?? 0) })}</span>
                 </div>
               )}
               {sinCargosVigentes ? (

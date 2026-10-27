@@ -45,5 +45,5 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ id: stri
     take: 500,
   });
   const adelanto = await adelantoEnNotasDePlan(ctx.clinicId, notasDePlan.map((f) => f.id));
-  return NextResponse.json({ total: r.total, porHacer: r.porHacer, porVencer: r.porVencer, porFactura: r.porFactura, adelanto });
+  return NextResponse.json({ total: r.total, porHacer: r.porHacer, porVencer: r.porVencer, porVencerCuotas: r.porVencerCuotas, porFactura: r.porFactura, adelanto });
 }
