@@ -198,6 +198,8 @@ export interface PlanConCuenta {
   saldoAFavor?: number;
   porHacer?: number;
   vencido?: number;
+  /** Alguna nota tiene cuotas acordadas (plan financiado): «Debe» es la cuota vencida (27-oct, A9). */
+  aCuotas?: boolean;
   /** Facturas de antes (presupuesto) que aún deben: «Cerrar plan» no las ajusta. */
   facturasDeAntes?: string[];
   notas: Array<{ invoiceId: string; invoiceNumber: string; status: string; total: number; paid: number; createdAt: string }>;

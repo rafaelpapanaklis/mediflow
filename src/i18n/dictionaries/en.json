@@ -3354,7 +3354,8 @@
       "invoiced": "Invoiced",
       "moreInvoiced": "+{count} more invoiced",
       "aunNoSeDebe": "Plus {monto} still to do or not yet due (not owed yet)",
-      "pagadoDeLoPorHacer": "Of what's still to do, {monto} is already paid"
+      "pagadoDeLoPorHacer": "Of what's still to do, {monto} is already paid",
+      "cuotasPorVencer": "Plus {monto} in installments not yet due"
     },
     "soapEditor": {
       "editorAria": "Consultation notes editor",
@@ -10775,6 +10776,12 @@
       "debe": "Owes",
       "saldoAFavor": "Credit balance",
       "pagadoPorAdelantado": "Paid in advance",
+      "vencidoCuotas": "Of what they owe, {monto} is agreed installments already overdue.",
+      "cuotasAyuda": "Plan with agreed installments: each installment is owed when it falls due, not when the work is done. It can be paid in advance.",
+      "tambienAdelantoCuotas": "Also, {monto} is already paid in advance over the work done.",
+      "cerrarSigueCuotas": "What's left of the work done ({monto}) is still collected through the agreed installments.",
+      "debeHoyCuotas": "Owes today (overdue installments)",
+      "ayudaAdelantoCuotas": "In overdue installments they owe {debe}. You can pay more, up to {saldo}: the extra goes toward the next installments.",
       "porHacer": "To do",
       "vencidoDe": "Of what they owe, {monto} is overdue (done more than 30 days ago).",
       "tambienAFavor": "Also, another note of this plan has {monto} paid in advance.",
@@ -11002,6 +11009,17 @@
     },
     "hecho": {
       "marcar": "Mark done",
+      "procedimientos": "Procedures",
+      "estadoPorHacer": "To do",
+      "estadoEnCurso": "In progress",
+      "estadoHecho": "Done on {fecha}",
+      "botonHecho": "Done",
+      "marcando": "Marking…",
+      "marcarAria": "Mark “{nombre}” as done",
+      "deshacerAria": "Undo “done” for “{nombre}”",
+      "ayudaTarjeta": "When a procedure is marked done, its amount moves to “Owes” and the odontogram is updated. It can be undone.",
+      "ayudaTarjetaSinDebe": "When a procedure is marked done, the odontogram is updated. It can be undone.",
+      "planCerrado": "Closed plan: procedures can no longer be marked.",
       "deshacer": "Undo",
       "resultado": {
         "aplicado": "Done. The odontogram now shows it.",
@@ -11029,7 +11047,8 @@
         "no_esta_hecha": "That procedure isn't marked as done: there's nothing to undo.",
         "cita_invalida": "That appointment doesn't belong to this patient.",
         "sin_filas_en_plan": "This is an older plan (text): its procedures can't be marked one by one.",
-        "sin_permiso_odontograma": "This \"done\" changed the odontogram and your user can't edit it: ask a doctor to undo it."
+        "sin_permiso_odontograma": "This \"done\" changed the odontogram and your user can't edit it: ask a doctor to undo it.",
+        "plan_cerrado": "This plan is closed: procedures can no longer be marked or undone."
       }
     }
   },
@@ -11505,9 +11524,9 @@
     "utilidadConMargen": "Income − expenses for the same period · you keep {pct} %.",
     "efectivo": "Cash payments in the period, refunds not subtracted. Excludes payments brought from your previous system; cash a patient pays today on a migrated balance does count.",
     "porDoctor": "What was COLLECTED in the period, minus refunds, by payment date: to the invoice's doctor (if none, the appointment's; in orthodontics, whoever had the case). This is the commission base; the sum equals revenue. Without migrated data.",
-    "porCobrar": "Balance of every issued invoice (no drafts or cancelled ones), from any date, migrated ones included. For a treatment plan note, only what's already done minus what's paid; for orthodontic “Total price in installments”, only what's overdue (the rest goes to “To do / not yet due”). Does not depend on the period.",
-    "vencido": "Of the receivables, what is past its date: past «Due on», overdue installments of payment plans and orthodontic charges (placement and check-ups, from the day they were created) and, in treatment plans, work done more than 30 days ago and still unpaid. An invoice with no date never becomes overdue. Includes the Orthodontics «Overdue».",
-    "porHacer": "What isn't owed yet: from accepted treatment plans, the work still to do and unpaid (it moves to “Receivable” once done), and from orthodontic “Total price in installments” cases, the installments not yet due (they move when due). Doesn't depend on the period.",
+    "porCobrar": "Balance of every issued invoice (no drafts or cancelled ones), from any date, migrated ones included. For a treatment plan note, only what's already done minus what's paid (with agreed installments, the overdue installment); for orthodontic “Total price in installments”, only what's overdue (the rest goes to “To do / not yet due”). Does not depend on the period.",
+    "vencido": "Of the receivables, what is past its date: past «Due on», overdue installments of payment plans and orthodontic charges (placement and check-ups, from the day they were created) and, in treatment plans, work done more than 30 days ago and still unpaid (with agreed installments, the overdue installment). An invoice with no date never becomes overdue. Includes the Orthodontics «Overdue».",
+    "porHacer": "What isn't owed yet: from accepted treatment plans, the work still to do and unpaid (it moves to “Receivable” once done), and from orthodontic “Total price in installments” cases and plans with agreed installments, the installments not yet due (they move when due). Doesn't depend on the period.",
     "ortoCobrado": "Payments in the period to orthodontic case invoices, minus refunds. Excludes payments brought from your previous system. Without applied credit balance: that money counted on the day it was collected.",
     "ortoVencido": "Orthodontics only: installments, placement and check-ups past their date. Already included in the Balances «Overdue».",
     "reportesIngresos": "Payments recorded in each of the last 6 months, minus refunds, by payment date. A payment counts in the month it came in even if its invoice is later cancelled; a refund subtracts in the month it was given back. Excludes payments brought from your previous system; what a patient pays on a migrated balance does count.",

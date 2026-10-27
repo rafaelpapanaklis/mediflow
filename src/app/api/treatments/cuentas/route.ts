@@ -77,6 +77,7 @@ export async function GET(req: NextRequest) {
       saldoAFavor: cuenta.saldoAFavor,
       porHacer: cuenta.porHacer,
       vencido: cuenta.vencido,
+      aCuotas: cuenta.aCuotas ?? false,
       facturasDeAntes: cuenta.facturasDeAntes ?? [],
       notas: cuenta.notas.map((n) => ({
         invoiceId: n.id, invoiceNumber: n.invoiceNumber, status: n.status, total: n.total, paid: n.paid, createdAt: n.createdAt ?? "",

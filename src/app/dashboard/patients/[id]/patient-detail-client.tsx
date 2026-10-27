@@ -1466,7 +1466,7 @@ export function PatientDetailClient({
   // del plan; lo que aún no se debe va aparte, y lo pagado de más sobre lo hecho es saldo a favor. Se
   // relee cuando cambian las facturas Y cuando cambian las cuentas de los planes («marcar hecho» no
   // cambia ninguna factura, pero sí lo que se debe — t5, N1).
-  const { total: aunNoSeDebe, adelanto: adelantoEnPlanes, porFactura: aunNoSeDebePorFactura } = useLoQueAunNoSeDebe(
+  const { total: aunNoSeDebe, adelanto: adelantoEnPlanes, cuotas: cuotasPorVencer, porFactura: aunNoSeDebePorFactura } = useLoQueAunNoSeDebe(
     patient.id,
     canViewBilling && (totalBalance > 0 || totalPaid > 0),
     `${refrescoCuentas}|${planesDelServidor.map((p: any) => p.id + p.updatedAt).join(",")}|` +
@@ -1477,7 +1477,9 @@ export function PatientDetailClient({
   // libro `patient_credits`, lo que se descuenta de la siguiente factura): es parte de lo por hacer que ya
   // está pagada. «Además, $X por hacer» = lo por hacer COMPLETO (el «Por hacer» de la Cuenta del plan) y
   // aparte «De lo por hacer, $Y ya están pagados».
-  const porHacerCompleto = Math.round((aunNoSeDebe + adelantoEnPlanes) * 100) / 100;
+  // v12 (t5, m1): con cuotas acordadas manda la mensualidad (v10): sus cuotas por vencer van aparte
+  // («Además, $X de cuotas que aún no vencen») y sin «ya pagados»; el adelanto ya no las cuenta.
+  const porHacerCompleto = Math.round((aunNoSeDebe - cuotasPorVencer + adelantoEnPlanes) * 100) / 100;
   // ws1-t2 (F3 de la auditoría BEVADENT: «Total tratamiento $700 · 100% cubierto» con un plan de
   // $900): lo de arriba suma FACTURAS. El costo de los planes ACTIVOS va aparte, para que el
   // «Estado de cuenta» enseñe plan y facturado sin mezclarlos.
@@ -2328,6 +2330,7 @@ export function PatientDetailClient({
                 saldo: saldoQueSeDebe,
                 aunNoSeDebe: porHacerCompleto,
                 pagadoDeLoPorHacer: adelantoEnPlanes,
+                cuotasPorVencer,
                 credito: creditBalance,
                 plan: totalPlanesActivos,
               }}
@@ -2943,6 +2946,9 @@ export function PatientDetailClient({
                     cargandoCuentas={cuentasDePlanes.cargando}
                     onCobrarPlan={canViewBilling ? () => setCobrarHoyAbierto(true) : undefined}
                     onCuentaCambio={alCambiarDineroDePlanes}
+                    patientId={patient.id}
+                    puedeMarcarHecho={canEditTreatments || currentUser.role === "SUPER_ADMIN"}
+                    refresco={`${refrescoCuentas}|${planesDelServidor.map((p: any) => p.id + p.updatedAt).join(",")}`}
                     onNuevo={() => setShowNewTreatment(true)}
                     onVer={(plan) => setViewPlan(plan)}
                     onEditar={(plan) => setEditPlan(plan)}
@@ -3838,7 +3844,7 @@ export function PatientDetailClient({
             <BillingTab
               patientId={patient.id}
               invoices={invoices}
-              summary={{ total: totalPlan, paid: totalPaid, balance: saldoQueSeDebe, aunNoSeDebe: porHacerCompleto, pagadoDeLoPorHacer: adelantoEnPlanes }}
+              summary={{ total: totalPlan, paid: totalPaid, balance: saldoQueSeDebe, aunNoSeDebe: porHacerCompleto, pagadoDeLoPorHacer: adelantoEnPlanes, cuotasPorVencer }}
               facturApiEnabled={facturApiEnabled}
               onNewInvoice={() => setShowNewInvoice(true)}
               onOpenInvoice={(inv) => setInvoiceDetailOpen(inv)}
@@ -3864,6 +3870,7 @@ export function PatientDetailClient({
               balance: saldoQueSeDebe,
               aunNoSeDebe: porHacerCompleto,
               pagadoDeLoPorHacer: adelantoEnPlanes,
+              cuotasPorVencer,
               credit: creditBalance,
               pct: pctPaid,
               plan: totalPlanesActivos,
@@ -3897,7 +3904,7 @@ export function PatientDetailClient({
           router.refresh();
         }}
         patientId={canViewTreatments ? patient.id : undefined}
-        puedeMarcarHecho={canEditTreatments}
+        puedeMarcarHecho={canEditTreatments || currentUser.role === "SUPER_ADMIN"}
         onCobrarHoy={canViewBilling ? () => setCobrarHoyAbierto(true) : undefined}
         onHechos={() => { setRefrescoCuentas((n) => n + 1); router.refresh(); }}
       />

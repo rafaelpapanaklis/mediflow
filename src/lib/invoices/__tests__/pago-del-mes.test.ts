@@ -39,7 +39,8 @@ test("pagoDelMesDeFactura nunca lanza: si la lectura falla, null (el aviso de si
 
 test("la ruta y la tarjeta de Sabina usan el MISMO cálculo (la tarjeta enseña el texto exacto)", () => {
   // 26-oct: en ortodoncia «Precio total» la ruta ya no dice «pago del mes» (dice lo vencido y el total
-  // aparte); fuera de eso, el mismo cálculo de siempre.
+  // aparte); fuera de eso, el mismo cálculo de siempre. 27-oct (A9): lo mismo en una nota de plan con
+  // cuotas acordadas, y la tarjeta de Sabina hace igual que la ruta.
   assert.match(leer("app/api/invoices/[id]/send-whatsapp/route.ts"), /const pagoDelMes = esFactura \|\| saldoTotalDelTratamiento !== null \? null : await pagoDelMesDeFactura\(prisma,/);
-  assert.match(leer("lib/sabina/dinero/avisar-saldo.ts"), /pagoDelMes: await pagoDelMesDeFactura\(db,/);
+  assert.match(leer("lib/sabina/dinero/avisar-saldo.ts"), /pagoDelMes: saldoTotalDelTratamiento !== null \? null : await pagoDelMesDeFactura\(db,/);
 });

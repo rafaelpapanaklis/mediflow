@@ -3354,7 +3354,8 @@
       "invoiced": "Facturado",
       "moreInvoiced": "+{count} facturadas más",
       "aunNoSeDebe": "Además, {monto} por hacer o por vencer (aún no se debe)",
-      "pagadoDeLoPorHacer": "De lo por hacer, {monto} ya están pagados"
+      "pagadoDeLoPorHacer": "De lo por hacer, {monto} ya están pagados",
+      "cuotasPorVencer": "Además, {monto} de cuotas que aún no vencen"
     },
     "soapEditor": {
       "editorAria": "Editor de notas de consulta",
@@ -10775,6 +10776,12 @@
       "debe": "Debe",
       "saldoAFavor": "Saldo a favor",
       "pagadoPorAdelantado": "Pagado por adelantado",
+      "vencidoCuotas": "De lo que debe, {monto} son cuotas acordadas ya vencidas.",
+      "cuotasAyuda": "Plan con cuotas acordadas: se debe cada cuota cuando vence, no lo hecho. Se puede abonar por adelantado.",
+      "tambienAdelantoCuotas": "Además, {monto} ya están pagados por adelantado sobre lo hecho.",
+      "cerrarSigueCuotas": "Lo que falta de lo hecho ({monto}) se sigue cobrando con las cuotas acordadas.",
+      "debeHoyCuotas": "Debe hoy (cuotas vencidas)",
+      "ayudaAdelantoCuotas": "De cuotas vencidas debe {debe}. Puedes abonar más, hasta {saldo}: lo de más adelanta las siguientes cuotas.",
       "porHacer": "Por hacer",
       "vencidoDe": "De lo que debe, {monto} ya venció (se hizo hace más de 30 días).",
       "tambienAFavor": "Además, otra nota del plan lleva {monto} pagados por adelantado.",
@@ -11002,6 +11009,17 @@
     },
     "hecho": {
       "marcar": "Marcar hecho",
+      "procedimientos": "Procedimientos",
+      "estadoPorHacer": "Por hacer",
+      "estadoEnCurso": "En curso",
+      "estadoHecho": "Hecho el {fecha}",
+      "botonHecho": "Hecho",
+      "marcando": "Marcando…",
+      "marcarAria": "Marcar «{nombre}» como hecho",
+      "deshacerAria": "Deshacer «hecho» de «{nombre}»",
+      "ayudaTarjeta": "Al marcar un procedimiento como hecho, su importe pasa a «Debe» y el odontograma se actualiza. Se puede deshacer.",
+      "ayudaTarjetaSinDebe": "Al marcar un procedimiento como hecho, el odontograma se actualiza. Se puede deshacer.",
+      "planCerrado": "Plan cerrado: ya no se marcan procedimientos.",
       "deshacer": "Deshacer",
       "resultado": {
         "aplicado": "Hecho. El odontograma ya lo muestra.",
@@ -11029,7 +11047,8 @@
         "no_esta_hecha": "Ese procedimiento no está marcado como hecho: no hay nada que deshacer.",
         "cita_invalida": "Esa cita no es de este paciente.",
         "sin_filas_en_plan": "Este plan es de los de antes (texto): sus procedimientos no se pueden marcar uno por uno.",
-        "sin_permiso_odontograma": "Este «hecho» cambió el odontograma y tu usuario no puede editarlo: pide a un doctor que lo deshaga."
+        "sin_permiso_odontograma": "Este «hecho» cambió el odontograma y tu usuario no puede editarlo: pide a un doctor que lo deshaga.",
+        "plan_cerrado": "Este plan está cerrado: ya no se marcan ni se deshacen procedimientos."
       }
     }
   },
@@ -11505,9 +11524,9 @@
     "utilidadConMargen": "Ingresos − gastos del mismo periodo · te queda el {pct} %.",
     "efectivo": "Pagos en efectivo del periodo, sin restar reembolsos. Sin los pagos traídos de tu sistema anterior; el efectivo que un paciente paga hoy de un saldo migrado sí cuenta.",
     "porDoctor": "Lo COBRADO en el periodo, menos reembolsos, por fecha de cobro: al doctor de la factura (si no tiene, al de su cita; en ortodoncia, a quien llevaba el caso). Es la base de comisiones; la suma da los ingresos. Sin lo migrado.",
-    "porCobrar": "Saldo de todas las facturas emitidas (sin borradores ni canceladas), de cualquier fecha e incluidas las migradas. De una nota de plan de tratamiento, solo lo ya hecho menos lo pagado; de ortodoncia «Precio total a plazos», solo lo vencido (lo demás va en «Por hacer / por vencer»). No depende del periodo.",
-    "vencido": "De lo por cobrar, lo que ya pasó su fecha: «Vence el» pasado, cuotas vencidas de planes a plazos, cargos de ortodoncia (colocación y controles, desde el día en que se crearon) y, en planes de tratamiento, lo hecho hace más de 30 días sin pagar. Una factura sin fecha no vence. Incluye el «Vencido» de Ortodoncia.",
-    "porHacer": "Lo que todavía no se debe: de los planes de tratamiento aceptados, lo que falta por hacer y no está pagado (pasa a «Por cobrar» cuando se hace), y de ortodoncia «Precio total a plazos», las cuotas que aún no vencen (pasan cuando vencen). No depende del periodo.",
+    "porCobrar": "Saldo de todas las facturas emitidas (sin borradores ni canceladas), de cualquier fecha e incluidas las migradas. De una nota de plan de tratamiento, solo lo ya hecho menos lo pagado (con cuotas acordadas, la cuota vencida); de ortodoncia «Precio total a plazos», solo lo vencido (lo demás va en «Por hacer / por vencer»). No depende del periodo.",
+    "vencido": "De lo por cobrar, lo que ya pasó su fecha: «Vence el» pasado, cuotas vencidas de planes a plazos, cargos de ortodoncia (colocación y controles, desde el día en que se crearon) y, en planes de tratamiento, lo hecho hace más de 30 días sin pagar (con cuotas acordadas, la cuota vencida). Una factura sin fecha no vence. Incluye el «Vencido» de Ortodoncia.",
+    "porHacer": "Lo que todavía no se debe: de los planes de tratamiento aceptados, lo que falta por hacer y no está pagado (pasa a «Por cobrar» cuando se hace), y de ortodoncia «Precio total a plazos» y de los planes con cuotas acordadas, las cuotas que aún no vencen (pasan cuando vencen). No depende del periodo.",
     "ortoCobrado": "Pagos del periodo a facturas de casos de ortodoncia, menos reembolsos. Sin los pagos traídos de tu sistema anterior. Sin el saldo a favor aplicado: ese dinero contó el día que se cobró.",
     "ortoVencido": "Solo ortodoncia: cuotas, colocación y controles pasados de fecha. Ya está sumado en el «Vencido» de Saldos.",
     "reportesIngresos": "Pagos registrados en cada uno de los últimos 6 meses, menos reembolsos, por fecha de cobro. Un cobro cuenta el mes en que entró aunque después se cancele su factura; un reembolso resta el mes en que se devolvió. Sin los pagos traídos de tu sistema anterior; lo que un paciente paga de un saldo migrado sí cuenta.",

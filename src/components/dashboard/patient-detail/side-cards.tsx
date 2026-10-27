@@ -26,7 +26,8 @@ interface SideCardsProps {
    */
   /** `balance` (v7) = lo que se debe de verdad; `aunNoSeDebe` (aparte): lo por hacer de planes y lo por vencer de ortodoncia. */
   /** v8: `aunNoSeDebe` es lo por hacer completo; `pagadoDeLoPorHacer`, lo ya pagado de eso; `credit`, solo el libro. */
-  finance: { total: number; paid: number; balance: number; credit?: number; pct: number; plan?: number; aunNoSeDebe?: number; pagadoDeLoPorHacer?: number };
+  /** v12: `cuotasPorVencer`, las cuotas acordadas que aún no vencen (aparte, sin «ya pagados»). */
+  finance: { total: number; paid: number; balance: number; credit?: number; pct: number; plan?: number; aunNoSeDebe?: number; pagadoDeLoPorHacer?: number; cuotasPorVencer?: number };
   patientId: string;
   patientName: string;
   patientPhone: string | null;
@@ -235,6 +236,11 @@ export function SideCards({
               {(finance.pagadoDeLoPorHacer ?? 0) > 0.005 && (
                 <div className={styles.financeRow} data-pagado-de-lo-por-hacer>
                   <span>{t("patients.sideCards.pagadoDeLoPorHacer", { monto: formatCurrency(finance.pagadoDeLoPorHacer ?? 0) })}</span>
+                </div>
+              )}
+              {(finance.cuotasPorVencer ?? 0) > 0.005 && (
+                <div className={styles.financeRow} data-cuotas-por-vencer>
+                  <span>{t("patients.sideCards.cuotasPorVencer", { monto: formatCurrency(finance.cuotasPorVencer ?? 0) })}</span>
                 </div>
               )}
             </>

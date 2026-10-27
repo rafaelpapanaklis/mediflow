@@ -538,7 +538,7 @@ export function FinanzasRediseno() {
                     <p className={s.kpiPista}><QueCuenta clave="vencido" /></p>
                   </Link>
                   {/* Lo que aún no se debe sale de «Por cobrar» y se ve aquí: lo aceptado en planes y sin hacer,
-                      y las cuotas de ortodoncia «Precio total» que aún no vencen (26-oct). */}
+                      y las cuotas de ortodoncia «Precio total» y de planes con cuotas acordadas que aún no vencen (26 y 27-oct). */}
                   {(data.saldos?.porHacer ?? 0) > 0 && (
                     <div className={`${s.saldo} ${s.saldoAncho}`} data-saldo-por-hacer>
                       <div className={s.kpiArriba}>

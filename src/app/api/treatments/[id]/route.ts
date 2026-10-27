@@ -22,7 +22,12 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
 
   // EQ-07: registrar sesiones, cambiar estado y editar el plan → "Crear y
   // editar planes de tratamiento". El doctor sigue acotado a sus planes.
-  const deniedPerm = denyIfMissingPermission(ctx, "treatments.edit");
+  // v11 (27-oct, Rafael): «Hecho» y su deshacer —desde la consulta o desde la tarjeta del plan— usan
+  // ese mismo permiso, y el SUPER_ADMIN puede siempre (aunque su override no lo traiga). Se mira la
+  // acción en una copia del cuerpo: el cuerpo de verdad se lee abajo, como siempre.
+  const accion = await req.clone().json().then((b: any) => b?.action).catch(() => null);
+  const esHecho = accion === "marcar_hecho" || accion === "deshacer_hecho";
+  const deniedPerm = esHecho && ctx.role === "SUPER_ADMIN" ? null : denyIfMissingPermission(ctx, "treatments.edit");
   if (deniedPerm) return deniedPerm;
 
   const plan = await prisma.treatmentPlan.findFirst({

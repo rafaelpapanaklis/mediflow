@@ -18,6 +18,9 @@
 //    ahora + «Por hacer (aceptado)»: ningún peso desaparece de las cifras, solo cambia de renglón.
 //  · VENCIDO: lo hecho y no pagado, a los `DIAS_PARA_VENCER` días de hecho. Lo pagado cubre primero
 //    lo que se hizo antes (el abono más viejo paga el trabajo más viejo).
+//
+// Excepción (27-oct, A9): una nota con CUOTAS ACORDADAS (plan financiado) debe la cuota vencida, no lo
+// hecho (`deudaConCuotasAcordadas`).
 
 import { invoiceLineBases, round2 } from "@/lib/invoice-totals";
 import type { EstadoDeFila } from "./items";
@@ -73,6 +76,8 @@ export interface DeudaDeNota {
   porHacerSinPagar: number;
   vencido: number;
   lineas: LineaClasificada[];
+  /** true = nota con cuotas acordadas: `debe` y `vencido` son la cuota vencida (`deudaConCuotasAcordadas`). */
+  porCuotas?: boolean;
 }
 
 const esPorHacer = (estado: EstadoDeFila) => estado === "pendiente" || estado === "en_curso";
@@ -151,6 +156,20 @@ export function deudaDeNotaDelPlan(nota: NotaParaDeuda, filas: ReadonlyMap<strin
   }
 
   return { aceptado: total, hecho, porHacer, pagado, debe, saldoAFavor, porHacerSinPagar, vencido, lineas };
+}
+
+/**
+ * Nota del plan con CUOTAS ACORDADAS (forma de pago «a plazos»: plan financiado) — decisión de Rafael,
+ * 27-oct-2026 (A9): manda la mensualidad acordada, no lo hecho. Debe = lo vencido del calendario
+ * (`estadoDelPlan(...).importeVencido`, el MISMO número que dicen el WhatsApp de cobranza y el bot
+ * «¿cuánto debo?»), sin pasar del saldo de la nota; lo demás del saldo aún no se debe (por vencer).
+ * Hecho, por hacer y lo pagado por adelantado no cambian: dicen cómo va el tratamiento.
+ * Sin cuotas acordadas no se llama y sigue la regla de lo hecho.
+ */
+export function deudaConCuotasAcordadas(d: DeudaDeNota, cuotaVencida: number): DeudaDeNota {
+  const saldoNota = round2(Math.max(0, d.aceptado - d.pagado));
+  const debe = round2(Math.min(saldoNota, Math.max(0, Number(cuotaVencida) || 0)));
+  return { ...d, debe, vencido: debe, porHacerSinPagar: round2(saldoNota - debe), porCuotas: true };
 }
 
 /** Lo hecho antes de este instante ya venció: el inicio de HOY (zona de la clínica) menos 30 días. */

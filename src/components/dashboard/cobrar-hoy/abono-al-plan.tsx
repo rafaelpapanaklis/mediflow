@@ -283,10 +283,10 @@ export function AbonoAlPlan({ titulo, plan: planInicial, modo: modoInicial, pued
             <span className={c.rotulo}>{t("planTratamiento.cobro.abonado")}</span>
             <span className={`${c.cifra} ${c.cifraExito}`}>{fmtMXNdec(plan.pagado)}</span>
           </div>
-          {/* Lo HECHO menos lo pagado (26-oct). Abonar más es un adelanto: queda pagado por adelantado dentro del plan (no es saldo a favor). */}
+          {/* Lo HECHO menos lo pagado (26-oct); con cuotas acordadas, la cuota vencida (27-oct, A9). Abonar más es un adelanto: queda pagado por adelantado dentro del plan (no es saldo a favor). */}
           {modo === "abono" && plan.debe !== undefined && (
             <div className={c.resumenFila} data-abono-debe-hoy>
-              <span className={c.rotulo}>{t("planTratamiento.cobro.debeHoy")}</span>
+              <span className={c.rotulo}>{t(plan.aCuotas ? "planTratamiento.cobro.debeHoyCuotas" : "planTratamiento.cobro.debeHoy")}</span>
               <span className={`${c.cifra} ${plan.debe > 0.005 ? c.cifraPeligro : c.cifraExito}`}>{fmtMXNdec(plan.debe)}</span>
             </div>
           )}
@@ -296,7 +296,7 @@ export function AbonoAlPlan({ titulo, plan: planInicial, modo: modoInicial, pued
           </div>
         </div>
         {modo === "abono" && plan.debe !== undefined && debeAntes > plan.debe + 0.005 && (
-          <p className={c.ayuda} data-abono-adelanto>{t("planTratamiento.cobro.ayudaAdelanto", { debe: fmtMXNdec(plan.debe), saldo: fmtMXNdec(debeAntes) })}</p>
+          <p className={c.ayuda} data-abono-adelanto>{t(plan.aCuotas ? "planTratamiento.cobro.ayudaAdelantoCuotas" : "planTratamiento.cobro.ayudaAdelanto", { debe: fmtMXNdec(plan.debe), saldo: fmtMXNdec(debeAntes) })}</p>
         )}
         <p className={c.ayuda}>
           {modo === "nota_del_plan"

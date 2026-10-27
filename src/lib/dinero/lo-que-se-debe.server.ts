@@ -1,7 +1,9 @@
 // Lo que todavía NO se debe del saldo de unas facturas (decisiones de Rafael, 26-oct-2026):
 //  · de una nota de plan de tratamiento, lo aceptado que aún no se hace ni se paga;
 //  · de la factura principal de un caso de ortodoncia «Precio total a plazos», las cuotas que aún no
-//    vencen.
+//    vencen;
+//  · de una nota de plan con cuotas acordadas (plan financiado), lo que no es cuota vencida (27-oct,
+//    A9): se debe la mensualidad acordada, no lo hecho — lo mismo que el WhatsApp de cobranza y el bot.
 // Es la parte de `porHacerPorFactura` de `computeReceivables` (caja.ts): la MISMA regla que Caja y
 // Finanzas, para que Pacientes, la ficha, Reportes, Analítica, el Inbox, el aviso de la nota y el
 // portal del paciente digan lo mismo. Lo que el paciente debe de verdad = saldo − esto.
@@ -16,18 +18,25 @@ import { computeReceivables, receivableInvoiceWhere } from "@/lib/caja";
 import { columnaNotaDelPlanExiste } from "@/lib/treatments/items-db";
 import { leerNotasDePlan } from "@/lib/treatments/por-cobrar-db";
 import { deudaDeNotaDelPlan } from "@/lib/treatments/por-cobrar";
+import { leerCondicionesDeFacturas } from "@/lib/invoices/condiciones-pago-db";
+import { esPlanAPlazos } from "@/lib/invoices/plan-de-pagos";
 
 export interface LoQueAunNoSeDebe {
   /** `invoiceId` → pesos de su saldo que aún no se deben. Solo las que tienen algo. */
   porFactura: Record<string, number>;
   /** De las notas de plan (por hacer). */
   porHacer: number;
-  /** De ortodoncia «Precio total a plazos» (por vencer). */
+  /** De ortodoncia «Precio total a plazos» y de las notas de plan con cuotas acordadas (por vencer). */
   porVencer: number;
+  /**
+   * De `porVencer`, solo las cuotas de notas de plan con cuotas acordadas (v12, t5 m1): la ficha las dice
+   * aparte («Además, $X de cuotas que aún no vencen»), sin el «ya pagados» de lo por hacer.
+   */
+  porVencerCuotas: number;
   total: number;
 }
 
-const NADA = (): LoQueAunNoSeDebe => ({ porFactura: {}, porHacer: 0, porVencer: 0, total: 0 });
+const NADA = (): LoQueAunNoSeDebe => ({ porFactura: {}, porHacer: 0, porVencer: 0, porVencerCuotas: 0, total: 0 });
 
 /**
  * Las facturas de la clínica cuyo saldo PUEDE no ser deuda entera: notas de plan con saldo y
@@ -104,11 +113,12 @@ export async function loQueAunNoSeDebe(
       },
     );
     const total = s.porHacer ?? 0;
-    const porVencer = s.porVencerOrto ?? 0;
+    const porVencer = Math.round(((s.porVencerOrto ?? 0) + (s.porVencerCuotas ?? 0)) * 100) / 100;
     return {
       porFactura: s.porHacerPorFactura ?? {},
       porHacer: Math.round((total - porVencer) * 100) / 100,
       porVencer,
+      porVencerCuotas: s.porVencerCuotas ?? 0,
       total,
     };
   } catch (e) {
@@ -124,13 +134,18 @@ export async function loQueAunNoSeDebe(
  * revisión t5 de la v7, V1); al cerrar el plan pasa a ese libro y aquí da 0. Con esto, lo por hacer
  * completo = `loQueAunNoSeDebe` (lo por hacer sin pagar) + esto, el «Por hacer» de la Cuenta del plan.
  * Mira también las notas ya saldadas (pagó todo y no se ha hecho nada). Tolerante: si falla, 0.
+ *
+ * v12 (t5, m1): NO cuenta las notas con cuotas acordadas. Ahí manda la mensualidad (v10): lo que aún no
+ * se debe son cuotas por vencer, no lo por hacer, y la ficha no dice «ya pagados» de ellas.
  */
 export async function adelantoEnNotasDePlan(clinicId: string, invoiceIds: string[]): Promise<number> {
   if (!clinicId || invoiceIds.length === 0) return 0;
   try {
     const notas = await leerNotasDePlan(clinicId, invoiceIds);
+    const { porFactura: condiciones } = await leerCondicionesDeFacturas(prisma, { clinicId, invoiceIds: Array.from(notas.keys()) });
     let centavos = 0;
-    for (const l of Array.from(notas.values())) {
+    for (const [id, l] of Array.from(notas.entries())) {
+      if (esPlanAPlazos(condiciones.get(id))) continue;
       const d = deudaDeNotaDelPlan(l.nota, l.filas, null);
       centavos += Math.round(Math.min(d.saldoAFavor, d.porHacer) * 100);
     }
