@@ -147,6 +147,9 @@ const SEDES_DEL_MISMO_DUENO: Record<string, { motivo: string; escribeEnC?: boole
   "GET /api/cfdi/usage": { motivo: "cupo de 150 CFDI del mes compartido con las sedes incluidas del dueño (leerGrupoDePago); solo el conteo" },
   "POST /api/clinic/subscription/cancel-request": { motivo: "una sede incluida lee quién paga (leerGrupoDePago) para negarse y mandar a la principal; no escribe en ella" },
   "GET /api/storage/usage": { motivo: "almacenamiento del plan compartido: suma el uso de las sedes del mismo dueño; solo bytes" },
+  // ws1-t4 v8: Auditoría lee id, nombre y slug de las sedes hermanas SOLO para taparlos («otra sede») en
+  // las filas viejas ante quien no tiene ficha en ellas; no devuelve nada de esas sedes.
+  "GET /api/auditoria": { motivo: "tapa en la bitácora las sedes del mismo dueño a las que quien mira no tiene acceso (sedesAjenasPara); no devuelve nada de ellas" },
   "POST /api/auth/2fa/setup": { motivo: "el 2FA es de la PERSONA (EQ-02): se propaga a todas sus fichas", escribeEnC: true },
   // Solo van aquí las que el arnés DEMUESTRA que tocan la sede hermana (la
   // prueba falla si una entrada no hace falta). Las demás rutas del 2FA y de la
