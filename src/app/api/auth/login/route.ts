@@ -12,6 +12,7 @@ import {
   registrarFalloLogin,
   revisarBloqueoLogin,
 } from "@/lib/auth/login-bloqueo";
+import { borrarDesbloqueos } from "@/lib/sede-clave/core";
 
 export const dynamic = "force-dynamic";
 
@@ -73,5 +74,8 @@ export async function POST(req: NextRequest) {
   }
 
   await registrarAciertoLogin(req, entrada.email);
-  return NextResponse.json({ ok: true });
+  const res = NextResponse.json({ ok: true });
+  // ws1-t4 v5: sesión nueva, sin desbloqueos de la clave de la sede de antes.
+  borrarDesbloqueos(res, req.headers.get("cookie"));
+  return res;
 }

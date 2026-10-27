@@ -37,10 +37,24 @@ export interface GrupoDePermisos {
   keys: PermissionKey[];
 }
 
+/**
+ * ws1-t4 v5 (Rafael, 27-oct): «Crear y cambiar la clave de la sede» solo se
+ * enseña si la cuenta tiene 2+ sedes o esta sede ya tiene la clave puesta (lo
+ * decide el servidor: `permisoDeClaveVisible`). Oculto se conserva igual que
+ * los de arriba.
+ */
+export function clavesOcultasEnModal(permisoClaveDeSede: boolean): ReadonlySet<PermissionKey> {
+  if (permisoClaveDeSede) return CLAVES_OCULTAS_EN_MODAL;
+  return new Set<PermissionKey>([...CLAVES_OCULTAS_EN_MODAL, "sede.clave"]);
+}
+
 /** Los grupos que se pintan: sin las claves ocultas y sin grupos que se quedan vacíos. */
-export function gruposVisibles(grupos: readonly GrupoDePermisos[]): GrupoDePermisos[] {
+export function gruposVisibles(
+  grupos: readonly GrupoDePermisos[],
+  ocultas: ReadonlySet<PermissionKey> = CLAVES_OCULTAS_EN_MODAL,
+): GrupoDePermisos[] {
   return grupos
-    .map((g) => ({ title: TITULO_VISIBLE[g.title] ?? g.title, keys: g.keys.filter((k) => !CLAVES_OCULTAS_EN_MODAL.has(k)) }))
+    .map((g) => ({ title: TITULO_VISIBLE[g.title] ?? g.title, keys: g.keys.filter((k) => !ocultas.has(k)) }))
     .filter((g) => g.keys.length > 0);
 }
 
@@ -57,7 +71,13 @@ export function sigueElDefaultDelRol(
   return true;
 }
 
-/** En qué se distingue lo que tiene de lo que da su rol (solo claves visibles). */
+/**
+ * En qué se distingue lo que tiene de lo que da su rol (sin las claves de
+ * CLAVES_OCULTAS_EN_MODAL). ws1-t4 v6 (revisión de t8, m-1): «Crear y cambiar
+ * la clave de la sede» SÍ cuenta aunque con una sola sede no salga en la lista.
+ * Si no, un ADMIN que lo tiene salía «personalizado» sin ninguna diferencia a
+ * la vista, y «Usar default del rol» se lo quitaba sin que se viera.
+ */
 export function diferenciasConElRol(
   seleccionados: Iterable<PermissionKey>,
   defaultsDelRol: Iterable<PermissionKey>,

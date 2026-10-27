@@ -11557,7 +11557,7 @@
     "conClaveDetalle": "This location has a passcode. Enter it with its passcode to see its numbers.",
     "pantalla": {
       "titulo": "This location has a passcode",
-      "subtitulo": "Enter the location passcode to continue. This browser won't ask you again for 72 hours.",
+      "subtitulo": "Enter the location passcode to continue. This browser won't ask you again for 72 hours unless you log out.",
       "abierta": "This location no longer asks you for a passcode in this browser.",
       "irALaSede": "Go to this location",
       "etiqueta": "Location passcode",
@@ -11578,7 +11578,7 @@
     "card": {
       "titulo": "Location passcode",
       "subtitulo": "Require a passcode to enter this location, on top of each person's password.",
-      "explicacion": "With the passcode on, nobody enters this location without typing it, not even the account owner. It's asked once every 72 hours in each browser. If it's forgotten, only DaleControl support can remove it.",
+      "explicacion": "With the passcode on, nobody enters this location without typing it, not even the account owner. It's asked once every 72 hours in each browser, and again after logging out. If it's forgotten, only DaleControl support can remove it.",
       "activa": "On",
       "inactiva": "Off",
       "activar": "Turn on passcode",

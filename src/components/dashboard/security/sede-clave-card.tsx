@@ -6,14 +6,19 @@ import toast from "react-hot-toast";
 import { useT } from "@/i18n/i18n-provider";
 import { CLAVE_MIN } from "@/lib/sede-clave/constantes";
 
-type Estado = { disponible: boolean; puedeGestionar: boolean; activa: boolean };
+type Estado = { disponible: boolean; puedeGestionar: boolean; activa: boolean; variasSedes: boolean };
 type Modo = null | "activar" | "cambiar" | "desactivar";
+
+const SIN_TARJETA: Estado = { disponible: false, puedeGestionar: false, activa: false, variasSedes: false };
 
 /**
  * «Clave de la sede» en Configuración → Seguridad (ws1-t4). Lo decide todo el
  * servidor (GET/POST /api/sede-clave, sobre la sede activa de la sesión): esta
  * tarjeta no se pinta si quien la abre no es el SUPER_ADMIN ni un ADMIN con el
  * permiso «sede.clave», ni mientras el SQL de la función no esté pegado.
+ * v4 (Rafael, 27-oct): tampoco si el dueño de la cuenta tiene una sola sede
+ * (salvo que esta sede ya tenga la clave puesta: entonces sale para cambiarla
+ * o quitarla).
  * La clave nunca vuelve del servidor: solo `activa` sí/no.
  */
 export function SedeClaveCard() {
@@ -30,8 +35,8 @@ export function SedeClaveCard() {
     let vivo = true;
     fetch("/api/sede-clave", { credentials: "include" })
       .then((r) => (r.ok ? r.json() : null))
-      .then((d) => { if (vivo) setEstado(d && typeof d === "object" ? (d as Estado) : { disponible: false, puedeGestionar: false, activa: false }); })
-      .catch(() => { if (vivo) setEstado({ disponible: false, puedeGestionar: false, activa: false }); });
+      .then((d) => { if (vivo) setEstado(d && typeof d === "object" ? (d as Estado) : SIN_TARJETA); })
+      .catch(() => { if (vivo) setEstado(SIN_TARJETA); });
     return () => { vivo = false; };
   }, []);
 
@@ -83,11 +88,11 @@ export function SedeClaveCard() {
     }
   }
 
-  // Cargando: esqueleto del mismo alto que la cabecera, para que no salte.
-  if (estado === null) {
-    return <div className="card p-6" aria-busy="true" style={{ minHeight: 88, opacity: 0.6 }} />;
-  }
+  // Mientras carga, nada: casi todas las cuentas tienen una sola sede y no
+  // la verán; un esqueleto que aparece y se va haría saltar la pantalla.
+  if (estado === null) return null;
   if (!estado.puedeGestionar || !estado.disponible) return null;
+  if (!estado.variasSedes && !estado.activa) return null;
 
   const activa = estado.activa;
 

@@ -59,7 +59,7 @@ const TEXTOS = {
     conClaveTocar: "Escribe la clave para ver esta sede",
     cuadro: {
       titulo: "Sede con clave",
-      texto: "Escribe la clave de la sede para verla en el reporte. No se te volverá a pedir en este navegador en 72 horas.",
+      texto: "Escribe la clave de la sede para verla en el reporte. No se te volverá a pedir en este navegador en 72 horas, salvo que cierres sesión.",
       etiqueta: "Clave de la sede",
       entrar: "Ver la sede",
       comprobando: "Comprobando…",
@@ -106,7 +106,7 @@ const TEXTOS = {
     conClaveTocar: "Type the passcode to see this location",
     cuadro: {
       titulo: "Location with passcode",
-      texto: "Type the location passcode to see it in the report. This browser won't ask again for 72 hours.",
+      texto: "Type the location passcode to see it in the report. This browser won't ask again for 72 hours unless you log out.",
       etiqueta: "Location passcode",
       entrar: "Show location",
       comprobando: "Checking…",

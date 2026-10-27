@@ -11,10 +11,7 @@ import {
 } from "@/lib/auth/permissions";
 import type { Role } from "@prisma/client";
 import { useT, useLocale } from "@/i18n/i18n-provider";
-import { gruposVisibles, sigueElDefaultDelRol, diferenciasConElRol } from "@/lib/team/permisos-modal";
-
-// Lo que se pinta (ver permisos-modal.ts: sin Marketplace ni las especialidades que ya no se contratan).
-const GRUPOS = gruposVisibles(PERMISSION_GROUPS);
+import { clavesOcultasEnModal, gruposVisibles, sigueElDefaultDelRol, diferenciasConElRol } from "@/lib/team/permisos-modal";
 
 // labelKey -> resolved via t() at render time (never call t() at module scope).
 const ROLE_LABEL: Record<string, string> = {
@@ -37,10 +34,16 @@ interface PermissionsModalProps {
   // Callback tras guardar — el padre actualiza su state local para
   // reflejar el cambio sin recargar la página entera.
   onSaved: (memberId: string, newOverride: string[]) => void;
+  /** ws1-t4 v5: enseñar «Crear y cambiar la clave de la sede» (2+ sedes o clave ya puesta). */
+  permisoClaveDeSede?: boolean;
 }
 
-export function PermissionsModal({ open, member, onClose, onSaved }: PermissionsModalProps) {
+export function PermissionsModal({ open, member, onClose, onSaved, permisoClaveDeSede = false }: PermissionsModalProps) {
   const t = useT();
+  // Lo que se pinta (ver permisos-modal.ts: sin Marketplace, sin las especialidades
+  // que ya no se contratan y, con una sola sede, sin la clave de la sede).
+  const ocultas = useMemo(() => clavesOcultasEnModal(permisoClaveDeSede), [permisoClaveDeSede]);
+  const grupos = useMemo(() => gruposVisibles(PERMISSION_GROUPS, ocultas), [ocultas]);
   const enIngles = useLocale().startsWith("en");
   // useDefault: true → checkboxes deshabilitados, mostrando los del rol.
   // false → habilitados, editando el override del usuario.
@@ -245,7 +248,7 @@ export function PermissionsModal({ open, member, onClose, onSaved }: Permissions
 
           {/* Permission groups */}
           <div className="space-y-4">
-            {GRUPOS.map((group) => (
+            {grupos.map((group) => (
               <div key={group.title}>
                 <div className="form-section__title">
                   {group.title}

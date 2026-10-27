@@ -80,6 +80,9 @@ export function secretoDesbloqueo(base: string = activeClinicSecret()): string {
   return `${base}:sede-clave`;
 }
 
+const PREFIJO_COOKIE_DESBLOQUEO = "df_sede_";
+const NOMBRE_COOKIE_DESBLOQUEO = new RegExp(`^${PREFIJO_COOKIE_DESBLOQUEO}[0-9a-f]{16}$`);
+
 /**
  * Nombre de la cookie de UNA persona en UNA sede. Va por persona y sede para
  * que en la computadora compartida de recepción el desbloqueo de una persona
@@ -88,7 +91,32 @@ export function secretoDesbloqueo(base: string = activeClinicSecret()): string {
  */
 export function nombreCookieDesbloqueo(supabaseId: string, clinicId: string): string {
   const h = createHash("sha256").update(JSON.stringify([supabaseId, clinicId])).digest("hex").slice(0, 16);
-  return `df_sede_${h}`;
+  return `${PREFIJO_COOKIE_DESBLOQUEO}${h}`;
+}
+
+/**
+ * v4 (Rafael, 27-oct): los nombres de TODAS las cookies de desbloqueo que trae
+ * la cabecera Cookie, de cualquier persona y sede. El cierre de sesión las borra
+ * para que, al volver a entrar, se pida la clave otra vez.
+ */
+export function cookiesDeDesbloqueo(cabecera: string | null | undefined): string[] {
+  if (!cabecera) return [];
+  const nombres = cabecera.split(/;\s*/).map((c) => c.slice(0, Math.max(0, c.indexOf("="))).trim());
+  return Array.from(new Set(nombres.filter((n) => NOMBRE_COOKIE_DESBLOQUEO.test(n))));
+}
+
+type ConCookies = { cookies: { set(nombre: string, valor: string, opciones: { path: string; maxAge: number }): unknown } };
+
+/**
+ * Borra en `res` todos los desbloqueos que trae la petición. v4: al cerrar
+ * sesión. v5 (Rafael, 27-oct; revisión de t8, M-1): también en TODO inicio de
+ * sesión nuevo (contraseña, Google y enlaces de correo), así que la clave se
+ * vuelve a pedir aunque la sesión anterior terminara en otro dispositivo, por
+ * caducidad o sin pasar por el logout. Solo donde nace la sesión: un
+ * desbloqueo tecleado DENTRO de la sesión no se toca.
+ */
+export function borrarDesbloqueos(res: ConCookies, cabecera: string | null | undefined): void {
+  for (const nombre of cookiesDeDesbloqueo(cabecera)) res.cookies.set(nombre, "", { path: "/", maxAge: 0 });
 }
 
 export interface DatosDesbloqueo {

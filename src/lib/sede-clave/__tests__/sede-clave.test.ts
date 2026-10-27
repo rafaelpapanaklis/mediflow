@@ -194,11 +194,25 @@ const prismaFalso: any = {
       return f ? { id: f.id, clinicId: f.clinicId } : null;
     },
     findMany: async ({ where }: any) =>
-      fichas
-        .filter((x) => x.supabaseId === where.supabaseId && (!where.role || x.role === where.role) && x.isActive)
-        .map((x) => ({ clinic: { id: x.clinic.id, createdAt: x.clinic.createdAt, archivedAt: null } })),
+      where.clinicId !== undefined
+        // v4 · cuentaConVariasSedes: los dueños de UNA sede.
+        ? fichas
+          .filter((x) => x.clinicId === where.clinicId && (!where.role || x.role === where.role) && x.isActive)
+          .map((x) => ({ supabaseId: x.supabaseId }))
+        : fichas
+          .filter((x) => x.supabaseId === where.supabaseId && (!where.role || x.role === where.role) && x.isActive)
+          .map((x) => ({ clinicId: x.clinicId, clinic: { id: x.clinic.id, createdAt: x.clinic.createdAt, archivedAt: null } })),
   },
   clinic: {
+    // v4 · cuentaConVariasSedes: sedes sin archivar de las que alguno de esos dueños es SUPER_ADMIN activo.
+    count: async ({ where }: any) => {
+      const algun = where.users.some;
+      return new Set(
+        fichas
+          .filter((f) => algun.supabaseId.in.includes(f.supabaseId) && f.role === algun.role && f.isActive && !f.clinic.archivedAt)
+          .map((f) => f.clinicId),
+      ).size;
+    },
     findMany: async ({ where }: any) => (where.id.in as string[]).map((id) => CLINICAS[id]).filter(Boolean),
     findUnique: async ({ where }: any) => (CLINICAS[where.id] ? { id: where.id } : null),
     update: async ({ where }: any) => { archivadas.push(where.id); return { id: where.id }; },
@@ -254,6 +268,13 @@ const dobles: Record<string, unknown> = {
       auth: {
         getUser: async () => ({ data: { user: sesion ? { id: sesion } : null } }),
         getSession: async () => ({ data: { session: null } }),
+        signOut: async () => ({ error: null }),
+        // v5: los tres caminos que crean una sesión nueva.
+        signInWithPassword: async ({ password }: any) =>
+          password === "buena-123" ? { data: { session: { access_token: "t" } }, error: null } : { data: { session: null }, error: { message: "Invalid login credentials" } },
+        exchangeCodeForSession: async (code: string) =>
+          code === "ok" ? { data: { user: { id: sesion, email: "dueno@example.com" } }, error: null } : { data: { user: null }, error: { message: "bad code" } },
+        verifyOtp: async ({ token_hash }: any) => ({ error: token_hash === "ok" ? null : { message: "otp_expired" } }),
       },
     }),
   },
@@ -263,6 +284,7 @@ const dobles: Record<string, unknown> = {
     logClinicFallback: () => undefined,
     resembrarActiveClinicCookie: async () => false,
     writeActiveClinicCookie: (_res: unknown, id: string) => { activasEscritas.push(id); },
+    pickActiveClinicId: (actual: string | null, ids: string[]) => ({ clinicId: actual && ids.includes(actual) ? actual : ids[0] }),
   },
   "@/lib/auth/sesion-en-cache": { resolverSesion: async (sb: string, c: string | null) => resolverSesion(sb, c) },
   "@/lib/auth/two-factor-decision": { decidirDosPasos: async () => ({ decision: null }) },
@@ -275,6 +297,7 @@ const dobles: Record<string, unknown> = {
   "@/lib/admin-audit": { logAdminClinicMutation: async (o: any) => { bitacoraAdmin.push({ ...o, req: undefined }); } },
   "@/lib/admin-auth": { getAdminSession: async () => adminSesion },
   "@/lib/failban": { persistentRateLimit: async () => null },
+  "@/lib/auth/login-bloqueo": { revisarBloqueoLogin: async () => null, registrarAciertoLogin: async () => undefined, registrarFalloLogin: async () => undefined },
   // El reporte de sedes: las cifras de cada sede salen de aquí, y se apunta qué sede se consultó.
   "@/lib/branches": { getOwnedClinicIds: async (sb: string) => fichas.filter((f) => f.supabaseId === sb && f.role === "SUPER_ADMIN").map((f) => f.clinicId) },
   "@/lib/dinero/ingresos.server": {
@@ -455,7 +478,7 @@ test("sin sql/sede-clave.sql: nadie queda bloqueado, nada se consulta y la tarje
   assert.equal(sw.status, 200);
   const { GET } = await rutaClave();
   const g = await llamar(GET, "/api/sede-clave");
-  assert.deepEqual(g.body, { disponible: false, puedeGestionar: true, activa: false });
+  assert.deepEqual(g.body, { disponible: false, puedeGestionar: true, activa: false, variasSedes: false });
   assert.deepEqual(
     db.consultas.filter((q) => !q.includes("to_regclass")),
     [],
@@ -1075,4 +1098,265 @@ test("el gate de la clave está en los dos caminos de la sesión y en el layout"
     const src = readFileSync(join(SRC, "..", r), "utf8");
     assert.match(src, /await (sedeCerradaPara|estadoGateSede)\(\{/, `${r} no pregunta por la clave de la sede`);
   }
+});
+
+// ══════════════════ v4 · decisiones de Rafael (27-oct) ══════════════════
+
+test("v4 · la tarjeta solo sale si el dueño tiene 2+ sedes: con una sola sede ni sale ni se puede activar", async () => {
+  const { GET, POST } = await rutaClave();
+  // El dueño de la sede 3 tiene dos sedes (la principal y la 3): sale, también para el ADMIN con permiso.
+  como(SB_ADMIN3, CLI_3);
+  assert.equal((await llamar(GET, "/api/sede-clave")).body.variasSedes, true);
+  como(SB_DUENO, CLI_1);
+  assert.equal((await llamar(GET, "/api/sede-clave")).body.variasSedes, true);
+
+  // «Clínica ajena» es la única sede de su dueño.
+  como(SB_OTRO, CLI_OTRA);
+  const g = await llamar(GET, "/api/sede-clave");
+  assert.deepEqual(g.body, { disponible: true, puedeGestionar: true, activa: false, variasSedes: false });
+  const r = await llamar(POST, "/api/sede-clave", { accion: "activar", clave: CLAVE, confirmacion: CLAVE });
+  assert.equal(r.status, 409);
+  assert.equal(r.body.code, "una_sede");
+  assert.equal(db.claves.has(CLI_OTRA), false, "no se guardó ninguna clave");
+  assert.equal(bitacora.length, 0);
+
+  // Si abre una segunda sede, ya puede.
+  CLINICAS.cli_otra_2 = clinica("cli_otra_2", "Clínica ajena Norte", 6);
+  try {
+    fichas.push(ficha("u-otro-2", SB_OTRO, "cli_otra_2", "SUPER_ADMIN"));
+    assert.equal((await llamar(GET, "/api/sede-clave")).body.variasSedes, true);
+    assert.equal((await llamar(POST, "/api/sede-clave", { accion: "activar", clave: CLAVE, confirmacion: CLAVE })).status, 200);
+  } finally {
+    delete CLINICAS.cli_otra_2;
+  }
+});
+
+test("v4 · una sede sola que YA tiene la clave puesta la sigue viendo para cambiarla o quitarla", async () => {
+  await activarComoAdmin3();
+  // Se va la principal (deja de ser del dueño): la cuenta queda con una sede.
+  fichas = fichas.filter((f) => f.clinicId !== CLI_1);
+  como(SB_ADMIN3, CLI_3);
+  const { GET, POST } = await rutaClave();
+  const g = await llamar(GET, "/api/sede-clave");
+  assert.equal(g.body.variasSedes, false);
+  assert.equal(g.body.activa, true, "la tarjeta sale porque la clave está activa");
+  const off = await llamar(POST, "/api/sede-clave", { accion: "desactivar", claveActual: CLAVE });
+  assert.equal(off.status, 200, JSON.stringify(off.body));
+  const otraVez = await llamar(POST, "/api/sede-clave", { accion: "activar", clave: CLAVE, confirmacion: CLAVE });
+  assert.equal(otraVez.body.code, "una_sede", "quitada, ya no se puede volver a poner con una sola sede");
+});
+
+test("v4 · la clave no toca ninguna integración: activar no consulta ni desconecta Google, TV ni en vivo", async () => {
+  db.consultas = [];
+  await activarComoAdmin3();
+  const sql = db.consultas.join("\n");
+  assert.doesNotMatch(sql, /google|calendar|tv_|live|integra/i);
+  const ruta = readFileSync(join(SRC, "app/api/sede-clave/route.ts"), "utf8");
+  const tarjeta = readFileSync(join(SRC, "components/dashboard/security/sede-clave-card.tsx"), "utf8");
+  for (const src of [ruta, tarjeta]) assert.doesNotMatch(src, /google|calendar|\btv\b|live|desconect|disconnect/i);
+  const es = JSON.stringify(JSON.parse(readFileSync(join(SRC, "i18n/dictionaries/es.json"), "utf8")).sedeClave);
+  assert.doesNotMatch(es, /google|calendar|\btv\b|en vivo|desconect|integraci/i);
+});
+
+/** «Cerrar sesión»: POST /api/auth/logout con las cookies del navegador de quien está sentado. */
+async function cerrarSesion() {
+  const { NextRequest } = await import("next/server");
+  const { POST } = await import("@/app/api/auth/logout/route");
+  const cookie = Array.from(tarro().entries()).map(([k, v]) => `${k}=${v}`).join("; ");
+  const res: any = await POST(new NextRequest("http://localhost/api/auth/logout", { method: "POST", headers: { cookie, host: "localhost" } }));
+  for (const c of res.cookies.getAll()) {
+    if (!c.value || c.maxAge === 0) tarro().delete(c.name);
+    else tarro().set(c.name, c.value);
+  }
+  return res;
+}
+
+test("v4 · al cerrar sesión se borra el desbloqueo de 72 h: al volver a entrar se pide la clave", async () => {
+  await activarComoAdmin3();
+  como(SB_DUENO, CLI_1);
+  assert.equal((await llamar(await rutaDesbloquear(), "/api/sede-clave/desbloquear", { clinicId: CLI_3, clave: CLAVE })).status, 200);
+  como(SB_DUENO, CLI_3);
+  assert.equal((await getAuthContext())?.clinicId, CLI_3, "desbloqueada");
+  tarro().set("otra_cookie", "se-queda");
+  const desbloqueos = Array.from(tarro().keys()).filter((k) => k.startsWith("df_sede_"));
+  assert.equal(desbloqueos.length, 1);
+
+  await cerrarSesion();
+  assert.deepEqual(Array.from(tarro().keys()).filter((k) => k.startsWith("df_sede_")), [], "sin desbloqueos");
+  assert.equal(tarro().get("otra_cookie"), "se-queda", "solo se borran las de la clave");
+
+  // Vuelve a entrar en el mismo navegador: la sede 3 pide la clave otra vez.
+  assert.equal(await getAuthContext(), null);
+  como(SB_DUENO, CLI_1);
+  assert.equal((await llamar(await rutaSwitch(), "/api/switch-clinic", { clinicId: CLI_3 })).status, 423);
+});
+
+test("v4 · cookiesDeDesbloqueo solo reconoce las de la clave", async () => {
+  const { cookiesDeDesbloqueo, nombreCookieDesbloqueo } = await import("../core");
+  const a = nombreCookieDesbloqueo(SB_DUENO, CLI_3);
+  const b = nombreCookieDesbloqueo(SB_ADMIN3, CLI_3);
+  assert.deepEqual(cookiesDeDesbloqueo(`activeClinicId=x; ${a}=v1; df_2fa=z; ${b}=v2; df_sede_corta=1; ${a}=v1`), [a, b]);
+  assert.deepEqual(cookiesDeDesbloqueo(null), []);
+  assert.deepEqual(cookiesDeDesbloqueo(""), []);
+});
+
+// ══════════════════ v5 · todo inicio de sesión nuevo pide la clave (t8, M-1) ══════════════════
+
+/** Una petición con las cookies del navegador de quien está sentado; lo que la respuesta pone o borra vuelve al navegador. */
+async function conCookies(handler: (req: any) => Promise<Response>, url: string, body?: unknown) {
+  const { NextRequest } = await import("next/server");
+  const cookie = Array.from(tarro().entries()).map(([k, v]) => `${k}=${v}`).join("; ");
+  const res: any = await handler(new NextRequest(`http://localhost${url}`, {
+    method: body === undefined ? "GET" : "POST",
+    headers: { cookie, host: "localhost", origin: "http://localhost", "content-type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  }));
+  for (const c of res.cookies.getAll()) {
+    if (!c.value || c.maxAge === 0) tarro().delete(c.name);
+    else tarro().set(c.name, c.value);
+  }
+  return res as Response;
+}
+
+/** El dueño, con la clave de la sede 3 tecleada en su navegador. */
+async function duenoConSede3Desbloqueada() {
+  await activarComoAdmin3();
+  como(SB_DUENO, CLI_1);
+  assert.equal((await llamar(await rutaDesbloquear(), "/api/sede-clave/desbloquear", { clinicId: CLI_3, clave: CLAVE, cambiarDeSede: false })).status, 200);
+  tarro().set("otra_cookie", "se-queda");
+  assert.equal(desbloqueosEnElNavegador().length, 1);
+}
+const desbloqueosEnElNavegador = () => Array.from(tarro().keys()).filter((k) => k.startsWith("df_sede_"));
+
+async function sede3PideLaClave() {
+  como(SB_DUENO, CLI_1);
+  return (await llamar(await rutaSwitch(), "/api/switch-clinic", { clinicId: CLI_3 })).status === 423;
+}
+
+test("v5 · iniciar sesión con contraseña borra los desbloqueos (p. ej. la sesión se cerró en otro dispositivo)", async () => {
+  await duenoConSede3Desbloqueada();
+  const { POST } = await import("@/app/api/auth/login/route");
+  // Un intento fallido no crea sesión: no toca nada.
+  assert.equal((await conCookies(POST, "/api/auth/login", { email: "dueno@example.com", password: "mala" })).status, 401);
+  assert.equal(desbloqueosEnElNavegador().length, 1);
+  // La sesión se crea bien: sin desbloqueos, y la sede 3 vuelve a pedir la clave.
+  assert.equal((await conCookies(POST, "/api/auth/login", { email: "dueno@example.com", password: "buena-123" })).status, 200);
+  assert.deepEqual(desbloqueosEnElNavegador(), []);
+  assert.equal(tarro().get("otra_cookie"), "se-queda");
+  assert.ok(await sede3PideLaClave());
+});
+
+test("v5 · entrar con Google (auth/callback) borra los desbloqueos y deja el 2FA y la sede activa como siempre", async () => {
+  await duenoConSede3Desbloqueada();
+  const { GET } = await import("@/app/api/auth/callback/route");
+  assert.equal((await conCookies(GET, "/api/auth/callback?code=malo")).status, 307);
+  assert.equal(desbloqueosEnElNavegador().length, 1, "sin sesión nueva no se toca");
+  const r = await conCookies(GET, "/api/auth/callback?code=ok");
+  assert.equal(r.headers.get("location"), "http://localhost/dashboard", "rama de quien ya tiene clínica (la del 2FA)");
+  assert.deepEqual(desbloqueosEnElNavegador(), []);
+  // El callback carga active-clinic con import() dinámico (no pasa por el doble): la cookie real se siembra igual.
+  assert.ok(tarro().has("activeClinicId"), "la sede activa se siembra igual");
+  assert.ok(await sede3PideLaClave());
+});
+
+test("v5 · entrar por un enlace de correo (auth/confirm: recuperar contraseña, invitación) borra los desbloqueos", async () => {
+  const { GET } = await import("@/app/auth/confirm/route");
+  for (const url of ["/auth/confirm?code=ok&next=/reset-password", "/auth/confirm?token_hash=ok&type=recovery&next=/reset-password"]) {
+    navegadores.clear();
+    db.claves.clear();
+    (await import("../estado.server"))._olvidarEstado();
+    await duenoConSede3Desbloqueada();
+    const malo = await conCookies(GET, url.replace("=ok", "=malo"));
+    assert.match(malo.headers.get("location") ?? "", /error=link_invalido/);
+    assert.equal(desbloqueosEnElNavegador().length, 1, `${url}: un enlace inválido no toca nada`);
+    const r = await conCookies(GET, url);
+    assert.match(r.headers.get("location") ?? "", /\/reset-password$/);
+    assert.deepEqual(desbloqueosEnElNavegador(), [], url);
+    assert.ok(await sede3PideLaClave(), url);
+  }
+});
+
+test("v5 · solo se borran donde NACE la sesión: no en post-login, 2FA, «Ver como clínica» ni la clave misma", () => {
+  const usan = TODOS.filter((f) => /borrarDesbloqueos\s*\(/.test(f.src)).map((f) => f.rel).sort();
+  assert.deepEqual(usan, [
+    "src/app/api/auth/callback/route.ts",
+    "src/app/api/auth/login/route.ts",
+    "src/app/api/auth/logout/route.ts",
+    "src/app/auth/confirm/route.ts",
+    "src/lib/sede-clave/core.ts",
+  ]);
+  // Y nadie más se salta la función para borrarlas a mano.
+  const aMano = TODOS.filter((f) => /cookiesDeDesbloqueo\s*\(/.test(f.src)).map((f) => f.rel);
+  assert.deepEqual(aMano, ["src/lib/sede-clave/core.ts"]);
+});
+
+test("v5 · el desbloqueo tecleado después de iniciar sesión se queda (con el 2FA y el resto de la sesión)", async () => {
+  await activarComoAdmin3();
+  como(SB_DUENO, CLI_1);
+  const { POST } = await import("@/app/api/auth/login/route");
+  assert.equal((await conCookies(POST, "/api/auth/login", { email: "dueno@example.com", password: "buena-123" })).status, 200);
+  assert.equal((await llamar(await rutaDesbloquear(), "/api/sede-clave/desbloquear", { clinicId: CLI_3, clave: CLAVE })).status, 200);
+  como(SB_DUENO, CLI_3);
+  assert.equal((await getAuthContext())?.clinicId, CLI_3);
+  // Las peticiones siguientes de la misma sesión (cambiar de sede, el 2FA, refrescar) no lo borran.
+  como(SB_DUENO, CLI_1);
+  assert.equal((await llamar(await rutaSwitch(), "/api/switch-clinic", { clinicId: CLI_3 })).status, 200);
+  assert.equal(desbloqueosEnElNavegador().length, 1);
+});
+
+// ══════════════════ v5 · el permiso en Equipo → Permisos ══════════════════
+
+test("v5 · el permiso «Crear y cambiar la clave de la sede» solo se enseña con 2+ sedes o con la clave ya puesta", async () => {
+  const { permisoDeClaveVisible } = await import("../cuenta.server");
+  assert.equal(await permisoDeClaveVisible(CLI_3), true, "su dueño tiene 2 sedes");
+  assert.equal(await permisoDeClaveVisible(CLI_1), true);
+  assert.equal(await permisoDeClaveVisible(CLI_OTRA), false, "una sola sede");
+  db.claves.set(CLI_OTRA, { claveHash: "$2a$10$x", version: 1, actualizadaPor: null });
+  const { invalidarLista } = await import("../estado.server");
+  invalidarLista();
+  assert.equal(await permisoDeClaveVisible(CLI_OTRA), true, "una sede sola con la clave puesta: igual que la tarjeta");
+  db.tablas = false;
+  const { _olvidarEstado } = await import("../estado.server");
+  _olvidarEstado();
+  assert.equal(await permisoDeClaveVisible(CLI_3), false, "sin el SQL la función está apagada");
+  db.tablas = true;
+  _olvidarEstado();
+  db.falloSonda = true;
+  assert.equal(await permisoDeClaveVisible(CLI_3), false, "si falla la base, no se enseña");
+});
+
+test("v5 · el modal de Permisos esconde la clave de la sede con una sola sede y conserva lo guardado", async () => {
+  const { PERMISSION_GROUPS } = await import("@/lib/auth/permissions");
+  const { clavesOcultasEnModal, gruposVisibles, diferenciasConElRol } = await import("@/lib/team/permisos-modal");
+  const llaves = (o: ReadonlySet<any>) => gruposVisibles(PERMISSION_GROUPS, o).flatMap((g) => g.keys);
+  assert.ok(llaves(clavesOcultasEnModal(true)).includes("sede.clave"));
+  assert.ok(!llaves(clavesOcultasEnModal(false)).includes("sede.clave"));
+  // Lo de antes sigue oculto en los dos casos.
+  for (const v of [true, false]) assert.ok(!llaves(clavesOcultasEnModal(v)).includes("marketplace.view"));
+  // Un ADMIN que ya lo tenía: aunque no salga en la lista, sale como «Además» (v6, m-1) y sigue en lo que se guarda (selected).
+  assert.deepEqual(diferenciasConElRol(["sede.clave", "today.view"], ["today.view"]).ademasDelRol, ["sede.clave"]);
+  // La página de Equipo lo calcula en el servidor y llega a los dos modales.
+  const pagina = readFileSync(join(SRC, "app/dashboard/team/page.tsx"), "utf8");
+  assert.match(pagina, /permisoDeClaveVisible\(user\.clinicId\)/);
+  const cliente = readFileSync(join(SRC, "app/dashboard/team/team-client.tsx"), "utf8");
+  assert.equal(cliente.match(/permisoClaveDeSede=\{permisoClaveDeSede\}/g)?.length, 2);
+  const sabina = readFileSync(join(SRC, "components/dashboard/team/sabina-permissions-modal.tsx"), "utf8");
+  assert.match(sabina, /permisoClaveDeSede \|\| k !== "sede\.clave"/);
+});
+
+test("v6 (m-1) · con una sola sede, el ADMIN que ya tiene la clave de la sede no sale «personalizado» sin decir en qué", async () => {
+  const { ROLE_DEFAULT_PERMISSIONS, ALL_PERMISSIONS } = await import("@/lib/auth/permissions");
+  const { sigueElDefaultDelRol, diferenciasConElRol } = await import("@/lib/team/permisos-modal");
+  const delRol = ROLE_DEFAULT_PERMISSIONS.ADMIN;
+  assert.ok(!delRol.includes("sede.clave"), "el ADMIN no la trae por defecto");
+  // Se la dieron cuando había 2 sedes; ahora la cuenta tiene una y el permiso no sale en la lista.
+  const guardado = [...delRol, "sede.clave" as const];
+  assert.equal(sigueElDefaultDelRol(guardado, delRol), false, "el interruptor sale apagado…");
+  const d = diferenciasConElRol(guardado, delRol);
+  assert.deepEqual(d.ademasDelRol, ["sede.clave"], "…y el recuadro dice en qué se distingue");
+  assert.deepEqual(d.sinLoDelRol, []);
+  assert.equal(ALL_PERMISSIONS["sede.clave"], "Crear y cambiar la clave de la sede", "con su nombre, antes de encender «Usar default del rol»");
+  // El modal usa esa misma función sin quitarle las ocultas por sede.
+  const modal = readFileSync(join(SRC, "components/dashboard/team/permissions-modal.tsx"), "utf8");
+  assert.match(modal, /diferenciasConElRol\(selected, roleDefaults\)/);
 });

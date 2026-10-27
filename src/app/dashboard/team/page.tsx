@@ -14,6 +14,7 @@ import { getOpcionesSubida } from "@/lib/team/opciones-subida";
 import { isClinicBillingAdmin } from "@/lib/billing/authz";
 import { hasPermission } from "@/lib/auth/permissions";
 import { conIndicadorDePin } from "@/lib/team/member-fields";
+import { permisoDeClaveVisible } from "@/lib/sede-clave/cuenta.server";
 
 export const metadata: Metadata = { title: "Equipo — DaleControl" };
 
@@ -80,7 +81,11 @@ export default async function TeamPage() {
     getOpcionesSubida(user.clinicId),
   ]);
 
-  const tambienEn = await sedesDeMiembros(user.clinicId, team.map((m) => m.supabaseId));
+  // ws1-t4 v5: el permiso de la clave de la sede solo sale con 2+ sedes (o con la clave ya puesta).
+  const [tambienEn, permisoClaveDeSede] = await Promise.all([
+    sedesDeMiembros(user.clinicId, team.map((m) => m.supabaseId)),
+    permisoDeClaveVisible(user.clinicId),
+  ]);
   const equipo = team.map(({ supabaseId, ...m }) => ({ ...conIndicadorDePin(m), tambienEn: tambienEn.get(supabaseId) ?? [] }));
 
   return (
@@ -97,6 +102,7 @@ export default async function TeamPage() {
       cupo={cupo}
       subida={{ ...subida, puedeSubir: isClinicBillingAdmin(user.role) }}
       puedeEditarEquipo={hasPermission({ role: user.role, permissionsOverride: user.permissionsOverride ?? [] }, "team.edit")}
+      permisoClaveDeSede={permisoClaveDeSede}
     />
   );
 }
