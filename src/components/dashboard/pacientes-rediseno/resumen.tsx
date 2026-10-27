@@ -66,9 +66,10 @@ export interface ResumenProps {
   /**
    * `saldo` (v7) = lo que se DEBE de verdad: la suma de saldos menos `aunNoSeDebe` (lo aceptado en planes
    * sin hacer y lo de ortodoncia que aún no vence, GET /api/patients/[id]/lo-que-aun-no-se-debe), que se
-   * dice aparte. `credito` = saldo a favor (libro + lo adelantado en notas de plan).
+   * dice aparte, completo (v8: el «Por hacer» de la Cuenta del plan); `pagadoDeLoPorHacer` = de eso, lo ya
+   * pagado por adelantado. `credito` = saldo a favor: solo el libro (`patient_credits`).
    */
-  finanzas: { total: number; pagado: number; saldo: number; credito: number; plan?: number; aunNoSeDebe?: number };
+  finanzas: { total: number; pagado: number; saldo: number; credito: number; plan?: number; aunNoSeDebe?: number; pagadoDeLoPorHacer?: number };
   citas: any[];
   facturas: any[];
   tratamientos: any[];
@@ -402,6 +403,11 @@ export function Resumen({
               {(finanzas.aunNoSeDebe ?? 0) > 0.005 && (
                 <div className={s.pie} style={{ marginTop: 3 }} data-aun-no-se-debe>
                   <span>{t("patients.sideCards.aunNoSeDebe", { monto: formatCurrency(finanzas.aunNoSeDebe ?? 0) })}</span>
+                </div>
+              )}
+              {(finanzas.pagadoDeLoPorHacer ?? 0) > 0.005 && (
+                <div className={s.pie} style={{ marginTop: 3 }} data-pagado-de-lo-por-hacer>
+                  <span>{t("patients.sideCards.pagadoDeLoPorHacer", { monto: formatCurrency(finanzas.pagadoDeLoPorHacer ?? 0) })}</span>
                 </div>
               )}
               {sinCargosVigentes ? (

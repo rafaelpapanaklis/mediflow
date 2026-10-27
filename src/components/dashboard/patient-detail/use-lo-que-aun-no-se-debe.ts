@@ -3,9 +3,9 @@
 // De las facturas del paciente, cuánto de su saldo aún no se debe (decisiones de Rafael, 26-oct-2026):
 // lo aceptado sin hacer de sus notas de plan y lo que no vence de su ortodoncia «Precio total a
 // plazos». Lo lee GET /api/patients/[id]/lo-que-aun-no-se-debe (la regla de Caja y Finanzas). La
-// cabecera y «Estado de cuenta» lo restan de la suma de saldos (v7). `adelanto`: lo pagado de más
-// sobre lo hecho en sus notas de plan, que «Estado de cuenta» enseña como saldo a favor (la cifra de
-// la Cuenta del plan). Sin permiso de ver dinero, mientras carga o si falla: 0, y todo se ve como siempre.
+// cabecera y «Estado de cuenta» lo restan de la suma de saldos (v7). `adelanto`: de lo por hacer de sus
+// notas de plan, lo ya pagado; «Estado de cuenta» lo dice como «De lo por hacer, $X ya están pagados»,
+// no como saldo a favor (v8). Sin permiso de ver dinero, mientras carga o si falla: 0, y todo se ve como siempre.
 
 import { useEffect, useState } from "react";
 

@@ -118,9 +118,11 @@ export async function loQueAunNoSeDebe(
 }
 
 /**
- * Lo pagado POR ADELANTADO en las notas de plan de estas facturas: lo pagado de más sobre lo hecho
- * (`saldoAFavor` de `deudaDeNotaDelPlan`, la cifra «Saldo a favor» de la Cuenta del plan). Sigue en la
- * nota (no es crédito del libro `patient_credits`); al cerrar el plan pasa a ese libro y aquí da 0.
+ * De lo POR HACER de las notas de plan de estas facturas, lo que ya está pagado (por adelantado): lo
+ * pagado de más sobre lo hecho, sin pasar de lo por hacer de cada nota. Sigue en la nota: NO es saldo
+ * a favor (eso es solo el libro `patient_credits`, lo que se descuenta de la siguiente factura —
+ * revisión t5 de la v7, V1); al cerrar el plan pasa a ese libro y aquí da 0. Con esto, lo por hacer
+ * completo = `loQueAunNoSeDebe` (lo por hacer sin pagar) + esto, el «Por hacer» de la Cuenta del plan.
  * Mira también las notas ya saldadas (pagó todo y no se ha hecho nada). Tolerante: si falla, 0.
  */
 export async function adelantoEnNotasDePlan(clinicId: string, invoiceIds: string[]): Promise<number> {
@@ -128,7 +130,10 @@ export async function adelantoEnNotasDePlan(clinicId: string, invoiceIds: string
   try {
     const notas = await leerNotasDePlan(clinicId, invoiceIds);
     let centavos = 0;
-    for (const l of Array.from(notas.values())) centavos += Math.round(deudaDeNotaDelPlan(l.nota, l.filas, null).saldoAFavor * 100);
+    for (const l of Array.from(notas.values())) {
+      const d = deudaDeNotaDelPlan(l.nota, l.filas, null);
+      centavos += Math.round(Math.min(d.saldoAFavor, d.porHacer) * 100);
+    }
     return centavos / 100;
   } catch (e) {
     console.warn(`[dinero:no-exigible] clínica ${clinicId}: no se leyó lo pagado por adelantado.`, e);

@@ -25,7 +25,8 @@ interface SideCardsProps {
    * tratamiento ACTIVOS: se enseña aparte para que «Estado de cuenta» no haga pasar lo facturado por el plan.
    */
   /** `balance` (v7) = lo que se debe de verdad; `aunNoSeDebe` (aparte): lo por hacer de planes y lo por vencer de ortodoncia. */
-  finance: { total: number; paid: number; balance: number; credit?: number; pct: number; plan?: number; aunNoSeDebe?: number };
+  /** v8: `aunNoSeDebe` es lo por hacer completo; `pagadoDeLoPorHacer`, lo ya pagado de eso; `credit`, solo el libro. */
+  finance: { total: number; paid: number; balance: number; credit?: number; pct: number; plan?: number; aunNoSeDebe?: number; pagadoDeLoPorHacer?: number };
   patientId: string;
   patientName: string;
   patientPhone: string | null;
@@ -229,6 +230,11 @@ export function SideCards({
               {(finance.aunNoSeDebe ?? 0) > 0.005 && (
                 <div className={styles.financeRow} data-aun-no-se-debe>
                   <span>{t("patients.sideCards.aunNoSeDebe", { monto: formatCurrency(finance.aunNoSeDebe ?? 0) })}</span>
+                </div>
+              )}
+              {(finance.pagadoDeLoPorHacer ?? 0) > 0.005 && (
+                <div className={styles.financeRow} data-pagado-de-lo-por-hacer>
+                  <span>{t("patients.sideCards.pagadoDeLoPorHacer", { monto: formatCurrency(finance.pagadoDeLoPorHacer ?? 0) })}</span>
                 </div>
               )}
             </>

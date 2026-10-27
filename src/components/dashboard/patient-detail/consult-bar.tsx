@@ -17,6 +17,8 @@ export interface ConsultBarProps {
   onPause: () => void;
   onComplete: () => void;
   onClose?: () => void;
+  /** v8: la consulta se está completando (guardado + cierre): «Completar» y la X no se pueden volver a pulsar. */
+  ocupado?: boolean;
 }
 
 function fmtTimer(seconds: number): string {
@@ -39,6 +41,7 @@ export function ConsultBar({
   onPause,
   onComplete,
   onClose,
+  ocupado = false,
 }: ConsultBarProps) {
   const t = useT();
   const [now, setNow] = useState(() => Date.now());
@@ -95,6 +98,8 @@ export function ConsultBar({
         type="button"
         className={`${styles.consultBtn} ${styles.consultBtnComplete}`}
         onClick={onComplete}
+        disabled={ocupado}
+        aria-busy={ocupado || undefined}
       >
         <CheckCircle2 size={12} aria-hidden />
         <span>{t("patients.consultBar.completeConsultation")}</span>
@@ -104,6 +109,7 @@ export function ConsultBar({
           type="button"
           className={styles.consultClose}
           onClick={onClose}
+          disabled={ocupado}
           aria-label={t("patients.consultBar.closeConsultation")}
           title={t("patients.consultBar.exitConsultationMode")}
         >
