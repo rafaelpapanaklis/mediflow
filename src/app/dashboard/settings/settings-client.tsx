@@ -1571,7 +1571,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                   initialRequire2fa={!!(clinic as any)?.require2fa}
                   isAdmin={user.role === "ADMIN" || user.role === "SUPER_ADMIN"}
                 />
-                {/* ws1-t4: se pinta sola solo para el dueño o el admin con «sede.clave». */}
+                {/* ws1-t4: se pinta sola solo para el dueño o el admin con «sede.clave», y solo si la cuenta tiene 2+ sedes. */}
                 <SedeClaveCard />
                 <Seccion titulo={t("settings.client.accountInfoTitle")}>
                   <Filas>
@@ -2575,7 +2575,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
             initialRequire2fa={!!(clinic as any)?.require2fa}
             isAdmin={user.role === "ADMIN" || user.role === "SUPER_ADMIN"}
           />
-          {/* ws1-t4: se pinta sola solo para el dueño o el admin con «sede.clave». */}
+          {/* ws1-t4: se pinta sola solo para el dueño o el admin con «sede.clave», y solo si la cuenta tiene 2+ sedes. */}
           <SedeClaveCard />
           <div className="bg-card border border-border rounded-2xl p-6 shadow-card">
             <h2 className="text-base font-bold mb-4">{t("settings.client.accountInfoTitle")}</h2>

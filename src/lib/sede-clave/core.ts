@@ -80,6 +80,9 @@ export function secretoDesbloqueo(base: string = activeClinicSecret()): string {
   return `${base}:sede-clave`;
 }
 
+const PREFIJO_COOKIE_DESBLOQUEO = "df_sede_";
+const NOMBRE_COOKIE_DESBLOQUEO = new RegExp(`^${PREFIJO_COOKIE_DESBLOQUEO}[0-9a-f]{16}$`);
+
 /**
  * Nombre de la cookie de UNA persona en UNA sede. Va por persona y sede para
  * que en la computadora compartida de recepción el desbloqueo de una persona
@@ -88,7 +91,18 @@ export function secretoDesbloqueo(base: string = activeClinicSecret()): string {
  */
 export function nombreCookieDesbloqueo(supabaseId: string, clinicId: string): string {
   const h = createHash("sha256").update(JSON.stringify([supabaseId, clinicId])).digest("hex").slice(0, 16);
-  return `df_sede_${h}`;
+  return `${PREFIJO_COOKIE_DESBLOQUEO}${h}`;
+}
+
+/**
+ * v4 (Rafael, 27-oct): los nombres de TODAS las cookies de desbloqueo que trae
+ * la cabecera Cookie, de cualquier persona y sede. El cierre de sesión las borra
+ * para que, al volver a entrar, se pida la clave otra vez.
+ */
+export function cookiesDeDesbloqueo(cabecera: string | null | undefined): string[] {
+  if (!cabecera) return [];
+  const nombres = cabecera.split(/;\s*/).map((c) => c.slice(0, Math.max(0, c.indexOf("="))).trim());
+  return Array.from(new Set(nombres.filter((n) => NOMBRE_COOKIE_DESBLOQUEO.test(n))));
 }
 
 export interface DatosDesbloqueo {

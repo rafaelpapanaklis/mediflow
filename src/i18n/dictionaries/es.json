@@ -11504,7 +11504,7 @@
     "conClaveDetalle": "Esta sede tiene clave. Entra a ella con su clave para ver sus cifras.",
     "pantalla": {
       "titulo": "Esta sede tiene clave",
-      "subtitulo": "Escribe la clave de la sede para entrar. En este navegador no se te volverá a pedir en 72 horas.",
+      "subtitulo": "Escribe la clave de la sede para entrar. En este navegador no se te volverá a pedir en 72 horas, salvo que cierres sesión.",
       "abierta": "Esta sede ya no te pide clave en este navegador.",
       "irALaSede": "Entrar a la sede",
       "etiqueta": "Clave de la sede",
@@ -11525,7 +11525,7 @@
     "card": {
       "titulo": "Clave de la sede",
       "subtitulo": "Pide una clave para entrar a esta sede, además de la contraseña de cada persona.",
-      "explicacion": "Con la clave activa nadie entra a esta sede sin escribirla, tampoco el dueño de la cuenta. Se pide una vez cada 72 horas en cada navegador. Si se olvida, solo soporte de DaleControl puede quitarla.",
+      "explicacion": "Con la clave activa nadie entra a esta sede sin escribirla, tampoco el dueño de la cuenta. Se pide una vez cada 72 horas en cada navegador y otra vez al cerrar sesión. Si se olvida, solo soporte de DaleControl puede quitarla.",
       "activa": "Activa",
       "inactiva": "Desactivada",
       "activar": "Activar clave",

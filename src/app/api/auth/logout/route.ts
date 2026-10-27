@@ -5,6 +5,7 @@ import { TWO_FA_COOKIE, TWO_FA_PENDING_COOKIE, TWO_FA_ADMIN_COOKIE } from "@/lib
 import { estadoSuplantacionDe } from "@/lib/admin/suplantacion";
 import { COOKIE_SESION_PREVIA } from "@/lib/admin/suplantacion-core";
 import { cookiesDeSalida, salirDeSuplantacion } from "@/lib/admin/suplantacion-salida";
+import { cookiesDeDesbloqueo } from "@/lib/sede-clave/core";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -36,5 +37,10 @@ export async function POST(request: Request) {
   res.cookies.set(TWO_FA_PENDING_COOKIE, "", { path: "/", maxAge: 0 });
   // ws1-t8: ni la prueba de «Ver como clínica».
   res.cookies.set(TWO_FA_ADMIN_COOKIE, "", { path: "/", maxAge: 0 });
+  // ws1-t4 v4 (Rafael, 27-oct): ni los desbloqueos de 72 h de la clave de la
+  // sede, de nadie en este navegador: al volver a entrar se pide la clave.
+  for (const nombre of cookiesDeDesbloqueo(request.headers.get("cookie"))) {
+    res.cookies.set(nombre, "", { path: "/", maxAge: 0 });
+  }
   return res;
 }

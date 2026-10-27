@@ -5,6 +5,7 @@ import { logError } from "@/lib/safe-log";
 import { MENSAJE_CLAVE_NUEVA, minutosHasta, puedeGestionarClave, validarClaveNueva } from "@/lib/sede-clave/core";
 import { activarClave, cambiarClave, estadoFresco, quitarClave, tablaExiste } from "@/lib/sede-clave/estado.server";
 import { ponerDesbloqueo, quitarDesbloqueo } from "@/lib/sede-clave/gate.server";
+import { cuentaConVariasSedes } from "@/lib/sede-clave/cuenta.server";
 import { bitacoraClave, hashClave, verificarClave, type Verificacion } from "@/lib/sede-clave/servicio.server";
 
 export const dynamic = "force-dynamic";
@@ -13,7 +14,7 @@ export const runtime = "nodejs";
 /**
  * «Clave de la sede» (ws1-t4) — Configuración → Seguridad.
  *
- *   GET  → { disponible, puedeGestionar, activa }   (nunca la clave ni su hash)
+ *   GET  → { disponible, puedeGestionar, activa, variasSedes }   (nunca la clave ni su hash)
  *   POST → { accion: "activar", clave, confirmacion }
  *          { accion: "cambiar", claveActual, clave, confirmacion }
  *          { accion: "desactivar", claveActual }
@@ -24,6 +25,10 @@ export const runtime = "nodejs";
  * Como getAuthContext ya corta en una sede con clave sin desbloqueo, quien llega
  * aquí con la clave activa es porque la tecleó en este navegador.
  *
+ * v4 (Rafael, 27-oct): solo se ACTIVA en cuentas cuyo dueño tiene 2 o más sedes
+ * (`variasSedes`); con una sola sede la tarjeta no sale. Si una sede ya la tiene
+ * activa (y luego se archivaron las demás), cambiarla y quitarla sigue igual.
+ *
  * Activar y cambiar dejan desbloqueado al que lo hizo (acaba de escribirla);
  * cambiar, desactivar y restablecer suben la versión y caducan todos los demás
  * desbloqueos.
@@ -32,11 +37,11 @@ export async function GET() {
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
   const puedeGestionar = puedeGestionarClave(ctx.user);
-  if (!puedeGestionar) return NextResponse.json({ disponible: false, puedeGestionar: false, activa: false });
+  if (!puedeGestionar) return NextResponse.json({ disponible: false, puedeGestionar: false, activa: false, variasSedes: false });
   try {
-    if (!(await tablaExiste(true))) return NextResponse.json({ disponible: false, puedeGestionar, activa: false });
-    const estado = await estadoFresco(ctx.clinicId);
-    return NextResponse.json({ disponible: true, puedeGestionar, activa: estado.activa });
+    if (!(await tablaExiste(true))) return NextResponse.json({ disponible: false, puedeGestionar, activa: false, variasSedes: false });
+    const [estado, variasSedes] = await Promise.all([estadoFresco(ctx.clinicId), cuentaConVariasSedes(ctx.clinicId)]);
+    return NextResponse.json({ disponible: true, puedeGestionar, activa: estado.activa, variasSedes });
   } catch (err) {
     logError("[api/sede-clave GET]", err);
     return NextResponse.json({ error: "No se pudo leer la clave de la sede" }, { status: 500 });
@@ -108,6 +113,9 @@ export async function POST(req: NextRequest) {
     if (accion === "activar") {
       const v = validarClaveNueva(body?.clave, body?.confirmacion);
       if (!v.ok) return NextResponse.json({ error: MENSAJE_CLAVE_NUEVA[v.error], code: v.error }, { status: 400 });
+      if (!(await cuentaConVariasSedes(clinicId))) {
+        return NextResponse.json({ error: "La clave de la sede es para cuentas con dos o más sedes.", code: "una_sede" }, { status: 409 });
+      }
       const version = await activarClave(clinicId, await hashClave(body.clave), por);
       if (version === null) {
         return NextResponse.json({ error: "Esta sede ya tiene clave. Para cambiarla escribe la actual.", code: "ya_activa" }, { status: 409 });

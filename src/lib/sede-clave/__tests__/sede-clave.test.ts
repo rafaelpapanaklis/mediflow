@@ -194,11 +194,25 @@ const prismaFalso: any = {
       return f ? { id: f.id, clinicId: f.clinicId } : null;
     },
     findMany: async ({ where }: any) =>
-      fichas
-        .filter((x) => x.supabaseId === where.supabaseId && (!where.role || x.role === where.role) && x.isActive)
-        .map((x) => ({ clinic: { id: x.clinic.id, createdAt: x.clinic.createdAt, archivedAt: null } })),
+      where.clinicId !== undefined
+        // v4 · cuentaConVariasSedes: los dueños de UNA sede.
+        ? fichas
+          .filter((x) => x.clinicId === where.clinicId && (!where.role || x.role === where.role) && x.isActive)
+          .map((x) => ({ supabaseId: x.supabaseId }))
+        : fichas
+          .filter((x) => x.supabaseId === where.supabaseId && (!where.role || x.role === where.role) && x.isActive)
+          .map((x) => ({ clinic: { id: x.clinic.id, createdAt: x.clinic.createdAt, archivedAt: null } })),
   },
   clinic: {
+    // v4 · cuentaConVariasSedes: sedes sin archivar de las que alguno de esos dueños es SUPER_ADMIN activo.
+    count: async ({ where }: any) => {
+      const algun = where.users.some;
+      return new Set(
+        fichas
+          .filter((f) => algun.supabaseId.in.includes(f.supabaseId) && f.role === algun.role && f.isActive && !f.clinic.archivedAt)
+          .map((f) => f.clinicId),
+      ).size;
+    },
     findMany: async ({ where }: any) => (where.id.in as string[]).map((id) => CLINICAS[id]).filter(Boolean),
     findUnique: async ({ where }: any) => (CLINICAS[where.id] ? { id: where.id } : null),
     update: async ({ where }: any) => { archivadas.push(where.id); return { id: where.id }; },
@@ -254,6 +268,7 @@ const dobles: Record<string, unknown> = {
       auth: {
         getUser: async () => ({ data: { user: sesion ? { id: sesion } : null } }),
         getSession: async () => ({ data: { session: null } }),
+        signOut: async () => ({ error: null }),
       },
     }),
   },
@@ -455,7 +470,7 @@ test("sin sql/sede-clave.sql: nadie queda bloqueado, nada se consulta y la tarje
   assert.equal(sw.status, 200);
   const { GET } = await rutaClave();
   const g = await llamar(GET, "/api/sede-clave");
-  assert.deepEqual(g.body, { disponible: false, puedeGestionar: true, activa: false });
+  assert.deepEqual(g.body, { disponible: false, puedeGestionar: true, activa: false, variasSedes: false });
   assert.deepEqual(
     db.consultas.filter((q) => !q.includes("to_regclass")),
     [],
@@ -1075,4 +1090,104 @@ test("el gate de la clave está en los dos caminos de la sesión y en el layout"
     const src = readFileSync(join(SRC, "..", r), "utf8");
     assert.match(src, /await (sedeCerradaPara|estadoGateSede)\(\{/, `${r} no pregunta por la clave de la sede`);
   }
+});
+
+// ══════════════════ v4 · decisiones de Rafael (27-oct) ══════════════════
+
+test("v4 · la tarjeta solo sale si el dueño tiene 2+ sedes: con una sola sede ni sale ni se puede activar", async () => {
+  const { GET, POST } = await rutaClave();
+  // El dueño de la sede 3 tiene dos sedes (la principal y la 3): sale, también para el ADMIN con permiso.
+  como(SB_ADMIN3, CLI_3);
+  assert.equal((await llamar(GET, "/api/sede-clave")).body.variasSedes, true);
+  como(SB_DUENO, CLI_1);
+  assert.equal((await llamar(GET, "/api/sede-clave")).body.variasSedes, true);
+
+  // «Clínica ajena» es la única sede de su dueño.
+  como(SB_OTRO, CLI_OTRA);
+  const g = await llamar(GET, "/api/sede-clave");
+  assert.deepEqual(g.body, { disponible: true, puedeGestionar: true, activa: false, variasSedes: false });
+  const r = await llamar(POST, "/api/sede-clave", { accion: "activar", clave: CLAVE, confirmacion: CLAVE });
+  assert.equal(r.status, 409);
+  assert.equal(r.body.code, "una_sede");
+  assert.equal(db.claves.has(CLI_OTRA), false, "no se guardó ninguna clave");
+  assert.equal(bitacora.length, 0);
+
+  // Si abre una segunda sede, ya puede.
+  CLINICAS.cli_otra_2 = clinica("cli_otra_2", "Clínica ajena Norte", 6);
+  try {
+    fichas.push(ficha("u-otro-2", SB_OTRO, "cli_otra_2", "SUPER_ADMIN"));
+    assert.equal((await llamar(GET, "/api/sede-clave")).body.variasSedes, true);
+    assert.equal((await llamar(POST, "/api/sede-clave", { accion: "activar", clave: CLAVE, confirmacion: CLAVE })).status, 200);
+  } finally {
+    delete CLINICAS.cli_otra_2;
+  }
+});
+
+test("v4 · una sede sola que YA tiene la clave puesta la sigue viendo para cambiarla o quitarla", async () => {
+  await activarComoAdmin3();
+  // Se va la principal (deja de ser del dueño): la cuenta queda con una sede.
+  fichas = fichas.filter((f) => f.clinicId !== CLI_1);
+  como(SB_ADMIN3, CLI_3);
+  const { GET, POST } = await rutaClave();
+  const g = await llamar(GET, "/api/sede-clave");
+  assert.equal(g.body.variasSedes, false);
+  assert.equal(g.body.activa, true, "la tarjeta sale porque la clave está activa");
+  const off = await llamar(POST, "/api/sede-clave", { accion: "desactivar", claveActual: CLAVE });
+  assert.equal(off.status, 200, JSON.stringify(off.body));
+  const otraVez = await llamar(POST, "/api/sede-clave", { accion: "activar", clave: CLAVE, confirmacion: CLAVE });
+  assert.equal(otraVez.body.code, "una_sede", "quitada, ya no se puede volver a poner con una sola sede");
+});
+
+test("v4 · la clave no toca ninguna integración: activar no consulta ni desconecta Google, TV ni en vivo", async () => {
+  db.consultas = [];
+  await activarComoAdmin3();
+  const sql = db.consultas.join("\n");
+  assert.doesNotMatch(sql, /google|calendar|tv_|live|integra/i);
+  const ruta = readFileSync(join(SRC, "app/api/sede-clave/route.ts"), "utf8");
+  const tarjeta = readFileSync(join(SRC, "components/dashboard/security/sede-clave-card.tsx"), "utf8");
+  for (const src of [ruta, tarjeta]) assert.doesNotMatch(src, /google|calendar|\btv\b|live|desconect|disconnect/i);
+  const es = JSON.stringify(JSON.parse(readFileSync(join(SRC, "i18n/dictionaries/es.json"), "utf8")).sedeClave);
+  assert.doesNotMatch(es, /google|calendar|\btv\b|en vivo|desconect|integraci/i);
+});
+
+/** «Cerrar sesión»: POST /api/auth/logout con las cookies del navegador de quien está sentado. */
+async function cerrarSesion() {
+  const { NextRequest } = await import("next/server");
+  const { POST } = await import("@/app/api/auth/logout/route");
+  const cookie = Array.from(tarro().entries()).map(([k, v]) => `${k}=${v}`).join("; ");
+  const res: any = await POST(new NextRequest("http://localhost/api/auth/logout", { method: "POST", headers: { cookie, host: "localhost" } }));
+  for (const c of res.cookies.getAll()) {
+    if (!c.value || c.maxAge === 0) tarro().delete(c.name);
+    else tarro().set(c.name, c.value);
+  }
+  return res;
+}
+
+test("v4 · al cerrar sesión se borra el desbloqueo de 72 h: al volver a entrar se pide la clave", async () => {
+  await activarComoAdmin3();
+  como(SB_DUENO, CLI_1);
+  assert.equal((await llamar(await rutaDesbloquear(), "/api/sede-clave/desbloquear", { clinicId: CLI_3, clave: CLAVE })).status, 200);
+  como(SB_DUENO, CLI_3);
+  assert.equal((await getAuthContext())?.clinicId, CLI_3, "desbloqueada");
+  tarro().set("otra_cookie", "se-queda");
+  const desbloqueos = Array.from(tarro().keys()).filter((k) => k.startsWith("df_sede_"));
+  assert.equal(desbloqueos.length, 1);
+
+  await cerrarSesion();
+  assert.deepEqual(Array.from(tarro().keys()).filter((k) => k.startsWith("df_sede_")), [], "sin desbloqueos");
+  assert.equal(tarro().get("otra_cookie"), "se-queda", "solo se borran las de la clave");
+
+  // Vuelve a entrar en el mismo navegador: la sede 3 pide la clave otra vez.
+  assert.equal(await getAuthContext(), null);
+  como(SB_DUENO, CLI_1);
+  assert.equal((await llamar(await rutaSwitch(), "/api/switch-clinic", { clinicId: CLI_3 })).status, 423);
+});
+
+test("v4 · cookiesDeDesbloqueo solo reconoce las de la clave", async () => {
+  const { cookiesDeDesbloqueo, nombreCookieDesbloqueo } = await import("../core");
+  const a = nombreCookieDesbloqueo(SB_DUENO, CLI_3);
+  const b = nombreCookieDesbloqueo(SB_ADMIN3, CLI_3);
+  assert.deepEqual(cookiesDeDesbloqueo(`activeClinicId=x; ${a}=v1; df_2fa=z; ${b}=v2; df_sede_corta=1; ${a}=v1`), [a, b]);
+  assert.deepEqual(cookiesDeDesbloqueo(null), []);
+  assert.deepEqual(cookiesDeDesbloqueo(""), []);
 });
