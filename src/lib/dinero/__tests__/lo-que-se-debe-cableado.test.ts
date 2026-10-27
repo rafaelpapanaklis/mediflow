@@ -261,3 +261,47 @@ test("A9 (27-oct): con cuotas acordadas manda la mensualidad — Caja, Cuenta de
   }
 });
 
+test("v11 · «Hecho» en la tarjeta del plan: misma acción que la consulta, refresca la ficha sin recargar; plan cerrado sin botones", async () => {
+  const tarjeta = leer("src/components/dashboard/expediente-rediseno/plan-tratamiento.tsx");
+  assert.match(tarjeta, /<ProcedimientosDelPlan\n\s*planId=\{plan\.id\}\n\s*estadoDelPlan=\{plan\.status\}/);
+  assert.match(tarjeta, /onCambio=\{\(\) => onCuentaCambio\?\.\(\[\]\)\}/, "relee cuentas, «Estado de cuenta» y el odontograma (alCambiarDineroDePlanes)");
+  const ficha = leer("src/app/dashboard/patients/[id]/patient-detail-client.tsx");
+  assert.match(ficha, /puedeMarcarHecho=\{canEditTreatments \|\| currentUser\.role === "SUPER_ADMIN"\}/);
+  assert.match(ficha, /refresco=\{`\$\{refrescoCuentas\}\|/);
+  // `loQueAunNoSeDebe` (cabecera, «Estado de cuenta», Cobrar hoy) se relee con el mismo `refrescoCuentas`.
+  assert.match(ficha, /useLoQueAunNoSeDebe\(\n\s*patient\.id,\n[^\n]*\n\s*`\$\{refrescoCuentas\}\|/);
+  const bloque = leer("src/components/dashboard/expediente-rediseno/procedimientos-del-plan.tsx");
+  assert.match(bloque, /^"use client";/);
+  assert.match(bloque, /const cerrado = ESTADOS_DE_PLAN_SIN_HECHO\.includes\(estadoDelPlan\);\n\s*const conBotones = puede && !cerrado;/);
+  assert.match(bloque, /await marcarHecho\(planId, \[f\.id\], null\)/);
+  assert.match(bloque, /await deshacerHecho\(planId, f\.id\)/);
+  const ruta = leer("src/app/api/treatments/[id]/route.ts");
+  assert.match(ruta, /const deniedPerm = esHecho && ctx\.role === "SUPER_ADMIN" \? null : denyIfMissingPermission\(ctx, "treatments\.edit"\);/);
+  for (const idioma of ["es", "en"]) {
+    const h = JSON.parse(leer(`src/i18n/dictionaries/${idioma}.json`)).planTratamiento.hecho;
+    for (const k of ["procedimientos", "estadoPorHacer", "estadoEnCurso", "estadoHecho", "botonHecho", "marcando", "marcarAria", "deshacerAria", "ayudaTarjeta", "planCerrado"]) {
+      assert.ok(h[k], `${idioma}: planTratamiento.hecho.${k}`);
+    }
+    assert.ok(h.error.plan_cerrado, `${idioma}: planTratamiento.hecho.error.plan_cerrado`);
+    assert.match(h.estadoHecho, /\{fecha\}/);
+  }
+
+  // El cliente del deshacer: estado y avisos del servidor; un PATCH de antes (sin `item`) no es un éxito.
+  const { deshacerHecho, ESTADOS_DE_PLAN_SIN_HECHO } = await import("@/lib/treatments/marcar-hecho-cliente");
+  assert.deepEqual(ESTADOS_DE_PLAN_SIN_HECHO, ["ABANDONED"]);
+  const pedidos: Array<{ url: string; body: string }> = [];
+  const responde = (status: number, cuerpo: unknown) => async (url: string, init?: RequestInit) => {
+    pedidos.push({ url, body: String(init?.body) });
+    return new Response(JSON.stringify(cuerpo), { status });
+  };
+  const ok = await deshacerHecho("p 1", "f1", responde(200, {
+    success: true, item: { id: "f1" }, estado: "en_curso", mensaje: "Listo.",
+    odontograma: { conflictos: [{ mensaje: "Diente 16: no se devolvió." }] },
+  }));
+  assert.deepEqual(ok, { ok: true, status: 200, estado: "en_curso", mensaje: "Listo. Diente 16: no se devolvió." });
+  assert.equal(pedidos[0].url, "/api/treatments/p%201");
+  assert.deepEqual(JSON.parse(pedidos[0].body), { action: "deshacer_hecho", itemId: "f1" });
+  assert.deepEqual(await deshacerHecho("p", "f1", responde(409, { error: "Este plan está cerrado.", code: "plan_cerrado" })), { ok: false, status: 409, error: "Este plan está cerrado." });
+  assert.equal((await deshacerHecho("p", "f1", responde(200, { success: true }))).noDisponible, true);
+});
+

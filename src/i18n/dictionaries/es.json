@@ -10993,6 +10993,16 @@
     },
     "hecho": {
       "marcar": "Marcar hecho",
+      "procedimientos": "Procedimientos",
+      "estadoPorHacer": "Por hacer",
+      "estadoEnCurso": "En curso",
+      "estadoHecho": "Hecho el {fecha}",
+      "botonHecho": "Hecho",
+      "marcando": "Marcando…",
+      "marcarAria": "Marcar «{nombre}» como hecho",
+      "deshacerAria": "Deshacer «hecho» de «{nombre}»",
+      "ayudaTarjeta": "Al marcar un procedimiento como hecho, su importe pasa a «Debe» y el odontograma se actualiza. Se puede deshacer.",
+      "planCerrado": "Plan cerrado: ya no se marcan procedimientos.",
       "deshacer": "Deshacer",
       "resultado": {
         "aplicado": "Hecho. El odontograma ya lo muestra.",
@@ -11020,7 +11030,8 @@
         "no_esta_hecha": "Ese procedimiento no está marcado como hecho: no hay nada que deshacer.",
         "cita_invalida": "Esa cita no es de este paciente.",
         "sin_filas_en_plan": "Este plan es de los de antes (texto): sus procedimientos no se pueden marcar uno por uno.",
-        "sin_permiso_odontograma": "Este «hecho» cambió el odontograma y tu usuario no puede editarlo: pide a un doctor que lo deshaga."
+        "sin_permiso_odontograma": "Este «hecho» cambió el odontograma y tu usuario no puede editarlo: pide a un doctor que lo deshaga.",
+        "plan_cerrado": "Este plan está cerrado: ya no se marcan ni se deshacen procedimientos."
       }
     }
   },

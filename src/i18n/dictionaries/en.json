@@ -10993,6 +10993,16 @@
     },
     "hecho": {
       "marcar": "Mark done",
+      "procedimientos": "Procedures",
+      "estadoPorHacer": "To do",
+      "estadoEnCurso": "In progress",
+      "estadoHecho": "Done on {fecha}",
+      "botonHecho": "Done",
+      "marcando": "Marking…",
+      "marcarAria": "Mark “{nombre}” as done",
+      "deshacerAria": "Undo “done” for “{nombre}”",
+      "ayudaTarjeta": "When a procedure is marked done, its amount moves to “Owes” and the odontogram is updated. It can be undone.",
+      "planCerrado": "Closed plan: procedures can no longer be marked.",
       "deshacer": "Undo",
       "resultado": {
         "aplicado": "Done. The odontogram now shows it.",
@@ -11020,7 +11030,8 @@
         "no_esta_hecha": "That procedure isn't marked as done: there's nothing to undo.",
         "cita_invalida": "That appointment doesn't belong to this patient.",
         "sin_filas_en_plan": "This is an older plan (text): its procedures can't be marked one by one.",
-        "sin_permiso_odontograma": "This \"done\" changed the odontogram and your user can't edit it: ask a doctor to undo it."
+        "sin_permiso_odontograma": "This \"done\" changed the odontogram and your user can't edit it: ask a doctor to undo it.",
+        "plan_cerrado": "This plan is closed: procedures can no longer be marked or undone."
       }
     }
   },

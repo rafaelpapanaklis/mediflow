@@ -25,18 +25,19 @@ let base: Base;
 const prismaVivo: any = {};
 const ctx: Record<string, any> = {};
 const bitacora: any[] = [];
+const mutaciones: any[] = [];
 
 const dobles: Record<string, unknown> = {
   "server-only": {},
   "@/lib/prisma": { prisma: prismaVivo },
   "@/lib/auth-context": { getAuthContext: async () => ({ ...ctx }) },
-  "@/lib/audit": { logAudit: async (a: unknown) => { bitacora.push(a); }, logMutation: async () => {}, extractAuditMeta: () => ({}) },
+  "@/lib/audit": { logAudit: async (a: unknown) => { bitacora.push(a); }, logMutation: async (m: unknown) => { mutaciones.push(m); }, extractAuditMeta: () => ({}) },
   "@/lib/patient-visibility": {
     assertPatientVisible: async () => null,
     relatedPatientVisibilityAnd: () => [],
     canSeePatient: () => true,
   },
-  "@/lib/cache/revalidate": { revalidateAfter: () => undefined },
+  "@/lib/cache/revalidate": { revalidateAfter: () => undefined, revalidatePatientProfile: () => undefined },
   "next/cache": { revalidatePath: () => undefined, revalidateTag: () => undefined },
   // La nota nace sin anticipo (no hay saldo a favor previo en estas pruebas).
   "@/lib/patient-credit-aplicar": {
@@ -71,6 +72,7 @@ async function usar() {
   (await import("@/lib/invoices/condiciones-pago-db"))._olvidarTabla();
   await base.db.query(`INSERT INTO "procedure_catalog" VALUES ('proc-r','c1','Resina',1250.5,true), ('proc-l','c1','Limpieza',800,true)`);
   bitacora.length = 0;
+  mutaciones.length = 0;
 }
 
 const pedir = (url: string, body?: unknown, method = "POST") =>
@@ -586,6 +588,101 @@ test("A9: sin cuotas acordadas (un solo pago) sigue la regla de lo hecho", async
   const c = await cuenta(planId);
   assert.equal(c.debe, 750.5);
   assert.equal(c.aCuotas, false);
+});
+
+// ── v11 (27-oct): «Hecho» desde la tarjeta del plan ───────────────────────────────────────────────
+
+/** Lo que manda la tarjeta: el mismo PATCH que «Completar consulta». */
+async function hechoDesdeLaTarjeta(planId: string, cuerpo: Record<string, unknown>) {
+  // El tarifario de la base de prueba no trae `code` (el que dice qué pinta el procedimiento en el odontograma).
+  await base.db.exec(`ALTER TABLE "procedure_catalog" ADD COLUMN IF NOT EXISTS "code" text`);
+  const { PATCH } = await import("@/app/api/treatments/[id]/route");
+  return leer(await PATCH(pedir(`/api/treatments/${planId}`, cuerpo, "PATCH"), params(planId)));
+}
+const filaDe = async (planId: string, nombre: string) => (await filas(planId)).find((f: any) => f.nombre === nombre);
+
+test("v11: «Hecho» desde la tarjeta — Debe sube al momento, con bitácora; «Deshacer» la regresa y la deuda baja (ficha, Caja, portal igual)", async (t) => {
+  if (salta(t)) return;
+  await usar();
+  const { loQueAunNoSeDebe } = await import("@/lib/dinero/lo-que-se-debe.server");
+  const { planId, notaId } = await planAceptado();
+  await pagar(notaId, 500);
+  const resina = await filaDe(planId, "Resina");
+  const todas = async () => {
+    const r = await loQueAunNoSeDebe("c1", { ids: [notaId] });
+    const [nota] = await notas(planId);
+    return { cuenta: (await cuenta(planId)).debe, caja: (await saldos()).porCobrar, ficha: Math.round((Number(nota.balance) - r.total) * 100) / 100 };
+  };
+  assert.deepEqual(await todas(), { cuenta: 0, caja: 0, ficha: 0 }, "nada hecho: no debe nada (pagó $500 por adelantado)");
+
+  const r = await hechoDesdeLaTarjeta(planId, { action: "marcar_hecho", itemIds: [resina.id] });
+  assert.equal(r.status, 200);
+  assert.equal(r.body.items.find((f: any) => f.id === resina.id).estado, "hecho");
+  // Debe = lo hecho − lo pagado = 1,250.50 − 500, en todas partes.
+  assert.deepEqual(await todas(), { cuenta: 750.5, caja: 750.5, ficha: 750.5 });
+  const fila = await filaDe(planId, "Resina");
+  assert.equal(fila.estado, "hecho");
+  assert.equal(fila.hechoPor, "doc-c1", "quién");
+  assert.ok(fila.hechoEn instanceof Date, "cuándo");
+  assert.match(mutaciones.at(-1).texto, /Marcó como hecho en el plan «Plan Ana»: Resina 16 \(MO\)/);
+
+  const d = await hechoDesdeLaTarjeta(planId, { action: "deshacer_hecho", itemId: resina.id });
+  assert.equal(d.status, 200);
+  assert.equal(d.body.estado, "pendiente");
+  assert.deepEqual(await todas(), { cuenta: 0, caja: 0, ficha: 0 }, "deshecho: la deuda baja");
+  assert.equal((await filaDe(planId, "Resina")).estado, "pendiente");
+  assert.match(mutaciones.at(-1).texto, /Deshizo «hecho» en el plan «Plan Ana»: Resina 16 \(MO\)/);
+});
+
+test("v11: quién puede — treatments.edit (el doctor, en sus planes) y SUPER_ADMIN siempre; recepción sin el permiso no", async (t) => {
+  if (salta(t)) return;
+  await usar();
+  const { planId } = await planAceptado();
+  const resina = await filaDe(planId, "Resina");
+  const marcar = () => hechoDesdeLaTarjeta(planId, { action: "marcar_hecho", itemIds: [resina.id] });
+  const deshacer = () => hechoDesdeLaTarjeta(planId, { action: "deshacer_hecho", itemId: resina.id });
+
+  // Recepción a la que la clínica le quitó «Crear y editar planes»: no.
+  Object.assign(ctx, { userId: "rec-c1", role: "RECEPTIONIST", isDoctor: false, permissionsOverride: ["treatments.view", "billing.view"] });
+  assert.equal((await marcar()).status, 403);
+  assert.equal((await filaDe(planId, "Resina")).estado, "pendiente");
+
+  // SUPER_ADMIN siempre, aunque su override no traiga el permiso.
+  Object.assign(ctx, { userId: "sa-c1", role: "SUPER_ADMIN", isDoctor: false, permissionsOverride: ["treatments.view"] });
+  assert.equal((await marcar()).status, 200);
+  assert.equal((await deshacer()).status, 200);
+  // …pero solo eso: editar el plan sigue pidiendo el permiso.
+  assert.equal((await hechoDesdeLaTarjeta(planId, { status: "PAUSED" })).status, 403);
+
+  // Un doctor en un plan de otro doctor: no (el doctor sigue acotado a sus planes). En el suyo, sí.
+  Object.assign(ctx, { userId: "otro-doc", role: "DOCTOR", isDoctor: true, permissionsOverride: null });
+  assert.equal((await marcar()).status, 403);
+  Object.assign(ctx, { userId: "doc-c1", role: "DOCTOR", isDoctor: true, permissionsOverride: null });
+  assert.equal((await marcar()).status, 200);
+
+  // La otra clínica no encuentra el plan.
+  Object.assign(ctx, { clinicId: "c2", userId: "doc-c2", role: "ADMIN", isDoctor: false });
+  assert.equal((await deshacer()).status, 404);
+});
+
+test("v11: plan cerrado (Abandonado) — no se marca ni se deshace", async (t) => {
+  if (salta(t)) return;
+  await usar();
+  const { planId } = await planAceptado();
+  const resina = await filaDe(planId, "Resina");
+  const limpieza = await filaDe(planId, "Limpieza");
+  assert.equal((await hechoDesdeLaTarjeta(planId, { action: "marcar_hecho", itemIds: [resina.id] })).status, 200);
+  assert.equal((await cerrar(planId)).status, 200);
+  const r = await hechoDesdeLaTarjeta(planId, { action: "deshacer_hecho", itemId: resina.id });
+  assert.equal(r.status, 409);
+  assert.equal(r.body.code, "plan_cerrado");
+  assert.equal((await filaDe(planId, "Resina")).estado, "hecho");
+  // Aunque lo pasen a Abandonado a mano (sin «Cerrar plan»), tampoco.
+  await base.db.query(`UPDATE "treatment_plan_items" SET "estado" = 'pendiente', "canceladoEn" = NULL WHERE "id" = $1`, [limpieza.id]);
+  const m = await hechoDesdeLaTarjeta(planId, { action: "marcar_hecho", itemIds: [limpieza.id] });
+  assert.equal(m.status, 409);
+  assert.equal(m.body.code, "plan_cerrado");
+  assert.equal((await filaDe(planId, "Limpieza")).estado, "pendiente");
 });
 
 test("cerrar un plan TERMINADO: ya_cerrado, no lo pasa a Abandonado ni escribe nada (revisión t5, A7)", async (t) => {

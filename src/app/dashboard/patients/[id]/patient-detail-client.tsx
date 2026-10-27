@@ -2943,6 +2943,9 @@ export function PatientDetailClient({
                     cargandoCuentas={cuentasDePlanes.cargando}
                     onCobrarPlan={canViewBilling ? () => setCobrarHoyAbierto(true) : undefined}
                     onCuentaCambio={alCambiarDineroDePlanes}
+                    patientId={patient.id}
+                    puedeMarcarHecho={canEditTreatments || currentUser.role === "SUPER_ADMIN"}
+                    refresco={`${refrescoCuentas}|${planesDelServidor.map((p: any) => p.id + p.updatedAt).join(",")}`}
                     onNuevo={() => setShowNewTreatment(true)}
                     onVer={(plan) => setViewPlan(plan)}
                     onEditar={(plan) => setEditPlan(plan)}
@@ -3897,7 +3900,7 @@ export function PatientDetailClient({
           router.refresh();
         }}
         patientId={canViewTreatments ? patient.id : undefined}
-        puedeMarcarHecho={canEditTreatments}
+        puedeMarcarHecho={canEditTreatments || currentUser.role === "SUPER_ADMIN"}
         onCobrarHoy={canViewBilling ? () => setCobrarHoyAbierto(true) : undefined}
         onHechos={() => { setRefrescoCuentas((n) => n + 1); router.refresh(); }}
       />

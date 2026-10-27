@@ -38,6 +38,7 @@ import { CONDITIONS } from "@/components/dashboard/odontogram-v2/data";
 import { filaDto, type DbDeFilas, type EstadoDeFila, type FilaDelPlan } from "./items";
 import { bloquearPlan, FilaError, repoFilas, tablaDeFilasExiste } from "./items-db";
 import { columnaOdontogramaHechoExiste, leerRegistro, type RegistroHecho } from "./aplicar-hecho-db";
+import { ESTADOS_DE_PLAN_SIN_HECHO } from "./marcar-hecho-cliente";
 
 const NOTA = "__note__";
 /** Tope de filas por clic (un plan real marca 1–6 a la vez). */
@@ -144,6 +145,17 @@ export interface ResultadoDeFila {
 
 export interface PlanParaHecho { id: string; clinicId: string; patientId: string | null; name: string }
 
+/**
+ * v11 (decisión de Rafael, 27-oct): en un plan CERRADO («Cerrar plan» lo deja Abandonado) no se marca ni
+ * se deshace «hecho»: su nota ya quedó en lo hecho y sus filas por hacer se cancelaron. Se lee con el
+ * plan ya bloqueado (FOR UPDATE), así que no se cruza con un «Cerrar plan» a la vez.
+ */
+async function exigirPlanAbierto(tx: DbDeFilas, clinicId: string, planId: string): Promise<void> {
+  const r = await tx.$queryRaw<{ status: string }[]>`
+    SELECT "status"::text AS "status" FROM "treatment_plans" WHERE "id" = ${planId} AND "clinicId" = ${clinicId}`;
+  if (r.length === 1 && ESTADOS_DE_PLAN_SIN_HECHO.includes(String(r[0].status))) throw new FilaError("plan_cerrado");
+}
+
 export async function marcarHecho(args: {
   clinicId: string;
   plan: PlanParaHecho;
@@ -161,6 +173,7 @@ export async function marcarHecho(args: {
 
   await prisma.$transaction(async (tx: DbDeFilas) => {
     if (!(await bloquearPlan(tx, clinicId, plan.id))) throw new FilaError("fila_desconocida");
+    await exigirPlanAbierto(tx, clinicId, plan.id);
     const todas = await repoFilas.leer(clinicId, plan.id, { conCanceladas: true, db: tx });
     const porId = new Map(todas.map((f) => [f.id, f]));
     for (const id of args.itemIds) {
@@ -269,6 +282,7 @@ export async function deshacerHecho(args: {
 
   await prisma.$transaction(async (tx: DbDeFilas) => {
     if (!(await bloquearPlan(tx, clinicId, plan.id))) throw new FilaError("fila_desconocida");
+    await exigirPlanAbierto(tx, clinicId, plan.id);
     const todas = await repoFilas.leer(clinicId, plan.id, { conCanceladas: true, db: tx });
     const f = todas.find((x) => x.id === itemId);
     if (!f) throw new FilaError("fila_desconocida");
@@ -320,7 +334,7 @@ export async function deshacerHecho(args: {
 
 const CODIGOS_HECHO = [
   "sin_filas", "demasiadas_filas", "fila_desconocida", "fila_cancelada", "no_esta_hecha",
-  "cita_invalida", "sin_filas_en_plan", "sin_permiso_odontograma",
+  "cita_invalida", "sin_filas_en_plan", "sin_permiso_odontograma", "plan_cerrado",
 ] as const;
 export type CodigoDeHecho = (typeof CODIGOS_HECHO)[number];
 
