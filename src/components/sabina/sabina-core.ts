@@ -140,7 +140,8 @@ export const SABINA_ERROR_COPY: Record<SabinaErrorKind, SabinaErrorCopy> = {
   no_balance: {
     title: "Sin saldo en el monedero de IA",
     message:
-      "La clínica se quedó sin saldo. Pídele a un administrador que lo recargue para que Sabina siga respondiendo.",
+      // Recargar es del permiso «Recargar Saldo IA» (27-oct-2026), no de ser administrador: el mismo texto que la pantalla del saldo.
+      "La clínica se quedó sin saldo y Sabina no puede seguir respondiendo. Pídeselo a quien tenga el permiso «Recargar Saldo IA».",
     retryable: false,
   },
   rate_limited: {

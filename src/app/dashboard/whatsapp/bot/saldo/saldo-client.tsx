@@ -21,6 +21,7 @@ import { SaldoRediseno } from "@/components/dashboard/whatsapp-rediseno/saldo";
 import { FuncionesIaCard, useFuncionesIa } from "./funciones-ia";
 import { useT } from "@/i18n/i18n-provider";
 import { montoMxn, SPEI_MAX_CENTS, SPEI_MIN_CENTS } from "@/lib/ai-wallet/spei-montos";
+import { MENSAJE_SIN_PERMISO_RECARGA } from "@/lib/ai-wallet/permiso-recarga";
 import { desgloseConsumo, modeloLegible, NOTA_COSTO_CONSUMO } from "@/lib/ai-billing/consumo-legible";
 
 // ── Tipos de la API (GET /api/ai-wallet) ──────────────────────────────────────
@@ -62,6 +63,8 @@ export type WalletData = {
   autoRechargeAmountCents: number;
   hasPaymentMethod: boolean;
   isAdmin: boolean;
+  /** Recargar y la auto-recarga: el permiso «Recargar Saldo IA» (el dueño siempre). Lo decide el servidor. */
+  puedeRecargar: boolean;
   usage: UsageRow[];
   recargas: RecargaRow[];
 };
@@ -347,7 +350,7 @@ export function SaldoClient({
         body: JSON.stringify(body),
       });
       if (res.status === 403) {
-        toast.error("Solo administradores pueden cambiar esto.");
+        toast.error(MENSAJE_SIN_PERMISO_RECARGA);
         return;
       }
       if (!res.ok) {
@@ -518,7 +521,7 @@ export function SaldoClient({
                 {idleTitle(data.status)}
               </div>
               {IDLE_CONSEQUENCE_NOTE} Mientras tanto no se te cobra nada.
-              <RechargeCta isAdmin={data.isAdmin} />
+              <RechargeCta puedeRecargar={data.puedeRecargar} />
             </div>
           ) : showLowWarning ? (
             <div style={{ fontSize: 12.5, color: "var(--text-2)", marginTop: 12 }}>
@@ -559,8 +562,8 @@ export function SaldoClient({
           </div>
         </CardNew>
 
-        {/* ── Recargar (solo admin) ── */}
-        {data.isAdmin ? (
+        {/* ── Recargar (permiso «Recargar Saldo IA»; el dueño siempre) ── */}
+        {data.puedeRecargar ? (
           <>
             <CardNew id={RECHARGE_ANCHOR} title="Recargar saldo" sub="Elige un monto y un método de pago.">
               <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -705,7 +708,7 @@ export function SaldoClient({
         ) : (
           <CardNew>
             <div style={{ fontSize: 13, color: "var(--text-3)" }}>
-              Solo administradores pueden recargar o configurar la recarga automática.
+              Recargar o configurar la recarga automática pide el permiso «Recargar Saldo IA». Pídeselo a quien lo tenga.
             </div>
           </CardNew>
         )}
@@ -1029,12 +1032,12 @@ export function SaldoClient({
 
 // CTA de recarga. No inventa ruta: ancla a la tarjeta "Recargar saldo" de esta
 // misma pantalla, que es donde viven Tarjeta / MercadoPago / SPEI. Si quien mira
-// no es administrador esa tarjeta no se pinta, así que se le dice a quién pedirlo.
-function RechargeCta({ isAdmin }: { isAdmin: boolean }) {
-  if (!isAdmin) {
+// no tiene «Recargar Saldo IA» esa tarjeta no se pinta, así que se le dice a quién pedirlo.
+function RechargeCta({ puedeRecargar }: { puedeRecargar: boolean }) {
+  if (!puedeRecargar) {
     return (
       <div style={{ marginTop: 8, fontSize: 12, color: "var(--text-3)" }}>
-        Pídele a un administrador de la clínica que recargue el saldo.
+        Pídeselo a quien tenga el permiso «Recargar Saldo IA».
       </div>
     );
   }

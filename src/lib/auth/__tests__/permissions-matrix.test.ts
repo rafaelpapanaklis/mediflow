@@ -78,6 +78,8 @@ const ENFORCED_KEYS: PermissionKey[] = [
   "procedures.view", "procedures.edit",
   "clinicLayout.edit",
   "arco.manage",
+  // Saldo IA (27-oct-2026): src/lib/ai-wallet/permiso-recarga.ts, en las rutas de recarga y auto-recarga.
+  "aiWallet.topup",
 ];
 
 /** Lo que cada rol DEBE poder hacer por default (true) o no (false). */
@@ -115,6 +117,8 @@ const EXPECTED: Record<Role, Record<string, boolean>> = {
     "procedures.view": false, "procedures.edit": false,
     "clinicLayout.edit": false,
     "arco.manage": false,
+    // Recargar Saldo IA: por default solo el dueño y ADMIN; a los demás se lo dan en Equipo → Permisos.
+    "aiWallet.topup": false,
   },
   RECEPTIONIST: {
     "agenda.view": true, "agenda.create": true, "agenda.edit": true, "agenda.delete": true,
@@ -143,6 +147,8 @@ const EXPECTED: Record<Role, Record<string, boolean>> = {
     "procedures.view": false, "procedures.edit": false,
     "clinicLayout.edit": false,
     "arco.manage": false,
+    // Recargar Saldo IA: por default solo el dueño y ADMIN; a los demás se lo dan en Equipo → Permisos.
+    "aiWallet.topup": false,
   },
   READONLY: {
     "agenda.view": true, "agenda.create": false, "agenda.edit": false, "agenda.delete": false,
@@ -174,6 +180,8 @@ const EXPECTED: Record<Role, Record<string, boolean>> = {
     "clinicLayout.edit": false,
     // A propósito no acaba en ".view": solicitudes de datos personales de terceros.
     "arco.manage": false,
+    // Recargar Saldo IA: por default solo el dueño y ADMIN; a los demás se lo dan en Equipo → Permisos.
+    "aiWallet.topup": false,
   },
 };
 

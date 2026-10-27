@@ -171,6 +171,12 @@ export const ALL_PERMISSIONS = {
   // siguen decidiendo «Editar expediente» (clínico) y «Cobrar» (mensualidades).
   "specialties.orthodontics": "Acceso al módulo de Ortodoncia (casos, controles y cobro de mensualidades)",
   "specialties.implants":     "Ver Implantología",
+  // Saldo IA (decisión de Rafael, 27-oct-2026): recargar el monedero de IA de la
+  // clínica (tarjeta, Mercado Pago, SPEI y la auto-recarga). NO es solo del dueño
+  // como el plan: lo hace quien lo tenga aquí; el SUPER_ADMIN siempre puede
+  // (src/lib/ai-wallet/permiso-recarga.ts). No acaba en ".view": READONLY no lo
+  // hereda. Ver el saldo no lo pide.
+  "aiWallet.topup":           "Recargar Saldo IA (tarjeta, Mercado Pago, SPEI y recarga automática)",
 } as const;
 
 export type PermissionKey = keyof typeof ALL_PERMISSIONS;
@@ -201,6 +207,7 @@ export const PERMISSION_GROUPS: { title: string; keys: PermissionKey[] }[] = [
   { title: "Privacidad",     keys: ["arco.manage"] },
   { title: "Marketplace",    keys: ["marketplace.view"] },
   { title: "Especialidades", keys: ["specialties.pediatrics", "specialties.endodontics", "specialties.periodontics", "specialties.orthodontics", "specialties.implants"] },
+  { title: "Saldo IA",       keys: ["aiWallet.topup"] },
 ];
 
 /**

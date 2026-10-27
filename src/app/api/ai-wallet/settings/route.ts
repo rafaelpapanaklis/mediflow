@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAuthContext, requireAdmin } from "@/lib/auth-context";
+import { getAuthContext } from "@/lib/auth-context";
+import { puedeRecargarSaldoIa, sinPermisoDeRecarga } from "@/lib/ai-wallet/permiso-recarga";
 import { prisma } from "@/lib/prisma";
 import { getOrCreateWallet } from "@/lib/ai-billing/wallet";
 
@@ -11,7 +12,7 @@ const MAX_CENTS = 5_000_000;
 const MIN_RECHARGE_CENTS = 5000;
 
 /**
- * Ajustes del monedero de IA. Solo ADMIN: la auto-recarga autoriza cobros
+ * Ajustes del monedero de IA. Solo quien tenga «Recargar Saldo IA» (el dueño siempre): la auto-recarga autoriza cobros
  * automáticos a la tarjeta. clinicId SIEMPRE de la sesión. La clínica solo
  * maneja MXN (centavos); jamás exponemos USD ni fees.
  */
@@ -22,8 +23,9 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const err = requireAdmin(ctx);
-    if (err) return err;
+    // La auto-recarga autoriza cobros a la tarjeta: es recargar, con el mismo permiso
+    // («Recargar Saldo IA», Equipo → Permisos); el dueño siempre.
+    if (!puedeRecargarSaldoIa(ctx)) return NextResponse.json(sinPermisoDeRecarga(), { status: 403 });
 
     let body: any;
     try {

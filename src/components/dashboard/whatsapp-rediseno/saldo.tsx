@@ -116,9 +116,9 @@ export function SaldoRediseno({ vm }: { vm: SaldoVM }) {
   const spentCents = data.usage.reduce((acc, u) => acc + u.billedCents, 0);
 
   // CTA de recarga. No inventa ruta: ancla a la tarjeta «Recargar saldo» de
-  // esta misma pantalla. Si quien mira no es administrador esa tarjeta no se
-  // pinta, así que se le dice a quién pedirlo.
-  const ctaRecarga = data.isAdmin ? (
+  // esta misma pantalla. Si quien mira no tiene «Recargar Saldo IA» esa tarjeta
+  // no se pinta, así que se le dice a quién pedirlo.
+  const ctaRecarga = data.puedeRecargar ? (
     <div style={{ marginTop: 10 }}>
       <Boton
         icono={<Wallet size={15} />}
@@ -135,7 +135,7 @@ export function SaldoRediseno({ vm }: { vm: SaldoVM }) {
     </div>
   ) : (
     <div className={`${s.textoSuaveMedio} ${s.arriba}`}>
-      Pídele a un administrador de la clínica que recargue el saldo.
+      Pídeselo a quien tenga el permiso «Recargar Saldo IA».
     </div>
   );
 
@@ -193,9 +193,9 @@ export function SaldoRediseno({ vm }: { vm: SaldoVM }) {
             derecha. En iPad una debajo de otra. Nada se esconde. */}
         <div className={s.rejillaPar}>
           <div className={s.columna}>
-            {data.isAdmin ? (
+            {data.puedeRecargar ? (
               <>
-                {/* ── Recargar (solo admin) ── */}
+                {/* ── Recargar (permiso «Recargar Saldo IA»; el dueño siempre) ── */}
                 <Tarjeta id={textos.rechargeAnchor} titulo="Recargar saldo" sub="Elige un monto y un método de pago.">
                   <div className={s.apilado} style={{ gap: 16 }}>
                     <div className={s.chips}>
@@ -313,7 +313,7 @@ export function SaldoRediseno({ vm }: { vm: SaldoVM }) {
               </>
             ) : (
               <Tarjeta>
-                <p className={s.vacio}>Solo administradores pueden recargar o configurar la recarga automática.</p>
+                <p className={s.vacio}>Recargar o configurar la recarga automática pide el permiso «Recargar Saldo IA». Pídeselo a quien lo tenga.</p>
               </Tarjeta>
             )}
 
