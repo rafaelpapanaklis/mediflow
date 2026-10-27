@@ -119,7 +119,7 @@ test("cableado: la cita sin nota abre la hoja; la ficha la ofrece y ?charge=1 la
   const ficha = leer("src/app/dashboard/patients/[id]/patient-detail-client.tsx");
   assert.match(ficha, /onCobrarHoy=\{canViewBilling \? \(\) => setCobrarHoyAbierto\(true\) : undefined\}/);
   assert.match(ficha, /if \(borradorDeHoy\) \{ void openDirectPayment\(borradorDeHoy\); return; \}\s*if \(canViewBilling\) \{ setCobrarHoyAbierto\(true\); return; \}/);
-  assert.match(ficha, /pendientes=\{pendientesPrevios\(invoices\)\}/);
+  assert.match(ficha, /pendientes=\{pendientesPrevios\(invoices(, aunNoSeDebePorFactura)?\)\}/);
   const tarjeta = leer("src/components/dashboard/patient-detail/side-cards.tsx");
   assert.match(tarjeta, /\{onCobrarHoy && puedeCobrar && \(/);
 });

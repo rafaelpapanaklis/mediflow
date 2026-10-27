@@ -375,6 +375,56 @@ test("lo que aún no se debe (v3: Pacientes, ficha, Reportes, Inbox, portal): de
   assert.equal(c.debe, 750.5);
 });
 
+test("v7 (QA de t12): «Estado de cuenta» de la ficha — sin nada hecho debe $0; hecho y pagado de más, debe $0 y saldo a favor (lo de la Cuenta del plan)", async (t) => {
+  if (salta(t)) return;
+  await usar();
+  const { planId, notaId } = await planAceptado();
+  const { GET } = await import("@/app/api/patients/[id]/lo-que-aun-no-se-debe/route");
+  const ficha = async (clinicId = "c1") => {
+    ctx.clinicId = clinicId;
+    return leer(await GET(pedir("/api/patients/pac-c1/lo-que-aun-no-se-debe", undefined, "GET"), params("pac-c1")));
+  };
+  // Lo que pinta la ficha: la suma de saldos de sus notas menos lo que aún no se debe.
+  const debe = async (body: { total: number }) => {
+    const saldo = (await notas(planId)).reduce((s, n) => s + Number(n.balance), 0);
+    return Math.max(0, Math.round((saldo - body.total) * 100) / 100);
+  };
+
+  // Plan aceptado, nada hecho: antes pintaba $2,050.50 en rojo.
+  let r = await ficha();
+  assert.equal(r.status, 200);
+  assert.equal(await debe(r.body), 0);
+  assert.equal(r.body.adelanto, 0);
+
+  // Hecha la limpieza ($800): debe $800, como la Cuenta del plan.
+  await hecho(planId, "Limpieza", 1);
+  r = await ficha();
+  assert.equal(await debe(r.body), 800);
+  assert.equal((await cuenta(planId)).debe, 800);
+
+  // Paga $1,000: debe $0 y $200 a favor (antes pintaba $1,050.50 en rojo).
+  await pagar(notaId, 1000);
+  r = await ficha();
+  assert.equal(await debe(r.body), 0);
+  assert.equal(r.body.adelanto, 200);
+  assert.equal((await cuenta(planId)).saldoAFavor, 200);
+
+  // Paga todo lo aceptado: la nota queda saldada y el adelanto se sigue viendo.
+  await pagar(notaId, 1050.5);
+  r = await ficha();
+  assert.equal(r.body.total, 0);
+  assert.equal(r.body.adelanto, 1250.5);
+
+  // Al cerrar el plan, lo de más pasa al libro de saldo a favor: aquí ya no se cuenta dos veces.
+  ctx.clinicId = "c1";
+  assert.equal((await cerrar(planId)).status, 200);
+  r = await ficha();
+  assert.equal(r.body.adelanto, 0);
+
+  // La otra clínica no ve al paciente.
+  assert.equal((await ficha("c2")).status, 404);
+});
+
 test("cerrar un plan TERMINADO: ya_cerrado, no lo pasa a Abandonado ni escribe nada (revisión t5, A7)", async (t) => {
   if (salta(t)) return;
   await usar();

@@ -24,7 +24,7 @@ interface SideCardsProps {
    * `total` = lo FACTURADO (suma de facturas no canceladas). `plan` (ws1-t2, F3) = costo de los planes de
    * tratamiento ACTIVOS: se enseña aparte para que «Estado de cuenta» no haga pasar lo facturado por el plan.
    */
-  /** `aunNoSeDebe` (26-oct): de `balance`, lo por hacer de planes y lo por vencer de ortodoncia. */
+  /** `balance` (v7) = lo que se debe de verdad; `aunNoSeDebe` (aparte): lo por hacer de planes y lo por vencer de ortodoncia. */
   finance: { total: number; paid: number; balance: number; credit?: number; pct: number; plan?: number; aunNoSeDebe?: number };
   patientId: string;
   patientName: string;
@@ -222,13 +222,13 @@ export function SideCards({
                 <span>{t("patients.sideCards.paid")}</span>
                 <strong>{formatCurrency(finance.paid)}</strong>
               </div>
-              <div className={`${styles.financeRow} ${styles.danger}`}>
+              <div className={`${styles.financeRow} ${finance.balance > 0 ? styles.danger : ""}`}>
                 <span>{t("patients.sideCards.pendingBalance")}</span>
                 <strong>{formatCurrency(finance.balance)}</strong>
               </div>
-              {(finance.aunNoSeDebe ?? 0) > 0.005 && finance.balance > 0 && (
+              {(finance.aunNoSeDebe ?? 0) > 0.005 && (
                 <div className={styles.financeRow} data-aun-no-se-debe>
-                  <span>{t("patients.sideCards.aunNoSeDebe", { monto: formatCurrency(Math.min(finance.balance, finance.aunNoSeDebe ?? 0)) })}</span>
+                  <span>{t("patients.sideCards.aunNoSeDebe", { monto: formatCurrency(finance.aunNoSeDebe ?? 0) })}</span>
                 </div>
               )}
             </>

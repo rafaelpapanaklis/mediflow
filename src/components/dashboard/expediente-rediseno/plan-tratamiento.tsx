@@ -47,6 +47,8 @@ export interface PlanTratamientoProps {
   cargandoCuentas?: boolean;
   /** «Abonar al plan»: abre «Cobrar hoy», que abona a la nota del plan. */
   onCobrarPlan?: () => void;
+  /** v7: «Cerrar plan» cambió estas notas; la ficha relee cuentas y facturas sin esperar al refresco. */
+  onCuentaCambio?: (invoiceIds: string[]) => void;
 }
 
 const ESTADO_PLAN: Record<string, { labelKey: string; tono: string }> = {
@@ -69,8 +71,8 @@ const sesionesHechas = (sesiones: any[] | undefined) =>
   (sesiones ?? []).filter((x: any) => x.completedAt).length;
 
 export function PlanTratamiento({
-  tratamientos, puedeEditar, onNuevo, onVer, onEditar, onEliminar, casoOrtodoncia = null, onAbrirCaso,
-  cuentas, cargandoCuentas, onCobrarPlan,
+  tratamientos: tratamientosDelServidor, puedeEditar, onNuevo, onVer, onEditar, onEliminar, casoOrtodoncia = null, onAbrirCaso,
+  cuentas, cargandoCuentas, onCobrarPlan, onCuentaCambio,
 }: PlanTratamientoProps) {
   const t = useT();
   const locale = useLocale();
@@ -78,6 +80,12 @@ export function PlanTratamiento({
   // Abierto = por colocar, en curso, pausado o en retención. Un caso terminado
   // o abandonado se consulta en su pestaña; aquí ya no es un tratamiento vivo.
   const casoOrto = casoOrtodoncia && casoOrtodoncia.abierto ? casoOrtodoncia : null;
+
+  // v7 (QA de t12): tras «Cerrar plan» la cuenta recién leída ya dice que el plan está cancelado, y el
+  // plan del servidor llega después (con el refresco). Mientras, manda la cuenta: no se queda «Activo».
+  const tratamientos = tratamientosDelServidor.map((p: any) =>
+    cuentas?.get(p.id)?.estado === "ABANDONED" && p.status !== "ABANDONED" ? { ...p, status: "ABANDONED" } : p,
+  );
 
   const activos = tratamientos.filter((p: any) => p.status === "ACTIVE");
   const pendientesTotal = activos.reduce(
@@ -243,7 +251,7 @@ export function PlanTratamiento({
               </div>
               {/* Un plan cancelado conserva su nota: su saldo se sigue viendo (y abonando). */}
               {cuentas !== undefined && (
-                <CuentaDelPlan cuenta={cuentas?.get(plan.id)} cargando={cargandoCuentas && !cuentas} onCobrar={onCobrarPlan} puedeCerrar={puedeEditar} />
+                <CuentaDelPlan cuenta={cuentas?.get(plan.id)} cargando={cargandoCuentas && !cuentas} onCobrar={onCobrarPlan} puedeCerrar={puedeEditar} onCambio={onCuentaCambio} />
               )}
               {/* Fase 2 · C: «Agendar lo pendiente» (se esconde solo). La tarjeta entera abre el plan:
                   ni el clic ni el teclado de aquí (ni de la hoja que abre) llegan a ella. */}

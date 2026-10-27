@@ -103,6 +103,13 @@ interface Props {
    */
   citaEnCursoId?: string | null;
   /**
+   * v7 (QA de t12): «Completar consulta» (la barra de la ficha) respondía «La nota de la consulta está
+   * vacía» con el Motivo y la Exploración escritos aquí, porque solo «Guardar consulta» los manda. La
+   * ficha recibe aquí con qué guardar lo escrito antes de cerrar la cita: «guardada», «vacia» (no hay
+   * nada que guardar) o «fallo» (el formulario ya dijo qué falta). `null` al desmontarse.
+   */
+  registrarGuardado?: (guardar: (() => Promise<"guardada" | "vacia" | "fallo">) | null) => void;
+  /**
    * Consulta → plan (ws1-t5, P9): «Armar el plan» junto a «Plan de tratamiento futuro» abre la
    * ventana rápida del plan con el diagnóstico, el pronóstico y el odontograma de ESTA consulta.
    * Solo lo pasa la ficha en la Nueva consulta del rediseño y con `treatments.edit`; sin él, el
@@ -150,7 +157,7 @@ function readAddenda(spec: any): Addendum[] {
     }));
 }
 
-export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord, rediseno = false, citaEnCursoId = null, armarPlan }: Props) {
+export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord, rediseno = false, citaEnCursoId = null, armarPlan, registrarGuardado }: Props) {
   const t = useT();
   const isEditing = !!initialRecord;
   // Dx CIE-10 codificados (NOM-024 §6.3 / NOM-004). Edición: en vivo contra el
@@ -668,6 +675,7 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
     }
   }
 
+  // v7: devuelve `true` solo si se guardó («Completar consulta» de la ficha necesita saberlo).
   async function handleSave() {
     // Cinturón, además del formulario bloqueado: un Enter en cualquier campo
     // dispara el submit del <form>, y una nota firmada no se guarda nunca.
@@ -809,6 +817,7 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
       // Guardada de verdad: el borrador local ya no tiene a quién servir.
       clearDraft();
       onSaved(record);
+      return true;
     } catch (err: any) {
       toast.error(err.message ?? (isEditing ? t("clinical.dentalForm.updateError") : t("clinical.dentalForm.saveError")));
     } finally {
@@ -843,6 +852,21 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
       setAddendumSaving(false);
     }
   }
+
+  // v7: lo que la ficha llama antes de «Completar consulta». Una consulta NUEVA con algo escrito se guarda
+  // (como «Guardar consulta»: en el borrador de la cita en curso, firmada); sin nada, o editando una que
+  // ya existe, no se toca. La ref lleva siempre el último render (el estado del formulario al pulsar).
+  const guardarAntesDeCompletarRef = useRef<() => Promise<"guardada" | "vacia" | "fallo">>(async () => "vacia");
+  guardarAntesDeCompletarRef.current = async () => {
+    if (isEditing || isLocked || saving) return "vacia";
+    if (!tieneContenido(form) && dxs.length === 0 && selectedProcs.length === 0) return "vacia";
+    return (await handleSave()) ? "guardada" : "fallo";
+  };
+  useEffect(() => {
+    if (!registrarGuardado) return;
+    registrarGuardado(() => guardarAntesDeCompletarRef.current());
+    return () => registrarGuardado(null);
+  }, [registrarGuardado]);
 
   /**
    * Abre el modal de receta NOM-024 sin tocar el expediente clínico. La

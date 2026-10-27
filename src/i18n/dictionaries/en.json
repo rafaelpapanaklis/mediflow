@@ -3349,7 +3349,7 @@
       "viewBilling": "View billing",
       "invoiced": "Invoiced",
       "moreInvoiced": "+{count} more invoiced",
-      "aunNoSeDebe": "Of this, {monto} is still to do or not yet due (not owed yet)"
+      "aunNoSeDebe": "Plus {monto} still to do or not yet due (not owed yet)"
     },
     "soapEditor": {
       "editorAria": "Consultation notes editor",

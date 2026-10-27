@@ -611,9 +611,9 @@ export function PatientDetailClient({
     setPlanesRecienCreados((prev) => purgarRecienCreados(planesDelServidor, prev));
   }, [planesDelServidor]);
   // ws1-t12 · fase 2: la cuenta de cada plan (total, abonado, saldo), solo para quien ve dinero. Se
-  // relee al cambiar los planes, al cobrar y al marcar hechos (`refrescoCuentas`).
+  // relee al cambiar los planes, al cobrar y al marcar hechos (`refrescoCuentas`); la llamada va debajo
+  // de `invoices` (v7: también se relee cuando cambia cualquier nota del paciente).
   const [refrescoCuentas, setRefrescoCuentas] = useState(0);
-  const cuentasDePlanes = useCuentasDelPaciente(patient.id, canViewBilling && treatments.length > 0, `${treatments.length}:${refrescoCuentas}:${planesDelServidor.map((p: any) => p.id + p.updatedAt).join(",")}`);
   const pediatricsState = derivePediatricsTabState({
     hasData:      Boolean(pediatricsData),
     moduleActive: pediatricsModuleActive,
@@ -767,6 +767,26 @@ export function PatientDetailClient({
   useEffect(() => {
     setInvoices((prev: any[]) => fusionarFacturas(initialInvoices as any[], prev ?? []));
   }, [initialInvoices]);
+  // v7 (QA de t12): «Aceptar todo» de un presupuesto crea la nota del plan SIN tocar el plan (ni su
+  // `updatedAt`): la cuenta seguía en «Plan aceptado $0». Ahora también se relee al cambiar las notas.
+  const cuentasDePlanes = useCuentasDelPaciente(
+    patient.id,
+    canViewBilling && treatments.length > 0,
+    `${treatments.length}:${refrescoCuentas}:${planesDelServidor.map((p: any) => p.id + p.updatedAt).join(",")}|` +
+      (invoices as any[]).map((inv: any) => `${inv.id}:${inv.total}:${inv.paid}:${inv.status}`).join(","),
+  );
+  // v7: algo cambió el dinero de los planes fuera de la ficha (presupuesto aceptado, plan cerrado): la
+  // cuenta se relee YA y las notas tocadas se traen frescas, sin esperar al refresco de la página.
+  const alCambiarDineroDePlanes = useCallback((invoiceIds: string[] = []) => {
+    setRefrescoCuentas((n) => n + 1);
+    for (const id of invoiceIds) {
+      fetch(`/api/invoices/${encodeURIComponent(id)}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((f) => { if (f?.id) setInvoices((prev: any[]) => (prev.some((i: any) => i.id === f.id) ? prev.map((i: any) => (i.id === f.id ? { ...i, ...f } : i)) : [f, ...prev])); })
+        .catch(() => {});
+    }
+    setTimeout(() => router.refresh(), 0);
+  }, [router]);
   // Fotos clínicas (ficha v3): count vivo para el badge del menú/tab bar.
   // Nace del count server-side y el tab lo actualiza al subir/borrar.
   const [fotosCount, setFotosCount] = useState(initialFotosCount);
@@ -1439,17 +1459,20 @@ export function PatientDetailClient({
   }, [invoices]);
   const pctPaid  = totalPlan > 0 ? Math.round((totalPaid / totalPlan) * 100) : 0;
   // 26-oct (Rafael): de una nota de plan solo se debe lo hecho menos lo pagado, y de ortodoncia
-  // «Precio total a plazos» lo vencido. La cabecera dice lo que se debe de verdad (lo mismo que
-  // Pacientes, Caja y la cuenta del plan); «Estado de cuenta» sigue con las facturas y dice aparte
-  // cuánto de su saldo aún no se debe. Se relee cuando cambian las facturas Y cuando cambian las
-  // cuentas de los planes («marcar hecho» no cambia ninguna factura, pero sí lo que se debe — t5, N1).
-  const aunNoSeDebe = useLoQueAunNoSeDebe(
+  // «Precio total a plazos» lo vencido. La cabecera Y «Estado de cuenta» (v7, QA de t12: pintaba en rojo
+  // el saldo entero de la nota) dicen lo que se debe de verdad, lo mismo que Pacientes, Caja y la cuenta
+  // del plan; lo que aún no se debe va aparte, y lo pagado de más sobre lo hecho es saldo a favor. Se
+  // relee cuando cambian las facturas Y cuando cambian las cuentas de los planes («marcar hecho» no
+  // cambia ninguna factura, pero sí lo que se debe — t5, N1).
+  const { total: aunNoSeDebe, adelanto: adelantoEnPlanes, porFactura: aunNoSeDebePorFactura } = useLoQueAunNoSeDebe(
     patient.id,
-    canViewBilling && totalBalance > 0,
+    canViewBilling && (totalBalance > 0 || totalPaid > 0),
     `${refrescoCuentas}|${planesDelServidor.map((p: any) => p.id + p.updatedAt).join(",")}|` +
-      (invoices as any[]).map((inv) => `${inv.id}:${inv.balance}:${inv.status}`).join(","),
+      (invoices as any[]).map((inv) => `${inv.id}:${inv.balance}:${inv.paid}:${inv.status}`).join(","),
   );
   const saldoQueSeDebe = Math.max(0, Math.round((totalBalance - aunNoSeDebe) * 100) / 100);
+  // Saldo a favor de «Estado de cuenta»: el del libro (`patient_credits`) más lo adelantado en notas de plan.
+  const saldoAFavorTotal = Math.round((creditBalance + adelantoEnPlanes) * 100) / 100;
   // ws1-t2 (F3 de la auditoría BEVADENT: «Total tratamiento $700 · 100% cubierto» con un plan de
   // $900): lo de arriba suma FACTURAS. El costo de los planes ACTIVOS va aparte, para que el
   // «Estado de cuenta» enseñe plan y facturado sin mezclarlos.
@@ -1615,6 +1638,12 @@ export function PatientDetailClient({
 
   const [clinicalNoteId, setClinicalNoteId] = useState<string | null>(null);
   const notaFirmadaDeLaConsultaRef = useRef<string | null>(null);
+  // v7 (QA de t12): con qué guarda «Nueva consulta» (dental) lo escrito y no guardado; lo registra el
+  // formulario mientras está montado. «Completar consulta» lo llama antes de cerrar la cita.
+  const guardarConsultaAbiertaRef = useRef<(() => Promise<"guardada" | "vacia" | "fallo">) | null>(null);
+  const registrarGuardadoDeConsulta = useCallback((guardar: (() => Promise<"guardada" | "vacia" | "fallo">) | null) => {
+    guardarConsultaAbiertaRef.current = guardar;
+  }, []);
   // C-65 (auditoría de uso): con la nota de la consulta ya firmada no se enseña el SOAP vacío para «firmar» otra vez.
   const [notaDeLaConsultaFirmada, setNotaDeLaConsultaFirmada] = useState(false);
   const txConsultaFirmada = useTextosConsultaFirmada();
@@ -1780,6 +1809,23 @@ export function PatientDetailClient({
       // Guarda el draft final si aún no se persistió (debounce pendiente). Si la nota de la consulta ya se
       // guardó firmada desde «Nueva consulta», no se toca (una nota firmada no se edita).
       const borrador = draft ?? soapDraft;
+      // v7 (QA de t12): lo escrito en «Nueva consulta» (Motivo, Exploración…) sin pulsar «Guardar consulta» no
+      // llegaba a ninguna nota y el servidor contestaba «La nota de la consulta está vacía». Se guarda primero,
+      // igual que con el botón (adopta el borrador de esta cita y lo firma). Antes se manda lo de la barra a
+      // ese borrador para que el servidor lo junte con lo de la consulta y no se pierda nada.
+      const guardarConsulta = guardarConsultaAbiertaRef.current;
+      if (guardarConsulta) {
+        const conTextoEnLaBarra = !!(borrador.subjective.trim() || borrador.objective.trim() || borrador.assessment.trim() || borrador.plan.trim());
+        if (clinicalNoteId && conTextoEnLaBarra && notaFirmadaDeLaConsultaRef.current !== clinicalNoteId) {
+          await fetch(`/api/clinical-notes/${clinicalNoteId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ subjective: borrador.subjective, objective: borrador.objective, assessment: borrador.assessment, plan: borrador.plan }),
+          }).catch(() => null);
+        }
+        // «fallo»: el formulario ya dijo qué falta (p. ej. el motivo); la consulta sigue abierta.
+        if ((await guardarConsulta()) === "fallo") return;
+      }
       // C-65 (segunda auditoría): «Guardar consulta» firma OTRO registro (el expediente de la consulta), no el
       // borrador SOAP de la barra. Con esa nota ya firmada, se cierra la cita con ELLA (el servidor no la vuelve a
       // firmar) y el borrador SOAP vacío se quita; antes se mandaba a firmar el borrador vacío → 422.
@@ -2069,7 +2115,7 @@ export function PatientDetailClient({
             facturacion: invoices.length,
             implantes: implants?.length ?? 0,
           }}
-          hasBalance={totalBalance > 0}
+          hasBalance={saldoQueSeDebe > 0}
           pediatrics={{ state: pediatricsState, reason: PEDIATRICS_DISABLED_REASON }}
           showPeriodontics={showPeriodontics}
           showEndodontics={showEndodontics}
@@ -2100,7 +2146,7 @@ export function PatientDetailClient({
           implantes: implants?.length ?? 0,
           ortodoncia: orthoData?.controls.filter((c) => c.performedAt === null).length ?? 0,
         }}
-        hasBalance={totalBalance > 0}
+        hasBalance={saldoQueSeDebe > 0}
         pediatrics={{ state: pediatricsState, reason: PEDIATRICS_DISABLED_REASON }}
         showPeriodontics={showPeriodontics}
         showEndodontics={showEndodontics}
@@ -2247,9 +2293,9 @@ export function PatientDetailClient({
               finanzas={{
                 total: totalPlan,
                 pagado: totalPaid,
-                saldo: totalBalance,
+                saldo: saldoQueSeDebe,
                 aunNoSeDebe,
-                credito: creditBalance,
+                credito: saldoAFavorTotal,
                 plan: totalPlanesActivos,
               }}
               citas={appointments}
@@ -2631,7 +2677,7 @@ export function PatientDetailClient({
               onIrACuestionario={() => setTab("cuestionario")}
               formulario={
                 <>
-                  {formularioConsulta === "dental"     && <DentalForm          patientId={patient.id} isChild={!!patient.isChild} onSaved={handleRecordSaved} citaEnCursoId={activeAppointment?.id ?? null} rediseno armarPlan={armarPlanConsulta} />}
+                  {formularioConsulta === "dental"     && <DentalForm          patientId={patient.id} isChild={!!patient.isChild} onSaved={handleRecordSaved} registrarGuardado={registrarGuardadoDeConsulta} citaEnCursoId={activeAppointment?.id ?? null} rediseno armarPlan={armarPlanConsulta} />}
                   {formularioConsulta === "nutrition"  && <NutritionForm       patientId={patient.id} patient={patient} onSaved={handleRecordSaved} />}
                   {formularioConsulta === "psychology" && <PsychologyForm      patientId={patient.id} sessionNum={records.length + 1} onSaved={handleRecordSaved} />}
                   {formularioConsulta === "medicine"   && <GeneralMedicineForm patientId={patient.id} onSaved={handleRecordSaved} />}
@@ -2674,7 +2720,7 @@ export function PatientDetailClient({
                 </div>
               </div>
               {showQuestionnaireWarning && <div className="mb-4">{questionnaireBanner}</div>}
-              {formularioConsulta === "dental"     && <DentalForm          patientId={patient.id} isChild={!!patient.isChild} onSaved={handleRecordSaved} citaEnCursoId={activeAppointment?.id ?? null} />}
+              {formularioConsulta === "dental"     && <DentalForm          patientId={patient.id} isChild={!!patient.isChild} onSaved={handleRecordSaved} registrarGuardado={registrarGuardadoDeConsulta} citaEnCursoId={activeAppointment?.id ?? null} />}
               {formularioConsulta === "nutrition"  && <NutritionForm       patientId={patient.id} patient={patient} onSaved={handleRecordSaved} />}
               {formularioConsulta === "psychology" && <PsychologyForm      patientId={patient.id} sessionNum={records.length + 1} onSaved={handleRecordSaved} />}
               {formularioConsulta === "medicine"   && <GeneralMedicineForm patientId={patient.id} onSaved={handleRecordSaved} />}
@@ -2863,6 +2909,7 @@ export function PatientDetailClient({
                     cuentas={canViewBilling ? cuentasDePlanes.cuentas : undefined}
                     cargandoCuentas={cuentasDePlanes.cargando}
                     onCobrarPlan={canViewBilling ? () => setCobrarHoyAbierto(true) : undefined}
+                    onCuentaCambio={alCambiarDineroDePlanes}
                     onNuevo={() => setShowNewTreatment(true)}
                     onVer={(plan) => setViewPlan(plan)}
                     onEditar={(plan) => setEditPlan(plan)}
@@ -3704,6 +3751,7 @@ export function PatientDetailClient({
                 else openBillingTab(); // factura recién creada aún no en el snapshot
               }}
               onViewPlan={() => setTab("tratamiento")}
+              onCambio={() => alCambiarDineroDePlanes()}
               abrirId={presupuestoAbrir}
               onInvoiceCreated={(inv) =>
                 // Nueva → al frente; ya conocida (el borrador ligado que el PATCH
@@ -3757,7 +3805,7 @@ export function PatientDetailClient({
             <BillingTab
               patientId={patient.id}
               invoices={invoices}
-              summary={{ total: totalPlan, paid: totalPaid, balance: totalBalance, aunNoSeDebe }}
+              summary={{ total: totalPlan, paid: totalPaid, balance: saldoQueSeDebe, aunNoSeDebe }}
               facturApiEnabled={facturApiEnabled}
               onNewInvoice={() => setShowNewInvoice(true)}
               onOpenInvoice={(inv) => setInvoiceDetailOpen(inv)}
@@ -3780,9 +3828,9 @@ export function PatientDetailClient({
             finance={{
               total: totalPlan,
               paid: totalPaid,
-              balance: totalBalance,
+              balance: saldoQueSeDebe,
               aunNoSeDebe,
-              credit: creditBalance,
+              credit: saldoAFavorTotal,
               pct: pctPaid,
               plan: totalPlanesActivos,
             }}
@@ -4048,7 +4096,8 @@ export function PatientDetailClient({
         clinicTaxMode={clinicTaxMode}
         puedeCobrar={permisosCobro?.cobrar !== false}
         puedeEnviarComprobante={permisosCobro?.enviar === true}
-        pendientes={pendientesPrevios(invoices)}
+        // v7: «Además tiene $X por cobrar en notas anteriores» cuenta lo que se debe, no lo por hacer del plan.
+        pendientes={pendientesPrevios(invoices, aunNoSeDebePorFactura)}
         onCobrarPendientes={() => { setCobrarHoyAbierto(false); openChargeShortcut(); }}
         // C-14 (auditoría de uso): la nota nueva entra a la lista al instante (sin esperar al refresco).
         onListo={(nota) => {

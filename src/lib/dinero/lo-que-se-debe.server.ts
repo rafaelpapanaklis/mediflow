@@ -14,6 +14,8 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { computeReceivables, receivableInvoiceWhere } from "@/lib/caja";
 import { columnaNotaDelPlanExiste } from "@/lib/treatments/items-db";
+import { leerNotasDePlan } from "@/lib/treatments/por-cobrar-db";
+import { deudaDeNotaDelPlan } from "@/lib/treatments/por-cobrar";
 
 export interface LoQueAunNoSeDebe {
   /** `invoiceId` → pesos de su saldo que aún no se deben. Solo las que tienen algo. */
@@ -112,6 +114,25 @@ export async function loQueAunNoSeDebe(
   } catch (e) {
     console.warn(`[dinero:no-exigible] clínica ${clinicId}: no se pudo calcular; se cuenta todo.`, e);
     return NADA();
+  }
+}
+
+/**
+ * Lo pagado POR ADELANTADO en las notas de plan de estas facturas: lo pagado de más sobre lo hecho
+ * (`saldoAFavor` de `deudaDeNotaDelPlan`, la cifra «Saldo a favor» de la Cuenta del plan). Sigue en la
+ * nota (no es crédito del libro `patient_credits`); al cerrar el plan pasa a ese libro y aquí da 0.
+ * Mira también las notas ya saldadas (pagó todo y no se ha hecho nada). Tolerante: si falla, 0.
+ */
+export async function adelantoEnNotasDePlan(clinicId: string, invoiceIds: string[]): Promise<number> {
+  if (!clinicId || invoiceIds.length === 0) return 0;
+  try {
+    const notas = await leerNotasDePlan(clinicId, invoiceIds);
+    let centavos = 0;
+    for (const l of Array.from(notas.values())) centavos += Math.round(deudaDeNotaDelPlan(l.nota, l.filas, null).saldoAFavor * 100);
+    return centavos / 100;
+  } catch (e) {
+    console.warn(`[dinero:no-exigible] clínica ${clinicId}: no se leyó lo pagado por adelantado.`, e);
+    return 0;
   }
 }
 
