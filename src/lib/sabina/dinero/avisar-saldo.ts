@@ -206,7 +206,7 @@ type Mensaje =
  * Lo que saldría AHORA: las mismas comprobaciones del handler, en el mismo orden,
  * y el texto que decidiría `sendWhatsAppLogged`. No manda nada.
  */
-export async function mensajeDe(ctx: SabinaCtx, f: FacturaLeida): Promise<Mensaje> {
+export async function mensajeDe(ctx: SabinaCtx, f: FacturaLeida, saldoTotalDelTratamiento: number | null = null): Promise<Mensaje> {
   if (!ENVIABLES.includes(f.status)) {
     return {
       tipo: "no",
@@ -234,17 +234,19 @@ export async function mensajeDe(ctx: SabinaCtx, f: FacturaLeida): Promise<Mensaj
     return { tipo: "no", frase: "Falta el teléfono de la clínica (Configuración → Clínica): el aviso lo necesita para decir a dónde llamar." };
   }
 
-  // ws1-t4 (8c): mismo «pago por realizar / saldo vencido» que la ruta.
+  // ws1-t4 (8c): mismo «pago por realizar / saldo vencido» que la ruta. Con cuotas acordadas
+  // (`saldoTotalDelTratamiento`), como la ruta: lo vencido y el saldo total aparte (27-oct, A9).
   const zona = (clinica as { timezone?: string | null }).timezone ?? "";
-  const estado = estadoDeCobro({ status: f.status, balance: f.balance, dueDate: f.dueDate }, startOfTodayInTz(zona));
+  const estado = saldoTotalDelTratamiento !== null ? null : estadoDeCobro({ status: f.status, balance: f.balance, dueDate: f.dueDate }, startOfTodayInTz(zona));
   const aviso = buildPaymentNotice({
     patient: { firstName: f.paciente.firstName, lastName: f.paciente.lastName },
     clinicName: clinica.name,
     clinicPhone: telefonoClinica,
     invoiceNumber: f.folio,
     balance: f.balance,
+    saldoTotalDelTratamiento,
     // Mismo cálculo que la ruta: la tarjeta enseña el texto EXACTO que se manda.
-    pagoDelMes: await pagoDelMesDeFactura(db, {
+    pagoDelMes: saldoTotalDelTratamiento !== null ? null : await pagoDelMesDeFactura(db, {
       clinicId: ctx.clinicId, invoiceId: f.id, total: f.total, paid: f.paid, zonaHoraria: (clinica as { timezone?: string | null }).timezone,
     }),
     items: f.items,
@@ -295,21 +297,26 @@ export async function prepararAviso(ctx: SabinaCtx, p: ParamsAviso): Promise<Sab
   if (orto) return { tipo: "no_se_puede", frase: await fraseNoAvisaOrtodoncia(ctx, f, orto) };
 
   // Nota de un plan de tratamiento (26-oct, Rafael): la ruta avisa solo lo que el paciente debe DE
-  // VERDAD (lo hecho menos lo pagado) y no avisa si aún no debe nada. La tarjeta enseña lo mismo.
+  // VERDAD (lo hecho menos lo pagado; con cuotas acordadas, la cuota vencida —27-oct, A9—) y no avisa
+  // si aún no debe nada. La tarjeta enseña lo mismo.
   const saldoCompleto = f.balance;
-  const aunNo = (await loQueAunNoSeDebe(ctx.clinicId, { ids: [f.id] })).porFactura[f.id] ?? 0;
+  const noSeDebe = await loQueAunNoSeDebe(ctx.clinicId, { ids: [f.id] });
+  const aunNo = noSeDebe.porFactura[f.id] ?? 0;
+  const aCuotas = aunNo > 0 && noSeDebe.porVencer > 0;
   if (aunNo > 0) {
     const debe = Math.max(0, Math.round((f.balance - aunNo) * 100) / 100);
     if (debe <= 0.005) {
       return {
         tipo: "no_se_puede",
-        frase: `La factura ${f.folio} es la nota de un plan de tratamiento y ${f.paciente.nombre} todavía no debe nada de ella: lo aceptado se cobra cuando se hace.`,
+        frase: aCuotas
+          ? `La factura ${f.folio} es la nota de un plan con cuotas acordadas y ${f.paciente.nombre} no tiene ninguna cuota vencida: lo que falta aún no vence.`
+          : `La factura ${f.folio} es la nota de un plan de tratamiento y ${f.paciente.nombre} todavía no debe nada de ella: lo aceptado se cobra cuando se hace.`,
       };
     }
     f = { ...f, balance: debe };
   }
 
-  const m = await mensajeDe(ctx, f);
+  const m = await mensajeDe(ctx, f, aCuotas ? saldoCompleto : null);
   if (m.tipo === "no") return { tipo: "no_se_puede", frase: m.frase };
 
   const hoy = await avisosDeHoy(ctx, f);

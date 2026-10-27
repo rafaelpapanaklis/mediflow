@@ -1,7 +1,9 @@
 // Lo que todavía NO se debe del saldo de unas facturas (decisiones de Rafael, 26-oct-2026):
 //  · de una nota de plan de tratamiento, lo aceptado que aún no se hace ni se paga;
 //  · de la factura principal de un caso de ortodoncia «Precio total a plazos», las cuotas que aún no
-//    vencen.
+//    vencen;
+//  · de una nota de plan con cuotas acordadas (plan financiado), lo que no es cuota vencida (27-oct,
+//    A9): se debe la mensualidad acordada, no lo hecho — lo mismo que el WhatsApp de cobranza y el bot.
 // Es la parte de `porHacerPorFactura` de `computeReceivables` (caja.ts): la MISMA regla que Caja y
 // Finanzas, para que Pacientes, la ficha, Reportes, Analítica, el Inbox, el aviso de la nota y el
 // portal del paciente digan lo mismo. Lo que el paciente debe de verdad = saldo − esto.
@@ -22,7 +24,7 @@ export interface LoQueAunNoSeDebe {
   porFactura: Record<string, number>;
   /** De las notas de plan (por hacer). */
   porHacer: number;
-  /** De ortodoncia «Precio total a plazos» (por vencer). */
+  /** De ortodoncia «Precio total a plazos» y de las notas de plan con cuotas acordadas (por vencer). */
   porVencer: number;
   total: number;
 }
@@ -104,7 +106,7 @@ export async function loQueAunNoSeDebe(
       },
     );
     const total = s.porHacer ?? 0;
-    const porVencer = s.porVencerOrto ?? 0;
+    const porVencer = Math.round(((s.porVencerOrto ?? 0) + (s.porVencerCuotas ?? 0)) * 100) / 100;
     return {
       porFactura: s.porHacerPorFactura ?? {},
       porHacer: Math.round((total - porVencer) * 100) / 100,

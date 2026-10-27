@@ -67,7 +67,7 @@ export interface PaymentNoticeInput {
    */
   cobro?: { estado: EstadoDeCobro; vence: string | null } | null;
   /**
-   * Ortodoncia «Precio total a plazos» (26-oct, Rafael): `balance` es lo VENCIDO («debes») y esto, el
+   * Ortodoncia «Precio total a plazos» y nota de plan con cuotas acordadas (26 y 27-oct, Rafael): `balance` es lo VENCIDO («debes») y esto, el
    * saldo total del tratamiento, va como dato aparte. Mismas cifras que el Inbox y el bot.
    */
   saldoTotalDelTratamiento?: number | null;

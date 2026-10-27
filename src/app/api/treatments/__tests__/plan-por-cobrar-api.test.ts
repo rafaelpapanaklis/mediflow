@@ -68,6 +68,7 @@ async function usar() {
   Object.assign(prismaVivo, base.prisma);
   (await import("@/lib/treatments/items-db"))._olvidarSondas();
   (await import("@/lib/quotes/aceptacion-db"))._olvidarTablas();
+  (await import("@/lib/invoices/condiciones-pago-db"))._olvidarTabla();
   await base.db.query(`INSERT INTO "procedure_catalog" VALUES ('proc-r','c1','Resina',1250.5,true), ('proc-l','c1','Limpieza',800,true)`);
   bitacora.length = 0;
 }
@@ -134,12 +135,18 @@ async function saldos(clinicId = "c1") {
   const { computeReceivables } = await import("@/lib/caja");
   const db = {
     invoice: {
-      findMany: async () =>
-        (await base.db.query(
-          `SELECT "id", "balance", "dueDate", "total", "createdAt" FROM "invoices"
-            WHERE "clinicId" = $1 AND "status"::text NOT IN ('DRAFT', 'CANCELLED') AND "balance" > 0 ORDER BY "id"`,
-          [clinicId],
-        )).rows,
+      findMany: async (a: any = {}) =>
+        a?.select?.payments
+          // Los cobros de las facturas a plazos (A9: el calendario de una nota financiada).
+          ? Promise.all((a.where?.id?.in ?? []).map(async (id: string) => ({
+              id,
+              payments: (await base.db.query(`SELECT "amount", "method" FROM "payments" WHERE "invoiceId" = $1`, [id])).rows,
+            })))
+          : (await base.db.query(
+              `SELECT "id", "balance", "dueDate", "total", "createdAt" FROM "invoices"
+                WHERE "clinicId" = $1 AND "status"::text NOT IN ('DRAFT', 'CANCELLED') AND "balance" > 0 ORDER BY "id"`,
+              [clinicId],
+            )).rows,
       aggregate: async () => ({ _sum: {} }),
     },
     clinic: { findUnique: async () => ({ timezone: "America/Mexico_City" }) },
@@ -429,6 +436,156 @@ test("v7/v8: «Estado de cuenta» de la ficha — debe lo de la Cuenta del plan;
 
   // La otra clínica no ve al paciente.
   assert.equal((await ficha("c2")).status, 404);
+});
+
+// ── A9 (27-oct): nota de plan con cuotas acordadas → manda la mensualidad acordada ───────────────────
+
+/** Forma de pago «a plazos» en la nota, como la guarda el editor (`invoice_payment_terms`). */
+async function conCuotas(notaId: string, args: { numPagos: number; primerPago: string }) {
+  await base.db.exec(`
+    CREATE TABLE IF NOT EXISTS "invoice_payment_terms" ("invoiceId" text PRIMARY KEY REFERENCES "invoices"("id"),
+      "modo" text NOT NULL DEFAULT 'unico', "metodo" text, "enganche" numeric(10,2) NOT NULL DEFAULT 0,
+      "numPagos" integer NOT NULL DEFAULT 0, "frecuencia" text NOT NULL DEFAULT 'MONTHLY', "primerPago" date,
+      "difiereConSuBanco" boolean NOT NULL DEFAULT false);`);
+  await base.db.query(
+    `INSERT INTO "invoice_payment_terms" ("invoiceId", "modo", "enganche", "numPagos", "frecuencia", "primerPago") VALUES ($1, 'plazos', 0, $2, 'MONTHLY', $3)`,
+    [notaId, args.numPagos, args.primerPago],
+  );
+  (await import("@/lib/invoices/condiciones-pago-db"))._olvidarTabla();
+}
+
+/** Lo que contesta el bot «¿cuánto debo?» (la misma lectura que el WhatsApp de cobranza), contra esta base. */
+async function loQueDiceElBot(hoy: string) {
+  const { resumenDeSaldoDePaciente } = await import("@/lib/whatsapp/cobranza/datos");
+  const invoiceDePrueba = prismaVivo.invoice;
+  const ortoDePrueba = prismaVivo.orthodonticTreatmentPlan;
+  // El doble de la base no sabe filtrar por relación (`patient: { deletedAt: null }`): la misma consulta, a mano.
+  prismaVivo.invoice = {
+    ...invoiceDePrueba,
+    findMany: async (a: any) => {
+      const filas = (await base.db.query(
+        `SELECT "id", "status"::text AS "status", "total", "patientId" FROM "invoices"
+          WHERE "clinicId" = $1 AND "patientId" = $2 AND "status"::text IN ('PENDING', 'PARTIAL', 'OVERDUE') ORDER BY "createdAt"`,
+        [a.where.clinicId, a.where.patientId],
+      )).rows;
+      return Promise.all(filas.map(async (f: any) => ({
+        ...f,
+        patient: { firstName: "Ana", lastName: "", phone: "5512345678", status: "ACTIVE", deletedAt: null },
+        payments: (await base.db.query(`SELECT "amount", "method" FROM "payments" WHERE "invoiceId" = $1`, [f.id])).rows,
+      })));
+    },
+  };
+  prismaVivo.orthodonticTreatmentPlan = { findMany: async () => [] };
+  try {
+    return await resumenDeSaldoDePaciente("c1", "pac-c1", hoy);
+  } finally {
+    prismaVivo.invoice = invoiceDePrueba;
+    prismaVivo.orthodonticTreatmentPlan = ortoDePrueba;
+  }
+}
+
+test("A9: nota con cuotas acordadas — Caja, ficha, Cuenta del plan, bot y link de pago dicen la cuota vencida, no lo hecho", async (t) => {
+  if (salta(t)) return;
+  await usar();
+  const { hoyEnZona } = await import("@/lib/fechas/hoy-en-zona");
+  const { leerCondicionesDeFacturas } = await import("@/lib/invoices/condiciones-pago-db");
+  const { montoSugeridoDeCobro } = await import("@/lib/invoices/plan-de-pagos");
+  const { montoParaLink } = await import("@/lib/factura-mp/core");
+  const { loQueAunNoSeDebe } = await import("@/lib/dinero/lo-que-se-debe.server");
+  const { GET: FICHA } = await import("@/app/api/patients/[id]/lo-que-aun-no-se-debe/route");
+  const ZONA = "America/Mexico_City";
+  const hoy = hoyEnZona(new Date(), ZONA);
+  // El doble de la base no trae los cobros de una factura (`payments`); el calendario los necesita.
+  const invoiceDePrueba = prismaVivo.invoice;
+  prismaVivo.invoice = {
+    ...invoiceDePrueba,
+    findMany: async (a: any = {}) => {
+      const filas = await invoiceDePrueba.findMany(a);
+      if (!a?.select?.payments) return filas;
+      return Promise.all(filas.map(async (f: any) => ({
+        ...f,
+        payments: (await base.db.query(`SELECT "amount", "method" FROM "payments" WHERE "invoiceId" = $1`, [f.id])).rows,
+      })));
+    },
+  };
+  const { planId, notaId } = await planAceptado();
+  // $2,050.50 en 3 mensualidades de $683.50; la primera hace 40 días: dos ya vencieron ($1,367), la tercera no.
+  await conCuotas(notaId, { numPagos: 3, primerPago: hoyEnZona(new Date(Date.now() - 40 * 86_400_000), ZONA) });
+
+  /** Las cifras de todas las pantallas y mensajes, para compararlas de una vez. */
+  const todas = async () => {
+    const s = await saldos();
+    const c = await cuenta(planId);
+    const r = await loQueAunNoSeDebe("c1", { ids: [notaId] });
+    const ficha = await leer(await FICHA(pedir("/api/patients/pac-c1/lo-que-aun-no-se-debe", undefined, "GET"), params("pac-c1")));
+    const [nota] = await notas(planId);
+    const saldo = Number(nota.balance);
+    const bot = await loQueDiceElBot(hoy);
+    const cond = (await leerCondicionesDeFacturas(prismaVivo, { clinicId: "c1", invoiceIds: [notaId] })).porFactura.get(notaId);
+    const link = montoParaLink({ sugerido: montoSugeridoDeCobro(cond, Number(nota.total), Number(nota.paid), hoy), saldo, noSeDebe: r.porFactura[notaId] ?? 0 });
+    return {
+      caja: s.porCobrar,
+      cajaVencido: s.vencido,
+      cuenta: c.debe,
+      cuentaVencido: c.vencido,
+      ficha: Math.round((saldo - ficha.body.total) * 100) / 100,
+      portal: Math.round((saldo - (r.porFactura[notaId] ?? 0)) * 100) / 100,
+      bot: bot?.vencido,
+      link: "monto" in link ? link.monto : 0,
+      porVencer: { caja: s.porVencerCuotas, ficha: r.porVencer },
+      aCuotas: c.aCuotas,
+    };
+  };
+  const misma = (x: Awaited<ReturnType<typeof todas>>, cifra: number, porVencer: number) => {
+    assert.deepEqual(
+      { caja: x.caja, cajaVencido: x.cajaVencido, cuenta: x.cuenta, cuentaVencido: x.cuentaVencido, ficha: x.ficha, portal: x.portal, bot: x.bot, link: x.link },
+      { caja: cifra, cajaVencido: cifra, cuenta: cifra, cuentaVencido: cifra, ficha: cifra, portal: cifra, bot: cifra, link: cifra },
+    );
+    assert.deepEqual(x.porVencer, { caja: porVencer, ficha: porVencer });
+    assert.equal(x.aCuotas, true);
+  };
+
+  // Nada hecho ni pagado: por lo hecho no debería nada; con cuotas acordadas debe las dos vencidas.
+  misma(await todas(), 1367, 683.5);
+  const c0 = await cuenta(planId);
+  assert.equal(c0.hecho, 0);
+  assert.equal(c0.porHacer, 2050.5, "lo por hacer sigue diciendo cómo va el tratamiento");
+
+  // Hecha la resina y abonados $500: por lo hecho serían $750.50; manda la cuota: $1,367 − $500.
+  await hecho(planId, "Resina", 2);
+  await pagar(notaId, 500);
+  misma(await todas(), 867, 683.5);
+
+  // Al cerrar el plan la nota baja a lo hecho ($1,250.50) y las cuotas siguen: 416.84 + 416.83 vencidas − 500.
+  assert.equal((await cerrar(planId)).status, 200);
+  const x = await todas();
+  assert.equal(x.caja, 333.67);
+  assert.equal(x.cuenta, 333.67);
+  assert.equal(x.bot, 333.67);
+  assert.equal(x.ficha, 333.67);
+
+  // La otra clínica no ve nada de esto.
+  assert.equal((await saldos("c2")).porCobrar, 0);
+  assert.equal((await loQueAunNoSeDebe("c2", { ids: [notaId] })).total, 0);
+});
+
+test("A9: sin cuotas acordadas (un solo pago) sigue la regla de lo hecho", async (t) => {
+  if (salta(t)) return;
+  await usar();
+  const { planId, notaId } = await planAceptado();
+  await base.db.exec(`CREATE TABLE IF NOT EXISTS "invoice_payment_terms" ("invoiceId" text PRIMARY KEY, "modo" text NOT NULL DEFAULT 'unico',
+    "metodo" text, "enganche" numeric(10,2) NOT NULL DEFAULT 0, "numPagos" integer NOT NULL DEFAULT 0, "frecuencia" text NOT NULL DEFAULT 'MONTHLY',
+    "primerPago" date, "difiereConSuBanco" boolean NOT NULL DEFAULT false);`);
+  await base.db.query(`INSERT INTO "invoice_payment_terms" ("invoiceId", "modo", "metodo") VALUES ($1, 'unico', 'cash')`, [notaId]);
+  (await import("@/lib/invoices/condiciones-pago-db"))._olvidarTabla();
+  await hecho(planId, "Resina", 2);
+  await pagar(notaId, 500);
+  const s = await saldos();
+  assert.equal(s.porCobrar, 750.5);
+  assert.equal(s.porVencerCuotas, 0);
+  const c = await cuenta(planId);
+  assert.equal(c.debe, 750.5);
+  assert.equal(c.aCuotas, false);
 });
 
 test("cerrar un plan TERMINADO: ya_cerrado, no lo pasa a Abandonado ni escribe nada (revisión t5, A7)", async (t) => {

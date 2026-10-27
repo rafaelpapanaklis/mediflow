@@ -26,7 +26,7 @@ import type { CondicionesPago } from "@/lib/quotes/condiciones-pago";
 import { getTzParts, tzLocalToUtc } from "@/lib/agenda/time-utils";
 import { cargarVencimientosDeCargosDeControl } from "@/lib/orthodontics/cobranza-controles-db";
 import { DEFAULT_INVOICE_TZ } from "@/lib/invoices/due-date";
-import { corteDeVencido, deudaDeNotaDelPlan } from "@/lib/treatments/por-cobrar";
+import { corteDeVencido, deudaConCuotasAcordadas, deudaDeNotaDelPlan } from "@/lib/treatments/por-cobrar";
 import { leerNotasDePlan, type LectorDeNotasDePlan } from "@/lib/treatments/por-cobrar-db";
 import { principalesPrecioTotal, type LectorDePrincipalesPrecioTotal } from "@/lib/orthodontics/principales-precio-total-db";
 import {
@@ -948,7 +948,8 @@ export interface SaldosDeLaClinica {
   /**
    * POR COBRAR: todo lo que falta por cobrar de las facturas emitidas (ni borrador ni cancelada).
    * De una NOTA DE PLAN (`invoices."treatmentPlanId"`), solo lo HECHO menos lo pagado (decisión de
-   * Rafael, 26-oct-2026; `lib/treatments/por-cobrar.ts`): lo aceptado sin hacer va en `porHacer`.
+   * Rafael, 26-oct-2026; `lib/treatments/por-cobrar.ts`): lo aceptado sin hacer va en `porHacer`. Con
+   * cuotas acordadas (plan financiado), solo la cuota vencida (27-oct, A9).
    */
   porCobrar: number;
   /** VENCIDO: la parte de lo por cobrar cuya fecha ya pasó (por cuota en las facturas a plazos; en una nota de plan, lo hecho hace más de 30 días). */
@@ -958,12 +959,14 @@ export interface SaldosDeLaClinica {
   /**
    * POR HACER / POR VENCER: lo que salió de `porCobrar` porque todavía no se debe —de las notas de
    * plan, lo aceptado que no se hace ni se paga; de la factura principal de un caso de ortodoncia en
-   * «Precio total a plazos», las cuotas que aún no vencen (26-oct). `porCobrar + porHacer` = la suma
-   * de saldos de siempre.
+   * «Precio total a plazos» y de una nota de plan con cuotas acordadas (27-oct, A9), las cuotas que
+   * aún no vencen (26-oct). `porCobrar + porHacer` = la suma de saldos de siempre.
    */
   porHacer: number;
   /** De `porHacer`, lo que es ortodoncia por vencer (para decirlo aparte). */
   porVencerOrto: number;
+  /** De `porHacer`, las cuotas acordadas de notas de plan financiadas que aún no vencen (27-oct, A9). */
+  porVencerCuotas: number;
   /** `porHacer` de cada nota de plan que tiene algo por hacer: `invoiceId` → pesos (para quien suma saldos a mano). */
   porHacerPorFactura: Record<string, number>;
   /** `porHacer` de las notas emitidas HOY (Caja resta esto de «Por cobrar» del día). */
@@ -1007,7 +1010,7 @@ export interface OpcionesDeSaldos {
 }
 
 const SALDOS_VACIOS = (): SaldosDeLaClinica => ({
-  porCobrar: 0, vencido: 0, vencidoPorFactura: {}, porHacer: 0, porVencerOrto: 0, porHacerPorFactura: {}, porHacerEmitidoHoy: 0, incompleto: false,
+  porCobrar: 0, vencido: 0, vencidoPorFactura: {}, porHacer: 0, porVencerOrto: 0, porVencerCuotas: 0, porHacerPorFactura: {}, porHacerEmitidoHoy: 0, incompleto: false,
 });
 
 /**
@@ -1078,6 +1081,7 @@ export async function computeReceivables(
   let vencidoC = 0;
   let porHacerC = 0;
   let porVencerOrtoC = 0;
+  let porVencerCuotasC = 0;
   let porHacerHoyC = 0;
   const vencidoPorFactura: Record<string, number> = {};
   const porHacerPorFactura: Record<string, number> = {};
@@ -1101,31 +1105,32 @@ export async function computeReceivables(
 
     for (const f of tanda) {
       const dePlan = notasDePlan.get(f.id);
-      const deuda = dePlan ? deudaDeNotaDelPlan(dePlan.nota, dePlan.filas, corte) : null;
       const delCalendario = overdueOfInvoice(
         { ...f, condiciones: porFactura.get(f.id), cobros: cobrosPorFactura.get(f.id) ?? [], vencimientoControl: vencimientosControl.get(f.id) ?? null },
         todayStart,
         hoy,
       );
+      // Nota de plan: lo hecho menos lo pagado; con cuotas acordadas (plan financiado), la cuota vencida
+      // (27-oct, A9): el mismo número que el WhatsApp de cobranza y el bot.
+      const deLoHecho = dePlan ? deudaDeNotaDelPlan(dePlan.nota, dePlan.filas, corte) : null;
+      const deuda = deLoHecho && esPlanAPlazos(porFactura.get(f.id)) ? deudaConCuotasAcordadas(deLoHecho, delCalendario) : deLoHecho;
       const saldo = Math.max(0, f.balance ?? 0);
       const esOrto = !deuda && principalesOrto.has(f.id);
       const exigible = deuda ? deuda.debe : esOrto ? Math.min(saldo, delCalendario) : f.balance ?? 0;
       porCobrarC += Math.round(exigible * 100);
-      // Lo que falta y aún no se debe (por hacer en la nota del plan; por vencer en ortodoncia): sale de
-      // «Por cobrar» y va a «Por hacer / por vencer».
+      // Lo que falta y aún no se debe (por hacer en la nota del plan; por vencer en ortodoncia y en las
+      // cuotas acordadas): sale de «Por cobrar» y va a «Por hacer / por vencer».
       const ph = deuda ? Math.min(deuda.porHacerSinPagar, saldo) : esOrto ? money(saldo - exigible) : 0;
       if (ph > 0) {
         porHacerC += Math.round(ph * 100);
         if (esOrto) porVencerOrtoC += Math.round(ph * 100);
+        if (deuda?.porCuotas) porVencerCuotasC += Math.round(ph * 100);
         porHacerPorFactura[f.id] = money(ph);
         const creada = (f as { createdAt?: Date | null }).createdAt;
         if (creada && creada.getTime() >= todayStart.getTime()) porHacerHoyC += Math.round(ph * 100);
       }
-      // Nota de plan: vence lo hecho hace más de 30 días; si además tiene cuotas acordadas, la cuota
-      // vencida también, pero nunca más de lo que debe por lo hecho.
-      const v = deuda
-        ? Math.min(deuda.debe, Math.max(deuda.vencido, esPlanAPlazos(porFactura.get(f.id)) ? delCalendario : 0))
-        : delCalendario;
+      // Nota de plan: vence lo hecho hace más de 30 días (con cuotas acordadas, la cuota vencida).
+      const v = deuda ? Math.min(deuda.debe, deuda.vencido) : delCalendario;
       if (v > 0) {
         vencidoC += Math.round(v * 100);
         vencidoPorFactura[f.id] = money(v);
@@ -1148,6 +1153,7 @@ export async function computeReceivables(
     vencidoPorFactura,
     porHacer: porHacerC / 100,
     porVencerOrto: porVencerOrtoC / 100,
+    porVencerCuotas: porVencerCuotasC / 100,
     porHacerPorFactura,
     porHacerEmitidoHoy: porHacerHoyC / 100,
     incompleto,

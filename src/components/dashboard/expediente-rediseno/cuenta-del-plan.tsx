@@ -66,6 +66,7 @@ export function cifrasDeLaCuenta(c: PlanConCuenta) {
     saldoAFavor: c.saldoAFavor ?? 0,
     porHacer: c.porHacer ?? 0,
     vencido: c.vencido ?? 0,
+    aCuotas: c.aCuotas ?? false,
   };
 }
 
@@ -187,15 +188,18 @@ export function CuentaDelPlan({ cuenta, cargando, onCobrar, puedeCerrar, onCambi
           </div>
         )}
       </dl>
+      {/* 27-oct, A9: con cuotas acordadas (plan financiado), «Debe» y «Vencido» son la cuota vencida, no lo hecho. */}
       {c.vencido > 0.005 && (
         <p className={`${s.cuentaPlanAyuda} ${s.cuentaPlanAvisoPeligro}`} data-cuenta-plan-vencido>
-          {t("planTratamiento.cobro.vencidoDe", { monto: fmtMXNdec(c.vencido) })}
+          {t(c.aCuotas ? "planTratamiento.cobro.vencidoCuotas" : "planTratamiento.cobro.vencidoDe", { monto: fmtMXNdec(c.vencido) })}
         </p>
       )}
       {c.debe > 0.005 && c.saldoAFavor > 0.005 && (
-        <p className={s.cuentaPlanAyuda}>{t("planTratamiento.cobro.tambienAFavor", { monto: fmtMXNdec(c.saldoAFavor) })}</p>
+        <p className={s.cuentaPlanAyuda}>{t(c.aCuotas ? "planTratamiento.cobro.tambienAdelantoCuotas" : "planTratamiento.cobro.tambienAFavor", { monto: fmtMXNdec(c.saldoAFavor) })}</p>
       )}
-      {c.porHacer > 0.005 && <p className={s.cuentaPlanAyuda}>{t("planTratamiento.cobro.porHacerAyuda")}</p>}
+      {c.aCuotas
+        ? cuenta.saldo > 0.005 && <p className={s.cuentaPlanAyuda} data-cuenta-plan-cuotas>{t("planTratamiento.cobro.cuotasAyuda")}</p>
+        : c.porHacer > 0.005 && <p className={s.cuentaPlanAyuda}>{t("planTratamiento.cobro.porHacerAyuda")}</p>}
       {!cuenta.soloDelPlan && <p className={s.cuentaPlanAyuda}>{t("planTratamiento.cobro.mezclado")}</p>}
       {!cerrando && (onCobrar || conCierre) && (
         <div className={s.cuentaPlanAcciones}>
@@ -221,9 +225,13 @@ export function CuentaDelPlan({ cuenta, cargando, onCobrar, puedeCerrar, onCambi
             {(() => {
               // Lo pagado que pasaría de lo hecho, como queda tras quitar lo no hecho.
               const aFavor = Math.max(0, Math.round((c.pagado - c.hecho) * 100) / 100);
+              // Con cuotas acordadas, lo que falta de lo hecho se sigue cobrando con las cuotas (27-oct, A9).
+              const faltaDeLoHecho = Math.max(0, Math.round((c.hecho - c.pagado) * 100) / 100);
               return aFavor > 0.005
                 ? <li>{t("planTratamiento.cobro.cerrarAFavor", { monto: fmtMXNdec(aFavor) })}</li>
-                : c.debe > 0.005 ? <li>{t("planTratamiento.cobro.cerrarSigueDebiendo", { monto: fmtMXNdec(c.debe) })}</li> : null;
+                : c.aCuotas
+                  ? faltaDeLoHecho > 0.005 ? <li>{t("planTratamiento.cobro.cerrarSigueCuotas", { monto: fmtMXNdec(faltaDeLoHecho) })}</li> : null
+                  : c.debe > 0.005 ? <li>{t("planTratamiento.cobro.cerrarSigueDebiendo", { monto: fmtMXNdec(c.debe) })}</li> : null;
             })()}
             {(cuenta.facturasDeAntes ?? []).length > 0 && (
               <li className={s.cuentaPlanAvisoPeligro} data-cuenta-plan-de-antes>

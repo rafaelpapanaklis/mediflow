@@ -9,7 +9,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { corteDeVencido, deudaDeNotaDelPlan, DIAS_PARA_VENCER, importesPorLinea, type FilaParaDeuda, type NotaParaDeuda } from "@/lib/treatments/por-cobrar";
+import { corteDeVencido, deudaConCuotasAcordadas, deudaDeNotaDelPlan, DIAS_PARA_VENCER, importesPorLinea, type FilaParaDeuda, type NotaParaDeuda } from "@/lib/treatments/por-cobrar";
 import { ajustarNotaAlCerrar, motivoDeCierre, origenDelSaldoAFavor } from "@/lib/treatments/cerrar-plan";
 import { cuentaDelPlan } from "@/lib/treatments/cobro";
 import { computeReceivables } from "@/lib/caja";
@@ -260,4 +260,54 @@ test("Caja / Finanzas: si no se pueden leer las notas de plan, todo cuenta como 
   });
   assert.equal(s.porCobrar, 18000);
   assert.equal(s.porHacer, 0);
+});
+
+// ── A9 (27-oct): nota con cuotas acordadas (plan financiado) → manda la mensualidad acordada ──────────
+
+test("A9 · con cuotas acordadas debe la cuota vencida, no lo hecho; lo demás del saldo es por vencer", () => {
+  const f = filas(fila("r", "hecho", dia(40)), fila("e", "pendiente"), fila("c", "pendiente"));
+  const deLoHecho = deudaDeNotaDelPlan(nota(PLAN, { paid: 1000 }), f, CORTE);
+  assert.equal(deLoHecho.debe, 2000, "por lo hecho debería 2,000 (y vencidos)");
+  // Plan de 18,000 a 6 mensualidades de 3,000: van 3 vencidas (9,000) y pagó 1,000 → 8,000.
+  const d = deudaConCuotasAcordadas(deLoHecho, 8000);
+  assert.equal(d.debe, 8000);
+  assert.equal(d.vencido, 8000);
+  assert.equal(d.porHacerSinPagar, 9000, "saldo 17,000 − 8,000");
+  assert.equal(d.porCuotas, true);
+  // Cómo va el tratamiento no cambia.
+  assert.equal(d.hecho, 3000);
+  assert.equal(d.porHacer, 15000);
+  assert.equal(d.pagado, 1000);
+  // Invariante: lo que se debe + lo que aún no = el saldo de la nota.
+  assert.equal(d.debe + d.porHacerSinPagar, 17000);
+});
+
+test("A9 · cuotas: sin ninguna vencida no debe nada aunque haya trabajo hecho; nunca más que el saldo", () => {
+  const f = filas(fila("r", "hecho", dia(40)), fila("e", "hecho", dia(35)), fila("c", "pendiente"));
+  const deLoHecho = deudaDeNotaDelPlan(nota(PLAN, { paid: 2000 }), f, CORTE);
+  const alCorriente = deudaConCuotasAcordadas(deLoHecho, 0);
+  assert.equal(alCorriente.debe, 0);
+  assert.equal(alCorriente.vencido, 0);
+  assert.equal(alCorriente.porHacerSinPagar, 16000);
+  const deMas = deudaConCuotasAcordadas(deLoHecho, 99999);
+  assert.equal(deMas.debe, 16000, "tope: el saldo de la nota");
+  assert.equal(deMas.porHacerSinPagar, 0);
+  assert.equal(deudaConCuotasAcordadas(deLoHecho, Number.NaN).debe, 0);
+});
+
+test("A9 · Cuenta del plan: la nota con cuotas suma su cuota vencida en «Debe» y lo dice (`aCuotas`)", () => {
+  const c = cuentaDelPlan({
+    total: 18000,
+    facturas: [
+      { id: "n1", invoiceNumber: "F-1", status: "PARTIAL", total: 18000, paid: 1000, hecho: 3000, vencido: 8000, debe: 8000 },
+    ],
+  });
+  assert.equal(c.debe, 8000);
+  assert.equal(c.vencido, 8000);
+  assert.equal(c.hecho, 3000);
+  assert.equal(c.porHacer, 15000);
+  assert.equal(c.aCuotas, true);
+  const sin = cuentaDelPlan({ total: 18000, facturas: [{ id: "n1", invoiceNumber: "F-1", status: "PARTIAL", total: 18000, paid: 1000, hecho: 3000, vencido: 0 }] });
+  assert.equal(sin.debe, 2000);
+  assert.equal(sin.aCuotas, false);
 });

@@ -225,3 +225,39 @@ test("v9 · observación 1: «Completar consulta» tiene tope: pasado, suelta lo
   const es = JSON.parse(leer("src/i18n/dictionaries/es.json"));
   assert.ok(es.patients.consult.completeSlow);
 });
+
+test("A9 (27-oct): con cuotas acordadas manda la mensualidad — Caja, Cuenta del plan, aviso, Sabina y la ficha usan la misma regla", () => {
+  // Una sola regla (`deudaConCuotasAcordadas`), en Caja (→ `loQueAunNoSeDebe`, portal, Inbox, Pacientes) y en la Cuenta del plan.
+  const caja = leer("src/lib/caja.ts");
+  assert.match(caja, /const deuda = deLoHecho && esPlanAPlazos\(porFactura\.get\(f\.id\)\) \? deudaConCuotasAcordadas\(deLoHecho, delCalendario\) : deLoHecho;/);
+  assert.match(caja, /if \(deuda\?\.porCuotas\) porVencerCuotasC \+= /);
+  const cuenta = leer("src/lib/treatments/cobro.server.ts");
+  assert.match(cuenta, /deudaConCuotasAcordadas\(deLoHecho, estadoDelPlan\(calendarioDeCuotas\(c, l\.nota\.total\), pagosDesdeFilas\(cobros\.get\(f\.id\)\), hoy\)\.importeVencido\)/);
+  const ayudante = leer("src/lib/dinero/lo-que-se-debe.server.ts");
+  assert.match(ayudante, /const porVencer = Math\.round\(\(\(s\.porVencerOrto \?\? 0\) \+ \(s\.porVencerCuotas \?\? 0\)\) \* 100\) \/ 100;/);
+  // El bot y el WhatsApp de cobranza ya siguen el calendario de cuotas: la misma cuenta (`estadoDelPlan`).
+  const datos = leer("src/lib/whatsapp/cobranza/datos.ts");
+  assert.match(datos, /const estado = estadoDelPlan\(cuotas, f\.pagos, hoy\);/);
+  // El aviso de saldo (ruta y tarjeta de Sabina): lo vencido y, aparte, el saldo total.
+  const ruta = leer("src/app/api/invoices/[id]/send-whatsapp/route.ts");
+  assert.match(ruta, /const aCuotas = noSeDebe\.porVencer > 0;\n\s*if \(aCuotas\) saldoTotalDelTratamiento = invoice\.balance;/);
+  const sabina = leer("src/lib/sabina/dinero/avisar-saldo.ts");
+  assert.match(sabina, /const m = await mensajeDe\(ctx, f, aCuotas \? saldoCompleto : null\);/);
+  assert.match(sabina, /saldoTotalDelTratamiento,\n/);
+  // La ficha dice por qué: cuotas vencidas, no «lo hecho».
+  const tarjeta = leer("src/components/dashboard/expediente-rediseno/cuenta-del-plan.tsx");
+  assert.match(tarjeta, /c\.aCuotas \? "planTratamiento\.cobro\.vencidoCuotas" : "planTratamiento\.cobro\.vencidoDe"/);
+  assert.match(tarjeta, /t\("planTratamiento\.cobro\.cuotasAyuda"\)/);
+  const abono = leer("src/components/dashboard/cobrar-hoy/abono-al-plan.tsx");
+  assert.match(abono, /plan\.aCuotas \? "planTratamiento\.cobro\.debeHoyCuotas" : "planTratamiento\.cobro\.debeHoy"/);
+  assert.match(leer("src/app/api/treatments/cuentas/route.ts"), /aCuotas: cuenta\.aCuotas \?\? false,/);
+  for (const idioma of ["es", "en"]) {
+    const cobro = JSON.parse(leer(`src/i18n/dictionaries/${idioma}.json`)).planTratamiento.cobro;
+    for (const k of ["vencidoCuotas", "cuotasAyuda", "tambienAdelantoCuotas", "cerrarSigueCuotas", "debeHoyCuotas", "ayudaAdelantoCuotas"]) {
+      assert.ok(cobro[k], `${idioma}: planTratamiento.cobro.${k}`);
+    }
+    for (const k of ["vencidoCuotas", "tambienAdelantoCuotas", "cerrarSigueCuotas"]) assert.match(cobro[k], /\{monto\}/);
+    assert.match(cobro.ayudaAdelantoCuotas, /\{debe\}[\s\S]*\{saldo\}/);
+  }
+});
+

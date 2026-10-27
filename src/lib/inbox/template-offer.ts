@@ -179,8 +179,9 @@ async function loadTemplateFacts(args: {
       : Promise.resolve(null),
   ]);
 
-  // Lo que el paciente debe DE VERDAD (26-oct, Rafael): de una nota de plan, lo hecho menos lo pagado;
-  // de ortodoncia «Precio total a plazos», lo vencido. Un plan aceptado y sin hacer no se le cobra.
+  // Lo que el paciente debe DE VERDAD (26-oct, Rafael): de una nota de plan, lo hecho menos lo pagado
+  // (con cuotas acordadas, la cuota vencida — 27-oct, A9); de ortodoncia «Precio total a plazos», lo
+  // vencido. Un plan aceptado y sin hacer no se le cobra.
   const saldo = (debt ?? []).reduce((s, f) => s + (f.balance ?? 0), 0);
   const noSeDebe = debt?.length ? await loQueAunNoSeDebe(args.clinicId, { ids: debt.map((f) => f.id), timezone: base.timezone }) : null;
 

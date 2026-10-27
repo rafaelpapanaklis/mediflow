@@ -25,10 +25,13 @@ import { leerEstado } from "@/lib/quotes/cargos.server";
 import { aPesos, totalCentavos } from "./items";
 import { bloquearPlan, columnaNotaDelPlanExiste, repoFilas, tablaDeFilasExiste, FilaError } from "./items-db";
 import { cuentaDelPlan, planearNota, type CuentaDelPlan, type FacturaDeLaCuenta, type LineaDeNota, type NotaDelPlan, type PresupuestoDelPlan } from "./cobro";
-import { corteDeVencido, deudaDeNotaDelPlan } from "./por-cobrar";
+import { corteDeVencido, deudaConCuotasAcordadas, deudaDeNotaDelPlan } from "./por-cobrar";
 import { leerNotasDePlan } from "./por-cobrar-db";
 import { DEFAULT_INVOICE_TZ } from "@/lib/invoices/due-date";
 import { medianocheAnterior } from "@/lib/dinero/caja-core";
+import { leerCondicionesDeFacturas } from "@/lib/invoices/condiciones-pago-db";
+import { calendarioDeCuotas, esPlanAPlazos, estadoDelPlan, pagosDesdeFilas } from "@/lib/invoices/plan-de-pagos";
+import { hoyEnZona } from "@/lib/fechas/hoy-en-zona";
 import { leerPlan } from "./leer-plan";
 
 const dinero = (v: number) => new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(v);
@@ -420,13 +423,31 @@ export async function leerCuentaDelPlan(args: {
       const zona = args.timezone
         || (await prisma.clinic.findUnique({ where: { id: clinicId }, select: { timezone: true } }).catch(() => null))?.timezone
         || DEFAULT_INVOICE_TZ;
-      const corte = corteDeVencido(medianocheAnterior(new Date(), zona));
+      const ahora = new Date();
+      const corte = corteDeVencido(medianocheAnterior(ahora, zona));
+      // Notas con cuotas acordadas (plan financiado): debe la cuota vencida, con el MISMO calendario y
+      // los mismos cobros que Caja, el WhatsApp de cobranza y el bot (27-oct, A9). Tolerante: sin la
+      // tabla de condiciones, ninguna es a plazos y todo sigue la regla de lo hecho.
+      const { porFactura: condiciones } = await leerCondicionesDeFacturas(prisma, { clinicId, invoiceIds: Array.from(leidas.keys()) });
+      const idsAPlazos = Array.from(leidas.keys()).filter((id) => esPlanAPlazos(condiciones.get(id)));
+      const cobros = idsAPlazos.length
+        ? new Map((await prisma.invoice.findMany({
+            where: { clinicId, id: { in: idsAPlazos } },
+            select: { id: true, payments: { select: { amount: true, method: true } } },
+          })).map((i) => [i.id, i.payments]))
+        : new Map<string, Array<{ amount: unknown; method: string | null }>>();
+      const hoy = hoyEnZona(ahora, zona);
       for (const f of facturas) {
         const l = leidas.get(f.id);
         if (!l || l.planId !== planId) continue;
-        const d = deudaDeNotaDelPlan(l.nota, l.filas, corte);
+        const deLoHecho = deudaDeNotaDelPlan(l.nota, l.filas, corte);
+        const c = condiciones.get(f.id);
+        const d = esPlanAPlazos(c)
+          ? deudaConCuotasAcordadas(deLoHecho, estadoDelPlan(calendarioDeCuotas(c, l.nota.total), pagosDesdeFilas(cobros.get(f.id)), hoy).importeVencido)
+          : deLoHecho;
         f.hecho = d.hecho;
         f.vencido = d.vencido;
+        if (d.porCuotas) f.debe = d.debe;
       }
     }
   }

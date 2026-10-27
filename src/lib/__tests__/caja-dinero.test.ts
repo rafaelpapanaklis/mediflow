@@ -425,7 +425,7 @@ test("fila 87 · computeReceivables: sin clínica no consulta nada, y si falla l
     facturas: [{ id: "n1", clinicId: "cl-1", status: "PENDING", balance: 300, total: 300, dueDate: new Date("2026-01-09T06:00:00Z") }],
   });
   assert.deepEqual(await computeReceivables("", new Date(), db), {
-    porCobrar: 0, vencido: 0, vencidoPorFactura: {}, porHacer: 0, porVencerOrto: 0, porHacerPorFactura: {}, porHacerEmitidoHoy: 0, incompleto: false,
+    porCobrar: 0, vencido: 0, vencidoPorFactura: {}, porHacer: 0, porVencerOrto: 0, porVencerCuotas: 0, porHacerPorFactura: {}, porHacerEmitidoHoy: 0, incompleto: false,
   });
   assert.equal(consultas.length, 0);
   const saldos = await computeReceivables("cl-1", new Date("2026-02-10T18:00:00Z"), db, async () => { throw new Error("sin columna"); });

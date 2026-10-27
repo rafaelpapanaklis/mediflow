@@ -278,6 +278,11 @@ export interface FacturaDeLaCuenta {
    */
   hecho?: number;
   vencido?: number;
+  /**
+   * Solo en una nota con CUOTAS ACORDADAS (plan financiado, 27-oct, A9): lo que debe = la cuota vencida
+   * (`deudaConCuotasAcordadas`), no lo hecho menos lo pagado.
+   */
+  debe?: number;
 }
 
 export interface CuentaDelPlan {
@@ -295,7 +300,8 @@ export interface CuentaDelPlan {
    * Las cuatro cifras de la ficha (decisión de Rafael, 26-oct-2026): PLAN ACEPTADO (= facturado:
    * lo que está en sus notas), HECHO, PAGADO y DEBE = lo hecho menos lo pagado de cada nota (o SALDO
    * A FAVOR si pagó de más). POR HACER = lo aceptado que aún no se hace. `vencido`: lo hecho hace
-   * más de 30 días y sin pagar.
+   * más de 30 días y sin pagar. En una nota con cuotas acordadas, DEBE y VENCIDO son la cuota vencida
+   * (27-oct, A9; `aCuotas`).
    */
   aceptado: number;
   hecho: number;
@@ -303,6 +309,8 @@ export interface CuentaDelPlan {
   saldoAFavor: number;
   porHacer: number;
   vencido: number;
+  /** Alguna nota del plan tiene cuotas acordadas: su «Debe» es la cuota vencida (27-oct, A9). */
+  aCuotas?: boolean;
   /**
    * Folios de facturas de la vía de antes (las del presupuesto, no ligadas por columna) que aún deben:
    * «Cerrar plan» no las ajusta; la ficha lo avisa antes de confirmar (revisión t5, A5).
@@ -334,7 +342,7 @@ export function cuentaDelPlan(args: { total: number; facturas: FacturaDeLaCuenta
     const p = Number(f.paid) || 0;
     const h = round2(Math.min(t, Math.max(0, f.hecho ?? t)));
     hecho += h;
-    debe += Math.max(0, round2(h - p));
+    debe += f.debe !== undefined ? Math.max(0, f.debe) : Math.max(0, round2(h - p));
     saldoAFavor += Math.max(0, round2(p - h));
     vencido += Math.max(0, Number(f.vencido) || 0);
   }
@@ -350,6 +358,7 @@ export function cuentaDelPlan(args: { total: number; facturas: FacturaDeLaCuenta
     saldoAFavor: round2(saldoAFavor),
     porHacer: round2(Math.max(0, facturado - hecho)),
     vencido: round2(Math.min(debe, vencido)),
+    aCuotas: vivas.some((f) => f.debe !== undefined),
     notas: vivas,
     soloDelPlan: args.soloDelPlan ?? true,
   };

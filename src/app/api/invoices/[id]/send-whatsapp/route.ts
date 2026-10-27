@@ -120,8 +120,9 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
   }
 
   // El aviso de saldo dice lo que el paciente debe DE VERDAD (26-oct, Rafael), lo mismo que el Inbox y
-  // el bot: de una nota de plan, lo hecho menos lo pagado; de ortodoncia «Precio total a plazos», lo
-  // vencido —y aparte, como dato, el saldo total del tratamiento—. Si aún no debe nada, no se manda.
+  // el bot: de una nota de plan, lo hecho menos lo pagado; de ortodoncia «Precio total a plazos» y de una
+  // nota de plan con cuotas acordadas (27-oct, A9), lo vencido —y aparte, como dato, el saldo total del
+  // tratamiento—. Si aún no debe nada, no se manda.
   let saldoDelAviso = invoice.balance;
   let saldoTotalDelTratamiento: number | null = null;
   if (!esFactura) {
@@ -129,13 +130,13 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     const aunNo = noSeDebe.porFactura[invoice.id] ?? 0;
     if (aunNo > 0) {
       saldoDelAviso = Math.max(0, Math.round((invoice.balance - aunNo) * 100) / 100);
-      const esOrtodoncia = noSeDebe.porVencer > 0;
-      if (esOrtodoncia) saldoTotalDelTratamiento = invoice.balance;
+      const aCuotas = noSeDebe.porVencer > 0;
+      if (aCuotas) saldoTotalDelTratamiento = invoice.balance;
       if (saldoDelAviso <= 0.005) {
         return NextResponse.json(
           {
             code: "nada_que_cobrar_aun",
-            error: esOrtodoncia
+            error: aCuotas
               ? "El paciente no tiene pagos vencidos del tratamiento: lo que falta aún no vence, así que no hay saldo que avisar."
               : "Esta nota es de un plan de tratamiento y el paciente todavía no debe nada: lo aceptado se cobra cuando se hace (o como abono, si él quiere adelantar).",
           },
@@ -190,7 +191,8 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
   // El texto sale de lib/invoices/payment-notice: Sabina enseña ESE MISMO texto en
   // su tarjeta antes de que alguien confirme el envío.
   // Factura a plazos: el texto dice «Tu pago de este mes es $X (saldo total $Y)».
-  // En ortodoncia «Precio total» ya no: «debes» es lo vencido y el saldo total va aparte (26-oct).
+  // En ortodoncia «Precio total» y en una nota de plan con cuotas acordadas ya no: «debes» es lo vencido y
+  // el saldo total va aparte (26-oct; 27-oct, A9).
   const pagoDelMes = esFactura || saldoTotalDelTratamiento !== null ? null : await pagoDelMesDeFactura(prisma, {
     clinicId: ctx.clinicId, invoiceId: invoice.id, total: invoice.total, paid: invoice.paid, zonaHoraria: clinic.timezone,
   });
