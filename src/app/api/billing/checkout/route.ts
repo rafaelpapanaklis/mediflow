@@ -101,7 +101,7 @@ export async function POST(req: NextRequest) {
 
   // M1 (ws1-t5): una sede incluida NUNCA abre un cobro propio (una segunda suscripción a nombre de la sede
   // = doble cobro del plan Clínica). Se paga en la clínica principal, que es la que lleva la suscripción.
-  const grupo = await leerGrupoDePago(clinic.id);
+  const grupo = await leerGrupoDePago(clinic.id, user.supabaseId);
   if (grupo.esSedeIncluida) {
     return NextResponse.json(
       { code: "SEDE_INCLUIDA", error: avisoSedeIncluida(grupo.pagadoraNombre), pagadoraId: grupo.pagadoraId },

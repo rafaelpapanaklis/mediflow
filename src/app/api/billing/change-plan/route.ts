@@ -144,7 +144,7 @@ export async function POST(req: NextRequest) {
 
   // M2 (ws1-t5): una sede incluida no paga ni tiene plan propio — cambiar de plan desde ella caía en la rama
   // de «pagador manual» y respondía mensajes que no aplican. Se explica y se manda a la clínica que paga.
-  const grupo = await leerGrupoDePago(clinic.id);
+  const grupo = await leerGrupoDePago(clinic.id, user.supabaseId);
   if (grupo.esSedeIncluida) {
     return NextResponse.json(
       { code: "SEDE_INCLUIDA", error: avisoSedeIncluida(grupo.pagadoraNombre), pagadoraId: grupo.pagadoraId },

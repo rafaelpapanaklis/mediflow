@@ -80,7 +80,7 @@ export default async function SuspendedPage(
   // M1 (ws1-t5): una sede incluida NUNCA ve la pantalla de pago (pagar aquí abría una segunda suscripción a
   // nombre de la sede = doble cobro). Con acceso se va al panel; sin acceso (la madre dejó de pagar) se le
   // explica y se le lleva a la clínica que paga.
-  const grupo = await leerGrupoDePago(user.clinicId);
+  const grupo = await leerGrupoDePago(user.clinicId, user.supabaseId);
   if (grupo.esSedeIncluida) {
     if (!isPlanExpired(clinic)) redirect("/dashboard");
     return <SedeIncluidaSuspendida principalId={grupo.pagadoraId} principalNombre={grupo.pagadoraNombre} />;

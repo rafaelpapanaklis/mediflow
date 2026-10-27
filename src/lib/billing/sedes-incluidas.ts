@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { sedesQueVe } from "@/lib/sedes-que-ve";
 import { getPlanLimits } from "@/lib/plans";
 import { findBranchMothers } from "@/lib/admin/mrr-core";
 import type { PlanId } from "@/lib/billing/plans";
@@ -15,7 +16,10 @@ import {
  */
 
 export interface GrupoDePagoConNombre extends GrupoDePago {
-  /** Nombre de la clínica que paga (para los avisos). */
+  /**
+   * Nombre de la clínica que paga (para los avisos). ws1-t4 v7: solo si `quienMira` tiene acceso
+   * a ella (`sedesQueVe`); si no, o sin `quienMira`, null y el aviso dice «la clínica principal».
+   */
   pagadoraNombre: string | null;
 }
 
@@ -31,8 +35,11 @@ const CAMPOS_FACTURACION = {
   nextBillingDate: true,
 } as const;
 
-/** Quién paga por `clinicId` y qué sedes comparten ese pago. Sin dueño localizable: la clínica sola. */
-export async function leerGrupoDePago(clinicId: string): Promise<GrupoDePagoConNombre> {
+/**
+ * Quién paga por `clinicId` y qué sedes comparten ese pago. Sin dueño localizable: la clínica sola.
+ * `quienMira` (supabaseId de la SESIÓN) solo hace falta para nombrar a la que paga en un aviso.
+ */
+export async function leerGrupoDePago(clinicId: string, quienMira?: string | null): Promise<GrupoDePagoConNombre> {
   if (!clinicId) throw new Error("leerGrupoDePago: falta clinicId");
   const solo: GrupoDePagoConNombre = { pagadoraId: clinicId, miembros: [clinicId], esSedeIncluida: false, pagadoraNombre: null };
 
@@ -55,7 +62,9 @@ export async function leerGrupoDePago(clinicId: string): Promise<GrupoDePagoConN
   });
   const grupo = grupoDePago(clinicId, clinicas, duenos);
   const pagadora = clinicas.find((c) => c.id === grupo.pagadoraId);
-  return { ...grupo, pagadoraNombre: pagadora?.name ?? null };
+  if (!grupo.esSedeIncluida || !pagadora || !quienMira) return { ...grupo, pagadoraNombre: null };
+  const visibles = await sedesQueVe(quienMira, [pagadora.id]);
+  return { ...grupo, pagadoraNombre: visibles.has(pagadora.id) ? pagadora.name : null };
 }
 
 /**
