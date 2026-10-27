@@ -375,6 +375,62 @@ test("lo que aún no se debe (v3: Pacientes, ficha, Reportes, Inbox, portal): de
   assert.equal(c.debe, 750.5);
 });
 
+test("v7/v8: «Estado de cuenta» de la ficha — debe lo de la Cuenta del plan; «además por hacer» = su «Por hacer», y de eso lo ya pagado (no es saldo a favor)", async (t) => {
+  if (salta(t)) return;
+  await usar();
+  const { planId, notaId } = await planAceptado();
+  const { GET } = await import("@/app/api/patients/[id]/lo-que-aun-no-se-debe/route");
+  const ficha = async (clinicId = "c1") => {
+    ctx.clinicId = clinicId;
+    return leer(await GET(pedir("/api/patients/pac-c1/lo-que-aun-no-se-debe", undefined, "GET"), params("pac-c1")));
+  };
+  // Lo que pinta la ficha: la suma de saldos de sus notas menos lo que aún no se debe.
+  const debe = async (body: { total: number }) => {
+    const saldo = (await notas(planId)).reduce((s, n) => s + Number(n.balance), 0);
+    return Math.max(0, Math.round((saldo - body.total) * 100) / 100);
+  };
+  // v8 (t5, V1): «Además, $X por hacer» = lo por hacer sin pagar + lo ya pagado de eso = el «Por hacer» de la cuenta.
+  const porHacerCompleto = (body: { total: number; adelanto: number }) => Math.round((body.total + body.adelanto) * 100) / 100;
+
+  // Plan aceptado, nada hecho: antes pintaba $2,050.50 en rojo.
+  let r = await ficha();
+  assert.equal(r.status, 200);
+  assert.equal(await debe(r.body), 0);
+  assert.equal(r.body.adelanto, 0);
+  assert.equal(porHacerCompleto(r.body), (await cuenta(planId)).porHacer);
+
+  // Hecha la limpieza ($800): debe $800, como la Cuenta del plan.
+  await hecho(planId, "Limpieza", 1);
+  r = await ficha();
+  assert.equal(await debe(r.body), 800);
+  assert.equal((await cuenta(planId)).debe, 800);
+  assert.equal(porHacerCompleto(r.body), 1250.5);
+
+  // Paga $1,000: debe $0; por hacer $1,250.50 (lo mismo que la cuenta), de los que $200 ya están pagados.
+  await pagar(notaId, 1000);
+  r = await ficha();
+  assert.equal(await debe(r.body), 0);
+  assert.equal(r.body.adelanto, 200);
+  assert.equal(porHacerCompleto(r.body), 1250.5);
+  assert.equal(porHacerCompleto(r.body), (await cuenta(planId)).porHacer);
+
+  // Paga todo lo aceptado: la nota queda saldada y el adelanto se sigue viendo.
+  await pagar(notaId, 1050.5);
+  r = await ficha();
+  assert.equal(r.body.total, 0);
+  assert.equal(r.body.adelanto, 1250.5);
+  assert.equal(porHacerCompleto(r.body), (await cuenta(planId)).porHacer);
+
+  // Al cerrar el plan, lo de más pasa al libro de saldo a favor: aquí ya no se cuenta dos veces.
+  ctx.clinicId = "c1";
+  assert.equal((await cerrar(planId)).status, 200);
+  r = await ficha();
+  assert.equal(r.body.adelanto, 0);
+
+  // La otra clínica no ve al paciente.
+  assert.equal((await ficha("c2")).status, 404);
+});
+
 test("cerrar un plan TERMINADO: ya_cerrado, no lo pasa a Abandonado ni escribe nada (revisión t5, A7)", async (t) => {
   if (salta(t)) return;
   await usar();

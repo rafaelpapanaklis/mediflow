@@ -74,6 +74,11 @@ interface QuotesTabProps {
    */
   onInvoiceCreated?: (invoice: BillingInvoiceLite) => void;
   /**
+   * v7 (QA de t12): un presupuesto cambió (aceptado, cobrado, cancelado…). Aceptarlo crea o cambia la
+   * nota del plan: la ficha relee la «Cuenta del plan» (seguía en «Plan aceptado $0» hasta recargar).
+   */
+  onCambio?: () => void;
+  /**
    * Interruptor `menu-dos-niveles` de la clínica (WS1-T8). Encendido, se pinta
    * el Presupuestos rediseñado (`components/dashboard/presupuesto-nuevo/`):
    * conceptos en tabla, descuentos en $ o %, formas de pago y el calendario de
@@ -84,7 +89,7 @@ interface QuotesTabProps {
   rediseno?: boolean;
 }
 
-export function QuotesTab({ patientId, prefill, onViewInvoice, onViewPlan, abrirId = null, onInvoiceCreated, rediseno = false }: QuotesTabProps) {
+export function QuotesTab({ patientId, prefill, onViewInvoice, onViewPlan, abrirId = null, onInvoiceCreated, onCambio, rediseno = false }: QuotesTabProps) {
   const t = useT();
   const [quotes, setQuotes] = useState<QuoteDTO[]>([]);
   const [loading, setLoading] = useState(true);
@@ -106,6 +111,11 @@ export function QuotesTab({ patientId, prefill, onViewInvoice, onViewPlan, abrir
   }, [patientId]);
 
   useEffect(() => { load(); }, [load]);
+  // Lo que cambia un presupuesto ya guardado (aceptar, cobrar, cancelar) puede cambiar la nota del plan.
+  const recargarYAvisar = useCallback(async () => {
+    await load();
+    onCambio?.();
+  }, [load, onCambio]);
 
   // Abrir editor con prefill (una sola vez).
   const prefillDone = useRef(false);
@@ -170,7 +180,7 @@ export function QuotesTab({ patientId, prefill, onViewInvoice, onViewPlan, abrir
         cargando={loading}
         onNuevo={openNew}
         onEditar={openEdit}
-        onRecargar={load}
+        onRecargar={recargarYAvisar}
         onVerFactura={onViewInvoice}
         onVerPlan={onViewPlan}
         onFacturaCreada={onInvoiceCreated}
@@ -206,7 +216,7 @@ export function QuotesTab({ patientId, prefill, onViewInvoice, onViewPlan, abrir
       ) : (
         <div className="space-y-3">
           {quotes.map((q) => (
-            <QuoteCard key={q.id} quote={q} presupuestos={quotes} patientId={patientId} onChanged={load} onEdit={() => openEdit(q)} onViewInvoice={onViewInvoice} onViewPlan={onViewPlan} onInvoiceCreated={onInvoiceCreated} />
+            <QuoteCard key={q.id} quote={q} presupuestos={quotes} patientId={patientId} onChanged={recargarYAvisar} onEdit={() => openEdit(q)} onViewInvoice={onViewInvoice} onViewPlan={onViewPlan} onInvoiceCreated={onInvoiceCreated} />
           ))}
         </div>
       )}

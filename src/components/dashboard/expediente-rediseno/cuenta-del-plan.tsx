@@ -69,12 +69,14 @@ export function cifrasDeLaCuenta(c: PlanConCuenta) {
   };
 }
 
-export function CuentaDelPlan({ cuenta, cargando, onCobrar, puedeCerrar }: {
+export function CuentaDelPlan({ cuenta, cargando, onCobrar, puedeCerrar, onCambio }: {
   cuenta: PlanConCuenta | null | undefined;
   cargando?: boolean;
   onCobrar?: () => void;
   /** Quien edita planes ve «Cerrar plan» (el servidor exige además `billing.edit`). */
   puedeCerrar?: boolean;
+  /** v7: el plan se cerró y cambiaron estas notas (la ficha relee la cuenta y las facturas al momento). */
+  onCambio?: (invoiceIds: string[]) => void;
 }) {
   const t = useT();
   const router = useRouter();
@@ -118,7 +120,13 @@ export function CuentaDelPlan({ cuenta, cargando, onCobrar, puedeCerrar }: {
       if (sinAjustar.length) toast(t("planTratamiento.cobro.cerrarSinAjustar", { folios: sinAjustar.join(", ") }), { duration: 9000 });
       setCerrando(false);
       setMotivo("");
-      router.refresh();
+      // v7 (QA de t12): la cuenta y las notas se releen YA (la cuenta seguía «Activo» con cifras viejas hasta
+      // recargar); el refresco de la página va en el siguiente tick para no retener nada mientras llega.
+      const notas: string[] = Array.isArray(cuerpo?.notas)
+        ? cuerpo.notas.map((n: { invoiceId?: unknown }) => n?.invoiceId).filter((x: unknown): x is string => typeof x === "string")
+        : [];
+      onCambio?.(notas);
+      setTimeout(() => router.refresh(), 0);
     } catch (e) {
       toast.error(mensajeDeError(e, t, { porDefecto: t("planTratamiento.cobro.cerrarError") }));
     } finally {
@@ -151,9 +159,13 @@ export function CuentaDelPlan({ cuenta, cargando, onCobrar, puedeCerrar }: {
           <dt>{t("planTratamiento.cobro.pagado")}</dt>
           <dd className={s.cuentaPlanExito}>{fmtMXNdec(c.pagado)}</dd>
         </div>
+        {/* v9 (revisión t5 de la v8, M1): lo pagado de más sobre lo hecho SIGUE EN LA NOTA del plan: es un adelanto,
+            no saldo a favor (eso es solo el libro `patient_credits`, lo que se descuenta de otra factura). Pasa al
+            libro al «Cerrar plan», y entonces aquí da 0 y sale como saldo a favor en «Estado de cuenta». Igual
+            que «De lo por hacer, $X ya están pagados» de «Estado de cuenta». */}
         {c.saldoAFavor > 0.005 && c.debe <= 0.005 ? (
-          <div data-cifra="saldo-a-favor">
-            <dt>{t("planTratamiento.cobro.saldoAFavor")}</dt>
+          <div data-cifra="pagado-por-adelantado">
+            <dt>{t("planTratamiento.cobro.pagadoPorAdelantado")}</dt>
             <dd className={s.cuentaPlanExito}>{fmtMXNdec(c.saldoAFavor)}</dd>
           </div>
         ) : (

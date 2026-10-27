@@ -197,12 +197,19 @@ export function conceptoDeLaCita(
 
 /** Notas del paciente que ya estaban por cobrar (no son las de hoy): se enlazan, no se mezclan. */
 export function pendientesPrevios(
-  facturas: Array<{ status?: string | null; balance?: number | null }>,
+  facturas: Array<{ id?: string; status?: string | null; balance?: number | null }>,
+  /**
+   * v7 (QA de t12): `invoiceId` → lo que aún no se debe de su saldo (por hacer del plan, por vencer de
+   * ortodoncia). Sin esto, el aviso decía «$2,050.50 por cobrar» de un plan aceptado sin hacer.
+   */
+  aunNoSeDebe: Record<string, number> = {},
 ): { cuantas: number; saldo: number } {
+  const queSeDebe = (f: { id?: string; balance?: number | null }) =>
+    round2(Number(f.balance ?? 0) - (f.id ? Number(aunNoSeDebe[f.id] ?? 0) : 0));
   const vivas = facturas.filter(
-    (f) => ["PENDING", "PARTIAL", "OVERDUE", "DRAFT"].includes(String(f.status ?? "")) && Number(f.balance ?? 0) > 0,
+    (f) => ["PENDING", "PARTIAL", "OVERDUE", "DRAFT"].includes(String(f.status ?? "")) && queSeDebe(f) > 0,
   );
-  return { cuantas: vivas.length, saldo: round2(vivas.reduce((s, f) => s + Number(f.balance ?? 0), 0)) };
+  return { cuantas: vivas.length, saldo: round2(vivas.reduce((s, f) => s + queSeDebe(f), 0)) };
 }
 
 /**
