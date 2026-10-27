@@ -88,10 +88,12 @@ export function bloqueoDowngradePorSedes(input: {
 }
 
 /** M1/M2 — texto cuando una sede incluida intenta pagar / cancelar / cambiar plan. */
+// ws1-t4 v7: sin nombre es que quien lee no tiene acceso a la clínica que paga (`leerGrupoDePago`
+// con `quienMira`): no se nombra ni se le manda a cambiarse a ella, se le manda con el dueño.
 export function avisoSedeIncluida(principalNombre: string | null): string {
   return principalNombre
     ? `Esta sede va incluida en el plan de «${principalNombre}», que es la clínica que paga. Cambia a esa clínica para pagar, cambiar de plan o cancelar.`
-    : "Esta sede va incluida en el plan de la clínica principal del dueño. Cambia a esa clínica para pagar, cambiar de plan o cancelar.";
+    : "Esta sede va incluida en el plan de la clínica principal del dueño. Para pagar, cambiar de plan o cancelar, pídeselo al dueño.";
 }
 
 /**

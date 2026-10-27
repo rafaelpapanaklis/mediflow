@@ -49,15 +49,18 @@ export function SedeIncluidaAviso({
         <div className="space-y-3">
           <h2 className="text-lg font-bold">Sede incluida en tu plan</h2>
           <p className="text-sm leading-relaxed text-muted-foreground">{avisoSedeIncluida(principalNombre)}</p>
-          <button
-            type="button"
-            onClick={irALaPrincipal}
-            disabled={yendo}
-            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:opacity-90 disabled:opacity-60"
-          >
-            {yendo ? <Loader2 size={14} className="animate-spin" aria-hidden /> : null}
-            {principalNombre ? `Ir a ${principalNombre}` : "Ir a la clínica principal"}
-          </button>
+          {/* ws1-t4 v7: sin nombre no hay acceso a la clínica que paga: no se ofrece ir a ella. */}
+          {principalNombre && (
+            <button
+              type="button"
+              onClick={irALaPrincipal}
+              disabled={yendo}
+              className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:opacity-90 disabled:opacity-60"
+            >
+              {yendo ? <Loader2 size={14} className="animate-spin" aria-hidden /> : null}
+              Ir a {principalNombre}
+            </button>
+          )}
         </div>
       </div>
     </div>

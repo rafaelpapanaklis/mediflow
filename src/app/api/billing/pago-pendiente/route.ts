@@ -83,7 +83,7 @@ async function armarDeps(req: NextRequest): Promise<DepsPago | NextResponse> {
     },
     bloqueoDeSedes: (id) => bloqueoDeSedesParaPlan(clinic.id, id),
     sedeIncluida: async () => {
-      const g = await leerGrupoDePago(clinic.id);
+      const g = await leerGrupoDePago(clinic.id, user.supabaseId);
       return g.esSedeIncluida ? { pagadoraId: g.pagadoraId, pagadoraNombre: g.pagadoraNombre } : null;
     },
     exencionIva: () => exencionIvaDeClinica(clinic),

@@ -7,6 +7,8 @@
  *       sin contraseña nueva; solo si ya está en otra sede VIVA del MISMO dueño; solo dueño/admin.
  * M3  · una sede archivada no existe para la sesión, el selector, los cupos ni switch-clinic.
  * M7  · el tope de usuarios es POR DUEÑO: no se multiplica por sede.
+ * v7  · (ws1-t4) quien MIRA solo lee nombres de sedes a las que tiene acceso: «También en», el aviso
+ *       del alta, la bitácora y la sede que paga. El dueño las sigue viendo todas.
  * Dobles: Prisma (con un evaluador de `where` mínimo), Supabase, sesión, bitácora, caché, planes.
  */
 import { before, beforeEach, mock, test } from "node:test";
@@ -15,8 +17,8 @@ import { readFileSync } from "node:fs";
 import { decidirSedeAdicional, personasDistintas } from "../sede-adicional";
 import { puedeCerrarSede } from "@/lib/sede-cierre";
 
-const A = "sede-a", B = "sede-b", C_ARCH = "sede-archivada", X = "sede-de-otro-dueno";
-const SB_DUENO = "sb-dueno", SB_DR = "sb-dr", SB_EXTRANO = "sb-extrano";
+const A = "sede-a", B = "sede-b", C_ARCH = "sede-archivada", X = "sede-de-otro-dueno", D = "sede-3-aislada";
+const SB_DUENO = "sb-dueno", SB_DR = "sb-dr", SB_EXTRANO = "sb-extrano", SB_ADMIN = "sb-admin-sedes";
 
 interface Fila { id: string; supabaseId: string; clinicId: string; email: string; role: string; isActive: boolean; color: string; firstName: string; lastName: string; createdAt: Date; mustChangePassword?: boolean }
 const CLINICAS: Record<string, { id: string; name: string; archivedAt: Date | null }> = {
@@ -24,8 +26,16 @@ const CLINICAS: Record<string, { id: string; name: string; archivedAt: Date | nu
   [B]: { id: B, name: "Sede B", archivedAt: null },
   [C_ARCH]: { id: C_ARCH, name: "Sede cerrada", archivedAt: new Date("2026-09-01") },
   [X]: { id: X, name: "Clínica ajena", archivedAt: null },
+  [D]: { id: D, name: "QA Sede 3 aislada", archivedAt: null },
 };
-const estado = { filas: [] as Fila[], maxUsers: null as number | null, creados: [] as any[], rol: "SUPER_ADMIN", cuentaExiste: true };
+// Antigüedad de cada clínica (la más antigua del grupo es la que paga si ninguna tiene cobro propio).
+const CREADA: Record<string, Date> = {
+  [A]: new Date("2026-01-01"), [B]: new Date("2026-02-01"), [C_ARCH]: new Date("2026-03-01"),
+  [X]: new Date("2026-01-15"), [D]: new Date("2026-04-01"),
+};
+// Campos de cobro por clínica (solo los usa la prueba de la sede que paga).
+const COBRO: Record<string, Record<string, unknown>> = {};
+const estado = { filas: [] as Fila[], maxUsers: null as number | null, creados: [] as any[], rol: "SUPER_ADMIN", cuentaExiste: true, quien: SB_DUENO, bitacora: [] as any[] };
 
 const u = (id: string, supabaseId: string, clinicId: string, role: string, over: Partial<Fila> = {}): Fila => ({
   id, supabaseId, clinicId, role, email: `${id}@x.com`, isActive: true, color: "#111111",
@@ -54,7 +64,10 @@ const prismaDoble: any = {
     count: async ({ where }: any) => estado.filas.filter((r) => cumple(r, where)).length,
     create: async ({ data }: any) => { estado.creados.push(data); return { id: "nuevo", ...data, createdAt: new Date(), updatedAt: new Date() }; },
   },
-  clinic: { findUnique: async () => ({ plan: "CLINICA" }) },
+  clinic: {
+    findUnique: async () => ({ plan: "CLINICA" }),
+    findMany: async ({ where }: any) => Object.values(CLINICAS).filter((c) => where.id.in.includes(c.id)).map((c) => ({ ...c, createdAt: CREADA[c.id], ...COBRO[c.id] })),
+  },
   $transaction: async (fn: any) => fn(prismaDoble),
 };
 
@@ -81,9 +94,10 @@ before(async () => {
     userId: "u-dueno-a", clinicId: A, role: estado.rol, permissionsOverride: estado.rol === "RECEPTIONIST" ? ["team.edit"] : [], clinicCategory: "DENTAL",
     clinic: { name: "Sede A", timezone: "America/Mexico_City", category: "DENTAL" },
     isSuperAdmin: estado.rol === "SUPER_ADMIN", isAdmin: estado.rol !== "RECEPTIONIST",
+    user: { supabaseId: estado.quien },
   }) } });
   const auditReal = await import("@/lib/audit");
-  mock.module("@/lib/audit", { namedExports: { ...auditReal, logMutation: async () => {}, logAudit: async () => {} } });
+  mock.module("@/lib/audit", { namedExports: { ...auditReal, logMutation: async (a: any) => { estado.bitacora.push(a); }, logAudit: async () => {} } });
   mock.module("@/lib/orthodontics/access", { namedExports: { hasActiveOrthodonticsModule: async () => false } });
   mock.module("@/lib/plans", { namedExports: { getPlanLimitsForClinic: async () => ({ maxUsers: estado.maxUsers }) } });
   mock.module("@/lib/cache/revalidate", { namedExports: { revalidateAfter: () => {} } });
@@ -99,6 +113,7 @@ before(async () => {
 
 beforeEach(() => {
   estado.rol = "SUPER_ADMIN"; estado.maxUsers = null; estado.creados = []; estado.cuentaExiste = true;
+  estado.quien = SB_DUENO; estado.bitacora = [];
   estado.filas = [
     u("u-dueno-a", SB_DUENO, A, "SUPER_ADMIN"),
     u("u-dueno-b", SB_DUENO, B, "SUPER_ADMIN", { createdAt: new Date("2026-02-01") }),
@@ -116,11 +131,14 @@ const alta = (email: string, over: Record<string, unknown> = {}) => ({ firstName
 
 test("A3 núcleo: solo se liga a quien ya está en OTRA sede viva del mismo dueño", () => {
   const f = (clinicId: string, role = "DOCTOR", supabaseId = "s1") => ({ supabaseId, clinicId, clinicName: clinicId, role, isActive: true });
-  assert.deepEqual(decidirSedeAdicional({ clinicIdActiva: A, sedesDelDueno: [A, B], fichas: [f(B)] }), { ok: true, supabaseId: "s1", otrasSedes: [B] });
-  assert.deepEqual(decidirSedeAdicional({ clinicIdActiva: A, sedesDelDueno: [A, B], fichas: [f(X)] }), { ok: false, motivo: "NO_ES_DE_ESTE_DUENO" });
-  assert.deepEqual(decidirSedeAdicional({ clinicIdActiva: A, sedesDelDueno: [A, B], fichas: [f(A)] }), { ok: false, motivo: "NO_ES_DE_ESTE_DUENO" });
-  assert.deepEqual(decidirSedeAdicional({ clinicIdActiva: A, sedesDelDueno: [A, B], fichas: [f(B, "SUPER_ADMIN")] }), { ok: false, motivo: "ES_DUENO" });
-  assert.deepEqual(decidirSedeAdicional({ clinicIdActiva: A, sedesDelDueno: [A, B, C_ARCH], fichas: [f(B, "DOCTOR", "s1"), f(C_ARCH, "DOCTOR", "s2")] }), { ok: false, motivo: "CUENTA_AMBIGUA" });
+  const ve = [A, B, C_ARCH];
+  assert.deepEqual(decidirSedeAdicional({ clinicIdActiva: A, sedesDelDueno: [A, B], fichas: [f(B)], sedesDeQuienMira: ve }), { ok: true, supabaseId: "s1", otrasSedes: [B] });
+  assert.deepEqual(decidirSedeAdicional({ clinicIdActiva: A, sedesDelDueno: [A, B], fichas: [f(X)], sedesDeQuienMira: ve }), { ok: false, motivo: "NO_ES_DE_ESTE_DUENO" });
+  assert.deepEqual(decidirSedeAdicional({ clinicIdActiva: A, sedesDelDueno: [A, B], fichas: [f(A)], sedesDeQuienMira: ve }), { ok: false, motivo: "NO_ES_DE_ESTE_DUENO" });
+  assert.deepEqual(decidirSedeAdicional({ clinicIdActiva: A, sedesDelDueno: [A, B], fichas: [f(B, "SUPER_ADMIN")], sedesDeQuienMira: ve }), { ok: false, motivo: "ES_DUENO" });
+  assert.deepEqual(decidirSedeAdicional({ clinicIdActiva: A, sedesDelDueno: [A, B, C_ARCH], fichas: [f(B, "DOCTOR", "s1"), f(C_ARCH, "DOCTOR", "s2")], sedesDeQuienMira: ve }), { ok: false, motivo: "CUENTA_AMBIGUA" });
+  // v7: la decisión de ligar no depende de quién mira; solo lo que se nombra.
+  assert.deepEqual(decidirSedeAdicional({ clinicIdActiva: A, sedesDelDueno: [A, B], fichas: [f(B)], sedesDeQuienMira: [A] }), { ok: true, supabaseId: "s1", otrasSedes: [] });
   assert.equal(personasDistintas([{ supabaseId: "a" }, { supabaseId: "a" }, { supabaseId: "b" }]), 2);
 });
 
@@ -228,4 +246,108 @@ test("M7: la misma persona en dos sedes cuenta UNA vez; la sede archivada no cue
 test("M7: el cupo del otro cliente no se mezcla", async () => {
   estado.maxUsers = 1;
   assert.equal((await CUPO(X)).usados, 2, "su clínica sola (dueño ajeno + extraño), sin las sedes de Rafael");
+});
+
+/* ── v7 (ws1-t4): solo se nombran las sedes a las que tiene acceso quien MIRA ─ */
+
+// El caso del QA en panel.108: el dueño está en A, B y D («QA Sede 3 aislada»); el admin, solo en A y B.
+function conSedeAislada() {
+  estado.filas.push(
+    u("u-dueno-d", SB_DUENO, D, "SUPER_ADMIN", { createdAt: new Date("2026-04-01") }),
+    u("u-admin-a", SB_ADMIN, A, "ADMIN", { email: "admin@x.com" }),
+    u("u-admin-b", SB_ADMIN, B, "ADMIN", { email: "admin@x.com" }),
+  );
+}
+const tambienDe = (lista: any[], email: string) => lista.find((m: any) => m.email === email)?.tambienEn;
+
+test("🔴 v7: en Equipo, el ADMIN no lee en la tarjeta del dueño el nombre de la sede a la que no tiene acceso", async () => {
+  conSedeAislada();
+  estado.rol = "ADMIN"; estado.quien = SB_ADMIN;
+  const lista = await (await LISTA()).json();
+  assert.deepEqual(tambienDe(lista, "u-dueno-a@x.com"), ["Sede B"], "sin «QA Sede 3 aislada»");
+  assert.deepEqual(tambienDe(lista, "admin@x.com"), ["Sede B"]);
+  assert.ok(!JSON.stringify(lista).includes("QA Sede 3 aislada"), "el nombre no viaja en ninguna parte de la respuesta");
+});
+
+test("v7: el dueño, que está en todas sus sedes, las sigue viendo todas", async () => {
+  conSedeAislada();
+  const lista = await (await LISTA()).json();
+  assert.deepEqual([...tambienDe(lista, "u-dueno-a@x.com")].sort(), ["QA Sede 3 aislada", "Sede B"]);
+});
+
+test("v7: una sede archivada no cuenta como acceso, y sin supabaseId en la sesión no se nombra ninguna", async () => {
+  conSedeAislada();
+  const { sedesQueVe } = await import("@/lib/sedes-que-ve");
+  assert.deepEqual([...(await sedesQueVe(SB_DUENO, [A, B, C_ARCH, D, X]))].sort(), [A, B, D].sort());
+  assert.deepEqual([...(await sedesQueVe(SB_ADMIN, [A, B, D]))].sort(), [A, B].sort());
+  assert.equal((await sedesQueVe(undefined, [A, B])).size, 0);
+  const { sedesDeMiembros } = await import("../tambien-en");
+  assert.equal((await sedesDeMiembros(A, [SB_DUENO], null)).size, 0);
+});
+
+test("🔴 v7: el alta por correo de quien solo está en la sede aislada no le nombra esa sede al ADMIN (ni en la respuesta ni en la bitácora)", async () => {
+  conSedeAislada();
+  estado.filas.push(u("u-dr-d", "sb-dr-d", D, "DOCTOR", { email: "drd@x.com" }));
+  estado.rol = "ADMIN"; estado.quien = SB_ADMIN;
+  const r = await ALTA(alta("drd@x.com"));
+  assert.equal(r.status, 201, "ligar no cambia: es la misma regla A3 de siempre");
+  const j = await r.json();
+  assert.deepEqual(j.tambienEn, []);
+  assert.equal(estado.bitacora.length, 1);
+  assert.deepEqual(estado.bitacora[0].after.tambienEn, []);
+  assert.ok(!JSON.stringify(estado.bitacora).includes("QA Sede 3 aislada"));
+});
+
+test("v7: en el alta, las sedes que el ADMIN sí ve se siguen nombrando; el dueño ve todas", async () => {
+  conSedeAislada();
+  estado.filas.push(u("u-dr-d", SB_DR, D, "DOCTOR", { email: "dr@x.com" }));
+  estado.rol = "ADMIN"; estado.quien = SB_ADMIN;
+  assert.deepEqual((await (await ALTA(alta("dr@x.com"))).json()).tambienEn, ["Sede B"]);
+  estado.rol = "SUPER_ADMIN"; estado.quien = SB_DUENO; estado.creados = [];
+  assert.deepEqual([...(await (await ALTA(alta("dr@x.com"))).json()).tambienEn].sort(), ["QA Sede 3 aislada", "Sede B"]);
+});
+
+test("🔴 v7: la sede que paga solo se nombra a quien tiene acceso a ella", async () => {
+  // El grupo de pago: D tiene el cobro propio y paga; A va incluida.
+  estado.filas = [
+    u("u-dueno-d", SB_DUENO, D, "SUPER_ADMIN"),
+    u("u-dueno-a", SB_DUENO, A, "SUPER_ADMIN"),
+    u("u-admin-a", SB_ADMIN, A, "ADMIN", { email: "admin@x.com" }),
+  ];
+  COBRO[D] = { stripeSubscriptionId: "sub_d", subscriptionStatus: "active" };
+  COBRO[A] = { subscriptionStatus: "active" };
+  try {
+    const { leerGrupoDePago } = await import("@/lib/billing/sedes-incluidas");
+    const delDueno = await leerGrupoDePago(A, SB_DUENO);
+    assert.equal(delDueno.esSedeIncluida, true);
+    assert.equal(delDueno.pagadoraId, D);
+    assert.equal(delDueno.pagadoraNombre, "QA Sede 3 aislada");
+    assert.equal((await leerGrupoDePago(A, SB_ADMIN)).pagadoraNombre, null, "el admin no está en la que paga");
+    assert.equal((await leerGrupoDePago(A)).pagadoraNombre, null, "sin quien mira no se nombra");
+  } finally {
+    delete COBRO[D];
+    delete COBRO[A];
+  }
+  const { avisoSedeIncluida } = await import("@/lib/billing/sedes-incluidas-core");
+  assert.doesNotMatch(avisoSedeIncluida(null), /«|Cambia a esa clínica/);
+  assert.match(avisoSedeIncluida(null), /pídeselo al dueño/);
+});
+
+test("v7: toda pantalla o ruta que enseña la sede que paga le pasa a leerGrupoDePago el supabaseId de la sesión", () => {
+  const llamadas: Record<string, RegExp> = {
+    "src/app/dashboard/settings/page.tsx": /leerGrupoDePago\(user\.clinicId, user\.supabaseId\)/,
+    "src/app/dashboard/suspended/page.tsx": /leerGrupoDePago\(user\.clinicId, user\.supabaseId\)/,
+    "src/app/api/clinic/subscription/cancel-request/route.ts": /leerGrupoDePago\(ctx\.clinicId, ctx\.user\?\.supabaseId\)/,
+    "src/app/api/billing/change-plan/route.ts": /leerGrupoDePago\(clinic\.id, user\.supabaseId\)/,
+    "src/app/api/billing/checkout/route.ts": /leerGrupoDePago\(clinic\.id, user\.supabaseId\)/,
+    "src/app/api/billing/spei-transferencia/route.ts": /leerGrupoDePago\(user\.clinicId, user\.supabaseId\)/,
+    "src/app/api/billing/pago-pendiente/route.ts": /leerGrupoDePago\(clinic\.id, user\.supabaseId\)/,
+  };
+  for (const [ruta, re] of Object.entries(llamadas)) assert.match(readFileSync(ruta, "utf8"), re, ruta);
+  // Y sin nombre no se ofrece «Ir a…» (sin acceso, cambiar de sede fallaría).
+  for (const ruta of ["src/components/dashboard/sede-incluida-aviso.tsx", "src/app/dashboard/suspended/sede-incluida.tsx"]) {
+    const src = readFileSync(ruta, "utf8");
+    assert.match(src, /\{principalNombre && \(\s*<button/, ruta);
+    assert.doesNotMatch(src, /Ir a la clínica principal/, ruta);
+  }
 });

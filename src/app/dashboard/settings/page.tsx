@@ -97,7 +97,7 @@ export default async function SettingsPage(props: Props) {
   const [reservaAbierta, reservaDisponible] = await Promise.all([reservaWebAbierta(user.clinicId), hayColumnaReservaWeb()]);
 
   // M2 (ws1-t5): en una sede incluida la pestaña Suscripción no ofrece pagar/cambiar/cancelar.
-  const grupoPago = await leerGrupoDePago(user.clinicId).catch(() => null);
+  const grupoPago = await leerGrupoDePago(user.clinicId, user.supabaseId).catch(() => null);
   const sedeIncluida = grupoPago?.esSedeIncluida
     ? { principalId: grupoPago.pagadoraId, principalNombre: grupoPago.pagadoraNombre }
     : null;

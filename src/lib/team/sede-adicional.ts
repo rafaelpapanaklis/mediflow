@@ -23,6 +23,11 @@ export function decidirSedeAdicional(input: {
   clinicIdActiva: string;
   sedesDelDueno: string[];
   fichas: FichaDePersona[];
+  /**
+   * ws1-t4 v7: sedes a las que tiene acceso quien da el alta (`sedesQueVe`). Solo esas se
+   * nombran en `otrasSedes` (el aviso y la bitácora); la decisión de ligar no cambia.
+   */
+  sedesDeQuienMira: string[];
 }): DecisionSedeAdicional {
   const validas = input.fichas.filter(
     (f) => f.isActive && f.clinicId !== input.clinicIdActiva && input.sedesDelDueno.includes(f.clinicId),
@@ -32,7 +37,8 @@ export function decidirSedeAdicional(input: {
   if (ids.length !== 1) return { ok: false, motivo: "CUENTA_AMBIGUA" };
   // Un dueño ya tiene ficha en todas sus sedes y no se "rebaja" por correo.
   if (validas.some((f) => f.role === "SUPER_ADMIN")) return { ok: false, motivo: "ES_DUENO" };
-  return { ok: true, supabaseId: ids[0], otrasSedes: Array.from(new Set(validas.map((f) => f.clinicName))) };
+  const nombrables = validas.filter((f) => input.sedesDeQuienMira.includes(f.clinicId));
+  return { ok: true, supabaseId: ids[0], otrasSedes: Array.from(new Set(nombrables.map((f) => f.clinicName))) };
 }
 
 /** Personas distintas (por cuenta) con ficha activa en las sedes dadas: el cupo es por persona. */

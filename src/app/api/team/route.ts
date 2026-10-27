@@ -1,5 +1,6 @@
 import { sedesDelDueno } from "@/lib/storage-owner";
 import { sedesDeMiembros } from "@/lib/team/tambien-en";
+import { sedesQueVe } from "@/lib/sedes-que-ve";
 import { decidirSedeAdicional } from "@/lib/team/sede-adicional";
 import { getCupoUsuarios } from "@/lib/team/cupo-usuarios";
 import { agendaActiveDelAlta } from "@/lib/team/parche-miembro";
@@ -63,7 +64,8 @@ export async function GET(req: NextRequest) {
     orderBy: [{ role: "asc" }, { firstName: "asc" }],
   });
 
-  const tambienEn = await sedesDeMiembros(ctx!.clinicId, team.map((m) => m.supabaseId));
+  // ws1-t4 v7: solo las sedes a las que tiene acceso quien mira (el supabaseId de la sesión).
+  const tambienEn = await sedesDeMiembros(ctx!.clinicId, team.map((m) => m.supabaseId), ctx!.user?.supabaseId);
 
   return NextResponse.json(team.map(({ supabaseId, ...m }) => ({ ...conIndicadorDePin(m), tambienEn: tambienEn.get(supabaseId) ?? [] })), {
     headers: { "Cache-Control": "no-store, must-revalidate" },
@@ -156,10 +158,13 @@ export async function POST(req: NextRequest) {
           where: { email: { equals: emailNuevo, mode: "insensitive" }, clinicId: { in: sedes }, isActive: true },
           select: { supabaseId: true, clinicId: true, role: true, isActive: true, clinic: { select: { name: true } } },
         });
+        // ws1-t4 v7: el aviso y la bitácora solo nombran sedes a las que tiene acceso quien da el alta.
+        const visibles = await sedesQueVe(ctx!.user?.supabaseId, fichas.map((f) => f.clinicId));
         const decision = decidirSedeAdicional({
           clinicIdActiva: ctx!.clinicId,
           sedesDelDueno: sedes,
           fichas: fichas.map((f) => ({ supabaseId: f.supabaseId, clinicId: f.clinicId, clinicName: f.clinic.name, role: f.role, isActive: f.isActive })),
+          sedesDeQuienMira: Array.from(visibles),
         });
         if (decision.ok) {
           const ligado = await prisma.user.create({

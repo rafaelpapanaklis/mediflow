@@ -48,15 +48,18 @@ export function SedeIncluidaSuspendida({
         </span>
         <h1 className="text-3xl font-extrabold tracking-tight">Esta sede va incluida en tu plan</h1>
         <p className="text-base leading-relaxed text-muted-foreground">{avisoSedeIncluida(principalNombre)}</p>
-        <button
-          type="button"
-          onClick={irALaPrincipal}
-          disabled={yendo}
-          className="mt-2 inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition hover:opacity-90 disabled:opacity-60"
-        >
-          {yendo ? <Loader2 size={15} className="animate-spin" aria-hidden /> : null}
-          {principalNombre ? `Ir a ${principalNombre}` : "Ir a la clínica principal"}
-        </button>
+        {/* ws1-t4 v7: sin nombre no hay acceso a la clínica que paga: no se ofrece ir a ella. */}
+        {principalNombre && (
+          <button
+            type="button"
+            onClick={irALaPrincipal}
+            disabled={yendo}
+            className="mt-2 inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition hover:opacity-90 disabled:opacity-60"
+          >
+            {yendo ? <Loader2 size={15} className="animate-spin" aria-hidden /> : null}
+            Ir a {principalNombre}
+          </button>
+        )}
       </div>
     </div>
   );

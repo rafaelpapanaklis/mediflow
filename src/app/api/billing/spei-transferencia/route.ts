@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
 
   // M1/A2 (ws1-t5): una sede incluida no paga (se paga en la principal) y no se reactiva en un plan con
   // menos sedes de las que cuelgan del pago.
-  const grupo = await leerGrupoDePago(user.clinicId);
+  const grupo = await leerGrupoDePago(user.clinicId, user.supabaseId);
   if (grupo.esSedeIncluida) {
     return NextResponse.json({ code: "SEDE_INCLUIDA", error: avisoSedeIncluida(grupo.pagadoraNombre), pagadoraId: grupo.pagadoraId }, { status: 409 });
   }

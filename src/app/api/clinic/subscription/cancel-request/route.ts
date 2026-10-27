@@ -21,7 +21,7 @@ export async function POST() {
   try {
     // M2 (ws1-t5): una sede incluida no paga; marcar «cancelar» en ella perdía la intención (la principal no
     // se enteraba y /admin la veía en la clínica equivocada). Se avisa y se manda a la clínica que paga.
-    const grupo = await leerGrupoDePago(ctx.clinicId);
+    const grupo = await leerGrupoDePago(ctx.clinicId, ctx.user?.supabaseId);
     if (grupo.esSedeIncluida) {
       return NextResponse.json(
         { code: "SEDE_INCLUIDA", error: avisoSedeIncluida(grupo.pagadoraNombre), pagadoraId: grupo.pagadoraId },

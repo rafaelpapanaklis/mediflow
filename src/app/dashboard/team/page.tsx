@@ -83,7 +83,8 @@ export default async function TeamPage() {
 
   // ws1-t4 v5: el permiso de la clave de la sede solo sale con 2+ sedes (o con la clave ya puesta).
   const [tambienEn, permisoClaveDeSede] = await Promise.all([
-    sedesDeMiembros(user.clinicId, team.map((m) => m.supabaseId)),
+    // v7: «También en» solo nombra las sedes a las que tiene acceso quien mira.
+    sedesDeMiembros(user.clinicId, team.map((m) => m.supabaseId), user.supabaseId),
     permisoDeClaveVisible(user.clinicId),
   ]);
   const equipo = team.map(({ supabaseId, ...m }) => ({ ...conIndicadorDePin(m), tambienEn: tambienEn.get(supabaseId) ?? [] }));
