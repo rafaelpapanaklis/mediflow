@@ -54,6 +54,12 @@ test("classifySabinaError — mapea cada código del contrato, y null a 'network
   assert.equal(classifySabinaError(200), "unknown");
 });
 
+test("sin saldo: Sabina manda a quien tenga «Recargar Saldo IA», como la pantalla del saldo (no a «un administrador»)", () => {
+  const { message } = SABINA_ERROR_COPY.no_balance;
+  assert.match(message, /Pídeselo a quien tenga el permiso «Recargar Saldo IA»\./);
+  assert.doesNotMatch(message, /administrador/i);
+});
+
 test("classifySabinaError — el 403 de la CLÍNICA que apagó a Sabina no es el del Super Admin", () => {
   // Cuerpo real de /api/sabina cuando la clínica la apagó en Saldo de IA (ws1-t1).
   assert.equal(classifySabinaError(403, { error: "…", funcionApagada: "sabina" }), "apagada_clinica");
