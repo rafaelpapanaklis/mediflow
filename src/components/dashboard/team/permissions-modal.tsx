@@ -234,7 +234,7 @@ export function PermissionsModal({ open, member, onClose, onSaved, permisoClaveD
 
           {/* Qué tiene distinto al rol — sin esto «apagado» no decía nada. */}
           {!useDefault && (() => {
-            const d = diferenciasConElRol(selected, roleDefaults, ocultas);
+            const d = diferenciasConElRol(selected, roleDefaults);
             if (d.sinLoDelRol.length === 0 && d.ademasDelRol.length === 0) return null;
             const nombre = (k: PermissionKey) => ALL_PERMISSIONS[k];
             return (

@@ -71,16 +71,21 @@ export function sigueElDefaultDelRol(
   return true;
 }
 
-/** En qué se distingue lo que tiene de lo que da su rol (solo claves visibles). */
+/**
+ * En qué se distingue lo que tiene de lo que da su rol (sin las claves de
+ * CLAVES_OCULTAS_EN_MODAL). ws1-t4 v6 (revisión de t8, m-1): «Crear y cambiar
+ * la clave de la sede» SÍ cuenta aunque con una sola sede no salga en la lista.
+ * Si no, un ADMIN que lo tiene salía «personalizado» sin ninguna diferencia a
+ * la vista, y «Usar default del rol» se lo quitaba sin que se viera.
+ */
 export function diferenciasConElRol(
   seleccionados: Iterable<PermissionKey>,
   defaultsDelRol: Iterable<PermissionKey>,
-  ocultas: ReadonlySet<PermissionKey> = CLAVES_OCULTAS_EN_MODAL,
 ): { sinLoDelRol: PermissionKey[]; ademasDelRol: PermissionKey[] } {
   const sel = new Set(seleccionados);
   const rol = new Set(defaultsDelRol);
   return {
-    sinLoDelRol: [...rol].filter((k) => !sel.has(k) && !ocultas.has(k)),
-    ademasDelRol: [...sel].filter((k) => !rol.has(k) && !ocultas.has(k)),
+    sinLoDelRol: [...rol].filter((k) => !sel.has(k) && !CLAVES_OCULTAS_EN_MODAL.has(k)),
+    ademasDelRol: [...sel].filter((k) => !rol.has(k) && !CLAVES_OCULTAS_EN_MODAL.has(k)),
   };
 }

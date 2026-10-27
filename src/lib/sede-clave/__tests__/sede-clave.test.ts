@@ -1333,10 +1333,8 @@ test("v5 · el modal de Permisos esconde la clave de la sede con una sola sede y
   assert.ok(!llaves(clavesOcultasEnModal(false)).includes("sede.clave"));
   // Lo de antes sigue oculto en los dos casos.
   for (const v of [true, false]) assert.ok(!llaves(clavesOcultasEnModal(v)).includes("marketplace.view"));
-  // Un ADMIN que ya lo tenía: oculto no sale como «Además», pero sigue en lo que se guarda (selected).
-  const d = diferenciasConElRol(["sede.clave", "today.view"], ["today.view"], clavesOcultasEnModal(false));
-  assert.deepEqual(d.ademasDelRol, []);
-  assert.deepEqual(diferenciasConElRol(["sede.clave", "today.view"], ["today.view"], clavesOcultasEnModal(true)).ademasDelRol, ["sede.clave"]);
+  // Un ADMIN que ya lo tenía: aunque no salga en la lista, sale como «Además» (v6, m-1) y sigue en lo que se guarda (selected).
+  assert.deepEqual(diferenciasConElRol(["sede.clave", "today.view"], ["today.view"]).ademasDelRol, ["sede.clave"]);
   // La página de Equipo lo calcula en el servidor y llega a los dos modales.
   const pagina = readFileSync(join(SRC, "app/dashboard/team/page.tsx"), "utf8");
   assert.match(pagina, /permisoDeClaveVisible\(user\.clinicId\)/);
@@ -1344,4 +1342,21 @@ test("v5 · el modal de Permisos esconde la clave de la sede con una sola sede y
   assert.equal(cliente.match(/permisoClaveDeSede=\{permisoClaveDeSede\}/g)?.length, 2);
   const sabina = readFileSync(join(SRC, "components/dashboard/team/sabina-permissions-modal.tsx"), "utf8");
   assert.match(sabina, /permisoClaveDeSede \|\| k !== "sede\.clave"/);
+});
+
+test("v6 (m-1) · con una sola sede, el ADMIN que ya tiene la clave de la sede no sale «personalizado» sin decir en qué", async () => {
+  const { ROLE_DEFAULT_PERMISSIONS, ALL_PERMISSIONS } = await import("@/lib/auth/permissions");
+  const { sigueElDefaultDelRol, diferenciasConElRol } = await import("@/lib/team/permisos-modal");
+  const delRol = ROLE_DEFAULT_PERMISSIONS.ADMIN;
+  assert.ok(!delRol.includes("sede.clave"), "el ADMIN no la trae por defecto");
+  // Se la dieron cuando había 2 sedes; ahora la cuenta tiene una y el permiso no sale en la lista.
+  const guardado = [...delRol, "sede.clave" as const];
+  assert.equal(sigueElDefaultDelRol(guardado, delRol), false, "el interruptor sale apagado…");
+  const d = diferenciasConElRol(guardado, delRol);
+  assert.deepEqual(d.ademasDelRol, ["sede.clave"], "…y el recuadro dice en qué se distingue");
+  assert.deepEqual(d.sinLoDelRol, []);
+  assert.equal(ALL_PERMISSIONS["sede.clave"], "Crear y cambiar la clave de la sede", "con su nombre, antes de encender «Usar default del rol»");
+  // El modal usa esa misma función sin quitarle las ocultas por sede.
+  const modal = readFileSync(join(SRC, "components/dashboard/team/permissions-modal.tsx"), "utf8");
+  assert.match(modal, /diferenciasConElRol\(selected, roleDefaults\)/);
 });
