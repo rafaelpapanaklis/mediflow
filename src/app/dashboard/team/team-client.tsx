@@ -782,9 +782,11 @@ interface Props {
   subida?: { planNombre: string; opciones: PlanSubida[]; puedeSubir: boolean };
   /** ws1-t1: la sesión tiene `team.edit`: ve la casilla «Puede usar Caja» en la ficha. */
   puedeEditarEquipo?: boolean;
+  /** ws1-t4 v5: Permisos enseña «Crear y cambiar la clave de la sede» (2+ sedes o clave ya puesta). */
+  permisoClaveDeSede?: boolean;
 }
 
-export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, clinicName, rediseno = false, horarioClinica = null, sedeDental = false, ortoModulo = false, cupo, subida, puedeEditarEquipo = false }: Props) {
+export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, clinicName, rediseno = false, horarioClinica = null, sedeDental = false, ortoModulo = false, cupo, subida, puedeEditarEquipo = false, permisoClaveDeSede = false }: Props) {
   const t = useT();
   // «dental» → «Odontología general» en la lista, como en el selector; lo desconocido, tal cual.
   const nombreDeEspecialidad = (guardada: string) => {
@@ -1531,6 +1533,7 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
             m.id === memberId ? { ...m, permissionsOverride: newOverride } : m,
           ));
         }}
+        permisoClaveDeSede={permisoClaveDeSede}
       />
 
       {/* Sabina en nombre de cada miembro — solo SUPER_ADMIN. Lee lo guardado
@@ -1539,6 +1542,7 @@ export function TeamClient({ team: initialTeam, currentUserId, currentUserRole, 
         open={sabinaMember !== null}
         member={sabinaMember}
         onClose={() => setSabinaMember(null)}
+        permisoClaveDeSede={permisoClaveDeSede}
       />
 
       {/* Horario de cada doctor — ADMIN y SUPER_ADMIN. Mismo patrón que

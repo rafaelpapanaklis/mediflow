@@ -28,6 +28,8 @@ interface SabinaPermissionsModalProps {
   open: boolean;
   member: MemberLike | null;
   onClose: () => void;
+  /** ws1-t4 v5: enseñar «Crear y cambiar la clave de la sede» (2+ sedes o clave ya puesta). */
+  permisoClaveDeSede?: boolean;
 }
 
 interface Estado {
@@ -36,8 +38,16 @@ interface Estado {
   delUsuario: Set<PermissionKey>;
 }
 
-export function SabinaPermissionsModal({ open, member, onClose }: SabinaPermissionsModalProps) {
+export function SabinaPermissionsModal({ open, member, onClose, permisoClaveDeSede = false }: SabinaPermissionsModalProps) {
   const t = useT();
+  // Con una sola sede (y sin clave puesta) no se enseña la clave de la sede; lo
+  // que ya estuviera marcado se guarda igual (va en `selected`).
+  const grupos = useMemo(
+    () => PERMISSION_GROUPS
+      .map((g) => ({ ...g, keys: g.keys.filter((k) => permisoClaveDeSede || k !== "sede.clave") }))
+      .filter((g) => g.keys.length > 0),
+    [permisoClaveDeSede],
+  );
   const [estado, setEstado]       = useState<Estado | null>(null);
   const [errorCarga, setErrorCarga] = useState<string | null>(null);
   const [activa, setActiva]       = useState(true);
@@ -232,7 +242,7 @@ export function SabinaPermissionsModal({ open, member, onClose }: SabinaPermissi
 
               {activa && (
                 <div className="space-y-4">
-                  {PERMISSION_GROUPS.map((group) => (
+                  {grupos.map((group) => (
                     <div key={group.title}>
                       <div className="form-section__title">
                         {group.title}

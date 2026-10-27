@@ -37,10 +37,24 @@ export interface GrupoDePermisos {
   keys: PermissionKey[];
 }
 
+/**
+ * ws1-t4 v5 (Rafael, 27-oct): «Crear y cambiar la clave de la sede» solo se
+ * enseña si la cuenta tiene 2+ sedes o esta sede ya tiene la clave puesta (lo
+ * decide el servidor: `permisoDeClaveVisible`). Oculto se conserva igual que
+ * los de arriba.
+ */
+export function clavesOcultasEnModal(permisoClaveDeSede: boolean): ReadonlySet<PermissionKey> {
+  if (permisoClaveDeSede) return CLAVES_OCULTAS_EN_MODAL;
+  return new Set<PermissionKey>([...CLAVES_OCULTAS_EN_MODAL, "sede.clave"]);
+}
+
 /** Los grupos que se pintan: sin las claves ocultas y sin grupos que se quedan vacíos. */
-export function gruposVisibles(grupos: readonly GrupoDePermisos[]): GrupoDePermisos[] {
+export function gruposVisibles(
+  grupos: readonly GrupoDePermisos[],
+  ocultas: ReadonlySet<PermissionKey> = CLAVES_OCULTAS_EN_MODAL,
+): GrupoDePermisos[] {
   return grupos
-    .map((g) => ({ title: TITULO_VISIBLE[g.title] ?? g.title, keys: g.keys.filter((k) => !CLAVES_OCULTAS_EN_MODAL.has(k)) }))
+    .map((g) => ({ title: TITULO_VISIBLE[g.title] ?? g.title, keys: g.keys.filter((k) => !ocultas.has(k)) }))
     .filter((g) => g.keys.length > 0);
 }
 
@@ -61,11 +75,12 @@ export function sigueElDefaultDelRol(
 export function diferenciasConElRol(
   seleccionados: Iterable<PermissionKey>,
   defaultsDelRol: Iterable<PermissionKey>,
+  ocultas: ReadonlySet<PermissionKey> = CLAVES_OCULTAS_EN_MODAL,
 ): { sinLoDelRol: PermissionKey[]; ademasDelRol: PermissionKey[] } {
   const sel = new Set(seleccionados);
   const rol = new Set(defaultsDelRol);
   return {
-    sinLoDelRol: [...rol].filter((k) => !sel.has(k) && !CLAVES_OCULTAS_EN_MODAL.has(k)),
-    ademasDelRol: [...sel].filter((k) => !rol.has(k) && !CLAVES_OCULTAS_EN_MODAL.has(k)),
+    sinLoDelRol: [...rol].filter((k) => !sel.has(k) && !ocultas.has(k)),
+    ademasDelRol: [...sel].filter((k) => !rol.has(k) && !ocultas.has(k)),
   };
 }

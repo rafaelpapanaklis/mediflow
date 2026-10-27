@@ -4,6 +4,7 @@
 // cuentas cuyo dueño tiene 2 o más sedes. Con una sola sede la clave no protege
 // de nadie y solo deja al equipo tecleándola cada 72 h.
 import { prisma } from "@/lib/prisma";
+import { estadoDeClave, tablaExiste } from "./estado.server";
 
 /**
  * Sí si algún dueño (SUPER_ADMIN activo) de esta sede es dueño de 2 o más sedes
@@ -21,4 +22,21 @@ export async function cuentaConVariasSedes(clinicId: string): Promise<boolean> {
     where: { archivedAt: null, users: { some: { supabaseId: { in: ids }, role: "SUPER_ADMIN", isActive: true } } },
   });
   return sedes >= 2;
+}
+
+/**
+ * v5 (Rafael, 27-oct): ¿Equipo → Permisos enseña «Crear y cambiar la clave de la
+ * sede»? Lo mismo que la tarjeta: con el SQL pegado, y si la cuenta tiene 2+
+ * sedes o esta sede ya tiene la clave puesta. Ante un fallo de la base no se
+ * enseña: el modal conserva igual lo que la persona ya tuviera guardado.
+ */
+export async function permisoDeClaveVisible(clinicId: string): Promise<boolean> {
+  if (!clinicId) return false;
+  try {
+    if (!(await tablaExiste())) return false;
+    if (await cuentaConVariasSedes(clinicId)) return true;
+    return (await estadoDeClave(clinicId)).activa;
+  } catch {
+    return false;
+  }
 }

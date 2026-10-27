@@ -105,6 +105,20 @@ export function cookiesDeDesbloqueo(cabecera: string | null | undefined): string
   return Array.from(new Set(nombres.filter((n) => NOMBRE_COOKIE_DESBLOQUEO.test(n))));
 }
 
+type ConCookies = { cookies: { set(nombre: string, valor: string, opciones: { path: string; maxAge: number }): unknown } };
+
+/**
+ * Borra en `res` todos los desbloqueos que trae la petición. v4: al cerrar
+ * sesión. v5 (Rafael, 27-oct; revisión de t8, M-1): también en TODO inicio de
+ * sesión nuevo (contraseña, Google y enlaces de correo), así que la clave se
+ * vuelve a pedir aunque la sesión anterior terminara en otro dispositivo, por
+ * caducidad o sin pasar por el logout. Solo donde nace la sesión: un
+ * desbloqueo tecleado DENTRO de la sesión no se toca.
+ */
+export function borrarDesbloqueos(res: ConCookies, cabecera: string | null | undefined): void {
+  for (const nombre of cookiesDeDesbloqueo(cabecera)) res.cookies.set(nombre, "", { path: "/", maxAge: 0 });
+}
+
 export interface DatosDesbloqueo {
   supabaseId: string;
   clinicId: string;

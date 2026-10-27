@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { rutaInternaSegura } from "@/lib/url-interna";
+import { borrarDesbloqueos } from "@/lib/sede-clave/core";
 
 /**
  * OAuth callback from Supabase (Google, Microsoft/Azure, etc.)
@@ -34,6 +35,8 @@ export async function GET(request: Request) {
 
   const supabaseId = sessionData.user.id;
   const email = sessionData.user.email ?? "";
+  // ws1-t4 v5: sesión nueva, sin desbloqueos de la clave de la sede de antes.
+  const cabecera = request.headers?.get("cookie") ?? null;
 
   // ¿El user ya tiene Clinic(s)?
   try {
@@ -59,6 +62,7 @@ export async function GET(request: Request) {
       // la clínica lo exige, marca el flag pendiente y borra df_2fa previa.
       const { applyTwoFactorLoginCookies } = await import("@/lib/auth/two-factor-cookie");
       await applyTwoFactorLoginCookies(res, supabaseId, picked.clinicId);
+      borrarDesbloqueos(res, cabecera);
       return res;
     }
   } catch (err) {
@@ -72,5 +76,7 @@ export async function GET(request: Request) {
   if (email) url.searchParams.set("email", email);
   // Señal para el form: vino de OAuth, no necesita crear Supabase user de nuevo
   url.searchParams.set("source", "oauth");
-  return NextResponse.redirect(url.toString());
+  const alta = NextResponse.redirect(url.toString());
+  borrarDesbloqueos(alta, cabecera);
+  return alta;
 }

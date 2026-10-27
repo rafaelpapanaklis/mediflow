@@ -2,6 +2,7 @@ import { origenPublicoDe } from "@/lib/url-publica";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { rutaInternaSegura } from "@/lib/url-interna";
+import { borrarDesbloqueos } from "@/lib/sede-clave/core";
 
 /**
  * Aterrizaje de enlaces de Supabase Auth. Dos consumidores hoy:
@@ -13,6 +14,10 @@ import { rutaInternaSegura } from "@/lib/url-interna";
  *    code_verifier vive en cookie). Si el template migra a
  *    token_hash/type=recovery (recomendado SSR), cae en la rama verifyOtp y
  *    funciona también cross-dispositivo.
+ * Con la sesión creada se borran los desbloqueos de la clave de la sede
+ * (ws1-t4 v5): recuperar la contraseña o entrar por un enlace es un inicio de
+ * sesión nuevo. «Ver como clínica» no pasa por aquí (canjea su enlace en
+ * /api/admin/impersonate).
  * En fallo: flujos de recovery → /reset-password?error=link_invalido (ofrece
  * pedir otro enlace); el resto conserva /login?error=invalid_token.
  */
@@ -32,24 +37,26 @@ export async function GET(request: NextRequest) {
       : `${origin}/login?error=invalid_token`,
   );
 
+  const entrar = () => {
+    const res = NextResponse.redirect(`${origin}${next}`);
+    borrarDesbloqueos(res, request.headers.get("cookie"));
+    return res;
+  };
+
   // Supabase puede llegar ya con error en la query (p. ej. otp_expired).
   if (searchParams.get("error")) return fail;
 
   if (token_hash && type) {
     const supabase = await createClient();
     const { error } = await supabase.auth.verifyOtp({ type, token_hash });
-    if (!error) {
-      return NextResponse.redirect(`${origin}${next}`);
-    }
+    if (!error) return entrar();
     return fail;
   }
 
   if (code) {
     const supabase = await createClient();
     const { error } = await supabase.auth.exchangeCodeForSession(code);
-    if (!error) {
-      return NextResponse.redirect(`${origin}${next}`);
-    }
+    if (!error) return entrar();
   }
 
   return fail;
