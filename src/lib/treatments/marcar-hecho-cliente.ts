@@ -54,11 +54,26 @@ export function avisoDeDeshacer(
   return [base, ...avisos].join(" ");
 }
 
-/** El error en el idioma de la pantalla; un código que no conoce, el texto genérico. */
-export function errorDeHecho(t: T, r: Pick<ResultadoMarcarHecho, "codigo">): string {
-  return (CODIGOS_DE_HECHO as readonly string[]).includes(r.codigo ?? "")
-    ? t(`planTratamiento.hecho.error.${r.codigo}`)
-    : t("planTratamiento.hecho.error.generico");
+/**
+ * ¿La ayuda de «Procedimientos» puede decir que lo hecho pasa a «Debe»? Solo si se sabe que el plan
+ * cobra lo hecho (cuenta leída y sin cuotas acordadas, v12 m2) Y lo que falta por hacer ya está en una
+ * nota de cobro (v13, t5 n1): en un plan sin aceptar, o en filas agregadas después de la nota, «Hecho»
+ * no mueve «Debe» (no crea cobros).
+ */
+export function ayudaHablaDeDebe(debeSigueLoHecho: boolean, filas: ReadonlyArray<{ estado: string; invoiceId: string | null }>): boolean {
+  return debeSigueLoHecho && filas.some((f) => f.estado !== "hecho" && f.estado !== "cancelado" && !!f.invoiceId);
+}
+
+/**
+ * El error en el idioma de la pantalla. Con un código de «hecho», su texto. Sin código (las respuestas
+ * de la ruta antes de llegar a «hecho»: permiso, doctor de otro plan, visibilidad del paciente — v13,
+ * t5 n2): un 403 dice que falta permiso; lo demás, el genérico DE LA ACCIÓN que se pulsó (marcar o
+ * deshacer).
+ */
+export function errorDeHecho(t: T, r: Pick<ResultadoMarcarHecho, "codigo" | "status">, accion: "marcar" | "deshacer" = "marcar"): string {
+  if ((CODIGOS_DE_HECHO as readonly string[]).includes(r.codigo ?? "")) return t(`planTratamiento.hecho.error.${r.codigo}`);
+  if (r.status === 403) return t("planTratamiento.hecho.error.sin_permiso");
+  return t(accion === "deshacer" ? "planTratamiento.hecho.error.genericoDeshacer" : "planTratamiento.hecho.error.generico");
 }
 
 export interface ResultadoMarcarHecho {

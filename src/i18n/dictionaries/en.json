@@ -11025,6 +11025,8 @@
       },
       "error": {
         "generico": "The procedure couldn't be marked.",
+        "genericoDeshacer": "The procedure couldn't be undone.",
+        "sin_permiso": "You don't have permission to mark or undo procedures in this plan. Ask your administrator.",
         "sin_filas": "Choose at least one procedure from the plan.",
         "demasiadas_filas": "Too many procedures at once: mark up to 30.",
         "fila_desconocida": "That procedure is no longer in this plan. Reload the plan and try again.",

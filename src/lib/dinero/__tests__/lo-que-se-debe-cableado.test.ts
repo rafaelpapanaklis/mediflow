@@ -350,7 +350,8 @@ test("v12 · m3: los avisos de «Hecho» / «Deshacer» de la tarjeta salen en e
   const bloque = leer("src/components/dashboard/expediente-rediseno/procedimientos-del-plan.tsx");
   assert.match(bloque, /toast\.success\(avisoDeHecho\(t, r\)\);/);
   assert.match(bloque, /toast\.success\(avisoDeDeshacer\(t, r, nombreDeHallazgo\), \{ duration: 8000 \}\);/);
-  assert.equal((bloque.match(/toast\.error\(errorDeHecho\(t, r\)\);/g) ?? []).length, 2);
+  assert.match(bloque, /toast\.error\(errorDeHecho\(t, r, "marcar"\)\);/);
+  assert.match(bloque, /toast\.error\(errorDeHecho\(t, r, "deshacer"\)\);/);
   assert.doesNotMatch(bloque, /r\.mensaje|r\.error/);
   // El servidor usa la misma lista de códigos.
   assert.match(leer("src/lib/treatments/aplicar-hecho.server.ts"), /const CODIGOS_HECHO = CODIGOS_DE_HECHO;/);
@@ -361,7 +362,9 @@ test("v12 · m2: con cuotas (o sin ver dinero) la ayuda de «Procedimientos» no
   assert.match(tarjeta, /debeSigueLoHecho=\{!!cuentas\?\.get\(plan\.id\) && !cuentas\.get\(plan\.id\)!\.aCuotas\}/);
   const bloque = leer("src/components/dashboard/expediente-rediseno/procedimientos-del-plan.tsx");
   assert.match(bloque, /debeSigueLoHecho = false/, "por omisión, sin hablar de «Debe»");
-  assert.match(bloque, /t\(debeSigueLoHecho \? "planTratamiento\.hecho\.ayudaTarjeta" : "planTratamiento\.hecho\.ayudaTarjetaSinDebe"\)/);
+  // v13 (t5, n1): además, solo si lo por hacer ya está en una nota (`ayudaHablaDeDebe`).
+  assert.match(bloque, /const conDebe = ayudaHablaDeDebe\(debeSigueLoHecho, vivas\);/);
+  assert.match(bloque, /t\(conDebe \? "planTratamiento\.hecho\.ayudaTarjeta" : "planTratamiento\.hecho\.ayudaTarjetaSinDebe"\)/);
   for (const idioma of ["es", "en"]) {
     const h = JSON.parse(leer(`src/i18n/dictionaries/${idioma}.json`)).planTratamiento.hecho;
     assert.match(h.ayudaTarjeta, idioma === "es" ? /«Debe»/ : /“Owes”/);
@@ -394,5 +397,44 @@ test("v12 · m1: con cuotas, «Además» de la ficha dice solo las cuotas que a�
   const en = JSON.parse(leer("src/i18n/dictionaries/en.json")).patients.sideCards;
   assert.equal(es.cuotasPorVencer, "Además, {monto} de cuotas que aún no vencen");
   assert.equal(en.cuotasPorVencer, "Plus {monto} in installments not yet due");
+});
+
+test("v13 · n1: la ayuda solo dice «pasa a Debe» si lo que falta por hacer ya está en una nota de cobro", async () => {
+  const { ayudaHablaDeDebe } = await import("@/lib/treatments/marcar-hecho-cliente");
+  const fila = (estado: string, invoiceId: string | null) => ({ estado, invoiceId });
+  // Plan sin aceptar (sin nota): «Hecho» no crea cobros → sin «Debe».
+  assert.equal(ayudaHablaDeDebe(true, [fila("pendiente", null), fila("pendiente", null)]), false);
+  // Aceptado: lo por hacer está en la nota.
+  assert.equal(ayudaHablaDeDebe(true, [fila("pendiente", "n1"), fila("hecho", "n1")]), true);
+  // Solo quedan por hacer filas agregadas después de la nota (sin nota).
+  assert.equal(ayudaHablaDeDebe(true, [fila("hecho", "n1"), fila("en_curso", null)]), false);
+  assert.equal(ayudaHablaDeDebe(true, [fila("cancelado", "n1"), fila("pendiente", null)]), false);
+  // Con cuotas o sin cuenta (v12 m2), nunca.
+  assert.equal(ayudaHablaDeDebe(false, [fila("pendiente", "n1")]), false);
+});
+
+test("v13 · n2: un error sin código no cae al genérico de «marcar»: 403 → permiso; si no, el genérico de la acción", async () => {
+  const { errorDeHecho } = await import("@/lib/treatments/marcar-hecho-cliente");
+  const { getDict } = await import("@/i18n/dictionaries");
+  const { makeT } = await import("@/i18n/t");
+  const en = makeT(getDict("en"));
+  const es = makeT(getDict("es"));
+  const e = (l: string) => JSON.parse(leer(`src/i18n/dictionaries/${l}.json`)).planTratamiento.hecho.error;
+  const [errEs, errEn] = [e("es"), e("en")];
+  // 403 sin código (permiso, doctor de otro plan, visibilidad): permiso, en los dos idiomas y en las dos acciones.
+  assert.equal(errorDeHecho(en, { status: 403 }, "marcar"), errEn.sin_permiso);
+  assert.equal(errorDeHecho(en, { status: 403 }, "deshacer"), errEn.sin_permiso);
+  assert.equal(errorDeHecho(es, { status: 403 }, "deshacer"), "No tienes permiso para marcar o deshacer procedimientos de este plan. Pídeselo al administrador.");
+  assert.match(errEn.sin_permiso, /permission/);
+  // El código manda sobre el status (el 403 del odontograma tiene su propio texto).
+  assert.equal(errorDeHecho(en, { status: 403, codigo: "sin_permiso_odontograma" }, "deshacer"), errEn.sin_permiso_odontograma);
+  // 404, 401, red caída: el genérico de lo que se pulsó.
+  assert.equal(errorDeHecho(en, { status: 404 }, "marcar"), errEn.generico);
+  assert.equal(errorDeHecho(en, { status: 404 }, "deshacer"), errEn.genericoDeshacer);
+  assert.equal(errorDeHecho(es, { status: 0 }, "deshacer"), "No se pudo deshacer el procedimiento.");
+  assert.equal(errEn.genericoDeshacer, "The procedure couldn't be undone.");
+  assert.doesNotMatch(errEs.genericoDeshacer, /marcar/);
+  // Por omisión (la consulta, que solo marca): como antes.
+  assert.equal(errorDeHecho(en, {}), errEn.generico);
 });
 

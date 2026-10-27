@@ -11025,6 +11025,8 @@
       },
       "error": {
         "generico": "No se pudo marcar el procedimiento.",
+        "genericoDeshacer": "No se pudo deshacer el procedimiento.",
+        "sin_permiso": "No tienes permiso para marcar o deshacer procedimientos de este plan. Pídeselo al administrador.",
         "sin_filas": "Elige al menos un procedimiento del plan.",
         "demasiadas_filas": "Son demasiados procedimientos a la vez: marca hasta 30.",
         "fila_desconocida": "Ese procedimiento ya no es de este plan. Recarga el plan e intenta de nuevo.",
