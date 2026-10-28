@@ -10,7 +10,8 @@
    - objetos extra dentro del grupo del diente (metros): aspas, insignias,
      implante, lesiones apicales, bracket, anillo del cuello, fractura.
 
-   Los colores salen SIEMPRE de COND_BY_ID / GROUP_COLOR (data.ts).
+   Los colores salen SIEMPRE de COND_BY_ID / GROUP_COLOR (data.ts), salvo el
+   rojo/azul del estado de la marca (ws1-t6), que llega ya resuelto en `colorDe`.
    La lógica visual sigue la de Surface2D / ToothGlyph: el hallazgo de
    cara más reciente manda en su cara; los de diente entero pintan lo que
    ninguna cara ha reclamado.
@@ -164,7 +165,11 @@ export function disposeObject(o: THREE.Object3D) {
   });
 }
 
-export function buildToothPlan(record: ToothRecord, meta: ToothMeta, info: FaceInfo): ToothPlan {
+/** El color (ya resuelto, sin var()) de una marca: por defecto, el de su especialidad. */
+export type ColorDeMarca = (c: Condition, cara: string | null) => string;
+const colorDeEspecialidad: ColorDeMarca = (c) => GROUP_COLOR[c.group];
+
+export function buildToothPlan(record: ToothRecord, meta: ToothMeta, info: FaceInfo, colorDe: ColorDeMarca = colorDeEspecialidad): ToothPlan {
   const faceColor = Array.from({ length: 6 }, () => new THREE.Vector4(0, 0, 0, 0));
   const faceStyle = [STYLE_FILL, STYLE_FILL, STYLE_FILL, STYLE_FILL, STYLE_FILL, STYLE_FILL];
   const claimed = [false, false, false, false, false, false];
@@ -187,7 +192,7 @@ export function buildToothPlan(record: ToothRecord, meta: ToothMeta, info: FaceI
     if (!arr || !arr.length) return;
     const c = COND_BY_ID[arr[arr.length - 1]];
     if (!c) return;
-    setFace(faceSlotOf(letter), GROUP_COLOR[c.group], c.render === "outline" ? 0.95 : 0.85, styleOf(c));
+    setFace(faceSlotOf(letter), colorDe(c, letter), c.render === "outline" ? 0.95 : 0.85, styleOf(c));
   });
 
   // 2) diente entero
@@ -206,10 +211,11 @@ export function buildToothPlan(record: ToothRecord, meta: ToothMeta, info: FaceI
   };
 
   for (const c of conds) {
-    const col = GROUP_COLOR[c.group];
+    const col = colorDe(c, null);
+    const conEstado = col !== GROUP_COLOR[c.group];
     switch (c.render) {
       case "ring": {
-        const hex = c.steel ? STEEL : col;
+        const hex = c.steel && !conEstado ? STEEL : col;
         if (c.band) crownSlots.forEach((s) => setFace(s, hex, 0.8, STYLE_BAND, 2 * MM));
         else crownSlots.forEach((s) => setFace(s, hex, 0.55, STYLE_FILL));
         break;

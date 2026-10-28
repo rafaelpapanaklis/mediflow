@@ -14,7 +14,8 @@
  * Nada de esto cambia lo que recibe `POST /api/treatments`: los mismos siete
  * campos de siempre, con los mismos tipos.
  */
-import { fasesDeHallazgos } from "@/lib/treatments/sugerir-procedimiento";
+import { FASE_DE_PROCEDIMIENTO, fasesDeHallazgos } from "@/lib/treatments/sugerir-procedimiento";
+import { CLAVE_DE_MARCA } from "@/lib/odontogram/estado-marca";
 
 /** Las fases con las que se ordena un plan dental, en su orden clínico. */
 export const FASES = ["urgencia", "sistemica", "higienica", "correctiva", "restauradora", "mantenimiento"] as const;
@@ -346,7 +347,13 @@ export function componerDescripcion(plan: PlanClinico, rot: Rotulos): string {
  */
 export const HALLAZGO_FASE: Record<string, Fase> = fasesDeHallazgos();
 
-export interface EntradaOdontograma { toothNumber: number; surface: string | null; conditionId: string }
+export interface EntradaOdontograma {
+  toothNumber: number;
+  surface: string | null;
+  conditionId: string;
+  /** Rojo/azul (ws1-t6): `por_hacer` = marcado en rojo, sale como procedimiento del plan. */
+  estado?: string | null;
+}
 
 export interface Hallazgo {
   clave: string;
@@ -354,16 +361,25 @@ export interface Hallazgo {
   caras: string[];
   conditionId: string;
   fase: Fase;
+  /** Una marca ROJA del odontograma (ws1-t6): el procedimiento ya está decidido (resina, corona…). */
+  porHacer?: boolean;
 }
 
-/** Un hallazgo por (diente, condición), con sus caras juntas: «16 · MO · Caries». */
+/**
+ * Un hallazgo por (diente, condición), con sus caras juntas: «16 · MO · Caries». Las marcas de
+ * procedimiento en ROJO («por hacer», ws1-t6) entran también, como lo que el doctor ya decidió
+ * hacer: «16 · O · Resina» (`porHacer: true`, clave `16:restoration`).
+ */
 export function hallazgosPorTratar(entradas: EntradaOdontograma[]): Hallazgo[] {
   const mapa = new Map<string, Hallazgo>();
   for (const e of entradas) {
-    const fase = HALLAZGO_FASE[e.conditionId];
+    // Realizado o previo (azul): ya está hecho, no es un problema por tratar (p. ej. «Extracción indicada» en azul).
+    if ((e.estado === "hecho" || e.estado === "previo") && CLAVE_DE_MARCA[e.conditionId]) continue;
+    const porHacer = e.estado === "por_hacer" && !!CLAVE_DE_MARCA[e.conditionId];
+    const fase = porHacer ? FASE_DE_PROCEDIMIENTO[CLAVE_DE_MARCA[e.conditionId]] : HALLAZGO_FASE[e.conditionId];
     if (!fase || !esFdi(e.toothNumber)) continue;
     const clave = `${e.toothNumber}:${e.conditionId}`;
-    const h = mapa.get(clave) ?? { clave, diente: e.toothNumber, caras: [], conditionId: e.conditionId, fase };
+    const h = mapa.get(clave) ?? { clave, diente: e.toothNumber, caras: [], conditionId: e.conditionId, fase, ...(porHacer ? { porHacer } : {}) };
     if (e.surface && (CARAS as readonly string[]).includes(e.surface) && !h.caras.includes(e.surface)) h.caras.push(e.surface);
     mapa.set(clave, h);
   }

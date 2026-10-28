@@ -4,12 +4,13 @@ import { memo, useState } from "react";
 import { GROUPS, CONDITIONS, GROUP_COLOR, I18N, classify } from "./data";
 import type { PaletteProps, ConditionSwatchProps, ToothRecord } from "./types";
 import { Surface2D } from "./Surface2D";
+import { admiteEstado, claveEstado } from "@/lib/odontogram/estado-marca";
 
 /**
  * Palette — specialty tabs + finding chips + eraser. 1:1 port of design
  * jsx/odontogram.jsx (Palette + ConditionSwatch). Swatches render via Surface2D.
  */
-export const Palette = memo(function Palette({ lang, brush, eraser, onPick, onEraser }: PaletteProps) {
+export const Palette = memo(function Palette({ lang, brush, eraser, onPick, onEraser, estado }: PaletteProps) {
   const t = I18N[lang];
   const [active, setActive] = useState<string>("diagnostic");
   const conds = CONDITIONS.filter((c) => c.group === active);
@@ -47,7 +48,7 @@ export const Palette = memo(function Palette({ lang, brush, eraser, onPick, onEr
             style={brush === c.id ? { borderColor: gc, boxShadow: `0 0 0 2px ${gc}33` } : {}}
             onClick={() => onPick(c.id)}
           >
-            <span className="odo-chip-ic"><ConditionSwatch cond={c} /></span>
+            <span className="odo-chip-ic"><ConditionSwatch cond={c} estado={estado} /></span>
             <span className="odo-chip-lb">{c[lang]}</span>
           </button>
         ))}
@@ -57,7 +58,7 @@ export const Palette = memo(function Palette({ lang, brush, eraser, onPick, onEr
 });
 
 /** ConditionSwatch — mini preview of how a finding renders (fake record on molar 16). */
-export function ConditionSwatch({ cond }: ConditionSwatchProps) {
+export function ConditionSwatch({ cond, estado }: ConditionSwatchProps) {
   // Mirror the design: surface findings preview on O (fills also tint M); whole-tooth on the glyph.
   const meta = classify(16);
   const record: ToothRecord =
@@ -66,6 +67,13 @@ export function ConditionSwatch({ cond }: ConditionSwatchProps) {
       : cond.render === "fill"
         ? { surfaces: { O: [cond.id], M: [cond.id] }, tooth: [] }
         : { surfaces: { O: [cond.id] }, tooth: [] };
+  // con el modo activo, el procedimiento se ve ya en su rojo/azul (ws1-t6)
+  if (estado && admiteEstado(cond.id)) {
+    record.estados = Object.fromEntries(
+      [...Object.keys(record.surfaces).map((l) => claveEstado(l, cond.id)), ...record.tooth.map((id) => claveEstado(null, id))]
+        .map((k) => [k, estado]),
+    );
+  }
   // Solo es un dibujo: sin `pointerEvents: "none"`, las caras del Surface2D
   // (que paran la propagación del clic) se tragaban el clic del botón y el
   // hallazgo no se elegía al tocar el icono (QA de Chrome, F1)

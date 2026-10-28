@@ -44,9 +44,11 @@
    sí llegó no duplica nada.
    ============================================================ */
 import type { Records, ToothRecord } from "./types";
+import { fijarEstadoEn, podarEstados, type EstadoMarca } from "@/lib/odontogram/estado-marca";
 
 export type SaveOp =
-  | { kind: "put"; toothNumber: number; surface: string | null; conditionId: string }
+  /** `estado` (ws1-t6): rojo/azul de una marca de procedimiento; sin él, el estado no se toca. */
+  | { kind: "put"; toothNumber: number; surface: string | null; conditionId: string; estado?: EstadoMarca | null }
   | { kind: "delete"; toothNumber: number; surface: string | null; conditionId: string }
   | { kind: "note"; toothNumber: number; text: string }
   | { kind: "reset" };
@@ -526,8 +528,10 @@ export class SaveQueue {
       const arr = op.surface ? (r.surfaces[op.surface] ??= []) : r.tooth;
       const i = arr.indexOf(op.conditionId);
       if (op.kind === "put" && i < 0) arr.push(op.conditionId);
+      if (op.kind === "put" && op.estado !== undefined) fijarEstadoEn(r, op.surface, op.conditionId, op.estado);
       if (op.kind === "delete" && i >= 0) arr.splice(i, 1);
       if (op.surface && !r.surfaces[op.surface].length) delete r.surfaces[op.surface];
+      podarEstados(r);
     }
     this.noteDrafts.forEach((text, n) => { rec(n).note = text; });
     return out;

@@ -4,7 +4,8 @@ import type { CSSProperties } from "react";
 import type {
   Surface2DProps, ToothMeta, ToothRecord, SurfaceLetter, Condition,
 } from "./types";
-import { COND_BY_ID, GROUP_COLOR } from "./data";
+import { COND_BY_ID } from "./data";
+import { colorDe, patronDe, tonoDe } from "./colores";
 
 /* ---------- geometry helpers (ported 1:1 from design jsx/surface2d.jsx) ---------- */
 function polar(cx: number, cy: number, r: number, deg: number): [number, number] {
@@ -59,14 +60,17 @@ export function Surface2D({ meta, record, onSurface, dimmed, size = 64 }: Surfac
     if (!arr || !arr.length) return null;
     return COND_BY_ID[arr[arr.length - 1]] || null;
   }
+  // El color va por `style`: el rojo/azul del estado es un token (var()) y en un
+  // atributo de presentación de SVG no todos los navegadores lo resuelven (ws1-t6).
   function zoneFill(letter: string): ZoneStyle {
     const c = topCond(letter);
     if (!c) return { fill: "transparent" };
-    const color = GROUP_COLOR[c.group];
+    const color = colorDe(record, letter, c);
+    const patron = patronDe(record, letter, c);
     if (c.render === "fill") return { fill: color, opacity: 0.9 };
     if (c.render === "outline") return { fill: "transparent", stroke: color, strokeWidth: 3 };
-    if (c.render === "stipple") return { fill: `url(#stipple-${c.group})` };
-    if (c.render === "dots") return { fill: `url(#dots-${c.group})` };
+    if (c.render === "stipple") return { fill: `url(#stipple-${patron})` };
+    if (c.render === "dots") return { fill: `url(#dots-${patron})` };
     return { fill: color, opacity: 0.9 };
   }
 
@@ -92,11 +96,10 @@ export function Surface2D({ meta, record, onSurface, dimmed, size = 64 }: Surfac
           <path
             key={z.pos}
             d={annular(cx, cy, ri, ro, z.a0, z.a1)}
-            fill={st.fill}
-            stroke={st.stroke || "#cfd6e0"}
             strokeWidth={st.strokeWidth || 1.2}
             opacity={st.opacity}
-            style={{ cursor: "pointer" }}
+            style={{ cursor: "pointer", fill: st.fill, stroke: st.stroke || "#cfd6e0" }}
+            data-cara={letter}
             onClick={(e) => { e.stopPropagation(); onSurface(letter); }}
           />
         );
@@ -109,11 +112,10 @@ export function Surface2D({ meta, record, onSurface, dimmed, size = 64 }: Surfac
         return (
           <circle
             cx={cx} cy={cy} r={ri}
-            fill={st.fill}
-            stroke={st.stroke || "#cfd6e0"}
             strokeWidth={st.strokeWidth || 1.4}
             opacity={st.opacity}
-            style={{ cursor: "pointer" }}
+            style={{ cursor: "pointer", fill: st.fill, stroke: st.stroke || "#cfd6e0" }}
+            data-cara={letter}
             onClick={(e) => { e.stopPropagation(); onSurface(letter); }}
           />
         );
@@ -122,7 +124,7 @@ export function Surface2D({ meta, record, onSurface, dimmed, size = 64 }: Surfac
       {/* ring (crown / band / steel crown) */}
       {ringCond && (
         <circle cx={cx} cy={cy} r={ro - 1} fill="none"
-          stroke={ringCond.steel ? "#64748b" : GROUP_COLOR[ringCond.group]}
+          style={{ stroke: ringCond.steel && !tonoDe(record, null, ringCond) ? "#64748b" : colorDe(record, null, ringCond) }}
           strokeWidth="3.5" strokeDasharray={ringCond.band ? "5 4" : ""} />
       )}
 
@@ -148,18 +150,18 @@ function ToothBadges({ meta, record }: { meta: ToothMeta; record: ToothRecord })
   // cara es), pero visible — el doctor sabe que hay algo que revisar.
   const unassignedSurface = conds.filter((c) => c.target === "surface");
   const out: React.JSX.Element[] = [];
+  const col = (c: Condition) => colorDe(record, null, c);
   if (badge) {
     out.push(
       <g key="b">
-        <circle cx="50" cy="50" r="13" fill="#fff" stroke={GROUP_COLOR[badge.group]} strokeWidth="2.5" />
-        <text x="50" y="50" textAnchor="middle" dominantBaseline="central" fontSize="16" fontWeight="800" fill={GROUP_COLOR[badge.group]}>{badge.letter}</text>
+        <circle cx="50" cy="50" r="13" fill="#fff" style={{ stroke: col(badge) }} strokeWidth="2.5" />
+        <text x="50" y="50" textAnchor="middle" dominantBaseline="central" fontSize="16" fontWeight="800" style={{ fill: col(badge) }}>{badge.letter}</text>
       </g>
     );
   }
   if (cross) {
-    const col = GROUP_COLOR[cross.group];
     out.push(
-      <g key="x" stroke={col} strokeWidth="4" strokeLinecap="round" opacity={cross.soft ? 0.7 : 1}>
+      <g key="x" style={{ stroke: col(cross) }} strokeWidth="4" strokeLinecap="round" opacity={cross.soft ? 0.7 : 1}>
         <line x1="20" y1="20" x2="80" y2="80" strokeDasharray={cross.soft ? "6 5" : ""} />
         <line x1="80" y1="20" x2="20" y2="80" strokeDasharray={cross.soft ? "6 5" : ""} />
       </g>
@@ -169,18 +171,18 @@ function ToothBadges({ meta, record }: { meta: ToothMeta; record: ToothRecord })
     const r = ["", "I", "II", "III"][roman.degree ?? 0] || "I";
     out.push(
       <g key="r" transform="translate(74,26)">
-        <circle r="13" fill={GROUP_COLOR[roman.group]} />
+        <circle r="13" style={{ fill: col(roman) }} />
         <text textAnchor="middle" dominantBaseline="central" fontSize="13" fontWeight="800" fill="#fff">{r}</text>
       </g>
     );
   }
   if (icon) {
-    out.push(<g key="i" transform="translate(50,50)">{glyphIcon(icon.icon || "", GROUP_COLOR[icon.group])}</g>);
+    out.push(<g key="i" transform="translate(50,50)">{glyphIcon(icon.icon || "", col(icon))}</g>);
   }
   unassignedSurface.forEach((c, i) => {
     out.push(
       <g key={`us-${c.id}`} transform={`translate(${20 + i * 15},84)`}>
-        <circle r="6.5" fill={GROUP_COLOR[c.group]} stroke="#fff" strokeWidth="1.5" />
+        <circle r="6.5" style={{ fill: col(c) }} stroke="#fff" strokeWidth="1.5" />
         <title>{`${c.es} — sin cara específica`}</title>
       </g>
     );
@@ -191,15 +193,16 @@ function ToothBadges({ meta, record }: { meta: ToothMeta; record: ToothRecord })
 /* tiny vector icons used as badges */
 function glyphIcon(name: string, color: string): React.JSX.Element | null {
   const s: CSSProperties = { fill: "none", stroke: color, strokeWidth: 4, strokeLinecap: "round", strokeLinejoin: "round" };
+  // el color por `style` (puede ser un token var(), ws1-t6)
   switch (name) {
     case "rotate":
       return <g style={s}><path d="M-14 -4 a14 14 0 1 1 4 12" /><path d="M-14 -12 v8 h8" /></g>;
     case "displace":
       return <g style={s}><line x1="-16" y1="0" x2="16" y2="0" /><path d="M10 -6 l6 6 -6 6" /><path d="M-10 -6 l-6 6 6 6" /></g>;
     case "drop":
-      return <g><path d="M0 -16 C 10 -2, 12 4, 0 14 C -12 4, -10 -2, 0 -16 Z" fill={color} opacity="0.85" /></g>;
+      return <g><path d="M0 -16 C 10 -2, 12 4, 0 14 C -12 4, -10 -2, 0 -16 Z" style={{ fill: color }} opacity="0.85" /></g>;
     case "sparkle":
-      return <g stroke={color} strokeWidth="3.5" strokeLinecap="round"><line x1="0" y1="-14" x2="0" y2="14" /><line x1="-14" y1="0" x2="14" y2="0" /><line x1="-9" y1="-9" x2="9" y2="9" /><line x1="9" y1="-9" x2="-9" y2="9" /></g>;
+      return <g style={{ stroke: color }} strokeWidth="3.5" strokeLinecap="round"><line x1="0" y1="-14" x2="0" y2="14" /><line x1="-14" y1="0" x2="14" y2="0" /><line x1="-9" y1="-9" x2="9" y2="9" /><line x1="9" y1="-9" x2="-9" y2="9" /></g>;
     case "probe":
       return <g style={s}><line x1="0" y1="-15" x2="0" y2="13" /><line x1="-7" y1="13" x2="7" y2="13" /><line x1="-5" y1="-15" x2="5" y2="-15" /></g>;
     case "furca":

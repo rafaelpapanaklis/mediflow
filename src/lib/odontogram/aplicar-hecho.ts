@@ -12,10 +12,16 @@
  * Formato de las entradas = el de la base (`odontogram_entries`): caras M D V L O, la incisal
  * de los anteriores guardada como «O», `surface: null` = el diente completo; la nota por
  * diente (`__note__`) no se toca nunca.
+ *
+ * Rojo → azul (ws1-t6, decisión 3 de Rafael): si lo que el procedimiento deja ya está marcado
+ * EN ROJO («por hacer»), no se crea otra marca: esa pasa a azul («hecho»; hecho no es pagado) y va
+ * en `aHecho`. Su deshacer la regresa a rojo (`deshacer.aPorHacer`). Sin caras en el renglón, las
+ * caras salen también de las marcas rojas de ese procedimiento en el diente.
  */
 import { esFdi } from "@/components/dashboard/plan-tratamiento-rediseno/plan-clinico";
 import { classify } from "@/components/dashboard/odontogram-v2/data";
-import { claveDeProcedimiento, type ClaveProcedimiento } from "@/lib/treatments/sugerir-procedimiento";
+import { PROCEDIMIENTOS, claveDeProcedimiento, type ClaveProcedimiento } from "@/lib/treatments/sugerir-procedimiento";
+import { CLAVE_DE_MARCA, type EstadoMarca } from "./estado-marca";
 
 export type CaraBase = "M" | "D" | "V" | "L" | "O";
 
@@ -24,6 +30,8 @@ export interface EntradaOdontograma {
   surface: CaraBase | null;
   conditionId: string;
   notes?: string | null;
+  /** Rojo/azul (ws1-t6); null o ausente = lo de antes, sin estado. */
+  estado?: EstadoMarca | null;
 }
 
 export interface ProcedimientoHecho {
@@ -49,8 +57,12 @@ export interface CambioOdontograma {
   clave: ClaveProcedimiento | null;
   altas: EntradaOdontograma[];
   bajas: EntradaOdontograma[];
-  /** Lo que vuelve el odontograma a como estaba (las bajas regresan con su nota). */
-  deshacer: { altas: EntradaOdontograma[]; bajas: EntradaOdontograma[] };
+  /** Marcas que estaban EN ROJO y pasan a azul (ws1-t6): no se crean ni se quitan, cambian de estado. */
+  aHecho: EntradaOdontograma[];
+  /** Marcas que vuelven a rojo: solo en el deshacer (`cambioDeshacer`); `aplicarHecho` la deja vacía. */
+  aPorHacer: EntradaOdontograma[];
+  /** Lo que vuelve el odontograma a como estaba (las bajas regresan con su nota; lo que pasó a azul, a rojo). */
+  deshacer: { altas: EntradaOdontograma[]; bajas: EntradaOdontograma[]; aHecho: EntradaOdontograma[]; aPorHacer: EntradaOdontograma[] };
   /** Todo lo que el procedimiento deja en el odontograma, ESTUVIERA o no (lo que «hecho» cubre:
    *  si el doctor ya lo había pintado, tampoco se vuelve a proponer cobrar). Sin notas. */
   objetivo: EntradaOdontograma[];
@@ -132,9 +144,28 @@ const clave = (e: { toothNumber: number; surface: string | null; conditionId: st
  */
 export function aplicarHecho(hecho: ProcedimientoHecho, entradas: EntradaOdontograma[]): CambioOdontograma {
   const claveProc = hecho.clave ?? claveDeProcedimiento({ codigo: hecho.codigo, nombre: hecho.nombre });
-  const vacio = (sinCambio: SinCambio, dientesInvalidos: number[] = []): CambioOdontograma =>
-    ({ clave: claveProc, altas: [], bajas: [], deshacer: { altas: [], bajas: [] }, objetivo: [...objetivo], sinCambio, dientesInvalidos });
   const objetivo: EntradaOdontograma[] = [];
+  const sinEstado = ({ estado: _e, ...e }: EntradaOdontograma): EntradaOdontograma => e;
+  // Lo marcado EN ROJO de este mismo procedimiento en el diente completo (flúor, profilaxis, pulpotomía,
+  // corona…): «hecho» lo pasa a azul aunque el procedimiento no dibuje nada o dibuje otra cosa (ws1-t6).
+  // En toda la boca si el procedimiento es de boca y el renglón no dice dientes. Las caras las lleva `poner`.
+  const pedidosFdi = [...new Set(hecho.dientes.filter(esFdi))];
+  const deLaBoca = !!claveProc && PROCEDIMIENTOS[claveProc].alcance === "boca" && pedidosFdi.length === 0;
+  const rojosDelProc = claveProc
+    ? entradas.filter((e) => e.conditionId !== NOTA && e.surface === null && e.estado === "por_hacer"
+      && CLAVE_DE_MARCA[e.conditionId] === claveProc && (deLaBoca || pedidosFdi.includes(e.toothNumber)))
+    : [];
+  const vacio = (sinCambio: SinCambio, dientesInvalidos: number[] = []): CambioOdontograma => {
+    if (rojosDelProc.length > 0) {
+      const aHecho = rojosDelProc.map((e) => ({ ...sinEstado(e), notes: e.notes ?? null }));
+      return {
+        clave: claveProc, altas: [], bajas: [], aHecho, aPorHacer: [],
+        deshacer: { altas: [], bajas: [], aHecho: [], aPorHacer: aHecho.map((e) => ({ ...e })) },
+        objetivo: [...objetivo, ...aHecho.map((e) => ({ ...e, notes: null }))], sinCambio: null, dientesInvalidos,
+      };
+    }
+    return { clave: claveProc, altas: [], bajas: [], aHecho: [], aPorHacer: [], deshacer: { altas: [], bajas: [], aHecho: [], aPorHacer: [] }, objetivo: [...objetivo], sinCambio, dientesInvalidos };
+  };
 
   const dientesInvalidos = [...new Set(hecho.dientes.filter((d) => !esFdi(d)))];
   if (!claveProc) return vacio("procedimiento_desconocido", dientesInvalidos);
@@ -154,11 +185,18 @@ export function aplicarHecho(hecho: ProcedimientoHecho, entradas: EntradaOdontog
   const hay = new Map(vivas.map((e) => [clave(e), e]));
   const altas: EntradaOdontograma[] = [];
   const bajas: EntradaOdontograma[] = [];
+  const aHecho: EntradaOdontograma[] = [];
   const quitar = (e: EntradaOdontograma) => { if (!bajas.some((b) => clave(b) === clave(e))) bajas.push({ ...e, notes: e.notes ?? null }); };
   const poner = (toothNumber: number, surface: CaraBase | null, conditionId: string) => {
     const e = { toothNumber, surface, conditionId };
     if (!objetivo.some((o) => clave(o) === clave(e))) objetivo.push({ ...e, notes: null });
-    if (!hay.has(clave(e)) && !altas.some((a) => clave(a) === clave(e))) altas.push({ ...e, notes: null });
+    const ya = hay.get(clave(e));
+    // Marcada en rojo: pasa a azul, no se crea otra (ws1-t6).
+    if (ya?.estado === "por_hacer" && !bajas.some((b) => clave(b) === clave(e))) {
+      if (!aHecho.some((a) => clave(a) === clave(e))) aHecho.push({ ...sinEstado(ya), notes: ya.notes ?? null });
+      return;
+    }
+    if (!ya && !altas.some((a) => clave(a) === clave(e))) altas.push({ ...e, notes: null });
   };
   let faltanCaras = false;
 
@@ -176,6 +214,10 @@ export function aplicarHecho(hecho: ProcedimientoHecho, entradas: EntradaOdontog
       if (caras.length === 0 && efecto.carasDesde) {
         caras = CARAS.filter((c) => delDiente.some((e) => e.surface === c && efecto.carasDesde!.includes(e.conditionId)));
       }
+      // …o de donde el doctor ya lo marcó en rojo (ws1-t6)
+      if (caras.length === 0) {
+        caras = CARAS.filter((c) => delDiente.some((e) => e.surface === c && e.conditionId === efecto.ponerEnCaras && e.estado === "por_hacer"));
+      }
       if (caras.length === 0 && efecto.carasPorDefecto) caras = efecto.carasPorDefecto;
       if (efecto.soloCaras) caras = caras.filter((c) => efecto.soloCaras!.includes(c));
       if (caras.length === 0) { faltanCaras = true; continue; }
@@ -188,7 +230,9 @@ export function aplicarHecho(hecho: ProcedimientoHecho, entradas: EntradaOdontog
     }
 
     if (efecto.ponerEnDiente) {
-      const id = typeof efecto.ponerEnDiente === "function" ? efecto.ponerEnDiente(diente) : efecto.ponerEnDiente;
+      // Si el doctor ya lo marcó en rojo (p. ej. «Pulpotomía» en un temporal), esa marca es la que pasa a azul.
+      const rojo = efecto.todoElDiente ? undefined : rojosDelProc.find((e) => e.toothNumber === diente);
+      const id = rojo ? rojo.conditionId : typeof efecto.ponerEnDiente === "function" ? efecto.ponerEnDiente(diente) : efecto.ponerEnDiente;
       // Extracción: lo que se quita del diente no cuenta como «ya estaba».
       if (efecto.todoElDiente && hay.has(clave({ toothNumber: diente, surface: null, conditionId: id }))) {
         const i = bajas.findIndex((b) => clave(b) === clave({ toothNumber: diente, surface: null, conditionId: id }));
@@ -200,17 +244,25 @@ export function aplicarHecho(hecho: ProcedimientoHecho, entradas: EntradaOdontog
     }
   }
 
-  if (altas.length === 0 && bajas.length === 0) return vacio(faltanCaras ? "sin_caras" : "ya_estaba", dientesInvalidos);
+  for (const r of rojosDelProc) {
+    if (aHecho.some((a) => clave(a) === clave(r)) || bajas.some((b) => clave(b) === clave(r))) continue;
+    aHecho.push({ ...sinEstado(r), notes: r.notes ?? null });
+    if (!objetivo.some((o) => clave(o) === clave(r))) objetivo.push({ ...sinEstado(r), notes: null });
+  }
+  if (altas.length === 0 && bajas.length === 0 && aHecho.length === 0) return vacio(faltanCaras ? "sin_caras" : "ya_estaba", dientesInvalidos);
   const orden = (a: EntradaOdontograma, b: EntradaOdontograma) =>
     a.toothNumber - b.toothNumber || (a.surface ?? "").localeCompare(b.surface ?? "") || a.conditionId.localeCompare(b.conditionId);
   altas.sort(orden);
   bajas.sort(orden);
+  aHecho.sort(orden);
   objetivo.sort(orden);
   return {
     clave: claveProc,
     altas,
     bajas,
-    deshacer: { altas: bajas.map((e) => ({ ...e })), bajas: altas.map((e) => ({ ...e })) },
+    aHecho,
+    aPorHacer: [],
+    deshacer: { altas: bajas.map((e) => ({ ...e })), bajas: altas.map((e) => ({ ...e })), aHecho: [], aPorHacer: aHecho.map((e) => ({ ...e })) },
     objetivo,
     sinCambio: null,
     dientesInvalidos,
@@ -223,17 +275,26 @@ export function cambioDeshacer(c: CambioOdontograma): CambioOdontograma {
     clave: c.clave,
     altas: c.deshacer.altas,
     bajas: c.deshacer.bajas,
-    deshacer: { altas: c.altas, bajas: c.bajas },
+    aHecho: c.deshacer.aHecho,
+    aPorHacer: c.deshacer.aPorHacer,
+    deshacer: { altas: c.altas, bajas: c.bajas, aHecho: c.aHecho, aPorHacer: c.aPorHacer },
     objetivo: c.deshacer.altas,
     sinCambio: c.sinCambio,
     dientesInvalidos: c.dientesInvalidos,
   };
 }
 
-/** Las entradas tras aplicar el cambio (para vista previa y pruebas). */
-export function aplicarAEntradas(entradas: EntradaOdontograma[], c: Pick<CambioOdontograma, "altas" | "bajas">): EntradaOdontograma[] {
+/** Las entradas tras aplicar el cambio (para vista previa y pruebas): lo de `aHecho` queda azul y lo de `aPorHacer`, rojo. */
+export function aplicarAEntradas(
+  entradas: EntradaOdontograma[],
+  c: Pick<CambioOdontograma, "altas" | "bajas"> & { aHecho?: EntradaOdontograma[]; aPorHacer?: EntradaOdontograma[] },
+): EntradaOdontograma[] {
   const fuera = new Set(c.bajas.map(clave));
-  const quedan = entradas.filter((e) => !fuera.has(clave(e)));
+  const azul = new Set((c.aHecho ?? []).map(clave));
+  const rojo = new Set((c.aPorHacer ?? []).map(clave));
+  const quedan = entradas
+    .filter((e) => !fuera.has(clave(e)))
+    .map((e) => (azul.has(clave(e)) ? { ...e, estado: "hecho" as const } : rojo.has(clave(e)) ? { ...e, estado: "por_hacer" as const } : e));
   const ya = new Set(quedan.map(clave));
   return [...quedan, ...c.altas.filter((e) => !ya.has(clave(e)))];
 }
@@ -286,6 +347,8 @@ export interface EntradaConId extends EntradaOdontograma { id: string }
 export interface EscritoPorHecho {
   altas: EntradaConId[];
   bajas: EntradaOdontograma[];
+  /** Lo que estaba en rojo y «hecho» pasó a azul, con su id (ws1-t6): el deshacer lo regresa a rojo. */
+  aHecho?: EntradaConId[];
 }
 
 export interface ConflictoDeshacer {
@@ -304,6 +367,8 @@ export interface ConflictoDeshacer {
 export interface PlanDeDeshacer {
   /** Las altas de «hecho» que siguen ahí (por id): se quitan. */
   borrar: EntradaConId[];
+  /** Lo que «hecho» pasó de rojo a azul y sigue azul (por id): vuelve a rojo (ws1-t6). */
+  aPorHacer: EntradaConId[];
   /** Lo que «hecho» quitó y se devuelve, con su nota. */
   crear: EntradaOdontograma[];
   conflictos: ConflictoDeshacer[];
@@ -328,6 +393,14 @@ export function planearDeshacer(escrito: EscritoPorHecho, actuales: EntradaConId
     if (viva && clave(viva) === clave(a)) borrar.push(viva);
     else perdidas.push(a);
   }
+  // Lo que pasó a azul: vuelve a rojo si sigue ahí y sigue azul; si alguien lo quitó, se avisa; si
+  // alguien ya le cambió el estado (lo regresó a rojo, o es «previo»), no se toca.
+  const aPorHacer: EntradaConId[] = [];
+  for (const a of escrito.aHecho ?? []) {
+    const viva = porId.get(a.id);
+    if (!viva || clave(viva) !== clave(a)) perdidas.push(a);
+    else if (viva.estado === "hecho") aPorHacer.push(viva);
+  }
   const conflictos: ConflictoDeshacer[] = perdidas.map((a) => ({
     toothNumber: a.toothNumber, surface: a.surface, conditionId: a.conditionId, motivo: "alta_ya_no_esta",
   }));
@@ -338,8 +411,10 @@ export function planearDeshacer(escrito: EscritoPorHecho, actuales: EntradaConId
   const crear: EntradaOdontograma[] = [];
   for (const b of escrito.bajas) {
     if (b.conditionId === NOTA || hay.has(clave(b))) continue;
-    const enLaCara = escrito.altas.filter((a) => a.toothNumber === b.toothNumber && a.surface === b.surface);
-    const anclas = enLaCara.length > 0 ? enLaCara : escrito.altas.filter((a) => a.toothNumber === b.toothNumber);
+    // Lo que «hecho» puso en ese sitio: sus altas y lo que pasó de rojo a azul.
+    const puestas = [...escrito.altas, ...(escrito.aHecho ?? [])];
+    const enLaCara = puestas.filter((a) => a.toothNumber === b.toothNumber && a.surface === b.surface);
+    const anclas = enLaCara.length > 0 ? enLaCara : puestas.filter((a) => a.toothNumber === b.toothNumber);
     if (anclas.some((a) => perdidas.includes(a))) {
       conflictos.push({ toothNumber: b.toothNumber, surface: b.surface, conditionId: b.conditionId, motivo: "cambio_posterior" });
       continue;
@@ -348,5 +423,5 @@ export function planearDeshacer(escrito: EscritoPorHecho, actuales: EntradaConId
   }
   const orden = (a: EntradaOdontograma, b: EntradaOdontograma) =>
     a.toothNumber - b.toothNumber || (a.surface ?? "").localeCompare(b.surface ?? "") || a.conditionId.localeCompare(b.conditionId);
-  return { borrar: borrar.sort(orden), crear: crear.sort(orden), conflictos: conflictos.sort(orden) };
+  return { borrar: borrar.sort(orden), aPorHacer: aPorHacer.sort(orden), crear: crear.sort(orden), conflictos: conflictos.sort(orden) };
 }

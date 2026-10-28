@@ -10,6 +10,9 @@
  *    del tarifario; un segundo hallazgo del mismo diente que pide lo mismo se junta con el primero
  *    (caries MO + restauración temporal D = una resina de 3 caras).
  *  · `filasParaGuardar`: los renglones en el formato del contrato de filas (`items.ts`, t12).
+ *  · Marcas ROJAS del odontograma (ws1-t6, decisión 2 de Rafael): cada una sale como un chip
+ *    `por_hacer` con su procedimiento y el precio de la clínica («Resina · 16 O · $700»), listo para
+ *    agregar. Mandan sobre lo que sugeriría un hallazgo del mismo diente (no salen dos resinas).
  */
 import {
   CARAS, MINUTOS_POR_DEFECTO, cantidadDe, leerDientes, precioDe, renglonesUtiles, sesionesSugeridas,
@@ -21,12 +24,13 @@ import {
 } from "@/lib/treatments/sugerir-procedimiento";
 import { aCentavos } from "@/lib/treatments/items";
 
-type Entradas = { toothNumber: number; conditionId: string }[];
+type Entradas = { toothNumber: number; conditionId: string; estado?: string | null }[];
 
 export interface Chip {
-  /** Llave estable: `h:16:caries` (un hallazgo), `g:limpieza` (boca), `q:raspado:1` (cuadrante), `e:corona:36` (encadenada). */
+  /** Llave estable: `h:16:caries` (un hallazgo), `g:limpieza` (boca), `q:raspado:1` (cuadrante), `e:corona:36` (encadenada),
+   *  `r:h:16:restoration` (una marca roja; `r:g:limpieza`, `r:q:…` igual que los otros). */
   clave: string;
-  tipo: "hallazgo" | "encadenada";
+  tipo: "hallazgo" | "encadenada" | "por_hacer";
   /** Las condiciones del chip, sin repetir (un chip de boca puede juntar cálculo y sangrado). */
   condiciones: string[];
   dientes: number[];
@@ -42,11 +46,18 @@ export interface Chip {
 const cuadrante = (fdi: number) => Math.floor(fdi / 10);
 
 function llaveDeChip(h: Hallazgo, s: Sugerencia | null): string {
-  if (!s) return `h:${h.clave}`;
+  const r = h.porHacer ? "r:" : "";
+  if (!s) return `${r}h:${h.clave}`;
   const alcance = PROCEDIMIENTOS[s.clave].alcance;
-  if (alcance === "boca") return `g:${s.clave}`;
-  if (alcance === "cuadrante") return `q:${s.clave}:${cuadrante(h.diente)}`;
-  return `h:${h.clave}`;
+  if (alcance === "boca") return `${r}g:${s.clave}`;
+  if (alcance === "cuadrante") return `${r}q:${s.clave}:${cuadrante(h.diente)}`;
+  return `${r}h:${h.clave}`;
+}
+
+/** Lo que ya pide una marca roja: `«clave»:«diente»` (o `«clave»:boca`, `«clave»:q«n»`). */
+function cubiertoPor(s: Sugerencia, diente: number): string {
+  const alcance = PROCEDIMIENTOS[s.clave].alcance;
+  return alcance === "boca" ? `${s.clave}:boca` : alcance === "cuadrante" ? `${s.clave}:q${cuadrante(diente)}` : `${s.clave}:${diente}`;
 }
 
 /** ¿El renglón trabaja ese diente? (o toda la boca, si no lleva dientes). */
@@ -61,10 +72,18 @@ export function chipsDelPlan(hallazgos: Hallazgo[], tarifario: ProcedimientoTari
   const grupos = new Map<string, { hallazgos: Hallazgo[]; base: Sugerencia | null }>();
   const encadenadas: Chip[] = [];
   const vistasEncadenadas = new Set<string>();
+  // Lo que el doctor ya marcó en rojo: un hallazgo del mismo diente que pide lo mismo no sale aparte.
+  const enRojo = new Set<string>();
+  for (const h of hallazgos) {
+    if (!h.porHacer) continue;
+    const s = sugerirProcedimiento(h, tarifario, entradas).sugerencias[0];
+    if (s) enRojo.add(cubiertoPor(s, h.diente));
+  }
 
   for (const h of hallazgos) {
     const res = sugerirProcedimiento(h, tarifario, entradas);
     const base = res.sugerencias.find((s) => s.encadenadaDe === null) ?? null;
+    if (!h.porHacer && base && enRojo.has(cubiertoPor(base, h.diente))) continue;
     const llave = llaveDeChip(h, base);
     const g = grupos.get(llave);
     if (g) g.hallazgos.push(h);
@@ -93,7 +112,7 @@ export function chipsDelPlan(hallazgos: Hallazgo[], tarifario: ProcedimientoTari
       : sugerirPlan(g.hallazgos, tarifario, entradas).find((s) => s.encadenadaDe === null && s.clave === g.base!.clave) ?? g.base;
     chips.push({
       clave,
-      tipo: "hallazgo",
+      tipo: g.hallazgos[0].porHacer ? "por_hacer" : "hallazgo",
       condiciones: [...new Set(g.hallazgos.map((h) => h.conditionId))],
       dientes: [...new Set(g.hallazgos.map((h) => h.diente))].sort((a, b) => a - b),
       caras: unSolo ? g.hallazgos[0].caras : [],
@@ -102,7 +121,8 @@ export function chipsDelPlan(hallazgos: Hallazgo[], tarifario: ProcedimientoTari
       puesto: g.hallazgos.every((h) => usados.has(h.clave)),
     });
   }
-  return [...chips, ...encadenadas];
+  // Lo marcado en rojo, primero: es lo que el doctor ya decidió.
+  return [...chips.filter((c) => c.tipo === "por_hacer"), ...chips.filter((c) => c.tipo !== "por_hacer"), ...encadenadas];
 }
 
 export interface ContextoAgregar {
@@ -125,7 +145,7 @@ export function agregarDesdeChip(renglones: Renglon[], chip: Chip, ctx: Contexto
     caras: chip.caras,
     entryId: null,
   };
-  const origen = chip.tipo === "hallazgo" ? chip.hallazgos.map((h) => h.clave) : [];
+  const origen = chip.tipo !== "encadenada" ? chip.hallazgos.map((h) => h.clave) : [];
 
   if (!s) {
     // Sin sugerencia: el renglón de siempre, con fase, diente, caras y motivo, para escribir el procedimiento.
@@ -138,7 +158,7 @@ export function agregarDesdeChip(renglones: Renglon[], chip: Chip, ctx: Contexto
 
   const alcance = PROCEDIMIENTOS[s.clave].alcance;
   // Mismo diente y mismo procedimiento: se juntan (caras y hallazgos) en vez de repetir el renglón.
-  if (chip.tipo === "hallazgo" && alcance === "diente") {
+  if (chip.tipo !== "encadenada" && alcance === "diente") {
     const d = chip.dientes[0];
     const i = renglones.findIndex((r) => r.clave === s.clave && leerDientes(r.dientes).dientes.length === 1 && enDiente(r, d));
     if (i >= 0) {
@@ -147,7 +167,7 @@ export function agregarDesdeChip(renglones: Renglon[], chip: Chip, ctx: Contexto
       const junto: Renglon = { ...r, caras, origen: [...new Set([...(r.origen ?? []), ...origen])] };
       // Si el renglón sigue como lo dejó la sugerencia, la variante se ajusta a las caras nuevas.
       if (r.precioDelTarifario) {
-        const otra = sugerirProcedimiento({ diente: d, caras, conditionId: primero.conditionId }, ctx.tarifario, ctx.entradas)
+        const otra = sugerirProcedimiento({ diente: d, caras, conditionId: primero.conditionId, porHacer: primero.porHacer }, ctx.tarifario, ctx.entradas)
           .sugerencias.find((x) => x.clave === s.clave && x.encadenadaDe === null);
         if (otra?.procedimientoId) {
           Object.assign(junto, {
@@ -174,7 +194,7 @@ export function agregarDesdeChip(renglones: Renglon[], chip: Chip, ctx: Contexto
 /* ─────── Desde la Nueva consulta (P9) ─────── */
 
 /** Un diente en el formato `Records` del odontograma (el de la consulta, con letras de pantalla). */
-type RegistroDiente = { surfaces?: Record<string, string[] | undefined>; tooth?: string[]; note?: string };
+type RegistroDiente = { surfaces?: Record<string, string[] | undefined>; tooth?: string[]; note?: string; estados?: Record<string, string> };
 
 /**
  * El odontograma de una consulta (`Records`, lo que el doctor ve y marcó, aún sin guardar) como
@@ -184,19 +204,20 @@ type RegistroDiente = { surfaces?: Record<string, string[] | undefined>; tooth?:
 export function entradasDeRegistros(registros: Record<number | string, RegistroDiente | undefined>): EntradaOdontograma[] {
   const out: EntradaOdontograma[] = [];
   const vistas = new Set<string>();
-  const poner = (toothNumber: number, surface: string | null, conditionId: string) => {
+  const poner = (toothNumber: number, surface: string | null, conditionId: string, estado: string | undefined) => {
     const k = `${toothNumber}:${surface ?? "_"}:${conditionId}`;
     if (vistas.has(k) || conditionId === "__note__") return;
     vistas.add(k);
-    out.push({ toothNumber, surface, conditionId });
+    out.push({ toothNumber, surface, conditionId, ...(estado ? { estado } : {}) });
   };
   for (const [fdi, r] of Object.entries(registros)) {
     const diente = Number(fdi);
     if (!Number.isInteger(diente) || !r) continue;
+    // el rojo/azul de cada marca (ws1-t6), con la letra de la pantalla en la llave
     for (const [letra, ids] of Object.entries(r.surfaces ?? {})) {
-      for (const id of ids ?? []) poner(diente, letra === "I" ? "O" : letra, id);
+      for (const id of ids ?? []) poner(diente, letra === "I" ? "O" : letra, id, r.estados?.[`${letra}:${id}`]);
     }
-    for (const id of r.tooth ?? []) poner(diente, null, id);
+    for (const id of r.tooth ?? []) poner(diente, null, id, r.estados?.[`_:${id}`]);
   }
   return out;
 }

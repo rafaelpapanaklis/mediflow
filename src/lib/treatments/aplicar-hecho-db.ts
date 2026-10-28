@@ -5,6 +5,7 @@
 
 import { prisma } from "@/lib/prisma";
 import type { CaraBase, ConflictoDeshacer, EntradaConId, EntradaOdontograma, SinCambio } from "@/lib/odontogram/aplicar-hecho";
+import { esEstadoMarca } from "@/lib/odontogram/estado-marca";
 
 // ── La columna (sonda como items-db.ts: to_regclass/information_schema nunca falla) ─────────────
 
@@ -60,8 +61,10 @@ export interface RegistroHecho {
   sinCambio: SinCambio | null;
   /** Lo que ESTA escritura creó (con su id): lo único que el deshacer quita. */
   altas: EntradaConId[];
-  /** Lo que quitó, con su nota. */
+  /** Lo que quitó, con su nota (y su rojo/azul, ws1-t6). */
   bajas: EntradaOdontograma[];
+  /** Lo que estaba en rojo y pasó a azul, con su id (ws1-t6): el deshacer lo regresa a rojo. */
+  aHecho?: EntradaConId[];
   /** Todo lo que el procedimiento deja en el odontograma, estuviera ya o no (el doctor lo pudo pintar
    *  antes, o lo pinta después si quien marcó no podía escribir el odontograma). */
   cubre: EntradaOdontograma[];
@@ -77,14 +80,18 @@ export function leerRegistro(v: unknown): RegistroHecho | null {
     surface: typeof e?.surface === "string" ? (e.surface as CaraBase) : null,
     conditionId: String(e?.conditionId ?? ""),
     notes: typeof e?.notes === "string" ? e.notes : null,
+    ...(esEstadoMarca(e?.estado) ? { estado: e.estado } : {}),
   });
+  const conId = (l: unknown): EntradaConId[] =>
+    Array.isArray(l) ? l.filter((a: any) => typeof a?.id === "string").map((a: any) => ({ ...entrada(a), id: a.id })) : [];
   const lista = (l: unknown) => (Array.isArray(l) ? l.map(entrada) : []);
   return {
     ...x,
     estadoAntes: x.estadoAntes === "en_curso" ? "en_curso" : "pendiente",
     citaAntes: typeof x.citaAntes === "string" ? x.citaAntes : null,
-    altas: Array.isArray(x.altas) ? x.altas.filter((a: any) => typeof a?.id === "string").map((a: any) => ({ ...entrada(a), id: a.id })) : [],
+    altas: conId(x.altas),
     bajas: lista(x.bajas),
+    aHecho: conId(x.aHecho),
     cubre: lista(x.cubre),
     ...(x.deshecho ? { deshecho: { ...x.deshecho, devueltas: lista(x.deshecho.devueltas), conflictos: Array.isArray(x.deshecho.conflictos) ? x.deshecho.conflictos : [] } } : {}),
   };
@@ -136,6 +143,7 @@ export async function marcasQueNoSeCobran(patientId: string, desde: Date | null)
       if (despuesDe(r.deshecho.en, desde)) r.deshecho.devueltas.forEach(poner);
     } else if (f.estado === "hecho" && despuesDe(r.en, desde)) {
       r.altas.forEach(poner);
+      (r.aHecho ?? []).forEach(poner);
       r.cubre.forEach(poner);
     }
   }

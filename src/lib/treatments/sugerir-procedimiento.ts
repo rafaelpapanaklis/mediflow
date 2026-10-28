@@ -16,6 +16,7 @@
 import type { Fase, Hallazgo, Renglon } from "@/components/dashboard/plan-tratamiento-rediseno/plan-clinico";
 import { normalizar, type ProcedimientoDelTarifario } from "@/components/dashboard/plan-tratamiento-rediseno/buscar-tarifario";
 import { classify } from "@/components/dashboard/odontogram-v2/data";
+import { CLAVE_DE_MARCA } from "@/lib/odontogram/estado-marca";
 
 /* ─────── Procedimientos que se sugieren o se reconocen ─────── */
 
@@ -255,6 +256,21 @@ export function cobrosAlMarcar(): Record<string, string> {
   return out;
 }
 
+/**
+ * La fase de un procedimiento que el doctor marcó EN ROJO en el odontograma (ws1-t6): la misma en
+ * la que el plan lo pone cuando lo sugiere un hallazgo (caries → resina, higiénica; la corona tras
+ * la endodoncia, restauradora; ausente → implante, restauradora). DECISIÓN PARA RAFAEL (reporte
+ * ws1-t6): el doctor la cambia en el renglón si no es esa.
+ */
+export const FASE_DE_PROCEDIMIENTO: Record<ClaveProcedimiento, Fase> = {
+  resina: "higienica", incrustacion: "restauradora", endodoncia: "higienica", retratamiento: "higienica",
+  pulpotomia: "urgencia", pulpectomia: "higienica", corona: "restauradora", corona_acero: "restauradora",
+  carilla: "restauradora", perno: "restauradora", extraccion: "higienica", extraccion_quirurgica: "correctiva",
+  implante: "restauradora", apicectomia: "correctiva", limpieza: "higienica", raspado: "higienica",
+  sellante: "higienica", fluor: "higienica", ferulizacion: "correctiva", injerto_gingival: "correctiva",
+  mantenedor: "correctiva",
+};
+
 /* ─────── Orden de fases (el de `FASES` del plan; la prueba lo vigila) ─────── */
 
 export const ORDEN_FASE: Record<Fase, number> = {
@@ -370,8 +386,8 @@ export function elegirDelTarifario(
 
 /* ─────── Sugerencias ─────── */
 
-/** Lo que entra: un hallazgo (como los de `hallazgosPorTratar`). */
-export type HallazgoParaSugerir = Pick<Hallazgo, "diente" | "caras" | "conditionId">;
+/** Lo que entra: un hallazgo (como los de `hallazgosPorTratar`); `porHacer` = una marca ROJA. */
+export type HallazgoParaSugerir = Pick<Hallazgo, "diente" | "caras" | "conditionId"> & Partial<Pick<Hallazgo, "porHacer">>;
 
 /** Una fila propuesta para el plan. */
 export interface Sugerencia {
@@ -429,6 +445,13 @@ const carasDeBase = (caras: string[]) =>
  *  · no se encadena corona si el diente ya la tiene.
  */
 function pasosDeHallazgo(h: HallazgoParaSugerir, condicionesDelDiente: string[]): Paso[] {
+  if (h.porHacer) {
+    // Marca roja (ws1-t6): el procedimiento ya lo decidió el doctor; sin encadenados.
+    const clave = CLAVE_DE_MARCA[h.conditionId];
+    if (!clave) return [];
+    const caras = PROCEDIMIENTOS[clave].variantes === "caras" ? carasDeBase(h.caras) : [];
+    return [{ clave, fase: FASE_DE_PROCEDIMIENTO[clave], diente: h.diente, caras, origen: `${h.diente}:${h.conditionId}`, encadenadaDe: null, revisar: false }];
+  }
   const c = CONDICIONES_CLINICAS[h.conditionId];
   if (!c || !c.fase || !c.sugiere) return [];
   const temporal = classify(h.diente).primary;
@@ -483,10 +506,15 @@ function resolver(
   };
 }
 
-/** Condiciones del diente (de las entradas del odontograma), para ajustar la sugerencia. */
-function condicionesPorDiente(entradas: { toothNumber: number; conditionId: string }[]): Map<number, string[]> {
+/**
+ * Condiciones del diente (de las entradas del odontograma), para ajustar la sugerencia. Lo marcado
+ * EN ROJO todavía no está hecho (ws1-t6): un conducto rojo no hace «retratamiento», ni una corona roja
+ * quita la corona encadenada.
+ */
+function condicionesPorDiente(entradas: { toothNumber: number; conditionId: string; estado?: string | null }[]): Map<number, string[]> {
   const m = new Map<number, string[]>();
   for (const e of entradas) {
+    if (e.estado === "por_hacer") continue;
     const l = m.get(e.toothNumber) ?? [];
     if (!l.includes(e.conditionId)) l.push(e.conditionId);
     m.set(e.toothNumber, l);
@@ -502,11 +530,11 @@ function condicionesPorDiente(entradas: { toothNumber: number; conditionId: stri
 export function sugerirProcedimiento(
   h: HallazgoParaSugerir,
   tarifario: ProcedimientoTarifario[],
-  entradas: { toothNumber: number; conditionId: string }[] = [],
+  entradas: { toothNumber: number; conditionId: string; estado?: string | null }[] = [],
 ): ResultadoHallazgo {
   const c = CONDICIONES_CLINICAS[h.conditionId];
   if (!c) return { sinTratamiento: "desconocida", sugerencias: [] };
-  if (!c.sugiere) return { sinTratamiento: c.sinTratamiento ?? "dato_clinico", sugerencias: [] };
+  if (!c.sugiere && !(h.porHacer && CLAVE_DE_MARCA[h.conditionId])) return { sinTratamiento: c.sinTratamiento ?? "dato_clinico", sugerencias: [] };
   const delDiente = condicionesPorDiente(entradas).get(h.diente) ?? [];
   const sugerencias = pasosDeHallazgo(h, delDiente).map((p) => resolver({ ...p, dientes: [p.diente], origen: [p.origen] }, tarifario));
   return { sinTratamiento: null, sugerencias };
@@ -521,7 +549,7 @@ export function sugerirProcedimiento(
 export function sugerirPlan(
   hallazgos: HallazgoParaSugerir[],
   tarifario: ProcedimientoTarifario[],
-  entradas: { toothNumber: number; conditionId: string }[] = [],
+  entradas: { toothNumber: number; conditionId: string; estado?: string | null }[] = [],
 ): Sugerencia[] {
   const porDiente = condicionesPorDiente(entradas);
   type Grupo = { clave: ClaveProcedimiento; fase: Fase; dientes: number[]; caras: string[]; origen: string[]; encadenadaDe: ClaveProcedimiento | null; revisar: boolean };

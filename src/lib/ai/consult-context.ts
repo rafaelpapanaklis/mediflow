@@ -89,7 +89,9 @@ export async function buildConsultContext(args: Args): Promise<string> {
         const cond = COND_BY_ID[e.conditionId]?.es ?? e.conditionId;
         // la incisal de los anteriores se guarda como «O» (ws1-t11): se rotula «Incisal»
         const surf = e.surface ? ` (${rotuloCara(e.toothNumber, e.surface)})` : "";
-        (byTooth[e.toothNumber] ||= []).push(`${cond}${surf}`);
+        // rojo = por hacer (aún no está hecho), previo = de otra clínica (ws1-t6)
+        const estado = e.estado === "por_hacer" ? " [por hacer]" : e.estado === "previo" ? " [previo, otra clínica]" : "";
+        (byTooth[e.toothNumber] ||= []).push(`${cond}${surf}${estado}`);
       });
       Object.keys(byTooth)
         .map(Number)

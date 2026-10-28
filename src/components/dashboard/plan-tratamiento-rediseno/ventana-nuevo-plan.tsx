@@ -6,7 +6,7 @@ import toast from "react-hot-toast";
 import { AlertTriangle, ChevronRight, ClipboardList, Grid3x3, Plus, Sparkles, Trash2, X } from "lucide-react";
 import { useLocale, useT } from "@/i18n/i18n-provider";
 import { CLASES_MENU } from "@/components/dashboard/menu-dos-niveles/clases";
-import { COND_BY_ID, PERM, PRIMARY } from "@/components/dashboard/odontogram-v2/data";
+import { COND_BY_ID, PERM, PRIMARY, SURFACE_NAMES, classify } from "@/components/dashboard/odontogram-v2/data";
 import {
   CARAS, FASES, FASE_CLAVE, PLAN_VACIO, PRONOSTICOS, PRONOSTICO_CLAVE,
   alternarDiente, avisosDeOrden, componerDescripcion, hallazgosPorTratar, importeRenglon,
@@ -162,7 +162,10 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
   }, [form.name, nombreTocado, idioma, setForm]);
 
   const hallazgos: Hallazgo[] = useMemo(() => hallazgosPorTratar(entradas), [entradas]);
-  const chips = useMemo(() => chipsDelPlan(hallazgos, tarifario, entradas, plan.renglones), [hallazgos, tarifario, entradas, plan.renglones]);
+  const todosLosChips = useMemo(() => chipsDelPlan(hallazgos, tarifario, entradas, plan.renglones), [hallazgos, tarifario, entradas, plan.renglones]);
+  // Las marcas ROJAS del odontograma (ws1-t6) van en su propia sección, con su precio.
+  const chipsRojos = useMemo(() => todosLosChips.filter((c) => c.tipo === "por_hacer"), [todosLosChips]);
+  const chips = useMemo(() => todosLosChips.filter((c) => c.tipo !== "por_hacer"), [todosLosChips]);
 
   const rotulos = useMemo(() => ({
     diagnostico: t("planTratamiento.texto.diagnostico"),
@@ -217,13 +220,34 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
   const nombreCondicion = (id: string) => COND_BY_ID[id]?.[idioma] ?? id;
   const nombreSugerido = (c: Chip) => (c.sugerencia ? (c.sugerencia.elegir ? c.sugerencia.nombreSugerido[idioma] : c.sugerencia.nombre) : "");
   const motivoDe = (c: Chip) =>
-    c.tipo === "encadenada" && c.sugerencia?.encadenadaDe
+    c.tipo === "por_hacer"
+      ? t("planTratamiento.nuevo.motivoPorHacer")
+      : c.tipo === "encadenada" && c.sugerencia?.encadenadaDe
       ? t("planTratamiento.nuevo.motivoTras", { procedimiento: PROCEDIMIENTOS[c.sugerencia.encadenadaDe].nombre[idioma].toLowerCase() })
       : c.condiciones.map(nombreCondicion).join(" · ");
 
   // El toque en un chip: entra el procedimiento con su precio, sus minutos y su fase.
   const tocarChip = (c: Chip) =>
     cambiarPlan((p) => ({ ...p, renglones: agregarDesdeChip(p.renglones, c, { tarifario, entradas, nuevoId, motivo: motivoDe(c), idioma }) }));
+  // «Agregar todo lo marcado por hacer»: un toque por cada chip rojo que falte.
+  const agregarRojos = () =>
+    cambiarPlan((p) => ({
+      ...p,
+      renglones: chipsRojos.filter((c) => !c.puesto).reduce(
+        (rs, c) => agregarDesdeChip(rs, c, { tarifario, entradas, nuevoId, motivo: motivoDe(c), idioma }), p.renglones),
+    }));
+  // «pieza 16 oclusal» / «pieza 16 MO» (la cara con su nombre cuando es una).
+  const dondeRojo = (c: Chip) => {
+    if (c.dientes.length !== 1) return t("planTratamiento.nuevo.nDientes", { count: c.dientes.length });
+    const d = c.dientes[0];
+    const letras = CARAS.filter((x) => c.caras.includes(x)).map((x) => (x === "O" ? letraCentro([d]) : x));
+    let caras = letras.join("");
+    if (letras.length === 1) {
+      const nombre = SURFACE_NAMES[letras[0] as keyof typeof SURFACE_NAMES][idioma].split(" / ");
+      caras = (letras[0] === "L" && nombre.length > 1 && !classify(d).upper ? nombre[1] : nombre[0]).toLowerCase();
+    }
+    return [t("planTratamiento.nuevo.pieza", { diente: String(d) }), caras].filter(Boolean).join(" ");
+  };
 
   // Elegir del tarifario trae su nombre, su precio y su tiempo (el precio solo si el renglón no
   // tenía uno tecleado a mano).
@@ -379,6 +403,43 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
               </div>
             </div>
           </section>
+
+          {/* ── 2a · Marcado por hacer (rojo) en el odontograma → procedimientos (ws1-t6) ── */}
+          {chipsRojos.length > 0 && (
+            <section className={s.seccion} aria-labelledby="plan-por-hacer-titulo" data-plan-por-hacer>
+              <div className={s.porHacerCabeza}>
+                <h4 id="plan-por-hacer-titulo" className={s.seccionTitulo}>
+                  <span className={s.puntoPorHacer} aria-hidden />{t("planTratamiento.nuevo.porHacer")}
+                </h4>
+                {chipsRojos.some((c) => !c.puesto) && (
+                  <button type="button" className={s.ficha} onClick={agregarRojos} disabled={guardando} data-agregar-por-hacer>
+                    <Plus size={12} strokeWidth={2} aria-hidden />{t("planTratamiento.nuevo.agregarTodoPorHacer")}
+                  </button>
+                )}
+              </div>
+              <div className={s.sugerencias}>
+                {chipsRojos.map((c) => {
+                  const sug = nombreSugerido(c);
+                  const precio = c.sugerencia?.precio;
+                  return (
+                    <button
+                      key={c.clave}
+                      type="button"
+                      data-chip={c.clave}
+                      className={`${s.ficha} ${s.fichaPorHacer} ${c.puesto ? s.fichaPuesta : ""}`}
+                      disabled={c.puesto || guardando}
+                      onClick={() => tocarChip(c)}
+                      title={t("planTratamiento.nuevo.hallazgoAgregar")}
+                    >
+                      <span className={c.sugerencia?.elegir ? s.fichaSugeridoSinTarifario : undefined}>{sug || c.condiciones.map(nombreCondicion).join(" · ")}</span>
+                      <span className={s.fichaCuenta}>· {dondeRojo(c)}</span>
+                      <span className={s.fichaPrecio}>· {precio != null ? dineroExacto(precio) : t("planTratamiento.nuevo.sinPrecio")}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+          )}
 
           {/* ── 2 · Hallazgos → procedimientos (un toque cada uno) ─────────── */}
           {chips.length > 0 && (

@@ -10,7 +10,7 @@ import { TreatmentTimeline } from "@/components/clinical/shared";
 import { PrescriptionModal } from "@/components/clinical/shared/prescription-modal";
 import { useT } from "@/i18n/i18n-provider";
 import { OdontogramV2 } from "@/components/dashboard/odontogram-v2/App";
-import { fetchRecords, syncCambios, type CambioDiente } from "@/components/dashboard/odontogram-v2/adapter";
+import { fetchOdontogram, syncCambios, type CambioDiente } from "@/components/dashboard/odontogram-v2/adapter";
 import type { Records, ToothRecord } from "@/components/dashboard/odontogram-v2/types";
 import { mergeLiveOdontogram, changedTeeth } from "@/components/dashboard/odontogram-v2/merge-consulta";
 import { Cie10Selector } from "@/components/dashboard/clinical/cie10-selector";
@@ -222,6 +222,8 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
   // deja igual: sin ver el vivo, el doctor marcó a ciegas. En edición no hay precarga.
   const [odoStatus, setOdoStatus] = useState<"loading" | "ready" | "error">(isEditing ? "ready" : "loading");
   const [odoRetry, setOdoRetry] = useState(0);
+  // La base guarda rojo/azul por marca (ws1-t6): lo dice la lectura del vivo. En edición no se lee.
+  const [odoConEstado, setOdoConEstado] = useState<boolean | undefined>(undefined);
   // true desde que el doctor toca el odontograma; la precarga no pisa sus marcas.
   const odoTouchedRef = useRef(false);
   // Qué dientes tocó en esta consulta y cómo estaban al tocarlos: su cambio es
@@ -234,9 +236,10 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
     if (initialRecord) return; // edición: ya tenemos la foto guardada
     let cancelled = false;
     setOdoStatus("loading");
-    fetchRecords(patientId)
-      .then(live => {
+    fetchOdontogram(patientId)
+      .then(({ records: live, conEstado }) => {
         if (cancelled) return;
+        setOdoConEstado(conEstado);
         const merged = mergeLiveOdontogram(live, odontogramRef.current, odoTouchedRef.current, odoBasesRef.current);
         // desde aquí el cambio del doctor se mide contra ESTE vivo: si luego
         // alguien quita algo en el vivo, el borrador no lo resucita
@@ -1157,7 +1160,7 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
           `disabled` del fieldset no le llega: con la nota firmada se le quitan
           los clics a mano para que no acepte marcas que nunca se guardarían. */}
       <div style={{ width: "100%", overflowX: "auto", pointerEvents: isLocked ? "none" : undefined }} aria-disabled={isLocked}>
-        <OdontogramV2 patientId={patientId} value={odontogram} onChange={handleOdontogramChange} />
+        <OdontogramV2 patientId={patientId} value={odontogram} onChange={handleOdontogramChange} conEstado={odoConEstado} />
       </div>
       {/* Autoguardado (ws1-t11): las marcas de la consulta no se pierden al
           cambiar de pestaña ni al recargar; al odontograma del paciente pasan

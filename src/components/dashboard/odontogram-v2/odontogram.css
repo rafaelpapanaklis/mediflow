@@ -17,6 +17,11 @@
   --radius: 14px;
   --shadow: 0 1px 2px rgba(20, 30, 50, .04), 0 6px 24px rgba(20, 30, 50, .06);
   --font: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
+  /* ws1-t6: rojo = por hacer, azul = realizado. Tokens del panel (claro y oscuro en globals.css). */
+  --odo-por-hacer: var(--danger);
+  --odo-por-hacer-suave: var(--danger-soft);
+  --odo-realizado: var(--info);
+  --odo-realizado-suave: var(--info-soft);
 
   /* C-83 (auditoría de uso): llevaba un alto mínimo de toda la pantalla (de cuando el odontograma era una página sola). Dentro de
      la consulta, la ficha y el expediente dejaba un hueco en blanco del alto de la pantalla bajo la paleta. */
@@ -124,6 +129,29 @@
 }
 @media (hover: hover) and (pointer: fine) { .odo-app .odo-num:hover { background: #eef2f8; color: var(--accent); } }
 .odo-app .palmer { font-size: 12px; line-height: 1; display: inline-block; }
+
+/* ============ MODO: POR HACER / REALIZADO (ws1-t6) ============ */
+.odo-app .odo-modo { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; margin-bottom: 8px; }
+.odo-app .odo-modo-seg { display: inline-flex; gap: 3px; padding: 3px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
+.odo-app .odo-modo-btn {
+  border: 0; background: transparent; color: var(--ink-2);
+  font-size: 13px; font-weight: 700; padding: 7px 14px; min-height: 36px; border-radius: 8px;
+  display: inline-flex; align-items: center; gap: 7px; transition: background .12s, color .12s;
+}
+.odo-app .odo-modo-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.odo-app .odo-modo-btn[data-modo="por_hacer"] .odo-modo-dot { background: var(--odo-por-hacer); }
+.odo-app .odo-modo-btn[data-modo="hecho"] .odo-modo-dot { background: var(--odo-realizado); }
+.odo-app .odo-modo-btn.on[data-modo="por_hacer"] { background: var(--odo-por-hacer-suave); color: var(--odo-por-hacer); box-shadow: inset 0 0 0 1.5px var(--odo-por-hacer); }
+.odo-app .odo-modo-btn.on[data-modo="hecho"] { background: var(--odo-realizado-suave); color: var(--odo-realizado); box-shadow: inset 0 0 0 1.5px var(--odo-realizado); }
+.odo-app .odo-modo-previo { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; color: var(--ink-2); min-height: 36px; cursor: pointer; }
+.odo-app .odo-modo-previo input { width: 16px; height: 16px; accent-color: var(--odo-realizado); margin: 0; }
+.odo-app .odo-modo-ayuda { font-size: 12px; color: var(--ink-3); font-weight: 500; }
+.odo-app .odo-estado-tag { font-size: 10.5px; font-weight: 700; padding: 1px 7px; border-radius: 999px; white-space: nowrap; }
+.odo-app .odo-estado-tag.rojo { color: var(--odo-por-hacer); background: var(--odo-por-hacer-suave); }
+.odo-app .odo-estado-tag.azul { color: var(--odo-realizado); background: var(--odo-realizado-suave); }
+.odo-app .odo-find-estado { border: 1px solid var(--line); background: var(--card); color: var(--ink-2); font-size: 11.5px; font-weight: 700; padding: 3px 8px; border-radius: 7px; white-space: nowrap; min-height: 28px; }
+@media (hover: hover) and (pointer: fine) { .odo-app .odo-find-estado:hover { color: var(--ink); border-color: var(--ink-3); } }
+.odo-app .odo-leg-estado { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--ink); font-weight: 700; }
 
 /* ============ LEGEND ============ */
 .odo-app .odo-legend { display: flex; flex-wrap: wrap; gap: 8px 18px; padding: 12px 4px 2px; border-top: 1px solid var(--line-2); margin-top: 10px; }

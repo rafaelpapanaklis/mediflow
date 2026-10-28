@@ -1,7 +1,8 @@
 "use client";
 
 import type { ToothGlyphProps } from "./types";
-import { COND_BY_ID, GROUP_COLOR } from "./data";
+import { COND_BY_ID } from "./data";
+import { colorDe } from "./colores";
 
 /* =========================================================
    ToothGlyph — schematic anatomical drawing (ported 1:1 from
@@ -18,6 +19,8 @@ export function ToothGlyph({ meta, record, w = 44, h = 62 }: ToothGlyphProps) {
   const fracture = conds.find((c) => c.render === "fracture");
   const post = conds.find((c) => c.render === "post");
   const remnant = conds.find((c) => c.render === "remnant");
+  // rojo/azul por el estado de la marca (ws1-t6), o el color de su especialidad; por `style` (var())
+  const col = (c: NonNullable<typeof endo>) => colorDe(record, null, c);
 
   // canonical: crown at TOP (biting edge up), roots downward. viewBox 0..40 x 0..60
   const stroke = "#b7c0cd";
@@ -51,13 +54,13 @@ export function ToothGlyph({ meta, record, w = 44, h = 62 }: ToothGlyphProps) {
   // endo: line(s) down the roots
   const endoEls = endo && roots > 0 ? rootCenters(roots).map((x, i) => (
     <line key={i} x1={x} y1={crownBot - 6} x2={x} y2={rootBot - 4}
-      stroke={GROUP_COLOR[endo.group]} strokeWidth="2.4"
+      style={{ stroke: col(endo) }} strokeWidth="2.4"
       strokeDasharray={endo.dashed ? "4 3" : ""} strokeLinecap="round" />
   )) : null;
 
   // apical lesion: circle at root apex, size by mm
   const apicalEls = apical ? rootCenters(roots).slice(0, 1).map((x, i) => (
-    <circle key={i} cx={20} cy={rootBot - 2} r={3 + (apical.mm ?? 1) * 2.5} fill={GROUP_COLOR[apical.group]} opacity="0.28" stroke={GROUP_COLOR[apical.group]} strokeWidth="1.2" />
+    <circle key={i} cx={20} cy={rootBot - 2} r={3 + (apical.mm ?? 1) * 2.5} opacity="0.28" style={{ fill: col(apical), stroke: col(apical) }} strokeWidth="1.2" />
   )) : null;
 
   return (
@@ -65,13 +68,13 @@ export function ToothGlyph({ meta, record, w = 44, h = 62 }: ToothGlyphProps) {
       style={{ overflow: "visible", transform: meta.upper ? "scaleY(-1)" : "none" }}>
       {missing && <line x1="4" y1="4" x2="36" y2="56" stroke="#9aa3af" strokeWidth="2" />}
       {!implant && rootEls}
-      {implant && <ImplantBody crownBot={crownBot} rootBot={rootBot} color={GROUP_COLOR[implant.group]} />}
+      {implant && <ImplantBody crownBot={crownBot} rootBot={rootBot} color={col(implant)} />}
       <path d={crownPath} fill={fill} stroke={stroke} strokeWidth="1.6" />
-      {post && <rect x="17" y={crownBot - 4} width="6" height={rootBot - crownBot - 6} rx="2" fill={GROUP_COLOR[post.group]} opacity="0.5" />}
-      {remnant && <line x1="6" y1="12" x2="34" y2="12" stroke={GROUP_COLOR[remnant.group]} strokeWidth="2" strokeDasharray="4 3" />}
+      {post && <rect x="17" y={crownBot - 4} width="6" height={rootBot - crownBot - 6} rx="2" style={{ fill: col(post) }} opacity="0.5" />}
+      {remnant && <line x1="6" y1="12" x2="34" y2="12" style={{ stroke: col(remnant) }} strokeWidth="2" strokeDasharray="4 3" />}
       {endoEls}
       {apicalEls}
-      {fracture && <polyline points="20,4 16,14 24,20 18,26" fill="none" stroke={GROUP_COLOR[fracture.group]} strokeWidth="2" strokeLinejoin="round" />}
+      {fracture && <polyline points="20,4 16,14 24,20 18,26" fill="none" style={{ stroke: col(fracture) }} strokeWidth="2" strokeLinejoin="round" />}
       {missing && <line x1="36" y1="4" x2="4" y2="56" stroke="#9aa3af" strokeWidth="2" />}
     </svg>
   );
@@ -86,11 +89,11 @@ function rootCenters(n: number): number[] {
 function ImplantBody({ crownBot, rootBot, color }: { crownBot: number; rootBot: number; color: string }) {
   const threads: React.JSX.Element[] = [];
   for (let y = crownBot + 2; y < rootBot - 4; y += 5) {
-    threads.push(<line key={y} x1="14" y1={y} x2="26" y2={y + 2} stroke={color} strokeWidth="1.4" />);
+    threads.push(<line key={y} x1="14" y1={y} x2="26" y2={y + 2} style={{ stroke: color }} strokeWidth="1.4" />);
   }
   return (
     <g>
-      <path d={`M14 ${crownBot} L26 ${crownBot} L22 ${rootBot - 2} L18 ${rootBot - 2} Z`} fill="#e7ecf3" stroke={color} strokeWidth="1.6" />
+      <path d={`M14 ${crownBot} L26 ${crownBot} L22 ${rootBot - 2} L18 ${rootBot - 2} Z`} fill="#e7ecf3" style={{ stroke: color }} strokeWidth="1.6" />
       {threads}
     </g>
   );

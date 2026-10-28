@@ -953,3 +953,32 @@
   color: var(--m2-texto);
   font-weight: 600;
 }
+
+/* ── Marcado por hacer en el odontograma (ws1-t6) ─────────────────────
+   Las marcas ROJAS del odontograma salen como procedimiento con su precio
+   («Resina · pieza 16 oclusal · $700»), listas para agregar. */
+.porHacerCabeza {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.porHacerCabeza .seccionTitulo { margin: 0; display: inline-flex; align-items: center; gap: 6px; }
+
+.puntoPorHacer {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--pr-peligro, var(--danger));
+}
+
+.fichaPorHacer {
+  border-color: var(--pr-peligro, var(--danger));
+  color: var(--m2-texto);
+  text-align: left;
+  flex-wrap: wrap;
+}
+
+.fichaPrecio { font-weight: 700; color: var(--m2-texto); }

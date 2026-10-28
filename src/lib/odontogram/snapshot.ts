@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
 import { cobrosAlMarcar } from "@/lib/treatments/sugerir-procedimiento";
 import { marcasQueNoSeCobran } from "@/lib/treatments/aplicar-hecho-db";
+import { esEstadoMarca, type EstadoMarca } from "./estado-marca";
+import { columnaEstadoExiste, leerEstados } from "./estado-db";
 
 /* ─────── Tipos ───────────────────────────────────────────── */
 
@@ -15,6 +17,8 @@ export interface SnapshotEntry {
   /** id del catálogo de hallazgos (caries, restoration, crown, rct, …). */
   conditionId: string;
   notes?: string | null;
+  /** Rojo/azul (ws1-t6); ausente = lo de antes (o la base sin la columna). */
+  estado?: EstadoMarca | null;
 }
 
 export interface SnapshotChange {
@@ -23,6 +27,8 @@ export interface SnapshotChange {
   conditionId: string;
   /** "added" = condición nueva vs. el snapshot anterior; "removed" = ya no está. */
   type: "added" | "removed";
+  /** El rojo/azul de la marca (ws1-t6): una marca POR HACER o PREVIA no es trabajo hecho hoy. */
+  estado?: EstadoMarca | null;
 }
 
 export interface SuggestedTreatment {
@@ -39,34 +45,46 @@ const NOTE_CONDITION = "__note__";
 
 /* ─────── Lectura del estado vigente ───────────────────────── */
 
-/** Lee odontogram_entries del paciente (excluye la nota por diente). */
+/**
+ * Lee odontogram_entries del paciente (excluye la nota por diente), con su rojo/azul si la base lo
+ * guarda. Si no se puede saber si lo guarda, LANZA (sonda estricta): quien la llama para cobrar
+ * («Completar consulta») lo atrapa y esa vez no propone nada, en vez de cobrar lo que está en rojo.
+ */
 export async function readCurrentEntries(patientId: string): Promise<SnapshotEntry[]> {
   const rows = await prisma.odontogramEntry.findMany({
     where: { patientId, conditionId: { not: NOTE_CONDITION } },
     orderBy: [{ toothNumber: "asc" }, { surface: "asc" }],
     select: {
+      id: true,
       toothNumber: true,
       surface: true,
       conditionId: true,
       notes: true,
     },
   });
+  const estados = (await columnaEstadoExiste({ estricta: true })) ? await leerEstados(prisma, patientId) : new Map<string, EstadoMarca>();
   return rows.map((r) => ({
     toothNumber: r.toothNumber,
     surface: (r.surface ?? null) as SurfaceKey | null,
     conditionId: r.conditionId,
     notes: r.notes,
+    ...(estados.has(r.id) ? { estado: estados.get(r.id)! } : {}),
   }));
 }
 
 /* ─────── Diff entre snapshots ─────────────────────────────── */
 
+/**
+ * La llave de una marca para comparar fotos. Una marca EN ROJO es otra marca que la misma en azul
+ * (ws1-t6): si en esta consulta pasó de rojo a azul, aparece como «added» (trabajo hecho hoy).
+ */
 function keyOf(e: {
   toothNumber: number;
   surface: SurfaceKey | null;
   conditionId: string;
+  estado?: EstadoMarca | null;
 }): string {
-  return `${e.toothNumber}:${e.surface ?? "_"}:${e.conditionId}`;
+  return `${e.toothNumber}:${e.surface ?? "_"}:${e.conditionId}${e.estado === "por_hacer" ? ":por_hacer" : ""}`;
 }
 
 /**
@@ -84,6 +102,7 @@ export function diffSnapshots(prev: SnapshotEntry[], curr: SnapshotEntry[]): Sna
       changes.push({
         toothNumber: c.toothNumber, surface: c.surface,
         conditionId: c.conditionId, type: "added",
+        ...(c.estado ? { estado: c.estado } : {}),
       });
     }
   }
@@ -92,6 +111,7 @@ export function diffSnapshots(prev: SnapshotEntry[], curr: SnapshotEntry[]): Sna
       changes.push({
         toothNumber: p.toothNumber, surface: p.surface,
         conditionId: p.conditionId, type: "removed",
+        ...(p.estado ? { estado: p.estado } : {}),
       });
     }
   }
@@ -177,6 +197,8 @@ export async function changesToTreatments(
   const out: SuggestedTreatment[] = [];
   for (const ch of changes) {
     if (ch.type !== "added") continue;
+    // Rojo = por hacer (aún no se hizo) y previo = lo hizo otra clínica: ninguno es trabajo de hoy (ws1-t6).
+    if (ch.estado === "por_hacer" || ch.estado === "previo") continue;
     const code = conditionToTreatmentCode(ch.conditionId);
     if (!code) continue;
     const cat = byCode.get(code);
@@ -251,7 +273,10 @@ function normalizeSnapshotEntry(e: Record<string, unknown>): SnapshotEntry | nul
   if (!conditionId || conditionId === "sano" || conditionId === NOTE_CONDITION) {
     return null;
   }
-  return { toothNumber, surface, conditionId, notes: (e.notes ?? null) as string | null };
+  return {
+    toothNumber, surface, conditionId, notes: (e.notes ?? null) as string | null,
+    ...(esEstadoMarca(e.estado) ? { estado: e.estado } : {}),
+  };
 }
 
 /**

@@ -12,6 +12,8 @@ import { sesionDistinta } from "@/lib/odontogram/sesion-pestana";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { extractAuditMeta } from "@/lib/audit";
 import { anotarAccionDeSuplantacion, suplantacionDeEstaPeticion } from "@/lib/admin/suplantacion";
+import { ESTADOS_MARCA, admiteEstado, type EstadoMarca } from "@/lib/odontogram/estado-marca";
+import { columnaEstadoExiste, fijarEstado, leerEstados } from "@/lib/odontogram/estado-db";
 
 export const dynamic = "force-dynamic";
 
@@ -36,6 +38,8 @@ const PutSchema = z.object({
     message: "usa /api/odontogram/note para la nota por diente",
   }),
   notes: z.string().max(2000).nullable().optional(),
+  /** Rojo/azul (ws1-t6). Sin la clave, el estado de la marca no se toca (pestañas con el JS de antes). */
+  estado: z.enum(ESTADOS_MARCA).nullable().optional(),
 });
 
 const DeleteSchema = z.object({
@@ -112,7 +116,13 @@ export async function GET(req: NextRequest) {
       select: ENTRY_SELECT,
     });
 
-    const entries = rows.filter((r) => r.conditionId !== NOTE_CONDITION);
+    // Rojo/azul (ws1-t6): el estado de cada marca, si la base ya tiene la columna. Lo guardado
+    // antes no lo tiene y viaja sin él (se pinta como hoy).
+    const conEstado = await columnaEstadoExiste();
+    const estados = conEstado ? await leerEstados(prisma, patientId) : new Map<string, EstadoMarca>();
+    const entries = rows
+      .filter((r) => r.conditionId !== NOTE_CONDITION)
+      .map((r) => (estados.has(r.id) ? { ...r, estado: estados.get(r.id)! } : r));
     const notes: Record<number, string> = {};
     for (const r of rows) {
       if (r.conditionId === NOTE_CONDITION && r.notes) notes[r.toothNumber] = r.notes;
@@ -120,7 +130,7 @@ export async function GET(req: NextRequest) {
     // clinicId y userId de la SESIÓN (no del paciente): el autoguardado del
     // panel comprueba con ellos, antes de reintentar algo que falló, que la
     // sesión siga siendo la misma (nada sale firmado por otro ni a otra sede).
-    return NextResponse.json({ entries, notes, clinicId: dbUser.clinicId, userId: dbUser.id });
+    return NextResponse.json({ entries, notes, clinicId: dbUser.clinicId, userId: dbUser.id, conEstado });
   } catch (err) {
     return unexpectedError(err);
   }
@@ -159,6 +169,13 @@ export async function PUT(req: NextRequest) {
     const { patientId, toothNumber, conditionId } = parsed.data;
     const surface = parsed.data.surface ?? null;
     const notes = parsed.data.notes ?? null;
+    // Sin `notes` en el cuerpo, la nota de una marca que ya estaba NO se toca: cambiarle el color
+    // (rojo/azul, ws1-t6) no borra lo que trae (marca y lote de un implante, lo importado).
+    const cambiaNotas = parsed.data.notes !== undefined;
+    // El estado se escribe solo si viene, si la marca es de procedimiento y si la base ya tiene la columna.
+    const estado = parsed.data.estado !== undefined && admiteEstado(conditionId) && (await columnaEstadoExiste())
+      ? parsed.data.estado
+      : undefined;
 
     // Postgres trata NULL como distinto en UNIQUE; para condiciones de diente
     // completo (surface=null) hacemos el upsert manual por (tooth, conditionId).
@@ -173,25 +190,27 @@ export async function PUT(req: NextRequest) {
           where: { patientId, toothNumber, surface: null, conditionId },
           select: { id: true },
         });
-        return existing
-          ? tx.odontogramEntry.update({
+        const fila = existing
+          ? await tx.odontogramEntry.update({
               where: { id: existing.id },
-              data: { notes },
+              data: cambiaNotas ? { notes } : { updatedAt: new Date() },
               select: ENTRY_SELECT,
             })
-          : tx.odontogramEntry.create({
+          : await tx.odontogramEntry.create({
               data: { patientId, toothNumber, surface: null, conditionId, notes },
               select: ENTRY_SELECT,
             });
+        if (estado !== undefined) await fijarEstado(tx, patientId, fila.id, estado);
+        return fila;
       });
       await anotarEnBitacora(req, dbUser, patientId, "odontogram_write", {
-        toothNumber, surface: null, conditionId, notes,
+        toothNumber, surface: null, conditionId, notes, ...(estado !== undefined ? { estado } : {}),
       });
       return NextResponse.json({ entry });
     }
 
     // Surface no-null: upsert real con la unique compound nueva.
-    const entry = await prisma.odontogramEntry.upsert({
+    const upsert = (db: Pick<typeof prisma, "odontogramEntry">) => db.odontogramEntry.upsert({
       where: {
         patientId_toothNumber_surface_conditionId: {
           patientId,
@@ -201,12 +220,20 @@ export async function PUT(req: NextRequest) {
         },
       },
       create: { patientId, toothNumber, surface, conditionId, notes },
-      update: { notes },
+      update: cambiaNotas ? { notes } : {},
       select: ENTRY_SELECT,
     });
+    // Con estado, la marca y su color en la misma transacción.
+    const entry = estado === undefined
+      ? await upsert(prisma)
+      : await prisma.$transaction(async (tx) => {
+          const fila = await upsert(tx);
+          await fijarEstado(tx, patientId, fila.id, estado);
+          return fila;
+        });
 
     await anotarEnBitacora(req, dbUser, patientId, "odontogram_write", {
-      toothNumber, surface, conditionId, notes,
+      toothNumber, surface, conditionId, notes, ...(estado !== undefined ? { estado } : {}),
     });
     return NextResponse.json({ entry });
   } catch (err) {

@@ -6,6 +6,8 @@ import {
   SURFACES, SURFACE_NAMES, GROUPS, CONDITIONS,
 } from "./data";
 import type { DetailPanelProps, Lang } from "./types";
+import { colorDe } from "./colores";
+import { admiteEstado, estadoEn, tonoDeEstado, type EstadoMarca } from "@/lib/odontogram/estado-marca";
 import { Surface2D } from "./Surface2D";
 import { Tooth3D } from "./Tooth3D";
 import { PalmerLabel } from "./Odontogram";
@@ -30,6 +32,7 @@ const TYPE_NAMES: Record<string, Record<"es" | "en", string>> = {
 export function DetailPanel({
   fdi, lang, numbering, record, brush, eraser,
   onApply, onClose, onClearTooth, onNote, onNoteDraft, onNoteFlush, onRemove, onPick,
+  conEstado, onEstado, estadoPincel, selectorModo,
 }: DetailPanelProps) {
   const t = I18N[lang];
   const meta = classify(fdi);
@@ -85,13 +88,14 @@ export function DetailPanel({
     TYPE_NAMES[meta.type][lang] + (meta.primary ? (lang === "es" ? " (temporal)" : " (primary)") : "");
   const surfaceLetters = meta.posterior ? SURFACES.posterior : SURFACES.anterior;
 
-  // Color of a surface button = group color of its last (top-most) finding.
+  // Color of a surface button = group color of its last (top-most) finding (o su rojo/azul, ws1-t6).
   const surfaceColor = (letter: string): string | null => {
     const arr = (record.surfaces || {})[letter];
     if (!arr || !arr.length) return null;
     const cond = COND_BY_ID[arr[arr.length - 1]];
-    return cond ? GROUP_COLOR[cond.group] : null;
+    return cond ? colorDe(record, letter, cond) : null;
   };
+  const rotuloEstado = (e: EstadoMarca) => (e === "por_hacer" ? t.estadoPorHacer : e === "previo" ? t.estadoPrevio : t.estadoHecho);
 
   // Assemble the findings list: whole-tooth conditions first, then per-surface.
   const findings: { scope: "tooth" | "surface"; letter?: string; id: string }[] = [];
@@ -172,7 +176,8 @@ export function DetailPanel({
 
           {/* mini palette */}
           <div className="odo-section-t">{t.brush}</div>
-          <DetailPalette lang={lang} brush={brush} onPick={onPick} />
+          {selectorModo}
+          <DetailPalette lang={lang} brush={brush} onPick={onPick} estado={estadoPincel ?? null} />
 
           {/* findings */}
           <div className="odo-section-t">{t.history}</div>
@@ -180,11 +185,24 @@ export function DetailPanel({
             {findings.length === 0 && <div className="odo-empty">{t.noFindings}</div>}
             {findings.map((f, i) => {
               const cond = COND_BY_ID[f.id];
+              const cara = f.scope === "surface" ? (f.letter ?? null) : null;
+              const estado = estadoEn(record, cara, f.id);
+              const tono = tonoDeEstado(estado);
+              // Con estado en la base, un procedimiento se pasa de rojo a azul (o al revés) desde aquí.
+              const otro: EstadoMarca | null = conEstado && onEstado && admiteEstado(f.id)
+                ? (estado === "por_hacer" ? "hecho" : "por_hacer")
+                : null;
               return (
-                <div className="odo-find" key={i}>
-                  <span className="odo-find-dot" style={{ background: cond ? GROUP_COLOR[cond.group] : "#ccc" }} />
+                <div className="odo-find" key={i} data-marca={`${f.letter ?? "_"}:${f.id}`} data-estado={estado ?? ""}>
+                  <span className="odo-find-dot" style={{ background: cond ? colorDe(record, cara, cond) : "#ccc" }} />
                   <span className="odo-find-lb">{cond ? cond[lang] : f.id}</span>
+                  {estado && tono && <span className={`odo-estado-tag ${tono}`}>{rotuloEstado(estado)}</span>}
                   <span className="odo-find-loc">{f.scope === "surface" ? f.letter : (lang === "es" ? "diente" : "tooth")}</span>
+                  {otro && (
+                    <button type="button" className="odo-find-estado" onClick={() => onEstado!(fdi, f.scope, f.letter, f.id, otro)}>
+                      {otro === "hecho" ? t.pasarAHecho : t.pasarAPorHacer}
+                    </button>
+                  )}
                   <button type="button" className="odo-find-rm" onClick={() => onRemove(fdi, f.scope, f.letter, f.id)}>×</button>
                 </div>
               );
@@ -219,7 +237,7 @@ export function DetailPanel({
  * DetailPalette — compact specialty tabs + finding chips inside the panel.
  * Ported 1:1 from design jsx/detail.jsx; reuses the shared ConditionSwatch.
  */
-function DetailPalette({ lang, brush, onPick }: { lang: Lang; brush: string | null; onPick: (id: string) => void }) {
+function DetailPalette({ lang, brush, onPick, estado }: { lang: Lang; brush: string | null; onPick: (id: string) => void; estado: EstadoMarca | null }) {
   const [active, setActive] = useState<string>("diagnostic");
   const conds = CONDITIONS.filter((c) => c.group === active);
   const gc = GROUP_COLOR[active];
@@ -246,7 +264,7 @@ function DetailPalette({ lang, brush, onPick }: { lang: Lang; brush: string | nu
             style={brush === c.id ? { borderColor: gc, boxShadow: `0 0 0 2px ${gc}33` } : {}}
             onClick={() => onPick(c.id)}
           >
-            <span className="odo-chip-ic"><ConditionSwatch cond={c} /></span>
+            <span className="odo-chip-ic"><ConditionSwatch cond={c} estado={estado} /></span>
             <span className="odo-chip-lb">{c[lang]}</span>
           </button>
         ))}

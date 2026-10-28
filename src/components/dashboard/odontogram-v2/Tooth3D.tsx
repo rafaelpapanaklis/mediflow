@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import type { Tooth3DProps, ToothMeta } from "./types";
-import { COND_BY_ID, GROUP_COLOR } from "./data";
+import { COND_BY_ID } from "./data";
+import { colorDe, resolverColor } from "./colores";
 import { acquireTooth, releaseTooth, MODEL_CREDIT, type LoadedTooth } from "./tooth3d-model";
 import { letterAtFace, faceSlotOf, mesialSign } from "./tooth3d-faces";
 import { createPaintUniforms, patchToothMaterial } from "./tooth3d-paint";
@@ -308,7 +309,8 @@ export function Tooth3D({ meta, record, onSurface, style, resetKey }: Tooth3DPro
 
       st.applyRecord = () => {
         const rec = st.record || { surfaces: {}, tooth: [] };
-        const plan = buildToothPlan(rec, meta, info);
+        // rojo/azul del estado (ws1-t6), ya resuelto: el shader no entiende var()
+        const plan = buildToothPlan(rec, meta, info, (c, cara) => resolverColor(colorDe(rec, cara, c), mount));
         plan.faceColor.forEach((c, i) => u.uFaceColor.value[i].copy(c));
         plan.faceStyle.forEach((s, i) => { u.uFaceStyle.value[i] = s; });
         u.uHideRoot.value = plan.hideRoot ? 1 : 0;
@@ -417,7 +419,7 @@ export function Tooth3D({ meta, record, onSurface, style, resetKey }: Tooth3DPro
           const mat = m.material as THREE.MeshBasicMaterial;
           const c = arr && arr.length ? COND_BY_ID[arr[arr.length - 1]] : null;
           if (c) {
-            mat.color.set(GROUP_COLOR[c.group]); // hex string from data.ts
+            mat.color.set(resolverColor(colorDe(rec, letter, c), mount)); // color de la especialidad o rojo/azul del estado
             mat.opacity = (hovered ? 0.95 : 0.82) * dim;
           } else {
             mat.color.set(0x2a6fdb);
