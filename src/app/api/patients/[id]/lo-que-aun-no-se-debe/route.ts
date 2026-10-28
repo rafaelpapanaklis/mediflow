@@ -38,7 +38,7 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ id: stri
   });
   const r = await loQueAunNoSeDebe(ctx.clinicId, { ids: facturas.map((f) => f.id) });
   // v7/v8: de lo por hacer de sus notas de plan, lo ya pagado (también en las ya saldadas). «Estado de
-  // cuenta» lo dice como «De lo por hacer, $X ya están pagados» — NO como saldo a favor (t5, V1).
+  // cuenta» lo dice como «Pagado por adelantado: $X» (v14; antes «De lo por hacer, $X ya están pagados») — NO como saldo a favor (t5, V1).
   const notasDePlan = await prisma.invoice.findMany({
     where: { clinicId: ctx.clinicId, patientId: paciente.id, status: { notIn: ["DRAFT", "CANCELLED"] }, paid: { gt: 0 } },
     select: { id: true },

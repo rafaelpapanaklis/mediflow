@@ -4,7 +4,7 @@
 // lo aceptado sin hacer de sus notas de plan y lo que no vence de su ortodoncia «Precio total a
 // plazos». Lo lee GET /api/patients/[id]/lo-que-aun-no-se-debe (la regla de Caja y Finanzas). La
 // cabecera y «Estado de cuenta» lo restan de la suma de saldos (v7). `adelanto`: de lo por hacer de sus
-// notas de plan, lo ya pagado; «Estado de cuenta» lo dice como «De lo por hacer, $X ya están pagados»,
+// notas de plan, lo ya pagado; «Estado de cuenta» lo dice como «Pagado por adelantado: $X» (v14; antes «De lo por hacer, $X ya están pagados»),
 // no como saldo a favor (v8). `cuotas`: de `total`, las cuotas de planes con cuotas acordadas que aún no
 // vencen; la ficha las dice aparte y sin «ya pagados» (v12, t5 m1). Sin permiso de ver dinero, mientras
 // carga o si falla: 0, y todo se ve como siempre.

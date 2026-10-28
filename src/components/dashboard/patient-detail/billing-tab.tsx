@@ -110,7 +110,7 @@ export function BillingTab({
         <p style={{ margin: "-6px 0 14px", fontSize: 12, color: "var(--text-3)" }} data-aun-no-se-debe>
           {t("patients.sideCards.aunNoSeDebe", { monto: fmtMXN(summary.aunNoSeDebe ?? 0) })}
           {(summary.pagadoDeLoPorHacer ?? 0) > 0.005 && (
-            <> · {t("patients.sideCards.pagadoDeLoPorHacer", { monto: fmtMXN(summary.pagadoDeLoPorHacer ?? 0) })}</>
+            <> · {t("patients.sideCards.pagadoDeLoPorHacer", { monto: fmtMXNdec(summary.pagadoDeLoPorHacer ?? 0) })}</>
           )}
         </p>
       )}

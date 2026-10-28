@@ -121,6 +121,8 @@ export function TreatmentsModal({
   const porHacer = filasPlan.filter((f) => !f.cancelado && f.estado !== "hecho" && !hechasHoy.has(f.id));
   const yaHechas = filasPlan.filter((f) => !f.cancelado && (f.estado === "hecho" || hechasHoy.has(f.id)));
   const hayPlan = filasPlan.some((f) => !f.cancelado);
+  // Presupuesto y factura, solo con lo que NO es de un plan (lo del plan ya tiene su nota).
+  const ofreceFactura = rows.length > 0 || !hayPlan;
 
   // Nada del plan y nada detectado: no hay qué decidir (la ficha la abre por si el plan tenía algo).
   useEffect(() => {
@@ -420,15 +422,19 @@ export function TreatmentsModal({
         )}
 
         <footer className={styles.treatmentsFoot}>
+          {/* v14 (QA de Claude): no hay factura que cancelar. Si la ventana no ofrece factura (todo es de un
+              plan: ya está en su nota y se cobra con «Cobrar hoy»), el botón dice «Cerrar»; si la ofrece
+              (algo de fuera de todo plan), «No facturar». Antes decía «Cancelar factura» en los dos casos. */}
           <button
             type="button"
             className={styles.treatmentsCancel}
             onClick={onClose}
+            data-hoy-salir={ofreceFactura ? "no-facturar" : "cerrar"}
           >
-            <X size={12} aria-hidden /> {t("patients.treatmentsModal.cancelInvoice")}
+            <X size={12} aria-hidden /> {ofreceFactura ? t("patients.treatmentsModal.noFacturar") : t("common.close")}
           </button>
           {/* Presupuesto y factura, solo con lo que NO es de un plan (lo del plan ya tiene su nota). */}
-          {(rows.length > 0 || !hayPlan) && (
+          {ofreceFactura && (
             <>
               <button
                 type="button"

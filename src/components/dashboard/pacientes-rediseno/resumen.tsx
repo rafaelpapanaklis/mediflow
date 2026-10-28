@@ -10,6 +10,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
+import { fmtMXNdec } from "@/lib/format";
 import { isVoidedInvoice } from "@/components/dashboard/billing/invoice-status";
 import { useLocale, useT } from "@/i18n/i18n-provider";
 import { textosDinero } from "@/lib/dinero/textos";
@@ -407,7 +408,7 @@ export function Resumen({
               )}
               {(finanzas.pagadoDeLoPorHacer ?? 0) > 0.005 && (
                 <div className={s.pie} style={{ marginTop: 3 }} data-pagado-de-lo-por-hacer>
-                  <span>{t("patients.sideCards.pagadoDeLoPorHacer", { monto: formatCurrency(finanzas.pagadoDeLoPorHacer ?? 0) })}</span>
+                  <span>{t("patients.sideCards.pagadoDeLoPorHacer", { monto: fmtMXNdec(finanzas.pagadoDeLoPorHacer ?? 0) })}</span>
                 </div>
               )}
               {/* v12 (t5, m1): con cuotas acordadas manda la mensualidad: solo lo que aún no vence, sin «ya pagados». */}

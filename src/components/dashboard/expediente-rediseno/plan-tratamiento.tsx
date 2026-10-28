@@ -10,6 +10,7 @@ import { RaizExpediente } from "./raiz";
 import { CuentaDelPlan, type CuentasDelPaciente } from "./cuenta-del-plan";
 import { AgendarLoPendiente } from "@/components/dashboard/plan-a-agenda/agendar-lo-pendiente";
 import { ProcedimientosDelPlan, useFilasDePlanes } from "./procedimientos-del-plan";
+import type { PlanConCuenta } from "@/lib/treatments/sin-doble-cobro";
 import s from "./expediente.module.css";
 
 /**
@@ -50,6 +51,8 @@ export interface PlanTratamientoProps {
   onCobrarPlan?: () => void;
   /** v7: «Cerrar plan» cambió estas notas; la ficha relee cuentas y facturas sin esperar al refresco. */
   onCuentaCambio?: (invoiceIds: string[]) => void;
+  /** v14: la cuenta de un plan tal como la devolvió «Hecho», «Deshacer» o «Cerrar plan» (se pinta al momento). */
+  onCuentaNueva?: (cuenta: PlanConCuenta) => void;
   /**
    * v11 (27-oct): «Hecho» desde la tarjeta del plan. `patientId` para leer sus filas; `puedeMarcarHecho`
    * = `treatments.edit` o SUPER_ADMIN (el servidor lo vuelve a mirar, y al doctor lo acota a sus planes);
@@ -81,7 +84,7 @@ const sesionesHechas = (sesiones: any[] | undefined) =>
 
 export function PlanTratamiento({
   tratamientos: tratamientosDelServidor, puedeEditar, onNuevo, onVer, onEditar, onEliminar, casoOrtodoncia = null, onAbrirCaso,
-  cuentas, cargandoCuentas, onCobrarPlan, onCuentaCambio, patientId, puedeMarcarHecho = false, refresco,
+  cuentas, cargandoCuentas, onCobrarPlan, onCuentaCambio, onCuentaNueva, patientId, puedeMarcarHecho = false, refresco,
 }: PlanTratamientoProps) {
   const t = useT();
   const locale = useLocale();
@@ -261,7 +264,7 @@ export function PlanTratamiento({
               </div>
               {/* Un plan cancelado conserva su nota: su saldo se sigue viendo (y abonando). */}
               {cuentas !== undefined && (
-                <CuentaDelPlan cuenta={cuentas?.get(plan.id)} cargando={cargandoCuentas && !cuentas} onCobrar={onCobrarPlan} puedeCerrar={puedeEditar} onCambio={onCuentaCambio} />
+                <CuentaDelPlan cuenta={cuentas?.get(plan.id)} cargando={cargandoCuentas && !cuentas} onCobrar={onCobrarPlan} puedeCerrar={puedeEditar} onCambio={onCuentaCambio} onCuenta={onCuentaNueva} />
               )}
               {/* v11: los procedimientos, con «Hecho» y «Deshacer» (lo hecho pasa a «Debe» al momento). */}
               <ProcedimientosDelPlan
@@ -271,6 +274,7 @@ export function PlanTratamiento({
                 puede={puedeMarcarHecho}
                 debeSigueLoHecho={!!cuentas?.get(plan.id) && !cuentas.get(plan.id)!.aCuotas}
                 onFilas={(filas) => filasDePlanes.poner(plan.id, filas)}
+                onCuenta={onCuentaNueva}
                 onCambio={() => onCuentaCambio?.([])}
               />
               {/* Fase 2 · C: «Agendar lo pendiente» (se esconde solo). La tarjeta entera abre el plan:

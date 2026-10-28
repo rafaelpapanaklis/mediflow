@@ -777,6 +777,15 @@ export function PatientDetailClient({
     `${treatments.length}:${refrescoCuentas}:${planesDelServidor.map((p: any) => p.id + p.updatedAt).join(",")}|` +
       (invoices as any[]).map((inv: any) => `${inv.id}:${inv.total}:${inv.paid}:${inv.status}`).join(","),
   );
+  // v14 (QA de Claude): «Movimientos» se relee cuando la ficha cambia algo del paciente (cita completada,
+  // cobro, «Hecho», plan cerrado). Antes solo al montarse: con el Resumen abierto no salía «Completó la consulta».
+  const claveMovimientos = useMemo(
+    () =>
+      `${refrescoCuentas}|${appointments.map((a: any) => `${a.id}:${a.status}`).join(",")}|` +
+      `${planesDelServidor.map((p: any) => p.id + p.updatedAt).join(",")}|` +
+      (invoices as any[]).map((inv: any) => `${inv.id}:${inv.status}:${inv.paid}`).join(","),
+    [refrescoCuentas, appointments, planesDelServidor, invoices],
+  );
   // v7: algo cambió el dinero de los planes fuera de la ficha (presupuesto aceptado, plan cerrado): la
   // cuenta se relee YA y las notas tocadas se traen frescas, sin esperar al refresco de la página.
   const alCambiarDineroDePlanes = useCallback((invoiceIds: string[] = []) => {
@@ -1476,7 +1485,7 @@ export function PatientDetailClient({
   // v8 (revisión t5 de la v7, V1): lo pagado por adelantado de un plan NO es saldo a favor (eso es solo el
   // libro `patient_credits`, lo que se descuenta de la siguiente factura): es parte de lo por hacer que ya
   // está pagada. «Además, $X por hacer» = lo por hacer COMPLETO (el «Por hacer» de la Cuenta del plan) y
-  // aparte «De lo por hacer, $Y ya están pagados».
+  // aparte «Pagado por adelantado: $Y» (v14, el mismo rótulo que la Cuenta del plan).
   // v12 (t5, m1): con cuotas acordadas manda la mensualidad (v10): sus cuotas por vencer van aparte
   // («Además, $X de cuotas que aún no vencen») y sin «ya pagados»; el adelanto ya no las cuenta.
   const porHacerCompleto = Math.round((aunNoSeDebe - cuotasPorVencer + adelantoEnPlanes) * 100) / 100;
@@ -2352,7 +2361,7 @@ export function PatientDetailClient({
                   {/* ws1-t12 — «Movimientos recientes» ya no es la línea de tiempo
                       clínica (esa sigue en «Historia clínica»): son los cambios
                       hechos al paciente, con fecha y quién. */}
-                  <MovimientosRecientes patientId={patient.id} onVerCompleto={() => setTab("movimientos")} />
+                  <MovimientosRecientes patientId={patient.id} onVerCompleto={() => setTab("movimientos")} clave={claveMovimientos} />
                   <div style={{ marginTop: 14 }}>
                     <RecentPhotosStrip
                       patientId={patient.id}
@@ -2946,6 +2955,7 @@ export function PatientDetailClient({
                     cargandoCuentas={cuentasDePlanes.cargando}
                     onCobrarPlan={canViewBilling ? () => setCobrarHoyAbierto(true) : undefined}
                     onCuentaCambio={alCambiarDineroDePlanes}
+                    onCuentaNueva={cuentasDePlanes.poner}
                     patientId={patient.id}
                     puedeMarcarHecho={canEditTreatments || currentUser.role === "SUPER_ADMIN"}
                     refresco={`${refrescoCuentas}|${planesDelServidor.map((p: any) => p.id + p.updatedAt).join(",")}`}
@@ -3743,7 +3753,7 @@ export function PatientDetailClient({
 
           {/* ws1-t12 — «Movimientos Completo». Sin permiso propio: el servidor
               enmascara lo clínico y lo económico según quién mira. */}
-          {tab === "movimientos" && <MovimientosCompleto patientId={patient.id} />}
+          {tab === "movimientos" && <MovimientosCompleto patientId={patient.id} clave={claveMovimientos} />}
 
           {/* Pestaña gateada por "consents.view": sin el permiso el ítem no
               existe en el menú (ver buildPatientNavItems) y el server manda []

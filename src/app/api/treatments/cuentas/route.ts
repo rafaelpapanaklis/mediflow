@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { esIdDeLaBase, MENSAJE_ID_INVALIDO } from "@/lib/validation/id";
-import { leerCuentaDelPlan } from "@/lib/treatments/cobro.server";
+import { cuentaParaLaFicha } from "@/lib/treatments/cuenta-para-la-ficha.server";
 import { repoFilas } from "@/lib/treatments/items-db";
 import { planesDelPaciente } from "@/lib/treatments/sin-doble-cobro.server";
 import { filasAgendadasEnCita } from "@/lib/treatments/citas-del-plan-db";
@@ -57,36 +57,8 @@ export async function GET(req: NextRequest) {
     : null;
   const salida: PlanConCuenta[] = [];
   for (const p of planes) {
-    const cuenta = await leerCuentaDelPlan({ clinicId: ctx.clinicId, planId: p.id, timezone: zona });
-    if (!cuenta) continue;
-    const filas = filasPorPlan.get(p.id) ?? [];
-    salida.push({
-      planId: p.id,
-      nombre: p.name,
-      estado: p.status,
-      conFilas: filas.length > 0,
-      total: cuenta.total,
-      facturado: cuenta.facturado,
-      pagado: cuenta.pagado,
-      soloDelPlan: cuenta.soloDelPlan,
-      saldo: cuenta.saldo,
-      porFacturar: cuenta.porFacturar,
-      aceptado: cuenta.aceptado,
-      hecho: cuenta.hecho,
-      debe: cuenta.debe,
-      saldoAFavor: cuenta.saldoAFavor,
-      porHacer: cuenta.porHacer,
-      vencido: cuenta.vencido,
-      aCuotas: cuenta.aCuotas ?? false,
-      facturasDeAntes: cuenta.facturasDeAntes ?? [],
-      notas: cuenta.notas.map((n) => ({
-        invoiceId: n.id, invoiceNumber: n.invoiceNumber, status: n.status, total: n.total, paid: n.paid, createdAt: n.createdAt ?? "",
-      })),
-      filas: filas.map((f) => ({
-        id: f.id, planId: f.planId, nombre: f.nombre, procedureId: f.procedureId, dientes: f.dientes, cantidad: f.cantidad,
-        estado: f.estado, hechoEn: f.hechoEn ? f.hechoEn.toISOString() : null, invoiceId: f.invoiceId,
-      })),
-    });
+    const cuenta = await cuentaParaLaFicha({ clinicId: ctx.clinicId, plan: p, filas: filasPorPlan.get(p.id) ?? [], timezone: zona });
+    if (cuenta) salida.push(cuenta);
   }
   // Solo planes de ESTE paciente (los de la lista): una cita de otro paciente no dice nada aquí.
   const delPaciente = new Set(planes.map((p) => p.id));

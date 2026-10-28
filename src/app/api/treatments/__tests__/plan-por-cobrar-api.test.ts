@@ -811,3 +811,49 @@ test("cerrar con una factura de antes del plan (presupuesto): la confirmación y
   assert.equal(fs.find((f: any) => f.nombre === "Resina").estado, "cancelado");
   assert.ok(bitacora.some((b) => b.entityType === "treatment" && /F-VIEJA/.test(b.texto)));
 });
+
+// ── v14 (QA de Claude, 28-oct): la Cuenta del plan cambia con la RESPUESTA de la acción ─────────────
+
+test("v14: «Hecho», «Deshacer» y «Cerrar plan» devuelven la cuenta del plan ya cambiada (la misma de /cuentas); sin ver dinero, no", async (t) => {
+  if (salta(t)) return;
+  await usar();
+  const { marcarHecho, deshacerHecho, cuentaDeLaRespuesta } = await import("@/lib/treatments/marcar-hecho-cliente");
+  const porLaRuta = (planId: string) => async (_url: string, init?: RequestInit) => {
+    const { PATCH } = await import("@/app/api/treatments/[id]/route");
+    await base.db.exec(`ALTER TABLE "procedure_catalog" ADD COLUMN IF NOT EXISTS "code" text`);
+    return PATCH(pedir(`/api/treatments/${planId}`, JSON.parse(String(init?.body)), "PATCH"), params(planId));
+  };
+  const { planId, notaId } = await planAceptado();
+  await pagar(notaId, 500);
+  const resina = await filaDe(planId, "Resina");
+
+  // «Hecho»: la respuesta ya trae Debe $750.50, igual que releer todas las cuentas.
+  const m = await marcarHecho(planId, [resina.id], null, porLaRuta(planId));
+  assert.equal(m.ok, true);
+  assert.equal(m.cuenta?.planId, planId);
+  assert.equal(m.cuenta?.debe, 750.5);
+  assert.deepEqual(m.cuenta, await cuenta(planId), "la misma cuenta que GET /api/treatments/cuentas");
+  assert.equal(m.cuenta?.filas.find((f) => f.id === resina.id)?.estado, "hecho");
+
+  // «Deshacer»: Debe vuelve a $0 en la misma respuesta.
+  const d = await deshacerHecho(planId, resina.id, porLaRuta(planId));
+  assert.equal(d.ok, true);
+  assert.equal(d.cuenta?.debe, 0);
+  assert.deepEqual(d.cuenta, await cuenta(planId));
+
+  // Quien marca pero no ve dinero: la acción va, la cuenta NO viaja en la respuesta.
+  Object.assign(ctx, { userId: "rec-c1", role: "RECEPTIONIST", isDoctor: false, permissionsOverride: ["treatments.view", "treatments.edit"] });
+  const sinDinero = await hechoDesdeLaTarjeta(planId, { action: "marcar_hecho", itemIds: [resina.id] });
+  assert.equal(sinDinero.status, 200);
+  assert.equal(sinDinero.body.cuenta, undefined);
+  assert.equal(cuentaDeLaRespuesta(sinDinero.body), undefined);
+
+  // «Cerrar plan»: la cuenta ya cerrada (Abandonado, la nota baja a lo hecho) viene en la respuesta.
+  Object.assign(ctx, { userId: "doc-c1", role: "ADMIN", isDoctor: false, permissionsOverride: null });
+  const c = await cerrar(planId);
+  assert.equal(c.status, 200);
+  const cerrada = cuentaDeLaRespuesta(c.body);
+  assert.equal(cerrada?.estado, "ABANDONED");
+  assert.equal(cerrada?.porHacer, 0);
+  assert.deepEqual(cerrada, await cuenta(planId));
+});

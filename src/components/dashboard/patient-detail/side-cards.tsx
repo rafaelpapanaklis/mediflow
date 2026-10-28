@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Receipt, BellRing, BellOff, MessageCircle, CheckCircle2, Send } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
+import { fmtMXNdec } from "@/lib/format";
 import { textosDinero } from "@/lib/dinero/textos";
 import { isAbortError } from "@/lib/fetch-safe";
 import { useT, useLocale } from "@/i18n/i18n-provider";
@@ -235,7 +236,7 @@ export function SideCards({
               )}
               {(finance.pagadoDeLoPorHacer ?? 0) > 0.005 && (
                 <div className={styles.financeRow} data-pagado-de-lo-por-hacer>
-                  <span>{t("patients.sideCards.pagadoDeLoPorHacer", { monto: formatCurrency(finance.pagadoDeLoPorHacer ?? 0) })}</span>
+                  <span>{t("patients.sideCards.pagadoDeLoPorHacer", { monto: fmtMXNdec(finance.pagadoDeLoPorHacer ?? 0) })}</span>
                 </div>
               )}
               {(finance.cuotasPorVencer ?? 0) > 0.005 && (

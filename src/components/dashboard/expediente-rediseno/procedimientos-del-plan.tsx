@@ -21,6 +21,7 @@ import { fechaPanel } from "@/lib/formato-fecha-panel";
 import { avisoDeDeshacer, avisoDeHecho, ayudaHablaDeDebe, deshacerHecho, errorDeHecho, ESTADOS_DE_PLAN_SIN_HECHO, marcarHecho } from "@/lib/treatments/marcar-hecho-cliente";
 import { CONDITIONS } from "@/components/dashboard/odontogram-v2/data";
 import type { FilaDto } from "@/lib/treatments/items";
+import type { PlanConCuenta } from "@/lib/treatments/sin-doble-cobro";
 import s from "./expediente.module.css";
 
 /**
@@ -53,7 +54,7 @@ export function useFilasDePlanes(patientId: string | undefined, clave: unknown):
 const nombreDe = (f: Pick<FilaDto, "nombre" | "dientes" | "caras">) =>
   `${f.nombre}${f.dientes.length ? ` ${f.dientes.join(", ")}` : ""}${f.caras.length ? ` (${f.caras.join("")})` : ""}`;
 
-export function ProcedimientosDelPlan({ planId, estadoDelPlan, filas, puede, debeSigueLoHecho = false, onFilas, onCambio }: {
+export function ProcedimientosDelPlan({ planId, estadoDelPlan, filas, puede, debeSigueLoHecho = false, onFilas, onCuenta, onCambio }: {
   planId: string;
   estadoDelPlan: string;
   /**
@@ -67,6 +68,8 @@ export function ProcedimientosDelPlan({ planId, estadoDelPlan, filas, puede, deb
   puede: boolean;
   /** Las filas como quedaron (la respuesta del servidor), para pintarlas al momento. */
   onFilas: (filas: FilaDto[]) => void;
+  /** v14: la cuenta del plan que devuelve el servidor con «Hecho» / «Deshacer»: la ficha la pinta al momento. */
+  onCuenta?: (cuenta: PlanConCuenta) => void;
   /** Cambió lo hecho: la ficha relee cuentas, «Estado de cuenta» y el odontograma. */
   onCambio?: () => void;
 }) {
@@ -94,6 +97,7 @@ export function ProcedimientosDelPlan({ planId, estadoDelPlan, filas, puede, deb
         return;
       }
       onFilas(vivas.map((x) => (x.id === f.id ? { ...x, estado: "hecho", hechoEn: new Date().toISOString() } : x)));
+      if (r.cuenta) onCuenta?.(r.cuenta);
       // v12 (t5, m3): en el idioma de la pantalla, por lo que pasó (no el texto español del servidor).
       toast.success(avisoDeHecho(t, r));
       onCambio?.();
@@ -113,6 +117,7 @@ export function ProcedimientosDelPlan({ planId, estadoDelPlan, filas, puede, deb
       }
       const vuelve = r.estado === "en_curso" ? "en_curso" : "pendiente";
       onFilas(vivas.map((x) => (x.id === f.id ? { ...x, estado: vuelve, hechoEn: null } : x)));
+      if (r.cuenta) onCuenta?.(r.cuenta);
       toast.success(avisoDeDeshacer(t, r, nombreDeHallazgo), { duration: 8000 });
       onCambio?.();
     } finally {

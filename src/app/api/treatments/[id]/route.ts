@@ -14,6 +14,7 @@ import { bloquearPlan, FilaError, procedimientosDeLaClinica, repoFilas, tablaDeF
 import { cuerpoDeErrorDeFila } from "@/lib/treatments/errores";
 import { asegurarNotaDelPlan } from "@/lib/treatments/cobro.server";
 import { accionHecho } from "@/lib/treatments/aplicar-hecho.server";
+import { cuentaDeUnPlanParaLaFicha } from "@/lib/treatments/cuenta-para-la-ficha.server";
 
 export async function PATCH(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -47,7 +48,14 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
 
   // ── ws1-t5 · P7: «hecho» → odontograma, y su deshacer (lib/treatments/aplicar-hecho.server.ts) ──
   if (body.action === "marcar_hecho" || body.action === "deshacer_hecho") {
-    return accionHecho(req, ctx, { id: plan.id, clinicId: plan.clinicId, patientId: plan.patientId, name: plan.name }, body);
+    const res = await accionHecho(req, ctx, { id: plan.id, clinicId: plan.clinicId, patientId: plan.patientId, name: plan.name }, body);
+    // v14 (QA de Claude): con la respuesta va la cuenta del plan ya cambiada (quien ve dinero): la
+    // tarjeta «Cuenta del plan» cambia al momento, sin esperar a releer todos los planes del paciente.
+    if (!res.ok || denyIfMissingPermission(ctx, "billing.view") || denyIfMissingPermission(ctx, "treatments.view")) return res;
+    const cuerpo = await res.json().catch(() => null);
+    if (!cuerpo || typeof cuerpo !== "object") return res;
+    const cuenta = await cuentaDeUnPlanParaLaFicha(ctx.clinicId, plan.id);
+    return NextResponse.json(cuenta ? { ...cuerpo, cuenta } : cuerpo, { status: res.status });
   }
 
   // ── add_session with optional inventory deduction ─────────────────────────

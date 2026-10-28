@@ -3351,7 +3351,7 @@
       "invoiced": "Invoiced",
       "moreInvoiced": "+{count} more invoiced",
       "aunNoSeDebe": "Plus {monto} still to do or not yet due (not owed yet)",
-      "pagadoDeLoPorHacer": "Of what's still to do, {monto} is already paid",
+      "pagadoDeLoPorHacer": "Paid in advance: {monto}",
       "cuotasPorVencer": "Plus {monto} in installments not yet due"
     },
     "soapEditor": {
@@ -3433,6 +3433,7 @@
       "subtotal": "Subtotal",
       "discount": "Discount",
       "cancelInvoice": "Cancel invoice",
+      "noFacturar": "Don't invoice",
       "creating": "Creating…",
       "createInvoice": "Create invoice {total}",
       "createQuote": "Create quote",

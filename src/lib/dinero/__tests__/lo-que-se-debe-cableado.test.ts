@@ -210,7 +210,8 @@ test("v9 · M1: la Cuenta del plan llama «Pagado por adelantado» a lo pagado d
   assert.equal(es.planTratamiento.cobro.pagadoPorAdelantado, "Pagado por adelantado");
   assert.equal(en.planTratamiento.cobro.pagadoPorAdelantado, "Paid in advance");
   // Lo que dice lo mismo en «Estado de cuenta» y la ayuda de la tarjeta: «pagados por adelantado», no «a favor».
-  assert.match(es.patients.sideCards.pagadoDeLoPorHacer, /ya están pagados/);
+  // v14 (QA): el mismo rótulo que la tarjeta, «Pagado por adelantado: $X».
+  assert.ok(es.patients.sideCards.pagadoDeLoPorHacer.startsWith(es.planTratamiento.cobro.pagadoPorAdelantado));
   assert.match(es.planTratamiento.cobro.tambienAFavor, /pagados por adelantado/);
   assert.doesNotMatch(es.planTratamiento.cobro.ayudaAdelanto, /a favor/);
 });
@@ -251,7 +252,8 @@ test("A9 (27-oct): con cuotas acordadas manda la mensualidad — Caja, Cuenta de
   assert.match(tarjeta, /t\("planTratamiento\.cobro\.cuotasAyuda"\)/);
   const abono = leer("src/components/dashboard/cobrar-hoy/abono-al-plan.tsx");
   assert.match(abono, /plan\.aCuotas \? "planTratamiento\.cobro\.debeHoyCuotas" : "planTratamiento\.cobro\.debeHoy"/);
-  assert.match(leer("src/app/api/treatments/cuentas/route.ts"), /aCuotas: cuenta\.aCuotas \?\? false,/);
+  // v14: la forma de la cuenta vive en un ayudante que usan /cuentas y las acciones («Hecho», «Cerrar plan»).
+  assert.match(leer("src/lib/treatments/cuenta-para-la-ficha.server.ts"), /aCuotas: cuenta\.aCuotas \?\? false,/);
   for (const idioma of ["es", "en"]) {
     const cobro = JSON.parse(leer(`src/i18n/dictionaries/${idioma}.json`)).planTratamiento.cobro;
     for (const k of ["vencidoCuotas", "cuotasAyuda", "tambienAdelantoCuotas", "cerrarSigueCuotas", "debeHoyCuotas", "ayudaAdelantoCuotas"]) {
@@ -438,3 +440,64 @@ test("v13 · n2: un error sin código no cae al genérico de «marcar»: 403 →
   assert.equal(errorDeHecho(en, {}), errEn.generico);
 });
 
+
+test("v14 · 1: «Estado de cuenta» (Resumen, lateral, Facturación) dice «Pagado por adelantado» con la cifra de la tarjeta (centavos)", () => {
+  const es = JSON.parse(leer("src/i18n/dictionaries/es.json"));
+  const en = JSON.parse(leer("src/i18n/dictionaries/en.json"));
+  assert.equal(es.patients.sideCards.pagadoDeLoPorHacer, "Pagado por adelantado: {monto}");
+  assert.equal(en.patients.sideCards.pagadoDeLoPorHacer, "Paid in advance: {monto}");
+  assert.ok(en.patients.sideCards.pagadoDeLoPorHacer.startsWith(en.planTratamiento.cobro.pagadoPorAdelantado));
+  for (const [f, valor] of [
+    ["src/components/dashboard/pacientes-rediseno/resumen.tsx", "finanzas.pagadoDeLoPorHacer"],
+    ["src/components/dashboard/patient-detail/side-cards.tsx", "finance.pagadoDeLoPorHacer"],
+    ["src/components/dashboard/patient-detail/billing-tab.tsx", "summary.pagadoDeLoPorHacer"],
+  ] as const) {
+    // La tarjeta pinta $300.00 (fmtMXNdec): los tres sitios, igual (antes $300, y $300.50 salía $301).
+    assert.ok(leer(f).includes(`t("patients.sideCards.pagadoDeLoPorHacer", { monto: fmtMXNdec(${valor} ?? 0) })`), f);
+  }
+});
+
+test("v14 · 2: la Cuenta del plan cambia con la respuesta de «Hecho» / «Deshacer» / «Cerrar plan», y ninguna lectura vieja pisa una nueva", () => {
+  const ruta = leer("src/app/api/treatments/[id]/route.ts");
+  assert.match(ruta, /denyIfMissingPermission\(ctx, "billing\.view"\) \|\| denyIfMissingPermission\(ctx, "treatments\.view"\)\) return res;/);
+  assert.match(ruta, /cuentaDeUnPlanParaLaFicha\(ctx\.clinicId, plan\.id\)/);
+  const cerrar = leer("src/app/api/treatments/[id]/cerrar/route.ts");
+  assert.match(cerrar, /denyIfMissingPermission\(ctx, "billing\.view"\) \|\| denyIfMissingPermission\(ctx, "treatments\.view"\)\n\s*\? null\n\s*: await cuentaDeUnPlanParaLaFicha\(ctx\.clinicId, plan\.id\)/);
+  // Una sola forma de la cuenta: la de /cuentas y la de las acciones salen del mismo ayudante.
+  assert.match(leer("src/app/api/treatments/cuentas/route.ts"), /await cuentaParaLaFicha\(\{ clinicId: ctx\.clinicId, plan: p,/);
+  const tarjeta = leer("src/components/dashboard/expediente-rediseno/cuenta-del-plan.tsx");
+  assert.match(tarjeta, /if \(paciente\.current !== delPaciente \|\| n < aplicado\.current\) return;/);
+  assert.doesNotMatch(tarjeta, /vivo = false/, "una lectura en curso ya no se tira al cambiar la clave");
+  assert.match(tarjeta, /const nueva = cuentaDeLaRespuesta\(cuerpo\);\n\s*if \(nueva\) onCuenta\?\.\(nueva\);/);
+  const proc = leer("src/components/dashboard/expediente-rediseno/procedimientos-del-plan.tsx");
+  assert.equal((proc.match(/if \(r\.cuenta\) onCuenta\?\.\(r\.cuenta\);/g) ?? []).length, 2, "al marcar y al deshacer");
+  const plan = leer("src/components/dashboard/expediente-rediseno/plan-tratamiento.tsx");
+  assert.match(plan, /onCambio=\{onCuentaCambio\} onCuenta=\{onCuentaNueva\} \/>/);
+  assert.match(plan, /onCuenta=\{onCuentaNueva\}\n/);
+  assert.match(leer("src/app/dashboard/patients/[id]/patient-detail-client.tsx"), /onCuentaNueva=\{cuentasDePlanes\.poner\}/);
+});
+
+test("v14 · 3: «Tratamientos detectados» no dice «Cancelar factura»: «Cerrar» si no ofrece factura (todo es del plan), «No facturar» si la ofrece", () => {
+  const modal = leer("src/components/dashboard/patient-detail/treatments-modal.tsx");
+  assert.doesNotMatch(modal, /treatmentsModal\.cancelInvoice/);
+  assert.match(modal, /const ofreceFactura = rows\.length > 0 \|\| !hayPlan;/);
+  assert.match(modal, /\{ofreceFactura \? t\("patients\.treatmentsModal\.noFacturar"\) : t\("common\.close"\)\}/);
+  assert.match(modal, /\{ofreceFactura && \(/, "factura y presupuesto, solo con lo de fuera de todo plan (como antes)");
+  const es = JSON.parse(leer("src/i18n/dictionaries/es.json"));
+  const en = JSON.parse(leer("src/i18n/dictionaries/en.json"));
+  assert.equal(es.patients.treatmentsModal.noFacturar, "No facturar");
+  assert.equal(en.patients.treatmentsModal.noFacturar, "Don't invoice");
+  assert.equal(es.common.close, "Cerrar");
+});
+
+test("v14 · 4: «Movimientos» (recientes y completo) se relee cuando la ficha cambia algo del paciente", () => {
+  const mov = leer("src/components/dashboard/pacientes-rediseno/movimientos.tsx");
+  assert.match(mov, /\}, \[patientId, q\.page, q\.pageSize, q\.categoria, q\.desde, q\.hasta, clave\]\);/);
+  assert.match(mov, /useMovimientos\(patientId, consulta, clave\);[\s\S]*useMovimientos\(patientId, consulta, clave\);/);
+  const ficha = leer("src/app/dashboard/patients/[id]/patient-detail-client.tsx");
+  assert.match(ficha, /<MovimientosRecientes patientId=\{patient\.id\} onVerCompleto=\{\(\) => setTab\("movimientos"\)\} clave=\{claveMovimientos\} \/>/);
+  assert.match(ficha, /<MovimientosCompleto patientId=\{patient\.id\} clave=\{claveMovimientos\} \/>/);
+  assert.match(ficha, /appointments\.map\(\(a: any\) => `\$\{a\.id\}:\$\{a\.status\}`\)/, "una cita completada cambia la clave");
+  // Y la ruta de «Completar consulta» sigue escribiendo su movimiento (no era un hueco del registro).
+  assert.match(leer("src/app/api/appointments/[id]/complete/route.ts"), /patientId: existing\.patientId,\n\s*texto: textoCita\.completada\(/);
+});
