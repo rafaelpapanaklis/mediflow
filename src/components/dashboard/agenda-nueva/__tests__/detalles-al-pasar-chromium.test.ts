@@ -632,3 +632,36 @@ test("v4 (o1): con Tab a una cita FUERA de la vista, el scroll del propio foco n
   await page.locator(TARJETA).waitFor({ state: "detached", timeout: 2_000 });
   assert.deepEqual(a.errores, []);
 });
+
+test("v5 (p1): con el teclado, si la cita sube con la rueda bajo la cabecera de la agenda, la tarjeta se va", async (t) => {
+  const a = await abrir(t, { alto: 600 });
+  if (!a) return;
+  const { page } = a;
+  let enfocada = "";
+  for (let i = 0; i < 80 && enfocada !== "a-luis"; i++) {
+    await page.keyboard.press("Tab");
+    enfocada = await page.evaluate(() => (document.activeElement as HTMLElement | null)?.getAttribute("data-cita") ?? "");
+  }
+  assert.equal(enfocada, "a-luis");
+  const tarjeta = page.locator(`${TARJETA}[data-detalles-al-pasar="a-luis"]`);
+  await tarjeta.waitFor({ timeout: 3_000 });
+  await page.waitForTimeout(400);
+  assert.equal(await tarjeta.count(), 1, "abierta con el teclado");
+  // La rueda sobre una zona vacía de la rejilla (sin cita debajo): la rejilla baja y la cita sube.
+  const rejilla = await page.locator('[data-cita="a-luis"]').evaluate((el: HTMLElement) => {
+    let p = el.parentElement;
+    while (p && !/(auto|scroll)/.test(getComputedStyle(p).overflowY)) p = p.parentElement;
+    const r = p!.getBoundingClientRect();
+    return { top: r.top, x: r.left + 20, abajo: r.top + p!.clientHeight };
+  });
+  await page.mouse.move(rejilla.x, rejilla.abajo - 10);
+  for (let i = 0; i < 8; i++) {
+    await page.mouse.wheel(0, 60);
+    await page.waitForTimeout(40);
+  }
+  await page.waitForTimeout(300);
+  const cita = await page.locator('[data-cita="a-luis"]').boundingBox();
+  assert.ok(cita.y + cita.height > 0 && cita.y + cita.height <= rejilla.top + 1, `la cita quedó DENTRO de la ventana pero bajo la cabecera: ${JSON.stringify({ cita, rejilla })}`);
+  assert.equal(await tarjeta.count(), 0, "tapada por la cabecera = fuera de la vista: la tarjeta se va");
+  assert.deepEqual(a.errores, []);
+});

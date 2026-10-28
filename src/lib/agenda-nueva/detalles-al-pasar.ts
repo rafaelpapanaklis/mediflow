@@ -254,3 +254,35 @@ export function avisosAlPasar(cita: {
   if (cita.esperaValidacion) salida.push({ clave: "porValidar", tono: "ambar" });
   return salida;
 }
+
+/** Un rectángulo en coordenadas de la ventana. */
+export interface Caja {
+  top: number;
+  bottom: number;
+  left: number;
+  right: number;
+}
+
+/**
+ * Lo que de verdad se ve de la rejilla (v5, revisión t11 p1): el contenedor que se desplaza, recortado por la
+ * ventana y sin las cabeceras pegadas (`sticky`) que tenga dentro arriba o a la izquierda. La barra y la fila
+ * de doctores van FUERA del contenedor, así que su rectángulo ya las deja fuera; las de dentro se descuentan.
+ */
+export function areaVisible(
+  contenedor: Caja | null,
+  ventana: { ancho: number; alto: number },
+  pegadas: { arriba: number; izquierda: number } = { arriba: 0, izquierda: 0 },
+): Caja {
+  const base = contenedor ?? { top: 0, left: 0, bottom: ventana.alto, right: ventana.ancho };
+  return {
+    top: Math.max(0, base.top) + Math.max(0, pegadas.arriba),
+    left: Math.max(0, base.left) + Math.max(0, pegadas.izquierda),
+    bottom: Math.min(ventana.alto, base.bottom),
+    right: Math.min(ventana.ancho, base.right),
+  };
+}
+
+/** ¿No asoma nada de la cita en el área visible? (Tapada por la cabecera cuenta como fuera.) */
+export function citaFueraDeLaVista(cita: Caja, area: Caja): boolean {
+  return cita.bottom <= area.top || cita.top >= area.bottom || cita.right <= area.left || cita.left >= area.right;
+}

@@ -6,7 +6,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  areaVisible,
   avisosAlPasar,
+  citaFueraDeLaVista,
   CacheDeDetalles,
   claveDeDetalles,
   confirmoPorWhatsapp,
@@ -156,4 +158,21 @@ test("posición: si la cita ocupa casi todo el ancho (Día con un doctor), se an
   assert.ok(cerca.left + 320 <= 1250 - 16, "a la izquierda del cursor si a la derecha no cabe");
   assert.ok(cerca.top + 300 <= 800 - 16, "arriba del cursor si abajo no cabe");
   assert.equal(posicionDeLaTarjeta(ancha, ventana, tarjeta).lado, "derecha", "sin puntero, como siempre (y dentro)");
+});
+
+test("v5 (p1): «fuera de la vista» es contra el contenedor que se desplaza, sin sus cabeceras pegadas", () => {
+  const ventana = { ancho: 1440, alto: 600 };
+  // La rejilla empieza bajo la barra y la fila de doctores (124 px), que van FUERA de ella.
+  const area = areaVisible({ top: 124, left: 64, bottom: 600, right: 1425 }, ventana);
+  assert.deepEqual(area, { top: 124, left: 64, bottom: 600, right: 1425 });
+  const bajoLaCabecera = { top: 20, bottom: 110, left: 75, right: 1415 };
+  assert.equal(citaFueraDeLaVista(bajoLaCabecera, area), true, "dentro de la ventana, pero tapada por la cabecera");
+  assert.equal(citaFueraDeLaVista(bajoLaCabecera, areaVisible(null, ventana)), false, "contra la ventana (lo de la v4) no se veía el fallo");
+  assert.equal(citaFueraDeLaVista({ top: 100, bottom: 140, left: 75, right: 1415 }, area), false, "asoma 16 px: sigue");
+  assert.equal(citaFueraDeLaVista({ top: 600, bottom: 660, left: 75, right: 1415 }, area), true, "por abajo");
+  // Una cabecera pegada DENTRO del contenedor (40 px arriba) también tapa.
+  const conPegada = areaVisible({ top: 124, left: 64, bottom: 600, right: 1425 }, ventana, { arriba: 40, izquierda: 0 });
+  assert.equal(citaFueraDeLaVista({ top: 130, bottom: 160, left: 75, right: 1415 }, conPegada), true);
+  // El contenedor recortado por la ventana.
+  assert.deepEqual(areaVisible({ top: -50, left: 0, bottom: 900, right: 2000 }, ventana), { top: 0, left: 0, bottom: 600, right: 1440 });
 });

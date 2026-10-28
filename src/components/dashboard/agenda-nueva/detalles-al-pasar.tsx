@@ -46,7 +46,9 @@ import {
 import { useT } from "@/i18n/i18n-provider";
 import { fmtMXNdec } from "@/lib/format";
 import {
+  areaVisible,
   avisosAlPasar,
+  citaFueraDeLaVista,
   CacheDeDetalles,
   claveDeDetalles,
   detallesDesdeRespuesta,
@@ -251,13 +253,17 @@ export function DetallesAlPasarProvider({ children, inicial }: { children: React
   // Un scroll mueve la cita debajo de la tarjeta. Con el MOUSE, se esconde. Con el TECLADO (sin puntero) se
   // RECOLOCA junto a la cita (v4, o1): enfocar con Tab una cita fuera de la vista hace que el navegador
   // desplace la rejilla, y ese mismo scroll la cerraba nada más abrirse. Si la cita sale de la vista, se va.
-  // Esc la cierra (WCAG 1.4.13). Y al desmontar, nada colgando.
+  // «Fuera de la vista» se mide contra el CONTENEDOR que se desplaza (guardado al abrir), no contra la
+  // ventana: la cita que sube con la rueda bajo la fila de doctores ya no se ve aunque siga dentro de la
+  // ventana (v5, p1). Esc la cierra (WCAG 1.4.13). Y al desmontar, nada colgando.
   const abierta = visible !== null;
   const deTeclado = visible !== null && visible.puntero === null;
   const elVisible = visible?.el ?? null;
   useEffect(() => {
     if (!abierta) return;
     let cuadro = 0;
+    const contenedor = deTeclado && elVisible ? contenedorQueSeDesplaza(elVisible) : null;
+    const pegadas = contenedor ? cabecerasPegadas(contenedor) : { arriba: 0, izquierda: 0 };
     const alMoverse = () => {
       if (!deTeclado || !elVisible) {
         salir();
@@ -268,8 +274,12 @@ export function DetallesAlPasarProvider({ children, inicial }: { children: React
         cuadro = 0;
         if (!elVisible.isConnected) return salir();
         const r = elVisible.getBoundingClientRect();
-        const fuera = r.bottom <= 0 || r.top >= window.innerHeight || r.right <= 0 || r.left >= window.innerWidth;
-        if (fuera) return salir();
+        const area = areaVisible(
+          contenedor ? cajaInterior(contenedor) : null,
+          { ancho: window.innerWidth, alto: window.innerHeight },
+          pegadas,
+        );
+        if (citaFueraDeLaVista(r, area)) return salir();
         setVisible((v) => (v && v.el === elVisible ? { ...v, rect: r } : v));
       });
     };
@@ -327,6 +337,42 @@ export function DetallesAlPasarProvider({ children, inicial }: { children: React
         : null}
     </Ctx.Provider>
   );
+}
+
+/** El ancestro más cercano que se desplaza (overflow auto/scroll), o `null` si es la ventana. */
+function contenedorQueSeDesplaza(el: HTMLElement): HTMLElement | null {
+  for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
+    const c = getComputedStyle(p);
+    if (/(auto|scroll)/.test(`${c.overflowY} ${c.overflowX}`)) return p;
+  }
+  return null;
+}
+
+/** El área de contenido del contenedor (sin sus barras de desplazamiento), en coordenadas de la ventana. */
+function cajaInterior(c: HTMLElement) {
+  const r = c.getBoundingClientRect();
+  const top = r.top + c.clientTop;
+  const left = r.left + c.clientLeft;
+  return { top, left, bottom: top + c.clientHeight, right: left + c.clientWidth };
+}
+
+/**
+ * Cuánto tapan arriba y a la izquierda las cabeceras pegadas (`position: sticky`) que el contenedor tenga
+ * dentro (hasta dos niveles: así están hechas las rejillas). Se mide una vez, al abrir. Hoy la agenda nueva
+ * no tiene ninguna (su cabecera va fuera del contenedor); esto la cubre si alguna vista la añade.
+ */
+function cabecerasPegadas(c: HTMLElement): { arriba: number; izquierda: number } {
+  const caja = c.getBoundingClientRect();
+  let arriba = 0;
+  let izquierda = 0;
+  c.querySelectorAll<HTMLElement>(":scope > *, :scope > * > *").forEach((h) => {
+    const est = getComputedStyle(h);
+    if (est.position !== "sticky") return;
+    const r = h.getBoundingClientRect();
+    if (est.top !== "auto" && r.width >= caja.width / 2) arriba = Math.max(arriba, r.bottom - caja.top - c.clientTop);
+    if (est.left !== "auto" && r.height >= caja.height / 2) izquierda = Math.max(izquierda, r.right - caja.left - c.clientLeft);
+  });
+  return { arriba, izquierda };
 }
 
 const ANCHO_TARJETA = 320;
