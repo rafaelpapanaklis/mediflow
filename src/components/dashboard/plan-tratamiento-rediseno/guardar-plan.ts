@@ -13,7 +13,7 @@
  * `api/treatments/[id]/presentar`). Si una versión sin esa ruta contesta 404, el botón dice «Pronto».
  */
 import { CLAVE_DE_CODIGO, type CodigoDeFila, type FilaDto } from "@/lib/treatments/items";
-import type { FilaParaGuardar } from "./armar-plan";
+import type { FilaParaGuardar, OtroPlan } from "./armar-plan";
 
 type Fetch = (url: string, init?: RequestInit) => Promise<Response>;
 
@@ -101,6 +101,24 @@ export async function guardarPlan(a: AltaDePlan, f: Fetch = fetch): Promise<Resu
 }
 
 /** ¿Ya existe «presentar» (P4)? Un OPTIONS no escribe: Next lo contesta solo si la ruta existe. */
+/**
+ * Los planes activos (o en pausa) del paciente con sus filas (ws1-t6 v2, M1): lo marcado en rojo que
+ * ya está en uno de ellos no se ofrece otra vez en «Nuevo plan». Solo LEE (`GET /api/treatments`,
+ * `treatments.view`; un doctor ve sus planes). Si falla, lista vacía: la ventana sigue como antes.
+ */
+export async function planesActivosDelPaciente(patientId: string, f: Fetch = fetch): Promise<OtroPlan[]> {
+  try {
+    const r = await f(`/api/treatments?patientId=${encodeURIComponent(patientId)}`, { cache: "no-store" });
+    const d = r.ok ? await r.json() : [];
+    if (!Array.isArray(d)) return [];
+    return d
+      .filter((p) => (p?.status === "ACTIVE" || p?.status === "PAUSED") && Array.isArray(p.items) && p.items.length > 0)
+      .map((p) => ({ planId: String(p.id), nombre: String(p.name ?? ""), filas: p.items }));
+  } catch {
+    return [];
+  }
+}
+
 export async function presentarDisponible(f: Fetch = fetch): Promise<boolean> {
   try {
     const res = await f(RUTA_PRESENTAR("_"), { method: "OPTIONS" });

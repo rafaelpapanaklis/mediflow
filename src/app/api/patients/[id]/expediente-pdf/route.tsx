@@ -17,6 +17,8 @@ import {
 } from "@/lib/pdf/clinic-letterhead";
 import { COND_BY_ID } from "@/components/dashboard/odontogram-v2/data";
 import { rotuloCara } from "@/components/dashboard/odontogram-v2/adapter";
+import { rotuloDeEstado } from "@/lib/odontogram/estado-marca";
+import { estadosParaMostrar } from "@/lib/odontogram/estado-db";
 import {
   PADECIMIENTOS,
   ALERGIAS,
@@ -249,7 +251,7 @@ export async function GET(req: NextRequest, props0: Params) {
       // que ya se resolvió contra `user.clinicId` en el findFirst de arriba.
       where: { patientId: paciente.id },
       orderBy: [{ toothNumber: "asc" }, { conditionId: "asc" }],
-      select: { toothNumber: true, surface: true, conditionId: true, notes: true, updatedAt: true },
+      select: { id: true, toothNumber: true, surface: true, conditionId: true, notes: true, updatedAt: true },
     }),
     prisma.treatmentPlan.findMany({
       where: { patientId: paciente.id, clinicId: user.clinicId },
@@ -473,6 +475,8 @@ export async function GET(req: NextRequest, props0: Params) {
     adendas: adendas(n.specialtyData),
   }));
 
+  // Rojo/azul (ws1-t6, v2 M2): lo por hacer no se imprime como si ya estuviera hecho.
+  const estados = await estadosParaMostrar(prisma, paciente.id);
   const odontograma: ExpedienteHallazgoDental[] = hallazgos
     // `__note__` no es un hallazgo: es la nota por diente. Se imprime como
     // hallazgo "Nota del diente" para que el texto no se pierda.
@@ -483,7 +487,7 @@ export async function GET(req: NextRequest, props0: Params) {
       hallazgo:
         h.conditionId === "__note__"
           ? "Nota del diente"
-          : (COND_BY_ID[h.conditionId]?.es ?? h.conditionId),
+          : [COND_BY_ID[h.conditionId]?.es ?? h.conditionId, rotuloDeEstado(estados.get(h.id))].filter(Boolean).join(" "),
       notas: h.notes,
       actualizado: h.updatedAt.toISOString(),
     }));

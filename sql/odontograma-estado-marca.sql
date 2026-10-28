@@ -29,12 +29,18 @@ BEGIN
      WHERE conname = 'odontogram_entries_estado_check'
        AND conrelid = 'public.odontogram_entries'::regclass
   ) THEN
+    -- NOT VALID: no recorre la tabla con el candado fuerte; la validación va abajo, aparte.
     ALTER TABLE "odontogram_entries"
       ADD CONSTRAINT "odontogram_entries_estado_check"
-      CHECK ("estado" IS NULL OR "estado" IN ('por_hacer', 'hecho', 'previo'));
+      CHECK ("estado" IS NULL OR "estado" IN ('por_hacer', 'hecho', 'previo')) NOT VALID;
   END IF;
 END
 $estado$;
+
+-- Valida lo que ya hay (todo NULL: la columna es nueva) con un candado que no frena lecturas ni
+-- escrituras. Repetirlo no falla. Si quieres el candado corto de verdad, pega esta línea sola
+-- después del resto: el SQL Editor corre el archivo entero en UNA transacción.
+ALTER TABLE "odontogram_entries" VALIDATE CONSTRAINT "odontogram_entries_estado_check";
 
 
 -- ── Comprobación (solo lee) ──────────────────────────────────────────────

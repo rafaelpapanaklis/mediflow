@@ -37,6 +37,9 @@ const ODONTOGRAMA = {
   ],
 };
 
+/** Planes del paciente que contesta `GET /api/treatments?patientId=` (v2, M1). */
+let PLANES: unknown[] = [];
+
 async function abrir(chromium: { launch(o?: any): Promise<any> }, paquete: string, viewport: { width: number; height: number }, idioma: "es" | "en" = "es") {
   const navegador = await chromium.launch();
   const pagina = await navegador.newPage({ viewport });
@@ -56,6 +59,7 @@ async function abrir(chromium: { launch(o?: any): Promise<any> }, paquete: strin
     if (url.pathname === "/api/odontogram") return json(200, ODONTOGRAMA);
     if (url.pathname === "/api/clinical") return json(200, []);
     if (url.pathname.endsWith("/presentar")) return ruta.fulfill({ status: 404, contentType: "text/html", body: "<h1>404</h1>" });
+    if (url.pathname === "/api/treatments" && req.method() === "GET") return json(200, PLANES);
     if (url.pathname === "/api/treatments" && req.method() === "POST") {
       const cuerpo = JSON.parse(req.postData() ?? "{}");
       posts.push(cuerpo);
@@ -64,8 +68,13 @@ async function abrir(chromium: { launch(o?: any): Promise<any> }, paquete: strin
     return ruta.fulfill({ status: 404, body: "" });
   });
   await pagina.goto("http://plan.prueba/");
-  // con tarifario: el chip rojo ya trae su precio
-  await pagina.waitForFunction(() => /\$700/.test(document.querySelector('[data-chip="r:h:16:restoration"]')?.textContent ?? ""));
+  // con tarifario: el chip rojo ya trae su precio (o, si ya está en otro plan, lo dice)
+  try {
+    await pagina.waitForFunction(() => /\$700|ya en el plan|already in plan/.test(document.querySelector('[data-chip="r:h:16:restoration"]')?.textContent ?? ""));
+  } catch (e) {
+    await navegador.close(); // sin esto el proceso de la prueba se queda colgado
+    throw e;
+  }
   return { navegador, pagina, posts };
 }
 
@@ -125,6 +134,33 @@ test("a 390 px y en inglés: sin scroll horizontal; «tooth 16 occlusal»", asyn
     if (process.env.CAPTURAS) await pagina.screenshot({ path: join(process.env.CAPTURAS, "plan-por-hacer-390.png") });
     assert.deepEqual(desborde, { documento: 0, caja: 0 });
   } finally {
+    await navegador.close();
+  }
+});
+
+test("v2 M1: lo rojo que ya está en otro plan activo sale «ya en el plan X», no se toca y «Agregar todo» lo salta", async (t) => {
+  const chromium = await cargarChromium();
+  if (!chromium) { t.skip("Playwright no está en ~/navegador"); return; }
+  const fila = (id: string, nombre: string, dientes: number[]) =>
+    ({ id, planId: "plan-1", nombre, procedureId: "proc1", dientes, caras: ["O"], cantidad: 1, estado: "pendiente", hechoEn: null, invoiceId: null });
+  PLANES = [
+    { id: "plan-1", name: "Plan 20 oct 2026", status: "ACTIVE", items: [fila("f1", "Restauración resina 1 cara", [16])] },
+    // uno cerrado no cuenta
+    { id: "plan-0", name: "Plan viejo", status: "ABANDONED", items: [fila("f0", "Corona metal-porcelana", [26])] },
+  ];
+  const paquete = await empaquetar(`${CARPETA}/__tests__/arnes-ventana.tsx`);
+  const { navegador, pagina } = await abrir(chromium, paquete, { width: 1440, height: 1000 });
+  try {
+    await pagina.waitForSelector('[data-chip="r:h:16:restoration"][data-en-otro-plan]');
+    assert.equal(await chip(pagina, "r:h:16:restoration"), "Restauración resina 1 cara · pieza 16 oclusal · ya en el plan «Plan 20 oct 2026»");
+    assert.ok(await pagina.locator('[data-chip="r:h:16:restoration"]').isDisabled());
+    assert.equal(await pagina.locator('[data-chip="r:h:26:crown"][data-en-otro-plan]').count(), 0, "el plan cancelado no tapa la corona");
+    await pagina.click("[data-agregar-por-hacer]");
+    assert.equal(await pagina.locator("[data-renglon]").count(), 1, "solo la corona");
+    assert.equal(await pagina.textContent("[data-plan-total]"), "$4,500");
+    if (process.env.CAPTURAS) await pagina.screenshot({ path: join(process.env.CAPTURAS, "plan-por-hacer-ya-en-plan.png") });
+  } finally {
+    PLANES = [];
     await navegador.close();
   }
 });

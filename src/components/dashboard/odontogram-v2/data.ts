@@ -271,6 +271,7 @@ export const I18N: Record<Lang, Record<string, string>> = {
     sinEstado: "hallazgo",
     pasarAHecho: "Marcar realizado",
     pasarAPorHacer: "Marcar por hacer",
+    estadoNoLeido: "No se pudo leer qué está por hacer y qué está realizado: los colores pueden no ser los de verdad. Vuelve a cargar en un momento.",
   },
   en: {
     title: "Dental Chart",
@@ -330,5 +331,6 @@ export const I18N: Record<Lang, Record<string, string>> = {
     sinEstado: "finding",
     pasarAHecho: "Mark done",
     pasarAPorHacer: "Mark to do",
+    estadoNoLeido: "Couldn't read what's to do and what's done: the colors may be wrong. Reload in a moment.",
   },
 };

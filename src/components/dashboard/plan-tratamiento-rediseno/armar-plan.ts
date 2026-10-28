@@ -23,6 +23,7 @@ import {
   type ProcedimientoTarifario, type Sugerencia,
 } from "@/lib/treatments/sugerir-procedimiento";
 import { aCentavos } from "@/lib/treatments/items";
+import { emparejarConElPlan, type FilaParaEmparejar } from "@/lib/treatments/sin-doble-cobro";
 
 type Entradas = { toothNumber: number; conditionId: string; estado?: string | null }[];
 
@@ -41,6 +42,18 @@ export interface Chip {
   sugerencia: Sugerencia | null;
   /** Ya está en el plan. */
   puesto: boolean;
+  /**
+   * Marca roja que ya es una fila viva de OTRO plan activo del paciente (v2, M1): se enseña como
+   * «ya en el plan X» y no se agrega (ni con «Agregar todo»): serían dos notas de cobro.
+   */
+  enOtroPlan?: string | null;
+}
+
+/** Un plan activo del paciente con sus filas (lo que trae `GET /api/treatments?patientId=`). */
+export interface OtroPlan {
+  planId: string;
+  nombre: string;
+  filas: FilaParaEmparejar[];
 }
 
 const cuadrante = (fdi: number) => Math.floor(fdi / 10);
@@ -67,23 +80,37 @@ const enDiente = (r: Renglon, d: number) => leerDientes(r.dientes).dientes.inclu
  * Los chips de la ventana. `renglones` es el plan como va: decide qué chip ya está puesto y qué
  * sugerencias encadenadas salen.
  */
-export function chipsDelPlan(hallazgos: Hallazgo[], tarifario: ProcedimientoTarifario[], entradas: Entradas, renglones: Renglon[]): Chip[] {
+export function chipsDelPlan(
+  hallazgos: Hallazgo[], tarifario: ProcedimientoTarifario[], entradas: Entradas, renglones: Renglon[], otrosPlanes: OtroPlan[] = [],
+): Chip[] {
   const usados = new Set(renglones.flatMap((r) => r.origen ?? []));
   const grupos = new Map<string, { hallazgos: Hallazgo[]; base: Sugerencia | null }>();
   const encadenadas: Chip[] = [];
   const vistasEncadenadas = new Set<string>();
-  // Lo que el doctor ya marcó en rojo: un hallazgo del mismo diente que pide lo mismo no sale aparte.
-  const enRojo = new Set<string>();
+  // Lo que el doctor ya marcó en rojo: un hallazgo del mismo diente que pide lo mismo no sale aparte…
+  // salvo que trabaje caras que lo rojo no cubre (caries 16 M con la resina roja en 16 O: sale, y al
+  // agregarla se junta con la del 16 en una resina de 2 caras).
+  const enRojo = new Map<string, Set<string>>();
   for (const h of hallazgos) {
     if (!h.porHacer) continue;
     const s = sugerirProcedimiento(h, tarifario, entradas).sugerencias[0];
-    if (s) enRojo.add(cubiertoPor(s, h.diente));
+    if (!s) continue;
+    const k = cubiertoPor(s, h.diente);
+    const caras = enRojo.get(k) ?? new Set<string>();
+    h.caras.forEach((c) => caras.add(c));
+    enRojo.set(k, caras);
   }
+  const cubiertoEnRojo = (h: Hallazgo, s: Sugerencia) => {
+    const caras = enRojo.get(cubiertoPor(s, h.diente));
+    if (!caras) return false;
+    if (PROCEDIMIENTOS[s.clave].variantes !== "caras") return true;
+    return h.caras.every((c) => caras.has(c));
+  };
 
   for (const h of hallazgos) {
     const res = sugerirProcedimiento(h, tarifario, entradas);
     const base = res.sugerencias.find((s) => s.encadenadaDe === null) ?? null;
-    if (!h.porHacer && base && enRojo.has(cubiertoPor(base, h.diente))) continue;
+    if (!h.porHacer && base && cubiertoEnRojo(h, base)) continue;
     const llave = llaveDeChip(h, base);
     const g = grupos.get(llave);
     if (g) g.hallazgos.push(h);
@@ -121,6 +148,20 @@ export function chipsDelPlan(hallazgos: Hallazgo[], tarifario: ProcedimientoTari
       puesto: g.hallazgos.every((h) => usados.has(h.clave)),
     });
   }
+  // Lo rojo que ya está en una fila viva de otro plan activo: «ya en el plan X» (el mismo tipo de
+  // procedimiento y el mismo diente; `emparejarConElPlan`, la regla de «que nada se cobre dos veces»).
+  const rojos = chips.filter((c) => c.tipo === "por_hacer" && c.sugerencia && !c.puesto);
+  const filas = otrosPlanes.flatMap((p) => p.filas);
+  if (rojos.length > 0 && filas.length > 0) {
+    const nombreDe = new Map(otrosPlanes.map((p) => [p.planId, p.nombre] as const));
+    // Un chip de varios dientes (flúor de toda la boca) cuenta una vez por diente.
+    const cosas = rojos.flatMap((c, i) => (c.dientes.length ? c.dientes : [null]).map((d) => ({
+      chip: i, nombre: c.sugerencia!.nombre, procedureId: c.sugerencia!.procedimientoId,
+      codigo: PROCEDIMIENTOS[c.sugerencia!.clave].codigo, diente: d,
+    })));
+    const e = emparejarConElPlan(cosas, filas);
+    for (const m of e.delPlan) rojos[cosas[m.indice].chip].enOtroPlan ??= nombreDe.get(m.planId) ?? "";
+  }
   // Lo marcado en rojo, primero: es lo que el doctor ya decidió.
   return [...chips.filter((c) => c.tipo === "por_hacer"), ...chips.filter((c) => c.tipo !== "por_hacer"), ...encadenadas];
 }
@@ -136,7 +177,7 @@ export interface ContextoAgregar {
 
 /** El toque en un chip: el plan con el renglón nuevo (o con el renglón del mismo diente ampliado). */
 export function agregarDesdeChip(renglones: Renglon[], chip: Chip, ctx: ContextoAgregar): Renglon[] {
-  if (chip.puesto) return renglones;
+  if (chip.puesto || chip.enOtroPlan != null) return renglones;
   const s = chip.sugerencia;
   const primero = chip.hallazgos[0];
   const hallazgo = {

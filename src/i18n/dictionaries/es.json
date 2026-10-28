@@ -10910,6 +10910,7 @@
       "motivoPorHacer": "Marcado por hacer en el odontograma",
       "pieza": "pieza {diente}",
       "sinPrecio": "sin precio en tu tarifario",
+      "yaEnPlan": "ya en el plan «{plan}»",
       "nDientes": {"one": "{count} diente", "other": "{count} dientes"},
       "revisar": "Sugerido: revisa que sea el que corresponde (puedes cambiarlo arriba).",
       "detalles": "Más detalles (opcional): diagnóstico, pronóstico, alternativa, notas",
@@ -11046,6 +11047,7 @@
       },
       "error": {
         "generico": "No se pudo marcar el procedimiento.",
+        "estado_no_disponible": "No se pudo leer el odontograma (por hacer / realizado) y no se tocó nada. Inténtalo en un momento.",
         "genericoDeshacer": "No se pudo deshacer el procedimiento.",
         "sin_permiso": "No tienes permiso para marcar o deshacer procedimientos de este plan. Pídeselo al administrador.",
         "sin_filas": "Elige al menos un procedimiento del plan.",

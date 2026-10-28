@@ -982,3 +982,10 @@
 }
 
 .fichaPrecio { font-weight: 700; color: var(--m2-texto); }
+
+/* Ya está en otro plan activo del paciente (v2, M1): se ve, no se agrega. */
+.fichaEnOtroPlan {
+  border-style: dashed;
+  border-color: var(--m2-tarjeta-borde);
+  cursor: default;
+}

@@ -118,7 +118,15 @@ export async function GET(req: NextRequest) {
 
     // Rojo/azul (ws1-t6): el estado de cada marca, si la base ya tiene la columna. Lo guardado
     // antes no lo tiene y viaja sin él (se pinta como hoy).
-    const conEstado = await columnaEstadoExiste();
+    // Si no se puede saber (sonda caída), el odontograma se enseña igual pero se AVISA: sin eso, el
+    // selector desaparecía y lo rojo se veía con el color de siempre sin decir nada (v2, m5).
+    let conEstado: boolean | null;
+    try {
+      conEstado = await columnaEstadoExiste({ estricta: true });
+    } catch (e) {
+      console.error("[/api/odontogram] no se pudo saber si la base guarda el estado:", e);
+      conEstado = null;
+    }
     const estados = conEstado ? await leerEstados(prisma, patientId) : new Map<string, EstadoMarca>();
     const entries = rows
       .filter((r) => r.conditionId !== NOTE_CONDITION)
@@ -130,7 +138,10 @@ export async function GET(req: NextRequest) {
     // clinicId y userId de la SESIÓN (no del paciente): el autoguardado del
     // panel comprueba con ellos, antes de reintentar algo que falló, que la
     // sesión siga siendo la misma (nada sale firmado por otro ni a otra sede).
-    return NextResponse.json({ entries, notes, clinicId: dbUser.clinicId, userId: dbUser.id, conEstado });
+    return NextResponse.json({
+      entries, notes, clinicId: dbUser.clinicId, userId: dbUser.id,
+      ...(conEstado === null ? { estadoNoLeido: true } : { conEstado }),
+    });
   } catch (err) {
     return unexpectedError(err);
   }
@@ -173,9 +184,21 @@ export async function PUT(req: NextRequest) {
     // (rojo/azul, ws1-t6) no borra lo que trae (marca y lote de un implante, lo importado).
     const cambiaNotas = parsed.data.notes !== undefined;
     // El estado se escribe solo si viene, si la marca es de procedimiento y si la base ya tiene la columna.
-    const estado = parsed.data.estado !== undefined && admiteEstado(conditionId) && (await columnaEstadoExiste())
-      ? parsed.data.estado
-      : undefined;
+    // Si no se puede saber si la tiene (sonda caída), 503 y no se guarda nada: la cola del odontograma
+    // reintenta, en vez de guardar la marca sin su color y decir «Guardado» (v2, m5).
+    const pideEstado = parsed.data.estado !== undefined && admiteEstado(conditionId);
+    let conEstado = false;
+    if (pideEstado) {
+      try {
+        conEstado = await columnaEstadoExiste({ estricta: true });
+      } catch (e) {
+        console.error("[/api/odontogram] no se pudo saber si la base guarda el estado:", e);
+        return jsonError("estado_no_disponible", 503);
+      }
+    }
+    const estado = pideEstado && conEstado ? parsed.data.estado : undefined;
+    /** ¿La marca ya estaba? (Movimientos dice «Marcó por hacer…» y no «Registró…») */
+    let existia = false;
 
     // Postgres trata NULL como distinto en UNIQUE; para condiciones de diente
     // completo (surface=null) hacemos el upsert manual por (tooth, conditionId).
@@ -190,6 +213,7 @@ export async function PUT(req: NextRequest) {
           where: { patientId, toothNumber, surface: null, conditionId },
           select: { id: true },
         });
+        existia = !!existing;
         const fila = existing
           ? await tx.odontogramEntry.update({
               where: { id: existing.id },
@@ -204,7 +228,7 @@ export async function PUT(req: NextRequest) {
         return fila;
       });
       await anotarEnBitacora(req, dbUser, patientId, "odontogram_write", {
-        toothNumber, surface: null, conditionId, notes, ...(estado !== undefined ? { estado } : {}),
+        toothNumber, surface: null, conditionId, notes, ...(estado !== undefined ? { estado, existia } : {}),
       });
       return NextResponse.json({ entry });
     }
@@ -227,13 +251,14 @@ export async function PUT(req: NextRequest) {
     const entry = estado === undefined
       ? await upsert(prisma)
       : await prisma.$transaction(async (tx) => {
+          existia = !!(await tx.odontogramEntry.findFirst({ where: { patientId, toothNumber, surface, conditionId }, select: { id: true } }));
           const fila = await upsert(tx);
           await fijarEstado(tx, patientId, fila.id, estado);
           return fila;
         });
 
     await anotarEnBitacora(req, dbUser, patientId, "odontogram_write", {
-      toothNumber, surface, conditionId, notes, ...(estado !== undefined ? { estado } : {}),
+      toothNumber, surface, conditionId, notes, ...(estado !== undefined ? { estado, existia } : {}),
     });
     return NextResponse.json({ entry });
   } catch (err) {

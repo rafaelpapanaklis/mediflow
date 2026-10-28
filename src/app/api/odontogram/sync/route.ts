@@ -116,7 +116,20 @@ async function aplicarCambios(
     }
   }
   const dientes = Object.keys(cambios).map(Number);
-  const conEstado = await columnaEstadoExiste();
+  // Rojo/azul: solo si la consulta trae alguno. Si no se puede saber si la base lo guarda, las marcas
+  // se guardan igual y la respuesta lo AVISA (`estadoNoGuardado`): perder toda la consulta por el
+  // color sería peor (v2, m5).
+  const pideEstados = Object.values(cambios).some((c) => Object.keys(c.base?.estados ?? {}).length + Object.keys(c.now?.estados ?? {}).length > 0);
+  let conEstado = false;
+  let estadoNoGuardado = false;
+  if (pideEstados) {
+    try {
+      conEstado = await columnaEstadoExiste({ estricta: true });
+    } catch (e) {
+      console.error("[/api/odontogram/sync] no se pudo saber si la base guarda el estado:", e);
+      estadoNoGuardado = true;
+    }
+  }
   const { ipAddress, userAgent } = extractAuditMeta(req);
   const suplantacion = await suplantacionDeEstaPeticion();
   let detalle: unknown = null;
@@ -203,7 +216,7 @@ async function aplicarCambios(
       changes: detalle, patientId, ipAddress, userAgent,
     });
   }
-  return NextResponse.json({ ok: true, dientes: dientes.length });
+  return NextResponse.json({ ok: true, dientes: dientes.length, ...(estadoNoGuardado ? { estadoNoGuardado: true } : {}) });
 }
 
 /**

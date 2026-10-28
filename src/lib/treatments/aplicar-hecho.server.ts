@@ -36,7 +36,7 @@ import {
 } from "@/lib/odontogram/aplicar-hecho";
 import { CONDITIONS } from "@/components/dashboard/odontogram-v2/data";
 import { admiteEstado, esEstadoMarca, type EstadoMarca } from "@/lib/odontogram/estado-marca";
-import { columnaEstadoExiste, fijarEstado } from "@/lib/odontogram/estado-db";
+import { EstadoNoDisponible, columnaEstadoExiste, fijarEstado } from "@/lib/odontogram/estado-db";
 import { filaDto, type DbDeFilas, type EstadoDeFila, type FilaDelPlan } from "./items";
 import { bloquearPlan, FilaError, repoFilas, tablaDeFilasExiste } from "./items-db";
 import { columnaOdontogramaHechoExiste, leerRegistro, type RegistroHecho } from "./aplicar-hecho-db";
@@ -180,7 +180,9 @@ export async function marcarHecho(args: {
   const { clinicId, plan, userId } = args;
   if (!clinicId) throw new Error("plan:hecho: clinicId ausente — se corta antes de consultar");
   const conColumna = await columnaOdontogramaHechoExiste();
-  const conEstado = conColumna && (await columnaEstadoExiste());
+  // Estricta (v2, m5): sin saber si hay rojo, «hecho» dejaría la marca roja y otra azul al lado. Si no
+  // se puede saber, lanza `EstadoNoDisponible` (503) antes de tocar nada.
+  const conEstado = conColumna && (await columnaEstadoExiste({ estricta: true }));
   const en = new Date();
   const resultados: ResultadoDeFila[] = [];
   let filas: FilaDelPlan[] = [];
@@ -307,7 +309,9 @@ export async function deshacerHecho(args: {
   const { clinicId, plan, userId, itemId } = args;
   if (!clinicId) throw new Error("plan:hecho: clinicId ausente — se corta antes de consultar");
   const conColumna = await columnaOdontogramaHechoExiste();
-  const conEstado = conColumna && (await columnaEstadoExiste());
+  // Estricta (v2, m5): sin estados, el deshacer no regresaría a rojo lo que «hecho» pasó a azul y aun
+  // así daría la fila por deshecha. Mejor 503 antes de tocar nada.
+  const conEstado = conColumna && (await columnaEstadoExiste({ estricta: true }));
   let out: ResultadoDeshacer | null = null;
 
   await prisma.$transaction(async (tx: DbDeFilas) => {
@@ -382,6 +386,11 @@ export function mensajeDeHecho(codigo: string, locale: "es" | "en" = "es"): stri
 }
 
 const error = (codigo: string, status: number) => NextResponse.json({ error: mensajeDeHecho(codigo), code: codigo }, { status });
+/** La sonda del rojo/azul no contestó (v2, m5): no se tocó nada; se puede reintentar. */
+const sinEstado = () => NextResponse.json(
+  { error: makeT(getDict("es"))("planTratamiento.hecho.error.estado_no_disponible"), code: "estado_no_disponible" },
+  { status: 503 },
+);
 
 /** «Resina 16 (MO)» — la frase de Movimientos, sin datos clínicos de más. */
 const nombreDeFila = (f: Pick<FilaDelPlan, "nombre" | "dientes" | "caras">) =>
@@ -407,6 +416,7 @@ export async function accionHecho(
       r = await deshacerHecho({ clinicId: ctx.clinicId, plan, userId: ctx.userId, itemId, puedeOdontograma });
     } catch (e) {
       if (e instanceof FilaError) return error(e.codigo, e.codigo === "sin_permiso_odontograma" ? 403 : 409);
+      if (e instanceof EstadoNoDisponible) return sinEstado();
       throw e;
     }
     await logMutation({
@@ -464,6 +474,7 @@ export async function accionHecho(
     r = await marcarHecho({ clinicId: ctx.clinicId, plan, userId: ctx.userId, itemIds, citaId, puedeOdontograma });
   } catch (e) {
     if (e instanceof FilaError) return error(e.codigo, 409);
+    if (e instanceof EstadoNoDisponible) return sinEstado();
     throw e;
   }
 

@@ -329,7 +329,7 @@ test("en un teléfono (390 px): el selector se toca con el dedo y la página no 
     let [sw, cw] = await ancho();
     assert.ok(sw <= cw, `sin scroll horizontal de la página (${sw} > ${cw})`);
     const b = await modo(page, "hecho").boundingBox();
-    assert.ok(b.height >= 36, "botón cómodo para el dedo");
+    assert.ok(b.height >= 44, `botón cómodo para el dedo (${b.height} px)`);
     await page.touchscreen.tap(b.x + b.width / 2, b.y + b.height / 2);
     assert.equal(await modo(page, "hecho").getAttribute("aria-checked"), "true");
     assert.equal(await page.locator(".odo-chart-card [data-modo-previo]").count(), 1);
@@ -340,6 +340,32 @@ test("en un teléfono (390 px): el selector se toca con el dedo y la página no 
     await foto(page, "telefono-panel");
     const panel = await page.locator(".odo-detail").evaluate((el: Element) => [el.scrollWidth, el.clientWidth]);
     assert.ok(panel[0] <= panel[1], `el panel del diente no se desborda (${panel[0]} > ${panel[1]})`);
+    assert.deepEqual(errores, []);
+  } finally { await ctx.close(); }
+});
+
+test("v2 m1: lo de antes (sin color) cuenta como realizado: en «Realizado» tocarlo lo quita; en «Por hacer» lo pasa a rojo", async (t) => {
+  if (saltar) return t.skip(saltar);
+  // dos resinas guardadas antes de esto, sin estado
+  FILAS = [
+    { id: "v1", patientId: PACIENTE, toothNumber: 46, surface: "O", conditionId: "restoration", notes: null },
+    { id: "v2", patientId: PACIENTE, toothNumber: 47, surface: "O", conditionId: "restoration", notes: "importada" },
+  ];
+  seq = 10;
+  const { ctx, page, errores } = await abrir();
+  try {
+    await page.waitForSelector(".odo-chart-card .odo-modo");
+    assert.equal(await colorCara(page, 46, "O"), RESTAURADORA, "lo de antes se ve como hoy");
+    await elegir(page, "Restauradora", "Restauración (resina/amalgama)");
+    // «Por hacer» (el de arranque): la del 47 pasa a rojo en un toque, con su nota
+    await tocarCentro(page, 47);
+    await esperar(() => estado().includes("47:O:restoration:por_hacer"), "la vieja del 47 pasa a por hacer");
+    assert.equal(FILAS.find((f) => f.id === "v2")?.notes, "importada", "la nota no se pierde");
+    assert.equal(await colorCara(page, 47, "O"), ROJO);
+    // «Realizado»: tocar la vieja del 46 la quita, como siempre
+    await modo(page, "hecho").click();
+    await tocarCentro(page, 46);
+    await esperar(() => !estado().some((e) => e.startsWith("46:")), "la vieja del 46 se quita");
     assert.deepEqual(errores, []);
   } finally { await ctx.close(); }
 });

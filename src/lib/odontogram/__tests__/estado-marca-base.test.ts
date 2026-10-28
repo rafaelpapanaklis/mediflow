@@ -26,6 +26,7 @@ let base: Base;
 const prismaVivo: any = {};
 const ctx: Record<string, any> = {};
 const fotos: Array<{ patientId: string; appointmentId: string; snapshotAt: Date; entries: unknown }> = [];
+const bitacora: any[] = [];
 
 const dobles: Record<string, unknown> = {
   "server-only": {},
@@ -38,6 +39,7 @@ const dobles: Record<string, unknown> = {
   },
   "@/lib/patient-visibility": {
     assertPatientVisible: async () => null,
+    patientVisibilityAnd: () => [],
     relatedPatientVisibilityAnd: () => [],
     patientVisibilityFilter: () => null,
   },
@@ -158,7 +160,7 @@ async function usar(opciones: { conSqlEstado?: boolean } = {}) {
   for (const k of Object.keys(prismaVivo)) delete prismaVivo[k];
   Object.assign(prismaVivo, base.prisma);
   prismaVivo.odontogramEntry = modeloOdontograma(base.prisma);
-  prismaVivo.auditLog = { create: async () => ({}) };
+  prismaVivo.auditLog = { create: async (a: any) => { bitacora.push(a.data); return {}; } };
   const txDelArnes = base.prisma.$transaction;
   prismaVivo.$transaction = (fn: (tx: any) => Promise<unknown>, o?: unknown) =>
     txDelArnes((tx: any) => fn(Object.assign(tx, { odontogramEntry: modeloOdontograma(tx), auditLog: { create: async () => ({}) } })), o);
@@ -236,6 +238,7 @@ before(async () => { PGlite = await cargarPGlite(); });
 beforeEach(() => {
   Object.assign(ctx, { clinicId: "c1", userId: "doc-c1", role: "DOCTOR", isDoctor: false, permissionsOverride: [] });
   fotos.length = 0;
+  bitacora.length = 0;
 });
 const salta = (t: { skip: (m: string) => void }) => {
   if (!PGlite) { t.skip("PGlite no está: pasa PGLITE_DIR=<carpeta con node_modules/@electric-sql/pglite>"); return true; }
@@ -379,4 +382,104 @@ test("revisión 2: si no se puede saber si la base guarda el estado, «Completar
   await base.db.query(`UPDATE "odontogram_entries" SET "estado" = 'por_hacer'`); // la pintó otra instancia que ya sabía
   assert.equal(await db.columnaEstadoExiste(), false, "la pantalla espera a volver a preguntar (2 min)");
   assert.deepEqual((await s.readCurrentEntries("pac-c1")).map((e) => e.estado), ["por_hacer"], "el cobro pregunta ya");
+});
+
+/* ─────── v2 (revisión de t1) ─────── */
+
+/** La sonda de la columna `estado` falla (timeout del pooler) mientras corre `fn`. */
+async function conSondaCaida<T>(fn: () => Promise<T>): Promise<T> {
+  const db = await import("@/lib/odontogram/estado-db");
+  const real = prismaVivo.$queryRaw;
+  prismaVivo.$queryRaw = (strings: TemplateStringsArray, ...v: unknown[]) =>
+    strings.join("?").includes("information_schema.columns") && strings.join("?").includes("'estado'")
+      ? Promise.reject(new Error("timeout del pooler")) : real(strings, ...v);
+  db._olvidarSondaEstado();
+  try { return await fn(); } finally { prismaVivo.$queryRaw = real; db._olvidarSondaEstado(); }
+}
+
+test("v2 m7: la restricción entra NOT VALID y queda validada; el archivo se pega dos veces", async (t) => {
+  if (salta(t)) return;
+  await usar();
+  const r = await base.db.query(`SELECT convalidated FROM pg_constraint WHERE conname = 'odontogram_entries_estado_check'`);
+  assert.deepEqual(r.rows, [{ convalidated: true }]);
+});
+
+test("v2 m5: con la sonda caída, el PUT con color da 503 sin guardar nada (la cola reintenta); el GET avisa; el sync guarda y avisa", async (t) => {
+  if (salta(t)) return;
+  await usar();
+  await put(16, "O", "restoration", "por_hacer");
+  await conSondaCaida(async () => {
+    const p = await put(26, "O", "restoration", "hecho");
+    assert.equal(p.status, 503);
+    assert.equal(p.body.error, "estado_no_disponible");
+    assert.deepEqual(await odontograma(), ["16O:restoration(por_hacer)"], "ni la marca ni su color: se reintentan juntos");
+    const sinColor = await put(36, "O", "caries");
+    assert.equal(sinColor.status, 200, "un hallazgo (sin color) se guarda como siempre");
+    const g = await ruta("GET");
+    assert.equal(g.status, 200);
+    assert.equal(g.body.estadoNoLeido, true);
+    assert.equal("conEstado" in g.body, false, "no dice «sin columna»: el selector se queda como estaba");
+    const sy = await sync({ 46: { base: { surfaces: {}, tooth: [] }, now: { surfaces: {}, tooth: ["crown"], estados: { "_:crown": "por_hacer" } } } });
+    assert.equal(sy.status, 200);
+    assert.equal(sy.body.estadoNoGuardado, true);
+  });
+  assert.deepEqual(await odontograma(), ["16O:restoration(por_hacer)", "36O:caries", "46·:crown"]);
+});
+
+test("v2 m5: «Hecho» y «Deshacer» con la sonda caída: 503 y no se toca nada (ni la fila ni el odontograma)", async (t) => {
+  if (salta(t)) return;
+  await usar();
+  await sembrarPlan(base.db);
+  await base.db.query(
+    `INSERT INTO "treatment_plan_items" ("id","clinicId","planId","procedureId","nombre","dientes","caras","estado","orden","precio")
+     VALUES ('f-res','c1','plan1','p-res','Restauración resina 2 caras',$1,$2,'pendiente',0,1200)`, [[16], ["O"]]);
+  await put(16, "O", "restoration", "por_hacer");
+  const h = await conSondaCaida(() => patch({ action: "marcar_hecho", itemId: "f-res" }));
+  assert.equal(h.status, 503, JSON.stringify(h.body));
+  assert.equal(h.body.code, "estado_no_disponible");
+  assert.match(h.body.error, /no se tocó nada/);
+  assert.equal((await base.db.query(`SELECT "estado" FROM "treatment_plan_items" WHERE "id" = 'f-res'`)).rows[0].estado, "pendiente");
+  assert.deepEqual(await odontograma(), ["16O:restoration(por_hacer)"]);
+  assert.equal((await patch({ action: "marcar_hecho", itemId: "f-res" })).status, 200);
+  const d = await conSondaCaida(() => patch({ action: "deshacer_hecho", itemId: "f-res" }));
+  assert.equal(d.status, 503);
+  assert.deepEqual(await odontograma(), ["16O:restoration(hecho)"], "no queda deshecho a medias");
+  assert.equal((await base.db.query(`SELECT "estado" FROM "treatment_plan_items" WHERE "id" = 'f-res'`)).rows[0].estado, "hecho");
+});
+
+test("v2 m4: la bitácora del PUT dice si la marca ya existía (Movimientos: «Marcó…» vs «Registró…»)", async (t) => {
+  if (salta(t)) return;
+  await usar();
+  await put(16, "O", "restoration", "por_hacer");
+  await put(16, "O", "restoration", "hecho");
+  await put(26, null, "crown", "por_hacer");
+  await put(26, null, "crown", "previo");
+  const despues = bitacora.filter((b) => b.action === "odontogram_write").map((b) => b.changes._odontogram.after).map((a: any) => `${a.toothNumber}:${a.estado}:${a.existia}`);
+  assert.deepEqual(despues, ["16:por_hacer:false", "16:hecho:true", "26:por_hacer:false", "26:previo:true"]);
+});
+
+test("v2 M2: Sabina y el lector del PDF/exportación dicen «(por hacer)» / «(previo, otra clínica)»; sin la columna, como hoy", async (t) => {
+  if (salta(t)) return;
+  await usar();
+  await put(16, "O", "restoration", "por_hacer");
+  await put(17, "O", "restoration", "hecho");
+  await put(26, null, "crown", "previo");
+  const { odontograma: herramienta } = await import("@/lib/sabina/tools/odontograma");
+  const dbSabina: any = {
+    patient: { findFirst: async (a: any) => (a.where.id === "pac-c1" && a.where.clinicId === "c1" ? { id: "pac-c1" } : null) },
+    odontogramEntry: modeloOdontograma(base.prisma),
+    $queryRaw: (...a: any[]) => base.prisma.$queryRaw(...a),
+  };
+  const sab = { clinicId: "c1", userId: "doc-c1", role: "DOCTOR", permissionsOverride: [], timezone: "America/Mexico_City", db: dbSabina } as any;
+  const datos = await herramienta.ejecutar(sab, { patientId: "pac-c1" });
+  assert.deepEqual(datos.hallazgos.map((h: any) => `${h.hallazgo}: ${h.dientes}`).sort(), [
+    "Corona (previo, otra clínica): 26",
+    "Restauración (resina/amalgama) (por hacer): 16",
+    "Restauración (resina/amalgama): 17",
+  ]);
+  const { estadosParaMostrar } = await import("@/lib/odontogram/estado-db");
+  assert.equal((await estadosParaMostrar(base.prisma, "pac-c1")).size, 3);
+  // sin la columna: mapa vacío, nunca lanza
+  await usar({ conSqlEstado: false });
+  assert.equal((await estadosParaMostrar(base.prisma, "pac-c1")).size, 0);
 });

@@ -114,6 +114,16 @@ export function podarEstados(rec: ConEstados & { surfaces?: Record<string, strin
   else delete rec.estados;
 }
 
+/**
+ * Lo que se escribe junto al nombre de la marca fuera del odontograma (PDF del expediente,
+ * exportación, Sabina, la IA de la consulta): «Resina (por hacer)». Realizado y lo de antes, nada.
+ */
+export function rotuloDeEstado(estado: unknown): string {
+  if (estado === "por_hacer") return "(por hacer)";
+  if (estado === "previo") return "(previo, otra clínica)";
+  return "";
+}
+
 /** El estado que deja un toque con el pincel en un modo: «realizado» con «de otra clínica» = previo. */
 export function estadoDelModo(modo: ModoMarca, previo: boolean): EstadoMarca {
   return modo === "hecho" && previo ? "previo" : modo;

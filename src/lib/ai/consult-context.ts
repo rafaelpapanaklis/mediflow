@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
 import { readCurrentEntries } from "@/lib/odontogram/snapshot";
+import { rotuloDeEstado } from "@/lib/odontogram/estado-marca";
 import { COND_BY_ID } from "@/components/dashboard/odontogram-v2/data";
 import { rotuloCara } from "@/components/dashboard/odontogram-v2/adapter";
 
@@ -81,7 +82,8 @@ export async function buildConsultContext(args: Args): Promise<string> {
 
   // 3) Odontograma actual
   try {
-    const entries = await readCurrentEntries(patientId);
+    // sin la sonda estricta: si no se puede leer el rojo/azul, la IA ve el odontograma igual (v2, m6)
+    const entries = await readCurrentEntries(patientId, { estricta: false });
     if (entries.length) {
       L.push("\n== ODONTOGRAMA ACTUAL ==");
       const byTooth: Record<number, string[]> = {};
@@ -89,9 +91,9 @@ export async function buildConsultContext(args: Args): Promise<string> {
         const cond = COND_BY_ID[e.conditionId]?.es ?? e.conditionId;
         // la incisal de los anteriores se guarda como «O» (ws1-t11): se rotula «Incisal»
         const surf = e.surface ? ` (${rotuloCara(e.toothNumber, e.surface)})` : "";
-        // rojo = por hacer (aún no está hecho), previo = de otra clínica (ws1-t6)
-        const estado = e.estado === "por_hacer" ? " [por hacer]" : e.estado === "previo" ? " [previo, otra clínica]" : "";
-        (byTooth[e.toothNumber] ||= []).push(`${cond}${surf}${estado}`);
+        // rojo = por hacer (aún no está hecho), previo = de otra clínica (ws1-t6): «(por hacer)»
+        const estado = rotuloDeEstado(e.estado);
+        (byTooth[e.toothNumber] ||= []).push(`${cond}${surf}${estado ? ` ${estado}` : ""}`);
       });
       Object.keys(byTooth)
         .map(Number)

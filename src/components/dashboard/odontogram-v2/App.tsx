@@ -128,6 +128,7 @@ export const OdontogramV2 = memo(function OdontogramV2({ patientId, value, onCha
   const [modo, setModo] = useState<ModoMarca>("por_hacer");
   const [previo, setPrevio] = useState(false);
   const [conEstadoServidor, setConEstadoServidor] = useState(false);
+  const [estadoNoLeido, setEstadoNoLeido] = useState(false);
   const modos = controlled ? (conEstado ?? hayEstados(records)) : conEstadoServidor;
 
   // Cola de autoguardado del modo VIVO: una por paciente y por pestaña, que
@@ -188,6 +189,7 @@ export const OdontogramV2 = memo(function OdontogramV2({ patientId, value, onCha
         if (cancelled) return;
         if (r.records) setInternalRecords(r.records);
         if (r.conEstado !== undefined) setConEstadoServidor(r.conEstado);
+        setEstadoNoLeido(!!r.estadoNoLeido);
         if (r.error) setError(r.error);
       })
       .finally(() => { if (!cancelled) setLoading(false); });
@@ -202,6 +204,7 @@ export const OdontogramV2 = memo(function OdontogramV2({ patientId, value, onCha
       .then((r) => {
         if (r.records && !r.error) { setInternalRecords(r.records); setError(null); }
         if (r.conEstado !== undefined) setConEstadoServidor(r.conEstado);
+        if (!r.error) setEstadoNoLeido(!!r.estadoNoLeido);
       });
   }, [patientId]);
 
@@ -276,8 +279,10 @@ export const OdontogramV2 = memo(function OdontogramV2({ patientId, value, onCha
       : !!records[fdi]?.tooth?.includes(brush);
     // Con el selector de modo, un procedimiento queda en el color del modo en el mismo toque.
     // Tocar una marca que ya está en OTRO estado le cambia el color (no la quita); en el mismo, la quita.
+    // Lo de antes (sin estado) cuenta como realizado (v2, m1): en «Realizado» tocarlo lo quita como
+    // siempre; en «Por hacer» lo pasa a rojo.
     const estado: EstadoMarca | undefined = modos && admiteEstado(brush) ? estadoDelModo(modo, previo) : undefined;
-    if (present && estado !== undefined && estadoEn(records[fdi], lk, brush) !== estado) {
+    if (present && estado !== undefined && (estadoEn(records[fdi], lk, brush) ?? "hecho") !== estado) {
       setRecords((prev) => applyToRecords(prev, fdi, (r) => fijarEstadoEn(r, lk, brush, estado)));
       if (live) save({ kind: "put", toothNumber: fdi, surface: lk, conditionId: brush, estado });
       return;
@@ -418,10 +423,13 @@ export const OdontogramV2 = memo(function OdontogramV2({ patientId, value, onCha
       <section className="odo-main" aria-label="Odontograma">
         <div className="odo-chart-card">
           {selectorModo}
+          {/* no se pudo leer el rojo/azul: se dice aparte, sin tapar la ayuda del pincel (v2, m5) */}
+          {estadoNoLeido && <div className="odo-estado-aviso" role="alert">{t.estadoNoLeido}</div>}
           <div className="odo-chart-head">
             <div className="odo-hint">
               {error ? (
                 <span style={{ color: "#d8504f" }}>{error}</span>
+
               ) : activeBrushCond ? (
                 <span>
                   <b style={{ color: tonoPincel ? `var(${VAR_TONO[tonoPincel]})` : GROUP_COLOR[activeBrushCond.group] }}>{activeBrushCond[lang]}</b>

@@ -127,6 +127,7 @@ const MENSAJES: Record<string, string> = {
   schema_not_migrated: "El odontograma no está disponible en este servidor; avisa a soporte.",
   internal_error: "Falló el servidor.",
   otra_sesion: OTRA_SESION,
+  estado_no_disponible: "no se pudo guardar si es por hacer o realizado; se reintenta solo.",
 };
 
 /** El 403 del reto de dos pasos (el guardia no se lleva la pestaña si hay algo pendiente, N3-O1). */
@@ -194,6 +195,8 @@ export interface OdontogramRead {
   entries: OdontogramEntry[];
   /** La base guarda el estado de las marcas (rojo/azul, ws1-t6): la pantalla enseña el selector. */
   conEstado?: boolean;
+  /** No se pudo saber si lo guarda (falló la consulta): se avisa y el selector se queda como estaba. */
+  estadoNoLeido?: boolean;
 }
 
 /**
@@ -242,7 +245,7 @@ export async function fetchOdontogram(patientId: string): Promise<OdontogramRead
   if (!res.ok) throw await httpError(res, fallback);
   const data = await safeJson<{
     entries: OdontogramEntry[]; notes?: Record<string, string>;
-    clinicId?: string; userId?: string; conEstado?: boolean;
+    clinicId?: string; userId?: string; conEstado?: boolean; estadoNoLeido?: boolean;
   }>(res);
   const records = entriesToRecords(data?.entries ?? []);
   // Per-tooth notes arrive in a SEPARATE `notes` map keyed by toothNumber — the
@@ -259,7 +262,7 @@ export async function fetchOdontogram(patientId: string): Promise<OdontogramRead
     clinicId: typeof data?.clinicId === "string" ? data.clinicId : null,
     userId: typeof data?.userId === "string" ? data.userId : null,
     entries: data?.entries ?? [],
-    conEstado: data?.conEstado === true,
+    ...(data?.estadoNoLeido ? { estadoNoLeido: true } : { conEstado: data?.conEstado === true }),
   };
 }
 
@@ -341,7 +344,7 @@ export interface CambioDiente { base: ToothRecord; now: ToothRecord }
  * sobre lo que haya en ese momento (POST /api/odontogram/sync con `cambios`).
  * Así no pisa lo que otra pestaña autoguardó, ni siquiera en el mismo diente.
  */
-export async function syncCambios(patientId: string, cambios: Record<number, CambioDiente>): Promise<void> {
+export async function syncCambios(patientId: string, cambios: Record<number, CambioDiente>): Promise<{ estadoNoGuardado: boolean }> {
   const out: Record<number, CambioDiente> = {};
   for (const [fdi, c] of Object.entries(cambios)) {
     const n = Number(fdi);
@@ -355,6 +358,8 @@ export async function syncCambios(patientId: string, cambios: Record<number, Cam
     body: JSON.stringify({ patientId, cambios: out }),
   });
   if (!res.ok) throw await httpError(res, "No se pudo actualizar el odontograma");
+  // las marcas se guardaron, pero no su rojo/azul (el servidor no pudo leer si la base lo guarda)
+  return { estadoNoGuardado: (await safeJson<{ estadoNoGuardado?: boolean }>(res))?.estadoNoGuardado === true };
 }
 
 /** Las caras con la letra de la base (la «I» de los anteriores viaja como «O»). */

@@ -268,3 +268,56 @@ test("revisión 4: «Hecho» pasa a azul lo rojo que el procedimiento no dibuja 
   assert.deepEqual(corto(pu.bajas), ["85·:pulpitis"]);
   assert.deepEqual(corto(aplicarAEntradas(aplicarAEntradas(antes, pu), cambioDeshacer(pu))), corto(antes));
 });
+
+/* ─────── v2 (revisión de t1) ─────── */
+
+import { redactarMovimiento } from "../../movimientos-paciente/catalogo";
+import { rotuloDeEstado } from "../estado-marca";
+
+test("v2 M1: lo rojo que ya es una fila viva de otro plan activo sale «ya en el plan X», no se agrega y «Agregar todo» lo salta", () => {
+  const entradas: EntradaPlan[] = [
+    { toothNumber: 16, surface: "O", conditionId: "restoration", estado: "por_hacer" },
+    { toothNumber: 26, surface: null, conditionId: "crown", estado: "por_hacer" },
+  ];
+  const fila = (id: string, nombre: string, dientes: number[], estado: "pendiente" | "hecho" | "cancelado" = "pendiente") =>
+    ({ id, planId: "plan-1", nombre, procedureId: null, dientes, cantidad: 1, estado, hechoEn: null, invoiceId: null });
+  const otros = [{ planId: "plan-1", nombre: "Plan 20 oct 2026", filas: [fila("f1", "Restauración resina 2 caras", [16]), fila("f2", "Corona metal-porcelana", [27])] }];
+  const chips = chipsDelPlan(hallazgosPorTratar(entradas), TARIFARIO, entradas, [], otros);
+  assert.deepEqual(chips.map((c) => `${c.clave}:${c.enOtroPlan ?? "-"}`), ["r:h:16:restoration:Plan 20 oct 2026", "r:h:26:crown:-"], "la corona del 27 no es la del 26");
+  let id = 0;
+  const ctx = { tarifario: TARIFARIO, entradas, nuevoId: () => `r${++id}`, motivo: "x", idioma: "es" as const };
+  assert.deepEqual(agregarDesdeChip([], chips[0], ctx), [], "no se agrega: serían dos notas de cobro");
+  // una fila cancelada (o hecha hace días) ya no la tapa
+  const cancelada = [{ ...otros[0], filas: [fila("f1", "Restauración resina 2 caras", [16], "cancelado")] }];
+  assert.equal(chipsDelPlan(hallazgosPorTratar(entradas), TARIFARIO, entradas, [], cancelada)[0].enOtroPlan, undefined);
+});
+
+test("v2 m3: la caries de OTRA cara no se la come la resina roja: sale y se junta en una resina de 2 caras", () => {
+  const entradas: EntradaPlan[] = [
+    { toothNumber: 16, surface: "M", conditionId: "caries" },
+    { toothNumber: 16, surface: "O", conditionId: "caries" },
+    { toothNumber: 16, surface: "O", conditionId: "restoration", estado: "por_hacer" },
+  ];
+  const chips = chipsDelPlan(hallazgosPorTratar(entradas), TARIFARIO, entradas, []);
+  assert.deepEqual(chips.map((c) => c.clave), ["r:h:16:restoration", "h:16:caries"], "la caries (M y O) sale porque la M no está en rojo");
+  let id = 0;
+  const ctx = { tarifario: TARIFARIO, entradas, nuevoId: () => `r${++id}`, motivo: "x", idioma: "es" as const };
+  const rs = agregarDesdeChip(agregarDesdeChip([], chips[0], ctx), chips[1], ctx);
+  assert.equal(rs.length, 1);
+  assert.deepEqual({ c: rs[0].caras, p: rs[0].procedimiento, $: rs[0].precio }, { c: ["M", "O"], p: "Restauración resina 2 caras", $: "900" });
+  // cubierta del todo (solo O): no sale aparte
+  const soloO = entradas.filter((e) => e.surface === "O");
+  assert.deepEqual(chipsDelPlan(hallazgosPorTratar(soloO), TARIFARIO, soloO, []).map((c) => c.clave), ["r:h:16:restoration"]);
+});
+
+test("v2 m4 y M2: Movimientos dice «Marcó por hacer…» sin valores clínicos; el rótulo fuera del odontograma", () => {
+  const fila = (after: Record<string, unknown>) => ({ entityType: "patient", action: "odontogram_write", changes: { _odontogram: { after } } });
+  assert.equal(redactarMovimiento(fila({ toothNumber: 16, surface: "O", conditionId: "restoration", estado: "hecho", existia: true })), "Marcó realizado un procedimiento en el odontograma");
+  assert.equal(redactarMovimiento(fila({ toothNumber: 16, surface: "O", conditionId: "restoration", estado: "por_hacer", existia: true })), "Marcó por hacer un procedimiento en el odontograma");
+  assert.equal(redactarMovimiento(fila({ toothNumber: 26, surface: null, conditionId: "crown", estado: "previo", existia: false })), "Registró un procedimiento previo (de otra clínica) en el odontograma");
+  assert.equal(redactarMovimiento(fila({ toothNumber: 36, surface: "O", conditionId: "caries" })), "Registró un hallazgo en el odontograma", "sin estado, como siempre");
+  assert.equal(rotuloDeEstado("por_hacer"), "(por hacer)");
+  assert.equal(rotuloDeEstado("previo"), "(previo, otra clínica)");
+  assert.equal(rotuloDeEstado("hecho"), "");
+  assert.equal(rotuloDeEstado(null), "");
+});

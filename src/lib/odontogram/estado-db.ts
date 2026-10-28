@@ -11,6 +11,16 @@ import { prisma } from "@/lib/prisma";
 import { esEstadoMarca, type EstadoMarca } from "./estado-marca";
 
 type Db = Pick<Prisma.TransactionClient, "$queryRaw" | "$executeRaw">;
+/** Para leer basta un `$queryRaw` (el de Prisma, el de una transacción o el de solo lectura de Sabina). */
+type Lector = { $queryRaw: (...args: any[]) => Promise<unknown> };
+
+/** La sonda estricta no pudo saber si la columna existe (la consulta falló). */
+export class EstadoNoDisponible extends Error {
+  constructor(causa: unknown) {
+    super(`no se pudo saber si odontogram_entries tiene la columna estado: ${causa instanceof Error ? causa.message : String(causa)}`);
+    this.name = "EstadoNoDisponible";
+  }
+}
 
 // ── La columna (sonda en globalThis: sobrevive a las recargas de `next dev`) ────────────────────
 
@@ -48,7 +58,7 @@ export async function columnaEstadoExiste(opciones: { estricta?: boolean } = {})
     m.columna = { existe, en: Date.now() };
     return existe;
   } catch (e) {
-    if (opciones.estricta) throw e;
+    if (opciones.estricta) throw new EstadoNoDisponible(e);
     console.warn("[odontograma] no se pudo saber si existe la columna estado:", e);
     return false;
   }
@@ -57,13 +67,28 @@ export async function columnaEstadoExiste(opciones: { estricta?: boolean } = {})
 // ── Lectura y escritura ─────────────────────────────────────────────────────────────────────────
 
 /** id de la entrada → estado, solo las que lo tienen (lo viejo, sin estado, no viaja). */
-export async function leerEstados(db: Db, patientId: string): Promise<Map<string, EstadoMarca>> {
-  const filas = await db.$queryRaw<{ id: string; estado: string | null }[]>`
+export async function leerEstados(db: Lector, patientId: string): Promise<Map<string, EstadoMarca>> {
+  const filas = await (db.$queryRaw as (q: TemplateStringsArray, ...v: unknown[]) => Promise<{ id: string; estado: string | null }[]>)`
     SELECT "id", "estado" FROM "odontogram_entries"
      WHERE "patientId" = ${patientId} AND "estado" IS NOT NULL`;
   const out = new Map<string, EstadoMarca>();
   for (const f of filas) if (esEstadoMarca(f.estado)) out.set(f.id, f.estado);
   return out;
+}
+
+/**
+ * Para quien solo ENSEÑA el odontograma (PDF del expediente, exportación, Sabina): los estados del
+ * paciente, o un mapa vacío si la base no los guarda o no se pudieron leer (se enseña como hoy).
+ * Nunca lanza: un PDF no se cae por el color de una marca.
+ */
+export async function estadosParaMostrar(db: Lector, patientId: string): Promise<Map<string, EstadoMarca>> {
+  try {
+    if (!patientId || !(await columnaEstadoExiste())) return new Map();
+    return await leerEstados(db, patientId);
+  } catch (e) {
+    console.warn("[odontograma] no se pudieron leer los estados para mostrar:", e);
+    return new Map();
+  }
 }
 
 /** Fija el estado de UNA entrada del paciente (por id). */

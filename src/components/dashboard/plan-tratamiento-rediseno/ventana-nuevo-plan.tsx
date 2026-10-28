@@ -20,8 +20,8 @@ import { buscarEnTarifario, exactoEnTarifario } from "./buscar-tarifario";
 import { renglonesDelPlanSinPrecio, useTextosSinPrecio } from "@/lib/quotes/sin-precio";
 import { dineroExacto } from "@/lib/treatments/dinero-exacto";
 import { PROCEDIMIENTOS, type ProcedimientoTarifario } from "@/lib/treatments/sugerir-procedimiento";
-import { DIAS_ENTRE_SESIONES, agregarDesdeChip, chipsDelPlan, filasParaGuardar, nombrePorDefecto, sillon, type Chip } from "./armar-plan";
-import { guardarPlan, presentarDisponible, presentarPlan } from "./guardar-plan";
+import { DIAS_ENTRE_SESIONES, agregarDesdeChip, chipsDelPlan, filasParaGuardar, nombrePorDefecto, sillon, type Chip, type OtroPlan } from "./armar-plan";
+import { guardarPlan, planesActivosDelPaciente, presentarDisponible, presentarPlan } from "./guardar-plan";
 
 /**
  * «Nuevo plan de tratamiento» rápido (ws1-t5, fase 2 · P3), con el lenguaje del menú de dos niveles.
@@ -105,6 +105,8 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
   }));
   const [tarifario, setTarifario] = useState<ProcedimientoTarifario[]>([]);
   const [entradas, setEntradas] = useState<EntradaOdontograma[]>(() => precarga?.entradas ?? []);
+  // Los planes activos del paciente con sus filas: lo rojo que ya está en uno no se ofrece otra vez (v2, M1).
+  const [otrosPlanes, setOtrosPlanes] = useState<OtroPlan[]>([]);
   // Lo que trae la consulta no se vuelve a leer: ni su odontograma ni su diagnóstico.
   const odontogramaDeConsulta = precarga?.entradas !== undefined;
   const diagnosticoDeConsulta = precarga?.diagnostico !== undefined;
@@ -139,6 +141,8 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
         .then((d) => { if (vivo && d && Array.isArray(d.entries)) setEntradas(d.entries as EntradaOdontograma[]); })
         .catch(() => {});
     }
+    // Planes activos (o en pausa) con filas: lo rojo que ya está en uno no se vuelve a ofrecer.
+    planesActivosDelPaciente(paciente.id).then((p) => { if (vivo) setOtrosPlanes(p); });
     // El diagnóstico de la última consulta (sin `medicalRecord.view` la API dice 403 y no se precarga nada).
     if (!diagnosticoDeConsulta) fetch(`/api/clinical?patientId=${encodeURIComponent(paciente.id)}`, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
@@ -162,7 +166,10 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
   }, [form.name, nombreTocado, idioma, setForm]);
 
   const hallazgos: Hallazgo[] = useMemo(() => hallazgosPorTratar(entradas), [entradas]);
-  const todosLosChips = useMemo(() => chipsDelPlan(hallazgos, tarifario, entradas, plan.renglones), [hallazgos, tarifario, entradas, plan.renglones]);
+  const todosLosChips = useMemo(
+    () => chipsDelPlan(hallazgos, tarifario, entradas, plan.renglones, otrosPlanes),
+    [hallazgos, tarifario, entradas, plan.renglones, otrosPlanes],
+  );
   // Las marcas ROJAS del odontograma (ws1-t6) van en su propia sección, con su precio.
   const chipsRojos = useMemo(() => todosLosChips.filter((c) => c.tipo === "por_hacer"), [todosLosChips]);
   const chips = useMemo(() => todosLosChips.filter((c) => c.tipo !== "por_hacer"), [todosLosChips]);
@@ -233,7 +240,7 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
   const agregarRojos = () =>
     cambiarPlan((p) => ({
       ...p,
-      renglones: chipsRojos.filter((c) => !c.puesto).reduce(
+      renglones: chipsRojos.filter((c) => !c.puesto && c.enOtroPlan == null).reduce(
         (rs, c) => agregarDesdeChip(rs, c, { tarifario, entradas, nuevoId, motivo: motivoDe(c), idioma }), p.renglones),
     }));
   // «pieza 16 oclusal» / «pieza 16 MO» (la cara con su nombre cuando es una).
@@ -411,7 +418,7 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
                 <h4 id="plan-por-hacer-titulo" className={s.seccionTitulo}>
                   <span className={s.puntoPorHacer} aria-hidden />{t("planTratamiento.nuevo.porHacer")}
                 </h4>
-                {chipsRojos.some((c) => !c.puesto) && (
+                {chipsRojos.some((c) => !c.puesto && c.enOtroPlan == null) && (
                   <button type="button" className={s.ficha} onClick={agregarRojos} disabled={guardando} data-agregar-por-hacer>
                     <Plus size={12} strokeWidth={2} aria-hidden />{t("planTratamiento.nuevo.agregarTodoPorHacer")}
                   </button>
@@ -426,14 +433,19 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
                       key={c.clave}
                       type="button"
                       data-chip={c.clave}
-                      className={`${s.ficha} ${s.fichaPorHacer} ${c.puesto ? s.fichaPuesta : ""}`}
-                      disabled={c.puesto || guardando}
+                      className={`${s.ficha} ${s.fichaPorHacer} ${c.puesto ? s.fichaPuesta : ""} ${c.enOtroPlan != null ? s.fichaEnOtroPlan : ""}`}
+                      disabled={c.puesto || c.enOtroPlan != null || guardando}
                       onClick={() => tocarChip(c)}
-                      title={t("planTratamiento.nuevo.hallazgoAgregar")}
+                      title={c.enOtroPlan != null ? t("planTratamiento.nuevo.yaEnPlan", { plan: c.enOtroPlan }) : t("planTratamiento.nuevo.hallazgoAgregar")}
+                      data-en-otro-plan={c.enOtroPlan ?? undefined}
                     >
                       <span className={c.sugerencia?.elegir ? s.fichaSugeridoSinTarifario : undefined}>{sug || c.condiciones.map(nombreCondicion).join(" · ")}</span>
                       <span className={s.fichaCuenta}>· {dondeRojo(c)}</span>
-                      <span className={s.fichaPrecio}>· {precio != null ? dineroExacto(precio) : t("planTratamiento.nuevo.sinPrecio")}</span>
+                      {c.enOtroPlan != null ? (
+                        <span className={s.fichaCuenta}>· {t("planTratamiento.nuevo.yaEnPlan", { plan: c.enOtroPlan })}</span>
+                      ) : (
+                        <span className={s.fichaPrecio}>· {precio != null ? dineroExacto(precio) : t("planTratamiento.nuevo.sinPrecio")}</span>
+                      )}
                     </button>
                   );
                 })}

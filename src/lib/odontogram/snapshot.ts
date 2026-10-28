@@ -49,8 +49,10 @@ const NOTE_CONDITION = "__note__";
  * Lee odontogram_entries del paciente (excluye la nota por diente), con su rojo/azul si la base lo
  * guarda. Si no se puede saber si lo guarda, LANZA (sonda estricta): quien la llama para cobrar
  * («Completar consulta») lo atrapa y esa vez no propone nada, en vez de cobrar lo que está en rojo.
+ * Quien solo lo enseña (la IA de la consulta) pasa `estricta: false`: sin estados, pero con el
+ * odontograma (v2, m6).
  */
-export async function readCurrentEntries(patientId: string): Promise<SnapshotEntry[]> {
+export async function readCurrentEntries(patientId: string, opciones: { estricta?: boolean } = {}): Promise<SnapshotEntry[]> {
   const rows = await prisma.odontogramEntry.findMany({
     where: { patientId, conditionId: { not: NOTE_CONDITION } },
     orderBy: [{ toothNumber: "asc" }, { surface: "asc" }],
@@ -62,7 +64,7 @@ export async function readCurrentEntries(patientId: string): Promise<SnapshotEnt
       notes: true,
     },
   });
-  const estados = (await columnaEstadoExiste({ estricta: true })) ? await leerEstados(prisma, patientId) : new Map<string, EstadoMarca>();
+  const estados = (await columnaEstadoExiste({ estricta: opciones.estricta !== false })) ? await leerEstados(prisma, patientId) : new Map<string, EstadoMarca>();
   return rows.map((r) => ({
     toothNumber: r.toothNumber,
     surface: (r.surface ?? null) as SurfaceKey | null,

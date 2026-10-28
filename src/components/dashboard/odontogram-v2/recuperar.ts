@@ -28,6 +28,8 @@ export interface ResultadoCarga {
   error: string | null;
   /** la base guarda el estado de las marcas (rojo/azul, ws1-t6); sin lectura, no se sabe (undefined) */
   conEstado?: boolean;
+  /** el servidor no pudo leer los estados: se avisa */
+  estadoNoLeido?: boolean;
 }
 
 export async function cargarOdontograma(args: {
@@ -45,9 +47,10 @@ export async function cargarOdontograma(args: {
     for (let i = 0; i < 4; i++) {
       const v = queue?.getVersion();
       const r = await leer(patientId);
-      if (!queue) return { records: r.records, error: null, conEstado: r.conEstado };
+      const estado = { conEstado: r.conEstado, ...(r.estadoNoLeido ? { estadoNoLeido: true } : {}) };
+      if (!queue) return { records: r.records, error: null, ...estado };
       if (r.clinicId && r.userId) queue.setOwner({ clinicId: r.clinicId, userId: r.userId });
-      if (queue.getVersion() === v || (force && i === 3)) return { records: queue.overlay(r.records), error: null, conEstado: r.conEstado };
+      if (queue.getVersion() === v || (force && i === 3)) return { records: queue.overlay(r.records), error: null, ...estado };
     }
     return { records: null, error: null };
   } catch (e) {

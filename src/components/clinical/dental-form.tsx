@@ -795,7 +795,9 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
             odoBasesRef.current.forEach((base, fdi) => {
               cambios[fdi] = { base, now: odontogram[fdi] ?? { surfaces: {}, tooth: [] } };
             });
-            if (Object.keys(cambios).length) await syncCambios(patientId, cambios);
+            if (Object.keys(cambios).length && (await syncCambios(patientId, cambios)).estadoNoGuardado) {
+              toast("El odontograma se actualizó, pero no se pudo guardar qué está por hacer y qué está realizado. Revísalo en la pestaña Odontograma.", { icon: "⚠️", duration: 8000 });
+            }
           } catch {
             toast.error("La consulta se guardó; el odontograma del paciente no se pudo actualizar.", { duration: 7000 });
           }
