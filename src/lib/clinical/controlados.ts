@@ -496,7 +496,9 @@ export function detectarControlado(...textos: Array<string | null | undefined>):
   // v4 (m-1 de t8): las palabras se parten SOLO por espacios y dentro de cada
   // una se quitan los signos, para que «Trama-dool» o «Clonaze-pan» (errata +
   // palabra partida por un signo) sigan siendo UNA palabra.
-  const palabrasEspacio = junto.split(/\s+/).filter(Boolean);
+  // v5 (m-1 de t8): fuera las palabras que se quedan vacías al normalizar (un
+  // «-» suelto en «Trama - dool» partía la pareja en «trama»+«-» y «-»+«dool»).
+  const palabrasEspacio = junto.split(/\s+/).filter((p) => normalizarNombre(p) !== "");
   for (const palabra of palabrasEspacio) {
     for (const lectura of lecturasDelTexto(palabra)) {
       for (const [termino, nombre, grupo] of CONTENIDOS) {
@@ -507,15 +509,19 @@ export function detectarControlado(...textos: Array<string | null | undefined>):
     }
   }
   // 4 (v4, m-1 de t8): errata + palabra partida por un ESPACIO («Trama dool»,
-  // «Clona zepan»). Cada pareja de palabras vecinas se une y se compara ENTERA
+  // «Clona zepan»). Cada pareja (y desde v5 cada trío) de palabras vecinas se une y se compara ENTERA
   // con el término (largo ±1, del principio de la primera al final de la
   // segunda): no se busca el término DENTRO de la pareja, así «cefaclor» +
   // «acetato» no vuelve a parecerse a «cloracepato».
-  for (let k = 0; k + 1 < palabrasEspacio.length; k++) {
-    for (const lectura of lecturasDelTexto(`${palabrasEspacio[k]}${palabrasEspacio[k + 1]}`)) {
-      for (const [termino, nombre, grupo] of CONTENIDOS) {
-        if (termino.length < LARGO_CON_TOLERANCIA || SIN_TOLERANCIA.has(termino)) continue;
-        if (aUnaLetra(lectura, termino)) return { nombre, grupo };
+  // v5 (m-1 de t8): también cada TRÍO de vecinas unido, entero y con el mismo
+  // largo ±1 («Tra ma dool», «Cl ona zepan»).
+  for (const tam of [2, 3]) {
+    for (let k = 0; k + tam <= palabrasEspacio.length; k++) {
+      for (const lectura of lecturasDelTexto(palabrasEspacio.slice(k, k + tam).join(""))) {
+        for (const [termino, nombre, grupo] of CONTENIDOS) {
+          if (termino.length < LARGO_CON_TOLERANCIA || SIN_TOLERANCIA.has(termino)) continue;
+          if (aUnaLetra(lectura, termino)) return { nombre, grupo };
+        }
       }
     }
   }

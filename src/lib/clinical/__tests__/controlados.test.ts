@@ -229,6 +229,18 @@ test("v4 · m-1: errata + palabra partida por un signo o por un espacio cae (la 
   assert.equal(detectarControlado("Ácido fólico dinitrato"), null);
 });
 
+test("v5 · m-1: un signo suelto entre espacios o la palabra en tres trozos ya no esconden la errata (la tabla de t8)", () => {
+  for (const [texto, nombre] of [
+    ["Trama - dool", "Tramadol"], ["Tra ma dool", "Tramadol"], ["Tram a dool", "Tramadol"], ["Cl ona zepan", "Clonazepam"],
+  ]) {
+    assert.equal(detectarControlado(texto)?.nombre, nombre, texto);
+  }
+  // El trío se compara ENTERO: tres palabras legítimas no se vuelven un controlado.
+  assert.equal(detectarControlado("Cefaclor acetato 500 mg"), null);
+  assert.equal(detectarControlado("Ácido fólico dinitrato"), null);
+  assert.equal(detectarControlado("Ketorolaco - trometamina"), null);
+});
+
 test("v4 · m-2: los signos de dosis que imitan letras no disfrazan un controlado (la tabla de t8)", () => {
   const casos: Array<[string, string, string]> = [
     ["", "Mºrfina caja", "Morfina"],
@@ -255,6 +267,11 @@ test("v4 · los signos de dosis legítimos siguen sin disparar nada", () => {
   for (const [concentracion, presentacion] of [
     ["50 µg/mL", ""], ["50 \u03BCg", ""], ["37 °C", ""], ["", "N° 2, 1ª dosis, 2×10"], ["½ tableta", ""], ["¼ tableta", "¾ frasco"],
     ["100 mg; 200 mg", ""], ["1' 30''", ""], ["1:100,000", "caja c/50 cartuchos"],
+    // v5: los signos de dosis PEGADOS a letras del barrido de t8 (donde actúan el comodín y los tríos).
+    ["1000µg/mL", ""], ["25µg/h parche", ""], ["Vitamina D 25µg", ""], ["Ácido fólico 400µg", ""], ["Cianocobalamina 1000µg", ""],
+    ["Biotina 5000µg", ""], ["Selenio 200µg", ""], ["10 µL", ""], ["37°C", ""], ["1°", ""], ["1ªtoma", ""], ["2ª y 3ª dosis", ""], ["Nº3", ""],
+    ["0.5mg×2 al día", ""], ["Clorhexidina 0.12%×250 mL", ""], ["c/12h×5 días", ""], ["15 mL×3", ""],
+    ["½tab c/8h", ""], ["x½ tableta", ""], ["tableta ½ o ¼", ""], ["¾ de cucharadita", ""],
   ]) {
     assert.equal(detectarControlado("Lidocaína con epinefrina", concentracion, presentacion, "Inyectable", "Bucal"), null, `${concentracion}|${presentacion}`);
   }
