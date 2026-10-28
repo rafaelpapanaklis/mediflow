@@ -39,6 +39,8 @@ import { filaDto, type DbDeFilas, type EstadoDeFila, type FilaDelPlan } from "./
 import { bloquearPlan, FilaError, repoFilas, tablaDeFilasExiste } from "./items-db";
 import { columnaOdontogramaHechoExiste, leerRegistro, type RegistroHecho } from "./aplicar-hecho-db";
 import { CODIGOS_DE_HECHO, ESTADOS_DE_PLAN_SIN_HECHO } from "./marcar-hecho-cliente";
+import { limpiarMotivoSinCita } from "./cita-del-hecho";
+import { citasConNota } from "./cita-del-hecho.server";
 
 const NOTA = "__note__";
 /** Tope de filas por clic (un plan real marca 1–6 a la vez). */
@@ -162,6 +164,8 @@ export async function marcarHecho(args: {
   userId: string;
   itemIds: string[];
   citaId: string | null;
+  /** v17 (decisión 1 de Rafael): «Se hizo sin cita», con su motivo. Queda en el registro de la fila. */
+  sinCita?: { motivo: string } | null;
   puedeOdontograma: boolean;
 }): Promise<{ filas: FilaDelPlan[]; resultados: ResultadoDeFila[] }> {
   const { clinicId, plan, userId } = args;
@@ -195,10 +199,17 @@ export async function marcarHecho(args: {
       }
       const estadoAntes: RegistroHecho["estadoAntes"] = f.estado === "en_curso" ? "en_curso" : "pendiente";
       await repoFilas.cambiarEstado(tx, { clinicId, planId: plan.id, filaId: id, a: "hecho", userId, citaId: args.citaId, en });
+      // «Se hizo sin cita»: la fila no se queda con una cita de antes («Deshacer» la devuelve con `citaAntes`).
+      if (args.sinCita && f.citaId) {
+        await tx.$executeRaw`
+          UPDATE "treatment_plan_items" SET "citaId" = NULL, "updatedAt" = now()
+           WHERE "id" = ${id} AND "clinicId" = ${clinicId} AND "planId" = ${plan.id}`;
+      }
 
       const registro: RegistroHecho = {
         v: 1, estadoAntes, citaAntes: f.citaId, en: en.toISOString(), por: userId, patientId: plan.patientId,
         omitido: null, sinCambio: null, altas: [], bajas: [], cubre: [],
+        ...(args.sinCita ? { sinCita: args.sinCita } : {}),
       };
       if (!conColumna) {
         resultados.push({ itemId: id, estado: "pendiente_de_base", sinCambio: null, altas: [], bajas: [] });
@@ -409,6 +420,17 @@ export async function accionHecho(
   if (itemIds.length === 0) return error("sin_filas", 400);
   if (itemIds.length > MAX_FILAS_POR_HECHO) return error("demasiadas_filas", 400);
 
+  // v17 (decisión 1 de Rafael, 28-oct): la tarjeta pregunta en qué cita se hizo. «Se hizo sin cita» pide un
+  // motivo corto (obligatorio); queda en la fila hecha y en Movimientos. Sin ninguna de las dos (una pantalla
+  // de antes), todo como hoy: nunca se bloquea el «Hecho».
+  let sinCita: { motivo: string } | null = null;
+  if (body.sinCita === true) {
+    if (body.citaId != null && body.citaId !== "") return error("cita_invalida", 400);
+    const motivo = limpiarMotivoSinCita(body.motivoSinCita);
+    if (!motivo) return error("motivo_sin_cita", 400);
+    sinCita = { motivo };
+  }
+
   let citaId: string | null = null;
   if (body.citaId != null && body.citaId !== "") {
     if (typeof body.citaId !== "string" || !plan.patientId) return error("cita_invalida", 400);
@@ -420,7 +442,7 @@ export async function accionHecho(
 
   let r: Awaited<ReturnType<typeof marcarHecho>>;
   try {
-    r = await marcarHecho({ clinicId: ctx.clinicId, plan, userId: ctx.userId, itemIds, citaId, puedeOdontograma });
+    r = await marcarHecho({ clinicId: ctx.clinicId, plan, userId: ctx.userId, itemIds, citaId, sinCita, puedeOdontograma });
   } catch (e) {
     if (e instanceof FilaError) return error(e.codigo, 409);
     throw e;
@@ -433,20 +455,36 @@ export async function accionHecho(
     await logMutation({
       req, clinicId: ctx.clinicId, userId: ctx.userId, entityType: "treatment", entityId: plan.id, action: "update",
       patientId: plan.patientId,
-      texto: `Marcó como hecho en el plan «${plan.name}»: ${nombres.join(", ")}`,
+      // Quién lo marcó va en la línea de cada movimiento («Dra. Ana · 28 oct»), también en el plan de otro doctor.
+      texto: sinCita
+        ? `Marcó ${nombres.join(", ")} como hecho sin cita: ${sinCita.motivo} (plan «${plan.name}»)`
+        : `Marcó como hecho en el plan «${plan.name}»: ${nombres.join(", ")}`,
       before: { hechos: [] as string[] },
       after: {
         hechos: nombres,
         ...(citaId ? { citaId } : {}),
+        ...(sinCita ? { sinCita: true, motivoSinCita: sinCita.motivo } : {}),
         odontograma: nuevos.map((x) => ({ estado: x.estado, puso: x.altas.map(marca), quito: x.bajas.map(marca) })),
       },
     });
   }
   revalidateAfter("treatments");
   revalidatePatientProfile(plan.patientId);
+  // v17: la cita elegida sin nota clínica → la tarjeta avisa y ofrece escribirla (no bloquea nada). Solo si
+  // se pide (`avisarSinNota`, la tarjeta): «Hoy en el sillón» no lo usa (la nota se firma al completar).
+  let citaSinNota = false;
+  if (citaId && plan.patientId && body.avisarSinNota === true) {
+    try {
+      citaSinNota = !(await citasConNota(ctx.clinicId, plan.patientId, [citaId])).has(citaId);
+    } catch (e) {
+      console.warn("[plan:hecho] no se pudo mirar la nota de la cita:", (e as Error)?.message);
+    }
+  }
   const t = makeT(getDict("es"));
   return NextResponse.json({
     success: true,
+    ...(citaSinNota ? { citaSinNota: true } : {}),
+    ...(sinCita ? { sinCita: true } : {}),
     items: r.filas.map(filaDto),
     odontograma: r.resultados.map((x) => ({ ...x, mensaje: t(`planTratamiento.hecho.resultado.${x.estado}`) })),
   });

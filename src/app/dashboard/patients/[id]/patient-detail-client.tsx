@@ -2963,6 +2963,11 @@ export function PatientDetailClient({
                     patientId={patient.id}
                     puedeMarcarHecho={canEditTreatments || currentUser.role === "SUPER_ADMIN"}
                     refresco={`${refrescoCuentas}|${planesDelServidor.map((p: any) => p.id + p.updatedAt).join(",")}`}
+                    // v17: «Hecho» en una cita sin nota → a escribirla, en la pantalla con la que la clínica atiende.
+                    onEscribirNota={canEditRecords ? () => setTab(consultLandingPermitido(consultLandingTab(clinicCategory)) ?? "historia") : undefined}
+                    // v17 (decisión 3): «Convertir en presupuesto» también en la tarjeta (mismo permiso que en «Ver plan»).
+                    onAbrirPresupuesto={canCreateQuotes ? (q) => { setPresupuestoAbrir(q.id); setTab("presupuestos"); } : undefined}
+                    usuario={{ id: currentUser.id, esDoctor: currentUser.role === "DOCTOR" }}
                     onNuevo={() => setShowNewTreatment(true)}
                     onVer={(plan) => setViewPlan(plan)}
                     onEditar={(plan) => setEditPlan(plan)}

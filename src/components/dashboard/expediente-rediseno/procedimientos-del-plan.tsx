@@ -10,8 +10,11 @@
 // decisión del 20-oct (con su deshacer exacto). Aquí solo se llama y se avisa a la ficha (`onCambio`),
 // que relee cuentas, «Estado de cuenta» y el odontograma sin recargar la página.
 //
-// Quién: `treatments.edit` (el doctor, en sus planes) o SUPER_ADMIN — lo decide el servidor; `puede`
-// solo esconde los botones. Un plan cerrado (Abandonado) no se marca.
+// Quién: `treatments.edit` o SUPER_ADMIN — lo decide el servidor; `puede` solo esconde los botones. Desde
+// la v17 (decisión 4 de Rafael) también en el plan de otro doctor. Un plan cerrado (Abandonado) no se marca.
+//
+// v17 (decisión 1): «Hecho» pregunta en qué cita se hizo (`ElegirCitaDelHecho`): la de hoy primero, o «Se
+// hizo sin cita» con motivo. Una cita sin nota clínica solo se avisa. «Deshacer» sigue igual.
 
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
@@ -19,6 +22,8 @@ import { CheckCircle2, Circle, RotateCcw } from "lucide-react";
 import { useLocale, useT } from "@/i18n/i18n-provider";
 import { fechaPanel } from "@/lib/formato-fecha-panel";
 import { avisoDeDeshacer, avisoDeHecho, ayudaHablaDeDebe, deshacerHecho, errorDeHecho, ESTADOS_DE_PLAN_SIN_HECHO, marcarHecho } from "@/lib/treatments/marcar-hecho-cliente";
+import type { EleccionDeCita } from "@/lib/treatments/cita-del-hecho";
+import { ElegirCitaDelHecho } from "./elegir-cita-del-hecho";
 import { CONDITIONS } from "@/components/dashboard/odontogram-v2/data";
 import type { FilaDto } from "@/lib/treatments/items";
 import type { PlanConCuenta } from "@/lib/treatments/sin-doble-cobro";
@@ -36,7 +41,8 @@ export function useFilasDePlanes(patientId: string | undefined, clave: unknown):
   useEffect(() => {
     if (!patientId) return;
     let vivo = true;
-    fetch(`/api/treatments?patientId=${encodeURIComponent(patientId)}`, { credentials: "include" })
+    // v17 (decisión 4): los planes de TODOS sus doctores — el doctor también marca «Hecho» en el de otro.
+    fetch(`/api/treatments?patientId=${encodeURIComponent(patientId)}&todosLosDoctores=1`, { credentials: "include" })
       .then((r) => (r.ok ? r.json() : null))
       .then((planes: Array<{ id: string; items?: FilaDto[] }> | null) => {
         if (!vivo || !Array.isArray(planes)) return;
@@ -54,7 +60,7 @@ export function useFilasDePlanes(patientId: string | undefined, clave: unknown):
 const nombreDe = (f: Pick<FilaDto, "nombre" | "dientes" | "caras">) =>
   `${f.nombre}${f.dientes.length ? ` ${f.dientes.join(", ")}` : ""}${f.caras.length ? ` (${f.caras.join("")})` : ""}`;
 
-export function ProcedimientosDelPlan({ planId, estadoDelPlan, filas, puede, debeSigueLoHecho = false, onFilas, onCuenta, onCambio }: {
+export function ProcedimientosDelPlan({ planId, estadoDelPlan, filas, puede, debeSigueLoHecho = false, onFilas, onCuenta, onCambio, onEscribirNota }: {
   planId: string;
   estadoDelPlan: string;
   /**
@@ -72,10 +78,14 @@ export function ProcedimientosDelPlan({ planId, estadoDelPlan, filas, puede, deb
   onCuenta?: (cuenta: PlanConCuenta) => void;
   /** Cambió lo hecho: la ficha relee cuentas, «Estado de cuenta» y el odontograma. */
   onCambio?: () => void;
+  /** v17: lleva a escribir la nota de la consulta (solo si quien marca puede escribir notas). */
+  onEscribirNota?: () => void;
 }) {
   const t = useT();
   const locale = useLocale();
   const [ocupada, setOcupada] = useState<string | null>(null);
+  // v17: la fila cuyo «Hecho» está preguntando la cita.
+  const [eligiendo, setEligiendo] = useState<string | null>(null);
   const nombreDeHallazgo = (id: string) => {
     const c = CONDITIONS.find((x) => x.id === id);
     return c ? (locale === "en" ? c.en : c.es) : id;
@@ -87,20 +97,29 @@ export function ProcedimientosDelPlan({ planId, estadoDelPlan, filas, puede, deb
   // v13 (t5, n1): «pasa a Debe» solo si lo que falta por hacer ya está en una nota de cobro.
   const conDebe = ayudaHablaDeDebe(debeSigueLoHecho, vivas);
 
-  async function marcar(f: FilaDto) {
+  async function marcar(f: FilaDto, eleccion: EleccionDeCita, opciones: { escribirNota: boolean }) {
     if (ocupada) return;
     setOcupada(f.id);
     try {
       // v15 (t5, M3): la tarjeta pide la cuenta en la respuesta (la consulta no).
-      const r = await marcarHecho(planId, [f.id], null, undefined, { conCuenta: true });
+      // v17: con la cita elegida, o «sin cita» con su motivo.
+      const r = await marcarHecho(planId, [f.id], "citaId" in eleccion ? eleccion.citaId : null, undefined, {
+        conCuenta: true,
+        avisarSinNota: true,
+        ...("sinCita" in eleccion ? { sinCita: eleccion.motivo } : {}),
+      });
       if (!r.ok) {
         toast.error(errorDeHecho(t, r, "marcar"));
         return;
       }
-      onFilas(vivas.map((x) => (x.id === f.id ? { ...x, estado: "hecho", hechoEn: new Date().toISOString() } : x)));
+      setEligiendo(null);
+      onFilas(vivas.map((x) => (x.id === f.id ? { ...x, estado: "hecho", hechoEn: new Date().toISOString(), citaId: "citaId" in eleccion ? eleccion.citaId : null } : x)));
       if (r.cuenta) onCuenta?.(r.cuenta);
       // v12 (t5, m3): en el idioma de la pantalla, por lo que pasó (no el texto español del servidor).
       toast.success(avisoDeHecho(t, r));
+      // v17: la cita no tiene nota clínica — se avisa (ya está marcado) o se lleva a escribirla.
+      if (r.citaSinNota && opciones.escribirNota && onEscribirNota) onEscribirNota();
+      else if (r.citaSinNota) toast(t("planTratamiento.hecho.cita.avisoSinNota"), { icon: "⚠️", duration: 8000 });
       onCambio?.();
     } finally {
       setOcupada(null);
@@ -161,15 +180,27 @@ export function ProcedimientosDelPlan({ planId, estadoDelPlan, filas, puede, deb
                 <button
                   type="button"
                   className={`${s.boton} ${s.botonChico}`}
-                  onClick={() => void marcar(f)}
+                  onClick={() => setEligiendo(eligiendo === f.id ? null : f.id)}
                   disabled={!!ocupada}
                   aria-label={t("planTratamiento.hecho.marcarAria", { nombre })}
+                  aria-expanded={eligiendo === f.id}
                   data-fila-hecho={f.id}
                 >
                   <CheckCircle2 size={13} strokeWidth={2} aria-hidden />
                   {ocupada === f.id ? t("planTratamiento.hecho.marcando") : t("planTratamiento.hecho.botonHecho")}
                 </button>
               ))}
+              {conBotones && !hecha && eligiendo === f.id && (
+                <ElegirCitaDelHecho
+                  planId={planId}
+                  filaId={f.id}
+                  nombre={nombre}
+                  enviando={ocupada === f.id}
+                  puedeEscribirNota={!!onEscribirNota}
+                  onElegir={(eleccion, opciones) => void marcar(f, eleccion, opciones)}
+                  onVolver={() => setEligiendo(null)}
+                />
+              )}
             </li>
           );
         })}

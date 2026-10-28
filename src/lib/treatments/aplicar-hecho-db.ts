@@ -66,6 +66,8 @@ export interface RegistroHecho {
    *  antes, o lo pinta después si quien marcó no podía escribir el odontograma). */
   cubre: EntradaOdontograma[];
   deshecho?: { en: string; por: string; devueltas: EntradaOdontograma[]; conflictos: ConflictoDeshacer[] };
+  /** v17 (decisión 1 de Rafael): se marcó «Se hizo sin cita», con este motivo (la fila queda sin cita). */
+  sinCita?: { motivo: string };
 }
 
 export function leerRegistro(v: unknown): RegistroHecho | null {

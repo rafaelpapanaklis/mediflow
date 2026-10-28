@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { Wallet } from "lucide-react";
 import toast from "react-hot-toast";
@@ -103,10 +103,12 @@ export function cifrasDeLaCuenta(c: PlanConCuenta) {
   };
 }
 
-export function CuentaDelPlan({ cuenta, cargando, onCobrar, puedeCerrar, onCambio, onCuenta }: {
+export function CuentaDelPlan({ cuenta, cargando, onCobrar, puedeCerrar, onCambio, onCuenta, presupuesto }: {
   cuenta: PlanConCuenta | null | undefined;
   cargando?: boolean;
   onCobrar?: () => void;
+  /** v17 (decisión 3 de Rafael): «Convertir en presupuesto», junto a «Abonar al plan» (lo decide la tarjeta). */
+  presupuesto?: ReactNode;
   /** Quien edita planes ve «Cerrar plan» (el servidor exige además `billing.edit`). */
   puedeCerrar?: boolean;
   /** v7: el plan se cerró y cambiaron estas notas (la ficha relee la cuenta y las facturas al momento). */
@@ -240,13 +242,14 @@ export function CuentaDelPlan({ cuenta, cargando, onCobrar, puedeCerrar, onCambi
         ? cuenta.saldo > 0.005 && <p className={s.cuentaPlanAyuda} data-cuenta-plan-cuotas>{t("planTratamiento.cobro.cuotasAyuda")}</p>
         : c.porHacer > 0.005 && <p className={s.cuentaPlanAyuda}>{t("planTratamiento.cobro.porHacerAyuda")}</p>}
       {!cuenta.soloDelPlan && <p className={s.cuentaPlanAyuda}>{t("planTratamiento.cobro.mezclado")}</p>}
-      {!cerrando && (onCobrar || conCierre) && (
+      {!cerrando && (onCobrar || conCierre || presupuesto) && (
         <div className={s.cuentaPlanAcciones}>
           {onCobrar && cuenta.conFilas && (cuenta.saldo > 0.005 || (cuenta.porFacturar > 0.005 && cuenta.notas.length === 0 && cuenta.estado !== "ABANDONED")) && (
             <button type="button" className={`${s.boton} ${s.botonChico}`} onClick={(e) => { e.stopPropagation(); onCobrar(); }} data-cuenta-plan-cobrar>
               {t("planTratamiento.cobro.abonar")}
             </button>
           )}
+          {presupuesto}
           {conCierre && (
             <button type="button" className={`${s.boton} ${s.botonChico} ${s.botonPeligroSuave}`} onClick={(e) => { e.stopPropagation(); setCerrando(true); }} data-cuenta-plan-cerrar>
               {t("planTratamiento.cobro.cerrar")}

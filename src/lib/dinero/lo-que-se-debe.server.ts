@@ -218,3 +218,22 @@ export async function loQueAunNoSeDebeDeFacturas(facturas: Array<{ id: string; c
   }
   return salida;
 }
+
+/**
+ * v17 (decisión 2 de Rafael, 28-oct): lo que el paciente debe HOY — la cifra de Pacientes (`/api/patients`:
+ * saldo de sus facturas por cobrar menos `loQueAunNoSeDebe`) y del «Debe» de la ficha. La dice el detalle
+ * de la cita («Debe hoy»); no es una fórmula aparte, son las mismas dos piezas.
+ */
+export async function debeDelPaciente(clinicId: string, patientId: string): Promise<number> {
+  if (!clinicId) throw new Error("dinero: clinicId ausente — se corta antes de consultar");
+  if (!patientId) return 0;
+  const facturas = await prisma.invoice.findMany({
+    where: { ...receivableInvoiceWhere(clinicId), patientId },
+    select: { id: true, balance: true },
+    take: 500,
+  });
+  if (facturas.length === 0) return 0;
+  const r = await loQueAunNoSeDebe(clinicId, { ids: facturas.map((f) => f.id) });
+  const saldo = facturas.reduce((s, f) => s + Math.round((Number(f.balance) || 0) * 100), 0) / 100;
+  return Math.max(0, Math.round((saldo - r.total) * 100) / 100);
+}

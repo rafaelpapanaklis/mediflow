@@ -92,7 +92,9 @@ export function TreatmentsModal({
     let vivo = true;
     setPlanes(null);
     setHechasHoy(new Set());
-    fetch(`/api/treatments?patientId=${encodeURIComponent(patientId)}`)
+    // v17 (decisión 4 de Rafael): también los planes de otros doctores del paciente — quien completa la
+    // consulta marca «Hecho» en el plan de cualquiera (el servidor lo permite con `treatments.edit`).
+    fetch(`/api/treatments?patientId=${encodeURIComponent(patientId)}&todosLosDoctores=1`)
       .then((r) => (r.ok ? r.json() : []))
       .then((d) => { if (vivo) setPlanes(Array.isArray(d) ? d : []); })
       .catch(() => { if (vivo) setPlanes([]); });

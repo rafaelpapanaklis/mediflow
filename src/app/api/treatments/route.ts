@@ -27,6 +27,11 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const patientId = searchParams.get("patientId");
   const status    = searchParams.get("status"); // ACTIVE | COMPLETED | ABANDONED | PAUSED
+  // v17 (decisión 4 de Rafael): la ficha y «Hoy en el sillón» piden los planes del paciente de TODOS sus
+  // doctores (`todosLosDoctores=1`, solo con `patientId`) para enseñar sus procedimientos con «Hecho»: el
+  // doctor ya ve esos planes en la ficha (nombre, costo y cuenta); faltaba su lista de procedimientos. Sin
+  // el parámetro, el doctor sigue viendo solo los suyos.
+  const deTodosLosDoctores = !!patientId && searchParams.get("todosLosDoctores") === "1";
   const limit = Math.min(Math.max(parseInt(searchParams.get("limit") ?? "200"), 1), 500);
   const skip  = Math.max(parseInt(searchParams.get("skip") ?? "0"), 0);
 
@@ -34,7 +39,7 @@ export async function GET(req: NextRequest) {
     where: {
       clinicId:  ctx.clinicId,
       ...(patientId ? { patientId } : {}),
-      ...(ctx.isDoctor ? { doctorId: ctx.userId } : {}),
+      ...(ctx.isDoctor && !deTodosLosDoctores ? { doctorId: ctx.userId } : {}),
       ...(status ? { status: status as any } : {}),
       // Visibilidad por paciente. Va como filtro de RELACIÓN (no un assert)
       // porque `patientId` es opcional: sin él, esto listaba los planes de TODA

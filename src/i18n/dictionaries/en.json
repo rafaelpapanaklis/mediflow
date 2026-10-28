@@ -1787,6 +1787,13 @@
       "prevDay": "Previous day",
       "nextDay": "Next day"
     },
+    "enEstaCita": {
+      "titulo": "In this appointment",
+      "hecho": "done",
+      "enCurso": "in progress",
+      "porHacer": "to do",
+      "debeHoy": "Owes today"
+    },
     "detailPanel": {
       "ariaLabel": "Appointment detail",
       "emptyState": "Select an appointment to view its detail",
@@ -11036,7 +11043,23 @@
         "cita_invalida": "That appointment doesn't belong to this patient.",
         "sin_filas_en_plan": "This is an older plan (text): its procedures can't be marked one by one.",
         "sin_permiso_odontograma": "This \"done\" changed the odontogram and your user can't edit it: ask a doctor to undo it.",
-        "plan_cerrado": "This plan is closed: procedures can no longer be marked or undone."
+        "plan_cerrado": "This plan is closed: procedures can no longer be marked or undone.",
+        "motivo_sin_cita": "Write why it was done without an appointment (at least 3 characters)."
+      },
+      "cita": {
+        "titulo": "Which appointment was {nombre} done in?",
+        "cargando": "Looking up the patient's appointments…",
+        "errorCarga": "Couldn't load the appointments. You can mark it without an appointment.",
+        "ninguna": "The patient has no recent appointments.",
+        "hoy": "Today, {hora}",
+        "sinNota": "No note",
+        "sinCita": "Done without an appointment",
+        "motivo": "Reason (required)",
+        "motivoPh": "E.g.: emergency, the appointment wasn't recorded…",
+        "avisoSinNota": "This appointment has no clinical note. Write it to back up the procedure.",
+        "marcarYEscribir": "Mark and write the note",
+        "volver": "Back",
+        "confirmar": "Mark as done"
       }
     }
   },

@@ -1787,6 +1787,13 @@
       "prevDay": "Día anterior",
       "nextDay": "Día siguiente"
     },
+    "enEstaCita": {
+      "titulo": "En esta cita",
+      "hecho": "hecho",
+      "enCurso": "en curso",
+      "porHacer": "por hacer",
+      "debeHoy": "Debe hoy"
+    },
     "detailPanel": {
       "ariaLabel": "Detalle de cita",
       "emptyState": "Selecciona una cita para ver su detalle",
@@ -11036,7 +11043,23 @@
         "cita_invalida": "Esa cita no es de este paciente.",
         "sin_filas_en_plan": "Este plan es de los de antes (texto): sus procedimientos no se pueden marcar uno por uno.",
         "sin_permiso_odontograma": "Este «hecho» cambió el odontograma y tu usuario no puede editarlo: pide a un doctor que lo deshaga.",
-        "plan_cerrado": "Este plan está cerrado: ya no se marcan ni se deshacen procedimientos."
+        "plan_cerrado": "Este plan está cerrado: ya no se marcan ni se deshacen procedimientos.",
+        "motivo_sin_cita": "Escribe por qué se hizo sin cita (al menos 3 letras)."
+      },
+      "cita": {
+        "titulo": "¿En qué cita se hizo {nombre}?",
+        "cargando": "Buscando las citas del paciente…",
+        "errorCarga": "No se pudieron leer las citas. Puedes marcarlo sin cita.",
+        "ninguna": "El paciente no tiene citas recientes.",
+        "hoy": "Hoy, {hora}",
+        "sinNota": "Sin nota",
+        "sinCita": "Se hizo sin cita",
+        "motivo": "Motivo (obligatorio)",
+        "motivoPh": "Ej.: urgencia, la cita no quedó registrada…",
+        "avisoSinNota": "Esta cita no tiene nota clínica. Escríbela para respaldar el procedimiento.",
+        "marcarYEscribir": "Marcar y escribir la nota",
+        "volver": "Volver",
+        "confirmar": "Marcar hecho"
       }
     }
   },

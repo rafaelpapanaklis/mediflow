@@ -603,6 +603,74 @@
 
 .cuentaPlanCierreCampo textarea:focus-visible { outline: none; box-shadow: var(--m2-foco); }
 
+/* v17: «¿En qué cita se hizo?» al pulsar «Hecho» (la de hoy primero; «Se hizo sin cita» pide motivo). */
+.citaHecho {
+  flex: 1 1 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--m2-tarjeta-borde);
+  border-radius: 10px;
+  background: var(--m2-tarjeta);
+  min-width: 0;
+}
+
+.citaHechoLista {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.citaHechoOpcion {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-height: 36px;
+  padding: 7px 8px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--m2-texto);
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+.citaHechoOpcion input { margin: 2px 0 0; flex: none; accent-color: var(--m2-activo); }
+.citaHechoOpcion small { display: block; font-size: 11.5px; color: var(--m2-texto-3); }
+
+@media (hover: hover) {
+  .citaHechoOpcion:hover { background: var(--m2-tarjeta-hover); }
+}
+
+.citaHechoSinNota {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 6px;
+  background: var(--pr-alerta-suave);
+  color: var(--pr-alerta);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.citaHechoAviso {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--pr-alerta-suave);
+  color: var(--m2-texto);
+  font-size: 12.5px;
+}
+
 .cuentaPlanEsqueleto {
   height: 58px;
   margin-top: 12px;

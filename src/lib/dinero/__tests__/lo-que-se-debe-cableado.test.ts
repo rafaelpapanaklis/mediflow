@@ -277,7 +277,8 @@ test("v11 · «Hecho» en la tarjeta del plan: misma acción que la consulta, re
   const bloque = leer("src/components/dashboard/expediente-rediseno/procedimientos-del-plan.tsx");
   assert.match(bloque, /^"use client";/);
   assert.match(bloque, /const cerrado = ESTADOS_DE_PLAN_SIN_HECHO\.includes\(estadoDelPlan\);\n\s*const conBotones = puede && !cerrado;/);
-  assert.match(bloque, /await marcarHecho\(planId, \[f\.id\], null, undefined, \{ conCuenta: true \}\)/);
+  // v17 (decisión 1): con la cita elegida (o «sin cita» y su motivo).
+  assert.match(bloque, /await marcarHecho\(planId, \[f\.id\], "citaId" in eleccion \? eleccion\.citaId : null, undefined, \{\n\s*conCuenta: true,/);
   assert.match(bloque, /await deshacerHecho\(planId, f\.id, undefined, \{ conCuenta: true \}\)/);
   const ruta = leer("src/app/api/treatments/[id]/route.ts");
   assert.match(ruta, /const deniedPerm = esHecho && ctx\.role === "SUPER_ADMIN" \? null : denyIfMissingPermission\(ctx, "treatments\.edit"\);/);
@@ -475,7 +476,7 @@ test("v14 · 2: la Cuenta del plan cambia con la respuesta de «Hecho» / «Desh
   const proc = leer("src/components/dashboard/expediente-rediseno/procedimientos-del-plan.tsx");
   assert.equal((proc.match(/if \(r\.cuenta\) onCuenta\?\.\(r\.cuenta\);/g) ?? []).length, 2, "al marcar y al deshacer");
   const plan = leer("src/components/dashboard/expediente-rediseno/plan-tratamiento.tsx");
-  assert.match(plan, /onCambio=\{onCuentaCambio\} onCuenta=\{onCuentaNueva\} \/>/);
+  assert.match(plan, /onCambio=\{onCuentaCambio\} onCuenta=\{onCuentaNueva\} /);
   assert.match(plan, /onCuenta=\{onCuentaNueva\}\n/);
   assert.match(leer("src/app/dashboard/patients/[id]/patient-detail-client.tsx"), /onCuentaNueva=\{cuentasDePlanes\.poner\}/);
 });
@@ -589,4 +590,60 @@ test("v16 · m1: «Pagado por adelantado» en su propia línea DESPUÉS de las c
   assert.match(textoPagadoPorAdelantado(en, 500, 867), /already paid in advance over the work done/);
   // El mismo texto que la tarjeta con cuotas atrasadas (cuenta-del-plan.tsx).
   assert.match(leer("src/components/dashboard/expediente-rediseno/cuenta-del-plan.tsx"), /"planTratamiento\.cobro\.tambienAdelantoCuotas"/);
+});
+
+test("v17: las 4 decisiones del 28-oct cableadas — cita del «Hecho», detalle de la cita, presupuesto en la tarjeta y «Hecho» en el plan de otro doctor", () => {
+  // 1. La tarjeta pregunta la cita; «Hoy en el sillón» no (la cita es la de la consulta).
+  const proc = leer("src/components/dashboard/expediente-rediseno/procedimientos-del-plan.tsx");
+  assert.match(proc, /onClick=\{\(\) => setEligiendo\(eligiendo === f\.id \? null : f\.id\)\}/, "«Hecho» abre la elección, no marca");
+  assert.match(proc, /<ElegirCitaDelHecho\n/);
+  assert.match(proc, /\.\.\.\("sinCita" in eleccion \? \{ sinCita: eleccion\.motivo \} : \{\}\)/);
+  assert.match(leer("src/components/dashboard/patient-detail/treatments-modal.tsx"), /await marcarHecho\(planId, ids, appointmentId \|\| null\);/);
+  assert.doesNotMatch(leer("src/components/dashboard/patient-detail/treatments-modal.tsx"), /ElegirCitaDelHecho/);
+  const elegir = leer("src/components/dashboard/expediente-rediseno/elegir-cita-del-hecho.tsx");
+  assert.match(elegir, /^"use client";/);
+  assert.match(elegir, /disabled=\{!lista \|\| enviando\}/, "solo pide una elección válida: el aviso de nota no deshabilita");
+  const servidor = leer("src/lib/treatments/aplicar-hecho.server.ts");
+  assert.match(servidor, /if \(!motivo\) return error\("motivo_sin_cita", 400\);/);
+  assert.match(servidor, /\.\.\.\(citaSinNota \? \{ citaSinNota: true \} : \{\}\)/);
+  assert.match(servidor, /if \(citaId && plan\.patientId && body\.avisarSinNota === true\) \{/, "solo si se pide: «Hoy en el sillón» no paga la consulta");
+  assert.match(proc, /conCuenta: true,\n\s*avisarSinNota: true,/);
+  // 2. El detalle de la cita, en las DOS agendas, sin importar nada de agenda-nueva/ (interruptor-agenda).
+  assert.match(leer("src/components/dashboard/agenda-nueva/panel-cita.tsx"), /<EnEstaCita appointmentId=\{dto\.id\}/);
+  assert.match(leer("src/components/dashboard/agenda/agenda-detail-panel.tsx"), /<EnEstaCita appointmentId=\{appt\.id\}/);
+  const enCita = leer("src/components/dashboard/plan-a-agenda/en-esta-cita.tsx") + leer("src/components/dashboard/plan-a-agenda/en-esta-cita.module.css");
+  assert.doesNotMatch(enCita, /agenda-nueva/);
+  assert.doesNotMatch(enCita, /#[0-9a-fA-F]{3,6}\b/, "sin hex: tokens");
+  assert.match(leer("src/app/api/appointments/[id]/plan-de-la-cita/route.ts"), /denyIfMissingPermission\(ctx, "agenda\.view"\)/);
+  assert.match(leer("src/lib/treatments/plan-de-la-cita.server.ts"), /debeHoy: patientId \? await debeDelPaciente\(clinicId, patientId\) : 0/);
+  // «Debe hoy» = Pacientes: facturas por cobrar menos `loQueAunNoSeDebe`, sin otra fórmula.
+  const debe = leer("src/lib/dinero/lo-que-se-debe.server.ts");
+  assert.match(debe, /where: \{ \.\.\.receivableInvoiceWhere\(clinicId\), patientId \}/);
+  assert.match(debe, /const r = await loQueAunNoSeDebe\(clinicId, \{ ids: facturas\.map\(\(f\) => f\.id\) \}\);/);
+  // 3. «Convertir en presupuesto» en la tarjeta: el MISMO componente, dentro de «Cuenta del plan», justo tras «Abonar».
+  const tarjeta = leer("src/components/dashboard/expediente-rediseno/plan-tratamiento.tsx");
+  assert.match(tarjeta, /<ConvertirEnPresupuesto\n\s*planId=\{plan\.id\}/);
+  assert.match(tarjeta, /&& !\(cuentaDelPlan && cuentaDelPlan\.notas\.length > 0\)/, "con nota (plan aceptado) no sale");
+  assert.match(leer("src/components/dashboard/expediente-rediseno/cuenta-del-plan.tsx"), /\{t\("planTratamiento\.cobro\.abonar"\)\}\n\s*<\/button>\n\s*\)\}\n\s*\{presupuesto\}/);
+  const ficha = leer("src/app/dashboard/patients/[id]/patient-detail-client.tsx");
+  assert.match(ficha, /onAbrirPresupuesto=\{canCreateQuotes \? \(q\) => \{ setPresupuestoAbrir\(q\.id\); setTab\("presupuestos"\); \} : undefined\}/);
+  assert.match(ficha, /onEscribirNota=\{canEditRecords \?/);
+  // 4. Otro doctor: SOLO marcar/deshacer; editar, cambiar estado y borrar siguen acotados.
+  const ruta = leer("src/app/api/treatments/[id]/route.ts");
+  assert.match(ruta, /if \(ctx\.isDoctor && plan\.doctorId !== ctx\.userId && !esHecho\) \{/);
+  assert.equal((ruta.match(/if \(ctx\.isDoctor && plan\.doctorId !== ctx\.userId\) \{/g) ?? []).length, 1, "DELETE sin cambio");
+  assert.match(leer("src/app/api/treatments/[id]/cerrar/route.ts"), /ctx\.isDoctor && plan\.doctorId !== ctx\.userId/);
+  for (const archivo of ["src/components/dashboard/expediente-rediseno/procedimientos-del-plan.tsx", "src/components/dashboard/patient-detail/treatments-modal.tsx"]) {
+    assert.match(leer(archivo), /&todosLosDoctores=1/, archivo);
+  }
+  // Textos en es y en.
+  for (const idioma of ["es", "en"]) {
+    const d = JSON.parse(leer(`src/i18n/dictionaries/${idioma}.json`));
+    assert.ok(d.planTratamiento.hecho.error.motivo_sin_cita, `${idioma}: motivo_sin_cita`);
+    for (const k of ["titulo", "cargando", "errorCarga", "ninguna", "hoy", "sinNota", "sinCita", "motivo", "motivoPh", "avisoSinNota", "marcarYEscribir", "volver", "confirmar"]) {
+      assert.ok(d.planTratamiento.hecho.cita[k], `${idioma}: planTratamiento.hecho.cita.${k}`);
+    }
+    for (const k of ["titulo", "hecho", "enCurso", "porHacer", "debeHoy"]) assert.ok(d.agenda.enEstaCita[k], `${idioma}: agenda.enEstaCita.${k}`);
+  }
+  assert.equal(JSON.parse(leer("src/i18n/dictionaries/es.json")).planTratamiento.hecho.cita.avisoSinNota, "Esta cita no tiene nota clínica. Escríbela para respaldar el procedimiento.");
 });

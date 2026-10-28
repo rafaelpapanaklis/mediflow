@@ -52,6 +52,8 @@ import { AgendaEditAppointmentModal } from "@/components/dashboard/agenda/agenda
 import { RanuraCita } from "@/components/specialties/orthodontics/agenda/RanuraCita";
 // ws1-t10: indicaciones de cuidado y constancia de asistencia de la cita.
 import { RanuraIndicaciones } from "@/components/indicaciones/ranura-indicaciones";
+// v17 (decisión 2 de Rafael): «En esta cita: resina $700 (hecha) · Debe hoy $700».
+import { EnEstaCita } from "@/components/dashboard/plan-a-agenda/en-esta-cita";
 import { esCitaOrtoConHoja } from "@/lib/orthodontics/agenda-constants";
 import { ocultarAnticipoPorMensualidad } from "@/lib/orthodontics/anticipo-control";
 import { paramsDeReagendar, type DatosDeReagendar } from "@/components/dashboard/plan-a-agenda/agendar-plan-datos";
@@ -635,6 +637,9 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
               autocalifica sola (dto.reason === TIPO_CITA_CONTROL_ORTO) y hoy
               no pinta nada — ver MAPA DE PARTES en REPORTE-ws1-t1.md. */}
           <RanuraCita dto={dto} onModoDeCobro={setModoCobroOrto} />
+
+          {/* v17: lo del plan de esta cita y lo que el paciente debe hoy (se calla si no hay nada del plan). */}
+          <EnEstaCita appointmentId={dto.id} clave={dto.status} />
 
           {/* ws1-t10 (mejora 12): «Después de la consulta» — indicaciones y constancia. */}
           <RanuraIndicaciones appointmentId={dto.id} estado={cita.estado} puedeEmitir={permissions.canEdit === true} />
