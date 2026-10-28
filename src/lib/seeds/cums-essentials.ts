@@ -13,8 +13,13 @@
  *  - V:   Venta libre / OTC
  *  - VI:  Productos especiales
  *
- * Se incluyen ~180 entradas. El catálogo es global (sin clinicId).
+ * Se incluyen ~180 entradas base + la ampliación odontológica de
+ * `cums-odontologia.ts` (ws1-t10, 28-oct-2026). El catálogo es global; las
+ * filas con `clinicId` (medicamentos propios de una clínica, ver
+ * `src/lib/clinical/medicamentos-propios.server.ts`) no salen de aquí.
  */
+
+import { CUMS_ODONTOLOGIA } from "./cums-odontologia";
 
 export interface CumsSeed {
   clave: string;
@@ -46,7 +51,7 @@ const ANESTHETIC = "Anestésicos locales";
 const ORAL_DENTAL = "Salud bucal y dental";
 const VACCINE = "Vacunas";
 
-export const CUMS_ESSENTIALS: CumsSeed[] = [
+const CUMS_BASE: CumsSeed[] = [
   // ── Analgésicos / antiinflamatorios ────────────────────────────────
   { clave: "MX-0001", descripcion: "Paracetamol",                presentacion: "500 mg, caja c/10 tabletas",   formaFarmaceutica: "Tableta",     grupoTerapeutico: ANALGESIC, cofeprisGroup: "V"  },
   { clave: "MX-0002", descripcion: "Paracetamol",                presentacion: "100 mg/mL gotas, frasco 15 mL", formaFarmaceutica: "Solución",   grupoTerapeutico: ANALGESIC, cofeprisGroup: "V"  },
@@ -315,3 +320,6 @@ export const CUMS_ESSENTIALS: CumsSeed[] = [
   { clave: "MX-0482", descripcion: "Vacuna hepatitis B",          presentacion: "Frasco ámpula 1 mL adulto",    formaFarmaceutica: "Inyectable",  grupoTerapeutico: VACCINE, cofeprisGroup: "IV" },
   { clave: "MX-0483", descripcion: "Vacuna VPH bivalente",        presentacion: "Jeringa prellenada 0.5 mL",    formaFarmaceutica: "Inyectable",  grupoTerapeutico: VACCINE, cofeprisGroup: "IV" },
 ];
+
+/** Todo el catálogo que se siembra: la base + la ampliación odontológica. */
+export const CUMS_ESSENTIALS: CumsSeed[] = [...CUMS_BASE, ...CUMS_ODONTOLOGIA];

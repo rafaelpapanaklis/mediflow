@@ -1,48 +1,36 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { unstable_cache } from "next/cache";
-import { getCurrentUser } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { getAuthContext } from "@/lib/auth-context";
+import { buscarMedicamentos, hayMedicamentosPropios } from "@/lib/clinical/medicamentos-propios.server";
 
 export const dynamic = "force-dynamic";
-
-// Catálogo CUMS: dataset global y casi inmutable (solo cambia con un import
-// masivo) → cache 24h por combinación q/group/limit (los args forman la key).
-// Tag "cums" por si un import futuro quiere revalidateTag().
-const searchCums = unstable_cache(
-  async (q: string, group: string, limit: number) => {
-    const where: Record<string, unknown> = {};
-    if (group) where.grupoTerapeutico = group;
-    if (q) {
-      where.OR = [
-        { clave: { contains: q, mode: "insensitive" } },
-        { descripcion: { contains: q, mode: "insensitive" } },
-      ];
-    }
-
-    return prisma.cumsItem.findMany({
-      where,
-      take: limit,
-      orderBy: [{ descripcion: "asc" }],
-    });
-  },
-  ["catalogs-cums"],
-  { revalidate: 60 * 60 * 24, tags: ["cums"] },
-);
 
 /**
  * GET /api/catalogs/cums?q=&group=&limit=
  *
- * Catálogo CUMS GLOBAL (no clinicId). Auth básica.
+ * Catálogo de medicamentos: el GLOBAL (CUMS, sin clinicId) + los PROPIOS de la
+ * clínica de la sesión (ws1-t10: «Agregar medicamento que no está»). Los de
+ * otra clínica no salen nunca. `puedeAgregar` dice si el alta de propios está
+ * disponible (= si Rafael ya pegó sql/cums-medicamentos-propios.sql); sin
+ * ella el buscador funciona como siempre y el botón no aparece.
+ *
+ * Antes este endpoint cacheaba 24 h con unstable_cache por (q, group, limit).
+ * Ya no: con medicamentos propios el resultado depende de la clínica y de lo
+ * que acaba de dar de alta, y la consulta va por índice (descripción) sobre
+ * unas 350 filas globales + las propias: no hace falta caché.
  */
 export async function GET(req: NextRequest) {
-  await getCurrentUser();
+  const ctx = await getAuthContext();
+  if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const sp = req.nextUrl.searchParams;
-  const q = (sp.get("q") ?? "").trim();
-  const group = (sp.get("group") ?? "").trim();
-  const limit = Math.min(Math.max(Number(sp.get("limit") ?? 50), 1), 200);
+  const q = (sp.get("q") ?? "").trim().slice(0, 100);
+  const group = (sp.get("group") ?? "").trim().slice(0, 100);
+  const limit = Math.min(Math.max(Number(sp.get("limit") ?? 50) || 50, 1), 200);
 
-  const items = await searchCums(q, group, limit);
+  const [items, puedeAgregar] = await Promise.all([
+    buscarMedicamentos({ q, group, limit, clinicId: ctx.clinicId }),
+    hayMedicamentosPropios(),
+  ]);
 
-  return NextResponse.json({ items, count: items.length });
+  return NextResponse.json({ items, count: items.length, puedeAgregar });
 }

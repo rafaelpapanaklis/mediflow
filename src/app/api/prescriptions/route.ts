@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { logMutation } from "@/lib/audit";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
+import { catalogoParaReceta } from "@/lib/clinical/medicamentos-propios.server";
 import {
   expiresForCofeprisGroup,
   folioObligatorioActivo,
@@ -186,11 +187,10 @@ export async function POST(req: NextRequest) {
 
   // Validar que todas las claves CUMS existan en el catálogo. Se pide también
   // `cofeprisGroup`: es el único dato de grupo en el que se puede confiar.
+  // ws1-t10: el catálogo de ESTA clínica = global + sus medicamentos propios;
+  // una clave propia de otra clínica no existe para esta (cums_not_found).
   const cumsKeys = itemsArray.map((it) => it.cumsKey!).filter(Boolean);
-  const foundCums = await prisma.cumsItem.findMany({
-    where: { clave: { in: cumsKeys } },
-    select: { clave: true, cofeprisGroup: true },
-  });
+  const foundCums = await catalogoParaReceta(cumsKeys, ctx.clinicId);
   const foundSet = new Set(foundCums.map((c) => c.clave));
   const missing = cumsKeys.filter((k) => !foundSet.has(k));
   if (missing.length > 0) {

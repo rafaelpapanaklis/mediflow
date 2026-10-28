@@ -46,6 +46,8 @@ export type AuditEntityType =
   // paciente (logos, soporte, comprobantes).
   | "upload-rejected"
   | "prescription"
+  // ws1-t10: medicamento que la clínica agregó a mano a su lista (cums_items con clinicId).
+  | "clinic-medication"
   | "user"
   | "clinic"
   | "subscription"
