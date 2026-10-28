@@ -30,6 +30,7 @@
  *        5 min. Sin TTL propio; se poda (> 24 h) en cada lectura de /admin.
  */
 import { Redis } from "@upstash/redis";
+import { OPCIONES_UPSTASH_RAPIDAS } from "@/lib/upstash-rapido";
 import {
   LATIDO,
   MAX_CLINICAS_EN_LISTA,
@@ -80,7 +81,7 @@ export function obtenerRedis(): RedisMini | null {
     return null;
   }
   try {
-    cliente = new Redis({ url, token }) as unknown as RedisMini;
+    cliente = new Redis({ url, token, ...OPCIONES_UPSTASH_RAPIDAS }) as unknown as RedisMini;
   } catch (e) {
     console.warn("[presencia] no se pudo iniciar Upstash; sin dato de «en línea»:", e instanceof Error ? e.message : e);
     cliente = null;

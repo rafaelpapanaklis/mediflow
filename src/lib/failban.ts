@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
 import { rateLimitKey } from "@/lib/rate-limit";
+import { OPCIONES_UPSTASH_RAPIDAS } from "@/lib/upstash-rapido";
 
 /**
  * Fail-ban persistente: rate-limit por ventana deslizante (punto 2) + lockout
@@ -79,7 +80,7 @@ function getRedis(): Redis | null {
     return null;
   }
   try {
-    redisClient = new Redis({ url, token });
+    redisClient = new Redis({ url, token, ...OPCIONES_UPSTASH_RAPIDAS });
   } catch (err) {
     console.warn("[failban] No se pudo inicializar Upstash Redis; usando memoria:", err);
     redisClient = null;
