@@ -2182,6 +2182,40 @@
         "porProcedimiento": "Colores por procedimiento:",
         "sinProcedimiento": "Sin procedimiento: color del doctor"
       }
+    },
+    "alPasar": {
+      "interruptor": "Mostrar detalles al pasar el mouse",
+      "interruptorAyuda": "Se guarda en tu cuenta.",
+      "interruptorNoGuardado": "No se pudo guardar en tu cuenta: queda así solo en esta pestaña.",
+      "interruptorSinGuardar": "Aún no se puede guardar: queda así solo en esta pestaña.",
+      "edad": "{n} años",
+      "primeraVez": "Primera vez",
+      "recurrente": "Recurrente",
+      "restringido": "Paciente con acceso restringido",
+      "alergias": "Alergias",
+      "hora": "Hora",
+      "doctor": "Doctor",
+      "unidad": "Sillón",
+      "teleconsulta": "Teleconsulta",
+      "motivo": "Motivo",
+      "sinMotivo": "Sin motivo",
+      "minutos": "{n} min",
+      "cargando": "Cargando detalles…",
+      "errorCarga": "No se pudieron leer los detalles de la cita.",
+      "enEstaCita": "En esta cita",
+      "debeHoy": "Debe hoy",
+      "fila": {
+        "hecho": "hecho",
+        "enCurso": "en curso",
+        "porHacer": "por hacer"
+      },
+      "avisos": {
+        "anticipoPagado": "Anticipo pagado",
+        "anticipoPedido": "Anticipo pedido · {monto}",
+        "mensualidadVencida": "Mensualidad de ortodoncia vencida",
+        "sobreagendada": "Sobreagendada",
+        "porValidar": "Por validar (del portal)"
+      }
     }
   },
   "patients": {

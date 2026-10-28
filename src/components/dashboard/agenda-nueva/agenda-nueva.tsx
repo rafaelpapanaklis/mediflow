@@ -59,6 +59,7 @@ import { VistaMes } from "./vista-mes";
 import { ROPA_VALIDAR } from "./ropa";
 import { ConParamsDeNuevaCita } from "@/components/dashboard/new-appointment/new-appointment-provider";
 import { useAgendarDelPlan } from "./agendar-del-plan";
+import { DetallesAlPasarProvider } from "./detalles-al-pasar";
 import s from "./agenda-nueva.module.css";
 
 export interface AgendaNuevaProps {
@@ -72,12 +73,17 @@ export interface AgendaNuevaProps {
   userRole?: Role;
   /** `?highlight=<id>`: la cita a la que mandan desde fuera. Se abre su panel. */
   highlightId?: string | null;
+  /** La preferencia «Mostrar detalles al pasar el mouse», ya leída en la SSR. */
+  detallesAlPasar?: boolean;
 }
 
 export function AgendaNueva(props: AgendaNuevaProps) {
   return (
     <AgendaNuevaProvider>
-      <Armazon {...props} />
+      {/* Decisión de Rafael (28-oct): la tarjeta de detalles al pasar el mouse sobre una cita. */}
+      <DetallesAlPasarProvider inicial={props.detallesAlPasar}>
+        <Armazon {...props} />
+      </DetallesAlPasarProvider>
     </AgendaNuevaProvider>
   );
 }

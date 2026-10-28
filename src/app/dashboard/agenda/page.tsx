@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { primeroElPropio } from "@/lib/agenda/primero-el-propio";
 import { getCurrentUser } from "@/lib/auth";
+import { leerDetallesAlPasar } from "@/lib/agenda-nueva/detalles-al-pasar.server";
 import { requirePermissionOrRedirect } from "@/lib/auth/require-permission";
 import { hasPermission } from "@/lib/auth/permissions";
 import {
@@ -175,7 +176,9 @@ export default async function AgendaPage(props: PageProps) {
   // color. Sin bandera esto no consulta nada más que la bandera (en memoria
   // 60 s) y el payload queda igual que siempre.
   const flexible = await leerAgendaFlexible(clinic.id);
-  const [bloqueos, horariosFlexibles, procedimientos] = await Promise.all([
+  // La preferencia «Mostrar detalles al pasar el mouse» (decisión de Rafael, 28-oct) va en la SSR: sin pedido
+  // extra al abrir y sin que quien la tiene apagada la vea encendida un instante. Solo con la agenda nueva.
+  const [bloqueos, horariosFlexibles, procedimientos, detallesAlPasar] = await Promise.all([
     listarBloqueos(ctxDeUsuario({ ...user, clinic }), {
       desde: range.fromUtc.toISOString(),
       hasta: range.toUtc.toISOString(),
@@ -184,6 +187,7 @@ export default async function AgendaPage(props: PageProps) {
     flexible.encendida && flexible.modoColor === "procedimiento"
       ? procedimientosConColor(clinic.id)
       : Promise.resolve([]),
+    agendaNueva ? leerDetallesAlPasar(clinic.id, user.id) : Promise.resolve(true),
   ]);
 
   const payload: AgendaDayResponse = {
@@ -228,6 +232,7 @@ export default async function AgendaPage(props: PageProps) {
       // clínico), y sin él el panel de la agenda nueva ofrecería botones que
       // el servidor va a rechazar con un 403.
       userRole={user.role}
+      detallesAlPasar={detallesAlPasar}
     />
   );
 }
