@@ -45,6 +45,17 @@ export const LIMITES_PROPIO = {
 export const CARACTERES_PERMITIDOS = /^[A-Za-zÁÉÍÓÚáéíóúÑñÜü0-9 .,%/+\-():]*$/;
 
 /**
+ * En CONCENTRACIÓN y PRESENTACIÓN (no en el nombre) se admiten además los
+ * signos legítimos de una dosis (v3, m-4 de t8): «µ» (50 µg; la «μ» griega se
+ * convierte en «µ» al limpiar), «°», «ª», «º», «×», «½ ¼ ¾», «;» y «'» (pies
+ * de… no: minutos, «1' 30''»). Ninguno sirve para escribir un controlado: el
+ * nombre sigue con la lista estrecha.
+ */
+export const CARACTERES_PERMITIDOS_DOSIS = /^[A-Za-zÁÉÍÓÚáéíóúÑñÜü0-9 .,%/+\-():µ°ªº×½¼¾;']*$/;
+
+export type CampoAlta = keyof AltaMedicamentoPropio;
+
+/**
  * Formas farmacéuticas y vías del alta. El VALOR que se guarda es siempre el
  * español (la receta es un documento mexicano y así lo lee la farmacia); la
  * etiqueta se traduce con la clave (`clinical.cumsSelector.forms.*` /
@@ -85,14 +96,26 @@ export type ResultadoAlta =
   | { ok: false; error: "datos_invalidos"; campo: keyof AltaMedicamentoPropio; motivo: MotivoInvalido }
   | { ok: false; error: "medicamento_controlado"; controlado: Controlado };
 
-function limpio(v: unknown, max: number): string {
-  return typeof v === "string" ? v.replace(/\s+/g, " ").trim().slice(0, max) : "";
+/**
+ * Lo que entra se normaliza a NFC (una «á» escrita como «a» + acento aparte,
+ * como la mandan algunos teclados y el pegar de macOS, se vuelve la «á» de una
+ * pieza), la «μ» griega (U+03BC) pasa a ser el signo micro «µ» (U+00B5), y los
+ * espacios raros (NBSP, fino, ideográfico, tabulador) se vuelven uno normal.
+ */
+export function normalizarEntrada(v: unknown): string {
+  return typeof v === "string" ? v.normalize("NFC").replace(/\u03BC/g, "\u00B5").replace(/\s+/g, " ").trim() : "";
 }
 
-/** `null` si el texto solo usa caracteres permitidos; si no, el primer carácter que sobra. */
-export function caracterNoPermitido(texto: string): string | null {
-  if (CARACTERES_PERMITIDOS.test(texto)) return null;
-  for (const ch of texto) if (!CARACTERES_PERMITIDOS.test(ch)) return ch;
+function limpio(v: unknown, max: number): string {
+  return normalizarEntrada(v).slice(0, max);
+}
+
+/** `null` si el texto solo usa caracteres permitidos para ese campo; si no, el primer carácter que sobra. */
+export function caracterNoPermitido(texto: string, campo: CampoAlta = "nombre"): string | null {
+  const permitidos = campo === "concentracion" || campo === "presentacion" ? CARACTERES_PERMITIDOS_DOSIS : CARACTERES_PERMITIDOS;
+  const t = normalizarEntrada(texto);
+  if (permitidos.test(t)) return null;
+  for (const ch of t) if (!permitidos.test(ch)) return ch;
   return "?";
 }
 
@@ -136,7 +159,7 @@ export function validarAlta(
   ];
   for (const [campo, valor, obligatorio] of campos) {
     if (obligatorio && (campo === "nombre" ? valor.length < 2 : !valor)) return { ok: false, campo, motivo: "vacio" };
-    if (caracterNoPermitido(valor)) return { ok: false, campo, motivo: "caracteres" };
+    if (caracterNoPermitido(valor, campo)) return { ok: false, campo, motivo: "caracteres" };
   }
   if (!VALORES_FORMA.has(forma)) return { ok: false, campo: "forma", motivo: "lista" };
   if (!VALORES_VIA.has(via)) return { ok: false, campo: "via", motivo: "lista" };

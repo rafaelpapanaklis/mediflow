@@ -292,6 +292,30 @@ test("v2 · letras que se ven iguales pero no son latinas → 400 caracteres, co
   assert.equal(tabla.length, 3);
 });
 
+test("v3 · m-4: µg (µ o μ griega), °, ª, ×, ½, ; y la tilde combinante pasan en concentración y presentación; en el nombre no", async () => {
+  columna = true;
+  const ok = async (campo: "concentracion" | "presentacion", valor: string) => {
+    const r = await alta({ ...ALTA_OK, nombre: `Prueba ${tabla.length}`, [campo]: valor });
+    assert.equal(r.status, 201, `${campo}=${JSON.stringify(valor)}: ${JSON.stringify(r.body)}`);
+    return r.body.medicamento.presentacion as string;
+  };
+  assert.match(await ok("concentracion", "50 \u00B5g"), /^50 \u00B5g,/);
+  assert.match(await ok("concentracion", "50 \u03BCg"), /^50 \u00B5g,/, "la μ griega se guarda como el signo micro µ");
+  await ok("concentracion", "37 \u00B0C");
+  await ok("presentacion", "N\u00B0 2, 1\u00AA dosis, 2\u00D710");
+  await ok("concentracion", "\u00BD tableta");
+  await ok("concentracion", "100 mg; 200 mg");
+  // «á» como a + acento combinante (teclados y el pegar de macOS): se normaliza a NFC.
+  const r = await alta({ ...ALTA_OK, nombre: "A\u0301cido mefena\u0301mico" });
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  assert.equal(r.body.medicamento.descripcion, "\u00C1cido mefen\u00E1mico");
+  // En el NOMBRE siguen fuera.
+  assert.deepEqual((await alta({ ...ALTA_OK, nombre: "Ibuprofeno \u00B5" })).body, { error: "datos_invalidos", campo: "nombre", motivo: "caracteres" });
+  assert.deepEqual((await alta({ ...ALTA_OK, nombre: "Ibuprofeno \u00BD" })).body, { error: "datos_invalidos", campo: "nombre", motivo: "caracteres" });
+  // Un NBSP se vuelve espacio normal.
+  assert.equal((await alta({ ...ALTA_OK, nombre: "Ibuprofeno\u00A0forte" })).status, 201);
+});
+
 test("v2 · lo normal sigue pasando: acentos, ñ, ü, %, /, +, paréntesis", async () => {
   columna = true;
   const r = await alta({ nombre: "Ácido mefenámico (señalado) + ü", concentracion: "500 mg/5 mL, 2.5 %", forma: "Suspensión", via: "Oral", presentacion: "frasco: 60 mL (c/vaso)" });

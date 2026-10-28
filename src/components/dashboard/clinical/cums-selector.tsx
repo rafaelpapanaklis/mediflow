@@ -177,7 +177,9 @@ export function CumsSelector({ items, onChange, disabled }: Props) {
   // v2: solo caracteres permitidos (letras latinas, dígitos y `. , % / + - ( ) :`);
   // el servidor responde 400 a lo demás ANTES de mirar el candado, y la
   // pantalla sigue el mismo orden: primero el carácter, luego el controlado.
-  const caracterRaro = agregando ? [nombre, concentracion, presentacion].map(caracterNoPermitido).find(Boolean) ?? null : null;
+  const caracterRaro = agregando
+    ? caracterNoPermitido(nombre, "nombre") ?? caracterNoPermitido(concentracion, "concentracion") ?? caracterNoPermitido(presentacion, "presentacion")
+    : null;
   const controlado = caracterRaro ? null : (controladoServidor ?? controladoLocal);
 
   async function guardarAlta() {

@@ -73,7 +73,7 @@ export interface Controlado {
  * El ORDEN importa cuando un término contiene a otro (pseudoefedrina II antes
  * que efedrina III; amobarbital II antes que el genérico barbital IV).
  */
-const CONTENIDOS: ReadonlyArray<[termino: string, nombre: string, grupo: GrupoControlado]> = [
+export const CONTENIDOS: ReadonlyArray<[termino: string, nombre: string, grupo: GrupoControlado]> = [
   // ── Fracción I · estupefacientes (art. 234) ──────────────────────────────
   ["fentanil", "Fentanilo", "I"], // fentanilo, fentanil, fentanilo citrato, carfentanilo, sufentanil, alfentanil, remifentanilo
   ["fentanyl", "Fentanilo", "I"],
@@ -129,6 +129,8 @@ const CONTENIDOS: ReadonlyArray<[termino: string, nombre: string, grupo: GrupoCo
   ["ritalin", "Metilfenidato", "II"],
   ["concerta", "Metilfenidato", "II"],
   ["tylex", "Codeína", "II"], // paracetamol + codeína, en el catálogo como II
+  ["tilex", "Codeína", "II"],
+  ["tylexx", "Codeína", "II"],
 
   // ── Fracción II · psicotrópicos grupo II (art. 245) ──────────────────────
   ["nalbufina", "Nalbufina", "II"],
@@ -235,9 +237,29 @@ const CONTENIDOS: ReadonlyArray<[termino: string, nombre: string, grupo: GrupoCo
   // Marcas (México y EE. UU.)
   ["rivotril", "Clonazepam", "III"],
   ["klonopin", "Clonazepam", "III"],
+  ["kriadex", "Clonazepam", "III"], // Psicofarma, reg. 466M98 / 590M2002 SSA (v3)
+  ["ortopsique", "Diazepam", "III"], // Psicofarma, reg. 85948 / 194M2006 SSA (v3)
+  ["alzam", "Alprazolam", "III"], // Psicofarma, reg. 344M2000 SSA (v3)
+  ["tramacet", "Tramadol", "III"], // Janssen-Cilag, tramadol + paracetamol, reg. 550M2000 SSA (v3)
+  ["sideril", "Trazodona", "III"], // Senosiain, reg. 446M79 SSA (v3)
+  ["efexor", "Venlafaxina", "III"], // Pfizer, Efexor XR, reg. 266M98 SSA (v3)
+  ["cymbalta", "Duloxetina", "III"], // Eli Lilly, reg. 211M2004 SSA (v3)
+  ["remeron", "Mirtazapina", "III"], // Organon, Remeron SolTab, reg. 303M2003 SSA (v3)
+  ["abilify", "Aripiprazol", "III"], // Bristol-Myers Squibb, reg. 332M2002 SSA (v3)
   ["tafil", "Alprazolam", "III"],
+  ["taffil", "Alprazolam", "III"], // erratas concretas de las marcas cortas (v3):
+  ["tafyl", "Alprazolam", "III"],  // sin tolerancia general, porque «Tafil» está
+  ["tafill", "Alprazolam", "III"], // a una letra de «Tafirol» (paracetamol)
   ["xanax", "Alprazolam", "III"],
+  ["zanax", "Alprazolam", "III"],
+  ["xanex", "Alprazolam", "III"],
+  ["xannax", "Alprazolam", "III"],
+  ["xanaks", "Alprazolam", "III"],
+  ["xanacs", "Alprazolam", "III"],
   ["valium", "Diazepam", "III"],
+  ["valiun", "Diazepam", "III"],
+  ["vallium", "Diazepam", "III"],
+  ["valiumm", "Diazepam", "III"],
   ["ativan", "Lorazepam", "III"],
   ["lexotan", "Bromazepam", "III"],
   ["dormicum", "Midazolam", "III"],
@@ -245,6 +267,9 @@ const CONTENIDOS: ReadonlyArray<[termino: string, nombre: string, grupo: GrupoCo
   ["rohypnol", "Flunitrazepam", "III"],
   ["imovane", "Zopiclona", "III"],
   ["tramal", "Tramadol", "III"],
+  ["tramaal", "Tramadol", "III"],
+  ["tramall", "Tramadol", "III"],
+  ["trammal", "Tramadol", "III"],
   ["ultram", "Tramadol", "III"],
   ["nobligan", "Tramadol", "III"],
   ["zaldiar", "Tramadol", "III"],
@@ -274,11 +299,13 @@ const CONTENIDOS: ReadonlyArray<[termino: string, nombre: string, grupo: GrupoCo
  * palabra entera («opio» no cae en «opioide»; «tradol» —tramadol en México—
  * no cae en «Ultradol», que es etodolaco).
  */
-const PALABRAS_EXACTAS: ReadonlyArray<[palabra: string, nombre: string, grupo: GrupoControlado]> = [
-  ["opio", "Opio", "I"],
-  ["thc", "Tetrahidrocannabinol", "I"],
-  ["litio", "Litio", "III"],
-  ["tradol", "Tramadol", "III"],
+const PALABRAS_EXACTAS: ReadonlyArray<[palabra: string, nombre: string, grupo: GrupoControlado, modo: "entera" | "prefijo"]> = [
+  ["opio", "Opio", "I", "entera"],
+  ["thc", "Tetrahidrocannabinol", "I", "entera"],
+  ["litio", "Litio", "III", "entera"],
+  // «tradol» también como PRINCIPIO de palabra («tradolretard», y «tradol50» se
+  // separa antes en «tradol 50»); nunca dentro de otra («ultradol»).
+  ["tradol", "Tramadol", "III", "prefijo"],
 ];
 
 /** Tolerancia mínima de un término para aceptar una letra de diferencia. */
@@ -290,15 +317,25 @@ const LARGO_CON_TOLERANCIA = 7;
  * «nada IV/V/VI del catálogo cae»).
  *   cocaina  ⇄ procaína («rocaina»), lidocaína («docaina»), benzocaína («zocaina»)
  *   metadona ⇄ dexametasona / betametasona («metasona»)
+ *   ketamina ⇄ trometamina / trometamol («metamina»): ketorolaco trometamina es
+ *              el analgésico más recetado en un consultorio dental (v3, m-3 de t8)
+ *   cannabis ⇄ cannabidiol (v3)
+ *   petidina ⇄ hexetidina (enjuague bucal; v3). «meperidina», «pethidine» y
+ *              «meperidine» siguen con tolerancia.
+ *   tramacet ⇄ «tetraacético» (ácido etilendiaminotetraacético, EDTA de endodoncia; v3)
  */
-const SIN_TOLERANCIA = new Set(["cocaina", "metadona"]);
+const SIN_TOLERANCIA = new Set(["cocaina", "metadona", "ketamina", "cannabis", "petidina", "tramacet"]);
 
 /** Minúsculas, sin acentos ni diéresis, sin signos; `conEspacios` conserva los espacios (uno) para buscar palabras. */
 export function normalizarNombre(texto: string, conEspacios = false): string {
   const base = String(texto ?? "")
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
-    .toLowerCase();
+    .toLowerCase()
+    // «@» y «$» se leen como letras ANTES de quitar los signos: «Tram@dol»
+    // no se queda en «tramdol».
+    .replace(/@/g, "a")
+    .replace(/\$/g, "s");
   return conEspacios
     ? base.replace(/[^a-z0-9]+/g, " ").trim()
     : base.replace(/[^a-z0-9]+/g, "");
@@ -314,8 +351,34 @@ export function lecturasConDigitos(normalizado: string): string[] {
   return [base.replace(/1/g, "i"), base.replace(/1/g, "l")];
 }
 
+/**
+ * Las lecturas con las que se compara un texto (v3, m-1 de t8):
+ *   · tal cual, normalizado;
+ *   · con la «I» MAYÚSCULA leída como «l» (en Helvetica no se distinguen:
+ *     «TyIex», «TafiI», «VaIium»); se hace ANTES de pasar a minúsculas, que es
+ *     cuando dejan de distinguirse;
+ *   · cada una de esas con los dígitos leídos como letras (0→o, 1→i/l…);
+ *   · cada una de esas con las parejas que imitan una letra: «rn»→«m»
+ *     («Trarnadol»), «vv»→«w», «cl»→«d».
+ * Sin repetidos. Las lecturas derivadas solo AÑADEN formas de caer: la
+ * original siempre está.
+ */
+export function lecturasDelTexto(texto: string): string[] {
+  const bases = [normalizarNombre(texto), normalizarNombre(texto.replace(/I/g, "l"))];
+  const conDigitos = bases.flatMap((b) => [b, ...lecturasConDigitos(b)]);
+  // Cada pareja por separado y las tres juntas: «Clonazeparn» necesita solo
+  // «rn»→«m» (con «cl»→«d» a la vez saldría «donazepam» y se perdería el nombre).
+  const conParejas = conDigitos.flatMap((l) => [
+    l.replace(/rn/g, "m"),
+    l.replace(/vv/g, "w"),
+    l.replace(/cl/g, "d"),
+    l.replace(/rn/g, "m").replace(/vv/g, "w").replace(/cl/g, "d"),
+  ]);
+  return Array.from(new Set([...conDigitos, ...conParejas]));
+}
+
 /** ¿`ventana` está a UNA letra (cambiada, sobrante o faltante) de `termino`? Ambas sin espacios. */
-function aUnaLetra(ventana: string, termino: string): boolean {
+export function aUnaLetra(ventana: string, termino: string): boolean {
   const a = ventana;
   const b = termino;
   if (a === b) return true;
@@ -337,7 +400,7 @@ function aUnaLetra(ventana: string, termino: string): boolean {
 }
 
 /** ¿El texto contiene algo a una letra del término? Ventanas de largo ±1 sobre el texto. */
-function contieneCasi(texto: string, termino: string): boolean {
+export function contieneCasi(texto: string, termino: string): boolean {
   for (const largo of [termino.length - 1, termino.length, termino.length + 1]) {
     if (largo < 1 || largo > texto.length) continue;
     for (let i = 0; i + largo <= texto.length; i++) {
@@ -357,26 +420,45 @@ function contieneCasi(texto: string, termino: string): boolean {
 export function detectarControlado(...textos: Array<string | null | undefined>): Controlado | null {
   const junto = textos.filter(Boolean).join(" ");
   if (!junto.trim()) return null;
-  const pegado = normalizarNombre(junto);
-  // 1 y 2: tal cual y con los dígitos leídos como letras.
-  const lecturas = Array.from(new Set([pegado, ...lecturasConDigitos(pegado)]));
+  const lecturas = lecturasDelTexto(junto);
+  // 1 y 2: tal cual, con la I mayúscula como l, con los dígitos leídos como
+  // letras y con «rn»→«m», «vv»→«w», «cl»→«d».
   for (const [termino, nombre, grupo] of CONTENIDOS) {
     for (const lectura of lecturas) {
       if (lectura.includes(termino)) return { nombre, grupo };
     }
   }
-  const palabras = new Set(normalizarNombre(junto, true).split(" "));
-  for (const [palabra, nombre, grupo] of PALABRAS_EXACTAS) {
-    if (palabras.has(palabra)) return { nombre, grupo };
+  // Palabras enteras (o por principio de palabra): letras y dígitos separados
+  // antes («tradol50» → «tradol 50»), en las mismas lecturas.
+  const palabras = palabrasDelTexto(junto);
+  for (const [palabra, nombre, grupo, modo] of PALABRAS_EXACTAS) {
+    if (palabras.some((p) => (modo === "entera" ? p === palabra : p.startsWith(palabra)))) return { nombre, grupo };
   }
-  // 3: una letra de tolerancia en los términos largos.
-  for (const [termino, nombre, grupo] of CONTENIDOS) {
-    if (termino.length < LARGO_CON_TOLERANCIA || SIN_TOLERANCIA.has(termino)) continue;
-    for (const lectura of lecturas) {
-      if (contieneCasi(lectura, termino)) return { nombre, grupo };
+  // 3: una letra de tolerancia en los términos largos, PALABRA POR PALABRA.
+  // Sobre el texto pegado (sin espacios) la tolerancia cruzaba palabras:
+  // «cefaclor acetato» → «cloracetato» ≈ «cloracepato», «ácido fólico
+  // dinitrato» → «…icodinitrato» ≈ «vicodin» (v3, m-3 de t8). Una errata va
+  // dentro de una palabra; lo repartido entre palabras lo caza el paso 1.
+  for (const palabra of palabrasDelTexto(junto)) {
+    for (const lectura of lecturasDelTexto(palabra)) {
+      for (const [termino, nombre, grupo] of CONTENIDOS) {
+        if (termino.length < LARGO_CON_TOLERANCIA || SIN_TOLERANCIA.has(termino)) continue;
+        if (lectura.length < termino.length - 1) continue;
+        if (contieneCasi(lectura, termino)) return { nombre, grupo };
+      }
     }
   }
   return null;
+}
+
+/** Las palabras del texto (letras y dígitos separados), sin repetidos, con la I mayúscula leída también como l. */
+function palabrasDelTexto(texto: string): string[] {
+  const out = new Set<string>();
+  for (const base of [texto, texto.replace(/I/g, "l")]) {
+    const separado = normalizarNombre(base, true).replace(/([a-z])(\d)/g, "$1 $2").replace(/(\d)([a-z])/g, "$1 $2");
+    for (const p of separado.split(" ")) if (p) out.add(p);
+  }
+  return Array.from(out);
 }
 
 /** Cuántos términos vigila el candado (para la prueba que fija que la lista no se vacíe por accidente). */

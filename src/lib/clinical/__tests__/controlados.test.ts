@@ -5,7 +5,8 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { detectarControlado, lecturasConDigitos, normalizarNombre, TERMINOS_CONTROLADOS } from "../controlados";
+import { CUMS_ESSENTIALS } from "@/lib/seeds/cums-essentials";
+import { detectarControlado, lecturasConDigitos, lecturasDelTexto, normalizarNombre, TERMINOS_CONTROLADOS } from "../controlados";
 
 test("los ejemplos de Rafael caen todos, con su grupo", () => {
   assert.deepEqual(detectarControlado("fentanilo"), { nombre: "Fentanilo", grupo: "I" });
@@ -142,6 +143,77 @@ test("v2 · la vía también se revisa (va a la receta impresa)", () => {
   assert.equal(detectarControlado("Analgésico", "50 mg", "", "Tableta", "Oral"), null);
 });
 
+// ── v3 · la revisión v2 de t8 (m-1, m-2, m-3) ─────────────────────────────
+
+test("v3 · m-1: I mayúscula leída como l, «rn» como «m» (antes de pasar a minúsculas)", () => {
+  assert.equal(detectarControlado("TyIex")?.nombre, "Codeína");
+  assert.equal(detectarControlado("TafiI")?.nombre, "Alprazolam");
+  assert.equal(detectarControlado("TramaI")?.nombre, "Tramadol");
+  assert.equal(detectarControlado("VaIium")?.nombre, "Diazepam");
+  assert.equal(detectarControlado("Iitio")?.nombre, "Litio");
+  assert.equal(detectarControlado("Trarnadol")?.nombre, "Tramadol");
+  assert.equal(detectarControlado("Ketarnina")?.nombre, "Ketamina");
+  assert.equal(detectarControlado("Trarnal")?.nombre, "Tramadol");
+  assert.equal(detectarControlado("Clonazeparn")?.nombre, "Clonazepam");
+  assert.equal(detectarControlado("rnorfina")?.nombre, "Morfina");
+  assert.ok(lecturasDelTexto("TyIex").includes("tylex"));
+  assert.ok(lecturasDelTexto("Trarnadol").includes("tramadol"));
+});
+
+test("v3 · m-1: erratas concretas de las marcas cortas (sin tolerancia general: Tafil está a una letra de Tafirol)", () => {
+  for (const [texto, nombre] of [["Zanax", "Alprazolam"], ["Xanex", "Alprazolam"], ["Xannax", "Alprazolam"], ["Xanaks", "Alprazolam"], ["Taffil", "Alprazolam"], ["Tafyl", "Alprazolam"], ["Valiun", "Diazepam"], ["Tramall", "Tramadol"], ["Tilex", "Codeína"]]) {
+    assert.equal(detectarControlado(texto)?.nombre, nombre, texto);
+  }
+  assert.equal(detectarControlado("Tafirol"), null, "Tafirol es paracetamol");
+  assert.equal(detectarControlado("Tempra"), null);
+});
+
+test("v3 · m-1: «tradol» pegado a un número o como principio de palabra cae; dentro de «Ultradol» no", () => {
+  assert.equal(detectarControlado("Tradol50")?.nombre, "Tramadol");
+  assert.equal(detectarControlado("TradolRetard")?.nombre, "Tramadol");
+  assert.equal(detectarControlado("Tradol-retard")?.nombre, "Tramadol");
+  assert.equal(detectarControlado("tradol 50 mg")?.nombre, "Tramadol");
+  assert.equal(detectarControlado("Ultradol"), null);
+  assert.equal(detectarControlado("Ultradol 300 mg"), null);
+});
+
+test("v3 · m-2: marcas confirmadas con registro sanitario (vademecum.es/mexico)", () => {
+  for (const [texto, nombre] of [["Kriadex", "Clonazepam"], ["Ortopsique", "Diazepam"], ["Alzam", "Alprazolam"], ["Tramacet", "Tramadol"], ["Sideril", "Trazodona"], ["Efexor XR", "Venlafaxina"], ["Cymbalta", "Duloxetina"], ["Remeron SolTab", "Mirtazapina"], ["Abilify", "Aripiprazol"]]) {
+    assert.equal(detectarControlado(texto)?.nombre, nombre, texto);
+  }
+});
+
+test("v3 · m-3: ketorolaco trometamina, trometamol, hexetidina, cannabidiol y EDTA NO son controlados", () => {
+  for (const libre of ["Ketorolaco trometamina", "Ketorolaco trometamina 10 mg", "Trometamina", "Ketorolaco trometamol", "Dexketoprofeno trometamol", "Hexetidina", "Cannabidiol", "Ácido etilendiaminotetraacético", "Cefaclor acetato", "Ornidazol maleato", "Ácido fólico dinitrato", "Keflex procaínica", "Dabigatrán maleato", "Levetiracetam maleato"]) {
+    assert.equal(detectarControlado(libre), null, `«${libre}» no es controlado y no debería caer`);
+  }
+  assert.equal(detectarControlado("Ketamina")?.nombre, "Ketamina");
+  assert.equal(detectarControlado("Ketalar")?.nombre, "Ketamina");
+  assert.equal(detectarControlado("Ketamine HCl")?.nombre, "Ketamina");
+  assert.equal(detectarControlado("Cannabis")?.nombre, "Cannabis");
+  assert.equal(detectarControlado("Petidina")?.nombre, "Petidina (meperidina)");
+  assert.equal(detectarControlado("Meperidina")?.nombre, "Petidina (meperidina)");
+});
+
+test("v3 · m-3: prueba amplia — todo el catálogo IV/V/VI y ~150 nombres de consultorio, con sus sales y en mayúsculas, sin falsos positivos", () => {
+  const SALES = ["", " trometamina", " trometamol", " clorhidrato", " sódico", " potásico", " maleato", " besilato", " citrato", " fosfato", " sulfato", " acetato", " succinato", " mesilato", " tartrato", " hidrobromuro", " dipropionato", " valerato", " dinitrato", " cálcico", " monohidratado", " trihidratada", " benzatínica", " procaínica"];
+  const EXTRA = ["Ketorolaco trometamina", "Trometamina", "Cannabidiol", "Articaína con epinefrina", "Lidocaína con epinefrina", "Mepivacaína con levonordefrina", "Prilocaína con felipresina", "Bupivacaína", "Epinefrina", "Levonordefrina", "Felipresina", "Norepinefrina", "Adrenalina", "Vasopresina", "Benzocaína", "Tetracaína", "Procaína", "Ropivacaína", "Pramoxina", "Ibuprofeno", "Ketoprofeno", "Dexketoprofeno trometamol", "Flurbiprofeno", "Naproxeno sódico", "Diclofenaco potásico", "Aceclofenaco", "Etodolaco", "Indometacina", "Meloxicam", "Piroxicam", "Tenoxicam", "Nimesulida", "Celecoxib", "Etoricoxib", "Parecoxib", "Paracetamol", "Acetaminofén", "Metamizol sódico", "Dipirona", "Ácido acetilsalicílico", "Clonixinato de lisina", "Ácido mefenámico", "Nabumetona", "Amoxicilina", "Amoxicilina clavulanato", "Ampicilina", "Dicloxacilina", "Fenoximetilpenicilina", "Penicilina G benzatínica", "Cefalexina", "Cefadroxilo", "Cefaclor", "Cefuroxima axetilo", "Cefixima", "Ceftriaxona", "Clindamicina fosfato", "Lincomicina", "Eritromicina", "Azitromicina", "Claritromicina", "Metronidazol", "Tinidazol", "Secnidazol", "Ornidazol", "Espiramicina", "Doxiciclina hiclato", "Minociclina", "Tetraciclina", "Ciprofloxacino", "Levofloxacino", "Moxifloxacino", "Gentamicina", "Amikacina", "Vancomicina", "Linezolid", "Trimetoprima sulfametoxazol", "Nitrofurantoína", "Fosfomicina", "Rifampicina", "Bacitracina", "Neomicina", "Mupirocina", "Ácido fusídico", "Nistatina", "Fluconazol", "Itraconazol", "Ketoconazol", "Miconazol", "Clotrimazol", "Terbinafina", "Anfotericina B", "Aciclovir", "Valaciclovir", "Famciclovir", "Penciclovir", "Dexametasona", "Betametasona", "Prednisona", "Prednisolona", "Metilprednisolona", "Hidrocortisona", "Triamcinolona acetónido", "Fluocinolona", "Clobetasol", "Mometasona", "Budesonida", "Deflazacort", "Clorhexidina", "Cloruro de cetilpiridinio", "Hexetidina", "Triclosán", "Povidona yodada", "Peróxido de hidrógeno", "Peróxido de carbamida", "Fluoruro de sodio", "Fluoruro estañoso", "Monofluorofosfato", "Xilitol", "Hidroxiapatita", "Nitrato de potasio", "Arginina", "Bencidamina", "Hialuronato de sodio", "Ácido hialurónico", "Carboximetilcelulosa", "Pilocarpina", "Cevimelina", "Hidróxido de calcio", "Óxido de zinc eugenol", "Eugenol", "Hipoclorito de sodio", "EDTA", "Ácido etilendiaminotetraacético", "Gluconato de clorhexidina", "Paramonoclorofenol", "Formocresol", "Yodoformo", "Gutapercha", "Trióxido mineral agregado", "Ionómero de vidrio", "Ácido fosfórico", "Ácido poliacrílico", "Alginato", "Loratadina", "Desloratadina", "Cetirizina", "Fexofenadina", "Clorfenamina", "Difenhidramina", "Hidroxicina", "Ranitidina", "Famotidina", "Omeprazol", "Pantoprazol", "Metoclopramida", "Ondansetrón", "Butilhioscina", "Enalapril", "Losartán", "Amlodipino", "Metoprolol", "Propranolol", "Furosemida", "Atorvastatina", "Metformina", "Levotiroxina", "Warfarina", "Rivaroxabán", "Apixabán", "Dabigatrán", "Clopidogrel", "Ácido tranexámico", "Heparina", "Enoxaparina", "Nitroglicerina", "Salbutamol", "Montelukast", "Ambroxol", "Acetilcisteína", "Ácido fólico", "Sulfato ferroso", "Cianocobalamina", "Vitamina C", "Vitamina D3", "Melatonina", "Carbamazepina", "Oxcarbazepina", "Gabapentina", "Pregabalina", "Amitriptilina", "Levetiracetam", "Ácido valproico", "Tiamina", "Nitazoxanida", "Albendazol", "Tafirol", "Tempra", "Tylenol", "Advil", "Motrin", "Dolac", "Supradol", "Neurobion", "Flanax", "Cataflam", "Voltaren", "Febrax", "Lertus", "Dorixina", "Novalgina", "Neo-Melubrina", "Amoxil", "Clavulin", "Augmentin", "Dalacin", "Flagyl", "Rodogyl", "Keflex", "Zitromax", "Klaricid", "Ceclor", "Zovirax", "Diflucan", "Micostatin", "Daktarin", "Canesten", "Decadron", "Alin", "Meticorten", "Medrol", "Oralgene", "Periogard", "Perioxidin", "Listerine", "Sensodyne", "Duraphat", "Clinpro", "Opalescence", "Xilocaína", "Xylocaina", "Septocaine", "Ultracaine", "Scandonest", "Citanest", "Marcaína", "Carbocaína", "Hurricaine", "Topex", "Orajel", "Anbesol", "Oragesic", "Ultradol", "Lodine"];
+  const nombres = [...CUMS_ESSENTIALS.filter((e) => !["I", "II", "III"].includes(e.cofeprisGroup ?? "")).map((e) => e.descripcion), ...EXTRA];
+  const falsos: string[] = [];
+  let n = 0;
+  for (const base of nombres) {
+    for (const sal of SALES) {
+      for (const v of [base + sal, (base + sal).toUpperCase()]) {
+        n++;
+        const c = detectarControlado(v);
+        if (c) falsos.push(`${v} → ${c.nombre} ${c.grupo}`);
+      }
+    }
+  }
+  assert.ok(n > 25_000, `solo ${n} combinaciones`);
+  assert.deepEqual(falsos.slice(0, 20), [], `${falsos.length} falsos positivos`);
+});
+
 test("los nombres cortos solo cuentan como palabra entera", () => {
   assert.equal(detectarControlado("Opio")?.nombre, "Opio");
   assert.equal(detectarControlado("tintura de opio")?.nombre, "Opio");
@@ -162,5 +234,5 @@ test("normalizarNombre: minúsculas, sin acentos ni signos", () => {
 });
 
 test("la lista no se vacía por accidente", () => {
-  assert.ok(TERMINOS_CONTROLADOS > 140, `solo ${TERMINOS_CONTROLADOS} términos`);
+  assert.ok(TERMINOS_CONTROLADOS > 170, `solo ${TERMINOS_CONTROLADOS} términos`);
 });
