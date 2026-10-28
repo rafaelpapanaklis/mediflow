@@ -77,7 +77,8 @@ test("la Nueva consulta ofrece «Armar el plan» sin tocar su texto libre, y abr
   const ficha = leer("src/app/dashboard/patients/[id]/patient-detail-client.tsx");
   // Solo la Nueva consulta del rediseño, y solo con permiso de crear planes.
   assert.equal((ficha.match(/armarPlan=\{/g) ?? []).length, 1);
-  assert.match(ficha, /citaEnCursoId=\{activeAppointment\?\.id \?\? null\} rediseno armarPlan=\{armarPlanConsulta\} \/>/);
+  // ws1-t12 v18: entre la cita en consulta y `rediseno` va la cita elegida en «Hecho» (citaElegida/onQuitarCitaElegida).
+  assert.match(ficha, /citaEnCursoId=\{activeAppointment\?\.id \?\? null\} citaElegida=\{citaParaLaNota\} onQuitarCitaElegida=\{\(\) => setCitaParaLaNota\(null\)\} rediseno armarPlan=\{armarPlanConsulta\} \/>/);
   assert.match(ficha, /const armarPlanConsulta = useMemo\(\(\) => \(canEditTreatments \? \{/);
   // La ventana del plan (P3) avisa a la ficha y el plan sale ya.
   assert.match(ficha, /onCrear=\{handleCreateTreatment\}[\s\S]{0,200}onGuardado=\{\(plan\) => \{\s*setPlanesRecienCreados/);
