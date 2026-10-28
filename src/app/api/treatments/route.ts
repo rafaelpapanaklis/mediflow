@@ -40,7 +40,9 @@ export async function GET(req: NextRequest) {
   }
   const idsConEstado = status
     ? (await prisma.$queryRaw<Array<{ id: string }>>`
-        SELECT "id" FROM "treatment_plans" WHERE "clinicId" = ${ctx.clinicId} AND "status"::text = ${status}`).map((r) => r.id)
+        SELECT "id" FROM "treatment_plans"
+         WHERE "clinicId" = ${ctx.clinicId} AND "status"::text = ${status}
+           AND (${patientId}::text IS NULL OR "patientId" = ${patientId})`).map((r) => r.id)
     : null;
   const limit = Math.min(Math.max(parseInt(searchParams.get("limit") ?? "200"), 1), 500);
   const skip  = Math.max(parseInt(searchParams.get("skip") ?? "0"), 0);

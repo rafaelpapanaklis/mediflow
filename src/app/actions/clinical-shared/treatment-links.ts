@@ -117,22 +117,26 @@ export async function listOpenTreatmentSessions(
   const sinPermiso = sinPermisoClinico(ctx, "ver");
   if (sinPermiso) return sinPermiso;
 
-  const sessions = await prisma.treatmentSession.findMany({
-    where: {
-      completedAt: null,
-      treatment: {
-        clinicId: ctx.clinicId,
-        patientId: parsed.data.patientId,
-        status: "ACTIVE",
+  // ws1-t12 v21 (t5 de la v20, m1): el estado del plan se filtra en JS. En la base real
+  // `treatment_plans.status` es TEXT y schema.prisma lo declara enum: un filtro por relación
+  // (`treatment: { status }`) manda el parámetro como enum y Postgres contesta 42883.
+  const sessions = (
+    await prisma.treatmentSession.findMany({
+      where: {
+        completedAt: null,
+        treatment: {
+          clinicId: ctx.clinicId,
+          patientId: parsed.data.patientId,
+        },
       },
-    },
-    select: {
-      id: true,
-      sessionNumber: true,
-      treatment: { select: { id: true, name: true } },
-    },
-    orderBy: { sessionNumber: "asc" },
-  });
+      select: {
+        id: true,
+        sessionNumber: true,
+        treatment: { select: { id: true, name: true, status: true } },
+      },
+      orderBy: { sessionNumber: "asc" },
+    })
+  ).filter((s) => String(s.treatment.status) === "ACTIVE");
 
   return ok(
     sessions.map((s) => ({
