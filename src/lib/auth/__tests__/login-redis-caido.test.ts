@@ -18,7 +18,12 @@ import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { NextRequest } from "next/server";
 import { Redis } from "@upstash/redis";
-import { OPCIONES_UPSTASH_RAPIDAS, UPSTASH_TIEMPO_MAX_MS } from "@/lib/upstash-rapido";
+import {
+  OPCIONES_UPSTASH_CANDADOS,
+  OPCIONES_UPSTASH_RAPIDAS,
+  UPSTASH_TIEMPO_MAX_CANDADOS_MS,
+  UPSTASH_TIEMPO_MAX_MS,
+} from "@/lib/upstash-rapido";
 
 // Antes de la primera llamada a failban: su cliente se crea una vez, con estas variables.
 process.env.UPSTASH_REDIS_REST_URL = "https://sin-redis.invalid";
@@ -86,6 +91,10 @@ test("opciones: un reintento a los 50 ms y señal NUEVA por comando (una fija qu
   assert.notEqual(a, b);
   assert.equal(a.aborted, false);
   assert.equal(UPSTASH_TIEMPO_MAX_MS, 1_000);
+  // v2: los candados contra duplicados, con más margen (los prueba failban-candados-lentos).
+  assert.equal(OPCIONES_UPSTASH_CANDADOS.retry.retries, 2);
+  assert.equal(UPSTASH_TIEMPO_MAX_CANDADOS_MS, 3_000);
+  assert.notEqual(OPCIONES_UPSTASH_CANDADOS.signal(), OPCIONES_UPSTASH_CANDADOS.signal());
 });
 
 /** Un servidor local: `corta` cierra cada conexión al llegar; `calla` la deja colgada. */
