@@ -99,7 +99,7 @@ function modeloOdontograma(cx: any) {
     else if (w.conditionId?.not) { p.push(`"conditionId" <> ?`); vals.push(w.conditionId.not); }
     return p.join(" AND ");
   };
-  const COLS = `"id","toothNumber","surface","conditionId","notes","updatedAt"`;
+  const COLS = `"id","toothNumber","surface","conditionId","notes","updatedAt","createdAt"`;
   const m = {
     async findMany(a: any) {
       const v: unknown[] = [];
@@ -511,7 +511,7 @@ test("v3 MAYOR-B: GET /api/treatments/en-planes da, de TODOS los doctores, tipo 
   assert.deepEqual(filas.map((f: any) => `${f.plan}:${f.clave}:${f.dientes}:${f.estado}`), [
     "Plan de la Dra. Otra:resina:16:pendiente", "Plan de la Dra. Otra:corona:26:hecho",
   ]);
-  for (const f of filas) assert.deepEqual(Object.keys(f).sort(), ["clave", "dientes", "estado", "hechoEn", "plan", "planId"], "sin precio, nombre de la fila ni notas");
+  for (const f of filas) assert.deepEqual(Object.keys(f).sort(), ["caras", "clave", "dientes", "estado", "hechoEn", "plan", "planId"], "sin precio, nombre de la fila ni notas (v6: con caras)");
   const ajena = await GET(new NextRequest("http://x/api/treatments/en-planes?patientId=pac-c2"));
   assert.equal(ajena.status, 404, "el paciente de otra clínica no existe aquí");
   Object.assign(ctx, { role: "RECEPTIONIST", permissionsOverride: ["patients.view"] });
@@ -597,4 +597,48 @@ test("v4 m2 y m3: se miran más de 20 planes; un paciente archivado (ARCO) da 40
   await base.db.exec(`ALTER TABLE "patients" ADD COLUMN IF NOT EXISTS "deletedAt" timestamp(3)`);
   await base.db.query(`UPDATE "patients" SET "deletedAt" = now() WHERE "id" = 'pac-c1'`);
   assert.equal((await GET(new NextRequest("http://x/api/treatments/en-planes?patientId=pac-c1"))).status, 404);
+});
+
+/* ─────── v6 (quinta revisión de t1) ─────── */
+
+test("v6 m2: «estadoDesde» = cuándo la marca pasó a su estado (rojo); el GET lo manda; rehacer una resina vieja se ofrece", async (t) => {
+  if (salta(t)) return;
+  await usar();
+  const col = await base.db.query(`SELECT data_type FROM information_schema.columns WHERE table_name = 'odontogram_entries' AND column_name = 'estadoDesde'`);
+  assert.equal(col.rows[0]?.data_type, "timestamp without time zone");
+  // F2 de t1: resina 16 O pintada en 2023, hecha (azul) en 2024 en un plan; hoy se repinta en ROJO
+  await put(16, "O", "restoration", "hecho");
+  await base.db.query(`UPDATE "odontogram_entries" SET "createdAt" = '2023-01-01', "estadoDesde" = '2024-01-01'`);
+  await sembrarFilasDePlan("plan-a", "doc-c1", [["Restauración resina 1 cara", [16], "hecho"]], "Plan A"); // hecha hace 400 días (≈ 2025)
+  const antes = (await base.db.query(`SELECT "estadoDesde" FROM "odontogram_entries"`)).rows[0].estadoDesde;
+  assert.equal((await put(16, "O", "restoration", "hecho")).status, 200);
+  assert.equal(String((await base.db.query(`SELECT "estadoDesde" FROM "odontogram_entries"`)).rows[0].estadoDesde), String(antes), "mismo estado: no se mueve");
+  assert.equal((await put(16, "O", "restoration", "por_hacer")).status, 200);
+  const g = await ruta("GET");
+  const e = g.body.entries[0];
+  assert.equal(e.estado, "por_hacer");
+  assert.ok(Date.now() - Date.parse(e.estadoDesde) < 60_000, "pasó a rojo ahora");
+  assert.ok(Date.parse(e.createdAt) < Date.parse("2023-06-01"), "createdAt sigue siendo el de 2023");
+  // lo que hace la ventana con eso: la fecha de la roja es estadoDesde → la resina hecha antes no la tapa
+  const { fechaDeMarca, hallazgosPorTratar } = await import("@/components/dashboard/plan-tratamiento-rediseno/plan-clinico");
+  const { chipsDelPlan } = await import("@/components/dashboard/plan-tratamiento-rediseno/armar-plan");
+  const { GET: enPlanesGET } = await import("@/app/api/treatments/en-planes/route");
+  const { filas } = await (await enPlanesGET(new NextRequest("http://x/api/treatments/en-planes?patientId=pac-c1"))).json();
+  const entradas = g.body.entries.map((x: any) => ({ ...x, marcadaEn: fechaDeMarca(x) }));
+  const tarifario = [{ id: "p1", name: "Restauración resina 1 cara", basePrice: 700, duration: 30, category: "dental", code: null, isActive: true }];
+  const chip = chipsDelPlan(hallazgosPorTratar(entradas), tarifario, entradas, [], filas)[0];
+  assert.equal(chip.clave, "r:h:16:restoration");
+  assert.equal(chip.enOtroPlan ?? null, null, "rehacerla sale con un toque");
+  assert.equal(chip.sugerencia?.precio, 700);
+});
+
+test("v6 m2: la sonda pide las DOS columnas del mismo SQL; con solo «estado» (SQL a medias), todo como hoy", async (t) => {
+  if (salta(t)) return;
+  await usar();
+  await base.db.exec(`ALTER TABLE "odontogram_entries" DROP COLUMN "estadoDesde"`); // solo en esta base de prueba
+  (await import("@/lib/odontogram/estado-db"))._olvidarSondaEstado();
+  const g = await ruta("GET");
+  assert.equal(g.body.conEstado, false);
+  assert.equal((await put(16, "O", "restoration", "por_hacer")).status, 200);
+  assert.deepEqual(await odontograma(), ["16O:restoration"], "el PUT no escribe estado sin las dos columnas");
 });

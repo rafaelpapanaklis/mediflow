@@ -53,6 +53,9 @@ export interface OdontogramEntry {
   updatedAt?: string;
   /** Rojo/azul (ws1-t6); sin él = lo de antes, se pinta como hoy. */
   estado?: EstadoMarca | null;
+  /** Desde cuándo tiene su estado (v6; para una roja, cuándo pasó a rojo) y cuándo se creó. */
+  estadoDesde?: string | null;
+  createdAt?: string | null;
 }
 
 /* ---------- robust response reading (never throws on empty/HTML body) ---------- */

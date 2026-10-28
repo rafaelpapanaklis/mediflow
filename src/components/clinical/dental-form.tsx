@@ -32,7 +32,7 @@ import {
 } from "@/components/dashboard/plan-tratamiento-rediseno/plan-clinico";
 import { pickSingleAppointmentOfDay } from "@/lib/clinical/note-appointment-link";
 import { VentanaNuevoPlan, type FormPlan, type VentanaNuevoPlanProps } from "@/components/dashboard/plan-tratamiento-rediseno/ventana-nuevo-plan";
-import { precargaDeConsulta } from "@/components/dashboard/plan-tratamiento-rediseno/armar-plan";
+import { fechasDelVivo, precargaDeConsulta, type FechasDelVivo } from "@/components/dashboard/plan-tratamiento-rediseno/armar-plan";
 
 /**
  * La cita de HOY de este paciente, o null si no hay exactamente una. Con dos
@@ -224,6 +224,8 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
   const [odoRetry, setOdoRetry] = useState(0);
   // La base guarda rojo/azul por marca (ws1-t6): lo dice la lectura del vivo. En edición no se lee.
   const [odoConEstado, setOdoConEstado] = useState<boolean | undefined>(undefined);
+  // Cuándo se marcó cada marca del vivo (ws1-t6 v6): «Armar el plan» decide como «Nuevo plan» de la ficha.
+  const odoFechasRef = useRef<FechasDelVivo | undefined>(undefined);
   // true desde que el doctor toca el odontograma; la precarga no pisa sus marcas.
   const odoTouchedRef = useRef(false);
   // Qué dientes tocó en esta consulta y cómo estaban al tocarlos: su cambio es
@@ -237,9 +239,10 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
     let cancelled = false;
     setOdoStatus("loading");
     fetchOdontogram(patientId)
-      .then(({ records: live, conEstado }) => {
+      .then(({ records: live, conEstado, entries }) => {
         if (cancelled) return;
         setOdoConEstado(conEstado);
+        odoFechasRef.current = fechasDelVivo(entries);
         const merged = mergeLiveOdontogram(live, odontogramRef.current, odoTouchedRef.current, odoBasesRef.current);
         // desde aquí el cambio del doctor se mide contra ESTE vivo: si luego
         // alguien quita algo en el vivo, el borrador no lo resucita
@@ -459,6 +462,7 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
       pronostico,
       odontograma: odontogram,
       odontogramaListo: odoStatus === "ready",
+      fechas: odoFechasRef.current,
     }));
     setFormPlan({ doctorId: armarPlan.doctorId, name: "", description: "", totalSessions: "1", sessionIntervalDays: "30", totalCost: "" });
     setPlanAbierto(true);

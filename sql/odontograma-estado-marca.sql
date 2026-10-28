@@ -8,6 +8,10 @@
 --     'previo'    → AZUL con la nota «previo»: el paciente lo trae hecho de otra clínica.
 --   NULL = lo que ya estaba guardado antes de esto: se lee y se pinta COMO HOY
 --   (color de la especialidad). Este archivo NO reescribe ni borra ninguna fila.
+-- Y una segunda columna (v6):
+--   "estadoDesde" TIMESTAMP(3), NULL por defecto — desde cuándo la marca tiene su estado (para una
+--   ROJA: cuándo pasó a «por hacer»). «Nuevo plan» la usa para no tapar el «rehacer» de un trabajo
+--   viejo. La escribe el código al cambiar el estado; lo de antes queda NULL.
 --
 -- IDEMPOTENTE: ADD COLUMN IF NOT EXISTS y la restricción solo si falta; correrlo dos veces no
 --   falla ni duplica.
@@ -21,6 +25,7 @@
 -- ═══════════════════════════════════════════════════════════════════════
 
 ALTER TABLE "odontogram_entries" ADD COLUMN IF NOT EXISTS "estado" TEXT;
+ALTER TABLE "odontogram_entries" ADD COLUMN IF NOT EXISTS "estadoDesde" TIMESTAMP(3);
 
 DO $estado$
 BEGIN
@@ -44,7 +49,8 @@ ALTER TABLE "odontogram_entries" VALIDATE CONSTRAINT "odontogram_entries_estado_
 
 
 -- ── Comprobación (solo lee) ──────────────────────────────────────────────
--- Debe salir 1 fila: odontogram_entries | estado | text | YES
+-- Deben salir 2 filas: odontogram_entries | estado | text | YES  y  … | estadoDesde | timestamp without time zone | YES
 SELECT table_name, column_name, data_type, is_nullable
 FROM information_schema.columns
-WHERE table_name = 'odontogram_entries' AND column_name = 'estado';
+WHERE table_name = 'odontogram_entries' AND column_name IN ('estado', 'estadoDesde')
+ORDER BY column_name;

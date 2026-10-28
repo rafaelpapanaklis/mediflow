@@ -33,6 +33,8 @@ export interface FilaEnPlan {
   plan: string;
   clave: ClaveProcedimiento;
   dientes: number[];
+  /** Caras que trabaja (letras de la base: M O D V L); vacío = no lo dice (v6, m1). */
+  caras: string[];
   estado: EstadoEnPlan;
   /** Cuándo se marcó hecha (ISO), solo si está hecha. */
   hechoEn: string | null;
@@ -44,11 +46,16 @@ export interface FilaParaResumir {
   nombre: string;
   procedureId: string | null;
   dientes: number[];
+  caras?: string[];
   estado: string;
   hechoEn: Date | string | null;
 }
 
 const PLAN_CANCELADO = "ABANDONED";
+const CARAS_BASE = ["M", "O", "D", "V", "L"];
+/** Letras de la base, sin repetir (la «I» de un anterior es la «O»). */
+const carasBase = (caras: readonly string[] | undefined) =>
+  CARAS_BASE.filter((c) => (caras ?? []).some((x) => (String(x).toUpperCase() === "I" ? "O" : String(x).toUpperCase()) === c));
 
 /**
  * Las filas que cuentan, ya con su tipo: las por hacer de planes no cancelados y las hechas de
@@ -68,7 +75,7 @@ export function resumirFilas(
       const clave = claveDeProcedimiento({ codigo: f.procedureId ? codigos.get(f.procedureId) ?? null : null, nombre: f.nombre });
       if (!clave) continue;
       const hechoEn = estado === "hecho" && f.hechoEn ? new Date(f.hechoEn).toISOString() : null;
-      out.push({ planId: p.id, plan: p.name, clave, dientes: [...f.dientes], estado, hechoEn });
+      out.push({ planId: p.id, plan: p.name, clave, dientes: [...f.dientes], caras: carasBase(f.caras), estado, hechoEn });
     }
   }
   return out;
@@ -99,14 +106,24 @@ export function planQueYaLoTiene(
   clave: ClaveProcedimiento,
   dientes: number[],
   filas: FilaEnPlan[],
-  opciones: { excluirPlanId?: string | null; ahora?: Date } & ContextoDeMarca = {},
+  opciones: { excluirPlanId?: string | null; ahora?: Date; caras?: readonly string[] } & ContextoDeMarca = {},
 ): FilaEnPlan | null {
   const ahora = opciones.ahora ?? new Date();
-  const candidatas = filas.filter((f) =>
+  let candidatas = filas.filter((f) =>
     f.clave === clave
     && f.planId !== opciones.excluirPlanId
     && (f.dientes.length === 0 || dientes.length === 0 || dientes.some((d) => f.dientes.includes(d)))
     && cuenta(f, ahora, opciones));
+  // Procedimiento por caras (resina, sellante…): una fila tapa solo las caras que trabaja (o todas si
+  // no dice caras). Lo que pide caras que ninguna fila cubre es trabajo nuevo (v6, m1).
+  const piden = carasBase(opciones.caras);
+  if (PROCEDIMIENTOS[clave].variantes === "caras" && piden.length > 0) {
+    // (una respuesta de antes, sin `caras`, cuenta como «no dice caras»)
+    const carasDe = (f: FilaEnPlan) => f.caras ?? [];
+    candidatas = candidatas.filter((f) => carasDe(f).length === 0 || carasDe(f).some((c) => piden.includes(c)));
+    const cubiertas = candidatas.some((f) => carasDe(f).length === 0) ? CARAS_BASE : candidatas.flatMap(carasDe);
+    if (!piden.every((c) => cubiertas.includes(c))) return null;
+  }
   return candidatas.find((f) => f.estado !== "hecho") ?? candidatas[0] ?? null;
 }
 
@@ -115,7 +132,7 @@ export function planQueYaLoTiene(
  * Aquí no hay marca detrás (se tecleó o salió de un chip): lo hecho solo cuenta si es reciente.
  */
 export function filasRepetidas(
-  nuevas: Array<{ nombre: string; procedureId: string | null; dientes: number[] }>,
+  nuevas: Array<{ nombre: string; procedureId: string | null; dientes: number[]; caras?: string[] }>,
   filas: FilaEnPlan[],
   opciones: { codigos?: ReadonlyMap<string, string>; excluirPlanId?: string | null; ahora?: Date } = {},
 ): Array<{ nombre: string; dientes: number[]; plan: string }> {
@@ -123,7 +140,7 @@ export function filasRepetidas(
   for (const n of nuevas) {
     const clave = claveDeProcedimiento({ codigo: n.procedureId ? opciones.codigos?.get(n.procedureId) ?? null : null, nombre: n.nombre });
     if (!clave) continue;
-    const ya = planQueYaLoTiene(clave, n.dientes, filas, opciones);
+    const ya = planQueYaLoTiene(clave, n.dientes, filas, { ...opciones, caras: n.caras });
     if (ya) out.push({ nombre: n.nombre, dientes: [...n.dientes], plan: ya.plan });
   }
   return out;

@@ -373,6 +373,16 @@ export interface Hallazgo {
 }
 
 /**
+ * Cuándo se marcó una marca, tal como la devuelve `GET /api/odontogram` (ws1-t6 v5/v6): una ROJA,
+ * desde que pasó a «por hacer» (`estadoDesde`, si la base lo guarda); lo demás, cuando se creó.
+ * Cambiar el color o la nota no mueve `createdAt`; repintar en rojo sí mueve `estadoDesde`.
+ */
+export function fechaDeMarca(e: { estado?: string | null; estadoDesde?: string | null; createdAt?: string | null; updatedAt?: string | null }): string | null {
+  if (e.estado === "por_hacer" && e.estadoDesde) return e.estadoDesde;
+  return e.createdAt ?? e.updatedAt ?? null;
+}
+
+/**
  * Un hallazgo por (diente, condición), con sus caras juntas: «16 · MO · Caries». Las marcas de
  * procedimiento en ROJO («por hacer», ws1-t6) entran también, como lo que el doctor ya decidió
  * hacer: «16 · O · Resina» (`porHacer: true`, clave `16:restoration`).

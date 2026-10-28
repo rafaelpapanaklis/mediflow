@@ -49,11 +49,13 @@ export async function columnaEstadoExiste(opciones: { estricta?: boolean } = {})
   if (m.columna?.existe) return true;
   if (!opciones.estricta && m.columna && Date.now() - m.columna.en < REPREGUNTAR_MS) return false;
   try {
+    // Las DOS columnas del mismo SQL (`estado` y, desde la v6, `estadoDesde`): con una sola (un SQL
+    // pegado a medias), como si no estuviera.
     const r = await prisma.$queryRaw<{ existe: boolean }[]>`
-      SELECT EXISTS (
-        SELECT 1 FROM information_schema.columns
-         WHERE table_schema = 'public' AND table_name = 'odontogram_entries' AND column_name = 'estado'
-      ) AS existe`;
+      SELECT (
+        SELECT COUNT(*) FROM information_schema.columns
+         WHERE table_schema = 'public' AND table_name = 'odontogram_entries' AND column_name IN ('estado', 'estadoDesde')
+      ) = 2 AS existe`;
     const existe = r[0]?.existe === true;
     m.columna = { existe, en: Date.now() };
     return existe;
@@ -65,6 +67,20 @@ export async function columnaEstadoExiste(opciones: { estricta?: boolean } = {})
 }
 
 // ── Lectura y escritura ─────────────────────────────────────────────────────────────────────────
+
+/** id de la entrada → estado y desde cuándo (ISO o null), solo las que tienen estado. */
+export async function leerEstadosConFecha(db: Lector, patientId: string): Promise<Map<string, { estado: EstadoMarca; desde: string | null }>> {
+  const filas = await (db.$queryRaw as (q: TemplateStringsArray, ...v: unknown[]) => Promise<{ id: string; estado: string | null; estadoDesde: Date | string | null }[]>)`
+    SELECT "id", "estado", "estadoDesde" FROM "odontogram_entries"
+     WHERE "patientId" = ${patientId} AND "estado" IS NOT NULL`;
+  const out = new Map<string, { estado: EstadoMarca; desde: string | null }>();
+  for (const f of filas) {
+    if (!esEstadoMarca(f.estado)) continue;
+    const d = f.estadoDesde ? new Date(f.estadoDesde) : null;
+    out.set(f.id, { estado: f.estado, desde: d && Number.isFinite(d.getTime()) ? d.toISOString() : null });
+  }
+  return out;
+}
 
 /** id de la entrada → estado, solo las que lo tienen (lo viejo, sin estado, no viaja). */
 export async function leerEstados(db: Lector, patientId: string): Promise<Map<string, EstadoMarca>> {
@@ -91,10 +107,15 @@ export async function estadosParaMostrar(db: Lector, patientId: string): Promise
   }
 }
 
-/** Fija el estado de UNA entrada del paciente (por id). */
+/**
+ * Fija el estado de UNA entrada del paciente (por id). Si el estado CAMBIA, `estadoDesde` = ahora
+ * (para una roja: cuándo pasó a «por hacer», v6); si es el mismo, no se mueve.
+ */
 export async function fijarEstado(db: Db, patientId: string, id: string, estado: EstadoMarca | null): Promise<void> {
   await db.$executeRaw`
-    UPDATE "odontogram_entries" SET "estado" = ${estado}, "updatedAt" = now()
+    UPDATE "odontogram_entries"
+       SET "estadoDesde" = CASE WHEN "estado" IS DISTINCT FROM ${estado}::text THEN now() ELSE "estadoDesde" END,
+           "estado" = ${estado}, "updatedAt" = now()
      WHERE "id" = ${id} AND "patientId" = ${patientId}`;
 }
 
@@ -106,13 +127,17 @@ export async function fijarEstadoPorLugar(
 ): Promise<void> {
   if (lugar.surface === null) {
     await db.$executeRaw`
-      UPDATE "odontogram_entries" SET "estado" = ${estado}, "updatedAt" = now()
+      UPDATE "odontogram_entries"
+         SET "estadoDesde" = CASE WHEN "estado" IS DISTINCT FROM ${estado}::text THEN now() ELSE "estadoDesde" END,
+             "estado" = ${estado}, "updatedAt" = now()
        WHERE "patientId" = ${lugar.patientId} AND "toothNumber" = ${lugar.toothNumber}::int
          AND "surface" IS NULL AND "conditionId" = ${lugar.conditionId}`;
     return;
   }
   await db.$executeRaw`
-    UPDATE "odontogram_entries" SET "estado" = ${estado}, "updatedAt" = now()
+    UPDATE "odontogram_entries"
+       SET "estadoDesde" = CASE WHEN "estado" IS DISTINCT FROM ${estado}::text THEN now() ELSE "estadoDesde" END,
+           "estado" = ${estado}, "updatedAt" = now()
      WHERE "patientId" = ${lugar.patientId} AND "toothNumber" = ${lugar.toothNumber}::int
        AND "surface" = ${lugar.surface} AND "conditionId" = ${lugar.conditionId}`;
 }

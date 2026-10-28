@@ -9,7 +9,7 @@ import { CLASES_MENU } from "@/components/dashboard/menu-dos-niveles/clases";
 import { COND_BY_ID, PERM, PRIMARY, SURFACE_NAMES, classify } from "@/components/dashboard/odontogram-v2/data";
 import {
   CARAS, FASES, FASE_CLAVE, PLAN_VACIO, PRONOSTICOS, PRONOSTICO_CLAVE,
-  alternarDiente, avisosDeOrden, componerDescripcion, hallazgosPorTratar, importeRenglon,
+  alternarDiente, avisosDeOrden, componerDescripcion, fechaDeMarca, hallazgosPorTratar, importeRenglon,
   leerDientes, letraCentro, soloEntero, subtotalesPorFase, totalProcedimientos,
   type EntradaOdontograma, type Fase, type Hallazgo, type PlanClinico, type Pronostico, type Renglon,
 } from "./plan-clinico";
@@ -144,8 +144,8 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
         .then((d) => {
           if (!vivo || !d || !Array.isArray(d.entries)) return;
           // con la fecha de cada marca (ws1-t6 v5): lo hecho en otro plan ANTES de marcarla no la tapa
-          setEntradas((d.entries as Array<EntradaOdontograma & { createdAt?: string; updatedAt?: string }>)
-            .map((e) => ({ ...e, marcadaEn: e.createdAt ?? e.updatedAt ?? null })));
+          setEntradas((d.entries as Array<EntradaOdontograma & { createdAt?: string; updatedAt?: string; estadoDesde?: string }>)
+            .map((e) => ({ ...e, marcadaEn: fechaDeMarca(e) })));
         })
         .catch(() => {});
     }

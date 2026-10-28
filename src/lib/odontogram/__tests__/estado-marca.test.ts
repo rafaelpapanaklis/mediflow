@@ -23,7 +23,7 @@ import type { ToothRecord } from "../../../components/dashboard/odontogram-v2/ty
 import { aplicarAEntradas, aplicarHecho, cambioDeshacer, planearDeshacer, type EntradaConId, type EntradaOdontograma } from "../aplicar-hecho";
 import { CONDICIONES_CLINICAS, PROCEDIMIENTOS, sugerirProcedimiento, type ProcedimientoTarifario } from "../../treatments/sugerir-procedimiento";
 import { hallazgosPorTratar, type EntradaOdontograma as EntradaPlan } from "../../../components/dashboard/plan-tratamiento-rediseno/plan-clinico";
-import { agregarDesdeChip, chipsDelPlan, entradasDeRegistros } from "../../../components/dashboard/plan-tratamiento-rediseno/armar-plan";
+import { agregarDesdeChip, chipsDelPlan, entradasDeRegistros, fechasDelVivo } from "../../../components/dashboard/plan-tratamiento-rediseno/armar-plan";
 
 /* ─────── Qué lleva estado ─────── */
 
@@ -436,4 +436,53 @@ test("v5 M1-v4: una fila HECHA tapa solo si se hizo DESPUÉS de marcar; lo pendi
   assert.ok(chipRojo(roja("2022-05-01T17:00:00.000Z"), plan("hecho", "2023-01-01T17:00:00.000Z")).enOtroPlan, "se quedó roja con el trabajo hecho después: no se ofrece");
   assert.equal(chipRojo(roja(hoy), plan("hecho", "2023-01-01T17:00:00.000Z")).enOtroPlan ?? null, null, "marcada hoy en rojo: rehacerla se ofrece");
   assert.ok(chipRojo(roja(), plan("hecho", "2023-01-01T17:00:00.000Z")).enOtroPlan, "roja sin fecha: como la v3 (m-b)");
+});
+
+test("v6 m1: en un procedimiento por caras, la fila tapa solo SUS caras (o todas si no dice)", () => {
+  const plan = (caras: string[], estado: string, hechoEn: string | null) => resumirFilas([{ id: "a", name: "Plan A", status: "ACTIVE" }],
+    new Map([["a", [{ nombre: "Restauración resina 1 cara", procedureId: null, dientes: [16], caras, estado, hechoEn }]]]));
+  const caries = (cara: string, marcadaEn: string): EntradaPlan[] => [{ toothNumber: 16, surface: cara, conditionId: "caries", marcadaEn }];
+  const chip = (e: EntradaPlan[], p: ReturnType<typeof plan>) => chipsDelPlan(hallazgosPorTratar(e), TARIFARIO, e, [], p).find((c) => c.clave === "h:16:caries")!;
+  // F1 de t1: caries 16 M de 2022; la resina de 2023 fue de la O → la M nunca se trató: se ofrece
+  assert.equal(chip(caries("M", "2022-05-01T17:00:00.000Z"), plan(["O"], "hecho", "2023-01-01T17:00:00.000Z")).enOtroPlan ?? null, null);
+  // la misma resina, pero de la M → sí la atendió
+  assert.ok(chip(caries("M", "2022-05-01T17:00:00.000Z"), plan(["M"], "hecho", "2023-01-01T17:00:00.000Z")).enOtroPlan);
+  // la fila no dice caras → tapa todas
+  assert.ok(chip(caries("M", "2022-05-01T17:00:00.000Z"), plan([], "hecho", "2023-01-01T17:00:00.000Z")).enOtroPlan);
+  // pendiente «Resina 16 O» frente a una caries nueva en la M: trabajo nuevo
+  const hoy = new Date().toISOString();
+  assert.equal(chip(caries("M", hoy), plan(["O"], "pendiente", null)).enOtroPlan ?? null, null);
+  assert.deepEqual(chip(caries("O", hoy), plan(["O"], "pendiente", null)).enOtroPlan, { plan: "Plan A", hechoEn: null });
+  // un procedimiento que no va por caras (corona) no mira caras
+  const corona = resumirFilas([{ id: "a", name: "Plan A", status: "ACTIVE" }],
+    new Map([["a", [{ nombre: "Corona", procedureId: null, dientes: [26], caras: ["O"], estado: "pendiente", hechoEn: null }]]]));
+  assert.ok(planQueYaLoTiene("corona", [26], corona, { caras: ["M"] }));
+  // y el aviso del servidor también va por caras
+  assert.deepEqual(filasRepetidas([{ nombre: "Resina", procedureId: null, dientes: [16], caras: ["M"] }], plan(["O"], "pendiente", null)), []);
+  assert.equal(filasRepetidas([{ nombre: "Resina", procedureId: null, dientes: [16], caras: ["O"] }], plan(["O"], "pendiente", null)).length, 1);
+});
+
+test("v6 m3: en la consulta, cada marca lleva la fecha del vivo; lo puesto o repintado en ESTA consulta, ahora", () => {
+  const ahora = new Date("2026-10-28T15:00:00.000Z");
+  const fechas = fechasDelVivo([
+    { toothNumber: 16, surface: "O", conditionId: "restoration", estado: "por_hacer", estadoDesde: "2025-01-10T17:00:00.000Z", createdAt: "2023-01-01T17:00:00.000Z" },
+    { toothNumber: 26, surface: null, conditionId: "crown", estado: "hecho", createdAt: "2023-01-01T17:00:00.000Z" },
+    { toothNumber: 36, surface: "O", conditionId: "caries", createdAt: "2024-02-02T17:00:00.000Z" },
+  ]);
+  const e = entradasDeRegistros({
+    16: { surfaces: { O: ["restoration"] }, tooth: [], estados: { "O:restoration": "por_hacer" } }, // ya roja en el vivo
+    26: { surfaces: {}, tooth: ["crown"], estados: { "_:crown": "por_hacer" } },                   // azul en el vivo, repintada en rojo HOY
+    36: { surfaces: { O: ["caries"] }, tooth: [] },                                                  // del vivo
+    46: { surfaces: { O: ["caries"] }, tooth: [] },                                                  // marcada en esta consulta
+  }, fechas, ahora);
+  const fecha = (d: number) => e.find((x) => x.toothNumber === d)?.marcadaEn;
+  assert.equal(fecha(16), "2025-01-10T17:00:00.000Z", "roja: desde que pasó a rojo");
+  assert.equal(fecha(26), ahora.toISOString(), "repintada en rojo en la consulta: ahora");
+  assert.equal(fecha(36), "2024-02-02T17:00:00.000Z");
+  assert.equal(fecha(46), ahora.toISOString());
+  // con eso la consulta decide como la ficha: la corona roja de HOY sobre una corona hecha en 2023 se ofrece
+  const enPlanes = resumirFilas([{ id: "a", name: "Plan A", status: "COMPLETED" }],
+    new Map([["a", [{ nombre: "Corona metal-porcelana", procedureId: null, dientes: [26], estado: "hecho", hechoEn: "2023-06-01T17:00:00.000Z" }]]]));
+  const c = chipsDelPlan(hallazgosPorTratar(e), TARIFARIO, e, [], enPlanes).find((x) => x.clave === "r:h:26:crown")!;
+  assert.equal(c.enOtroPlan ?? null, null);
 });

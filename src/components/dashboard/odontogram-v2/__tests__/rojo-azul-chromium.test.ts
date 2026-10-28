@@ -61,18 +61,20 @@ const crudo = {
   $queryRaw: async (s: TemplateStringsArray, ...v: unknown[]) => {
     const t = s.join("?");
     if (t.includes("information_schema.columns")) return [{ existe: CON_COLUMNA }];
-    if (t.includes(`SELECT "id", "estado" FROM "odontogram_entries"`)) {
+    if (t.includes(`SELECT "id", "estado"`) && t.includes(`FROM "odontogram_entries"`)) {
       if (!CON_COLUMNA) throw new Error('column "estado" does not exist');
-      return FILAS.filter((f) => f.patientId === v[0] && f.estado).map((f) => ({ id: f.id, estado: f.estado }));
+      return FILAS.filter((f) => f.patientId === v[0] && f.estado).map((f) => ({ id: f.id, estado: f.estado, estadoDesde: null }));
     }
     throw new Error(`$queryRaw no esperado: ${t}`);
   },
   $executeRaw: async (s: TemplateStringsArray, ...v: unknown[]) => {
     const t = s.join("?");
-    if (t.includes(`SET "estado"`)) {
+    if (t.includes(`"estadoDesde" = CASE`)) {
       if (!CON_COLUMNA) throw new Error('column "estado" does not exist');
-      const f = FILAS.find((x) => x.id === v[1] && x.patientId === v[2]);
-      if (f) f.estado = v[0] as string | null;
+      // UPDATE … SET "estadoDesde" = CASE … ${estado} …, "estado" = ${estado} … WHERE "id" = ${id} AND "patientId" = ${patientId}
+      const [, estado, id, patientId] = v;
+      const f = FILAS.find((x) => x.id === id && x.patientId === patientId);
+      if (f) f.estado = estado as string | null;
       return f ? 1 : 0;
     }
     return 1; // los candados

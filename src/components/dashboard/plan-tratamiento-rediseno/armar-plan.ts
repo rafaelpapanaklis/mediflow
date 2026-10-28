@@ -15,7 +15,7 @@
  *    agregar. Mandan sobre lo que sugeriría un hallazgo del mismo diente (no salen dos resinas).
  */
 import {
-  CARAS, MINUTOS_POR_DEFECTO, cantidadDe, leerDientes, precioDe, renglonesUtiles, sesionesSugeridas,
+  CARAS, MINUTOS_POR_DEFECTO, cantidadDe, fechaDeMarca, leerDientes, precioDe, renglonesUtiles, sesionesSugeridas,
   type EntradaOdontograma, type Fase, type Hallazgo, type Pronostico, type Renglon,
 } from "./plan-clinico";
 import {
@@ -155,7 +155,8 @@ export function chipsDelPlan(
       const marcadaEn = fechas.length > 0 && fechas.every(Boolean)
         ? new Date(Math.max(...fechas.map((f) => Date.parse(f!)))).toISOString()
         : null;
-      const ya = planQueYaLoTiene(c.sugerencia.clave, c.dientes, enPlanes, { marcadaEn, hechoPorSiempre: c.tipo === "por_hacer" });
+      // con sus caras: «Resina 16 O» en otro plan no tapa la caries de la M (v6, m1)
+      const ya = planQueYaLoTiene(c.sugerencia.clave, c.dientes, enPlanes, { marcadaEn, hechoPorSiempre: c.tipo === "por_hacer", caras: c.sugerencia.caras });
       if (ya) c.enOtroPlan = { plan: ya.plan, hechoEn: ya.estado === "hecho" ? ya.hechoEn : null };
     }
   }
@@ -234,19 +235,43 @@ export function agregarDesdeChip(renglones: Renglon[], chip: Chip, ctx: Contexto
 /** Un diente en el formato `Records` del odontograma (el de la consulta, con letras de pantalla). */
 type RegistroDiente = { surfaces?: Record<string, string[] | undefined>; tooth?: string[]; note?: string; estados?: Record<string, string> };
 
+/** Lo que la consulta sabe de cada marca del odontograma VIVO: su estado y cuándo se marcó (v6, m3). */
+export type FechasDelVivo = ReadonlyMap<string, { estado: string | null; fecha: string | null }>;
+
+/**
+ * Las fechas del vivo por marca (`«diente»:«cara de la base»:«condición»`), de las entradas que
+ * devuelve `GET /api/odontogram` (`fetchOdontogram().entries`).
+ */
+export function fechasDelVivo(entradas: Array<{ toothNumber: number; surface: string | null; conditionId: string; estado?: string | null; estadoDesde?: string | null; createdAt?: string | null; updatedAt?: string | null }>): FechasDelVivo {
+  return new Map(entradas.map((e) => [`${e.toothNumber}:${e.surface ?? "_"}:${e.conditionId}`, { estado: e.estado ?? null, fecha: fechaDeMarca(e) }]));
+}
+
 /**
  * El odontograma de una consulta (`Records`, lo que el doctor ve y marcó, aún sin guardar) como
  * las entradas que leen los chips: caras de la base (la «I» de un anterior es la «O»), el diente
  * completo con `surface: null`, sin la nota del diente.
+ *
+ * Con `fechas` (las del vivo, v6 m3) cada marca lleva cuándo se marcó: la que ya estaba en el vivo
+ * con el mismo estado, su fecha; la que se puso (o se repintó) en ESTA consulta, `ahora`. Sin
+ * `fechas`, sin fecha (los chips usan la regla de «sin fecha fiable»).
  */
-export function entradasDeRegistros(registros: Record<number | string, RegistroDiente | undefined>): EntradaOdontograma[] {
+export function entradasDeRegistros(
+  registros: Record<number | string, RegistroDiente | undefined>,
+  fechas?: FechasDelVivo,
+  ahora: Date = new Date(),
+): EntradaOdontograma[] {
   const out: EntradaOdontograma[] = [];
   const vistas = new Set<string>();
   const poner = (toothNumber: number, surface: string | null, conditionId: string, estado: string | undefined) => {
     const k = `${toothNumber}:${surface ?? "_"}:${conditionId}`;
     if (vistas.has(k) || conditionId === "__note__") return;
     vistas.add(k);
-    out.push({ toothNumber, surface, conditionId, ...(estado ? { estado } : {}) });
+    let marcadaEn: string | null = null;
+    if (fechas) {
+      const vivo = fechas.get(k);
+      marcadaEn = vivo && vivo.estado === (estado ?? null) ? vivo.fecha : ahora.toISOString();
+    }
+    out.push({ toothNumber, surface, conditionId, ...(estado ? { estado } : {}), ...(marcadaEn ? { marcadaEn } : {}) });
   };
   for (const [fdi, r] of Object.entries(registros)) {
     const diente = Number(fdi);
@@ -271,13 +296,15 @@ export function precargaDeConsulta(c: {
   pronostico: Pronostico;
   odontograma: Record<number | string, RegistroDiente | undefined>;
   odontogramaListo: boolean;
+  /** Las fechas de las marcas del vivo (v6, m3): así la consulta decide como la ficha. */
+  fechas?: FechasDelVivo;
 }): { diagnostico: string; pronostico: Pronostico; entradas: EntradaOdontograma[] | undefined } {
   const obs = c.observaciones.trim();
   const cie = c.cie10.trim();
   return {
     diagnostico: [obs, cie && !obs.includes(cie) ? cie : ""].filter(Boolean).join("\n"),
     pronostico: c.pronostico,
-    entradas: c.odontogramaListo ? entradasDeRegistros(c.odontograma) : undefined,
+    entradas: c.odontogramaListo ? entradasDeRegistros(c.odontograma, c.fechas) : undefined,
   };
 }
 

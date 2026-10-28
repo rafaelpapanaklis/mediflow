@@ -73,7 +73,7 @@ export async function filasEnPlanesDelPaciente(
 export async function avisoDeFilasRepetidas(
   clinicId: string,
   patientId: string,
-  nuevas: Array<{ nombre: string; procedureId: string | null; dientes: number[] }>,
+  nuevas: Array<{ nombre: string; procedureId: string | null; dientes: number[]; caras?: string[] }>,
   planIdPropio: string | null = null,
 ): Promise<Array<{ nombre: string; dientes: number[]; plan: string }>> {
   if (nuevas.length === 0) return [];

@@ -13,7 +13,7 @@ import { assertPatientVisible } from "@/lib/patient-visibility";
 import { extractAuditMeta } from "@/lib/audit";
 import { anotarAccionDeSuplantacion, suplantacionDeEstaPeticion } from "@/lib/admin/suplantacion";
 import { ESTADOS_MARCA, admiteEstado, type EstadoMarca } from "@/lib/odontogram/estado-marca";
-import { columnaEstadoExiste, fijarEstado, leerEstados } from "@/lib/odontogram/estado-db";
+import { columnaEstadoExiste, fijarEstado, leerEstadosConFecha } from "@/lib/odontogram/estado-db";
 
 export const dynamic = "force-dynamic";
 
@@ -129,10 +129,14 @@ export async function GET(req: NextRequest) {
       console.error("[/api/odontogram] no se pudo saber si la base guarda el estado:", e);
       conEstado = null;
     }
-    const estados = conEstado ? await leerEstados(prisma, patientId) : new Map<string, EstadoMarca>();
+    const estados = conEstado ? await leerEstadosConFecha(prisma, patientId) : new Map<string, { estado: EstadoMarca; desde: string | null }>();
+    // con su estado y desde cuándo (v6: para una roja, cuándo pasó a rojo)
     const entries = rows
       .filter((r) => r.conditionId !== NOTE_CONDITION)
-      .map((r) => (estados.has(r.id) ? { ...r, estado: estados.get(r.id)! } : r));
+      .map((r) => {
+        const e = estados.get(r.id);
+        return e ? { ...r, estado: e.estado, ...(e.desde ? { estadoDesde: e.desde } : {}) } : r;
+      });
     const notes: Record<number, string> = {};
     for (const r of rows) {
       if (r.conditionId === NOTE_CONDITION && r.notes) notes[r.toothNumber] = r.notes;
