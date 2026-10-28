@@ -50,9 +50,9 @@ test("A2: «Estado de cuenta» (lateral, Resumen y Facturación) dice aparte cu�
 
 test("v7 (QA de t12): «Estado de cuenta» (Resumen, lateral y Facturación) dice lo que se DEBE, no el saldo de la nota", () => {
   const ficha = leer("src/app/dashboard/patients/[id]/patient-detail-client.tsx");
-  assert.match(ficha, /saldo: saldoQueSeDebe,\n\s*aunNoSeDebe: porHacerCompleto,\n\s*pagadoDeLoPorHacer: adelantoEnPlanes,\n\s*cuotasPorVencer,\n\s*credito: creditBalance,/, "Resumen");
-  assert.match(ficha, /balance: saldoQueSeDebe,\n\s*aunNoSeDebe: porHacerCompleto,\n\s*pagadoDeLoPorHacer: adelantoEnPlanes,\n\s*cuotasPorVencer,\n\s*credit: creditBalance,/, "lateral");
-  assert.match(ficha, /summary=\{\{ total: totalPlan, paid: totalPaid, balance: saldoQueSeDebe, aunNoSeDebe: porHacerCompleto, pagadoDeLoPorHacer: adelantoEnPlanes, cuotasPorVencer \}\}/, "Facturación");
+  assert.match(ficha, /saldo: saldoQueSeDebe,\n\s*aunNoSeDebe: porHacerCompleto,\n\s*pagadoDeLoPorHacer: pagadoPorAdelantado,\n\s*cuotasPorVencer,\n\s*credito: creditBalance,/, "Resumen");
+  assert.match(ficha, /balance: saldoQueSeDebe,\n\s*aunNoSeDebe: porHacerCompleto,\n\s*pagadoDeLoPorHacer: pagadoPorAdelantado,\n\s*cuotasPorVencer,\n\s*credit: creditBalance,/, "lateral");
+  assert.match(ficha, /summary=\{\{ total: totalPlan, paid: totalPaid, balance: saldoQueSeDebe, aunNoSeDebe: porHacerCompleto, pagadoDeLoPorHacer: pagadoPorAdelantado, cuotasPorVencer \}\}/, "Facturación");
   assert.doesNotMatch(ficha, /saldo: totalBalance|balance: totalBalance/, "ningún «Estado de cuenta» con la suma de saldos");
   assert.doesNotMatch(ficha, /hasBalance=\{totalBalance > 0\}/, "la pestaña Facturación no se pinta «con deuda» por lo que aún no se debe");
   // v8 (t5, V1): saldo a favor = SOLO el libro; lo adelantado de un plan es «de lo por hacer, ya pagado».
@@ -65,7 +65,7 @@ test("v7 (QA de t12): «Estado de cuenta» (Resumen, lateral y Facturación) dic
     "src/components/dashboard/patient-detail/billing-tab.tsx",
   ]) assert.match(leer(f), /patients\.sideCards\.pagadoDeLoPorHacer/, f);
   assert.match(leer("src/lib/dinero/lo-que-se-debe.server.ts"), /Math\.min\(d\.saldoAFavor, d\.porHacer\)/);
-  assert.match(leer("src/app/api/patients/[id]/lo-que-aun-no-se-debe/route.ts"), /adelantoEnNotasDePlan\(ctx\.clinicId,/);
+  assert.match(leer("src/app/api/patients/[id]/lo-que-aun-no-se-debe/route.ts"), /adelantosEnNotasDePlan\(ctx\.clinicId,/);
   // «Cobrar hoy»: «Además tiene $X por cobrar en notas anteriores» sin lo por hacer del plan.
   assert.match(ficha, /pendientes=\{pendientesPrevios\(invoices, aunNoSeDebePorFactura\)\}/);
   // El «aún no se debe» ya no es «de esto» (el número grande ya lo descuenta).
@@ -276,8 +276,8 @@ test("v11 · «Hecho» en la tarjeta del plan: misma acción que la consulta, re
   const bloque = leer("src/components/dashboard/expediente-rediseno/procedimientos-del-plan.tsx");
   assert.match(bloque, /^"use client";/);
   assert.match(bloque, /const cerrado = ESTADOS_DE_PLAN_SIN_HECHO\.includes\(estadoDelPlan\);\n\s*const conBotones = puede && !cerrado;/);
-  assert.match(bloque, /await marcarHecho\(planId, \[f\.id\], null\)/);
-  assert.match(bloque, /await deshacerHecho\(planId, f\.id\)/);
+  assert.match(bloque, /await marcarHecho\(planId, \[f\.id\], null, undefined, \{ conCuenta: true \}\)/);
+  assert.match(bloque, /await deshacerHecho\(planId, f\.id, undefined, \{ conCuenta: true \}\)/);
   const ruta = leer("src/app/api/treatments/[id]/route.ts");
   assert.match(ruta, /const deniedPerm = esHecho && ctx\.role === "SUPER_ADMIN" \? null : denyIfMissingPermission\(ctx, "treatments\.edit"\);/);
   for (const idioma of ["es", "en"]) {
@@ -377,11 +377,11 @@ test("v12 · m2: con cuotas (o sin ver dinero) la ayuda de «Procedimientos» no
 
 test("v12 · m1: con cuotas, «Además» de la ficha dice solo las cuotas que aún no vencen, sin «ya pagados»; sin cuotas, como v8", () => {
   const ficha = leer("src/app/dashboard/patients/[id]/patient-detail-client.tsx");
-  assert.match(ficha, /const \{ total: aunNoSeDebe, adelanto: adelantoEnPlanes, cuotas: cuotasPorVencer, porFactura: aunNoSeDebePorFactura \} = useLoQueAunNoSeDebe\(/);
+  assert.match(ficha, /const \{ total: aunNoSeDebe, adelanto: adelantoEnPlanes, adelantoCuotas: adelantoEnPlanesConCuotas, cuotas: cuotasPorVencer, porFactura: aunNoSeDebePorFactura \} = useLoQueAunNoSeDebe\(/);
   assert.match(ficha, /const porHacerCompleto = Math\.round\(\(aunNoSeDebe - cuotasPorVencer \+ adelantoEnPlanes\) \* 100\) \/ 100;/);
   // Los tres sitios que lo pintan reciben las cuotas aparte.
-  assert.equal((ficha.match(/pagadoDeLoPorHacer: adelantoEnPlanes,\n\s*cuotasPorVencer,/g) ?? []).length, 2);
-  assert.match(ficha, /pagadoDeLoPorHacer: adelantoEnPlanes, cuotasPorVencer \}\}/);
+  assert.equal((ficha.match(/pagadoDeLoPorHacer: pagadoPorAdelantado,\n\s*cuotasPorVencer,/g) ?? []).length, 2);
+  assert.match(ficha, /pagadoDeLoPorHacer: pagadoPorAdelantado, cuotasPorVencer \}\}/);
   for (const archivo of [
     "src/components/dashboard/pacientes-rediseno/resumen.tsx",
     "src/components/dashboard/patient-detail/side-cards.tsx",
@@ -393,7 +393,8 @@ test("v12 · m1: con cuotas, «Además» de la ficha dice solo las cuotas que a�
   }
   // El adelanto («ya pagados») no cuenta las notas con cuotas.
   const ayudante = leer("src/lib/dinero/lo-que-se-debe.server.ts");
-  assert.match(ayudante, /if \(esPlanAPlazos\(condiciones\.get\(id\)\)\) continue;/);
+  // v15 (t5 de la v14, M1-b): el adelanto de las notas con cuotas va APARTE (no entra en lo por hacer).
+  assert.match(leer("src/lib/dinero/lo-que-se-debe.server.ts"), /if \(esPlanAPlazos\(condiciones\.get\(id\)\)\) con \+= centavos;/);
   assert.match(leer("src/app/api/patients/[id]/lo-que-aun-no-se-debe/route.ts"), /porVencerCuotas: r\.porVencerCuotas,/);
   const es = JSON.parse(leer("src/i18n/dictionaries/es.json")).patients.sideCards;
   const en = JSON.parse(leer("src/i18n/dictionaries/en.json")).patients.sideCards;
@@ -500,4 +501,50 @@ test("v14 · 4: «Movimientos» (recientes y completo) se relee cuando la ficha 
   assert.match(ficha, /appointments\.map\(\(a: any\) => `\$\{a\.id\}:\$\{a\.status\}`\)/, "una cita completada cambia la clave");
   // Y la ruta de «Completar consulta» sigue escribiendo su movimiento (no era un hueco del registro).
   assert.match(leer("src/app/api/appointments/[id]/complete/route.ts"), /patientId: existing\.patientId,\n\s*texto: textoCita\.completada\(/);
+});
+
+test("v15 · M1 (b): «Pagado por adelantado» de «Estado de cuenta» suma también el adelanto de las notas a plazos, pero no entra en «Además… por hacer»", () => {
+  const servidor = leer("src/lib/dinero/lo-que-se-debe.server.ts");
+  assert.match(servidor, /if \(esPlanAPlazos\(condiciones\.get\(id\)\)\) con \+= centavos;\n\s*else sin \+= centavos;/);
+  const ruta = leer("src/app/api/patients/[id]/lo-que-aun-no-se-debe/route.ts");
+  assert.match(ruta, /const \{ sinCuotas: adelanto, conCuotas: adelantoCuotas \} = await adelantosEnNotasDePlan\(/);
+  assert.match(ruta, /porFactura: r\.porFactura, adelanto, adelantoCuotas \}/);
+  const ficha = leer("src/app/dashboard/patients/[id]/patient-detail-client.tsx");
+  // Lo por hacer sigue SIN el adelanto con cuotas; el rótulo lo suma.
+  assert.match(ficha, /const porHacerCompleto = Math\.round\(\(aunNoSeDebe - cuotasPorVencer \+ adelantoEnPlanes\) \* 100\) \/ 100;/);
+  assert.match(ficha, /const pagadoPorAdelantado = Math\.round\(\(adelantoEnPlanes \+ adelantoEnPlanesConCuotas\) \* 100\) \/ 100;/);
+  assert.equal((ficha.match(/pagadoDeLoPorHacer: pagadoPorAdelantado/g) ?? []).length, 3, "Resumen, lateral y Facturación");
+  // Facturación ya no lo cuelga de «Además…»: sale aunque no haya nada por hacer sin pagar.
+  assert.match(leer("src/components/dashboard/patient-detail/billing-tab.tsx"), /\(summary\.aunNoSeDebe \?\? 0\) > 0\.005 \|\| \(summary\.pagadoDeLoPorHacer \?\? 0\) > 0\.005/);
+});
+
+test("v15 · M2: todas las cifras de «Estado de cuenta» (Resumen, lateral, Facturación) con centavos, como la tarjeta", () => {
+  const bloque = (archivo: string, ini: string, fin: string) => {
+    const x = leer(archivo);
+    const i = x.indexOf(ini);
+    assert.ok(i >= 0, archivo);
+    return x.slice(i, x.indexOf(fin, i));
+  };
+  const resumen = bloque("src/components/dashboard/pacientes-rediseno/resumen.tsx", "── 2. Estado de cuenta", "{/* Sin botón de cobro aquí");
+  const lateral = bloque("src/components/dashboard/patient-detail/side-cards.tsx", "Estado de cuenta — solo con permiso", "{/* CFDI");
+  const facturacion = bloque("src/components/dashboard/patient-detail/billing-tab.tsx", "Mini-resumen", "<CardNew");
+  for (const [nombre, x] of [["Resumen", resumen], ["lateral", lateral], ["Facturación", facturacion]] as const) {
+    assert.doesNotMatch(x, /formatCurrency\(|fmtMXN\(/, `${nombre}: nada redondeado a pesos`);
+    for (const clave of ["aunNoSeDebe", "pagadoDeLoPorHacer", "cuotasPorVencer"]) {
+      assert.match(x, new RegExp(`t\\("patients\\.sideCards\\.${clave}", \\{ monto: fmtMXNdec\\(`), `${nombre}: ${clave}`);
+    }
+  }
+  assert.match(resumen, /\{fmtMXNdec\(finanzas\.saldo\)\}/, "Debe");
+  assert.match(lateral, /<strong>\{fmtMXNdec\(finance\.balance\)\}<\/strong>/, "Debe");
+  assert.match(facturacion, /value=\{fmtMXNdec\(summary\.balance\)\}/, "Debe");
+});
+
+test("v15 · M3: la cuenta solo viaja si el cuerpo trae conCuenta: true (la tarjeta); «Hoy en el sillón» no la pide", () => {
+  assert.match(leer("src/app/api/treatments/[id]/route.ts"), /if \(body\.conCuenta !== true\) return res;/);
+  assert.match(leer("src/app/api/treatments/[id]/cerrar/route.ts"), /const cuenta = body\?\.conCuenta !== true \|\| denyIfMissingPermission/);
+  const proc = leer("src/components/dashboard/expediente-rediseno/procedimientos-del-plan.tsx");
+  assert.match(proc, /await deshacerHecho\(planId, f\.id, undefined, \{ conCuenta: true \}\)/);
+  assert.match(leer("src/components/dashboard/expediente-rediseno/cuenta-del-plan.tsx"), /body: JSON\.stringify\(\{ motivo, conCuenta: true \}\)/);
+  // La consulta llama igual que antes: sin opciones.
+  assert.match(leer("src/components/dashboard/patient-detail/treatments-modal.tsx"), /await marcarHecho\(planId, ids, appointmentId \|\| null\);/);
 });

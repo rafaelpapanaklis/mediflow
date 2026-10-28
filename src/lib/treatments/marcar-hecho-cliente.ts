@@ -125,17 +125,31 @@ const errorDe = (status: number, data: Record<string, unknown>): ResultadoMarcar
   ...(typeof data.code === "string" ? { codigo: data.code } : {}),
 });
 
-export function cuerpoMarcarHecho(filaIds: string[], citaId: string | null) {
-  return { action: ACCION_MARCAR_HECHO, itemIds: filaIds, ...(citaId ? { citaId } : {}) };
+/**
+ * v15 (t5 de la v14, M3): `conCuenta` pide que la respuesta traiga la cuenta del plan ya cambiada. Lo
+ * manda la tarjeta del plan (la pinta al momento); «Hoy en el sillón» no (no la usa y cuesta ~2 s por plan).
+ */
+export interface OpcionesDeHecho {
+  conCuenta?: boolean;
 }
 
-export async function marcarHecho(planId: string, filaIds: string[], citaId: string | null, f: Fetch = fetch): Promise<ResultadoMarcarHecho> {
+export function cuerpoMarcarHecho(filaIds: string[], citaId: string | null, opciones: OpcionesDeHecho = {}) {
+  return { action: ACCION_MARCAR_HECHO, itemIds: filaIds, ...(citaId ? { citaId } : {}), ...(opciones.conCuenta ? { conCuenta: true } : {}) };
+}
+
+export async function marcarHecho(
+  planId: string,
+  filaIds: string[],
+  citaId: string | null,
+  f: Fetch = fetch,
+  opciones: OpcionesDeHecho = {},
+): Promise<ResultadoMarcarHecho> {
   let res: Response;
   try {
     res = await f(RUTA_MARCAR_HECHO(planId), {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(cuerpoMarcarHecho(filaIds, citaId)),
+      body: JSON.stringify(cuerpoMarcarHecho(filaIds, citaId, opciones)),
     });
   } catch {
     return { ok: false, status: 0 };
@@ -163,13 +177,13 @@ export const ACCION_DESHACER_HECHO = "deshacer_hecho";
  * v11 (27-oct): «Deshacer» desde la tarjeta del plan — la fila vuelve a «por hacer» (o «en curso») y
  * el odontograma a como estaba; lo que se debe baja. El mismo PATCH, `{ action: "deshacer_hecho", itemId }`.
  */
-export async function deshacerHecho(planId: string, filaId: string, f: Fetch = fetch): Promise<ResultadoMarcarHecho> {
+export async function deshacerHecho(planId: string, filaId: string, f: Fetch = fetch, opciones: OpcionesDeHecho = {}): Promise<ResultadoMarcarHecho> {
   let res: Response;
   try {
     res = await f(RUTA_MARCAR_HECHO(planId), {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: ACCION_DESHACER_HECHO, itemId: filaId }),
+      body: JSON.stringify({ action: ACCION_DESHACER_HECHO, itemId: filaId, ...(opciones.conCuenta ? { conCuenta: true } : {}) }),
     });
   } catch {
     return { ok: false, status: 0 };

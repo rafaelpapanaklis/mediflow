@@ -16,11 +16,13 @@ export interface LoQueAunNoSeDebeDelPaciente {
   adelanto: number;
   /** De `total`, cuotas acordadas de notas de plan que aún no vencen (v12). */
   cuotas: number;
+  /** v15: lo pagado por adelantado de las notas CON cuotas (va aparte de `adelanto`, que entra en lo por hacer). */
+  adelantoCuotas: number;
   /** `invoiceId` → lo que aún no se debe de su saldo (solo las que tienen algo). */
   porFactura: Record<string, number>;
 }
 
-const CERO: LoQueAunNoSeDebeDelPaciente = { total: 0, adelanto: 0, cuotas: 0, porFactura: {} };
+const CERO: LoQueAunNoSeDebeDelPaciente = { total: 0, adelanto: 0, cuotas: 0, adelantoCuotas: 0, porFactura: {} };
 const pesos = (x: unknown) => {
   const n = Number(x);
   return Number.isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : 0;
@@ -37,14 +39,14 @@ export function useLoQueAunNoSeDebe(patientId: string, activo: boolean, clave: u
     let vivo = true;
     fetch(`/api/patients/${encodeURIComponent(patientId)}/lo-que-aun-no-se-debe`)
       .then((r) => (r.ok ? r.json() : null))
-      .then((d: { total?: unknown; adelanto?: unknown; porVencerCuotas?: unknown; porFactura?: unknown } | null) => {
+      .then((d: { total?: unknown; adelanto?: unknown; adelantoCuotas?: unknown; porVencerCuotas?: unknown; porFactura?: unknown } | null) => {
         if (!vivo) return;
         const porFactura: Record<string, number> = {};
         if (d?.porFactura && typeof d.porFactura === "object") {
           for (const [id, monto] of Object.entries(d.porFactura as Record<string, unknown>)) if (pesos(monto) > 0) porFactura[id] = pesos(monto);
         }
         const total = pesos(d?.total);
-        setValor({ total, adelanto: pesos(d?.adelanto), cuotas: Math.min(total, pesos(d?.porVencerCuotas)), porFactura });
+        setValor({ total, adelanto: pesos(d?.adelanto), cuotas: Math.min(total, pesos(d?.porVencerCuotas)), adelantoCuotas: pesos(d?.adelantoCuotas), porFactura });
       })
       .catch(() => { if (vivo) setValor(CERO); });
     return () => { vivo = false; };

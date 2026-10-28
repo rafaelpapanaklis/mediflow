@@ -1475,7 +1475,7 @@ export function PatientDetailClient({
   // del plan; lo que aún no se debe va aparte, y lo pagado de más sobre lo hecho es saldo a favor. Se
   // relee cuando cambian las facturas Y cuando cambian las cuentas de los planes («marcar hecho» no
   // cambia ninguna factura, pero sí lo que se debe — t5, N1).
-  const { total: aunNoSeDebe, adelanto: adelantoEnPlanes, cuotas: cuotasPorVencer, porFactura: aunNoSeDebePorFactura } = useLoQueAunNoSeDebe(
+  const { total: aunNoSeDebe, adelanto: adelantoEnPlanes, adelantoCuotas: adelantoEnPlanesConCuotas, cuotas: cuotasPorVencer, porFactura: aunNoSeDebePorFactura } = useLoQueAunNoSeDebe(
     patient.id,
     canViewBilling && (totalBalance > 0 || totalPaid > 0),
     `${refrescoCuentas}|${planesDelServidor.map((p: any) => p.id + p.updatedAt).join(",")}|` +
@@ -1489,6 +1489,10 @@ export function PatientDetailClient({
   // v12 (t5, m1): con cuotas acordadas manda la mensualidad (v10): sus cuotas por vencer van aparte
   // («Además, $X de cuotas que aún no vencen») y sin «ya pagados»; el adelanto ya no las cuenta.
   const porHacerCompleto = Math.round((aunNoSeDebe - cuotasPorVencer + adelantoEnPlanes) * 100) / 100;
+  // v15 (t5 de la v14, M1, opción b): «Pagado por adelantado» suma también el adelanto de las notas CON
+  // cuotas (lo que la tarjeta dice como «Pagado por adelantado»). Solo aquí: lo por hacer de arriba sigue
+  // sin él, y las cuotas que aún no vencen son lo que FALTA pagar, así que nada se cuenta dos veces.
+  const pagadoPorAdelantado = Math.round((adelantoEnPlanes + adelantoEnPlanesConCuotas) * 100) / 100;
   // ws1-t2 (F3 de la auditoría BEVADENT: «Total tratamiento $700 · 100% cubierto» con un plan de
   // $900): lo de arriba suma FACTURAS. El costo de los planes ACTIVOS va aparte, para que el
   // «Estado de cuenta» enseñe plan y facturado sin mezclarlos.
@@ -2338,7 +2342,7 @@ export function PatientDetailClient({
                 pagado: totalPaid,
                 saldo: saldoQueSeDebe,
                 aunNoSeDebe: porHacerCompleto,
-                pagadoDeLoPorHacer: adelantoEnPlanes,
+                pagadoDeLoPorHacer: pagadoPorAdelantado,
                 cuotasPorVencer,
                 credito: creditBalance,
                 plan: totalPlanesActivos,
@@ -3854,7 +3858,7 @@ export function PatientDetailClient({
             <BillingTab
               patientId={patient.id}
               invoices={invoices}
-              summary={{ total: totalPlan, paid: totalPaid, balance: saldoQueSeDebe, aunNoSeDebe: porHacerCompleto, pagadoDeLoPorHacer: adelantoEnPlanes, cuotasPorVencer }}
+              summary={{ total: totalPlan, paid: totalPaid, balance: saldoQueSeDebe, aunNoSeDebe: porHacerCompleto, pagadoDeLoPorHacer: pagadoPorAdelantado, cuotasPorVencer }}
               facturApiEnabled={facturApiEnabled}
               onNewInvoice={() => setShowNewInvoice(true)}
               onOpenInvoice={(inv) => setInvoiceDetailOpen(inv)}
@@ -3879,7 +3883,7 @@ export function PatientDetailClient({
               paid: totalPaid,
               balance: saldoQueSeDebe,
               aunNoSeDebe: porHacerCompleto,
-              pagadoDeLoPorHacer: adelantoEnPlanes,
+              pagadoDeLoPorHacer: pagadoPorAdelantado,
               cuotasPorVencer,
               credit: creditBalance,
               pct: pctPaid,

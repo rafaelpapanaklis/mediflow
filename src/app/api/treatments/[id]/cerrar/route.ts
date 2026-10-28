@@ -66,7 +66,8 @@ export async function POST(req: NextRequest, props: Params) {
   revalidateAfter("treatments");
   revalidateAfter("invoices");
   // v14 (QA de Claude): la cuenta del plan ya cerrado va en la respuesta; la tarjeta la pinta al momento.
-  const cuenta = denyIfMissingPermission(ctx, "billing.view") || denyIfMissingPermission(ctx, "treatments.view")
+  // v15 (t5 de la v14, M3): solo si se pide (`conCuenta: true`), igual que en «Hecho».
+  const cuenta = body?.conCuenta !== true || denyIfMissingPermission(ctx, "billing.view") || denyIfMissingPermission(ctx, "treatments.view")
     ? null
     : await cuentaDeUnPlanParaLaFicha(ctx.clinicId, plan.id);
   return NextResponse.json(cuenta ? { ...r, cuenta } : r);

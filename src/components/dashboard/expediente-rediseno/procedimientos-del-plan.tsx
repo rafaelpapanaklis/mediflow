@@ -91,7 +91,8 @@ export function ProcedimientosDelPlan({ planId, estadoDelPlan, filas, puede, deb
     if (ocupada) return;
     setOcupada(f.id);
     try {
-      const r = await marcarHecho(planId, [f.id], null);
+      // v15 (t5, M3): la tarjeta pide la cuenta en la respuesta (la consulta no).
+      const r = await marcarHecho(planId, [f.id], null, undefined, { conCuenta: true });
       if (!r.ok) {
         toast.error(errorDeHecho(t, r, "marcar"));
         return;
@@ -110,7 +111,7 @@ export function ProcedimientosDelPlan({ planId, estadoDelPlan, filas, puede, deb
     if (ocupada) return;
     setOcupada(f.id);
     try {
-      const r = await deshacerHecho(planId, f.id);
+      const r = await deshacerHecho(planId, f.id, undefined, { conCuenta: true });
       if (!r.ok) {
         toast.error(errorDeHecho(t, r, "deshacer"));
         return;

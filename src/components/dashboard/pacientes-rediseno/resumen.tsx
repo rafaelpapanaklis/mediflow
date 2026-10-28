@@ -392,7 +392,8 @@ export function Resumen({
                   finanzas.saldo > 0 ? s.importeDeuda : s.importePagado,
                 ].join(" ")}
               >
-                {formatCurrency(finanzas.saldo)}
+                {/* v15 (t5 de la v14, M2): todas las cifras del bloque con centavos, como la Cuenta del plan. */}
+                {fmtMXNdec(finanzas.saldo)}
               </div>
               <div className={s.pie} style={{ marginTop: 3 }}>
                 <span>
@@ -403,7 +404,7 @@ export function Resumen({
               </div>
               {(finanzas.aunNoSeDebe ?? 0) > 0.005 && (
                 <div className={s.pie} style={{ marginTop: 3 }} data-aun-no-se-debe>
-                  <span>{t("patients.sideCards.aunNoSeDebe", { monto: formatCurrency(finanzas.aunNoSeDebe ?? 0) })}</span>
+                  <span>{t("patients.sideCards.aunNoSeDebe", { monto: fmtMXNdec(finanzas.aunNoSeDebe ?? 0) })}</span>
                 </div>
               )}
               {(finanzas.pagadoDeLoPorHacer ?? 0) > 0.005 && (
@@ -411,17 +412,18 @@ export function Resumen({
                   <span>{t("patients.sideCards.pagadoDeLoPorHacer", { monto: fmtMXNdec(finanzas.pagadoDeLoPorHacer ?? 0) })}</span>
                 </div>
               )}
-              {/* v12 (t5, m1): con cuotas acordadas manda la mensualidad: solo lo que aún no vence, sin «ya pagados». */}
+              {/* v12 (t5, m1): con cuotas acordadas manda la mensualidad: aparte, lo que aún no vence (lo que falta pagar).
+                  v15: su adelanto ya va sumado en «Pagado por adelantado» de arriba, como en la tarjeta. */}
               {(finanzas.cuotasPorVencer ?? 0) > 0.005 && (
                 <div className={s.pie} style={{ marginTop: 3 }} data-cuotas-por-vencer>
-                  <span>{t("patients.sideCards.cuotasPorVencer", { monto: formatCurrency(finanzas.cuotasPorVencer ?? 0) })}</span>
+                  <span>{t("patients.sideCards.cuotasPorVencer", { monto: fmtMXNdec(finanzas.cuotasPorVencer ?? 0) })}</span>
                 </div>
               )}
               {sinCargosVigentes ? (
                 <div className={s.pie} style={{ marginTop: 6 }} data-sin-cargos>
                   <span>
                     {pasadoASaldo > 0
-                      ? txReembolso.sinCargosConSaldo(formatCurrency(pasadoASaldo))
+                      ? txReembolso.sinCargosConSaldo(fmtMXNdec(pasadoASaldo))
                       : txReembolso.sinCargos}
                   </span>
                 </div>
@@ -438,8 +440,8 @@ export function Resumen({
                   <div className={s.pie}>
                     <span>
                       {t("pacientesRediseno.resumen.pagadoDeTotal", {
-                        pagado: formatCurrency(finanzas.pagado),
-                        total: formatCurrency(finanzas.total),
+                        pagado: fmtMXNdec(finanzas.pagado),
+                        total: fmtMXNdec(finanzas.total),
                       })}
                     </span>
                     <span className={s.importe}>{pct}%</span>
@@ -449,14 +451,14 @@ export function Resumen({
               {(finanzas.plan ?? 0) > 0 && (
                 <div className={s.pie} style={{ marginTop: 6 }}>
                   <span>{t("patients.sideCards.activePlans")}</span>
-                  <span className={s.importe}>{formatCurrency(finanzas.plan ?? 0)}</span>
+                  <span className={s.importe}>{fmtMXNdec(finanzas.plan ?? 0)}</span>
                 </div>
               )}
               {finanzas.credito > 0 && (
                 <div className={s.pie} style={{ marginTop: 6 }}>
                   <span>{t("pacientesRediseno.resumen.saldoAFavor")}</span>
                   <span className={`${s.importe} ${s.importePagado}`}>
-                    {formatCurrency(finanzas.credito)}
+                    {fmtMXNdec(finanzas.credito)}
                   </span>
                 </div>
               )}

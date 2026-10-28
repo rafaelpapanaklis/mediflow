@@ -13,7 +13,7 @@ import {
   isVoidedInvoice,
   isChargeableInvoice,
 } from "@/components/dashboard/billing/invoice-status";
-import { fmtMXN, fmtMXNdec } from "@/lib/format";
+import { fmtMXNdec } from "@/lib/format";
 import { formatDate } from "@/lib/utils";
 import { useT } from "@/i18n/i18n-provider";
 import { PagosMigradosCard } from "./pagos-migrados-card";
@@ -101,22 +101,24 @@ export function BillingTab({
             marginBottom: 14,
           }}
         >
-          <KpiCard label={t("patients.sideCards.treatmentTotal")} value={fmtMXN(summary.total)} icon={Receipt} />
-          <KpiCard label={t("patients.sideCards.paid")} value={fmtMXN(summary.paid)} icon={CheckCircle2} />
-          <KpiCard label={t("patients.sideCards.pendingBalance")} value={fmtMXN(summary.balance)} icon={Clock} />
+          <KpiCard label={t("patients.sideCards.treatmentTotal")} value={fmtMXNdec(summary.total)} icon={Receipt} />
+          <KpiCard label={t("patients.sideCards.paid")} value={fmtMXNdec(summary.paid)} icon={CheckCircle2} />
+          <KpiCard label={t("patients.sideCards.pendingBalance")} value={fmtMXNdec(summary.balance)} icon={Clock} />
         </div>
       )}
-      {!redesignOn && (summary.aunNoSeDebe ?? 0) > 0.005 && (
+      {/* v15 (t5 de la v14, M1): «Pagado por adelantado» sale también sin «Además…» (un plan con cuotas, nada
+          por hacer sin pagar): ya no cuelga de esa línea. */}
+      {!redesignOn && ((summary.aunNoSeDebe ?? 0) > 0.005 || (summary.pagadoDeLoPorHacer ?? 0) > 0.005) && (
         <p style={{ margin: "-6px 0 14px", fontSize: 12, color: "var(--text-3)" }} data-aun-no-se-debe>
-          {t("patients.sideCards.aunNoSeDebe", { monto: fmtMXN(summary.aunNoSeDebe ?? 0) })}
-          {(summary.pagadoDeLoPorHacer ?? 0) > 0.005 && (
-            <> · {t("patients.sideCards.pagadoDeLoPorHacer", { monto: fmtMXNdec(summary.pagadoDeLoPorHacer ?? 0) })}</>
-          )}
+          {[
+            (summary.aunNoSeDebe ?? 0) > 0.005 ? t("patients.sideCards.aunNoSeDebe", { monto: fmtMXNdec(summary.aunNoSeDebe ?? 0) }) : null,
+            (summary.pagadoDeLoPorHacer ?? 0) > 0.005 ? t("patients.sideCards.pagadoDeLoPorHacer", { monto: fmtMXNdec(summary.pagadoDeLoPorHacer ?? 0) }) : null,
+          ].filter(Boolean).join(" · ")}
         </p>
       )}
       {!redesignOn && (summary.cuotasPorVencer ?? 0) > 0.005 && (
         <p style={{ margin: "-6px 0 14px", fontSize: 12, color: "var(--text-3)" }} data-cuotas-por-vencer>
-          {t("patients.sideCards.cuotasPorVencer", { monto: fmtMXN(summary.cuotasPorVencer ?? 0) })}
+          {t("patients.sideCards.cuotasPorVencer", { monto: fmtMXNdec(summary.cuotasPorVencer ?? 0) })}
         </p>
       )}
 

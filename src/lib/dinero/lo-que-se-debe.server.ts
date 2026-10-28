@@ -135,25 +135,37 @@ export async function loQueAunNoSeDebe(
  * completo = `loQueAunNoSeDebe` (lo por hacer sin pagar) + esto, el «Por hacer» de la Cuenta del plan.
  * Mira también las notas ya saldadas (pagó todo y no se ha hecho nada). Tolerante: si falla, 0.
  *
- * v12 (t5, m1): NO cuenta las notas con cuotas acordadas. Ahí manda la mensualidad (v10): lo que aún no
- * se debe son cuotas por vencer, no lo por hacer, y la ficha no dice «ya pagados» de ellas.
+ * v12 (t5, m1): `sinCuotas` NO cuenta las notas con cuotas acordadas. Ahí manda la mensualidad (v10): lo
+ * que aún no se debe son cuotas por vencer, no lo por hacer, así que su adelanto no entra en «Además,
+ * $X por hacer».
+ * v15 (t5 de la v14, M1, opción b): ese adelanto va aparte en `conCuotas`. La tarjeta lo dice como
+ * «Pagado por adelantado» (o «ya están pagados por adelantado sobre lo hecho») y «Estado de cuenta»
+ * lo suma a su «Pagado por adelantado». No se cuenta dos veces con «cuotas que aún no vencen»: eso es
+ * lo que FALTA pagar de la nota (saldo − lo vencido) y esto es lo ya pagado de más sobre lo hecho.
  */
-export async function adelantoEnNotasDePlan(clinicId: string, invoiceIds: string[]): Promise<number> {
-  if (!clinicId || invoiceIds.length === 0) return 0;
+export async function adelantosEnNotasDePlan(clinicId: string, invoiceIds: string[]): Promise<{ sinCuotas: number; conCuotas: number }> {
+  if (!clinicId || invoiceIds.length === 0) return { sinCuotas: 0, conCuotas: 0 };
   try {
     const notas = await leerNotasDePlan(clinicId, invoiceIds);
     const { porFactura: condiciones } = await leerCondicionesDeFacturas(prisma, { clinicId, invoiceIds: Array.from(notas.keys()) });
-    let centavos = 0;
+    let sin = 0;
+    let con = 0;
     for (const [id, l] of Array.from(notas.entries())) {
-      if (esPlanAPlazos(condiciones.get(id))) continue;
       const d = deudaDeNotaDelPlan(l.nota, l.filas, null);
-      centavos += Math.round(Math.min(d.saldoAFavor, d.porHacer) * 100);
+      const centavos = Math.round(Math.min(d.saldoAFavor, d.porHacer) * 100);
+      if (esPlanAPlazos(condiciones.get(id))) con += centavos;
+      else sin += centavos;
     }
-    return centavos / 100;
+    return { sinCuotas: sin / 100, conCuotas: con / 100 };
   } catch (e) {
     console.warn(`[dinero:no-exigible] clínica ${clinicId}: no se leyó lo pagado por adelantado.`, e);
-    return 0;
+    return { sinCuotas: 0, conCuotas: 0 };
   }
+}
+
+/** Solo el de las notas SIN cuotas acordadas (el que entra en «Además, $X por hacer»). */
+export async function adelantoEnNotasDePlan(clinicId: string, invoiceIds: string[]): Promise<number> {
+  return (await adelantosEnNotasDePlan(clinicId, invoiceIds)).sinCuotas;
 }
 
 /** Lo mismo, sumado por paciente (para listas): `patientId` → pesos que aún no se deben. */

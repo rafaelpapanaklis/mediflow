@@ -13,7 +13,7 @@ import { prisma } from "@/lib/prisma";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { receivableInvoiceWhere } from "@/lib/caja";
-import { adelantoEnNotasDePlan, loQueAunNoSeDebe } from "@/lib/dinero/lo-que-se-debe.server";
+import { adelantosEnNotasDePlan, loQueAunNoSeDebe } from "@/lib/dinero/lo-que-se-debe.server";
 import { esIdDeLaBase, MENSAJE_ID_INVALIDO } from "@/lib/validation/id";
 
 export const dynamic = "force-dynamic";
@@ -44,6 +44,8 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ id: stri
     select: { id: true },
     take: 500,
   });
-  const adelanto = await adelantoEnNotasDePlan(ctx.clinicId, notasDePlan.map((f) => f.id));
-  return NextResponse.json({ total: r.total, porHacer: r.porHacer, porVencer: r.porVencer, porVencerCuotas: r.porVencerCuotas, porFactura: r.porFactura, adelanto });
+  // v15 (t5 de la v14, M1): el de las notas con cuotas va aparte (`adelantoCuotas`): «Estado de cuenta» lo
+  // suma a «Pagado por adelantado», pero NO a «Además, $X por hacer» (con cuotas manda la mensualidad).
+  const { sinCuotas: adelanto, conCuotas: adelantoCuotas } = await adelantosEnNotasDePlan(ctx.clinicId, notasDePlan.map((f) => f.id));
+  return NextResponse.json({ total: r.total, porHacer: r.porHacer, porVencer: r.porVencer, porVencerCuotas: r.porVencerCuotas, porFactura: r.porFactura, adelanto, adelantoCuotas });
 }

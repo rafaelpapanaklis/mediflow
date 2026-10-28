@@ -51,6 +51,9 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
     const res = await accionHecho(req, ctx, { id: plan.id, clinicId: plan.clinicId, patientId: plan.patientId, name: plan.name }, body);
     // v14 (QA de Claude): con la respuesta va la cuenta del plan ya cambiada (quien ve dinero): la
     // tarjeta «Cuenta del plan» cambia al momento, sin esperar a releer todos los planes del paciente.
+    // v15 (t5 de la v14, M3): solo si se pide (`conCuenta: true`, la tarjeta). «Hoy en el sillón» no la usa
+    // y leerla cuesta ~12 consultas por plan.
+    if (body.conCuenta !== true) return res;
     if (!res.ok || denyIfMissingPermission(ctx, "billing.view") || denyIfMissingPermission(ctx, "treatments.view")) return res;
     const cuerpo = await res.json().catch(() => null);
     if (!cuerpo || typeof cuerpo !== "object") return res;

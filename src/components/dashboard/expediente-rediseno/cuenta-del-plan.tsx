@@ -136,7 +136,8 @@ export function CuentaDelPlan({ cuenta, cargando, onCobrar, puedeCerrar, onCambi
       const res = await fetch(`/api/treatments/${encodeURIComponent(cuenta.planId)}/cerrar`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ motivo }),
+        // v15 (t5, M3): la cuenta del plan cerrado viene en la respuesta solo si se pide.
+        body: JSON.stringify({ motivo, conCuenta: true }),
       });
       const cuerpo = await res.json().catch(() => ({}));
       if (!res.ok) {
