@@ -483,3 +483,66 @@ test("v2 M2: Sabina y el lector del PDF/exportación dicen «(por hacer)» / «(
   await usar({ conSqlEstado: false });
   assert.equal((await estadosParaMostrar(base.prisma, "pac-c1")).size, 0);
 });
+
+/* ─────── v3 (segunda revisión de t1) ─────── */
+
+async function sembrarFilasDePlan(planId: string, doctor: string, filas: Array<[string, number[], string]>, nombrePlan = planId) {
+  await base.db.query(`INSERT INTO "treatment_plans" ("id","clinicId","patientId","doctorId","name") VALUES ($1,'c1','pac-c1',$2,$3)`, [planId, doctor, nombrePlan]);
+  for (const [i, [nombre, dientes, estado]] of filas.entries()) {
+    await base.db.query(
+      `INSERT INTO "treatment_plan_items" ("id","clinicId","planId","procedureId","nombre","dientes","caras","estado","orden","precio","hechoEn")
+       VALUES ($1,'c1',$2,NULL,$3,$4,'{}',$5,$6,1200,$7)`,
+      [`${planId}-${i}`, planId, nombre, dientes, estado, i, estado === "hecho" ? new Date(Date.now() - 400 * 86_400_000) : null]);
+  }
+}
+
+test("v3 MAYOR-B: GET /api/treatments/en-planes da, de TODOS los doctores, tipo + dientes + plan + estado (sin precios ni notas); otra clínica 404", async (t) => {
+  if (salta(t)) return;
+  await usar();
+  await base.db.query(`INSERT INTO "users" ("id","clinicId","role","firstName","lastName") VALUES ('doc-otro','c1','DOCTOR','Otra','Doctora')`);
+  await sembrarFilasDePlan("plan-a", "doc-otro", [["Resina posterior", [16], "pendiente"], ["Corona metal-porcelana", [26], "hecho"]], "Plan de la Dra. Otra");
+  await sembrarFilasDePlan("plan-b", "doc-c1", [["Endodoncia multirradicular", [36], "cancelado"]], "Plan mío");
+  Object.assign(ctx, { isDoctor: true }); // un doctor: GET /api/treatments solo le daría SUS planes
+  const { GET } = await import("@/app/api/treatments/en-planes/route");
+  const r = await GET(new NextRequest("http://x/api/treatments/en-planes?patientId=pac-c1"));
+  assert.equal(r.status, 200);
+  const { filas } = await r.json();
+  assert.deepEqual(filas.map((f: any) => `${f.plan}:${f.clave}:${f.dientes}:${f.estado}`), [
+    "Plan de la Dra. Otra:resina:16:pendiente", "Plan de la Dra. Otra:corona:26:hecho",
+  ]);
+  for (const f of filas) assert.deepEqual(Object.keys(f).sort(), ["clave", "dientes", "estado", "hechoEn", "plan", "planId"], "sin precio, nombre de la fila ni notas");
+  const ajena = await GET(new NextRequest("http://x/api/treatments/en-planes?patientId=pac-c2"));
+  assert.equal(ajena.status, 404, "el paciente de otra clínica no existe aquí");
+  Object.assign(ctx, { role: "RECEPTIONIST", permissionsOverride: ["patients.view"] });
+  assert.equal((await GET(new NextRequest("http://x/api/treatments/en-planes?patientId=pac-c1"))).status, 403, "sin treatments.view, no");
+});
+
+test("v3 MAYOR-B: el servidor avisa (no rechaza) la fila que ya está en otro plan, al crear y al agregar filas", async (t) => {
+  if (salta(t)) return;
+  await usar();
+  await sembrarFilasDePlan("plan-a", "doc-c1", [["Resina posterior", [16], "pendiente"]], "Plan A");
+  const { POST } = await import("@/app/api/treatments/route");
+  const fila = (nombre: string, dientes: number[]) => ({ nombre, procedureId: null, dientes, caras: [], fase: "higienica", cantidad: 1, precioCentavos: 70000, motivo: "", estado: "pendiente" });
+  const alta = await POST(new NextRequest("http://x/api/treatments", {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ patientId: "pac-c1", name: "Plan B", totalCost: 1400, items: [fila("Restauración resina 1 cara", [16]), fila("Restauración resina 1 cara", [26])] }),
+  }));
+  const cuerpo = await alta.json();
+  assert.equal(alta.status, 201, JSON.stringify(cuerpo));
+  assert.deepEqual(cuerpo.yaEnOtrosPlanes, [{ nombre: "Restauración resina 1 cara", dientes: [16], plan: "Plan A" }]);
+  assert.equal(cuerpo.items.length, 2, "se guardó igual: es un aviso");
+  // agregar al plan A una corona del 26 que ya está en el B
+  await sembrarFilasDePlan("plan-c", "doc-c1", [["Corona metal-porcelana", [26], "pendiente"]], "Plan C");
+  const { PATCH } = await import("@/app/api/treatments/[id]/route");
+  const actuales = (await base.db.query(`SELECT "id","nombre","dientes","caras","fase","cantidad","precio","motivo","estado" FROM "treatment_plan_items" WHERE "planId" = 'plan-a'`)).rows;
+  const r = await PATCH(new NextRequest("http://x/api/treatments/plan-a", {
+    method: "PATCH", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ items: [
+      ...actuales.map((f: any) => ({ id: f.id, nombre: f.nombre, procedureId: null, dientes: f.dientes, caras: f.caras, fase: f.fase ?? "higienica", cantidad: f.cantidad ?? 1, precioCentavos: Math.round(Number(f.precio) * 100), motivo: f.motivo ?? "", estado: f.estado })),
+      fila("Corona de porcelana", [26]),
+    ] }),
+  }), { params: Promise.resolve({ id: "plan-a" }) });
+  const b = await r.json();
+  assert.equal(r.status, 200, JSON.stringify(b));
+  assert.deepEqual(b.yaEnOtrosPlanes, [{ nombre: "Corona de porcelana", dientes: [26], plan: "Plan C" }]);
+});

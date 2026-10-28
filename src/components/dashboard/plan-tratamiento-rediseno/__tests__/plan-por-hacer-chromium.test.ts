@@ -37,8 +37,8 @@ const ODONTOGRAMA = {
   ],
 };
 
-/** Planes del paciente que contesta `GET /api/treatments?patientId=` (v2, M1). */
-let PLANES: unknown[] = [];
+/** Lo que contesta `GET /api/treatments/en-planes` (v3): filas, o un estado de error, y cuánto tarda. */
+let EN_PLANES: { filas?: unknown[]; status?: number; demoraMs?: number } = { filas: [] };
 
 async function abrir(chromium: { launch(o?: any): Promise<any> }, paquete: string, viewport: { width: number; height: number }, idioma: "es" | "en" = "es") {
   const navegador = await chromium.launch();
@@ -59,7 +59,10 @@ async function abrir(chromium: { launch(o?: any): Promise<any> }, paquete: strin
     if (url.pathname === "/api/odontogram") return json(200, ODONTOGRAMA);
     if (url.pathname === "/api/clinical") return json(200, []);
     if (url.pathname.endsWith("/presentar")) return ruta.fulfill({ status: 404, contentType: "text/html", body: "<h1>404</h1>" });
-    if (url.pathname === "/api/treatments" && req.method() === "GET") return json(200, PLANES);
+    if (url.pathname === "/api/treatments/en-planes") {
+      if (EN_PLANES.demoraMs) await new Promise((r) => setTimeout(r, EN_PLANES.demoraMs));
+      return json(EN_PLANES.status ?? 200, EN_PLANES.status ? { error: "falló" } : { filas: EN_PLANES.filas ?? [] });
+    }
     if (url.pathname === "/api/treatments" && req.method() === "POST") {
       const cuerpo = JSON.parse(req.postData() ?? "{}");
       posts.push(cuerpo);
@@ -71,6 +74,8 @@ async function abrir(chromium: { launch(o?: any): Promise<any> }, paquete: strin
   // con tarifario: el chip rojo ya trae su precio (o, si ya está en otro plan, lo dice)
   try {
     await pagina.waitForFunction(() => /\$700|ya en el plan|already in plan/.test(document.querySelector('[data-chip="r:h:16:restoration"]')?.textContent ?? ""));
+    // y lo que ya está en otros planes ya contestó (o falló): los chips rojos se pueden tocar
+    await pagina.waitForFunction(() => !document.querySelector("[data-comprobando-planes]"));
   } catch (e) {
     await navegador.close(); // sin esto el proceso de la prueba se queda colgado
     throw e;
@@ -138,29 +143,66 @@ test("a 390 px y en inglés: sin scroll horizontal; «tooth 16 occlusal»", asyn
   }
 });
 
-test("v2 M1: lo rojo que ya está en otro plan activo sale «ya en el plan X», no se toca y «Agregar todo» lo salta", async (t) => {
+test("v2 M1 / v3: lo rojo que ya está en un plan (de cualquier doctor) sale «ya en el plan X», no se toca y «Agregar todo» lo salta", async (t) => {
   const chromium = await cargarChromium();
   if (!chromium) { t.skip("Playwright no está en ~/navegador"); return; }
-  const fila = (id: string, nombre: string, dientes: number[]) =>
-    ({ id, planId: "plan-1", nombre, procedureId: "proc1", dientes, caras: ["O"], cantidad: 1, estado: "pendiente", hechoEn: null, invoiceId: null });
-  PLANES = [
-    { id: "plan-1", name: "Plan 20 oct 2026", status: "ACTIVE", items: [fila("f1", "Restauración resina 1 cara", [16])] },
-    // uno cerrado no cuenta
-    { id: "plan-0", name: "Plan viejo", status: "ABANDONED", items: [fila("f0", "Corona metal-porcelana", [26])] },
-  ];
+  EN_PLANES = { filas: [{ planId: "plan-1", plan: "Plan 20 oct 2026", clave: "resina", dientes: [16], estado: "pendiente", hechoEn: null }] };
   const paquete = await empaquetar(`${CARPETA}/__tests__/arnes-ventana.tsx`);
   const { navegador, pagina } = await abrir(chromium, paquete, { width: 1440, height: 1000 });
   try {
     await pagina.waitForSelector('[data-chip="r:h:16:restoration"][data-en-otro-plan]');
     assert.equal(await chip(pagina, "r:h:16:restoration"), "Restauración resina 1 cara · pieza 16 oclusal · ya en el plan «Plan 20 oct 2026»");
     assert.ok(await pagina.locator('[data-chip="r:h:16:restoration"]').isDisabled());
-    assert.equal(await pagina.locator('[data-chip="r:h:26:crown"][data-en-otro-plan]').count(), 0, "el plan cancelado no tapa la corona");
+    assert.equal(await pagina.locator('[data-chip="r:h:26:crown"][data-en-otro-plan]').count(), 0);
     await pagina.click("[data-agregar-por-hacer]");
     assert.equal(await pagina.locator("[data-renglon]").count(), 1, "solo la corona");
     assert.equal(await pagina.textContent("[data-plan-total]"), "$4,500");
     if (process.env.CAPTURAS) await pagina.screenshot({ path: join(process.env.CAPTURAS, "plan-por-hacer-ya-en-plan.png") });
   } finally {
-    PLANES = [];
+    EN_PLANES = { filas: [] };
+    await navegador.close();
+  }
+});
+
+test("v3 m-a: mientras no contesta qué está en otros planes, lo rojo espera; si falla, se avisa y se deja agregar", async (t) => {
+  const chromium = await cargarChromium();
+  if (!chromium) { t.skip("Playwright no está en ~/navegador"); return; }
+  const paquete = await empaquetar(`${CARPETA}/__tests__/arnes-ventana.tsx`);
+  // lenta: antes de que conteste, ni «Agregar todo» ni los chips rojos se pueden tocar
+  EN_PLANES = { filas: [{ planId: "p", plan: "Plan A", clave: "resina", dientes: [16], estado: "pendiente", hechoEn: null }], demoraMs: 2500 };
+  const navegador = await chromium.launch();
+  try {
+    const pagina = await navegador.newPage({ viewport: { width: 1440, height: 1000 } });
+    const css = sinGlobal(readFileSync(join(CARPETA, "plan.module.css"), "utf8"));
+    await pagina.route("**/*", async (ruta: any) => {
+      const url = new URL(ruta.request().url());
+      const json = (status: number, cuerpo: unknown) => ruta.fulfill({ status, contentType: "application/json", body: JSON.stringify(cuerpo) });
+      if (url.pathname === "/") return ruta.fulfill({ status: 200, contentType: "text/html", body: `<!doctype html><html><head><meta charset="utf-8"><style>${css}</style></head><body><div id="raiz"></div><script>window.__IDIOMA__="es";</script><script src="/paquete.js"></script></body></html>` });
+      if (url.pathname === "/paquete.js") return ruta.fulfill({ status: 200, contentType: "text/javascript", body: paquete });
+      if (url.pathname === "/api/procedures") return json(200, TARIFARIO);
+      if (url.pathname === "/api/odontogram") return json(200, ODONTOGRAMA);
+      if (url.pathname === "/api/treatments/en-planes") {
+        await new Promise((r) => setTimeout(r, EN_PLANES.demoraMs ?? 0));
+        return json(EN_PLANES.status ?? 200, EN_PLANES.status ? { error: "x" } : { filas: EN_PLANES.filas });
+      }
+      return ruta.fulfill({ status: 404, body: "" });
+    });
+    await pagina.goto("http://plan.prueba/");
+    await pagina.waitForSelector("[data-comprobando-planes]");
+    await pagina.waitForSelector('[data-chip="r:h:16:restoration"]');
+    assert.ok(await pagina.locator("[data-agregar-por-hacer]").isDisabled(), "«Agregar todo» espera");
+    assert.ok(await pagina.locator('[data-chip="r:h:16:restoration"]').isDisabled(), "el chip rojo espera");
+    await pagina.waitForSelector('[data-chip="r:h:16:restoration"][data-en-otro-plan]', { timeout: 8000 });
+    assert.equal(await pagina.locator("[data-comprobando-planes]").count(), 0);
+    // falla: aviso, y lo rojo se puede agregar (la decisión es del doctor)
+    EN_PLANES = { status: 500 };
+    await pagina.reload();
+    await pagina.waitForSelector("[data-planes-sin-comprobar]");
+    assert.match(await pagina.textContent("[data-planes-sin-comprobar]") ?? "", /No se pudo comprobar/);
+    await pagina.waitForFunction(() => /\$700/.test(document.querySelector('[data-chip="r:h:16:restoration"]')?.textContent ?? ""));
+    assert.equal(await pagina.locator("[data-agregar-por-hacer]").isDisabled(), false);
+  } finally {
+    EN_PLANES = { filas: [] };
     await navegador.close();
   }
 });

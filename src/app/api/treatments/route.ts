@@ -12,6 +12,7 @@ import { aPesos, comoNueva, conProcedimientosValidos, filaDto, leerFilas, totalC
 import { procedimientosDeLaClinica, repoFilas, tablaDeFilasExiste } from "@/lib/treatments/items-db";
 import { cuerpoDeErrorDeFila } from "@/lib/treatments/errores";
 import { presupuestoDesdeElPlan, type ResultadoPresentar } from "@/lib/treatments/presentar.server";
+import { avisoDeFilasRepetidas } from "@/lib/treatments/ya-en-planes.server";
 
 // GET /api/treatments — list all treatment plans for clinic (role-filtered)
 export async function GET(req: NextRequest) {
@@ -222,9 +223,14 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Filas que ya están en OTRO plan del paciente (ws1-t6 v3): no se rechaza (rehacer un trabajo es
+  // válido), se avisa; la ventana lo dice. La pantalla ya no las ofrece; esto cubre lo que no pase por ella.
+  const yaEnOtrosPlanes = conFilas ? await avisoDeFilasRepetidas(ctx.clinicId, patientId, filas, plan.id) : [];
+
   revalidateAfter("treatments");
   return NextResponse.json({
     ...plan,
+    ...(yaEnOtrosPlanes.length ? { yaEnOtrosPlanes } : {}),
     ...(body.presentar === true ? { presupuesto: presupuesto?.quote ?? null, presupuestoError } : {}),
     startDate:       plan.startDate.toISOString(),
     endDate:         plan.endDate?.toISOString() ?? null,

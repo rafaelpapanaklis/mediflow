@@ -29,7 +29,7 @@ import {
   fetchOdontogram, fetchQuienSoy, putFinding, deleteFinding, setNote as apiSetNote, resetOdontogram,
 } from "./adapter";
 import { SaveQueue, saveQueueFor, type SaveOp, type SaveStatus } from "./autosave";
-import { cargarOdontograma, quitarDelDibujo } from "./recuperar";
+import { cargarOdontograma, conservarEstados, quitarDelDibujo } from "./recuperar";
 import { OdoDefs } from "./OdoDefs";
 import { Odontogram } from "./Odontogram";
 import { Palette } from "./Palette";
@@ -187,7 +187,8 @@ export const OdontogramV2 = memo(function OdontogramV2({ patientId, value, onCha
     cargarOdontograma({ patientId, queue: queueRef.current, sesion: sesionRef.current, leer: fetchOdontogram, force: true })
       .then((r) => {
         if (cancelled) return;
-        if (r.records) setInternalRecords(r.records);
+        // sin estados leídos (m-d): no se pierden los que ya había
+        if (r.records) setInternalRecords((prev) => (r.estadoNoLeido ? conservarEstados(prev, r.records!) : r.records!));
         if (r.conEstado !== undefined) setConEstadoServidor(r.conEstado);
         setEstadoNoLeido(!!r.estadoNoLeido);
         if (r.error) setError(r.error);
@@ -202,7 +203,10 @@ export const OdontogramV2 = memo(function OdontogramV2({ patientId, value, onCha
     if (ctrlRef.current.controlled) return;
     cargarOdontograma({ patientId, queue: queueRef.current, sesion: sesionRef.current, leer: fetchOdontogram, force: false })
       .then((r) => {
-        if (r.records && !r.error) { setInternalRecords(r.records); setError(null); }
+        if (r.records && !r.error) {
+          setInternalRecords((prev) => (r.estadoNoLeido ? conservarEstados(prev, r.records!) : r.records!));
+          setError(null);
+        }
         if (r.conEstado !== undefined) setConEstadoServidor(r.conEstado);
         if (!r.error) setEstadoNoLeido(!!r.estadoNoLeido);
       });

@@ -37,6 +37,8 @@ export const RESULTADOS_DE_HECHO = ["aplicado", "sin_cambio", "sin_permiso", "si
 export const CODIGOS_DE_HECHO = [
   "sin_filas", "demasiadas_filas", "fila_desconocida", "fila_cancelada", "no_esta_hecha",
   "cita_invalida", "sin_filas_en_plan", "sin_permiso_odontograma", "plan_cerrado",
+  // ws1-t6: no se pudo leer el rojo/azul del odontograma; no se tocó nada (503, se puede reintentar)
+  "estado_no_disponible",
 ] as const;
 
 export function avisoDeHecho(t: T, r: Pick<ResultadoMarcarHecho, "resultado">): string {

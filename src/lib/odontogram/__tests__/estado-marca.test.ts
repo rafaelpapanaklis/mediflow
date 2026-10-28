@@ -272,24 +272,71 @@ test("revisión 4: «Hecho» pasa a azul lo rojo que el procedimiento no dibuja 
 /* ─────── v2 (revisión de t1) ─────── */
 
 import { redactarMovimiento } from "../../movimientos-paciente/catalogo";
+import { filasRepetidas, planQueYaLoTiene, resumirFilas } from "../../treatments/ya-en-planes";
+import { claveDeProcedimiento } from "../../treatments/sugerir-procedimiento";
 import { rotuloDeEstado } from "../estado-marca";
 
-test("v2 M1: lo rojo que ya es una fila viva de otro plan activo sale «ya en el plan X», no se agrega y «Agregar todo» lo salta", () => {
+test("v2 M1 / v3: lo rojo que ya está en un plan (de cualquier doctor) sale «ya en el plan X», no se agrega y «Agregar todo» lo salta", () => {
   const entradas: EntradaPlan[] = [
     { toothNumber: 16, surface: "O", conditionId: "restoration", estado: "por_hacer" },
     { toothNumber: 26, surface: null, conditionId: "crown", estado: "por_hacer" },
   ];
-  const fila = (id: string, nombre: string, dientes: number[], estado: "pendiente" | "hecho" | "cancelado" = "pendiente") =>
-    ({ id, planId: "plan-1", nombre, procedureId: null, dientes, cantidad: 1, estado, hechoEn: null, invoiceId: null });
-  const otros = [{ planId: "plan-1", nombre: "Plan 20 oct 2026", filas: [fila("f1", "Restauración resina 2 caras", [16]), fila("f2", "Corona metal-porcelana", [27])] }];
-  const chips = chipsDelPlan(hallazgosPorTratar(entradas), TARIFARIO, entradas, [], otros);
+  const planes = [{ id: "plan-1", name: "Plan 20 oct 2026", status: "ACTIVE" }];
+  const filas = (lista: Array<[string, number[], string]>) =>
+    new Map([["plan-1", lista.map(([nombre, dientes, estado]) => ({ nombre, procedureId: null, dientes, estado, hechoEn: null }))]]);
+  const enPlanes = resumirFilas(planes, filas([["Restauración resina 2 caras", [16], "pendiente"], ["Corona metal-porcelana", [27], "pendiente"]]));
+  const chips = chipsDelPlan(hallazgosPorTratar(entradas), TARIFARIO, entradas, [], enPlanes);
   assert.deepEqual(chips.map((c) => `${c.clave}:${c.enOtroPlan ?? "-"}`), ["r:h:16:restoration:Plan 20 oct 2026", "r:h:26:crown:-"], "la corona del 27 no es la del 26");
   let id = 0;
   const ctx = { tarifario: TARIFARIO, entradas, nuevoId: () => `r${++id}`, motivo: "x", idioma: "es" as const };
   assert.deepEqual(agregarDesdeChip([], chips[0], ctx), [], "no se agrega: serían dos notas de cobro");
-  // una fila cancelada (o hecha hace días) ya no la tapa
-  const cancelada = [{ ...otros[0], filas: [fila("f1", "Restauración resina 2 caras", [16], "cancelado")] }];
+  // una fila cancelada no la tapa
+  const cancelada = resumirFilas(planes, filas([["Restauración resina 2 caras", [16], "cancelado"]]));
   assert.equal(chipsDelPlan(hallazgosPorTratar(entradas), TARIFARIO, entradas, [], cancelada)[0].enOtroPlan, undefined);
+});
+
+test("v3 MAYOR-A: «posterior» no es «poste»: resina, corona y amalgama posteriores son lo que son; poste de fibra y perno muñón, perno", () => {
+  const casos: Array<[string, string]> = [
+    ["Resina posterior", "resina"], ["Resina compuesta posterior", "resina"], ["Amalgama posterior", "resina"],
+    ["Corona posterior", "corona"], ["Poste de fibra", "perno"], ["Postes de fibra de vidrio", "perno"],
+    ["Perno muñón", "perno"], ["Muñón colado", "perno"], ["Endodoncia posterior", "endodoncia"],
+  ];
+  for (const [nombre, clave] of casos) assert.equal(claveDeProcedimiento({ nombre }), clave, nombre);
+  // y lo que eso arreglaba: «Hecho» de «Resina posterior 16 O» pasa la roja a azul, sin dibujar un perno
+  const c = aplicarHecho({ nombre: "Resina posterior", dientes: [16], caras: ["O"] }, [ent(16, "O", "restoration", "por_hacer")]);
+  assert.deepEqual(corto(c.aHecho), ["16O:restoration"]);
+  assert.deepEqual(corto(c.altas), []);
+  // y «ya en el plan» la reconoce
+  const enPlanes = resumirFilas([{ id: "p", name: "Plan A", status: "ACTIVE" }],
+    new Map([["p", [{ nombre: "Resina posterior", procedureId: null, dientes: [16], estado: "pendiente", hechoEn: null }]]]));
+  assert.equal(planQueYaLoTiene("resina", [16], enPlanes)?.plan, "Plan A");
+});
+
+test("v3 m-b: una fila HECHA de un diente cuenta en cualquier fecha; una de toda la boca solo si es reciente; de un plan cancelado, solo lo hecho", () => {
+  const hace = (dias: number) => new Date(Date.now() - dias * 86_400_000).toISOString();
+  const planes = [{ id: "a", name: "Plan viejo", status: "COMPLETED" }, { id: "b", name: "Plan cancelado", status: "ABANDONED" }];
+  const enPlanes = resumirFilas(planes, new Map([
+    ["a", [
+      { nombre: "Restauración resina 1 cara", procedureId: null, dientes: [16], estado: "hecho", hechoEn: hace(400) },
+      { nombre: "Profilaxis (limpieza)", procedureId: null, dientes: [], estado: "hecho", hechoEn: hace(200) },
+      { nombre: "Aplicación de flúor", procedureId: null, dientes: [], estado: "hecho", hechoEn: hace(0.1) },
+    ]],
+    ["b", [
+      { nombre: "Corona metal-porcelana", procedureId: null, dientes: [26], estado: "pendiente", hechoEn: null },
+      { nombre: "Corona metal-porcelana", procedureId: null, dientes: [36], estado: "hecho", hechoEn: hace(30) },
+    ]],
+  ]));
+  assert.equal(planQueYaLoTiene("resina", [16], enPlanes)?.plan, "Plan viejo", "la resina hecha hace 400 días: no se ofrece otra vez");
+  assert.equal(planQueYaLoTiene("limpieza", [11], enPlanes), null, "la limpieza de hace 200 días no tapa la de hoy");
+  assert.equal(planQueYaLoTiene("fluor", [16], enPlanes)?.plan, "Plan viejo", "el flúor de hace unas horas sí");
+  assert.equal(planQueYaLoTiene("corona", [26], enPlanes), null, "lo pendiente de un plan cancelado no cuenta");
+  assert.equal(planQueYaLoTiene("corona", [36], enPlanes)?.plan, "Plan cancelado", "lo hecho, aunque el plan se cancelara, sí");
+  // el aviso del servidor: las filas nuevas que ya están en otro plan (el propio no cuenta)
+  assert.deepEqual(
+    filasRepetidas([{ nombre: "Resina posterior", procedureId: null, dientes: [16] }, { nombre: "Corona", procedureId: null, dientes: [26] }], enPlanes),
+    [{ nombre: "Resina posterior", dientes: [16], plan: "Plan viejo" }],
+  );
+  assert.deepEqual(filasRepetidas([{ nombre: "Resina", procedureId: null, dientes: [16] }], enPlanes, { excluirPlanId: "a" }), []);
 });
 
 test("v2 m3: la caries de OTRA cara no se la come la resina roja: sale y se junta en una resina de 2 caras", () => {
@@ -320,4 +367,14 @@ test("v2 m4 y M2: Movimientos dice «Marcó por hacer…» sin valores clínicos
   assert.equal(rotuloDeEstado("previo"), "(previo, otra clínica)");
   assert.equal(rotuloDeEstado("hecho"), "");
   assert.equal(rotuloDeEstado(null), "");
+});
+
+test("v3 m-d: si la relectura llega sin estados (no se pudieron leer), se conservan los que ya había", async () => {
+  const { conservarEstados } = await import("../../../components/dashboard/odontogram-v2/recuperar");
+  const antes = { 16: { surfaces: { O: ["restoration"], M: ["restoration"] }, tooth: [], estados: { "O:restoration": "por_hacer" as const, "M:restoration": "hecho" as const } } };
+  // en la relectura la M ya no está (otra pestaña la quitó) y llega sin estados
+  const nuevos = { 16: { surfaces: { O: ["restoration"] }, tooth: [] }, 26: { surfaces: {}, tooth: ["crown"] } };
+  const r = conservarEstados(antes, nuevos);
+  assert.deepEqual(r[16].estados, { "O:restoration": "por_hacer" }, "la roja sigue roja; lo que se fue no deja color");
+  assert.equal(r[26].estados, undefined);
 });

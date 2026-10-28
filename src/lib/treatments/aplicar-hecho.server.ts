@@ -387,10 +387,7 @@ export function mensajeDeHecho(codigo: string, locale: "es" | "en" = "es"): stri
 
 const error = (codigo: string, status: number) => NextResponse.json({ error: mensajeDeHecho(codigo), code: codigo }, { status });
 /** La sonda del rojo/azul no contestó (v2, m5): no se tocó nada; se puede reintentar. */
-const sinEstado = () => NextResponse.json(
-  { error: makeT(getDict("es"))("planTratamiento.hecho.error.estado_no_disponible"), code: "estado_no_disponible" },
-  { status: 503 },
-);
+const sinEstado = () => error("estado_no_disponible", 503);
 
 /** «Resina 16 (MO)» — la frase de Movimientos, sin datos clínicos de más. */
 const nombreDeFila = (f: Pick<FilaDelPlan, "nombre" | "dientes" | "caras">) =>

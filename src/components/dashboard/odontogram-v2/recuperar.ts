@@ -83,3 +83,19 @@ export function quitarDelDibujo(records: Records, ops: SaveOp[]): Records {
   }
   return out;
 }
+
+/**
+ * La relectura llegó SIN estados porque el servidor no pudo leerlos (`estadoNoLeido`, ws1-t6 v3 m-d):
+ * se conservan los rojo/azul que ya se tenían de las marcas que siguen ahí. Sin esto, la marca roja
+ * se veía «de antes» y, en «Realizado», un toque la quitaba en vez de pasarla a azul.
+ */
+export function conservarEstados(antes: Records, nuevos: Records): Records {
+  const out: Records = JSON.parse(JSON.stringify(nuevos));
+  for (const [fdi, r] of Object.entries(out)) {
+    const previos = antes[Number(fdi)]?.estados;
+    if (!previos || r.estados) continue;
+    r.estados = { ...previos };
+    podarEstados(r);
+  }
+  return out;
+}

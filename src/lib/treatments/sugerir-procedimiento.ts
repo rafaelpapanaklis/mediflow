@@ -56,7 +56,7 @@ export const PROCEDIMIENTOS: Record<ClaveProcedimiento, Procedimiento> = {
   },
   endodoncia: {
     codigo: "ODO_ENDODONCIA", nombre: { es: "Endodoncia", en: "Root canal" },
-    incluye: /endodoncia|conductos?\b/, excluye: /retrat|re-?endodoncia|reendodoncia|pulpotomia|pulpectomia|perno|poste/,
+    incluye: /endodoncia|conductos?\b/, excluye: /retrat|re-?endodoncia|reendodoncia|pulpotomia|pulpectomia|perno|\bpostes?\b/,
     alcance: "diente", variantes: "raices",
   },
   retratamiento: {
@@ -86,7 +86,8 @@ export const PROCEDIMIENTOS: Record<ClaveProcedimiento, Procedimiento> = {
   },
   perno: {
     codigo: null, nombre: { es: "Perno / muñón", en: "Post & core" },
-    incluye: /perno|poste|munon/, alcance: "diente",
+    // «poste» como palabra entera: «Resina posterior» o «Corona posterior» NO son un perno (ws1-t6 v3).
+    incluye: /perno|\bpostes?\b|munon/, alcance: "diente",
   },
   extraccion: {
     codigo: "ODO_EXTRACCION", nombre: { es: "Extracción", en: "Extraction" },
