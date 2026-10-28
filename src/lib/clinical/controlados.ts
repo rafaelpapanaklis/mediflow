@@ -328,9 +328,17 @@ const SIN_TOLERANCIA = new Set(["cocaina", "metadona", "ketamina", "cannabis", "
 
 /** Minúsculas, sin acentos ni diéresis, sin signos; `conEspacios` conserva los espacios (uno) para buscar palabras. */
 export function normalizarNombre(texto: string, conEspacios = false): string {
+  // v4 (m-2 de t8): los signos de dosis que se admiten en concentración y
+  // presentación imitan letras. Se leen como la letra que imitan ANTES de
+  // quitar signos: «°»→o, «µ»/«μ»→u, «×»→x; y NFKD (no NFD) convierte las
+  // voladas «ª»→a y «º»→o y parte «½» en «1⁄2». Así «Mºrfina», «Tramªdol» y
+  // «Nµbain» se leen «morfina», «tramadol», «nubain».
   const base = String(texto ?? "")
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
+    .replace(/\u00B0/g, "o")
+    .replace(/[\u00B5\u03BC]/g, "u")
+    .replace(/\u00D7/g, "x")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     // «@» y «$» se leen como letras ANTES de quitar los signos: «Tram@dol»
     // no se queda en «tramdol».
@@ -339,6 +347,53 @@ export function normalizarNombre(texto: string, conEspacios = false): string {
   return conEspacios
     ? base.replace(/[^a-z0-9]+/g, " ").trim()
     : base.replace(/[^a-z0-9]+/g, "");
+}
+
+/**
+ * Signos de dosis que, pegados a letras, pueden imitar una letra cualquiera
+ * («Tr°m°dol», «X½nax», «Trªmªdºl»). En la lectura con comodín cada uno vale
+ * por UNA letra (v4).
+ */
+const SIGNOS_COMODIN = /[\u00B0\u00BA\u00AA\u00B5\u03BC\u00D7\u00BD\u00BC\u00BE]/g;
+const COMODIN = "?";
+
+/**
+ * Las palabras del texto (partido SOLO por espacios) con los signos que imitan
+ * letras como comodín y los demás signos quitados. Solo las que llevan al
+ * menos un comodín: sin él, ya las miran la comparación exacta y la tolerancia.
+ */
+function palabrasConComodin(texto: string): string[] {
+  const out = new Set<string>();
+  for (const base of [texto, texto.replace(/I/g, "l")]) {
+    const marcado = base.normalize("NFC").replace(SIGNOS_COMODIN, "\u0000");
+    for (const crudo of marcado.split(/\s+/)) {
+      if (!crudo.includes("\u0000")) continue;
+      const partes = crudo.split("\u0000").map((p) => normalizarNombre(p));
+      const palabra = partes.join(COMODIN);
+      for (const lectura of lecturasConDigitos(palabra)) out.add(lectura);
+    }
+  }
+  return Array.from(out);
+}
+
+/**
+ * ¿La palabra (con comodines) contiene el término, con cada comodín valiendo
+ * por una letra? Pide al menos un comodín dentro de la coincidencia y que los
+ * comodines no pasen de la mitad del término.
+ */
+function contieneConComodin(palabra: string, termino: string): boolean {
+  const n = termino.length;
+  for (let i = 0; i + n <= palabra.length; i++) {
+    let comodines = 0;
+    let ok = true;
+    for (let j = 0; j < n; j++) {
+      const c = palabra[i + j];
+      if (c === COMODIN) comodines++;
+      else if (c !== termino[j]) { ok = false; break; }
+    }
+    if (ok && comodines > 0 && comodines <= Math.floor(n / 2)) return true;
+  }
+  return false;
 }
 
 /**
@@ -437,15 +492,39 @@ export function detectarControlado(...textos: Array<string | null | undefined>):
   // 3: una letra de tolerancia en los términos largos, PALABRA POR PALABRA.
   // Sobre el texto pegado (sin espacios) la tolerancia cruzaba palabras:
   // «cefaclor acetato» → «cloracetato» ≈ «cloracepato», «ácido fólico
-  // dinitrato» → «…icodinitrato» ≈ «vicodin» (v3, m-3 de t8). Una errata va
-  // dentro de una palabra; lo repartido entre palabras lo caza el paso 1.
-  for (const palabra of palabrasDelTexto(junto)) {
+  // dinitrato» → «…icodinitrato» ≈ «vicodin» (v3, m-3 de t8).
+  // v4 (m-1 de t8): las palabras se parten SOLO por espacios y dentro de cada
+  // una se quitan los signos, para que «Trama-dool» o «Clonaze-pan» (errata +
+  // palabra partida por un signo) sigan siendo UNA palabra.
+  const palabrasEspacio = junto.split(/\s+/).filter(Boolean);
+  for (const palabra of palabrasEspacio) {
     for (const lectura of lecturasDelTexto(palabra)) {
       for (const [termino, nombre, grupo] of CONTENIDOS) {
         if (termino.length < LARGO_CON_TOLERANCIA || SIN_TOLERANCIA.has(termino)) continue;
         if (lectura.length < termino.length - 1) continue;
         if (contieneCasi(lectura, termino)) return { nombre, grupo };
       }
+    }
+  }
+  // 4 (v4, m-1 de t8): errata + palabra partida por un ESPACIO («Trama dool»,
+  // «Clona zepan»). Cada pareja de palabras vecinas se une y se compara ENTERA
+  // con el término (largo ±1, del principio de la primera al final de la
+  // segunda): no se busca el término DENTRO de la pareja, así «cefaclor» +
+  // «acetato» no vuelve a parecerse a «cloracepato».
+  for (let k = 0; k + 1 < palabrasEspacio.length; k++) {
+    for (const lectura of lecturasDelTexto(`${palabrasEspacio[k]}${palabrasEspacio[k + 1]}`)) {
+      for (const [termino, nombre, grupo] of CONTENIDOS) {
+        if (termino.length < LARGO_CON_TOLERANCIA || SIN_TOLERANCIA.has(termino)) continue;
+        if (aUnaLetra(lectura, termino)) return { nombre, grupo };
+      }
+    }
+  }
+  // 5 (v4, m-2 de t8): los signos de dosis pegados a letras como comodín de
+  // una letra («Tr°m°dol», «X½nax», «Trªmªdºl»). Solo mira palabras que llevan
+  // alguno de esos signos, así que un nombre normal no cambia de resultado.
+  for (const palabra of palabrasConComodin(junto)) {
+    for (const [termino, nombre, grupo] of CONTENIDOS) {
+      if (contieneConComodin(palabra, termino)) return { nombre, grupo };
     }
   }
   return null;

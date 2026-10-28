@@ -7,6 +7,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { CUMS_ESSENTIALS } from "@/lib/seeds/cums-essentials";
 import { detectarControlado, lecturasConDigitos, lecturasDelTexto, normalizarNombre, TERMINOS_CONTROLADOS } from "../controlados";
+import { FORMAS_FARMACEUTICAS, VIAS } from "../medicamentos-propios.contrato";
 
 test("los ejemplos de Rafael caen todos, con su grupo", () => {
   assert.deepEqual(detectarControlado("fentanilo"), { nombre: "Fentanilo", grupo: "I" });
@@ -211,6 +212,71 @@ test("v3 · m-3: prueba amplia — todo el catálogo IV/V/VI y ~150 nombres de c
     }
   }
   assert.ok(n > 25_000, `solo ${n} combinaciones`);
+  assert.deepEqual(falsos.slice(0, 20), [], `${falsos.length} falsos positivos`);
+});
+
+// ── v4 · la revisión v3 de t8 (m-1, m-2) ──────────────────────────────────
+
+test("v4 · m-1: errata + palabra partida por un signo o por un espacio cae (la tabla de t8)", () => {
+  for (const [texto, nombre] of [
+    ["Trama-dool", "Tramadol"], ["Tra.madool", "Tramadol"], ["Clonaze-pan", "Clonazepam"], ["Alpra-zolan", "Alprazolam"],
+    ["Trama dool", "Tramadol"], ["Clona zepan", "Clonazepam"], ["Fenobar bitol", "Fenobarbital"], ["Bupre norfin", "Buprenorfina"],
+  ]) {
+    assert.equal(detectarControlado(texto)?.nombre, nombre, texto);
+  }
+  // La pareja se compara ENTERA: no vuelven los falsos positivos de v3.
+  assert.equal(detectarControlado("Cefaclor acetato"), null);
+  assert.equal(detectarControlado("Ácido fólico dinitrato"), null);
+});
+
+test("v4 · m-2: los signos de dosis que imitan letras no disfrazan un controlado (la tabla de t8)", () => {
+  const casos: Array<[string, string, string]> = [
+    ["", "Mºrfina caja", "Morfina"],
+    ["", "Tramªdol", "Tramadol"],
+    ["", "Trªmªdol caja c/10", "Tramadol"],
+    ["", "Trªmadºl", "Tramadol"],
+    ["Trªmªdºl 50 mg", "", "Tramadol"],
+    ["", "Diazepªm", "Diazepam"],
+    ["Nµbain 10 mg", "", "Nalbufina"],
+    ["N\u03BCbain 10 mg", "", "Nalbufina"],
+    ["", "Tr°m°dol", "Tramadol"],
+    ["", "Tramad×l", "Tramadol"],
+    ["", "X½nax", "Alprazolam"],
+  ];
+  for (const [concentracion, presentacion, nombre] of casos) {
+    assert.equal(detectarControlado("Analgésico", concentracion, presentacion, "Tableta", "Oral")?.nombre, nombre, `${concentracion}|${presentacion}`);
+  }
+  assert.equal(normalizarNombre("Mºrfina"), "morfina");
+  assert.equal(normalizarNombre("Tramªdol"), "tramadol");
+  assert.equal(normalizarNombre("Nµbain"), "nubain");
+});
+
+test("v4 · los signos de dosis legítimos siguen sin disparar nada", () => {
+  for (const [concentracion, presentacion] of [
+    ["50 µg/mL", ""], ["50 \u03BCg", ""], ["37 °C", ""], ["", "N° 2, 1ª dosis, 2×10"], ["½ tableta", ""], ["¼ tableta", "¾ frasco"],
+    ["100 mg; 200 mg", ""], ["1' 30''", ""], ["1:100,000", "caja c/50 cartuchos"],
+  ]) {
+    assert.equal(detectarControlado("Lidocaína con epinefrina", concentracion, presentacion, "Inyectable", "Bucal"), null, `${concentracion}|${presentacion}`);
+  }
+});
+
+test("v4 · barrido: cada fila IV/V/VI del catálogo con su presentación, en las 16 formas × 14 vías y en MAYÚSCULAS, sin falsos positivos", () => {
+  const filas = CUMS_ESSENTIALS.filter((e) => !["I", "II", "III"].includes(e.cofeprisGroup ?? ""));
+  const falsos: string[] = [];
+  let n = 0;
+  for (const e of filas) {
+    for (const [, forma] of FORMAS_FARMACEUTICAS) {
+      for (const [, via] of VIAS) {
+        n++;
+        const c = detectarControlado(e.descripcion, e.presentacion, "", forma, via);
+        if (c) falsos.push(`${e.clave} ${e.descripcion} · ${e.presentacion} · ${forma} · ${via} → ${c.nombre}`);
+      }
+    }
+    const mayus = detectarControlado(e.descripcion.toUpperCase(), e.presentacion.toUpperCase());
+    n++;
+    if (mayus) falsos.push(`${e.clave} EN MAYÚSCULAS → ${mayus.nombre}`);
+  }
+  assert.ok(n > 60_000, `solo ${n} combinaciones`);
   assert.deepEqual(falsos.slice(0, 20), [], `${falsos.length} falsos positivos`);
 });
 

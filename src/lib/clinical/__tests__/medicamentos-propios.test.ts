@@ -343,6 +343,17 @@ test("v2 · la tabla de t8 en el servidor: marcas, barbitúricos, dígitos y una
   assert.equal(tabla.length, 3);
 });
 
+test("v4 · los dos pasos de QA de t8 en el servidor: «Clonaze-pan» y «Mºrfina caja c/10» → 422 sin tocar la tabla", async () => {
+  columna = true;
+  let r = await alta({ ...ALTA_OK, nombre: "Clonaze-pan", concentracion: "0.5 mg" });
+  assert.equal(r.status, 422);
+  assert.equal(r.body.controlado.nombre, "Clonazepam");
+  r = await alta({ ...ALTA_OK, nombre: "Analgésico", presentacion: "M\u00BArfina caja c/10" });
+  assert.equal(r.status, 422);
+  assert.equal(r.body.controlado.nombre, "Morfina");
+  assert.equal(tabla.length, 3);
+});
+
 // ── v2 · M-2 de t8: Sabina no ve los propios de otra clínica ─────────────
 
 async function sabinaBusca(clinicId: string, texto: string) {
