@@ -248,23 +248,44 @@ export function DetallesAlPasarProvider({ children, inicial }: { children: React
     if (e.pointerType === "mouse" && temporizador.current) puntero.current = { x: e.clientX, y: e.clientY };
   }, []);
 
-  // Un scroll mueve la cita debajo de la tarjeta: se esconde. Esc la cierra (WCAG 1.4.13: que se pueda
-  // descartar sin mover el mouse ni el foco). Y al desmontar, nada colgando.
+  // Un scroll mueve la cita debajo de la tarjeta. Con el MOUSE, se esconde. Con el TECLADO (sin puntero) se
+  // RECOLOCA junto a la cita (v4, o1): enfocar con Tab una cita fuera de la vista hace que el navegador
+  // desplace la rejilla, y ese mismo scroll la cerraba nada más abrirse. Si la cita sale de la vista, se va.
+  // Esc la cierra (WCAG 1.4.13). Y al desmontar, nada colgando.
+  const abierta = visible !== null;
+  const deTeclado = visible !== null && visible.puntero === null;
+  const elVisible = visible?.el ?? null;
   useEffect(() => {
-    if (!visible) return;
-    const esconder = () => salir();
+    if (!abierta) return;
+    let cuadro = 0;
+    const alMoverse = () => {
+      if (!deTeclado || !elVisible) {
+        salir();
+        return;
+      }
+      if (cuadro) return;
+      cuadro = requestAnimationFrame(() => {
+        cuadro = 0;
+        if (!elVisible.isConnected) return salir();
+        const r = elVisible.getBoundingClientRect();
+        const fuera = r.bottom <= 0 || r.top >= window.innerHeight || r.right <= 0 || r.left >= window.innerWidth;
+        if (fuera) return salir();
+        setVisible((v) => (v && v.el === elVisible ? { ...v, rect: r } : v));
+      });
+    };
     const tecla = (e: KeyboardEvent) => {
       if (e.key === "Escape") salir();
     };
-    window.addEventListener("scroll", esconder, true);
-    window.addEventListener("resize", esconder);
+    window.addEventListener("scroll", alMoverse, true);
+    window.addEventListener("resize", alMoverse);
     document.addEventListener("keydown", tecla);
     return () => {
-      window.removeEventListener("scroll", esconder, true);
-      window.removeEventListener("resize", esconder);
+      if (cuadro) cancelAnimationFrame(cuadro);
+      window.removeEventListener("scroll", alMoverse, true);
+      window.removeEventListener("resize", alMoverse);
       document.removeEventListener("keydown", tecla);
     };
-  }, [visible, salir]);
+  }, [abierta, deTeclado, elVisible, salir]);
   useEffect(() => () => {
     cancelar();
     soltarAncla();

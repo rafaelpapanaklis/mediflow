@@ -133,6 +133,7 @@ function payload() {
       cita("a-luis", "Luis Pérez", hora(10, 30), hora(11, 30), "CHECKED_IN", { checkedInAt: new Date(Date.now() - 12 * 60_000).toISOString(), reason: "Limpieza" }),
       cita("a-sofi", "Sofía Torres", hora(12), hora(13), "SCHEDULED", { anticipoPedido: 300, ortoMensualidadVencida: true, reason: "Control de ortodoncia" }),
       cita("a-rest", "Paciente restringido", hora(14), hora(15), "SCHEDULED"),
+      cita("a-tarde", "Marta Ríos", hora(15), hora(15, 30), "CONFIRMED", { reason: "Revisión" }),
     ],
     doctors: [{ id: "d1", displayName: "Dra. Laura Ruiz", shortName: "Dra. Ruiz", color: "#0d9488", activeInAgenda: true }],
     resources: [{ id: "r1", name: "Sillón 1", kind: "SILLA_DENTAL", color: null, orderIndex: 0, isActive: true }],
@@ -151,6 +152,7 @@ const PESADO: Record<string, unknown> = {
     debeHoy: 700,
   },
   "a-luis": { paciente: { edad: 52, primeraVez: true, telefono: null }, alergias: [], confirmadaPorWhatsapp: false, enEstaCita: [], debeHoy: 0 },
+  "a-tarde": { paciente: { edad: 41, primeraVez: false, telefono: null }, alergias: ["Lidocaína"], confirmadaPorWhatsapp: false, enEstaCita: [], debeHoy: 0 },
   "a-sofi": { paciente: { edad: 15, primeraVez: false, telefono: "55 0000 1111" }, alergias: [], confirmadaPorWhatsapp: false, enEstaCita: [], debeHoy: 1200 },
 };
 
@@ -162,6 +164,7 @@ after(async () => {
 
 interface Opciones {
   ancho?: number;
+  alto?: number;
   lang?: "es" | "en";
   oscuro?: boolean;
   tactil?: boolean;
@@ -183,7 +186,7 @@ async function abrir(t: { skip(m: string): void }, o: Opciones = {}) {
   paquete ??= await empaquetar("src/components/dashboard/agenda-nueva/__tests__/arnes-detalles-al-pasar.tsx");
   navegador ??= await chromium.launch({ args: ["--no-sandbox"] });
   const contexto = await navegador.newContext({
-    viewport: { width: o.ancho ?? 1440, height: 900 },
+    viewport: { width: o.ancho ?? 1440, height: o.alto ?? 900 },
     ...(o.tactil ? { hasTouch: true, isMobile: true } : {}),
   });
   const page = await contexto.newPage();
@@ -587,4 +590,45 @@ test("m2: si el servidor no guarda la preferencia, el interruptor lo dice (no «
   await a.page.waitForFunction(() => /No se pudo guardar en tu cuenta/.test(document.querySelector("[data-interruptor-detalles]")?.textContent ?? ""));
   assert.equal(await interruptor.getAttribute("aria-checked"), "false", "en esta pestaña sí se apaga");
   assert.deepEqual(a.puts, [{ encendida: false }]);
+});
+
+test("v4 (o1): con Tab a una cita FUERA de la vista, el scroll del propio foco no cierra la tarjeta: la recoloca; con el mouse el scroll sí la cierra", async (t) => {
+  const a = await abrir(t, { alto: 600 });
+  if (!a) return;
+  const { page } = a;
+  const dentro = async (sel: string) =>
+    page.locator(sel).evaluate((el: HTMLElement) => {
+      const r = el.getBoundingClientRect();
+      return r.bottom > 0 && r.top < window.innerHeight && r.right > 0 && r.left < window.innerWidth;
+    });
+  assert.equal(await dentro('[data-cita="a-tarde"]'), false, "la cita de las 15:00 empieza fuera de la vista");
+  let enfocada = "";
+  for (let i = 0; i < 80 && enfocada !== "a-tarde"; i++) {
+    await page.keyboard.press("Tab");
+    enfocada = await page.evaluate(() => (document.activeElement as HTMLElement | null)?.getAttribute("data-cita") ?? "");
+  }
+  assert.equal(enfocada, "a-tarde");
+  await page.waitForTimeout(700);
+  assert.equal(await dentro('[data-cita="a-tarde"]'), true, "el navegador la trajo a la vista");
+  const tarjeta = page.locator(`${TARJETA}[data-detalles-al-pasar="a-tarde"]`);
+  assert.equal(await tarjeta.count(), 1, "la tarjeta sigue abierta tras el scroll del foco");
+  await page.locator(`${TARJETA} [data-alergias]`).waitFor({ timeout: 3_000 });
+  const caja = await tarjeta.boundingBox();
+  const cita = await page.locator('[data-cita="a-tarde"]').boundingBox();
+  assert.ok(caja.y >= 0 && caja.y + caja.height <= 600, `dentro de la ventana: ${JSON.stringify(caja)}`);
+  assert.ok(Math.abs(caja.y - Math.max(8, Math.min(cita.y, 600 - 8 - caja.height))) < 2, `junto a la cita, no donde estaba antes del scroll: ${JSON.stringify({ caja, cita })}`);
+  await page.screenshot({ path: join(CAPTURAS, "teclado-fuera-de-vista.png") });
+
+  // Si la cita sale de la vista (rueda hacia arriba), la tarjeta se va.
+  await page.mouse.move(30, 300);
+  await page.mouse.wheel(0, -3000);
+  await tarjeta.waitFor({ state: "detached", timeout: 2_000 });
+
+  // Con el MOUSE, el scroll la cierra aunque la cita siga a la vista.
+  const p = await centro(page, "a-ana");
+  await page.mouse.move(p.x, p.y);
+  await page.locator(`${TARJETA}[data-detalles-al-pasar="a-ana"]`).waitFor();
+  await page.mouse.wheel(0, 40);
+  await page.locator(TARJETA).waitFor({ state: "detached", timeout: 2_000 });
+  assert.deepEqual(a.errores, []);
 });
