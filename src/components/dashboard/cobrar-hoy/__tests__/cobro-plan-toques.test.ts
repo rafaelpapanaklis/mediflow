@@ -252,7 +252,8 @@ test("a 390 px: Cobrar hoy (abono), Hoy en el sillón y la Cuenta del plan sin s
         await pagina.waitForSelector("[data-cuenta-plan-cierre]", { state: "detached" });
         const cierre = pedidas.find((p) => p.ruta === "/api/treatments/plan1/cerrar");
         assert.equal(cierre?.metodo, "POST");
-        assert.deepEqual(cierre?.cuerpo, { motivo: "Ya no continuará" });
+        // v15 (t5 de la v14, M3): la tarjeta pide la cuenta del plan cerrado en la respuesta.
+        assert.deepEqual(cierre?.cuerpo, { motivo: "Ya no continuará", conCuenta: true });
       }
       await sinScrollHorizontal(pagina);
       await foto(pagina, nombre);

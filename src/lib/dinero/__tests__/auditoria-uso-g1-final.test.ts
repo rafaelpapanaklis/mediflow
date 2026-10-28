@@ -118,7 +118,8 @@ test("F4 · sin cargos vigentes, «Estado de cuenta» ya no dice «$0 pagado de 
   const r = leer("src/components/dashboard/pacientes-rediseno/resumen.tsx");
   assert.match(r, /const sinCargosVigentes = finanzas\.total <= 0;/);
   assert.match(r, /\{sinCargosVigentes \? \(/);
-  assert.match(r, /txReembolso\.sinCargosConSaldo\(formatCurrency\(pasadoASaldo\)\)/);
+  // ws1-t12 v15 (t5, M2): todas las cifras de «Estado de cuenta» con centavos (fmtMXNdec), como la Cuenta del plan.
+  assert.match(r, /txReembolso\.sinCargosConSaldo\(fmtMXNdec\(pasadoASaldo\)\)/);
 });
 
 // ── F5 ──────────────────────────────────────────────────────────────────────
