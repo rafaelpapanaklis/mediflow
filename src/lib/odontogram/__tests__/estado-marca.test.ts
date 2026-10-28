@@ -286,7 +286,7 @@ test("v2 M1 / v3: lo rojo que ya está en un plan (de cualquier doctor) sale «y
     new Map([["plan-1", lista.map(([nombre, dientes, estado]) => ({ nombre, procedureId: null, dientes, estado, hechoEn: null }))]]);
   const enPlanes = resumirFilas(planes, filas([["Restauración resina 2 caras", [16], "pendiente"], ["Corona metal-porcelana", [27], "pendiente"]]));
   const chips = chipsDelPlan(hallazgosPorTratar(entradas), TARIFARIO, entradas, [], enPlanes);
-  assert.deepEqual(chips.map((c) => `${c.clave}:${c.enOtroPlan ?? "-"}`), ["r:h:16:restoration:Plan 20 oct 2026", "r:h:26:crown:-"], "la corona del 27 no es la del 26");
+  assert.deepEqual(chips.map((c) => `${c.clave}:${c.enOtroPlan?.plan ?? "-"}`), ["r:h:16:restoration:Plan 20 oct 2026", "r:h:26:crown:-"], "la corona del 27 no es la del 26");
   let id = 0;
   const ctx = { tarifario: TARIFARIO, entradas, nuevoId: () => `r${++id}`, motivo: "x", idioma: "es" as const };
   assert.deepEqual(agregarDesdeChip([], chips[0], ctx), [], "no se agrega: serían dos notas de cobro");
@@ -377,4 +377,28 @@ test("v3 m-d: si la relectura llega sin estados (no se pudieron leer), se conser
   const r = conservarEstados(antes, nuevos);
   assert.deepEqual(r[16].estados, { "O:restoration": "por_hacer" }, "la roja sigue roja; lo que se fue no deja color");
   assert.equal(r[26].estados, undefined);
+});
+
+test("v4 M1: TODO chip con sugerencia mira los otros planes (caries → resina, pulpitis → endodoncia y la corona encadenada); m1: lo ya hecho lleva su fecha", () => {
+  const entradas: EntradaPlan[] = [
+    { toothNumber: 16, surface: "O", conditionId: "caries" },
+    { toothNumber: 36, surface: null, conditionId: "pulpitis" },
+    { toothNumber: 46, surface: "O", conditionId: "caries" },
+  ];
+  const enPlanes = resumirFilas([{ id: "a", name: "Plan A", status: "ACTIVE" }], new Map([["a", [
+    { nombre: "Resina posterior", procedureId: null, dientes: [16], estado: "pendiente", hechoEn: null },
+    { nombre: "Endodoncia multirradicular", procedureId: null, dientes: [36], estado: "pendiente", hechoEn: null },
+    { nombre: "Corona metal-porcelana", procedureId: null, dientes: [36], estado: "hecho", hechoEn: "2025-03-03T17:00:00.000Z" },
+  ]]]));
+  const h = hallazgosPorTratar(entradas);
+  // la pulpitis ya «puesta» en este plan (para que salga su corona encadenada)
+  const renglones = [{ id: "x", fase: "urgencia", procedimiento: "Endodoncia", procedimientoId: null, dientes: "36", caras: [], motivo: "", cantidad: "1", precio: "", precioDelTarifario: false, minutos: 0, origen: ["36:pulpitis"], clave: "endodoncia", revisar: false }] as any;
+  const chips = chipsDelPlan(h, TARIFARIO, entradas, renglones, enPlanes);
+  const ver = (clave: string) => chips.find((c) => c.clave === clave)?.enOtroPlan ?? null;
+  assert.deepEqual(ver("h:16:caries"), { plan: "Plan A", hechoEn: null }, "la caries ya no ofrece otra resina del 16");
+  assert.equal(ver("h:46:caries"), null, "la del 46 sí se ofrece");
+  assert.deepEqual(ver("e:corona:36"), { plan: "Plan A", hechoEn: "2025-03-03T17:00:00.000Z" }, "la corona encadenada ya se hizo: con su fecha");
+  let id = 0;
+  const ctx = { tarifario: TARIFARIO, entradas, nuevoId: () => `r${++id}`, motivo: "x", idioma: "es" as const };
+  assert.deepEqual(agregarDesdeChip([], chips.find((c) => c.clave === "h:16:caries")!, ctx), [], "el toque no la agrega");
 });

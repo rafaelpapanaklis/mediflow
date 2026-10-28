@@ -7,8 +7,32 @@
 
 import { prisma } from "@/lib/prisma";
 import { repoFilas, tablaDeFilasExiste } from "./items-db";
-import { planesDelPaciente } from "./sin-doble-cobro.server";
-import { filasRepetidas, resumirFilas, type FilaEnPlan } from "./ya-en-planes";
+import { filasRepetidas, resumirFilas, type FilaEnPlan, type PlanParaResumir } from "./ya-en-planes";
+
+/**
+ * Tope de planes por paciente que se miran (v4, m2). Un paciente real tiene 1–5; el tope solo evita
+ * leer sin fin un expediente raro. Antes eran los 20 más nuevos (`planesDelPaciente` de t12).
+ */
+const MAX_PLANES = 200;
+
+/**
+ * TODOS los planes del paciente, de todos los doctores, con su estado. Ayudante PROPIO a propósito
+ * (v4, B1 de la revisión de t1): en la base real `treatment_plans.status` es TEXT aunque el esquema
+ * de Prisma lo declare enum, así que un `status: { in: [...] }` en el `where` revienta con 42883
+ * (`text = "TreatmentStatus"`). Aquí NO se filtra por estado en la consulta: se lee y se decide en JS
+ * (`resumirFilas` sabe qué cuenta de un plan cancelado). El de t12 (`planesDelPaciente`) lo arregla
+ * t12 en su rama; este no depende de él.
+ */
+export async function planesDelPacienteSinFiltroDeEstado(clinicId: string, patientId: string): Promise<PlanParaResumir[]> {
+  if (!clinicId || !patientId) return [];
+  const planes = await prisma.treatmentPlan.findMany({
+    where: { clinicId, patientId },
+    select: { id: true, name: true, status: true },
+    orderBy: { createdAt: "desc" },
+    take: MAX_PLANES,
+  });
+  return planes.map((p) => ({ id: p.id, name: p.name, status: String(p.status) }));
+}
 
 /** procedureId → llave `ODO_*`, solo del tarifario de ESA clínica. */
 async function codigosDeLaClinica(clinicId: string, ids: Array<string | null | undefined>): Promise<Map<string, string>> {
@@ -33,7 +57,7 @@ export async function filasEnPlanesDelPaciente(
 ): Promise<{ filas: FilaEnPlan[]; codigos: Map<string, string> }> {
   if (!clinicId || !patientId) return { filas: [], codigos: new Map() };
   if (!(await tablaDeFilasExiste())) return { filas: [], codigos: new Map() };
-  const planes = await planesDelPaciente(clinicId, patientId);
+  const planes = await planesDelPacienteSinFiltroDeEstado(clinicId, patientId);
   if (planes.length === 0) return { filas: [], codigos: await codigosDeLaClinica(clinicId, extraIds) };
   const porPlan = await repoFilas.leerDePlanes(clinicId, planes.map((p) => p.id));
   const ids = [...Array.from(porPlan.values()).flat().map((f) => f.procedureId), ...extraIds];

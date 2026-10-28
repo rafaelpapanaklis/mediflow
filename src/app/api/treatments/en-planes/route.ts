@@ -29,7 +29,8 @@ export async function GET(req: NextRequest) {
 
   const patientId = new URL(req.url).searchParams.get("patientId") ?? "";
   if (!patientId || !esIdDeLaBase(patientId)) return NextResponse.json({ error: MENSAJE_ID_INVALIDO }, { status: 400 });
-  const paciente = await prisma.patient.findFirst({ where: { id: patientId, clinicId: ctx.clinicId }, select: { id: true } });
+  // Un paciente archivado por ARCO no existe aquí (v4, m3).
+  const paciente = await prisma.patient.findFirst({ where: { id: patientId, clinicId: ctx.clinicId, deletedAt: null }, select: { id: true } });
   if (!paciente) return NextResponse.json({ error: "Paciente no encontrado" }, { status: 404 });
   const oculto = await assertPatientVisible(paciente.id, { userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId });
   if (oculto) return oculto;

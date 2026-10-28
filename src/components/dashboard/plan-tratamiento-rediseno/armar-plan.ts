@@ -43,11 +43,12 @@ export interface Chip {
   /** Ya está en el plan. */
   puesto: boolean;
   /**
-   * Marca roja que ya está en un plan del paciente (v2 M1; v3: de cualquier doctor, y también si ya
-   * se hizo): se enseña como «ya en el plan X» y no se agrega (ni con «Agregar todo»): serían dos
-   * notas de cobro. Las reglas, en `ya-en-planes.ts`.
+   * Lo que el chip propone ya está en un plan del paciente (v2 M1; v3: de cualquier doctor, y también
+   * si ya se hizo; v4: CUALQUIER chip con sugerencia, no solo los rojos): se enseña como «ya en el
+   * plan X» o «ya hecha en el plan X (fecha)» y no se agrega (ni con «Agregar todo»): serían dos notas
+   * de cobro. Las reglas, en `ya-en-planes.ts`.
    */
-  enOtroPlan?: string | null;
+  enOtroPlan?: { plan: string; hechoEn: string | null } | null;
 }
 
 const cuadrante = (fdi: number) => Math.floor(fdi / 10);
@@ -142,13 +143,14 @@ export function chipsDelPlan(
       puesto: g.hallazgos.every((h) => usados.has(h.clave)),
     });
   }
-  // Lo rojo que ya está en un plan del paciente (mismo tipo de procedimiento y mismo diente):
-  // «ya en el plan X». Un chip de varios dientes (flúor de toda la boca) cuenta si alguno ya está.
+  // Lo que ya está en un plan del paciente (mismo tipo de procedimiento y mismo diente): «ya en el
+  // plan X». Vale para TODO chip con sugerencia —rojo, hallazgo (caries → resina) y encadenado (la
+  // corona tras la endodoncia)— (v4, M1). Un chip de varios dientes cuenta si alguno ya está.
   if (enPlanes.length > 0) {
-    for (const c of chips) {
-      if (c.tipo !== "por_hacer" || !c.sugerencia || c.puesto) continue;
+    for (const c of [...chips, ...encadenadas]) {
+      if (!c.sugerencia || c.puesto) continue;
       const ya = planQueYaLoTiene(c.sugerencia.clave, c.dientes, enPlanes);
-      if (ya) c.enOtroPlan = ya.plan;
+      if (ya) c.enOtroPlan = { plan: ya.plan, hechoEn: ya.estado === "hecho" ? ya.hechoEn : null };
     }
   }
   // Lo marcado en rojo, primero: es lo que el doctor ya decidió.

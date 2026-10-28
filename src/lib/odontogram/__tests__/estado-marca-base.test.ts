@@ -68,6 +68,7 @@ const DDL_ODONTOGRAMA = `
     ON "odontogram_entries" ("patientId", "toothNumber", "surface", "conditionId");
   CREATE TABLE "audit_logs_vacia" ("id" text);
   ALTER TABLE "appointments" ADD COLUMN IF NOT EXISTS "patientId" text;
+  ALTER TABLE "patients" ADD COLUMN IF NOT EXISTS "deletedAt" timestamp(3); -- ARCO (la tabla real la tiene)
   ALTER TABLE "procedure_catalog" ADD COLUMN "code" text, ADD COLUMN "category" text;
 `;
 
@@ -545,4 +546,55 @@ test("v3 MAYOR-B: el servidor avisa (no rechaza) la fila que ya está en otro pl
   const b = await r.json();
   assert.equal(r.status, 200, JSON.stringify(b));
   assert.deepEqual(b.yaEnOtrosPlanes, [{ nombre: "Corona de porcelana", dientes: [26], plan: "Plan C" }]);
+});
+
+/* ─────── v4 (tercera revisión de t1) ─────── */
+
+test("v4 B1: con treatment_plans.status como TEXT (la base real) la ruta funciona: no filtra por estado en la consulta", async (t) => {
+  if (salta(t)) return;
+  await usar();
+  // la base real: status es TEXT aunque Prisma lo declare enum; un `status: { in }` en el where da 42883
+  await base.db.exec(`ALTER TABLE "treatment_plans" ALTER COLUMN "status" DROP DEFAULT;
+    ALTER TABLE "treatment_plans" ALTER COLUMN "status" TYPE text USING "status"::text;
+    ALTER TABLE "treatment_plans" ALTER COLUMN "status" SET DEFAULT 'ACTIVE';`);
+  await sembrarFilasDePlan("plan-a", "doc-c1", [["Resina posterior", [16], "pendiente"]], "Plan A");
+  await sembrarFilasDePlan("plan-x", "doc-c1", [["Corona metal-porcelana", [26], "pendiente"], ["Corona metal-porcelana", [27], "hecho"]], "Plan cancelado");
+  await base.db.query(`UPDATE "treatment_plans" SET "status" = 'ABANDONED' WHERE "id" = 'plan-x'`);
+  const real = prismaVivo.treatmentPlan.findMany;
+  const wheres: any[] = [];
+  prismaVivo.treatmentPlan = { ...prismaVivo.treatmentPlan, findMany: async (a: any) => {
+    wheres.push(a.where);
+    if (a.where && "status" in a.where) throw Object.assign(new Error('operator does not exist: text = "TreatmentStatus"'), { code: "42883" });
+    return real(a);
+  } };
+  try {
+    const { GET } = await import("@/app/api/treatments/en-planes/route");
+    const r = await GET(new NextRequest("http://x/api/treatments/en-planes?patientId=pac-c1"));
+    assert.equal(r.status, 200);
+    const { filas } = await r.json();
+    assert.deepEqual(filas.map((f: any) => `${f.plan}:${f.clave}:${f.dientes}:${f.estado}`).sort(), [
+      "Plan A:resina:16:pendiente", "Plan cancelado:corona:27:hecho",
+    ], "lo pendiente del plan cancelado no cuenta (se decide en JS); lo hecho sí");
+    assert.ok(wheres.length > 0 && wheres.every((w) => !("status" in w)), "ninguna consulta de planes filtra por status");
+    // y el aviso del servidor también funciona con TEXT
+    const { avisoDeFilasRepetidas } = await import("@/lib/treatments/ya-en-planes.server");
+    assert.deepEqual(await avisoDeFilasRepetidas("c1", "pac-c1", [{ nombre: "Resina", procedureId: null, dientes: [16] }]), [{ nombre: "Resina", dientes: [16], plan: "Plan A" }]);
+  } finally {
+    prismaVivo.treatmentPlan = { ...prismaVivo.treatmentPlan, findMany: real };
+  }
+});
+
+test("v4 m2 y m3: se miran más de 20 planes; un paciente archivado (ARCO) da 404", async (t) => {
+  if (salta(t)) return;
+  await usar();
+  // 25 planes: la resina hecha está en el MÁS VIEJO
+  await sembrarFilasDePlan("plan-viejo", "doc-c1", [["Resina posterior", [16], "hecho"]], "Plan viejo");
+  await base.db.query(`UPDATE "treatment_plans" SET "createdAt" = now() - interval '5 years' WHERE "id" = 'plan-viejo'`);
+  for (let i = 0; i < 24; i++) await sembrarFilasDePlan(`plan-${i}`, "doc-c1", [["Profilaxis", [], "pendiente"]], `Plan ${i}`);
+  const { GET } = await import("@/app/api/treatments/en-planes/route");
+  const { filas } = await (await GET(new NextRequest("http://x/api/treatments/en-planes?patientId=pac-c1"))).json();
+  assert.ok(filas.some((f: any) => f.plan === "Plan viejo" && f.clave === "resina"), "lo hecho en el plan nº 25 cuenta");
+  await base.db.exec(`ALTER TABLE "patients" ADD COLUMN IF NOT EXISTS "deletedAt" timestamp(3)`);
+  await base.db.query(`UPDATE "patients" SET "deletedAt" = now() WHERE "id" = 'pac-c1'`);
+  assert.equal((await GET(new NextRequest("http://x/api/treatments/en-planes?patientId=pac-c1"))).status, 404);
 });

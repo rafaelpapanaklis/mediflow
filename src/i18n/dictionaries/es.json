@@ -10911,6 +10911,7 @@
       "pieza": "pieza {diente}",
       "sinPrecio": "sin precio en tu tarifario",
       "yaEnPlan": "ya en el plan «{plan}»",
+      "yaHechaEnPlan": "ya hecha en el plan «{plan}» ({fecha})",
       "comprobandoPlanes": "Comprobando qué ya está en otro plan…",
       "planesSinComprobar": "No se pudo comprobar qué ya está en otro plan del paciente: revísalo antes de agregar.",
       "yaEnOtrosPlanesAviso": "Ojo: esto ya estaba en otro plan del paciente: {lista}.",

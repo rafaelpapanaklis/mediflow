@@ -146,7 +146,11 @@ test("a 390 px y en inglés: sin scroll horizontal; «tooth 16 occlusal»", asyn
 test("v2 M1 / v3: lo rojo que ya está en un plan (de cualquier doctor) sale «ya en el plan X», no se toca y «Agregar todo» lo salta", async (t) => {
   const chromium = await cargarChromium();
   if (!chromium) { t.skip("Playwright no está en ~/navegador"); return; }
-  EN_PLANES = { filas: [{ planId: "plan-1", plan: "Plan 20 oct 2026", clave: "resina", dientes: [16], estado: "pendiente", hechoEn: null }] };
+  EN_PLANES = { filas: [
+    { planId: "plan-1", plan: "Plan 20 oct 2026", clave: "resina", dientes: [16], estado: "pendiente", hechoEn: null },
+    // v4: la endodoncia del 36 (el hallazgo de pulpitis) ya se HIZO en otro plan
+    { planId: "plan-0", plan: "Plan viejo", clave: "endodoncia", dientes: [36], estado: "hecho", hechoEn: "2025-03-03T17:00:00.000Z" },
+  ] };
   const paquete = await empaquetar(`${CARPETA}/__tests__/arnes-ventana.tsx`);
   const { navegador, pagina } = await abrir(chromium, paquete, { width: 1440, height: 1000 });
   try {
@@ -154,6 +158,9 @@ test("v2 M1 / v3: lo rojo que ya está en un plan (de cualquier doctor) sale «y
     assert.equal(await chip(pagina, "r:h:16:restoration"), "Restauración resina 1 cara · pieza 16 oclusal · ya en el plan «Plan 20 oct 2026»");
     assert.ok(await pagina.locator('[data-chip="r:h:16:restoration"]').isDisabled());
     assert.equal(await pagina.locator('[data-chip="r:h:26:crown"][data-en-otro-plan]').count(), 0);
+    // v4 M1 + m1: también el chip de un HALLAZGO, y si ya se hizo, con su fecha
+    assert.match(await chip(pagina, "h:36:pulpitis"), /^36 Pulpitis · ya hecha en el plan «Plan viejo» \(3 mar\.? 2025\)$/);
+    assert.ok(await pagina.locator('[data-chip="h:36:pulpitis"]').isDisabled());
     await pagina.click("[data-agregar-por-hacer]");
     assert.equal(await pagina.locator("[data-renglon]").count(), 1, "solo la corona");
     assert.equal(await pagina.textContent("[data-plan-total]"), "$4,500");

@@ -246,6 +246,14 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
       renglones: chipsRojos.filter((c) => !c.puesto && c.enOtroPlan == null).reduce(
         (rs, c) => agregarDesdeChip(rs, c, { tarifario, entradas, nuevoId, motivo: motivoDe(c), idioma }), p.renglones),
     }));
+  // «ya en el plan «X»» o, si esa fila ya se hizo, «ya hecha en el plan «X» (3 mar 2025)» (v4, m1).
+  const textoYaEnPlan = (c: Chip) => {
+    if (!c.enOtroPlan) return "";
+    const { plan: nombrePlan, hechoEn } = c.enOtroPlan;
+    if (!hechoEn) return t("planTratamiento.nuevo.yaEnPlan", { plan: nombrePlan });
+    const fecha = new Intl.DateTimeFormat(idioma === "en" ? "en-US" : "es-MX", { day: "numeric", month: "short", year: "numeric" }).format(new Date(hechoEn));
+    return t("planTratamiento.nuevo.yaHechaEnPlan", { plan: nombrePlan, fecha });
+  };
   // «pieza 16 oclusal» / «pieza 16 MO» (la cara con su nombre cuando es una).
   const dondeRojo = (c: Chip) => {
     if (c.dientes.length !== 1) return t("planTratamiento.nuevo.nDientes", { count: c.dientes.length });
@@ -447,13 +455,13 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
                       className={`${s.ficha} ${s.fichaPorHacer} ${c.puesto ? s.fichaPuesta : ""} ${c.enOtroPlan != null ? s.fichaEnOtroPlan : ""}`}
                       disabled={c.puesto || c.enOtroPlan != null || guardando || comprobandoPlanes}
                       onClick={() => tocarChip(c)}
-                      title={c.enOtroPlan != null ? t("planTratamiento.nuevo.yaEnPlan", { plan: c.enOtroPlan }) : t("planTratamiento.nuevo.hallazgoAgregar")}
-                      data-en-otro-plan={c.enOtroPlan ?? undefined}
+                      title={c.enOtroPlan != null ? textoYaEnPlan(c) : t("planTratamiento.nuevo.hallazgoAgregar")}
+                      data-en-otro-plan={c.enOtroPlan?.plan ?? undefined}
                     >
                       <span className={c.sugerencia?.elegir ? s.fichaSugeridoSinTarifario : undefined}>{sug || c.condiciones.map(nombreCondicion).join(" · ")}</span>
                       <span className={s.fichaCuenta}>· {dondeRojo(c)}</span>
                       {c.enOtroPlan != null ? (
-                        <span className={s.fichaCuenta}>· {t("planTratamiento.nuevo.yaEnPlan", { plan: c.enOtroPlan })}</span>
+                        <span className={s.fichaCuenta}>· {textoYaEnPlan(c)}</span>
                       ) : (
                         <span className={s.fichaPrecio}>· {precio != null ? dineroExacto(precio) : t("planTratamiento.nuevo.sinPrecio")}</span>
                       )}
@@ -468,6 +476,9 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
           {chips.length > 0 && (
             <section className={s.seccion} aria-labelledby="plan-hallazgos-titulo">
               <h4 id="plan-hallazgos-titulo" className={s.seccionTitulo}>{t("planTratamiento.nuevo.hallazgos")}</h4>
+              {/* sin sección roja, el «comprobando / no se pudo comprobar» va aquí (v4, M1) */}
+              {chipsRojos.length === 0 && comprobandoPlanes && <p className={s.pistaRenglon} role="status" data-comprobando-planes>{t("planTratamiento.nuevo.comprobandoPlanes")}</p>}
+              {chipsRojos.length === 0 && enPlanes === null && <p className={s.avisoPorHacer} role="alert" data-planes-sin-comprobar>{t("planTratamiento.nuevo.planesSinComprobar")}</p>}
               <div className={s.sugerencias}>
                 {chips.map((c) => {
                   const sug = nombreSugerido(c);
@@ -477,15 +488,22 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
                       key={c.clave}
                       type="button"
                       data-chip={c.clave}
-                      className={`${s.ficha} ${s.fichaHallazgo} ${c.tipo === "encadenada" ? s.fichaEncadenada : ""} ${c.puesto ? s.fichaPuesta : ""}`}
-                      disabled={c.puesto || guardando}
+                      className={`${s.ficha} ${s.fichaHallazgo} ${c.tipo === "encadenada" ? s.fichaEncadenada : ""} ${c.puesto ? s.fichaPuesta : ""} ${c.enOtroPlan != null ? s.fichaEnOtroPlan : ""}`}
+                      // lo que ya está en otro plan no se ofrece; mientras no se sabe, se espera (v4, M1)
+                      disabled={c.puesto || c.enOtroPlan != null || guardando || (comprobandoPlanes && !!c.sugerencia)}
                       onClick={() => tocarChip(c)}
-                      title={t("planTratamiento.nuevo.hallazgoAgregar")}
+                      title={c.enOtroPlan != null ? textoYaEnPlan(c) : t("planTratamiento.nuevo.hallazgoAgregar")}
+                      data-en-otro-plan={c.enOtroPlan?.plan ?? undefined}
                     >
                       {c.tipo === "encadenada" && <Sparkles size={12} strokeWidth={1.75} aria-hidden />}
                       {c.dientes.length === 1 && <span className={s.fichaDiente}>{c.dientes[0]}</span>}
                       {caras && <span className={s.fichaCaras}>{caras}</span>}
-                      {c.tipo === "encadenada" ? (
+                      {c.enOtroPlan != null ? (
+                        <>
+                          <span>{c.tipo === "encadenada" ? sug : c.condiciones.map(nombreCondicion).join(" · ")}</span>
+                          <span className={s.fichaCuenta}>· {textoYaEnPlan(c)}</span>
+                        </>
+                      ) : c.tipo === "encadenada" ? (
                         <span>{t("planTratamiento.nuevo.sugeridoTras", { procedimiento: sug })}</span>
                       ) : (
                         <>
