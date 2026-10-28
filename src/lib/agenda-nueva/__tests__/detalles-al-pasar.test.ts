@@ -13,6 +13,7 @@ import {
   detallesDesdeRespuesta,
   edadEnAnios,
   estadoAlPasar,
+  EXTRA_DEL_CHIP,
   posicionDeLaTarjeta,
   RETARDO_DETALLES_MS,
   type DetallesPesados,
@@ -106,6 +107,8 @@ test("estado (v2, m5): el MISMO chip que la cita, más lo que la cita dice en su
   assert.equal(estadoAlPasar(c("IN_CHAIR", "En sillón", 0), null).minutos, null, "«0 min» no se dice");
   assert.deepEqual(estadoAlPasar(c("IN_PROGRESS", "En consulta", null, 25), null), { chip: "En consulta", extra: null, minutos: 25 });
   assert.equal(estadoAlPasar(c("NO_SHOW", "No asistió"), null).chip, "No asistió");
+  // v3 (n3): lo de detrás va en el idioma del chip (español mientras los chips no se traduzcan).
+  assert.deepEqual(EXTRA_DEL_CHIP, { porWhatsapp: "por WhatsApp", sinConfirmar: "sin confirmar" });
 });
 
 test("avisos: anticipo pagado / apartada / pedido, mensualidad de orto vencida, sobreagendada, por validar", () => {

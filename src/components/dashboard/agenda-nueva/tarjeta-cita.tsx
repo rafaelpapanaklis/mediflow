@@ -152,6 +152,8 @@ export function TarjetaCita({
       className={clases}
       onClick={(e) => {
         e.stopPropagation();
+        // Con Enter o Espacio no hay `pointerdown`: la tarjeta de detalles se esconde también aquí (v3, n2).
+        alPasar?.salir();
         onAbrir?.(cita.id);
       }}
       // Solo con mouse (`entrar` descarta el táctil): tocar sigue abriendo el panel y nada más. Presionar

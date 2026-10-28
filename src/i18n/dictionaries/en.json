@@ -2202,10 +2202,6 @@
         "enCurso": "in progress",
         "porHacer": "to do"
       },
-      "estadoExtra": {
-        "porWhatsapp": "via WhatsApp",
-        "sinConfirmar": "not confirmed"
-      },
       "avisos": {
         "anticipoPagado": "Deposit paid",
         "anticipoPedido": "Deposit requested · {monto}",

@@ -509,7 +509,9 @@ test("en inglés", async (t) => {
   await a.page.locator(`${TARJETA} [data-dinero]`).waitFor();
   const texto = await a.page.locator(TARJETA).innerText();
   assert.match(texto, /Allergies:/);
-  assert.match(texto, /Confirmada · via WhatsApp/, "el chip es el de la cita (que está en español); lo nuestro, en inglés");
+  // v3 (n3): lo de detrás del chip va en el idioma del chip (el de la cita, que aún no se traduce): sin mezclar.
+  assert.match(texto, /Confirmada · por WhatsApp/);
+  assert.doesNotMatch(texto, /via WhatsApp|not confirmed/);
   assert.match(texto, /34 years old · Returning/);
   assert.match(texto, /In this appointment/i);
   assert.match(texto, /Owes today/);
@@ -531,28 +533,40 @@ test("también en Semana (la tarjeta compacta)", async (t) => {
   assert.deepEqual(a.errores, []);
 });
 
-test("m1: con el TECLADO sale al enfocar la cita y Esc la cierra; un clic no la abre por el foco", async (t) => {
+test("m1/n1/n2: con el TECLADO sale al enfocar (lo pesado tras el retardo), Enter la esconde y abre el panel, Esc la cierra", async (t) => {
   const a = await abrir(t);
   if (!a) return;
   const { page } = a;
+  // n1: Tab de corrido por las citas no pide nada (cada foco dura menos que el retardo).
   let enfocada = "";
   for (let i = 0; i < 60 && enfocada !== "a-ana"; i++) {
     await page.keyboard.press("Tab");
     enfocada = await page.evaluate(() => (document.activeElement as HTMLElement | null)?.getAttribute("data-cita") ?? "");
   }
   assert.equal(enfocada, "a-ana", "se llega con Tab");
+  await page.locator(`${TARJETA}[data-detalles-al-pasar="a-ana"]`).waitFor({ timeout: 1_000 });
+  assert.deepEqual(a.pedidos, [], "lo ligero sale en el acto; todavía no se pidió nada");
   await page.locator(`${TARJETA}[data-detalles-al-pasar="a-ana"] [data-dinero]`).waitFor({ timeout: 3_000 });
+  assert.deepEqual(a.pedidos, ["a-ana"], "una sola petición, tras el retardo");
   assert.equal(await page.locator('[data-cita="a-ana"]').getAttribute("aria-describedby"), "titulo-cita-a-ana detalles-cita-a-ana");
+
+  // n2: Enter abre la cita (sin pointerdown) y la tarjeta se va.
+  await page.keyboard.press("Enter");
+  await page.locator(TARJETA).waitFor({ state: "detached", timeout: 2_000 });
+  assert.equal(await page.locator('[data-cita="a-ana"]').getAttribute("aria-pressed"), "true", "Enter abrió la cita");
+  assert.equal(await page.locator('[data-cita="a-ana"]').getAttribute("aria-describedby"), "titulo-cita-a-ana");
+
+  // Esc: a la siguiente cita con Tab, sale la suya, y Esc la cierra.
+  await page.locator('[data-cita="a-luis"]').focus();
+  await page.keyboard.press("Shift+Tab");
+  await page.keyboard.press("Tab");
+  const otra = await page.evaluate(() => (document.activeElement as HTMLElement | null)?.getAttribute("data-cita") ?? "");
+  assert.equal(otra, "a-luis");
+  await page.locator(`${TARJETA}[data-detalles-al-pasar="a-luis"]`).waitFor({ timeout: 3_000 });
   await page.keyboard.press("Escape");
   await page.locator(TARJETA).waitFor({ state: "detached" });
-  assert.equal(await page.locator('[data-cita="a-ana"]').getAttribute("aria-describedby"), "titulo-cita-a-ana");
-  // Tab a la siguiente cita: sale la suya.
-  await page.keyboard.press("Tab");
-  const siguiente = await page.evaluate(() => (document.activeElement as HTMLElement | null)?.getAttribute("data-cita") ?? "");
-  if (siguiente) {
-    await page.locator(`${TARJETA}[data-detalles-al-pasar="${siguiente}"]`).waitFor({ timeout: 3_000 });
-    await page.keyboard.press("Escape");
-  }
+  assert.equal(await page.locator('[data-cita="a-luis"]').getAttribute("aria-describedby"), "titulo-cita-a-luis");
+
   // Con el mouse: clic (foco sin :focus-visible) y fuera → nada.
   const p = await centro(page, "a-sofi");
   await page.mouse.click(p.x, p.y);

@@ -51,6 +51,7 @@ import {
   claveDeDetalles,
   detallesDesdeRespuesta,
   estadoAlPasar,
+  EXTRA_DEL_CHIP,
   posicionDeLaTarjeta,
   RETARDO_DETALLES_MS,
   type DetallesPesados,
@@ -225,8 +226,19 @@ export function DetallesAlPasarProvider({ children, inicial }: { children: React
       }
       if (!teclado) return;
       cancelar();
+      // Lo ligero sale en el acto; lo pesado, tras el MISMO retardo que con el mouse (v3, n1): con Tab
+      // apretado sobre una columna no sale un GET por cada cita que se cruza. `cancelar()` (el blur) lo limpia.
       mostrar({ cita, el, rect: el.getBoundingClientRect(), puntero: null });
-      pedir(cita);
+      const clave = claveDeDetalles(cita);
+      if (cache.current.leer(clave) || !cita.pacienteId) {
+        pedir(cita);
+        return;
+      }
+      setPesado({ clave, estado: "cargando", datos: null });
+      temporizador.current = setTimeout(() => {
+        temporizador.current = null;
+        if (el.isConnected) pedir(cita);
+      }, RETARDO_DETALLES_MS);
     },
     [encendida, cancelar, pedir, mostrar],
   );
@@ -376,7 +388,7 @@ export function TarjetaAlPasar({
               <span className={s.punto} aria-hidden />
             )}
             {estado.chip}
-            {estado.extra ? ` · ${t(`agenda.alPasar.estadoExtra.${estado.extra}`)}` : ""}
+            {estado.extra ? ` · ${EXTRA_DEL_CHIP[estado.extra]}` : ""}
             {estado.minutos !== null ? ` · ${t("agenda.alPasar.minutos", { n: estado.minutos })}` : ""}
           </span>
           {d?.paciente.primeraVez && <span className={s.marcaPrimera}>{t("agenda.alPasar.primeraVez")}</span>}

@@ -178,11 +178,21 @@ export function posicionDeLaTarjeta(
  */
 export interface EstadoAlPasar {
   chip: string;
-  /** Llave de `agenda.alPasar.estadoExtra.*`, o nada. */
+  /** Llave de `EXTRA_DEL_CHIP`, o nada. */
   extra: "porWhatsapp" | "sinConfirmar" | null;
   /** Minutos que el chip no trae (en el sillón, en consulta); `null` = no se dicen. */
   minutos: number | null;
 }
+
+/**
+ * Lo que va detrás del chip, en el MISMO idioma que el chip (v3, n3): el chip de la cita (`pinta.chipTexto`)
+ * todavía no pasa por los diccionarios y sale en español también en inglés; «Agendada · not confirmed»
+ * mezclaba idiomas. Cuando se traduzcan los chips de la agenda, esto pasa a `agenda.alPasar.*` con ellos.
+ */
+export const EXTRA_DEL_CHIP = {
+  porWhatsapp: "por WhatsApp",
+  sinConfirmar: "sin confirmar",
+} as const;
 
 /**
  * `cita.estado` ya viene normalizado (`PENDING` → `SCHEDULED`) por `aCitaVista`. «Por WhatsApp» solo cuando

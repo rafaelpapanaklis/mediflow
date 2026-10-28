@@ -2202,10 +2202,6 @@
         "enCurso": "en curso",
         "porHacer": "por hacer"
       },
-      "estadoExtra": {
-        "porWhatsapp": "por WhatsApp",
-        "sinConfirmar": "sin confirmar"
-      },
       "avisos": {
         "anticipoPagado": "Anticipo pagado",
         "anticipoPedido": "Anticipo pedido · {monto}",
