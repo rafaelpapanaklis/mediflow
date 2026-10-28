@@ -35,6 +35,7 @@ export async function GET(req: NextRequest) {
   // ws1-t12 v20 (B1 de t1): `?status=` ya no va al `where` de Prisma — en la base real `treatment_plans.status` es
   // TEXT y Prisma manda el parámetro como enum `TreatmentStatus` (42883). Los planes de ese estado se eligen con
   // `"status"::text` (vale con la columna TEXT o enum) y entran como `id: { in }`; la paginación sigue exacta.
+  // v22 (t5 de la v21, m2): `patientId=` vacío es «sin paciente», igual que en el `where` de abajo (`|| null`).
   if (status && !["ACTIVE", "COMPLETED", "ABANDONED", "PAUSED"].includes(status)) {
     return NextResponse.json({ error: "Estado inválido" }, { status: 400 });
   }
@@ -42,7 +43,7 @@ export async function GET(req: NextRequest) {
     ? (await prisma.$queryRaw<Array<{ id: string }>>`
         SELECT "id" FROM "treatment_plans"
          WHERE "clinicId" = ${ctx.clinicId} AND "status"::text = ${status}
-           AND (${patientId}::text IS NULL OR "patientId" = ${patientId})`).map((r) => r.id)
+           AND (${patientId || null}::text IS NULL OR "patientId" = ${patientId || null})`).map((r) => r.id)
     : null;
   const limit = Math.min(Math.max(parseInt(searchParams.get("limit") ?? "200"), 1), 500);
   const skip  = Math.max(parseInt(searchParams.get("skip") ?? "0"), 0);

@@ -13,6 +13,12 @@
  * Las relaciones que apuntan a TreatmentPlan se sacan de prisma/schema.prisma (un `plan TreatmentPlan`
  * nuevo también entra); las de otros planes (periodoncia, edu) no son esta columna.
  *
+ * v22 (t5 de la v21, m1): la regla ya no depende de estar en un `where:` de primer nivel. CADA objeto
+ * `treatment(s): { … }` del código —a cualquier profundidad, dentro de `where`, `include`, `select`, `_count`
+ * o de una variable, y con la clave entre comillas o no— falla si filtra `status` al nivel del PLAN: directo
+ * o dentro de `where`/`some`/`every`/`none`/`is`/`isNot`/`AND`/`OR`/`NOT`. No cuentan `status: true/false`
+ * (leerlo en un `select`), un `orderBy` ni las escrituras (`data`, `create`…): esos no comparan.
+ *
  * Run: npx tsx --test src/lib/treatments/__tests__/estado-del-plan-texto.test.ts
  */
 import { test } from "node:test";
@@ -93,7 +99,7 @@ test("el candado sí detecta la forma rota (con y sin `in`, también en una tran
   assert.doesNotMatch(objetoTras(arg, w.index + w[0].length), /\bstatus\s*:/);
 });
 
-// ── v21: filtros por relación ──────────────────────────────────────────────────────────────────────
+// ── v21/v22: filtros por relación ──────────────────────────────────────────────────────────────────
 
 /** Los campos de relación que apuntan a TreatmentPlan, leídos del esquema (`treatments TreatmentPlan[]`…). */
 function relacionesAlPlan(): string[] {
@@ -103,26 +109,48 @@ function relacionesAlPlan(): string[] {
   return Array.from(nombres).sort();
 }
 
-/** Todos los objetos `where: { … }` del texto (los literales; un `where: variable` no se ve). */
-function wheres(s: string): Array<{ desde: number; obj: string }> {
-  const out: Array<{ desde: number; obj: string }> = [];
-  for (const m of Array.from(s.matchAll(/\bwhere\s*:/g))) {
-    const obj = objetoTras(s, m.index! + m[0].length);
-    if (obj) out.push({ desde: m.index!, obj });
+/** El valor balanceado que empieza en `i` (`{…}` o `[…]`); con cadenas y comentarios saltados. */
+function balanceado(s: string, i: number): string {
+  const abre = s[i];
+  const cierra = abre === "{" ? "}" : "]";
+  let d = 0;
+  for (let j = i; j < s.length; j++) {
+    const c = s[j];
+    if (c === '"' || c === "'" || c === "`") {
+      j = finDeCadena(s, j);
+      continue;
+    }
+    if (c === "/" && s[j + 1] === "/") {
+      j = s.indexOf("\n", j);
+      if (j < 0) return s.slice(i);
+      continue;
+    }
+    if (c === abre) d++;
+    else if (c === cierra && --d === 0) return s.slice(i, j + 1);
   }
-  return out;
+  return s.slice(i);
 }
 
-/** Las llaves de primer nivel de un objeto `{ … }` con el texto de su valor (balanceando llaves y paréntesis). */
+function finDeCadena(s: string, j: number): number {
+  const q = s[j];
+  for (let k = j + 1; k < s.length; k++) {
+    if (s[k] === "\\") k++;
+    else if (s[k] === q) return k;
+  }
+  return s.length;
+}
+
+/** Las llaves de primer nivel de un objeto `{ … }` con su valor (clave con o sin comillas; `...x` se ignora). */
 function llaves(obj: string): Array<{ clave: string; valor: string }> {
-  const cuerpo = obj.trim().replace(/^\{/, "").replace(/\}$/, "");
+  const cuerpo = obj.slice(1, -1);
   const out: Array<{ clave: string; valor: string }> = [];
   let d = 0;
   let inicio = 0;
   const partes: string[] = [];
   for (let i = 0; i < cuerpo.length; i++) {
     const c = cuerpo[i];
-    if (c === "{" || c === "(" || c === "[") d++;
+    if (c === '"' || c === "'" || c === "`") i = finDeCadena(cuerpo, i);
+    else if (c === "{" || c === "(" || c === "[") d++;
     else if (c === "}" || c === ")" || c === "]") d--;
     else if (c === "," && d === 0) {
       partes.push(cuerpo.slice(inicio, i));
@@ -131,69 +159,108 @@ function llaves(obj: string): Array<{ clave: string; valor: string }> {
   }
   partes.push(cuerpo.slice(inicio));
   for (const p of partes) {
-    const m = /^\s*(?:\.\.\.)?\s*([A-Za-z_$][\w$]*)\s*:\s*([\s\S]*)$/.exec(p.replace(/\/\/[^\n]*/g, ""));
-    if (m) out.push({ clave: m[1], valor: m[2].trim() });
+    const m = /^\s*(?:["']([\w$]+)["']|([A-Za-z_$][\w$]*))\s*:\s*([\s\S]*)$/.exec(p.replace(/^\s*\/\/[^\n]*\n/gm, ""));
+    if (m) out.push({ clave: m[1] ?? m[2], valor: m[3].trim() });
   }
   return out;
 }
 
-/** ¿El filtro de una relación al plan pone `status` (directo o dentro de some/every/none/is/isNot/AND/OR/NOT)? */
-function filtraElEstado(valor: string): boolean {
-  if (!valor.startsWith("{")) return false;
-  return llaves(valor).some(({ clave, valor: v }) => {
-    if (clave === "status") return true;
-    if (["some", "every", "none", "is", "isNot", "NOT"].includes(clave)) return filtraElEstado(v);
-    if (["AND", "OR"].includes(clave) && v.startsWith("[")) return v.slice(1, -1).split(/(?<=\})\s*,\s*(?=\{)/).some((x) => filtraElEstado(x.trim()));
+/** Los elementos `{ … }` de un arreglo `[ … ]`. */
+function elementos(arr: string): string[] {
+  const out: string[] = [];
+  for (let i = 1; i < arr.length - 1; i++) {
+    if (arr[i] === '"' || arr[i] === "'" || arr[i] === "`") i = finDeCadena(arr, i);
+    else if (arr[i] === "{") {
+      const o = balanceado(arr, i);
+      out.push(o);
+      i += o.length - 1;
+    }
+  }
+  return out;
+}
+
+/** Las claves que siguen filtrando EL PLAN (no otro modelo, ni leer, ordenar o escribir). */
+const SIGUE_EN_EL_PLAN = ["where", "some", "every", "none", "is", "isNot", "NOT"];
+
+/** ¿Este objeto (el de `treatment(s): { … }`) filtra el `status` del plan? */
+function filtraElEstadoDelPlan(obj: string): boolean {
+  return llaves(obj).some(({ clave, valor }) => {
+    if (clave === "status") return !/^(true|false)\s*$/.test(valor);
+    if (SIGUE_EN_EL_PLAN.includes(clave) && valor.startsWith("{")) return filtraElEstadoDelPlan(valor);
+    if (["AND", "OR", "NOT"].includes(clave) && valor.startsWith("[")) return elementos(valor).some(filtraElEstadoDelPlan);
     return false;
   });
 }
 
-/** Recorre un `where` (y sus AND/OR/NOT) buscando una relación al plan que filtre el estado. */
-function relacionConEstado(obj: string, relaciones: string[]): string | null {
-  for (const { clave, valor } of llaves(obj)) {
-    if (relaciones.includes(clave) && filtraElEstado(valor)) return `${clave}: ${valor}`;
-    if (["AND", "OR", "NOT"].includes(clave)) {
-      const hijos = valor.startsWith("[") ? valor.slice(1, -1).split(/(?<=\})\s*,\s*(?=\{)/) : [valor];
-      for (const h of hijos) if (h.trim().startsWith("{")) {
-        const r = relacionConEstado(h.trim(), relaciones);
-        if (r) return r;
-      }
-    }
+/** Cada `treatment(s): { … }` del texto (clave con o sin comillas) que filtra el estado del plan. */
+function relacionesConEstado(s: string, relaciones: string[]): Array<{ linea: number; texto: string }> {
+  const out: Array<{ linea: number; texto: string }> = [];
+  const clave = new RegExp(`(?:["'](?:${relaciones.join("|")})["']|\\b(?:${relaciones.join("|")}))\\s*:\\s*\\{`, "g");
+  for (const m of Array.from(s.matchAll(clave))) {
+    const obj = balanceado(s, m.index! + m[0].length - 1);
+    if (filtraElEstadoDelPlan(obj)) out.push({ linea: s.slice(0, m.index).split("\n").length, texto: `${m[0]}${obj.slice(1)}` });
   }
-  return null;
+  return out;
 }
 
-test("v21: ningún `where` de Prisma (de cualquier modelo) filtra el estado del plan POR RELACIÓN", () => {
+test("v21/v22: ningún objeto de relación al plan (`treatment(s): { … }`, en cualquier sitio y profundidad) filtra su estado", () => {
   const relaciones = relacionesAlPlan();
   // El esquema de hoy: Clinic/User/Patient.treatments y TreatmentSession.treatment.
   assert.deepEqual(relaciones, ["treatment", "treatments"]);
   const malas: string[] = [];
   let vistos = 0;
+  const clave = new RegExp(`\\b(?:${relaciones.join("|")})["']?\\s*:\\s*\\{`, "g");
   for (const f of archivos(join(process.cwd(), "src"))) {
     const s = readFileSync(f, "utf8");
-    if (!/\bwhere\s*:/.test(s)) continue;
-    for (const w of wheres(s)) {
-      vistos++;
-      const r = relacionConEstado(w.obj, relaciones);
-      if (r) malas.push(`${f.replace(process.cwd() + "/", "")}:${s.slice(0, w.desde).split("\n").length} → ${r.replace(/\s+/g, " ").slice(0, 120)}`);
+    vistos += (s.match(clave) ?? []).length;
+    for (const r of relacionesConEstado(s, relaciones)) {
+      malas.push(`${f.replace(process.cwd() + "/", "")}:${r.linea} → ${r.texto.replace(/\s+/g, " ").slice(0, 140)}`);
     }
   }
-  assert.ok(vistos > 500, `el candado sí recorre los where (${vistos})`);
+  // Hoy (v22) son 18 en src/: si un día baja de 10, el patrón dejó de encontrarlos.
+  assert.ok(vistos >= 10, `el candado sí encuentra objetos de relación al plan (${vistos})`);
   assert.deepEqual(malas, [], `filtran treatment_plans.status por relación (42883 en la base real):\n${malas.join("\n")}`);
 });
 
-test("v21: el candado de relaciones sí detecta las formas rotas y deja pasar las buenas", () => {
-  const rel = ["treatment", "treatments"];
-  const ver = (codigo: string) => wheres(codigo).map((w) => relacionConEstado(w.obj, rel)).find(Boolean) ?? null;
-  // Rotas (la de listOpenTreatmentSessions hasta la v20, y las de Patient/Clinic/User).
-  assert.ok(ver(`prisma.treatmentSession.findMany({ where: { completedAt: null, treatment: { clinicId, patientId, status: "ACTIVE" } } })`));
-  assert.ok(ver(`prisma.patient.findMany({ where: { clinicId, treatments: { some: { status: "ACTIVE" } } } })`));
-  assert.ok(ver(`prisma.patient.count({ where: { AND: [{ clinicId }, { treatments: { none: { status: { in: ["ACTIVE"] } } } }] } })`));
-  assert.ok(ver(`db.user.findMany({ where: { treatments: { every: { AND: [{ status: "COMPLETED" }] } } } })`));
-  assert.ok(ver(`prisma.treatmentSession.count({ where: { treatment: { is: { status: "ACTIVE" } } } })`));
-  // Buenas: la relación sin estado, el estado de OTRO modelo, y leer el estado en el select.
-  assert.equal(ver(`prisma.treatmentSession.findMany({ where: { completedAt: null, treatment: { clinicId, patientId } }, select: { treatment: { select: { status: true } } } })`), null);
-  assert.equal(ver(`prisma.appointment.findMany({ where: { clinicId, status: "COMPLETED", patient: { treatments: { some: { clinicId } } } } })`), null);
-  assert.equal(ver(`prisma.edu.findMany({ where: { id, plan: { status: "ACTIVO" } } })`), null, "otro plan (edu), otra columna");
+/** Lo que diría el candado de un trozo de código (los dos: la llamada directa de la v20 y el de relación). */
+function rota(codigo: string): boolean {
+  const relacion = relacionesConEstado(codigo, ["treatment", "treatments"]).length > 0;
+  const directa = Array.from(codigo.matchAll(/\.treatmentPlan\.(\w+)\s*\(/g)).some((m) => {
+    const arg = argumento(codigo, m.index! + m[0].length);
+    const w = /\bwhere\s*:/.exec(arg);
+    return !!w && /\bstatus\s*:/.test(objetoTras(arg, w.index + w[0].length));
+  });
+  return relacion || directa;
+}
+
+test("v22: las 10 formas rotas de t5 (revisión de la v21) fallan", () => {
+  const formas = [
+    `prisma.appointment.findMany({ where: { clinicId, patient: { treatments: { some: { status: "ACTIVE" } } } } })`,
+    `prisma.invoice.findMany({ where: { patient: { is: { treatments: { none: { status: "ACTIVE" } } } } } })`,
+    `prisma.patient.findMany({ where: { clinicId }, include: { treatments: { where: { status: "ACTIVE" } } } })`,
+    `prisma.patient.findMany({ select: { id: true, treatments: { where: { status: { in: ["ACTIVE", "PAUSED"] } } } } })`,
+    `prisma.patient.findMany({ select: { _count: { select: { treatments: { where: { status: "ACTIVE" } } } } } })`,
+    `prisma.treatmentSession.findMany({ where: { treatment: { "status": "ACTIVE" } } })`,
+    `prisma.treatmentPlan.findMany({ where: { clinicId }, include: { sessions: { where: { treatment: { status: "ACTIVE" } } } } })`,
+    `prisma.treatmentSession.findMany({ where: { treatment: { status: { not: "ABANDONED" } } } })`,
+    `prisma.treatmentSession.findMany({ where: { treatment: { AND: [{ clinicId }, { status: "ACTIVE" }] } } })`,
+    `prisma.patient.findMany({ where: { treatments: { some: { OR: [{ clinicId }, { AND: [{ status: "PAUSED" }] }] } } } })`,
+  ];
+  for (const f of formas) assert.equal(rota(f), true, `no la ve: ${f}`);
+  // Y en una variable (el `where` que se arma aparte), con comillas simples.
+  assert.equal(rota(`const donde = { patient: { 'treatments': { some: { status: "ACTIVE" } } } };`), true);
 });
 
+test("v22: no marca leer, ordenar ni escribir el estado, ni el estado de otro modelo", () => {
+  const buenas = [
+    `prisma.treatmentSession.findMany({ where: { completedAt: null, treatment: { clinicId, patientId } }, select: { treatment: { select: { id: true, status: true } } } })`,
+    `prisma.patient.findMany({ include: { treatments: { select: { id: true, status: false }, orderBy: { status: "asc" } } } })`,
+    `prisma.patient.findMany({ select: { _count: { select: { treatments: true } } } })`,
+    `prisma.appointment.findMany({ where: { clinicId, status: "COMPLETED", patient: { treatments: { some: { clinicId } } } } })`,
+    `prisma.treatment.findMany({ where: { treatment: { patient: { status: "ACTIVE" } } } })`,
+    `prisma.patient.update({ where: { id }, data: { treatments: { create: { name, status: "ACTIVE" } } } })`,
+    `prisma.edu.findMany({ where: { id, plan: { status: "ACTIVO" } } })`,
+    `const fila = { treatment: { name: "x", "statusText": "ok" } };`,
+  ];
+  for (const b of buenas) assert.equal(rota(b), false, `la marca y no debía: ${b}`);
+});

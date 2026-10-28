@@ -709,5 +709,12 @@ test("v20 · B1: con `status` TEXT (como la base real) el arnés da el 42883 de 
   assert.deepEqual((await lista("&status=ABANDONED")).body.map((p: any) => p.id), [otro.body.id]);
   assert.equal((await lista("")).body.length, 2);
   assert.equal((await lista("&status=NADA")).status, 400);
+  // v22 (t5 de la v21, m2): `patientId=` vacío es «sin paciente» también con `?status=` (antes daba []).
+  const sinPaciente = async (q: string) => (await leer(await GET(pedir(`/api/treatments?patientId=${q}`, undefined, "GET")))).body.map((p: any) => p.id).sort();
+  assert.deepEqual(await sinPaciente(""), [planId, otro.body.id].sort());
+  assert.deepEqual(await sinPaciente("&status=ACTIVE"), [planId]);
+  assert.deepEqual(await sinPaciente("&status=ABANDONED"), [otro.body.id]);
+  // Otro paciente: nada de Ana.
+  assert.deepEqual(await sinPaciente("pac-otro&status=ACTIVE"), []);
 });
 
