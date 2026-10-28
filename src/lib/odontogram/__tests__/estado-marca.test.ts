@@ -326,15 +326,17 @@ test("v3 m-b: una fila HECHA de un diente cuenta en cualquier fecha; una de toda
       { nombre: "Corona metal-porcelana", procedureId: null, dientes: [36], estado: "hecho", hechoEn: hace(30) },
     ]],
   ]));
-  assert.equal(planQueYaLoTiene("resina", [16], enPlanes)?.plan, "Plan viejo", "la resina hecha hace 400 días: no se ofrece otra vez");
+  // (sin fecha de la marca, como una marca ROJA de la consulta: `hechoPorSiempre`)
+  assert.equal(planQueYaLoTiene("resina", [16], enPlanes, { hechoPorSiempre: true })?.plan, "Plan viejo", "la resina hecha hace 400 días: la roja no se ofrece otra vez");
   assert.equal(planQueYaLoTiene("limpieza", [11], enPlanes), null, "la limpieza de hace 200 días no tapa la de hoy");
   assert.equal(planQueYaLoTiene("fluor", [16], enPlanes)?.plan, "Plan viejo", "el flúor de hace unas horas sí");
   assert.equal(planQueYaLoTiene("corona", [26], enPlanes), null, "lo pendiente de un plan cancelado no cuenta");
-  assert.equal(planQueYaLoTiene("corona", [36], enPlanes)?.plan, "Plan cancelado", "lo hecho, aunque el plan se cancelara, sí");
-  // el aviso del servidor: las filas nuevas que ya están en otro plan (el propio no cuenta)
+  assert.equal(planQueYaLoTiene("corona", [36], enPlanes, { hechoPorSiempre: true })?.plan, "Plan cancelado", "lo hecho, aunque el plan se cancelara, sí");
+  // el aviso del servidor: una fila tecleada no tiene marca detrás; lo hecho hace 400 días no es
+  // «ya estaba en otro plan», es trabajo nuevo (v5)
   assert.deepEqual(
     filasRepetidas([{ nombre: "Resina posterior", procedureId: null, dientes: [16] }, { nombre: "Corona", procedureId: null, dientes: [26] }], enPlanes),
-    [{ nombre: "Resina posterior", dientes: [16], plan: "Plan viejo" }],
+    [],
   );
   assert.deepEqual(filasRepetidas([{ nombre: "Resina", procedureId: null, dientes: [16] }], enPlanes, { excluirPlanId: "a" }), []);
 });
@@ -382,7 +384,8 @@ test("v3 m-d: si la relectura llega sin estados (no se pudieron leer), se conser
 test("v4 M1: TODO chip con sugerencia mira los otros planes (caries → resina, pulpitis → endodoncia y la corona encadenada); m1: lo ya hecho lleva su fecha", () => {
   const entradas: EntradaPlan[] = [
     { toothNumber: 16, surface: "O", conditionId: "caries" },
-    { toothNumber: 36, surface: null, conditionId: "pulpitis" },
+    // la pulpitis se marcó en 2024; la corona se hizo después (2025): esa sí tapa (v5)
+    { toothNumber: 36, surface: null, conditionId: "pulpitis", marcadaEn: "2024-06-01T17:00:00.000Z" },
     { toothNumber: 46, surface: "O", conditionId: "caries" },
   ];
   const enPlanes = resumirFilas([{ id: "a", name: "Plan A", status: "ACTIVE" }], new Map([["a", [
@@ -401,4 +404,36 @@ test("v4 M1: TODO chip con sugerencia mira los otros planes (caries → resina, 
   let id = 0;
   const ctx = { tarifario: TARIFARIO, entradas, nuevoId: () => `r${++id}`, motivo: "x", idioma: "es" as const };
   assert.deepEqual(agregarDesdeChip([], chips.find((c) => c.clave === "h:16:caries")!, ctx), [], "el toque no la agrega");
+});
+
+test("v5 M1-v4: una fila HECHA tapa solo si se hizo DESPUÉS de marcar; lo pendiente tapa siempre (caries 16 M de hoy + resina 16 de 2023 → se ofrece con precio)", () => {
+  const hoy = new Date().toISOString();
+  const plan = (estado: string, hechoEn: string | null) => resumirFilas([{ id: "a", name: "Plan A", status: "COMPLETED" }],
+    new Map([["a", [{ nombre: "Restauración resina 1 cara", procedureId: null, dientes: [16], estado, hechoEn }]]]));
+  const caries = (marcadaEn?: string): EntradaPlan[] => [{ toothNumber: 16, surface: "M", conditionId: "caries", ...(marcadaEn ? { marcadaEn } : {}) }];
+  const chip = (entradas: EntradaPlan[], enPlanes: ReturnType<typeof plan>) =>
+    chipsDelPlan(hallazgosPorTratar(entradas), TARIFARIO, entradas, [], enPlanes).find((c) => c.clave === "h:16:caries")!;
+
+  // 1) la caries de HOY con una resina hecha en 2023: trabajo nuevo, con su precio
+  const nueva = chip(caries(hoy), plan("hecho", "2023-01-01T17:00:00.000Z"));
+  assert.equal(nueva.enOtroPlan ?? null, null);
+  assert.equal(nueva.sugerencia?.precio, 700);
+  let id = 0;
+  const ctx = { tarifario: TARIFARIO, entradas: caries(hoy), nuevoId: () => `r${++id}`, motivo: "Caries", idioma: "es" as const };
+  assert.equal(agregarDesdeChip([], nueva, ctx).length, 1, "se agrega con un toque");
+  // 2) con la resina del 16 PENDIENTE en otro plan: «ya en el plan», sin importar fechas
+  assert.deepEqual(chip(caries(hoy), plan("pendiente", null)).enOtroPlan, { plan: "Plan A", hechoEn: null });
+  // 3) la caries se marcó en 2022 y la resina se hizo en 2023: ese trabajo la atendió
+  assert.deepEqual(chip(caries("2022-05-01T17:00:00.000Z"), plan("hecho", "2023-01-01T17:00:00.000Z")).enOtroPlan,
+    { plan: "Plan A", hechoEn: "2023-01-01T17:00:00.000Z" });
+  // 4) sin fecha fiable (lo marcado en la consulta, aún sin guardar): un hallazgo solo se tapa con lo reciente
+  assert.equal(chip(caries(), plan("hecho", "2023-01-01T17:00:00.000Z")).enOtroPlan ?? null, null);
+  assert.ok(chip(caries(), plan("hecho", new Date(Date.now() - 3_600_000).toISOString())).enOtroPlan, "hecha hace 1 h: sí tapa");
+
+  // y las marcas ROJAS: con fecha, la misma regla; sin fecha, lo hecho de un diente tapa siempre (m-b)
+  const roja = (marcadaEn?: string): EntradaPlan[] => [{ toothNumber: 16, surface: "O", conditionId: "restoration", estado: "por_hacer", ...(marcadaEn ? { marcadaEn } : {}) }];
+  const chipRojo = (e: EntradaPlan[], p: ReturnType<typeof plan>) => chipsDelPlan(hallazgosPorTratar(e), TARIFARIO, e, [], p)[0];
+  assert.ok(chipRojo(roja("2022-05-01T17:00:00.000Z"), plan("hecho", "2023-01-01T17:00:00.000Z")).enOtroPlan, "se quedó roja con el trabajo hecho después: no se ofrece");
+  assert.equal(chipRojo(roja(hoy), plan("hecho", "2023-01-01T17:00:00.000Z")).enOtroPlan ?? null, null, "marcada hoy en rojo: rehacerla se ofrece");
+  assert.ok(chipRojo(roja(), plan("hecho", "2023-01-01T17:00:00.000Z")).enOtroPlan, "roja sin fecha: como la v3 (m-b)");
 });

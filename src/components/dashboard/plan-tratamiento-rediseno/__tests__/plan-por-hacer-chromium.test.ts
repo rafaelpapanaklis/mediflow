@@ -33,7 +33,8 @@ const ODONTOGRAMA = {
     { toothNumber: 26, surface: null, conditionId: "crown", estado: "por_hacer" },
     { toothNumber: 46, surface: null, conditionId: "crown", estado: "hecho" },         // azul: no
     { toothNumber: 47, surface: "O", conditionId: "restoration" },                     // de antes: no
-    { toothNumber: 36, surface: null, conditionId: "pulpitis" },                       // hallazgo: chip de siempre
+    // hallazgo: chip de siempre; marcado en 2024 (v5: lo hecho en otro plan después de esa fecha lo tapa)
+    { toothNumber: 36, surface: null, conditionId: "pulpitis", createdAt: "2024-06-01T17:00:00.000Z", updatedAt: "2024-06-01T17:00:00.000Z" },
   ],
 };
 

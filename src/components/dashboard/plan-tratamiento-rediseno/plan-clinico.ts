@@ -353,6 +353,8 @@ export interface EntradaOdontograma {
   conditionId: string;
   /** Rojo/azul (ws1-t6): `por_hacer` = marcado en rojo, sale como procedimiento del plan. */
   estado?: string | null;
+  /** Cuándo se marcó (ISO; `createdAt` de la marca, o `updatedAt`). Sin ella = lo de la consulta aún sin guardar. */
+  marcadaEn?: string | null;
 }
 
 export interface Hallazgo {
@@ -363,6 +365,11 @@ export interface Hallazgo {
   fase: Fase;
   /** Una marca ROJA del odontograma (ws1-t6): el procedimiento ya está decidido (resina, corona…). */
   porHacer?: boolean;
+  /**
+   * Cuándo se marcó (la más nueva de sus caras), solo si TODAS traen fecha (ws1-t6 v5): una fila
+   * hecha en otro plan tapa el chip solo si se hizo después (`ya-en-planes.ts`).
+   */
+  marcadaEn?: string;
 }
 
 /**
@@ -372,6 +379,7 @@ export interface Hallazgo {
  */
 export function hallazgosPorTratar(entradas: EntradaOdontograma[]): Hallazgo[] {
   const mapa = new Map<string, Hallazgo>();
+  const sinFecha = new Set<string>();
   for (const e of entradas) {
     // Realizado o previo (azul): ya está hecho, no es un problema por tratar (p. ej. «Extracción indicada» en azul).
     if ((e.estado === "hecho" || e.estado === "previo") && CLAVE_DE_MARCA[e.conditionId]) continue;
@@ -381,6 +389,10 @@ export function hallazgosPorTratar(entradas: EntradaOdontograma[]): Hallazgo[] {
     const clave = `${e.toothNumber}:${e.conditionId}`;
     const h = mapa.get(clave) ?? { clave, diente: e.toothNumber, caras: [], conditionId: e.conditionId, fase, ...(porHacer ? { porHacer } : {}) };
     if (e.surface && (CARAS as readonly string[]).includes(e.surface) && !h.caras.includes(e.surface)) h.caras.push(e.surface);
+    // la fecha del hallazgo: la de su cara más nueva; si alguna no la trae, no hay fecha fiable
+    const en = e.marcadaEn ? Date.parse(e.marcadaEn) : NaN;
+    if (!Number.isFinite(en)) { sinFecha.add(clave); delete h.marcadaEn; }
+    else if (!sinFecha.has(clave) && (!h.marcadaEn || en > Date.parse(h.marcadaEn))) h.marcadaEn = new Date(en).toISOString();
     mapa.set(clave, h);
   }
   return [...mapa.values()].sort((a, b) => FASES.indexOf(a.fase) - FASES.indexOf(b.fase) || a.diente - b.diente);

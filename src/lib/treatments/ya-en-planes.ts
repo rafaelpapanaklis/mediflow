@@ -10,12 +10,15 @@
 //  · el mismo TIPO de procedimiento (`claveDeProcedimiento`: «Resina 2 caras» y «Restauración con
 //    resina» son la misma resina) y
 //  · el mismo diente (una fila sin dientes, o una marca sin diente, vale para cualquiera) y
-//  · la fila está por hacer (pendiente o en curso, en un plan no cancelado) o HECHA:
-//      - de un procedimiento de un diente, hecha en CUALQUIER fecha (m-b): si la marca se quedó roja
-//        con el trabajo hecho —«Hecho» sin permiso de odontograma, o sin el SQL—, no se ofrece otra vez.
-//        Rehacerla años después se escribe a mano.
-//      - de uno de toda la boca o de un cuadrante (limpieza, flúor, raspado), solo si se hizo hace
-//        poco (`HECHO_RECIENTE_MS`): esos se repiten cada pocos meses.
+//  · la fila está por hacer (pendiente o en curso, en un plan no cancelado): tapa SIEMPRE;
+//  · la fila está HECHA (v5, M1-v4 de la revisión de t1): tapa solo si se hizo DESPUÉS de que se
+//    marcó la marca o el hallazgo del chip (`marcadaEn`). Una caries marcada hoy en un diente con una
+//    resina de 2023 es trabajo NUEVO y se ofrece; una marca roja puesta antes de que se hiciera el
+//    trabajo (se quedó roja: «Hecho» sin permiso de odontograma, o sin el SQL) no se ofrece otra vez.
+//    Sin fecha fiable de la marca (lo marcado en la consulta y aún sin guardar):
+//      - marca ROJA (`hechoPorSiempre`): la de un diente, hecha en cualquier fecha; la de toda la
+//        boca o un cuadrante (limpieza, flúor, raspado), solo si es reciente (`HECHO_RECIENTE_MS`);
+//      - hallazgo o encadenado: solo si es reciente.
 //  · una fila cancelada nunca.
 
 import { HECHO_RECIENTE_MS } from "./sin-doble-cobro";
@@ -71,11 +74,21 @@ export function resumirFilas(
   return out;
 }
 
-function cuenta(f: FilaEnPlan, ahora: Date): boolean {
+/** Cómo pesa una fila HECHA para el chip que se mira (ver arriba). */
+export interface ContextoDeMarca {
+  /** Cuándo se marcó la marca o el hallazgo (ISO). Sin ella (o si no se lee), «sin fecha fiable». */
+  marcadaEn?: string | null;
+  /** Sin fecha fiable: una marca ROJA cuenta lo hecho de un diente en cualquier fecha. */
+  hechoPorSiempre?: boolean;
+}
+
+function cuenta(f: FilaEnPlan, ahora: Date, marca: ContextoDeMarca): boolean {
   if (f.estado !== "hecho") return true;
-  if (PROCEDIMIENTOS[f.clave].alcance === "diente") return true;
-  const en = f.hechoEn ? Date.parse(f.hechoEn) : NaN;
-  return Number.isFinite(en) && ahora.getTime() - en <= HECHO_RECIENTE_MS;
+  const hecho = f.hechoEn ? Date.parse(f.hechoEn) : NaN;
+  const marcada = marca.marcadaEn ? Date.parse(marca.marcadaEn) : NaN;
+  if (Number.isFinite(marcada)) return Number.isFinite(hecho) && hecho > marcada;
+  if (marca.hechoPorSiempre && PROCEDIMIENTOS[f.clave].alcance === "diente") return true;
+  return Number.isFinite(hecho) && ahora.getTime() - hecho <= HECHO_RECIENTE_MS;
 }
 
 /**
@@ -86,18 +99,21 @@ export function planQueYaLoTiene(
   clave: ClaveProcedimiento,
   dientes: number[],
   filas: FilaEnPlan[],
-  opciones: { excluirPlanId?: string | null; ahora?: Date } = {},
+  opciones: { excluirPlanId?: string | null; ahora?: Date } & ContextoDeMarca = {},
 ): FilaEnPlan | null {
   const ahora = opciones.ahora ?? new Date();
   const candidatas = filas.filter((f) =>
     f.clave === clave
     && f.planId !== opciones.excluirPlanId
     && (f.dientes.length === 0 || dientes.length === 0 || dientes.some((d) => f.dientes.includes(d)))
-    && cuenta(f, ahora));
+    && cuenta(f, ahora, opciones));
   return candidatas.find((f) => f.estado !== "hecho") ?? candidatas[0] ?? null;
 }
 
-/** Las filas nuevas de un plan que ya están en OTRO plan del paciente: «Resina 16 (ya en «Plan X»)». */
+/**
+ * Las filas nuevas de un plan que ya están en OTRO plan del paciente: «Resina 16 (ya en «Plan X»)».
+ * Aquí no hay marca detrás (se tecleó o salió de un chip): lo hecho solo cuenta si es reciente.
+ */
 export function filasRepetidas(
   nuevas: Array<{ nombre: string; procedureId: string | null; dientes: number[] }>,
   filas: FilaEnPlan[],

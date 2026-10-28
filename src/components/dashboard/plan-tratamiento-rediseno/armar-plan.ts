@@ -146,10 +146,16 @@ export function chipsDelPlan(
   // Lo que ya está en un plan del paciente (mismo tipo de procedimiento y mismo diente): «ya en el
   // plan X». Vale para TODO chip con sugerencia —rojo, hallazgo (caries → resina) y encadenado (la
   // corona tras la endodoncia)— (v4, M1). Un chip de varios dientes cuenta si alguno ya está.
+  // Una fila HECHA solo tapa si se hizo después de marcar lo del chip (v5): la caries de hoy en un
+  // diente con una resina de 2023 es trabajo nuevo. La fecha del chip, la de su hallazgo más nuevo.
   if (enPlanes.length > 0) {
     for (const c of [...chips, ...encadenadas]) {
       if (!c.sugerencia || c.puesto) continue;
-      const ya = planQueYaLoTiene(c.sugerencia.clave, c.dientes, enPlanes);
+      const fechas = c.hallazgos.map((h) => h.marcadaEn);
+      const marcadaEn = fechas.length > 0 && fechas.every(Boolean)
+        ? new Date(Math.max(...fechas.map((f) => Date.parse(f!)))).toISOString()
+        : null;
+      const ya = planQueYaLoTiene(c.sugerencia.clave, c.dientes, enPlanes, { marcadaEn, hechoPorSiempre: c.tipo === "por_hacer" });
       if (ya) c.enOtroPlan = { plan: ya.plan, hechoEn: ya.estado === "hecho" ? ya.hechoEn : null };
     }
   }

@@ -141,7 +141,12 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
     if (!odontogramaDeConsulta) {
       fetch(`/api/odontogram?patientId=${encodeURIComponent(paciente.id)}`, { cache: "no-store" })
         .then((r) => (r.ok ? r.json() : null))
-        .then((d) => { if (vivo && d && Array.isArray(d.entries)) setEntradas(d.entries as EntradaOdontograma[]); })
+        .then((d) => {
+          if (!vivo || !d || !Array.isArray(d.entries)) return;
+          // con la fecha de cada marca (ws1-t6 v5): lo hecho en otro plan ANTES de marcarla no la tapa
+          setEntradas((d.entries as Array<EntradaOdontograma & { createdAt?: string; updatedAt?: string }>)
+            .map((e) => ({ ...e, marcadaEn: e.createdAt ?? e.updatedAt ?? null })));
+        })
         .catch(() => {});
     }
     // Lo que ya está en los planes del paciente: lo rojo que ya está en uno no se vuelve a ofrecer.

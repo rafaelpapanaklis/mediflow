@@ -79,6 +79,8 @@ const ENTRY_SELECT = {
   conditionId: true,
   notes: true,
   updatedAt: true,
+  // cuándo se marcó (ws1-t6 v5): «Nuevo plan» no tapa la caries de hoy con una resina hecha antes
+  createdAt: true,
 } as const;
 
 /**
