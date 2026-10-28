@@ -14,6 +14,7 @@ import {
   isChargeableInvoice,
 } from "@/components/dashboard/billing/invoice-status";
 import { fmtMXNdec } from "@/lib/format";
+import { textoPagadoPorAdelantado } from "@/lib/dinero/pagado-por-adelantado-texto";
 import { formatDate } from "@/lib/utils";
 import { useT } from "@/i18n/i18n-provider";
 import { PagosMigradosCard } from "./pagos-migrados-card";
@@ -106,19 +107,22 @@ export function BillingTab({
           <KpiCard label={t("patients.sideCards.pendingBalance")} value={fmtMXNdec(summary.balance)} icon={Clock} />
         </div>
       )}
-      {/* v15 (t5 de la v14, M1): «Pagado por adelantado» sale también sin «Además…» (un plan con cuotas, nada
-          por hacer sin pagar): ya no cuelga de esa línea. */}
-      {!redesignOn && ((summary.aunNoSeDebe ?? 0) > 0.005 || (summary.pagadoDeLoPorHacer ?? 0) > 0.005) && (
+      {!redesignOn && (summary.aunNoSeDebe ?? 0) > 0.005 && (
         <p style={{ margin: "-6px 0 14px", fontSize: 12, color: "var(--text-3)" }} data-aun-no-se-debe>
-          {[
-            (summary.aunNoSeDebe ?? 0) > 0.005 ? t("patients.sideCards.aunNoSeDebe", { monto: fmtMXNdec(summary.aunNoSeDebe ?? 0) }) : null,
-            (summary.pagadoDeLoPorHacer ?? 0) > 0.005 ? t("patients.sideCards.pagadoDeLoPorHacer", { monto: fmtMXNdec(summary.pagadoDeLoPorHacer ?? 0) }) : null,
-          ].filter(Boolean).join(" · ")}
+          {t("patients.sideCards.aunNoSeDebe", { monto: fmtMXNdec(summary.aunNoSeDebe ?? 0) })}
         </p>
       )}
       {!redesignOn && (summary.cuotasPorVencer ?? 0) > 0.005 && (
         <p style={{ margin: "-6px 0 14px", fontSize: 12, color: "var(--text-3)" }} data-cuotas-por-vencer>
           {t("patients.sideCards.cuotasPorVencer", { monto: fmtMXNdec(summary.cuotasPorVencer ?? 0) })}
+        </p>
+      )}
+      {/* v16 (t5 de la v15, m1): «Pagado por adelantado» en su propia línea, después de las cuotas (ya no
+          « · » detrás de «Además…»: suma también el adelanto de las notas a plazos, que no está ahí). Con
+          Debe, el texto de la tarjeta («… sobre lo hecho»). */}
+      {!redesignOn && (summary.pagadoDeLoPorHacer ?? 0) > 0.005 && (
+        <p style={{ margin: "-6px 0 14px", fontSize: 12, color: "var(--text-3)" }} data-pagado-de-lo-por-hacer>
+          {textoPagadoPorAdelantado(t, summary.pagadoDeLoPorHacer ?? 0, summary.balance)}
         </p>
       )}
 

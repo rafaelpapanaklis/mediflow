@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Receipt, BellRing, BellOff, MessageCircle, CheckCircle2, Send } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { fmtMXNdec } from "@/lib/format";
+import { textoPagadoPorAdelantado } from "@/lib/dinero/pagado-por-adelantado-texto";
 import { textosDinero } from "@/lib/dinero/textos";
 import { isAbortError } from "@/lib/fetch-safe";
 import { useT, useLocale } from "@/i18n/i18n-provider";
@@ -234,14 +235,15 @@ export function SideCards({
                   <span>{t("patients.sideCards.aunNoSeDebe", { monto: fmtMXNdec(finance.aunNoSeDebe ?? 0) })}</span>
                 </div>
               )}
-              {(finance.pagadoDeLoPorHacer ?? 0) > 0.005 && (
-                <div className={styles.financeRow} data-pagado-de-lo-por-hacer>
-                  <span>{t("patients.sideCards.pagadoDeLoPorHacer", { monto: fmtMXNdec(finance.pagadoDeLoPorHacer ?? 0) })}</span>
-                </div>
-              )}
               {(finance.cuotasPorVencer ?? 0) > 0.005 && (
                 <div className={styles.financeRow} data-cuotas-por-vencer>
                   <span>{t("patients.sideCards.cuotasPorVencer", { monto: fmtMXNdec(finance.cuotasPorVencer ?? 0) })}</span>
+                </div>
+              )}
+              {/* v16 (t5 de la v15, m1): después de las cuotas, en su línea; con Debe, el texto de la tarjeta. */}
+              {(finance.pagadoDeLoPorHacer ?? 0) > 0.005 && (
+                <div className={styles.financeRow} data-pagado-de-lo-por-hacer>
+                  <span>{textoPagadoPorAdelantado(t, finance.pagadoDeLoPorHacer ?? 0, finance.balance)}</span>
                 </div>
               )}
             </>

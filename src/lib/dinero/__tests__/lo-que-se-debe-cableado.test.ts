@@ -63,7 +63,8 @@ test("v7 (QA de t12): «Estado de cuenta» (Resumen, lateral y Facturación) dic
     "src/components/dashboard/patient-detail/side-cards.tsx",
     "src/components/dashboard/pacientes-rediseno/resumen.tsx",
     "src/components/dashboard/patient-detail/billing-tab.tsx",
-  ]) assert.match(leer(f), /patients\.sideCards\.pagadoDeLoPorHacer/, f);
+  ]) assert.match(leer(f), /textoPagadoPorAdelantado\(t, /, f); // v16: el texto sale del ayudante (con la clave de siempre)
+  assert.match(leer("src/lib/dinero/pagado-por-adelantado-texto.ts"), /"patients\.sideCards\.pagadoDeLoPorHacer"/);
   assert.match(leer("src/lib/dinero/lo-que-se-debe.server.ts"), /Math\.min\(d\.saldoAFavor, d\.porHacer\)/);
   assert.match(leer("src/app/api/patients/[id]/lo-que-aun-no-se-debe/route.ts"), /adelantosEnNotasDePlan\(ctx\.clinicId,/);
   // «Cobrar hoy»: «Además tiene $X por cobrar en notas anteriores» sin lo por hacer del plan.
@@ -454,7 +455,8 @@ test("v14 · 1: «Estado de cuenta» (Resumen, lateral, Facturación) dice «Pag
     ["src/components/dashboard/patient-detail/billing-tab.tsx", "summary.pagadoDeLoPorHacer"],
   ] as const) {
     // La tarjeta pinta $300.00 (fmtMXNdec): los tres sitios, igual (antes $300, y $300.50 salía $301).
-    assert.ok(leer(f).includes(`t("patients.sideCards.pagadoDeLoPorHacer", { monto: fmtMXNdec(${valor} ?? 0) })`), f);
+    // v16: por el ayudante, que formatea con fmtMXNdec.
+    assert.ok(leer(f).includes(`textoPagadoPorAdelantado(t, ${valor} ?? 0, `), f);
   }
 });
 
@@ -514,8 +516,8 @@ test("v15 · M1 (b): «Pagado por adelantado» de «Estado de cuenta» suma tamb
   assert.match(ficha, /const porHacerCompleto = Math\.round\(\(aunNoSeDebe - cuotasPorVencer \+ adelantoEnPlanes\) \* 100\) \/ 100;/);
   assert.match(ficha, /const pagadoPorAdelantado = Math\.round\(\(adelantoEnPlanes \+ adelantoEnPlanesConCuotas\) \* 100\) \/ 100;/);
   assert.equal((ficha.match(/pagadoDeLoPorHacer: pagadoPorAdelantado/g) ?? []).length, 3, "Resumen, lateral y Facturación");
-  // Facturación ya no lo cuelga de «Además…»: sale aunque no haya nada por hacer sin pagar.
-  assert.match(leer("src/components/dashboard/patient-detail/billing-tab.tsx"), /\(summary\.aunNoSeDebe \?\? 0\) > 0\.005 \|\| \(summary\.pagadoDeLoPorHacer \?\? 0\) > 0\.005/);
+  // Facturación ya no lo cuelga de «Además…»: sale aunque no haya nada por hacer sin pagar (v16: en su propia línea).
+  assert.match(leer("src/components/dashboard/patient-detail/billing-tab.tsx"), /\{!redesignOn && \(summary\.pagadoDeLoPorHacer \?\? 0\) > 0\.005 && \(/);
 });
 
 test("v15 · M2: todas las cifras de «Estado de cuenta» (Resumen, lateral, Facturación) con centavos, como la tarjeta", () => {
@@ -530,13 +532,23 @@ test("v15 · M2: todas las cifras de «Estado de cuenta» (Resumen, lateral, Fac
   const facturacion = bloque("src/components/dashboard/patient-detail/billing-tab.tsx", "Mini-resumen", "<CardNew");
   for (const [nombre, x] of [["Resumen", resumen], ["lateral", lateral], ["Facturación", facturacion]] as const) {
     assert.doesNotMatch(x, /formatCurrency\(|fmtMXN\(/, `${nombre}: nada redondeado a pesos`);
-    for (const clave of ["aunNoSeDebe", "pagadoDeLoPorHacer", "cuotasPorVencer"]) {
+    for (const clave of ["aunNoSeDebe", "cuotasPorVencer"]) {
       assert.match(x, new RegExp(`t\\("patients\\.sideCards\\.${clave}", \\{ monto: fmtMXNdec\\(`), `${nombre}: ${clave}`);
     }
+    // «Pagado por adelantado», por el ayudante (v16), que formatea con fmtMXNdec.
+    assert.match(x, /textoPagadoPorAdelantado\(t, /, `${nombre}: pagado por adelantado`);
   }
   assert.match(resumen, /\{fmtMXNdec\(finanzas\.saldo\)\}/, "Debe");
   assert.match(lateral, /<strong>\{fmtMXNdec\(finance\.balance\)\}<\/strong>/, "Debe");
   assert.match(facturacion, /value=\{fmtMXNdec\(summary\.balance\)\}/, "Debe");
+  assert.match(leer("src/lib/dinero/pagado-por-adelantado-texto.ts"), /monto: fmtMXNdec\(monto\)/);
+  // v16 (t5 de la v15, m2): «Costo del plan» y «+N planes · total activos» de «Tratamiento activo» (la misma
+  // cifra que «Planes activos» del bloque), también con centavos.
+  const tratamiento = bloque("src/components/dashboard/pacientes-rediseno/resumen.tsx", "pacientesRediseno.resumen.costoPlan", "</Tarjeta>");
+  assert.match(tratamiento, /\{fmtMXNdec\(plan\.costo\)\}/, "Costo del plan");
+  assert.match(tratamiento, /\{fmtMXNdec\(planesActivos\.totalCosto\)\}/, "total activos");
+  assert.doesNotMatch(tratamiento, /formatCurrency\(/, "Tratamiento activo: nada redondeado a pesos");
+  assert.match(resumen, /\{fmtMXNdec\(finanzas\.plan \?\? 0\)\}/, "Planes activos del bloque");
 });
 
 test("v15 · M3: la cuenta solo viaja si el cuerpo trae conCuenta: true (la tarjeta); «Hoy en el sillón» no la pide", () => {
@@ -547,4 +559,34 @@ test("v15 · M3: la cuenta solo viaja si el cuerpo trae conCuenta: true (la tarj
   assert.match(leer("src/components/dashboard/expediente-rediseno/cuenta-del-plan.tsx"), /body: JSON\.stringify\(\{ motivo, conCuenta: true \}\)/);
   // La consulta llama igual que antes: sin opciones.
   assert.match(leer("src/components/dashboard/patient-detail/treatments-modal.tsx"), /await marcarHecho\(planId, ids, appointmentId \|\| null\);/);
+});
+
+test("v16 · m1: «Pagado por adelantado» en su propia línea DESPUÉS de las cuotas (no parece parte de «Además…»); con Debe, el texto de la tarjeta", async () => {
+  for (const [archivo, debe] of [
+    ["src/components/dashboard/pacientes-rediseno/resumen.tsx", "finanzas.saldo"],
+    ["src/components/dashboard/patient-detail/side-cards.tsx", "finance.balance"],
+    ["src/components/dashboard/patient-detail/billing-tab.tsx", "summary.balance"],
+  ] as const) {
+    const x = leer(archivo);
+    const cuotas = x.indexOf("data-cuotas-por-vencer");
+    const adelanto = x.indexOf("data-pagado-de-lo-por-hacer");
+    assert.ok(cuotas > 0 && adelanto > cuotas, `${archivo}: después de «cuotas que aún no vencen»`);
+    assert.ok(x.indexOf("data-aun-no-se-debe") < cuotas, `${archivo}: «Además…» va antes`);
+    assert.ok(x.includes(`(t, ${debe.split(".")[0]}.pagadoDeLoPorHacer ?? 0, ${debe})`), `${archivo}: con el Debe del bloque`);
+  }
+  // Facturación: ya no «Además… · Pagado por adelantado» en la misma línea.
+  assert.doesNotMatch(leer("src/components/dashboard/patient-detail/billing-tab.tsx"), /join\(" · "\)/);
+
+  // El texto, con los diccionarios reales: sin Debe, el rótulo; con Debe, el de la tarjeta («… sobre lo hecho»).
+  const { textoPagadoPorAdelantado } = await import("@/lib/dinero/pagado-por-adelantado-texto");
+  const { getDict } = await import("@/i18n/dictionaries");
+  const { makeT } = await import("@/i18n/t");
+  const es = makeT(getDict("es" as any));
+  const en = makeT(getDict("en" as any));
+  assert.equal(textoPagadoPorAdelantado(es, 500, 0), "Pagado por adelantado: $500.00");
+  assert.equal(textoPagadoPorAdelantado(es, 500, 867), "Además, $500.00 ya están pagados por adelantado sobre lo hecho.");
+  assert.equal(textoPagadoPorAdelantado(en, 300.5, 0), "Paid in advance: $300.50");
+  assert.match(textoPagadoPorAdelantado(en, 500, 867), /already paid in advance over the work done/);
+  // El mismo texto que la tarjeta con cuotas atrasadas (cuenta-del-plan.tsx).
+  assert.match(leer("src/components/dashboard/expediente-rediseno/cuenta-del-plan.tsx"), /"planTratamiento\.cobro\.tambienAdelantoCuotas"/);
 });
