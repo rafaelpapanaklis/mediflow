@@ -23,7 +23,8 @@ import type { ToothRecord } from "../../../components/dashboard/odontogram-v2/ty
 import { aplicarAEntradas, aplicarHecho, cambioDeshacer, planearDeshacer, type EntradaConId, type EntradaOdontograma } from "../aplicar-hecho";
 import { CONDICIONES_CLINICAS, PROCEDIMIENTOS, sugerirProcedimiento, type ProcedimientoTarifario } from "../../treatments/sugerir-procedimiento";
 import { hallazgosPorTratar, type EntradaOdontograma as EntradaPlan } from "../../../components/dashboard/plan-tratamiento-rediseno/plan-clinico";
-import { agregarDesdeChip, chipsDelPlan, entradasDeRegistros, fechasDelVivo } from "../../../components/dashboard/plan-tratamiento-rediseno/armar-plan";
+import { agregarDesdeChip, aplicarCobertura, chipsDelPlan, entradasDeRegistros, fechasDelVivo, type Chip } from "../../../components/dashboard/plan-tratamiento-rediseno/armar-plan";
+import { coberturaEnPlanes } from "../../treatments/ya-en-planes";
 
 /* ─────── Qué lleva estado ─────── */
 
@@ -504,13 +505,13 @@ test("v7 M1-v6: solape PARCIAL de caras — el chip ofrece solo las que faltan, 
   assert.equal(c1.enOtroPlan ?? null, null);
   assert.deepEqual(c1.caras, ["M"]);
   assert.deepEqual({ n: c1.sugerencia?.nombre, $: c1.sugerencia?.precio, caras: c1.sugerencia?.caras }, { n: "Restauración resina 1 cara", $: 700, caras: ["M"] });
-  assert.deepEqual(c1.carasEnOtroPlan, { caras: ["O"], plan: "Plan A" });
+  assert.deepEqual(c1.carasEnOtroPlan, [{ plan: "Plan A", caras: ["O"] }]);
   const rs = agregarDesdeChip([], c1, ctx(cariesMO(hoy)));
   assert.deepEqual(rs.map((r) => `${r.dientes} ${r.caras.join("")} ${r.procedimiento} $${r.precio}`), ["16 M Restauración resina 1 cara $700"], "la O no entra dos veces");
 
   // 2) lo mismo con la resina 16 O HECHA después de marcar las caries
   const c2 = chip(cariesMO("2023-01-01T17:00:00.000Z"), plan("hecho", "2024-01-01T17:00:00.000Z"));
-  assert.deepEqual([c2.caras, c2.sugerencia?.precio, c2.carasEnOtroPlan], [["M"], 700, { caras: ["O"], plan: "Plan A" }]);
+  assert.deepEqual([c2.caras, c2.sugerencia?.precio, c2.carasEnOtroPlan], [["M"], 700, [{ plan: "Plan A", caras: ["O"] }]]);
   //    (y si se hizo ANTES de marcar, no cuenta: las dos caras son trabajo nuevo)
   const c2b = chip(cariesMO(hoy), plan("hecho", "2023-01-01T17:00:00.000Z"));
   assert.deepEqual([c2b.caras, c2b.sugerencia?.precio, c2b.carasEnOtroPlan ?? null], [["M", "O"], 900, null]);
@@ -518,7 +519,7 @@ test("v7 M1-v6: solape PARCIAL de caras — el chip ofrece solo las que faltan, 
   // la marca ROJA 16 MO frente a «Resina 16 O» pendiente: igual, solo la M
   const roja: EntradaPlan[] = ["M", "O"].map((cara) => ({ toothNumber: 16, surface: cara, conditionId: "restoration", estado: "por_hacer", marcadaEn: hoy }));
   const cr = chip(roja, plan("pendiente", null));
-  assert.deepEqual([cr.tipo, cr.caras, cr.sugerencia?.precio, cr.carasEnOtroPlan], ["por_hacer", ["M"], 700, { caras: ["O"], plan: "Plan A" }]);
+  assert.deepEqual([cr.tipo, cr.caras, cr.sugerencia?.precio, cr.carasEnOtroPlan], ["por_hacer", ["M"], 700, [{ plan: "Plan A", caras: ["O"] }]]);
 
   // 3) el aviso del servidor: «Resina MO» tecleada frente a la O pendiente → avisa (antes no)
   assert.deepEqual(filasRepetidas([{ nombre: "Restauración resina 2 caras", procedureId: null, dientes: [16], caras: ["M", "O"] }], plan("pendiente", null)),
@@ -527,4 +528,62 @@ test("v7 M1-v6: solape PARCIAL de caras — el chip ofrece solo las que faltan, 
   const sinCaras = resumirFilas([{ id: "a", name: "Plan A", status: "ACTIVE" }],
     new Map([["a", [{ nombre: "Resina", procedureId: null, dientes: [16], caras: [], estado: "pendiente", hechoEn: null }]]]));
   assert.equal(filasRepetidas([{ nombre: "Resina", procedureId: null, dientes: [16], caras: ["D"] }], sinCaras).length, 1);
+});
+
+test("v8 m1: la nota del solape parcial va por plan («16 O ya en el plan «A» · 16 D en el «B»»); cubierto entre varios, todos los planes", () => {
+  const hoy = new Date().toISOString();
+  const planes = (filasB: string[]) => resumirFilas(
+    [{ id: "a", name: "Plan A", status: "ACTIVE" }, { id: "b", name: "Plan B", status: "ACTIVE" }],
+    new Map([
+      ["a", [{ nombre: "Restauración resina 1 cara", procedureId: null, dientes: [16], caras: ["O"], estado: "pendiente", hechoEn: null }]],
+      ["b", [{ nombre: "Restauración resina 1 cara", procedureId: null, dientes: [16], caras: filasB, estado: "pendiente", hechoEn: null }]],
+    ]));
+  const caries = (caras: string[]): EntradaPlan[] => caras.map((cara) => ({ toothNumber: 16, surface: cara, conditionId: "caries", marcadaEn: hoy }));
+  const chip = (e: EntradaPlan[], p: ReturnType<typeof planes>) => chipsDelPlan(hallazgosPorTratar(e), TARIFARIO, e, [], p)[0];
+  // caries MOD; O en A y D en B → se ofrece solo la M, y la nota dice de quién es cada cara
+  const c = chip(caries(["M", "O", "D"]), planes(["D"]));
+  assert.deepEqual([c.caras, c.sugerencia?.precio], [["M"], 700]);
+  assert.deepEqual(c.carasEnOtroPlan, [{ plan: "Plan A", caras: ["O"] }, { plan: "Plan B", caras: ["D"] }]);
+  // caries MO; O en A y MD en B → todo cubierto entre los dos: bloqueado, con los dos planes
+  const t = chip(caries(["M", "O"]), planes(["M", "D"]));
+  assert.deepEqual(t.enOtroPlan, { plan: "Plan A", hechoEn: null, planes: ["Plan A", "Plan B"] });
+  assert.equal(t.carasEnOtroPlan ?? null, null);
+  // una cara que está en los dos planes cuenta en el primero (el por hacer)
+  const cob = coberturaEnPlanes("resina", [16], planes(["O", "D"]), { caras: ["O", "D", "M"] });
+  assert.deepEqual(cob.porPlan.map((g) => `${g.plan}:${g.caras.join("")}`), ["Plan A:O", "Plan B:D"]);
+});
+
+test("v8 m2: si el chip parcial no se puede recalcular, se BLOQUEA (nunca entero con la cara ya planeada)", () => {
+  const enPlanes = resumirFilas([{ id: "a", name: "Plan A", status: "ACTIVE" }],
+    new Map([["a", [{ nombre: "Restauración resina 1 cara", procedureId: null, dientes: [16], caras: ["O"], estado: "pendiente", hechoEn: null }]]]));
+  const cob = coberturaEnPlanes("resina", [16], enPlanes, { caras: ["M", "O"] });
+  assert.deepEqual([cob.cubiertas, cob.faltan], [["O"], ["M"]]);
+  const base = (): Chip => {
+    const e: EntradaPlan[] = [{ toothNumber: 16, surface: "M", conditionId: "caries" }, { toothNumber: 16, surface: "O", conditionId: "caries" }];
+    return chipsDelPlan(hallazgosPorTratar(e), TARIFARIO, e, [])[0];
+  };
+  // 1) el recálculo no devuelve nada
+  const a = base();
+  aplicarCobertura(a, cob, () => undefined);
+  assert.deepEqual([a.enOtroPlan?.plan, a.caras, a.carasEnOtroPlan ?? null], ["Plan A", ["M", "O"], null]);
+  let id = 0;
+  const ctx = { tarifario: TARIFARIO, entradas: [], nuevoId: () => `r${++id}`, motivo: "x", idioma: "es" as const };
+  assert.deepEqual(agregarDesdeChip([], a, ctx), [], "bloqueado: no se agrega");
+  // 2) el recálculo devuelve OTRO tipo de procedimiento
+  const b = base();
+  aplicarCobertura(b, cob, () => ({ ...b.sugerencia!, clave: "corona" }));
+  assert.equal(b.enOtroPlan?.plan, "Plan A");
+  // 3) un chip de varios dientes, o encadenado, no se recalcula: se bloquea
+  const c = base();
+  c.dientes = [16, 17];
+  aplicarCobertura(c, cob, () => base().sugerencia!);
+  assert.equal(c.enOtroPlan?.plan, "Plan A");
+  const d = base();
+  d.tipo = "encadenada";
+  aplicarCobertura(d, cob, () => base().sugerencia!);
+  assert.equal(d.enOtroPlan?.plan, "Plan A");
+  // y con recálculo bueno, el camino normal: solo la M
+  const ok = base();
+  aplicarCobertura(ok, cob, () => ({ ...ok.sugerencia!, caras: ["M"], nombre: "Restauración resina 1 cara", precio: 700 }));
+  assert.deepEqual([ok.enOtroPlan ?? null, ok.caras, ok.sugerencia?.precio], [null, ["M"], 700]);
 });

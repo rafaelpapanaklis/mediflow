@@ -112,6 +112,11 @@ export interface Cobertura {
   cubiertas: string[];
   /** Caras pedidas que NO están en ningún plan: lo que sigue siendo trabajo nuevo. */
   faltan: string[];
+  /**
+   * Las cubiertas, por plan y en el orden de preferencia (v8, m1): «16 O ya en el plan «A» · 16 D en
+   * el «B»». Una cara que está en dos planes cuenta en el primero. Sin caras pedidas, solo los planes.
+   */
+  porPlan: Array<{ planId: string; plan: string; caras: string[] }>;
 }
 
 /**
@@ -143,8 +148,20 @@ export function coberturaEnPlanes(
       : piden.filter((c) => candidatas.some((f) => carasDe(f).includes(c)));
   }
   const fila = candidatas.find((f) => f.estado !== "hecho") ?? candidatas[0] ?? null;
-  if (!fila) return { fila: null, cubiertas: [], faltan: piden };
-  return { fila, cubiertas, faltan: piden.filter((c) => !cubiertas.includes(c)) };
+  if (!fila) return { fila: null, cubiertas: [], faltan: piden, porPlan: [] };
+  // por plan: primero las filas por hacer, luego las hechas (el mismo orden que elige `fila`)
+  const ordenadas = [...candidatas.filter((f) => f.estado !== "hecho"), ...candidatas.filter((f) => f.estado === "hecho")];
+  const porPlan: Cobertura["porPlan"] = [];
+  const asignadas = new Set<string>();
+  for (const f of ordenadas) {
+    const suyas = (f.caras ?? []).length === 0 ? cubiertas : cubiertas.filter((c) => (f.caras ?? []).includes(c));
+    const nuevas = suyas.filter((c) => !asignadas.has(c));
+    nuevas.forEach((c) => asignadas.add(c));
+    const g = porPlan.find((x) => x.planId === f.planId);
+    if (g) g.caras = CARAS_BASE.filter((c) => g.caras.includes(c) || nuevas.includes(c));
+    else if (nuevas.length > 0 || cubiertas.length === 0) porPlan.push({ planId: f.planId, plan: f.plan, caras: nuevas });
+  }
+  return { fila, cubiertas, faltan: piden.filter((c) => !cubiertas.includes(c)), porPlan };
 }
 
 /** La fila de algún plan que ya tiene TODO lo pedido (dientes y, si va por caras, todas sus caras), o null. */

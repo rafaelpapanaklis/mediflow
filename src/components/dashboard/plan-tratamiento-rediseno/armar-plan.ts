@@ -23,7 +23,7 @@ import {
   type ProcedimientoTarifario, type Sugerencia,
 } from "@/lib/treatments/sugerir-procedimiento";
 import { aCentavos } from "@/lib/treatments/items";
-import { coberturaEnPlanes, type FilaEnPlan } from "@/lib/treatments/ya-en-planes";
+import { coberturaEnPlanes, type Cobertura, type FilaEnPlan } from "@/lib/treatments/ya-en-planes";
 
 type Entradas = { toothNumber: number; conditionId: string; estado?: string | null }[];
 
@@ -48,13 +48,45 @@ export interface Chip {
    * plan X» o «ya hecha en el plan X (fecha)» y no se agrega (ni con «Agregar todo»): serían dos notas
    * de cobro. Las reglas, en `ya-en-planes.ts`.
    */
-  enOtroPlan?: { plan: string; hechoEn: string | null } | null;
+  enOtroPlan?: {
+    plan: string;
+    hechoEn: string | null;
+    /** Si lo cubren entre VARIOS planes, todos (v8): «ya en los planes «A» y «B»». */
+    planes?: string[];
+  } | null;
   /**
-   * Solape PARCIAL de caras (v7, M1-v6): esas caras ya están en otro plan; el chip ofrece solo las
-   * que faltan (`caras` y `sugerencia` ya recalculadas, con su variante y su precio) y lo dice
-   * («16 O ya en el plan «A»»).
+   * Solape PARCIAL de caras (v7, M1-v6): esas caras ya están en otros planes; el chip ofrece solo
+   * las que faltan (`caras` y `sugerencia` ya recalculadas, con su variante y su precio) y lo dice,
+   * por plan (v8): «16 O ya en el plan «A» · 16 D en el «B»».
    */
-  carasEnOtroPlan?: { caras: string[]; plan: string } | null;
+  carasEnOtroPlan?: Array<{ plan: string; caras: string[] }> | null;
+}
+
+/**
+ * Lo que `coberturaEnPlanes` dice de un chip, aplicado al chip (v7/v8):
+ *  · nada solapa → el chip queda como está;
+ *  · todo cubierto → bloqueado («ya en el plan X», o «en los planes X e Y»);
+ *  · solape parcial → solo las caras que faltan, con `recalcular(faltan)` (la variante y el precio de
+ *    ESAS caras) y la nota por plan. Si no se puede recalcular (chip de varios dientes, encadenado, o
+ *    la sugerencia no sale del mismo tipo), se BLOQUEA: nunca se ofrece entero con la cara ya planeada
+ *    dentro (v8, m2).
+ */
+export function aplicarCobertura(c: Chip, cob: Cobertura, recalcular: (faltan: string[]) => Sugerencia | undefined): void {
+  if (!cob.fila) return;
+  const bloquear = () => {
+    const planes = Array.from(new Set(cob.porPlan.map((g) => g.plan)));
+    c.enOtroPlan = {
+      plan: cob.fila!.plan,
+      hechoEn: cob.fila!.estado === "hecho" ? cob.fila!.hechoEn : null,
+      ...(planes.length > 1 ? { planes } : {}),
+    };
+  };
+  if (cob.faltan.length === 0) return bloquear();
+  const otra = c.dientes.length === 1 && c.tipo !== "encadenada" ? recalcular(cob.faltan) : undefined;
+  if (!otra || otra.clave !== c.sugerencia?.clave) return bloquear();
+  c.sugerencia = otra;
+  c.caras = CARAS.filter((x) => cob.faltan.includes(x));
+  c.carasEnOtroPlan = cob.porPlan.filter((g) => g.caras.length > 0).map((g) => ({ plan: g.plan, caras: g.caras }));
 }
 
 const cuadrante = (fdi: number) => Math.floor(fdi / 10);
@@ -163,22 +195,13 @@ export function chipsDelPlan(
         : null;
       // con sus caras: «Resina 16 O» en otro plan no tapa la caries de la M (v6, m1)
       const cob = coberturaEnPlanes(c.sugerencia.clave, c.dientes, enPlanes, { marcadaEn, hechoPorSiempre: c.tipo === "por_hacer", caras: c.sugerencia.caras });
-      if (!cob.fila) continue;
-      if (cob.faltan.length === 0) {
-        c.enOtroPlan = { plan: cob.fila.plan, hechoEn: cob.fila.estado === "hecho" ? cob.fila.hechoEn : null };
-        continue;
-      }
-      // Solape parcial (v7): solo las caras que faltan, con la variante y el precio de ESAS caras
-      // (caries 16 MO con «Resina 16 O» en el plan A → «Resina 1 cara · 16 M»). La cara ya planeada
-      // no entra dos veces.
-      if (c.dientes.length !== 1 || c.tipo === "encadenada") continue;
+      // Solape parcial: solo las caras que faltan, con la variante y el precio de ESAS caras (caries
+      // 16 MO con «Resina 16 O» en el plan A → «Resina 1 cara · 16 M»). La cara ya planeada no entra
+      // dos veces; si no se puede recalcular, el chip se bloquea.
       const h0 = c.hallazgos[0];
-      const otra = sugerirProcedimiento({ diente: c.dientes[0], caras: cob.faltan, conditionId: h0.conditionId, porHacer: h0.porHacer }, tarifario, entradas)
-        .sugerencias.find((x) => x.clave === c.sugerencia!.clave && x.encadenadaDe === null);
-      if (!otra) continue;
-      c.sugerencia = otra;
-      c.caras = CARAS.filter((x) => cob.faltan.includes(x));
-      c.carasEnOtroPlan = { caras: cob.cubiertas, plan: cob.fila.plan };
+      aplicarCobertura(c, cob, (faltan) =>
+        sugerirProcedimiento({ diente: c.dientes[0], caras: faltan, conditionId: h0.conditionId, porHacer: h0.porHacer }, tarifario, entradas)
+          .sugerencias.find((x) => x.clave === c.sugerencia!.clave && x.encadenadaDe === null));
     }
   }
   // Lo marcado en rojo, primero: es lo que el doctor ya decidió.

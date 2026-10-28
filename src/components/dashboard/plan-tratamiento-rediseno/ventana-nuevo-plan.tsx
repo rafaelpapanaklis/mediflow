@@ -254,17 +254,25 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
   // «ya en el plan «X»» o, si esa fila ya se hizo, «ya hecha en el plan «X» (3 mar 2025)» (v4, m1).
   const textoYaEnPlan = (c: Chip) => {
     if (!c.enOtroPlan) return "";
-    const { plan: nombrePlan, hechoEn } = c.enOtroPlan;
+    const { plan: nombrePlan, hechoEn, planes } = c.enOtroPlan;
+    // cubierto entre varios planes (v8): «ya en los planes «A» y «B»»
+    if (planes && planes.length > 1) {
+      const lista = planes.map((p) => (idioma === "en" ? `“${p}”` : `«${p}»`));
+      return t("planTratamiento.nuevo.yaEnPlanes", { planes: `${lista.slice(0, -1).join(", ")} ${t("planTratamiento.nuevo.y")} ${lista[lista.length - 1]}` });
+    }
     if (!hechoEn) return t("planTratamiento.nuevo.yaEnPlan", { plan: nombrePlan });
     const fecha = new Intl.DateTimeFormat(idioma === "en" ? "en-US" : "es-MX", { day: "numeric", month: "short", year: "numeric" }).format(new Date(hechoEn));
     return t("planTratamiento.nuevo.yaHechaEnPlan", { plan: nombrePlan, fecha });
   };
-  // «16 O ya en el plan «A»»: las caras de ese diente que ya están en otro plan (v7, solape parcial).
+  // «16 O ya en el plan «A» · 16 D en el «B»»: las caras de ese diente que ya están en otros planes,
+  // por plan (v7 solape parcial; v8 agrupado).
   const textoCarasEnPlan = (c: Chip) => {
-    if (!c.carasEnOtroPlan || c.dientes.length !== 1) return "";
+    if (!c.carasEnOtroPlan?.length || c.dientes.length !== 1) return "";
     const d = c.dientes[0];
-    const caras = CARAS.filter((x) => c.carasEnOtroPlan!.caras.includes(x)).map((x) => (x === "O" ? letraCentro([d]) : x)).join("");
-    return t("planTratamiento.nuevo.carasYaEnPlan", { diente: String(d), caras, plan: c.carasEnOtroPlan.plan });
+    const letras = (caras: string[]) => CARAS.filter((x) => caras.includes(x)).map((x) => (x === "O" ? letraCentro([d]) : x)).join("");
+    return c.carasEnOtroPlan
+      .map((g, i) => t(i === 0 ? "planTratamiento.nuevo.carasYaEnPlan" : "planTratamiento.nuevo.carasEnOtroPlanMas", { diente: String(d), caras: letras(g.caras), plan: g.plan }))
+      .join(" · ");
   };
   // «pieza 16 oclusal» / «pieza 16 MO» (la cara con su nombre cuando es una).
   const dondeRojo = (c: Chip) => {
