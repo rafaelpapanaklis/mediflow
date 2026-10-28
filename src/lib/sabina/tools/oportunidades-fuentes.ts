@@ -495,20 +495,29 @@ export async function seccionSinAgendar(
   const vis = visibilidad(ctx);
   const auth = comoAuthContext(ctx);
 
+  // ws1-t12 v20 (B1 de t1): en la base real `treatment_plans.status` es TEXT y un `where: { status }` de Prisma
+  // da 42883 (text = "TreatmentStatus"). Primero una lectura ligera SIN estado (id y estado, en el mismo orden);
+  // los activos se eligen en JS y se toman los `tope` primeros; luego, la lectura completa de esos.
+  const donde = {
+    clinicId: ctx.clinicId,
+    // Mismo scope que GET /api/treatments: el doctor ve SUS planes.
+    ...(auth.isDoctor ? { doctorId: ctx.userId } : {}),
+    // 🔴 Los archivados NO se filtran aquí: se descartan abajo para poder
+    // CONTARLOS. Tirarlos en el `where` era lo que hacía que el trabajo
+    // aceptado de un paciente cancelado por ARCO —la sección que más
+    // dinero mueve— se evaporara sin dejar rastro en `archivados`.
+    ...(vis.length ? { AND: vis } : {}),
+  };
+  const activos = puede.verPlanes
+    ? (await db.treatmentPlan.findMany({ where: donde, select: { id: true, status: true }, orderBy: { totalCost: "desc" } }))
+        .filter((p: { status: unknown }) => String(p.status) === "ACTIVE")
+        .slice(0, tope)
+        .map((p: { id: string }) => p.id)
+    : [];
   const [planes, presupuestos] = await Promise.all([
-    puede.verPlanes
+    puede.verPlanes && activos.length > 0
       ? db.treatmentPlan.findMany({
-          where: {
-            clinicId: ctx.clinicId,
-            status: "ACTIVE",
-            // Mismo scope que GET /api/treatments: el doctor ve SUS planes.
-            ...(auth.isDoctor ? { doctorId: ctx.userId } : {}),
-            // 🔴 Los archivados NO se filtran aquí: se descartan abajo para poder
-            // CONTARLOS. Tirarlos en el `where` era lo que hacía que el trabajo
-            // aceptado de un paciente cancelado por ARCO —la sección que más
-            // dinero mueve— se evaporara sin dejar rastro en `archivados`.
-            ...(vis.length ? { AND: vis } : {}),
-          },
+          where: { ...donde, id: { in: activos } },
           select: {
             id: true,
             name: true,

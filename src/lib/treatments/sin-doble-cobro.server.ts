@@ -26,15 +26,26 @@ export interface PlanDelPaciente {
   doctorId: string;
 }
 
-/** Los planes del paciente (también los cancelados), del más nuevo al más viejo. */
+/**
+ * Los planes del paciente (también los cancelados), del más nuevo al más viejo.
+ *
+ * v20 (B1 de t1, 28-oct): el estado se filtra AQUÍ, no en el `where`. En la base real
+ * `treatment_plans.status` es TEXT y schema.prisma lo declara enum `TreatmentStatus`: un `where: { status }`
+ * manda el parámetro como enum y Postgres contesta 42883 «operator does not exist: text = "TreatmentStatus"»
+ * (panel.108: «Cuenta del plan», `/api/treatments/cuentas`, daba 500). Un paciente tiene pocos planes.
+ */
 export async function planesDelPaciente(clinicId: string, patientId: string): Promise<PlanDelPaciente[]> {
   if (!clinicId || !patientId) return [];
-  return prisma.treatmentPlan.findMany({
-    where: { clinicId, patientId, status: { in: [...ESTADOS_DE_PLAN_VIVO, CANCELADO] } },
+  const todos = await prisma.treatmentPlan.findMany({
+    where: { clinicId, patientId },
     select: { id: true, name: true, status: true, doctorId: true },
     orderBy: { createdAt: "desc" },
-    take: MAX_PLANES,
   });
+  const cuentan: readonly string[] = [...ESTADOS_DE_PLAN_VIVO, CANCELADO];
+  return todos
+    .map((p) => ({ ...p, status: String(p.status) }))
+    .filter((p) => cuentan.includes(p.status))
+    .slice(0, MAX_PLANES);
 }
 
 /**

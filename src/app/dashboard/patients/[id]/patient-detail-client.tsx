@@ -77,6 +77,8 @@ import { useConfirm } from "@/components/ui/confirm-dialog";
 import { CODIGO_PLAN_CON_NOTA } from "@/lib/treatments/borrar-plan";
 import { useCuentasDelPaciente } from "@/components/dashboard/expediente-rediseno/cuenta-del-plan";
 import { useLoQueAunNoSeDebe } from "@/components/dashboard/patient-detail/use-lo-que-aun-no-se-debe";
+import { cuentaEnElDebeDeLaFicha, debeDeLaFicha } from "@/lib/dinero/debe-de-la-ficha";
+import type { CitaElegidaParaLaNota } from "@/lib/treatments/cita-del-hecho";
 import { cancelarCitaEnServidor, useCancelarCita } from "@/components/dashboard/agenda/cancelar-cita";
 import { planSinCosto } from "@/lib/treatments/plan-sin-costo";
 import { DentalForm, type MotivoEnLaBarra } from "@/components/clinical/dental-form";
@@ -1456,9 +1458,11 @@ export function PatientDetailClient({
   // card "Estado de cuenta" y el botón "Cobrar ahora" mostraban la deuda de una
   // factura que ya no se debe. Los DRAFT SÍ suman a propósito: en la ficha son
   // facturas en curso y son justo lo que `openChargeShortcut` prioriza cobrar.
+  // v18 (t5 de la v17, m1): la regla vive en `lib/dinero/debe-de-la-ficha.ts` (el porqué, allí) y la usa
+  // también «Debe hoy» del detalle de la cita (`debeDelPaciente`): las dos cifras son siempre la misma.
   const { totalPlan, totalPaid, totalBalance } = useMemo(() => {
     return (invoices as any[])
-      .filter((inv) => !isVoidedInvoice(inv))
+      .filter((inv) => cuentaEnElDebeDeLaFicha(inv))
       .reduce(
         (acc, inv) => ({
           totalPlan:    acc.totalPlan    + (inv.total   ?? 0),
@@ -1481,7 +1485,7 @@ export function PatientDetailClient({
     `${refrescoCuentas}|${planesDelServidor.map((p: any) => p.id + p.updatedAt).join(",")}|` +
       (invoices as any[]).map((inv) => `${inv.id}:${inv.balance}:${inv.paid}:${inv.status}`).join(","),
   );
-  const saldoQueSeDebe = Math.max(0, Math.round((totalBalance - aunNoSeDebe) * 100) / 100);
+  const saldoQueSeDebe = debeDeLaFicha(totalBalance, aunNoSeDebe);
   // v8 (revisión t5 de la v7, V1): lo pagado por adelantado de un plan NO es saldo a favor (eso es solo el
   // libro `patient_credits`, lo que se descuenta de la siguiente factura): es parte de lo por hacer que ya
   // está pagada. «Además, $X por hacer» = lo por hacer COMPLETO (el «Por hacer» de la Cuenta del plan) y
@@ -1512,7 +1516,11 @@ export function PatientDetailClient({
     [invoices],
   );
 
+  // v18 (t5 de la v17, m2): la cita elegida en «Hecho» para escribir su nota («Marcar y escribir la nota»).
+  // «Nueva consulta» (dental) la liga a esa cita; se olvida al guardar la nota o con «Quitar».
+  const [citaParaLaNota, setCitaParaLaNota] = useState<CitaElegidaParaLaNota | null>(null);
   function handleRecordSaved(record: any) {
+    setCitaParaLaNota(null);
     // ws1-t8 (revisión de ws1-t9, fallo 1): con la consulta abierta, «Guardar consulta» escribe en el borrador
     // de la cita (mismo id): se reemplaza en la lista en vez de duplicarlo, y si quedó firmado, «Completar
     // consulta» ya no le manda encima el SOAP vacío de la barra.
@@ -2726,7 +2734,7 @@ export function PatientDetailClient({
               onIrACuestionario={() => setTab("cuestionario")}
               formulario={
                 <>
-                  {formularioConsulta === "dental"     && <DentalForm          patientId={patient.id} isChild={!!patient.isChild} onSaved={handleRecordSaved} registrarGuardado={registrarGuardadoDeConsulta} citaEnCursoId={activeAppointment?.id ?? null} rediseno armarPlan={armarPlanConsulta} />}
+                  {formularioConsulta === "dental"     && <DentalForm          patientId={patient.id} isChild={!!patient.isChild} onSaved={handleRecordSaved} registrarGuardado={registrarGuardadoDeConsulta} citaEnCursoId={activeAppointment?.id ?? null} citaElegida={citaParaLaNota} onQuitarCitaElegida={() => setCitaParaLaNota(null)} rediseno armarPlan={armarPlanConsulta} />}
                   {formularioConsulta === "nutrition"  && <NutritionForm       patientId={patient.id} patient={patient} onSaved={handleRecordSaved} />}
                   {formularioConsulta === "psychology" && <PsychologyForm      patientId={patient.id} sessionNum={records.length + 1} onSaved={handleRecordSaved} />}
                   {formularioConsulta === "medicine"   && <GeneralMedicineForm patientId={patient.id} onSaved={handleRecordSaved} />}
@@ -2769,7 +2777,7 @@ export function PatientDetailClient({
                 </div>
               </div>
               {showQuestionnaireWarning && <div className="mb-4">{questionnaireBanner}</div>}
-              {formularioConsulta === "dental"     && <DentalForm          patientId={patient.id} isChild={!!patient.isChild} onSaved={handleRecordSaved} registrarGuardado={registrarGuardadoDeConsulta} citaEnCursoId={activeAppointment?.id ?? null} />}
+              {formularioConsulta === "dental"     && <DentalForm          patientId={patient.id} isChild={!!patient.isChild} onSaved={handleRecordSaved} registrarGuardado={registrarGuardadoDeConsulta} citaEnCursoId={activeAppointment?.id ?? null} citaElegida={citaParaLaNota} onQuitarCitaElegida={() => setCitaParaLaNota(null)} />}
               {formularioConsulta === "nutrition"  && <NutritionForm       patientId={patient.id} patient={patient} onSaved={handleRecordSaved} />}
               {formularioConsulta === "psychology" && <PsychologyForm      patientId={patient.id} sessionNum={records.length + 1} onSaved={handleRecordSaved} />}
               {formularioConsulta === "medicine"   && <GeneralMedicineForm patientId={patient.id} onSaved={handleRecordSaved} />}
@@ -2963,6 +2971,14 @@ export function PatientDetailClient({
                     patientId={patient.id}
                     puedeMarcarHecho={canEditTreatments || currentUser.role === "SUPER_ADMIN"}
                     refresco={`${refrescoCuentas}|${planesDelServidor.map((p: any) => p.id + p.updatedAt).join(",")}`}
+                    // v17: «Hecho» en una cita sin nota → a escribirla. v18 (t5, m2): en «Nueva consulta» (dental), LIGADA
+                    // a esa cita; solo donde ese formulario existe y quien marca puede escribir notas.
+                    onEscribirNota={canEditRecords && formularioConsulta === "dental" && consultLandingPermitido(CONSULT_FORM_TAB)
+                      ? (cita) => { setCitaParaLaNota(cita); setTab(CONSULT_FORM_TAB); }
+                      : undefined}
+                    // v17 (decisión 3): «Convertir en presupuesto» también en la tarjeta (mismo permiso que en «Ver plan»).
+                    onAbrirPresupuesto={canCreateQuotes ? (q) => { setPresupuestoAbrir(q.id); setTab("presupuestos"); } : undefined}
+                    usuario={{ id: currentUser.id, esDoctor: currentUser.role === "DOCTOR" }}
                     onNuevo={() => setShowNewTreatment(true)}
                     onVer={(plan) => setViewPlan(plan)}
                     onEditar={(plan) => setEditPlan(plan)}

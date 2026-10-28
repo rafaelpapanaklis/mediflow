@@ -261,7 +261,8 @@ test("la ficha manda al formulario dental la cita en consulta, y este la usa al 
   const { join } = await import("node:path");
   const SRC = join(__dirname, "..", "..", "..", "..");
   const form = readFileSync(join(SRC, "components/clinical/dental-form.tsx"), "utf8");
-  assert.match(form, /const appointmentId = citaEnCursoId \?\? \(await fetchTodayAppointmentId\(patientId\)\);/);
+  // ws1-t12 v18: delante va la cita elegida en «Hecho» («Marcar y escribir la nota»); sin ella, la de la consulta.
+  assert.match(form, /const appointmentId = citaElegida\?\.id \?\? citaEnCursoId \?\? \(await fetchTodayAppointmentId\(patientId\)\);/);
   const ficha = readFileSync(join(SRC, "app/dashboard/patients/[id]/patient-detail-client.tsx"), "utf8");
   const dentales = ficha.match(/formularioConsulta === "dental"\s+&& <DentalForm[^\n]*/g) ?? [];
   assert.equal(dentales.length, 2);

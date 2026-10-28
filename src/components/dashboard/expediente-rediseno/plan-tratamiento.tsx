@@ -7,10 +7,12 @@ import { useLocale, useT } from "@/i18n/i18n-provider";
 import { esDescripcionDePlan, MARCA_PLAN } from "@/components/dashboard/plan-tratamiento-rediseno/plan-clinico";
 import { lineaDelCasoTraducida, type ResumenOrtoParaFicha } from "@/lib/orthodontics/resumen-para-ficha";
 import { RaizExpediente } from "./raiz";
-import { CuentaDelPlan, type CuentasDelPaciente } from "./cuenta-del-plan";
+import { CuentaDelPlan, cuentaConAlgo, type CuentasDelPaciente } from "./cuenta-del-plan";
+import { ConvertirEnPresupuesto, type PresupuestoDelPlan } from "@/components/dashboard/plan-a-presupuesto/convertir-en-presupuesto";
 import { AgendarLoPendiente } from "@/components/dashboard/plan-a-agenda/agendar-lo-pendiente";
 import { ProcedimientosDelPlan, useFilasDePlanes } from "./procedimientos-del-plan";
 import type { PlanConCuenta } from "@/lib/treatments/sin-doble-cobro";
+import type { CitaElegidaParaLaNota } from "@/lib/treatments/cita-del-hecho";
 import s from "./expediente.module.css";
 
 /**
@@ -61,6 +63,15 @@ export interface PlanTratamientoProps {
   patientId?: string;
   puedeMarcarHecho?: boolean;
   refresco?: unknown;
+  /** v17: «Hecho» en una cita sin nota clínica → escribirla (solo si quien marca puede escribir notas). v18: ligada a esa cita. */
+  onEscribirNota?: (cita: CitaElegidaParaLaNota) => void;
+  /**
+   * v17 (decisión 3 de Rafael): «Convertir en presupuesto» también en la tarjeta, junto a «Abonar al plan».
+   * Solo llega con `billing.create` + `treatments.view` (lo de hoy); abre el presupuesto creado o el que ya había.
+   */
+  onAbrirPresupuesto?: (q: PresupuestoDelPlan) => void;
+  /** El doctor solo convierte SUS planes (el servidor no le encuentra los de otro): sin botón en los ajenos. */
+  usuario?: { id: string; esDoctor: boolean };
 }
 
 const ESTADO_PLAN: Record<string, { labelKey: string; tono: string }> = {
@@ -85,6 +96,7 @@ const sesionesHechas = (sesiones: any[] | undefined) =>
 export function PlanTratamiento({
   tratamientos: tratamientosDelServidor, puedeEditar, onNuevo, onVer, onEditar, onEliminar, casoOrtodoncia = null, onAbrirCaso,
   cuentas, cargandoCuentas, onCobrarPlan, onCuentaCambio, onCuentaNueva, patientId, puedeMarcarHecho = false, refresco,
+  onEscribirNota, onAbrirPresupuesto, usuario,
 }: PlanTratamientoProps) {
   const t = useT();
   const locale = useLocale();
@@ -190,6 +202,26 @@ export function PlanTratamiento({
           const pct = plan.totalSessions > 0 ? Math.round((hechas / plan.totalSessions) * 100) : 0;
           const pendientes = Math.max(0, (plan.totalSessions || 0) - hechas);
           const estado = ESTADO_PLAN[plan.status] ?? ESTADO_PLAN.ACTIVE;
+          const cuentaDelPlan = cuentas?.get(plan.id);
+          // v17 (decisión 3): «Convertir en presupuesto» a la vista. No sale si el plan ya tiene nota de cobro
+          // (ya está aceptado: no se crean dos caminos de cobro), ni cerrado o terminado, ni mientras no se sabe
+          // (cuentas cargando). Con un presupuesto vivo (borrador, presentado o aceptado) la ventana ofrece
+          // abrirlo en vez de crear otro, como hoy. El componente y el permiso son los de «Ver plan».
+          const conPresupuesto = !!onAbrirPresupuesto
+            && plan.status !== "ABANDONED" && plan.status !== "COMPLETED"
+            && !(cuentas === null && cargandoCuentas)
+            && !(cuentaDelPlan && cuentaDelPlan.notas.length > 0)
+            && !(usuario?.esDoctor && plan.doctorId !== usuario.id);
+          const botonPresupuesto = conPresupuesto ? (
+            <ConvertirEnPresupuesto
+              planId={plan.id}
+              planCosto={Number(plan.totalCost) || 0}
+              onAbrirPresupuesto={onAbrirPresupuesto!}
+              claseBoton={`${s.boton} ${s.botonChico}`}
+            />
+          ) : null;
+          // Va dentro de «Cuenta del plan» cuando esta se pinta; si no (sin ver dinero, plan sin cifras), en su fila.
+          const presupuestoEnLaCuenta = cuentas !== undefined && cuentaConAlgo(cuentaDelPlan);
           return (
             <div
               key={plan.id}
@@ -264,7 +296,12 @@ export function PlanTratamiento({
               </div>
               {/* Un plan cancelado conserva su nota: su saldo se sigue viendo (y abonando). */}
               {cuentas !== undefined && (
-                <CuentaDelPlan cuenta={cuentas?.get(plan.id)} cargando={cargandoCuentas && !cuentas} onCobrar={onCobrarPlan} puedeCerrar={puedeEditar} onCambio={onCuentaCambio} onCuenta={onCuentaNueva} />
+                <CuentaDelPlan cuenta={cuentaDelPlan} cargando={cargandoCuentas && !cuentas} onCobrar={onCobrarPlan} puedeCerrar={puedeEditar} onCambio={onCuentaCambio} onCuenta={onCuentaNueva} presupuesto={presupuestoEnLaCuenta ? botonPresupuesto : null} />
+              )}
+              {botonPresupuesto && !presupuestoEnLaCuenta && (
+                <div className={s.planAgendar} onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()} data-presupuesto-plan={plan.id}>
+                  {botonPresupuesto}
+                </div>
               )}
               {/* v11: los procedimientos, con «Hecho» y «Deshacer» (lo hecho pasa a «Debe» al momento). */}
               <ProcedimientosDelPlan
@@ -276,6 +313,7 @@ export function PlanTratamiento({
                 onFilas={(filas) => filasDePlanes.poner(plan.id, filas)}
                 onCuenta={onCuentaNueva}
                 onCambio={() => onCuentaCambio?.([])}
+                onEscribirNota={onEscribirNota}
               />
               {/* Fase 2 · C: «Agendar lo pendiente» (se esconde solo). La tarjeta entera abre el plan:
                   ni el clic ni el teclado de aquí (ni de la hoja que abre) llegan a ella. */}

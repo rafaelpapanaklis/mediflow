@@ -546,8 +546,11 @@ test("el resumen cuesta lo que dice el reporte: una cuenta de consultas que se p
   await datos(adminNorte(db));
   // Si alguien añade una consulta, esta prueba lo dice. No es un tope sagrado:
   // es un aviso de que el coste cambió y hay que volver a mirarlo.
+  // ws1-t12 v20 (B1 de t1): 18 → 19. `sin_agendar` lee los planes en dos pasos —primero id y estado (ligero),
+  // luego los `tope` activos completos— porque en la base real `treatment_plans.status` es TEXT y no se puede
+  // filtrar en el `where` de Prisma (42883). Pesa menos que leer TODOS los planes con sesiones y paciente.
   assert.ok(
-    db.contador.llamadas.length <= 18,
+    db.contador.llamadas.length <= 19,
     `el resumen pasó a ${db.contador.llamadas.length} consultas: ${JSON.stringify(db.contador.llamadas)}`,
   );
 });
@@ -934,4 +937,26 @@ test("sin tocar el tope, el contador de archivados se presenta como cerrado", as
   assert.equal(d.archivados.exacto, true);
   const r = await correr(adminNorte(baseEscape()));
   assert.ok(!/Dejé fuera al menos/.test((r as any).resumen), "aquí la cifra sí es la de verdad");
+});
+
+// ws1-t12 v20 (B1 de t1): en la base real `treatment_plans.status` es TEXT; un `where: { status }` de Prisma da
+// 42883. `sin_agendar` elige los planes ACTIVOS en JS: ninguna consulta a `treatmentPlan` lleva `status` en el
+// `where`, y aun así solo salen los activos (Pablo, con su plan activo, sí; un plan terminado no).
+test("v20: `sin_agendar` no filtra treatmentPlan por `status` en el where (columna TEXT en la base real) y sigue dando solo los activos", async () => {
+  const db = baseEscape();
+  const wheres: unknown[] = [];
+  const planes = (db as unknown as { treatmentPlan: { findMany: (a: any) => Promise<any[]> } }).treatmentPlan;
+  const original = planes.findMany.bind(planes);
+  planes.findMany = async (a: any) => {
+    wheres.push(a?.where);
+    return original(a);
+  };
+  const filas = await filasDeSeccion(adminNorte(db), "sin_agendar");
+  assert.ok(wheres.length > 0, "sí leyó los planes");
+  assert.doesNotMatch(JSON.stringify(wheres), /"status"/, `un where de treatmentPlan lleva status: ${JSON.stringify(wheres)}`);
+  assert.ok(nombres(filas).includes("Pablo Plan"), "el plan activo sigue saliendo");
+  // La lectura completa pide solo los activos: el plan TERMINADO de Paz («tp-hecho», atrasado) no entra.
+  const pedidos = (wheres as Array<{ id?: { in?: string[] } } | undefined>).flatMap((w) => w?.id?.in ?? []);
+  assert.ok(pedidos.includes("tp-pablo"));
+  assert.ok(!pedidos.includes("tp-hecho"), "el estado se filtra en JS");
 });

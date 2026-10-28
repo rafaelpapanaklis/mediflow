@@ -36,7 +36,7 @@ export const RESULTADOS_DE_HECHO = ["aplicado", "sin_cambio", "sin_permiso", "si
 /** Los códigos de error de «hecho» (`CODIGOS_HECHO` del servidor es esta misma lista). */
 export const CODIGOS_DE_HECHO = [
   "sin_filas", "demasiadas_filas", "fila_desconocida", "fila_cancelada", "no_esta_hecha",
-  "cita_invalida", "sin_filas_en_plan", "sin_permiso_odontograma", "plan_cerrado",
+  "cita_invalida", "sin_filas_en_plan", "sin_permiso_odontograma", "plan_cerrado", "motivo_sin_cita",
 ] as const;
 
 export function avisoDeHecho(t: T, r: Pick<ResultadoMarcarHecho, "resultado">): string {
@@ -97,6 +97,8 @@ export interface ResultadoMarcarHecho {
    * ficha la pone al momento en «Cuenta del plan» en lugar de esperar a releer todos los planes.
    */
   cuenta?: PlanConCuenta;
+  /** v17: la cita elegida no tiene nota clínica (la tarjeta avisa y ofrece escribirla; nada se bloqueó). */
+  citaSinNota?: boolean;
 }
 
 /** La cuenta que viene en la respuesta de «Hecho», «Deshacer» o «Cerrar plan», si viene bien formada. */
@@ -131,10 +133,20 @@ const errorDe = (status: number, data: Record<string, unknown>): ResultadoMarcar
  */
 export interface OpcionesDeHecho {
   conCuenta?: boolean;
+  /** v17 (decisión 1 de Rafael): «Se hizo sin cita», con este motivo (va sin `citaId`). */
+  sinCita?: string;
+  /** v17: que la respuesta diga si la cita elegida no tiene nota clínica (`citaSinNota`). Lo pide la tarjeta. */
+  avisarSinNota?: boolean;
 }
 
 export function cuerpoMarcarHecho(filaIds: string[], citaId: string | null, opciones: OpcionesDeHecho = {}) {
-  return { action: ACCION_MARCAR_HECHO, itemIds: filaIds, ...(citaId ? { citaId } : {}), ...(opciones.conCuenta ? { conCuenta: true } : {}) };
+  return {
+    action: ACCION_MARCAR_HECHO,
+    itemIds: filaIds,
+    ...(citaId ? { citaId } : opciones.sinCita !== undefined ? { sinCita: true, motivoSinCita: opciones.sinCita } : {}),
+    ...(citaId && opciones.avisarSinNota ? { avisarSinNota: true } : {}),
+    ...(opciones.conCuenta ? { conCuenta: true } : {}),
+  };
 }
 
 export async function marcarHecho(
@@ -167,7 +179,7 @@ export async function marcarHecho(
   const resultado = resultados.length === 1 && typeof resultados[0]?.estado === "string" ? resultados[0].estado : undefined;
   const cuenta = cuentaDeLaRespuesta(data);
   return marcada
-    ? { ok: true, status: res.status, ...(resultado ? { resultado } : {}), ...(cuenta ? { cuenta } : {}) }
+    ? { ok: true, status: res.status, ...(resultado ? { resultado } : {}), ...(cuenta ? { cuenta } : {}), ...(data.citaSinNota === true ? { citaSinNota: true } : {}) }
     : { ok: false, noDisponible: true, status: res.status };
 }
 

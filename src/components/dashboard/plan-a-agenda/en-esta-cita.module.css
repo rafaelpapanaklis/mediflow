@@ -1,0 +1,62 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   «En esta cita: resina $700 (hecha) · Debe hoy $700» (v17, decisión 2 de
+   Rafael) en el detalle de la cita. Se monta en los DOS paneles (Agenda nueva
+   y la de siempre), así que usa los tokens globales que tienen los dos
+   (`--text-*`, `--border-soft`, `--danger`, `--success`). Nada de hex.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.enCita {
+  margin: 14px 20px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  font-size: 12.5px;
+  color: var(--text-1);
+  min-width: 0;
+}
+
+/* En la agenda de siempre, con los márgenes de sus avisos (`.detailAlerts`). */
+.enCitaDeSiempre { margin: 0 14px 10px; }
+
+.enCitaRotulo {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.enCitaLista {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.enCitaFila {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.enCitaNombre { flex: 1 1 120px; min-width: 0; }
+.enCitaImporte { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.enCitaEstado { color: var(--text-3); white-space: nowrap; }
+.enCitaHecho { color: var(--success); }
+
+.enCitaDebe {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-soft);
+  font-weight: 600;
+}
+
+.enCitaDebe span:last-child { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.enCitaConDeuda span:last-child { color: var(--danger); }

@@ -40,6 +40,8 @@ import { possibleTransitions } from "@/lib/agenda/transitions";
 import { useConfirmWithReason } from "@/components/ui/confirm-dialog";
 import { useNewAppointmentDialog } from "@/components/dashboard/new-appointment/new-appointment-provider";
 import { RanuraCita } from "@/components/specialties/orthodontics/agenda/RanuraCita";
+// v17 (decisión 2 de Rafael): «En esta cita: resina $700 (hecha) · Debe hoy $700».
+import { EnEstaCita } from "@/components/dashboard/plan-a-agenda/en-esta-cita";
 import { AgendaEditAppointmentModal } from "./agenda-edit-appointment-modal";
 import { InvoiceDetailModal } from "@/components/dashboard/billing/invoice-detail-modal";
 import {
@@ -544,6 +546,9 @@ export function AgendaDetailPanel({ clinicTaxMode }: AgendaDetailPanelProps) {
       {/* H42: la agenda de siempre también ofrece «Registrar control» (la
           ranura se calla sola si la cita no es de ortodoncia). */}
       <RanuraCita dto={appt} />
+
+      {/* v17: lo del plan de esta cita y lo que el paciente debe hoy (se calla si no hay nada del plan). */}
+      <EnEstaCita appointmentId={appt.id} clave={appt.status} deSiempre />
 
       <div className={styles.detailActions}>
         {/* Acciones de transición de status (filtradas por matriz). */}

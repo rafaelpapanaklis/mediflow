@@ -35,10 +35,12 @@ interface Vista {
   planEnCero?: boolean;
 }
 
-export function ConvertirEnPresupuesto({ planId, planCosto, onAbrirPresupuesto, antigua = false }: {
+export function ConvertirEnPresupuesto({ planId, planCosto, onAbrirPresupuesto, antigua = false, claseBoton }: {
   planId: string;
   /** Ficha sin el menú nuevo: el botón lleva la ropa de la ventana de siempre (el diálogo es el mismo). */
   antigua?: boolean;
+  /** v17: la ropa del botón donde se pone (la tarjeta del plan, junto a «Abonar al plan»). El diálogo es el mismo. */
+  claseBoton?: string;
   planCosto: number;
   /** Lleva al presupuesto (el recién creado o el que ya existía). Lo resuelve el contenedor de la ficha. */
   onAbrirPresupuesto: (q: PresupuestoDelPlan) => void;
@@ -90,10 +92,11 @@ export function ConvertirEnPresupuesto({ planId, planCosto, onAbrirPresupuesto, 
     <>
       <button
         type="button"
-        className={antigua
+        className={claseBoton ?? (antigua
           ? "px-3 h-9 rounded-lg border border-border text-sm font-semibold hover:bg-muted transition-colors focus-visible:outline-none focus-visible:shadow-[var(--ring)] inline-flex items-center gap-1.5"
-          : s.boton}
+          : s.boton)}
         onClick={() => setAbierto(true)}
+        data-convertir-presupuesto={planId}
       >
         <FileText size={14} strokeWidth={1.75} aria-hidden /> {t.boton}
       </button>

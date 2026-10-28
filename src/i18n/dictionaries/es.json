@@ -1790,6 +1790,13 @@
       "prevDay": "Día anterior",
       "nextDay": "Día siguiente"
     },
+    "enEstaCita": {
+      "titulo": "En esta cita",
+      "hecho": "hecho",
+      "enCurso": "en curso",
+      "porHacer": "por hacer",
+      "debeHoy": "Debe hoy"
+    },
     "detailPanel": {
       "ariaLabel": "Detalle de cita",
       "emptyState": "Selecciona una cita para ver su detalle",
@@ -7117,7 +7124,15 @@
       "nextVisitPlaceholder": "En 3 meses, urgente, etc.",
       "savingChanges": "Guardando cambios…",
       "saveConsultation": "Guardar consulta",
-      "linkedToTodayAppointment": "Esta nota quedará ligada a la cita de hoy de este paciente."
+      "linkedToTodayAppointment": "Esta nota quedará ligada a la cita de hoy de este paciente.",
+      "linkedToChosenAppointment": "Esta nota quedará ligada a {cita}, en la que se marcó el procedimiento como hecho.",
+      "unlinkChosenAppointment": "Quitar",
+      "notLinkedToChosen": "La nota se guardó, pero no quedó ligada a {cita}: esa cita ya tiene su nota o ya no admite otra.",
+      "citaDeHoy": "la cita de hoy {aLas}",
+      "citaDelDia": "la cita del {dia} {aLas}",
+      "horaALas": "a las {hora}",
+      "horaALaUna": "a la {hora}",
+      "citaSinFecha": "la cita elegida"
     },
     "dermatologyForm": {
       "zoneScalp": "Cuero cabelludo",
@@ -11051,7 +11066,25 @@
         "cita_invalida": "Esa cita no es de este paciente.",
         "sin_filas_en_plan": "Este plan es de los de antes (texto): sus procedimientos no se pueden marcar uno por uno.",
         "sin_permiso_odontograma": "Este «hecho» cambió el odontograma y tu usuario no puede editarlo: pide a un doctor que lo deshaga.",
-        "plan_cerrado": "Este plan está cerrado: ya no se marcan ni se deshacen procedimientos."
+        "plan_cerrado": "Este plan está cerrado: ya no se marcan ni se deshacen procedimientos.",
+        "motivo_sin_cita": "Escribe por qué se hizo sin cita (al menos 3 letras)."
+      },
+      "cita": {
+        "titulo": "¿En qué cita se hizo {nombre}?",
+        "cargando": "Buscando las citas del paciente…",
+        "errorCarga": "No se pudieron leer las citas. Puedes marcarlo sin cita.",
+        "ninguna": "El paciente no tiene citas recientes.",
+        "hoy": "Hoy, {hora}",
+        "sinNota": "Sin nota",
+        "sinCita": "Se hizo sin cita",
+        "motivo": "Motivo (obligatorio)",
+        "motivoPh": "Ej.: urgencia, la cita no quedó registrada…",
+        "avisoSinNota": "Esta cita no tiene nota clínica. Escríbela para respaldar el procedimiento.",
+        "avisoSinNotaDeOtro": "Esta cita no tiene nota clínica. La escribe {doctor} al atender la consulta.",
+        "suDoctor": "el doctor de la cita",
+        "marcarYEscribir": "Marcar y escribir la nota",
+        "volver": "Volver",
+        "confirmar": "Marcar hecho"
       }
     }
   },

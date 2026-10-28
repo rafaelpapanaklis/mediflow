@@ -27,6 +27,24 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const patientId = searchParams.get("patientId");
   const status    = searchParams.get("status"); // ACTIVE | COMPLETED | ABANDONED | PAUSED
+  // v17 (decisión 4 de Rafael): la ficha y «Hoy en el sillón» piden los planes del paciente de TODOS sus
+  // doctores (`todosLosDoctores=1`, solo con `patientId`) para enseñar sus procedimientos con «Hecho»: el
+  // doctor ya ve esos planes en la ficha (nombre, costo y cuenta); faltaba su lista de procedimientos. Sin
+  // el parámetro, el doctor sigue viendo solo los suyos.
+  const deTodosLosDoctores = !!patientId && searchParams.get("todosLosDoctores") === "1";
+  // ws1-t12 v20 (B1 de t1): `?status=` ya no va al `where` de Prisma — en la base real `treatment_plans.status` es
+  // TEXT y Prisma manda el parámetro como enum `TreatmentStatus` (42883). Los planes de ese estado se eligen con
+  // `"status"::text` (vale con la columna TEXT o enum) y entran como `id: { in }`; la paginación sigue exacta.
+  // v22 (t5 de la v21, m2): `patientId=` vacío es «sin paciente», igual que en el `where` de abajo (`|| null`).
+  if (status && !["ACTIVE", "COMPLETED", "ABANDONED", "PAUSED"].includes(status)) {
+    return NextResponse.json({ error: "Estado inválido" }, { status: 400 });
+  }
+  const idsConEstado = status
+    ? (await prisma.$queryRaw<Array<{ id: string }>>`
+        SELECT "id" FROM "treatment_plans"
+         WHERE "clinicId" = ${ctx.clinicId} AND "status"::text = ${status}
+           AND (${patientId || null}::text IS NULL OR "patientId" = ${patientId || null})`).map((r) => r.id)
+    : null;
   const limit = Math.min(Math.max(parseInt(searchParams.get("limit") ?? "200"), 1), 500);
   const skip  = Math.max(parseInt(searchParams.get("skip") ?? "0"), 0);
 
@@ -34,8 +52,8 @@ export async function GET(req: NextRequest) {
     where: {
       clinicId:  ctx.clinicId,
       ...(patientId ? { patientId } : {}),
-      ...(ctx.isDoctor ? { doctorId: ctx.userId } : {}),
-      ...(status ? { status: status as any } : {}),
+      ...(ctx.isDoctor && !deTodosLosDoctores ? { doctorId: ctx.userId } : {}),
+      ...(idsConEstado ? { id: { in: idsConEstado } } : {}),
       // Visibilidad por paciente. Va como filtro de RELACIÓN (no un assert)
       // porque `patientId` es opcional: sin él, esto listaba los planes de TODA
       // la clínica, restringidos incluidos.

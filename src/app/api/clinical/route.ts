@@ -33,6 +33,7 @@ import {
   withInvoiceNumberRetry,
 } from "@/lib/invoices/next-invoice-number";
 import { procedimientosParaElBorrador } from "@/lib/treatments/sin-doble-cobro.server";
+import { citaParaLaNota } from "@/lib/treatments/cita-del-hecho.server";
 
 export const dynamic = "force-dynamic";
 
@@ -51,6 +52,10 @@ const CreateSchema = z.object({
   vitals: z.record(z.any()).nullable().optional(),
   specialtyData: z.record(z.any()).nullable().optional(),
   autoInvoice: z.boolean().optional(),
+  // v18 (t5 de la v17, m2): «Marcar y escribir la nota» de la tarjeta del plan — `appointmentId` es la cita
+  // ELEGIDA al marcar «Hecho» y la nota se liga a ella aunque sea de otro día u otro doctor (reglas en
+  // `citaParaLaNota`). Sin esto, la regla de siempre (`resolveNoteAppointmentId`).
+  citaElegida: z.boolean().optional(),
 });
 
 // Contexto vía el helper CENTRAL (getAuthContext): misma resolución
@@ -171,7 +176,35 @@ export async function POST(req: NextRequest) {
   // tiene nota (ver note-appointment-link.ts).
   let appointmentId: string | null = null;
   let borradorDeLaCita: NotaLigadaALaCita | null = null;
-  if (sanitizeAppointmentId(data.appointmentId)) {
+  const citaPedida = sanitizeAppointmentId(data.appointmentId);
+  if (citaPedida && data.citaElegida === true) {
+    // v18 (t5 de la v17, m2): ENLACE EXPLÍCITO — la cita que se eligió al marcar «Hecho» (puede ser de otro
+    // día u otro doctor). `citaParaLaNota` exige esta clínica y este paciente, algo del plan hecho en ella y
+    // que no sea la consulta de hoy, aún sin terminar, de otro doctor. Una cita, una nota:
+    //   · sin nota ligada → esta;
+    //   · un borrador de quien escribe → se adopta (como «Nueva consulta»);
+    //   · un borrador VACÍO de otro doctor → no se toca (no se le cambia el autor); esta va ligada aparte;
+    //   · una nota con contenido → esta va suelta, como siempre.
+    try {
+      const timezone = (dbUser as any).clinic?.timezone || "America/Mexico_City";
+      const r = await citaParaLaNota({ clinicId: dbUser.clinicId, patientId: data.patientId, appointmentId: citaPedida, quienEscribe: dbUser.id, timezone });
+      if (r.ok) {
+        const yaLigada = await prisma.medicalRecord.findFirst({
+          where: { clinicId: dbUser.clinicId, patientId: data.patientId, specialtyData: { path: ["appointmentId"], equals: citaPedida } },
+          select: { id: true, doctorId: true, subjective: true, objective: true, assessment: true, plan: true, specialtyData: true },
+          orderBy: { createdAt: "desc" },
+        });
+        if (!yaLigada) appointmentId = citaPedida;
+        else if (esBorradorAdoptable(yaLigada) && yaLigada.doctorId === dbUser.id) {
+          borradorDeLaCita = yaLigada;
+          appointmentId = citaPedida;
+        } else if (esBorradorAdoptable(yaLigada) && isClinicalNoteEmpty(yaLigada)) appointmentId = citaPedida;
+      }
+    } catch (err) {
+      // Ligar es un extra: si la lectura falla, la nota se guarda sin ligar.
+      console.error("Error linking clinical note to the chosen appointment:", err);
+    }
+  } else if (citaPedida) {
     try {
       const timezone = (dbUser as any).clinic?.timezone || "America/Mexico_City";
       const day = calendarDayRangeUtc(todayInTz(timezone), timezone);

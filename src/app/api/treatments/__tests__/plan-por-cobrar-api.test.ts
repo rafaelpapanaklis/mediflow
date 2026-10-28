@@ -675,7 +675,7 @@ test("v11: «Hecho» desde la tarjeta — Debe sube al momento, con bitácora; �
   assert.match(mutaciones.at(-1).texto, /Deshizo «hecho» en el plan «Plan Ana»: Resina 16 \(MO\)/);
 });
 
-test("v11: quién puede — treatments.edit (el doctor, en sus planes) y SUPER_ADMIN siempre; recepción sin el permiso no", async (t) => {
+test("v11: quién puede — treatments.edit (v17: también en el plan de otro doctor) y SUPER_ADMIN siempre; recepción sin el permiso no", async (t) => {
   if (salta(t)) return;
   await usar();
   const { planId } = await planAceptado();
@@ -695,9 +695,11 @@ test("v11: quién puede — treatments.edit (el doctor, en sus planes) y SUPER_A
   // …pero solo eso: editar el plan sigue pidiendo el permiso.
   assert.equal((await hechoDesdeLaTarjeta(planId, { status: "PAUSED" })).status, 403);
 
-  // Un doctor en un plan de otro doctor: no (el doctor sigue acotado a sus planes). En el suyo, sí.
+  // v17 (decisión 4 de Rafael): un doctor en el plan de OTRO doctor, sí (marcar y deshacer); editarlo, no.
   Object.assign(ctx, { userId: "otro-doc", role: "DOCTOR", isDoctor: true, permissionsOverride: null });
-  assert.equal((await marcar()).status, 403);
+  assert.equal((await marcar()).status, 200);
+  assert.equal((await deshacer()).status, 200);
+  assert.equal((await hechoDesdeLaTarjeta(planId, { status: "PAUSED" })).status, 403);
   Object.assign(ctx, { userId: "doc-c1", role: "DOCTOR", isDoctor: true, permissionsOverride: null });
   assert.equal((await marcar()).status, 200);
 

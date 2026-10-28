@@ -22,7 +22,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   // EQ-07: registrar sesiones, cambiar estado y editar el plan → "Crear y
-  // editar planes de tratamiento". El doctor sigue acotado a sus planes.
+  // editar planes de tratamiento". El doctor sigue acotado a sus planes (salvo «Hecho», v17).
   // v11 (27-oct, Rafael): «Hecho» y su deshacer —desde la consulta o desde la tarjeta del plan— usan
   // ese mismo permiso, y el SUPER_ADMIN puede siempre (aunque su override no lo traiga). Se mira la
   // acción en una copia del cuerpo: el cuerpo de verdad se lee abajo, como siempre.
@@ -40,7 +40,10 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
     const denied = await assertPatientVisible(plan.patientId, { userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId });
     if (denied) return denied;
   }
-  if (ctx.isDoctor && plan.doctorId !== ctx.userId) {
+  // v17 (decisión 4 de Rafael, 28-oct): «Hecho» y «Deshacer» los puede hacer cualquiera con `treatments.edit`
+  // (y SUPER_ADMIN siempre) también en el plan de OTRO doctor; Movimientos dice quién fue. Editar, borrar,
+  // cerrar y lo demás siguen acotados a sus planes.
+  if (ctx.isDoctor && plan.doctorId !== ctx.userId && !esHecho) {
     return NextResponse.json({ error: "No autorizado" }, { status: 403 });
   }
 

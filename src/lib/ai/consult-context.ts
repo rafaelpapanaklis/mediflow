@@ -189,12 +189,17 @@ export async function buildConsultContext(args: Args): Promise<string> {
 
   // 6) Tratamientos activos
   try {
-    const tx = await prisma.treatmentPlan.findMany({
-      where: { clinicId, patientId, status: "ACTIVE" },
-      orderBy: { startDate: "desc" },
-      take: 5,
-      select: { name: true, description: true },
-    });
+    // ws1-t12 v20 (B1 de t1): el estado se filtra en JS — en la base real `treatment_plans.status` es TEXT y un
+    // `where: { status }` de Prisma da 42883 (text = "TreatmentStatus"). Un paciente tiene pocos planes.
+    const tx = (
+      await prisma.treatmentPlan.findMany({
+        where: { clinicId, patientId },
+        orderBy: { startDate: "desc" },
+        select: { name: true, description: true, status: true },
+      })
+    )
+      .filter((p) => String(p.status) === "ACTIVE")
+      .slice(0, 5);
     if (tx.length) {
       L.push("\n== TRATAMIENTOS ACTIVOS ==");
       tx.forEach((t) => L.push(`- ${t.name}${t.description ? `: ${t.description}` : ""}`));
