@@ -18,10 +18,15 @@ import { useEffect, useRef, useState } from "react";
 import { Armchair, Check, ListFilter } from "lucide-react";
 import { textoDelFiltro } from "@/lib/agenda-nueva/filtro-etiqueta";
 import { useAgendaNueva } from "./contexto-agenda-nueva";
+import { useDetallesAlPasar } from "./detalles-al-pasar";
+import { useT } from "@/i18n/i18n-provider";
 import s from "./agenda-nueva.module.css";
+import sd from "./detalles-al-pasar.module.css";
 
 export function FiltroDoctoresUnidades() {
   const ag = useAgendaNueva();
+  const alPasar = useDetallesAlPasar();
+  const t = useT();
   const [abierto, setAbierto] = useState(false);
   const cajaRef = useRef<HTMLDivElement | null>(null);
 
@@ -145,6 +150,32 @@ export function FiltroDoctoresUnidades() {
                     </button>
                   );
                 })}
+              </>
+            )}
+
+            {/* Decisión de Rafael (28-oct): hasta abajo, después de los sillones. Es de cada persona. */}
+            {alPasar && (
+              <>
+                <div className={s.filtroSeparador} />
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={alPasar.encendida}
+                  className={sd.interruptorFila}
+                  onClick={alPasar.alternar}
+                  data-interruptor-detalles
+                >
+                  <span className={sd.interruptorTexto}>
+                    <span>{t("agenda.alPasar.interruptor")}</span>
+                    <span className={sd.interruptorAyuda}>
+                      {alPasar.seGuarda ? t("agenda.alPasar.interruptorAyuda") : t("agenda.alPasar.interruptorSinGuardar")}
+                    </span>
+                  </span>
+                  <span
+                    className={`${sd.interruptor} ${alPasar.encendida ? sd.interruptorEncendido : ""}`}
+                    aria-hidden
+                  />
+                </button>
               </>
             )}
           </div>

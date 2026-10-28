@@ -59,6 +59,7 @@ import { VistaMes } from "./vista-mes";
 import { ROPA_VALIDAR } from "./ropa";
 import { ConParamsDeNuevaCita } from "@/components/dashboard/new-appointment/new-appointment-provider";
 import { useAgendarDelPlan } from "./agendar-del-plan";
+import { DetallesAlPasarProvider } from "./detalles-al-pasar";
 import s from "./agenda-nueva.module.css";
 
 export interface AgendaNuevaProps {
@@ -77,7 +78,10 @@ export interface AgendaNuevaProps {
 export function AgendaNueva(props: AgendaNuevaProps) {
   return (
     <AgendaNuevaProvider>
-      <Armazon {...props} />
+      {/* Decisión de Rafael (28-oct): la tarjeta de detalles al pasar el mouse sobre una cita. */}
+      <DetallesAlPasarProvider>
+        <Armazon {...props} />
+      </DetallesAlPasarProvider>
     </AgendaNuevaProvider>
   );
 }

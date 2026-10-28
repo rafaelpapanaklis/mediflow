@@ -25,6 +25,7 @@ import type { IconoEstado } from "@/lib/agenda-nueva/estados";
 import type { CitaVista } from "@/lib/agenda-nueva/vista-modelo";
 import { AGENDA_SOMBRAS } from "@/lib/agenda-nueva/tokens";
 import { useT } from "@/i18n/i18n-provider";
+import { useDetallesAlPasar } from "./detalles-al-pasar";
 import s from "./agenda-nueva.module.css";
 
 /** Debajo de esto la segunda línea no cabe: el README la oculta bajo 30 min. */
@@ -72,6 +73,10 @@ export function TarjetaCita({
 }: TarjetaCitaProps) {
   const { pinta } = cita;
   const t = useT();
+  // Decisión de Rafael (28-oct): la tarjeta de detalles al pasar el mouse. Fuera de su proveedor (arneses),
+  // `null`: la cita se porta como siempre.
+  const alPasar = useDetallesAlPasar();
+  const conTarjetaAlPasar = !!alPasar && alPasar.encendida && alPasar.conMouse;
 
   // El arrastre es el de la agenda de siempre: dnd-kit, con el mismo umbral de
   // distancia antes de empezar (un clic sigue siendo un clic) y los mismos
@@ -130,6 +135,15 @@ export function TarjetaCita({
       : s.tarjetaNotaApartada
     : "";
 
+  const tituloNativo =
+    (arrastrable
+      ? `${cita.nombrePaciente} · ${cita.rango} · ${cita.chip} · Arrastra para moverla`
+      : `${cita.nombrePaciente} · ${cita.rango} · ${cita.chip}`) +
+    (cita.avisoMensualidadVencida ? " · Mensualidad de ortodoncia vencida" : "") +
+    (cita.sobreagendada ? ` · ${t("agenda.flexible.sobreagendada")}` : "") +
+    (cita.procedimiento ? ` · ${cita.procedimiento.nombre}` : "") +
+    (conResponsable ? ` · ${cita.responsableNombre}` : "");
+
   return (
     <button
       ref={setNodeRef}
@@ -140,17 +154,18 @@ export function TarjetaCita({
         e.stopPropagation();
         onAbrir?.(cita.id);
       }}
+      // Solo con mouse (`entrar` descarta el táctil): tocar sigue abriendo el panel y nada más. Presionar
+      // (clic o arrastre) la esconde.
+      onPointerEnter={alPasar ? (e) => alPasar.entrar(cita, e.currentTarget, e) : undefined}
+      onPointerMove={alPasar ? alPasar.mover : undefined}
+      onPointerLeave={alPasar ? alPasar.salir : undefined}
+      onPointerDownCapture={alPasar ? alPasar.salir : undefined}
+      aria-describedby={conTarjetaAlPasar ? `detalles-cita-${cita.id}` : undefined}
       data-cita={cita.id}
       aria-pressed={seleccionada}
-      title={
-        (arrastrable
-          ? `${cita.nombrePaciente} · ${cita.rango} · ${cita.chip} · Arrastra para moverla`
-          : `${cita.nombrePaciente} · ${cita.rango} · ${cita.chip}`) +
-        (cita.avisoMensualidadVencida ? " · Mensualidad de ortodoncia vencida" : "") +
-        (cita.sobreagendada ? ` · ${t("agenda.flexible.sobreagendada")}` : "") +
-        (cita.procedimiento ? ` · ${cita.procedimiento.nombre}` : "") +
-        (conResponsable ? ` · ${cita.responsableNombre}` : "")
-      }
+      // Con la tarjeta encendida el `title` nativo sobra (saldrían los dos a la vez); apagada, o en táctil,
+      // se queda como siempre.
+      title={conTarjetaAlPasar ? undefined : tituloNativo}
       style={{
         top: geometria.top,
         height: geometria.alto,

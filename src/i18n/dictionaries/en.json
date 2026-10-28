@@ -2175,6 +2175,51 @@
         "porProcedimiento": "Colors by procedure:",
         "sinProcedimiento": "No procedure: doctor's color"
       }
+    },
+    "alPasar": {
+      "interruptor": "Show details on hover",
+      "interruptorAyuda": "Saved to your account.",
+      "interruptorSinGuardar": "Can't be saved yet: it only stays this way in this tab.",
+      "edad": "{n} years old",
+      "primeraVez": "First visit",
+      "recurrente": "Returning",
+      "restringido": "Restricted patient",
+      "alergias": "Allergies",
+      "hora": "Time",
+      "doctor": "Doctor",
+      "unidad": "Chair",
+      "teleconsulta": "Teleconsultation",
+      "motivo": "Reason",
+      "sinMotivo": "No reason",
+      "minutos": "{n} min",
+      "cargando": "Loading details…",
+      "errorCarga": "Couldn't load the appointment details.",
+      "enEstaCita": "In this appointment",
+      "debeHoy": "Owes today",
+      "fila": {
+        "hecho": "done",
+        "enCurso": "in progress",
+        "porHacer": "to do"
+      },
+      "estado": {
+        "sinConfirmar": "Not confirmed",
+        "confirmada": "Confirmed",
+        "confirmadaWhatsapp": "Confirmed via WhatsApp",
+        "enSala": "In the waiting room",
+        "enSillon": "In the chair",
+        "enConsulta": "In consultation",
+        "completada": "Completed",
+        "salio": "Checked out",
+        "cancelada": "Cancelled",
+        "noAsistio": "No-show"
+      },
+      "avisos": {
+        "anticipoPagado": "Deposit paid",
+        "anticipoPedido": "Deposit requested · {monto}",
+        "mensualidadVencida": "Overdue orthodontics installment",
+        "sobreagendada": "Double-booked",
+        "porValidar": "To validate (from the portal)"
+      }
     }
   },
   "patients": {
