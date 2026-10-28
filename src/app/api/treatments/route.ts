@@ -32,6 +32,16 @@ export async function GET(req: NextRequest) {
   // doctor ya ve esos planes en la ficha (nombre, costo y cuenta); faltaba su lista de procedimientos. Sin
   // el parámetro, el doctor sigue viendo solo los suyos.
   const deTodosLosDoctores = !!patientId && searchParams.get("todosLosDoctores") === "1";
+  // ws1-t12 v20 (B1 de t1): `?status=` ya no va al `where` de Prisma — en la base real `treatment_plans.status` es
+  // TEXT y Prisma manda el parámetro como enum `TreatmentStatus` (42883). Los planes de ese estado se eligen con
+  // `"status"::text` (vale con la columna TEXT o enum) y entran como `id: { in }`; la paginación sigue exacta.
+  if (status && !["ACTIVE", "COMPLETED", "ABANDONED", "PAUSED"].includes(status)) {
+    return NextResponse.json({ error: "Estado inválido" }, { status: 400 });
+  }
+  const idsConEstado = status
+    ? (await prisma.$queryRaw<Array<{ id: string }>>`
+        SELECT "id" FROM "treatment_plans" WHERE "clinicId" = ${ctx.clinicId} AND "status"::text = ${status}`).map((r) => r.id)
+    : null;
   const limit = Math.min(Math.max(parseInt(searchParams.get("limit") ?? "200"), 1), 500);
   const skip  = Math.max(parseInt(searchParams.get("skip") ?? "0"), 0);
 
@@ -40,7 +50,7 @@ export async function GET(req: NextRequest) {
       clinicId:  ctx.clinicId,
       ...(patientId ? { patientId } : {}),
       ...(ctx.isDoctor && !deTodosLosDoctores ? { doctorId: ctx.userId } : {}),
-      ...(status ? { status: status as any } : {}),
+      ...(idsConEstado ? { id: { in: idsConEstado } } : {}),
       // Visibilidad por paciente. Va como filtro de RELACIÓN (no un assert)
       // porque `patientId` es opcional: sin él, esto listaba los planes de TODA
       // la clínica, restringidos incluidos.

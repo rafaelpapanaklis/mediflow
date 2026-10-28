@@ -664,3 +664,50 @@ test("t5 v17 · 4 (al día con la v18): «Debe hoy» = «Debe» de la ficha — 
   assert.equal(await debeHoy(), 1250.5, "nada de la otra clínica (sede)");
 });
 
+// ── v20 (B1 de t1): `treatment_plans.status` es TEXT en la base real ───────────────────────────────
+
+test("v20 · B1: con `status` TEXT (como la base real) el arnés da el 42883 de producción, y «Cuenta del plan», las filas del paciente y `?status=` funcionan", async (t) => {
+  if (salta(t)) return;
+  await usar();
+  // El arnés es fiel: la columna es TEXT y un `where: { status }` de Prisma revienta como en panel.108 el 21-oct.
+  const tipo = (await base.db.query(`SELECT data_type FROM information_schema.columns WHERE table_name = 'treatment_plans' AND column_name = 'status'`)).rows[0].data_type;
+  assert.equal(tipo, "text");
+  await assert.rejects(
+    () => prismaVivo.treatmentPlan.findMany({ where: { clinicId: "c1", patientId: "pac-c1", status: { in: ["ACTIVE", "ABANDONED"] } } }),
+    /operator does not exist: text = "TreatmentStatus"/,
+    "la forma de antes de `planesDelPaciente`",
+  );
+
+  // Dos planes: uno vivo y uno cerrado (Abandonado) con lo pagado.
+  const { planId, notaId } = await planAceptado();
+  await pagar(notaId, 500);
+  const { POST } = await import("@/app/api/treatments/route");
+  const otro = await leer(await POST(pedir("/api/treatments", { patientId: "pac-c1", doctorId: "doc-c1", name: "Plan dos", description: "▸ x", items: [ITEMS[1]] })));
+  const { POST: ACEPTAR } = await import("@/app/api/treatments/[id]/nota-de-cobro/route");
+  await ACEPTAR(pedir(`/api/treatments/${otro.body.id}/nota-de-cobro`), params(otro.body.id));
+  const { POST: CERRAR } = await import("@/app/api/treatments/[id]/cerrar/route");
+  assert.equal((await CERRAR(pedir(`/api/treatments/${otro.body.id}/cerrar`, { motivo: "ya no vino" }), params(otro.body.id))).status, 200);
+  assert.equal((await base.db.query(`SELECT "status" FROM "treatment_plans" WHERE "id" = $1`, [otro.body.id])).rows[0].status, "ABANDONED", "escribir el estado sí funciona");
+
+  // «Cuenta del plan»: /cuentas (antes 500 en la base real).
+  const { GET: CUENTAS } = await import("@/app/api/treatments/cuentas/route");
+  const cuentas = await leer(await CUENTAS(pedir(`/api/treatments/cuentas?patientId=pac-c1`, undefined, "GET")));
+  assert.equal(cuentas.status, 200);
+  assert.deepEqual(cuentas.body.planes.map((p: any) => [p.planId, p.estado]).sort(), [[planId, "ACTIVE"], [otro.body.id, "ABANDONED"]].sort());
+
+  // Las filas del paciente (Tratamientos detectados, factura de la cita, borrador de la consulta).
+  const { filasDelPaciente, procedimientosParaElBorrador } = await import("@/lib/treatments/sin-doble-cobro.server");
+  const filas = await filasDelPaciente("c1", "pac-c1");
+  assert.ok(filas.some((f) => f.nombre === "Resina"), "las del plan vivo");
+  const borrador = await procedimientosParaElBorrador("c1", "pac-c1", [{ name: "Resina", price: 1250.5, quantity: 1, id: "proc-r" }, { name: "Blanqueamiento", price: 3000, quantity: 1 }] as any);
+  assert.deepEqual(borrador.procedures.map((p: any) => p.name), ["Blanqueamiento"], "lo del plan no entra al borrador de la consulta");
+
+  // GET /api/treatments?status= (antes `where: { status }`).
+  const { GET } = await import("@/app/api/treatments/route");
+  const lista = async (q: string) => leer(await GET(pedir(`/api/treatments?patientId=pac-c1${q}`, undefined, "GET")));
+  assert.deepEqual((await lista("&status=ACTIVE")).body.map((p: any) => p.id), [planId]);
+  assert.deepEqual((await lista("&status=ABANDONED")).body.map((p: any) => p.id), [otro.body.id]);
+  assert.equal((await lista("")).body.length, 2);
+  assert.equal((await lista("&status=NADA")).status, 400);
+});
+

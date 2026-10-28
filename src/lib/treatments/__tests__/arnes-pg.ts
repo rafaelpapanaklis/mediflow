@@ -12,6 +12,10 @@
  * node_modules/@electric-sql/pglite). Sin él, las pruebas que lo usan se SALTAN diciéndolo.
  */
 // Las columnas `timestamp` (sin zona) se leen como hora LOCAL en PGlite; Prisma y Supabase van en UTC.
+//
+// v20 (B1 de t1, 28-oct): `treatment_plans.status` es TEXT, COMO EN LA BASE REAL (schema.prisma lo declara enum
+// `TreatmentStatus`), y los filtros de Prisma mandan el parámetro con el tipo del enum. Un `where: { status }`
+// sobre los planes revienta aquí igual que en producción (42883): se filtra en JS o con `"status"::text` en SQL.
 process.env.TZ = "UTC";
 
 import { existsSync, readFileSync } from "node:fs";
@@ -45,7 +49,7 @@ export const DDL_BASE = `
     "id" text PRIMARY KEY, "clinicId" text NOT NULL REFERENCES "clinics"("id") ON DELETE CASCADE,
     "patientId" text NOT NULL, "doctorId" text NOT NULL, "name" text NOT NULL, "description" text,
     "totalSessions" integer NOT NULL DEFAULT 1, "sessionIntervalDays" integer NOT NULL DEFAULT 30,
-    "totalCost" float8 NOT NULL DEFAULT 0, "status" "TreatmentStatus" NOT NULL DEFAULT 'ACTIVE',
+    "totalCost" float8 NOT NULL DEFAULT 0, "status" text NOT NULL DEFAULT 'ACTIVE',
     "startDate" timestamp(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "endDate" timestamp(3), "lastFollowUpSent" timestamp(3),
     "nextExpectedDate" timestamp(3), "createdAt" timestamp(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" timestamp(3) NOT NULL DEFAULT CURRENT_TIMESTAMP);
@@ -169,19 +173,26 @@ function compilarWhere(tabla: string, where: Record<string, any> | undefined, va
       continue;
     }
     const col = `${q(tabla)}.${q(k)}`;
-    const enumCast = ENUMS[tabla]?.[k] ? `::text` : "";
+    // v20 (B1 de t1): como Prisma de verdad, el PARÁMETRO va con el tipo del enum del esquema
+    // (`$1::"TreatmentStatus"`), no la columna a texto. Así, contra una columna TEXT (la base real tiene
+    // `treatment_plans.status` TEXT) el arnés da el mismo 42883 «text = "TreatmentStatus"» que producción.
+    const tipo = ENUMS[tabla]?.[k];
+    const uno = (x: unknown) => (tipo ? `${v(x)}::"${tipo}"` : v(x));
+    // Con tipo, la lista va como literal de arreglo de Postgres (PGlite no serializa un arreglo de JS a `enum[]`).
+    const literal = (x: unknown) => `{${(x as unknown[]).map((e) => `"${String(e).replace(/["\\]/g, "\\$&")}"`).join(",")}}`;
+    const lista = (x: unknown) => (tipo ? `${v(literal(x))}::"${tipo}"[]` : v(x));
     if (val === null) partes.push(`${col} IS NULL`);
     else if (typeof val === "object" && !(val instanceof Date)) {
-      if ("in" in val) partes.push(`${col}${enumCast} = ANY(${v(val.in)})`);
-      else if ("notIn" in val) partes.push(`NOT (${col}${enumCast} = ANY(${v(val.notIn)}))`);
+      if ("in" in val) partes.push(`${col} = ANY(${lista(val.in)})`);
+      else if ("notIn" in val) partes.push(`NOT (${col} = ANY(${lista(val.notIn)}))`);
       else if (["gt", "gte", "lt", "lte"].some((o) => o in val)) {
         const OP: Record<string, string> = { gt: ">", gte: ">=", lt: "<", lte: "<=" };
         for (const [o, x] of Object.entries(val)) partes.push(`${col} ${OP[o]} ${v(x)}`);
       }
-      else if ("not" in val) partes.push(val.not === null ? `${col} IS NOT NULL` : `${col}${enumCast} IS DISTINCT FROM ${v(val.not)}`);
-      else if ("equals" in val) partes.push(`${col}${enumCast} = ${v(val.equals)}`);
+      else if ("not" in val) partes.push(val.not === null ? `${col} IS NOT NULL` : `${col} IS DISTINCT FROM ${uno(val.not)}`);
+      else if ("equals" in val) partes.push(`${col} = ${uno(val.equals)}`);
       else throw new Error(`where no soportado: ${k} ${JSON.stringify(val)}`);
-    } else partes.push(`${col}${enumCast} = ${v(val)}`);
+    } else partes.push(`${col} = ${uno(val)}`);
   }
   return partes.length ? partes.join(" AND ") : "TRUE";
 }
