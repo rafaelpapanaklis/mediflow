@@ -82,6 +82,8 @@ interface Props {
    * botón que el servidor rechazará. El servidor revalida igual.
    */
   userRole?: Role;
+  /** «Mostrar detalles al pasar el mouse» de quien mira, leído en la SSR (sin pedido extra al abrir). */
+  detallesAlPasar?: boolean;
 }
 
 export function AgendaPageClient(props: Props) {
@@ -102,6 +104,7 @@ export function AgendaPageClient(props: Props) {
           clinicTaxMode={props.clinicTaxMode}
           userRole={props.userRole}
           highlightId={props.highlightId}
+          detallesAlPasar={props.detallesAlPasar}
         />
       ) : (
         <AgendaShell highlightId={props.highlightId} clinicTaxMode={props.clinicTaxMode} />

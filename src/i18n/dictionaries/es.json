@@ -2179,6 +2179,7 @@
     "alPasar": {
       "interruptor": "Mostrar detalles al pasar el mouse",
       "interruptorAyuda": "Se guarda en tu cuenta.",
+      "interruptorNoGuardado": "No se pudo guardar en tu cuenta: queda así solo en esta pestaña.",
       "interruptorSinGuardar": "Aún no se puede guardar: queda así solo en esta pestaña.",
       "edad": "{n} años",
       "primeraVez": "Primera vez",
@@ -2201,17 +2202,9 @@
         "enCurso": "en curso",
         "porHacer": "por hacer"
       },
-      "estado": {
-        "sinConfirmar": "Sin confirmar",
-        "confirmada": "Confirmada",
-        "confirmadaWhatsapp": "Confirmada por WhatsApp",
-        "enSala": "En sala de espera",
-        "enSillon": "En el sillón",
-        "enConsulta": "En consulta",
-        "completada": "Completada",
-        "salio": "Ya salió",
-        "cancelada": "Cancelada",
-        "noAsistio": "No asistió"
+      "estadoExtra": {
+        "porWhatsapp": "por WhatsApp",
+        "sinConfirmar": "sin confirmar"
       },
       "avisos": {
         "anticipoPagado": "Anticipo pagado",

@@ -62,8 +62,11 @@ import s from "./detalles-al-pasar.module.css";
 interface ValorDetallesAlPasar {
   /** La preferencia de quien mira. */
   encendida: boolean;
-  /** `false` mientras no se pegue el SQL: el cambio solo vale en esta pestaña. */
-  seGuarda: boolean;
+  /**
+   * Cómo quedó el último cambio del interruptor: `"si"` (guardado en la cuenta, o aún no se tocó), `"sinSql"`
+   * (falta el SQL: vale solo en esta pestaña) o `"error"` (el servidor no lo guardó: lo mismo, con aviso).
+   */
+  guardado: "si" | "sinSql" | "error";
   /** ¿Este equipo tiene mouse? En táctil la tarjeta no existe y la cita conserva su `title`. */
   conMouse: boolean;
   alternar: () => void;
@@ -71,6 +74,8 @@ interface ValorDetallesAlPasar {
   entrar: (cita: CitaVista, el: HTMLElement, e: { pointerType: string; clientX: number; clientY: number; buttons: number }) => void;
   /** Dónde está el puntero mientras espera el retardo (para anclar la tarjeta a él si no cabe junto a la cita). */
   mover: (e: { pointerType: string; clientX: number; clientY: number }) => void;
+  /** Foco por TECLADO en la cita (`:focus-visible`): la tarjeta sale sin esperar. Un clic no la abre. */
+  enfocar: (cita: CitaVista, el: HTMLElement) => void;
   salir: () => void;
 }
 
@@ -81,12 +86,14 @@ export function useDetallesAlPasar(): ValorDetallesAlPasar | null {
   return useContext(Ctx);
 }
 
-type Visible = { cita: CitaVista; rect: DOMRect; puntero: { x: number; y: number } };
+type Visible = { cita: CitaVista; el: HTMLElement; rect: DOMRect; puntero: { x: number; y: number } | null };
 type Pesado = { clave: string; estado: "cargando" | "listo" | "error"; datos: DetallesPesados | null };
 
-export function DetallesAlPasarProvider({ children }: { children: ReactNode }) {
-  const [encendida, setEncendida] = useState(true);
-  const [seGuarda, setSeGuarda] = useState(true);
+export function DetallesAlPasarProvider({ children, inicial }: { children: ReactNode; inicial?: boolean }) {
+  // La preferencia llega en la SSR de la agenda (page.tsx): sin pedido al abrir y sin parpadeo. Sin ella
+  // (arneses), se pide; hasta que llega, encendida, que es el valor por defecto.
+  const [encendida, setEncendida] = useState(inicial ?? true);
+  const [guardado, setGuardado] = useState<"si" | "sinSql" | "error">("si");
   const [conMouse, setConMouse] = useState(false);
   const [visible, setVisible] = useState<Visible | null>(null);
   const [pesado, setPesado] = useState<Pesado | null>(null);
@@ -96,8 +103,9 @@ export function DetallesAlPasarProvider({ children }: { children: ReactNode }) {
   const peticion = useRef<AbortController | null>(null);
   const puntero = useRef({ x: 0, y: 0 });
 
-  // La preferencia de la cuenta. Hasta que llega (o si falla), encendida: es el valor por defecto.
+  const conInicial = typeof inicial === "boolean";
   useEffect(() => {
+    if (conInicial) return;
     let vivo = true;
     fetch("/api/agenda/detalles-al-pasar", { credentials: "include" })
       .then((r) => (r.ok ? r.json() : null))
@@ -108,7 +116,7 @@ export function DetallesAlPasarProvider({ children }: { children: ReactNode }) {
     return () => {
       vivo = false;
     };
-  }, []);
+  }, [conInicial]);
 
   useEffect(() => {
     if (typeof window === "undefined" || !window.matchMedia) return;
@@ -126,10 +134,34 @@ export function DetallesAlPasarProvider({ children }: { children: ReactNode }) {
     peticion.current = null;
   }, []);
 
+  // El id de la tarjeta va en `aria-describedby` de la cita SOLO mientras la tarjeta existe (apuntar a un id
+  // que no está no describe nada). Se suma a mano a lo que ya tenía (el texto del `title`) y se devuelve tal
+  // cual al esconderla; no por props: así pasar el mouse no vuelve a pintar ninguna tarjeta de la rejilla.
+  const anclada = useRef<{ el: HTMLElement; antes: string | null } | null>(null);
+  const soltarAncla = useCallback(() => {
+    const a = anclada.current;
+    anclada.current = null;
+    if (!a) return;
+    if (a.antes === null) a.el.removeAttribute("aria-describedby");
+    else a.el.setAttribute("aria-describedby", a.antes);
+  }, []);
+
+  const mostrar = useCallback(
+    (v: Visible) => {
+      soltarAncla();
+      const antes = v.el.getAttribute("aria-describedby");
+      v.el.setAttribute("aria-describedby", [antes, `detalles-cita-${v.cita.id}`].filter(Boolean).join(" "));
+      anclada.current = { el: v.el, antes };
+      setVisible(v);
+    },
+    [soltarAncla],
+  );
+
   const salir = useCallback(() => {
     cancelar();
+    soltarAncla();
     setVisible(null);
-  }, [cancelar]);
+  }, [cancelar, soltarAncla]);
 
   const pedir = useCallback((cita: CitaVista) => {
     const clave = claveDeDetalles(cita);
@@ -175,11 +207,28 @@ export function DetallesAlPasarProvider({ children }: { children: ReactNode }) {
       temporizador.current = setTimeout(() => {
         temporizador.current = null;
         if (!el.isConnected) return;
-        setVisible({ cita, rect: el.getBoundingClientRect(), puntero: { ...puntero.current } });
+        mostrar({ cita, el, rect: el.getBoundingClientRect(), puntero: { ...puntero.current } });
         pedir(cita);
       }, RETARDO_DETALLES_MS);
     },
-    [encendida, cancelar, pedir],
+    [encendida, cancelar, pedir, mostrar],
+  );
+
+  const enfocar = useCallback(
+    (cita: CitaVista, el: HTMLElement) => {
+      if (!encendida) return;
+      let teclado = false;
+      try {
+        teclado = el.matches(":focus-visible");
+      } catch {
+        teclado = false;
+      }
+      if (!teclado) return;
+      cancelar();
+      mostrar({ cita, el, rect: el.getBoundingClientRect(), puntero: null });
+      pedir(cita);
+    },
+    [encendida, cancelar, pedir, mostrar],
   );
 
   // Solo se apunta mientras espera: ya pintada, la tarjeta no persigue al cursor.
@@ -187,18 +236,27 @@ export function DetallesAlPasarProvider({ children }: { children: ReactNode }) {
     if (e.pointerType === "mouse" && temporizador.current) puntero.current = { x: e.clientX, y: e.clientY };
   }, []);
 
-  // Un scroll mueve la cita debajo de la tarjeta: se esconde. Y al desmontar, nada colgando.
+  // Un scroll mueve la cita debajo de la tarjeta: se esconde. Esc la cierra (WCAG 1.4.13: que se pueda
+  // descartar sin mover el mouse ni el foco). Y al desmontar, nada colgando.
   useEffect(() => {
     if (!visible) return;
     const esconder = () => salir();
+    const tecla = (e: KeyboardEvent) => {
+      if (e.key === "Escape") salir();
+    };
     window.addEventListener("scroll", esconder, true);
     window.addEventListener("resize", esconder);
+    document.addEventListener("keydown", tecla);
     return () => {
       window.removeEventListener("scroll", esconder, true);
       window.removeEventListener("resize", esconder);
+      document.removeEventListener("keydown", tecla);
     };
   }, [visible, salir]);
-  useEffect(() => cancelar, [cancelar]);
+  useEffect(() => () => {
+    cancelar();
+    soltarAncla();
+  }, [cancelar, soltarAncla]);
 
   const alternar = useCallback(() => {
     const nueva = !encendida;
@@ -210,13 +268,15 @@ export function DetallesAlPasarProvider({ children }: { children: ReactNode }) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ encendida: nueva }),
     })
-      .then((r) => setSeGuarda(r.status !== 503))
-      .catch(() => {});
+      // Solo un 2xx es «guardado»: 503 = falta el SQL; cualquier otro fallo (o la red) = no se guardó. En los
+      // dos casos el cambio vale en esta pestaña y el interruptor lo dice.
+      .then((r) => setGuardado(r.ok ? "si" : r.status === 503 ? "sinSql" : "error"))
+      .catch(() => setGuardado("error"));
   }, [encendida, salir]);
 
   const valor = useMemo<ValorDetallesAlPasar>(
-    () => ({ encendida, seGuarda, conMouse, alternar, entrar, mover, salir }),
-    [encendida, seGuarda, conMouse, alternar, entrar, mover, salir],
+    () => ({ encendida, guardado, conMouse, alternar, entrar, mover, enfocar, salir }),
+    [encendida, guardado, conMouse, alternar, entrar, mover, enfocar, salir],
   );
 
   const datos = visible && pesado?.clave === claveDeDetalles(visible.cita) ? pesado : null;
@@ -305,13 +365,18 @@ export function TarjetaAlPasar({
       <div className={s.cabecera}>
         <span className={s.nombre}>{cita.nombrePaciente}</span>
         <div className={s.marcas}>
-          <span className={`${s.estado} ${s[`tono_${estado.tono}`]}`} data-estado={estado.clave}>
-            {estado.clave === "confirmadaWhatsapp" ? (
+          <span
+            className={s.estado}
+            style={{ background: cita.pinta.chipFondo, color: cita.pinta.chipTinta }}
+            data-estado={cita.estado}
+          >
+            {estado.extra === "porWhatsapp" ? (
               <MessageCircle size={12} strokeWidth={2.4} aria-hidden />
             ) : (
               <span className={s.punto} aria-hidden />
             )}
-            {t(`agenda.alPasar.estado.${estado.clave}`)}
+            {estado.chip}
+            {estado.extra ? ` · ${t(`agenda.alPasar.estadoExtra.${estado.extra}`)}` : ""}
             {estado.minutos !== null ? ` · ${t("agenda.alPasar.minutos", { n: estado.minutos })}` : ""}
           </span>
           {d?.paciente.primeraVez && <span className={s.marcaPrimera}>{t("agenda.alPasar.primeraVez")}</span>}

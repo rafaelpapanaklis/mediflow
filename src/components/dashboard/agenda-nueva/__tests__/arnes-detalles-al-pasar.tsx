@@ -13,7 +13,7 @@ import { ConfirmProvider } from "@/components/ui/confirm-dialog";
 import es from "@/i18n/dictionaries/es.json";
 import en from "@/i18n/dictionaries/en.json";
 
-const w = window as unknown as { __PAYLOAD__: any; __DIA__: string; __LANG__: "es" | "en" };
+const w = window as unknown as { __PAYLOAD__: any; __DIA__: string; __LANG__: "es" | "en"; __PREF__?: boolean };
 
 createRoot(document.getElementById("raiz")!).render(
   <I18nProvider locale={w.__LANG__} dict={(w.__LANG__ === "en" ? en : es) as any}>
@@ -22,7 +22,8 @@ createRoot(document.getElementById("raiz")!).render(
       <NewPatientProvider apariencia="nueva">
         <NewAppointmentProvider apariencia="nueva">
           <div style={{ height: "100vh" }}>
-            <AgendaNueva clinicTaxMode="exempt" userRole="ADMIN" />
+            {/* `__PREF__` = la preferencia que manda la SSR de page.tsx; sin ella, la pantalla la pide. */}
+            <AgendaNueva clinicTaxMode="exempt" userRole="ADMIN" detallesAlPasar={w.__PREF__} />
           </div>
         </NewAppointmentProvider>
       </NewPatientProvider>

@@ -241,12 +241,19 @@ export class DetallesAlPasarSinColumnaError extends Error {
 /**
  * Guarda la preferencia de ESTA persona. Una persona tiene una fila `User` por clínica (mismo `supabaseId`,
  * como `mustChangePassword`): se guarda en todas sus filas, para que la preferencia sea de su cuenta y no de
- * la sede en la que estaba. Se parte de SU fila (`id` + `clinicId` de la sesión); nunca toca a otra persona.
+ * la sede en la que estaba (decisión de Rafael, m6 de la revisión). Se parte de SU fila (`id` + `clinicId` de
+ * la sesión); nunca toca a otra persona. Su propia fila va siempre, aunque no tenga `supabaseId` (con
+ * `supabaseId` nulo la subconsulta no casaba con nada y no se guardaba ni la suya).
+ *
+ * Devuelve cuántas filas tocó: 0 = no se guardó (la ruta lo dice y la pantalla avisa).
  */
-export async function guardarDetallesAlPasar(clinicId: string, userId: string, encendida: boolean): Promise<void> {
+export async function guardarDetallesAlPasar(clinicId: string, userId: string, encendida: boolean): Promise<number> {
   if (!clinicId || !userId) throw new Error("agenda:al-pasar: sesión incompleta — se corta antes de escribir");
   if (!(await columnaDetallesAlPasarExiste(true))) throw new DetallesAlPasarSinColumnaError();
-  await prisma.$executeRaw`
+  const filas = await prisma.$executeRaw`
     UPDATE "users" SET "agendaDetallesAlPasar" = ${encendida}
-     WHERE "supabaseId" = (SELECT "supabaseId" FROM "users" WHERE "id" = ${userId} AND "clinicId" = ${clinicId})`;
+     WHERE ("id" = ${userId} AND "clinicId" = ${clinicId})
+        OR "supabaseId" = (SELECT "supabaseId" FROM "users"
+                            WHERE "id" = ${userId} AND "clinicId" = ${clinicId} AND "supabaseId" IS NOT NULL)`;
+  return Number(filas) || 0;
 }

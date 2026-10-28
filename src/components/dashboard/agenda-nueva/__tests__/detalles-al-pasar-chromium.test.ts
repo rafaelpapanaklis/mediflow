@@ -11,6 +11,9 @@
  *  · un clic la esconde y abre el panel; apagada desde el filtro no sale y la cita recupera su `title`;
  *  · en táctil (390 px) no sale al tocar: tocar abre el panel, y no se pide nada;
  *  · modo oscuro y en inglés. Fotos en ~/capturas/agenda-hover/.
+ *  v2 (revisión t11): el chip es el MISMO de la cita (m5); con el teclado sale al enfocar y Esc la cierra,
+ *  `aria-describedby` solo con la tarjeta a la vista y el texto del `title` como descripción (m1); un PUT que
+ *  falla avisa (m2); con la preferencia de la SSR no se pide nada al abrir (m3).
  * Sin Playwright (NAVEGADOR_DIR) la prueba se SALTA diciéndolo.
  */
 import { test, after } from "node:test";
@@ -165,6 +168,10 @@ interface Opciones {
   /** Milisegundos que tarda la respuesta de lo pesado. */
   demora?: number;
   preferencia?: boolean;
+  /** La preferencia que manda la SSR (prop `detallesAlPasar`); sin ella, la pantalla la pide. */
+  ssr?: boolean;
+  /** Estado del PUT de la preferencia. */
+  putStatus?: number;
 }
 
 async function abrir(t: { skip(m: string): void }, o: Opciones = {}) {
@@ -185,6 +192,7 @@ async function abrir(t: { skip(m: string): void }, o: Opciones = {}) {
   const pedidos: string[] = [];
   const cancelados: string[] = [];
   const puts: unknown[] = [];
+  let gets = 0;
   page.on("requestfailed", (r: any) => {
     if (r.url().includes("/detalles-al-pasar")) cancelados.push(new URL(r.url()).pathname);
   });
@@ -195,7 +203,7 @@ async function abrir(t: { skip(m: string): void }, o: Opciones = {}) {
     if (url.pathname === "/dashboard/agenda") {
       return route.fulfill({
         contentType: "text/html",
-        body: `<!doctype html><html lang="${lang}" class="${o.oscuro ? "dark" : ""}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><style>${css()}</style></head><body><div id="raiz"></div><script>window.__PAYLOAD__=${JSON.stringify(payload())};window.__DIA__=${JSON.stringify(DIA)};window.__LANG__=${JSON.stringify(lang)};</script><script src="/arnes.js"></script></body></html>`,
+        body: `<!doctype html><html lang="${lang}" class="${o.oscuro ? "dark" : ""}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><style>${css()}</style></head><body><div id="raiz"></div><script>window.__PAYLOAD__=${JSON.stringify(payload())};window.__DIA__=${JSON.stringify(DIA)};window.__LANG__=${JSON.stringify(lang)};${o.ssr === undefined ? "" : `window.__PREF__=${o.ssr};`}</script><script src="/arnes.js"></script></body></html>`,
       });
     }
     if (url.pathname === "/arnes.js") return route.fulfill({ contentType: "text/javascript", body: paquete });
@@ -203,8 +211,9 @@ async function abrir(t: { skip(m: string): void }, o: Opciones = {}) {
     if (url.pathname === "/api/agenda/detalles-al-pasar") {
       if (req.method() === "PUT") {
         puts.push(JSON.parse(req.postData() ?? "{}"));
-        return route.fulfill({ contentType: "application/json", body: req.postData() });
+        return route.fulfill({ status: o.putStatus ?? 200, contentType: "application/json", body: req.postData() });
       }
+      gets++;
       return route.fulfill({ contentType: "application/json", body: JSON.stringify({ encendida: o.preferencia ?? true }) });
     }
     const m = url.pathname.match(/^\/api\/appointments\/([^/]+)\/detalles-al-pasar$/);
@@ -224,7 +233,7 @@ async function abrir(t: { skip(m: string): void }, o: Opciones = {}) {
     .catch((e: Error) => {
       throw new Error(`la agenda no se pintó: ${errores.join(" | ") || e.message}`);
     });
-  return { page, contexto, errores, pedidos, cancelados, puts };
+  return { page, contexto, errores, pedidos, cancelados, puts, gets: () => gets };
 }
 
 const TARJETA = "[data-detalles-al-pasar]";
@@ -263,7 +272,12 @@ test("sale a los ~300 ms con todo: alergias arriba en rojo, estado por WhatsApp,
   const texto = await tarjeta.innerText();
   assert.match(texto, /Alergias:\s*Penicilina, Látex/);
   assert.match(texto, /Ana García/);
-  assert.match(texto, /Confirmada por WhatsApp/);
+  assert.match(texto, /Confirmada · por WhatsApp/);
+  // m5: el chip de la tarjeta empieza con el MISMO texto y colores que el de la cita.
+  const chipCita = await page.locator('[data-cita="a-ana"] span[style]').filter({ hasText: "Confirmada" }).first();
+  assert.equal((await chipCita.innerText()).trim(), "Confirmada");
+  const estilo = async (l: any) => l.evaluate((el: HTMLElement) => [getComputedStyle(el).backgroundColor, getComputedStyle(el).color].join("|"));
+  assert.equal(await estilo(page.locator(`${TARJETA} [data-estado]`)), await estilo(chipCita), "mismos colores que el chip de la cita");
   assert.match(texto, /34 años · Recurrente/);
   assert.match(texto, /55 1234 5678/);
   assert.match(texto, /09:00–10:00/);
@@ -285,7 +299,10 @@ test("sale a los ~300 ms con todo: alergias arriba en rojo, estado por WhatsApp,
   // En Día con un solo doctor la cita ocupa casi todo el ancho: la tarjeta va junto al cursor, sin taparlo.
   const tapaCursor = p.x >= caja.x && p.x <= caja.x + caja.width && p.y >= caja.y && p.y <= caja.y + caja.height;
   assert.equal(tapaCursor, false, `no tapa el cursor: ${JSON.stringify({ caja, p, deCita })}`);
-  assert.equal(await page.locator('[data-cita="a-ana"]').getAttribute("aria-describedby"), "detalles-cita-a-ana");
+  // m1: describe con el texto del title (oculto) y, solo mientras se ve, con la tarjeta.
+  assert.equal(await page.locator('[data-cita="a-ana"]').getAttribute("aria-describedby"), "titulo-cita-a-ana detalles-cita-a-ana");
+  assert.match((await page.locator("#titulo-cita-a-ana").textContent()) ?? "", /^Ana García · 09:00–10:00 · Confirmada · Arrastra para moverla/);
+  assert.equal(await page.locator("#titulo-cita-a-ana").isVisible(), false, "oculto a la vista");
   mkdirSync(CAPTURAS, { recursive: true });
   await page.screenshot({ path: join(CAPTURAS, "claro-1440.png") });
   await tarjeta.screenshot({ path: join(CAPTURAS, "tarjeta-claro.png") });
@@ -294,6 +311,7 @@ test("sale a los ~300 ms con todo: alergias arriba en rojo, estado por WhatsApp,
   // Se va el mouse: se esconde. Vuelve: sale de la caché, sin otra petición.
   await page.mouse.move(5, 5);
   await tarjeta.waitFor({ state: "detached" });
+  assert.equal(await page.locator('[data-cita="a-ana"]').getAttribute("aria-describedby"), "titulo-cita-a-ana", "sin la tarjeta, sin su id");
   await page.mouse.move(p.x, p.y);
   await tarjeta.waitFor();
   assert.match(await tarjeta.innerText(), /Debe hoy\s*\$700\.00/);
@@ -306,7 +324,8 @@ test("sale a los ~300 ms con todo: alergias arriba en rojo, estado por WhatsApp,
   await page.locator(`${TARJETA}[data-detalles-al-pasar="a-luis"]`).waitFor();
   await page.waitForFunction(() => /Primera vez/.test(document.querySelector("[data-detalles-al-pasar]")?.textContent ?? ""));
   const luis = await page.locator(TARJETA).innerText();
-  assert.match(luis, /En sala de espera · 1[12] min/);
+  assert.match(luis, /Registrado · 1[12] min/, "el mismo nombre que la cita (no «En sala de espera»)");
+  assert.doesNotMatch(luis, /En sala de espera/);
   assert.match(luis, /52 años/);
   assert.equal(await page.locator(`${TARJETA} [data-alergias]`).count(), 0);
   assert.equal(await page.locator(`${TARJETA} [data-dinero]`).count(), 0, "debe 0 y nada en la cita: sin bloque de dinero");
@@ -317,7 +336,7 @@ test("sale a los ~300 ms con todo: alergias arriba en rojo, estado por WhatsApp,
   await page.mouse.move(so.x, so.y);
   await page.locator(`${TARJETA}[data-detalles-al-pasar="a-sofi"] [data-dinero]`).waitFor();
   const sofi = await page.locator(TARJETA).innerText();
-  assert.match(sofi, /Sin confirmar/);
+  assert.match(sofi, /Agendada · sin confirmar/);
   assert.match(sofi, /Anticipo pedido · \$300\.00/);
   assert.match(sofi, /Mensualidad de ortodoncia vencida/);
   assert.match(sofi, /Debe hoy\s*\$1,200\.00/);
@@ -416,7 +435,19 @@ test("un clic la esconde y abre el panel; apagada desde el filtro no sale, la ci
   assert.deepEqual(a.errores, []);
 });
 
-test("la preferencia guardada en la cuenta manda: apagada, no sale", async (t) => {
+test("m3: la preferencia llega en la SSR: apagada no sale, y al abrir NO se pide nada", async (t) => {
+  const a = await abrir(t, { ssr: false, preferencia: true });
+  if (!a) return;
+  assert.notEqual(await a.page.locator('[data-cita="a-ana"]').getAttribute("title"), null, "apagada desde el primer pintado");
+  const p = await centro(a.page, "a-ana");
+  await a.page.mouse.move(p.x, p.y);
+  await a.page.waitForTimeout(700);
+  assert.equal(await a.page.locator(TARJETA).count(), 0);
+  assert.equal(a.gets(), 0, "sin GET de la preferencia al abrir");
+  assert.deepEqual(a.pedidos, []);
+});
+
+test("sin la SSR (arneses), la pide: la preferencia guardada en la cuenta manda", async (t) => {
   const a = await abrir(t, { preferencia: false });
   if (!a) return;
   await a.page.waitForFunction(() => document.querySelector('[data-cita="a-ana"]')?.getAttribute("title") !== null);
@@ -478,7 +509,7 @@ test("en inglés", async (t) => {
   await a.page.locator(`${TARJETA} [data-dinero]`).waitFor();
   const texto = await a.page.locator(TARJETA).innerText();
   assert.match(texto, /Allergies:/);
-  assert.match(texto, /Confirmed via WhatsApp/);
+  assert.match(texto, /Confirmada · via WhatsApp/, "el chip es el de la cita (que está en español); lo nuestro, en inglés");
   assert.match(texto, /34 years old · Returning/);
   assert.match(texto, /In this appointment/i);
   assert.match(texto, /Owes today/);
@@ -498,4 +529,48 @@ test("también en Semana (la tarjeta compacta)", async (t) => {
   assert.ok(caja.x >= 0 && caja.x + caja.width <= 1440 && caja.y >= 0 && caja.y + caja.height <= 900, JSON.stringify(caja));
   await a.page.screenshot({ path: join(CAPTURAS, "semana-1440.png") });
   assert.deepEqual(a.errores, []);
+});
+
+test("m1: con el TECLADO sale al enfocar la cita y Esc la cierra; un clic no la abre por el foco", async (t) => {
+  const a = await abrir(t);
+  if (!a) return;
+  const { page } = a;
+  let enfocada = "";
+  for (let i = 0; i < 60 && enfocada !== "a-ana"; i++) {
+    await page.keyboard.press("Tab");
+    enfocada = await page.evaluate(() => (document.activeElement as HTMLElement | null)?.getAttribute("data-cita") ?? "");
+  }
+  assert.equal(enfocada, "a-ana", "se llega con Tab");
+  await page.locator(`${TARJETA}[data-detalles-al-pasar="a-ana"] [data-dinero]`).waitFor({ timeout: 3_000 });
+  assert.equal(await page.locator('[data-cita="a-ana"]').getAttribute("aria-describedby"), "titulo-cita-a-ana detalles-cita-a-ana");
+  await page.keyboard.press("Escape");
+  await page.locator(TARJETA).waitFor({ state: "detached" });
+  assert.equal(await page.locator('[data-cita="a-ana"]').getAttribute("aria-describedby"), "titulo-cita-a-ana");
+  // Tab a la siguiente cita: sale la suya.
+  await page.keyboard.press("Tab");
+  const siguiente = await page.evaluate(() => (document.activeElement as HTMLElement | null)?.getAttribute("data-cita") ?? "");
+  if (siguiente) {
+    await page.locator(`${TARJETA}[data-detalles-al-pasar="${siguiente}"]`).waitFor({ timeout: 3_000 });
+    await page.keyboard.press("Escape");
+  }
+  // Con el mouse: clic (foco sin :focus-visible) y fuera → nada.
+  const p = await centro(page, "a-sofi");
+  await page.mouse.click(p.x, p.y);
+  await page.mouse.move(5, 5);
+  await page.waitForTimeout(600);
+  assert.equal(await page.locator(TARJETA).count(), 0, "el foco de un clic no la abre");
+  assert.deepEqual(a.errores, []);
+});
+
+test("m2: si el servidor no guarda la preferencia, el interruptor lo dice (no «Se guarda en tu cuenta»)", async (t) => {
+  const a = await abrir(t, { putStatus: 500 });
+  if (!a) return;
+  await a.page.locator('[aria-haspopup="true"][title]').first().click();
+  const interruptor = a.page.locator("[data-interruptor-detalles]");
+  await interruptor.waitFor();
+  assert.match(await interruptor.innerText(), /Se guarda en tu cuenta/);
+  await interruptor.click();
+  await a.page.waitForFunction(() => /No se pudo guardar en tu cuenta/.test(document.querySelector("[data-interruptor-detalles]")?.textContent ?? ""));
+  assert.equal(await interruptor.getAttribute("aria-checked"), "false", "en esta pestaña sí se apaga");
+  assert.deepEqual(a.puts, [{ encendida: false }]);
 });

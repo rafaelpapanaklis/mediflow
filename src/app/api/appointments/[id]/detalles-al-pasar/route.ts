@@ -5,7 +5,8 @@
 //
 // Lo ve TODO el que ve la cita (decisión: los importes también): `agenda.view`, no `billing.view`. Clínica de
 // la sesión y visibilidad del paciente (un paciente restringido no se le enseña a quien no lo puede ver).
-// Solo lectura.
+// Y la regla de la agenda: un DOCTOR solo ve SUS citas (`doctorIdScope` de page.tsx y /api/agenda/range); la
+// de otro doctor le contesta 404, como si no existiera (v2, revisión t11 M1). Solo lectura.
 
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
@@ -27,8 +28,14 @@ export async function GET(_req: Request, props: { params: Promise<{ id: string }
   if (!id || !esIdDeLaBase(id)) return NextResponse.json({ error: MENSAJE_ID_INVALIDO }, { status: 400 });
 
   const clinicId = session.clinic.id;
-  const cita = await prisma.appointment.findFirst({ where: { id, clinicId }, select: { id: true, patientId: true } });
+  const cita = await prisma.appointment.findFirst({
+    where: { id, clinicId },
+    select: { id: true, patientId: true, doctorId: true },
+  });
   if (!cita) return NextResponse.json({ error: "Cita no encontrada" }, { status: 404 });
+  if (session.user.role === "DOCTOR" && cita.doctorId !== session.user.id) {
+    return NextResponse.json({ error: "Cita no encontrada" }, { status: 404 });
+  }
   if (cita.patientId) {
     const oculto = await assertPatientVisible(cita.patientId, { userId: session.user.id, role: session.user.role, clinicId });
     if (oculto) return oculto;

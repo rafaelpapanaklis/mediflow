@@ -170,53 +170,41 @@ export function posicionDeLaTarjeta(
   return { ...ajustar(left, top), lado: "puntero" };
 }
 
-/** Lo que la tarjeta dice del estado: una llave de `agenda.alPasar.estado.*` y, si aplica, los minutos. */
+/**
+ * Lo que la tarjeta dice del estado. v2 (revisión t11, m5): el chip es el MISMO de la cita (`cita.chip`:
+ * «Agendada», «Confirmada», «Registrado · 12 min», «En consulta»…, con sus colores de `pinta`), para no
+ * enseñar dos nombres distintos del mismo estado uno al lado del otro. Detrás va solo lo que la cita dice en
+ * su segunda línea y el chip no: «sin confirmar», «por WhatsApp» y los minutos en el sillón o en consulta.
+ */
 export interface EstadoAlPasar {
-  clave:
-    | "sinConfirmar"
-    | "confirmada"
-    | "confirmadaWhatsapp"
-    | "enSala"
-    | "enSillon"
-    | "enConsulta"
-    | "completada"
-    | "salio"
-    | "cancelada"
-    | "noAsistio";
-  /** Minutos esperando o en consulta; `null` = no se dicen. */
+  chip: string;
+  /** Llave de `agenda.alPasar.estadoExtra.*`, o nada. */
+  extra: "porWhatsapp" | "sinConfirmar" | null;
+  /** Minutos que el chip no trae (en el sillón, en consulta); `null` = no se dicen. */
   minutos: number | null;
-  /** Tono del punto: el mismo significado que el chip de la tarjeta. */
-  tono: "neutro" | "verde" | "ambar" | "morado" | "rojo";
 }
 
 /**
- * El estado de la cita en palabras de la tarjeta. `cita.estado` ya viene normalizado (`PENDING` → `SCHEDULED`)
- * por `aCitaVista`. «Por WhatsApp» solo cuando lo pesado ya llegó y lo confirma; mientras, «Confirmada».
+ * `cita.estado` ya viene normalizado (`PENDING` → `SCHEDULED`) por `aCitaVista`. «Por WhatsApp» solo cuando
+ * lo pesado ya llegó y lo confirma; mientras, el chip a secas.
  */
 export function estadoAlPasar(
-  cita: { estado: string; minutosEsperando: number | null; minutosEnConsulta: number | null },
+  cita: { estado: string; chip: string; minutosEsperando: number | null; minutosEnConsulta: number | null },
   confirmadaPorWhatsapp: boolean | null,
 ): EstadoAlPasar {
   const min = (n: number | null) => (n !== null && n > 0 ? n : null);
   switch (cita.estado) {
+    case "SCHEDULED":
+      return { chip: cita.chip, extra: "sinConfirmar", minutos: null };
     case "CONFIRMED":
-      return { clave: confirmadaPorWhatsapp ? "confirmadaWhatsapp" : "confirmada", minutos: null, tono: "verde" };
-    case "CHECKED_IN":
-      return { clave: "enSala", minutos: min(cita.minutosEsperando), tono: "ambar" };
+      return { chip: cita.chip, extra: confirmadaPorWhatsapp ? "porWhatsapp" : null, minutos: null };
     case "IN_CHAIR":
-      return { clave: "enSillon", minutos: min(cita.minutosEsperando), tono: "ambar" };
+      return { chip: cita.chip, extra: null, minutos: min(cita.minutosEsperando) };
     case "IN_PROGRESS":
-      return { clave: "enConsulta", minutos: min(cita.minutosEnConsulta), tono: "morado" };
-    case "COMPLETED":
-      return { clave: "completada", minutos: null, tono: "verde" };
-    case "CHECKED_OUT":
-      return { clave: "salio", minutos: null, tono: "neutro" };
-    case "CANCELLED":
-      return { clave: "cancelada", minutos: null, tono: "rojo" };
-    case "NO_SHOW":
-      return { clave: "noAsistio", minutos: null, tono: "rojo" };
+      return { chip: cita.chip, extra: null, minutos: min(cita.minutosEnConsulta) };
     default:
-      return { clave: "sinConfirmar", minutos: null, tono: "neutro" };
+      // CHECKED_IN ya trae sus minutos en el chip («Registrado · 12 min»).
+      return { chip: cita.chip, extra: null, minutos: null };
   }
 }
 

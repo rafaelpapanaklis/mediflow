@@ -14,10 +14,12 @@ export const dynamic = "force-dynamic";
  * (decisión de Rafael, 28-oct-2026). Es una preferencia de CADA persona, no de la clínica:
  *
  *     GET  (agenda.view)  → { encendida }
- *     PUT  (agenda.view)  ← { encendida: boolean } → { encendida }
+ *     PUT  (agenda.view)  ← { encendida: boolean } → { encendida, filas }  (409 si no tocó ni su fila)
  *
- * Solo toca la fila de quien llama (id + clinicId de la sesión). Sin sql/agenda-detalles-al-pasar.sql el GET
- * dice encendida y el PUT contesta 503 (la pantalla lo deja cambiado solo en esta pestaña).
+ * Solo toca las filas de quien llama (las suyas en cada sede; ver `guardarDetallesAlPasar`). Sin
+ * sql/agenda-detalles-al-pasar.sql el GET dice encendida y el PUT contesta 503 (la pantalla lo deja cambiado
+ * solo en esta pestaña). La agenda recibe la preferencia en la SSR (page.tsx): el GET queda para quien la
+ * monte sin ella.
  */
 
 export async function GET() {
@@ -45,13 +47,16 @@ export async function PUT(req: NextRequest) {
   if (typeof body.encendida !== "boolean") {
     return NextResponse.json({ error: "encendida debe ser true o false" }, { status: 400 });
   }
+  let filas: number;
   try {
-    await guardarDetallesAlPasar(session.clinic.id, session.user.id, body.encendida);
+    filas = await guardarDetallesAlPasar(session.clinic.id, session.user.id, body.encendida);
   } catch (err) {
     if (err instanceof DetallesAlPasarSinColumnaError) {
       return NextResponse.json({ error: "SQL_PENDIENTE" }, { status: 503 });
     }
     throw err;
   }
-  return NextResponse.json({ encendida: body.encendida });
+  // Ni su propia fila: no se guardó (la pantalla avisa en vez de decir «Se guarda en tu cuenta»).
+  if (filas === 0) return NextResponse.json({ error: "NO_GUARDADO" }, { status: 409 });
+  return NextResponse.json({ encendida: body.encendida, filas });
 }

@@ -2179,6 +2179,7 @@
     "alPasar": {
       "interruptor": "Show details on hover",
       "interruptorAyuda": "Saved to your account.",
+      "interruptorNoGuardado": "Couldn't save to your account: it only stays this way in this tab.",
       "interruptorSinGuardar": "Can't be saved yet: it only stays this way in this tab.",
       "edad": "{n} years old",
       "primeraVez": "First visit",
@@ -2201,17 +2202,9 @@
         "enCurso": "in progress",
         "porHacer": "to do"
       },
-      "estado": {
-        "sinConfirmar": "Not confirmed",
-        "confirmada": "Confirmed",
-        "confirmadaWhatsapp": "Confirmed via WhatsApp",
-        "enSala": "In the waiting room",
-        "enSillon": "In the chair",
-        "enConsulta": "In consultation",
-        "completada": "Completed",
-        "salio": "Checked out",
-        "cancelada": "Cancelled",
-        "noAsistio": "No-show"
+      "estadoExtra": {
+        "porWhatsapp": "via WhatsApp",
+        "sinConfirmar": "not confirmed"
       },
       "avisos": {
         "anticipoPagado": "Deposit paid",

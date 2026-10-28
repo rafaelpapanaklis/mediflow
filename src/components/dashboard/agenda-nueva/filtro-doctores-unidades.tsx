@@ -168,7 +168,11 @@ export function FiltroDoctoresUnidades() {
                   <span className={sd.interruptorTexto}>
                     <span>{t("agenda.alPasar.interruptor")}</span>
                     <span className={sd.interruptorAyuda}>
-                      {alPasar.seGuarda ? t("agenda.alPasar.interruptorAyuda") : t("agenda.alPasar.interruptorSinGuardar")}
+                      {alPasar.guardado === "si"
+                        ? t("agenda.alPasar.interruptorAyuda")
+                        : alPasar.guardado === "sinSql"
+                          ? t("agenda.alPasar.interruptorSinGuardar")
+                          : t("agenda.alPasar.interruptorNoGuardado")}
                     </span>
                   </span>
                   <span

@@ -6,11 +6,12 @@
  * Run: npm run test:agenda-detalles-al-pasar
  *
  *  · GET /api/appointments/[id]/detalles-al-pasar: 401 / 403 sin `agenda.view` / 400 id raro / 404 cita de
- *    otra clínica / paciente restringido; y lo pesado: edad, primera vez o recurrente, teléfono, alergias,
+ *    otra clínica / 404 cita de OTRO doctor para un DOCTOR (v2, M1) / paciente restringido; y lo pesado: edad, primera vez o recurrente, teléfono, alergias,
  *    confirmada por WhatsApp, «En esta cita» y «Debe hoy» = saldo − `loQueAunNoSeDebe` (la cifra de
  *    Pacientes). Toda consulta lleva el `clinicId` de la SESIÓN. Lo ve un DOCTOR (no pide `billing.view`).
  *  · /api/agenda/detalles-al-pasar: sin el SQL, encendida y el PUT dice 503 sin escribir; con el SQL, lee la
- *    fila de quien llama y guarda en las filas de la MISMA persona (su `supabaseId`).
+ *    fila de quien llama y guarda en su fila y en las de la MISMA persona (su `supabaseId`, si lo tiene); si no
+ *    toca ninguna, 409 (v2, m2).
  */
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
@@ -31,6 +32,7 @@ let wheres: Array<{ modelo: string; where: any }>;
 let sqls: string[];
 let escrito: { sql: string; valores: unknown[] } | null;
 let contadas: number;
+let filasTocadas: number;
 
 function usuario(role: string, permissionsOverride: string[] = []) {
   return {
@@ -46,11 +48,21 @@ beforeEach(() => {
       id: "a-hoy",
       clinicId: "c1",
       patientId: "p1",
+      doctorId: "u1",
       startsAt: new Date("2026-10-28T17:00:00Z"),
       confirmedAt: new Date("2026-10-27T15:00:00Z"),
       patient: { dob: new Date("1990-03-15T00:00:00Z"), phone: " 55 1234 5678 ", allergies: ["Penicilina", " Látex "] },
     },
-    { id: "a-otra-clinica", clinicId: "c2", patientId: "p9", startsAt: new Date(), confirmedAt: null, patient: { dob: null, phone: null, allergies: [] } },
+    {
+      id: "a-de-otro-doctor",
+      clinicId: "c1",
+      patientId: "p1",
+      doctorId: "u2",
+      startsAt: new Date("2026-10-28T18:00:00Z"),
+      confirmedAt: null,
+      patient: { dob: null, phone: "55 9999 0000", allergies: ["Látex"] },
+    },
+    { id: "a-otra-clinica", clinicId: "c2", doctorId: "u1", patientId: "p9", startsAt: new Date(), confirmedAt: null, patient: { dob: null, phone: null, allergies: [] } },
   ];
   respuestas = [{ clinicId: "c1", appointmentId: "a-hoy", repliedAt: new Date("2026-10-27T15:00:02Z") }];
   facturas = [
@@ -66,6 +78,7 @@ beforeEach(() => {
   sqls = [];
   escrito = null;
   contadas = 0;
+  filasTocadas = 1;
   delete (globalThis as any)[Symbol.for("dalecontrol.agenda-nueva.detalles-al-pasar")];
 });
 
@@ -77,7 +90,7 @@ const prismaStub: any = {
       wheres.push({ modelo: "appointment.findFirst", where });
       const c = citas.find((x) => x.id === where.id && x.clinicId === where.clinicId);
       if (!c) return null;
-      return select.patient ? c : { id: c.id, patientId: c.patientId };
+      return select.patient ? c : { id: c.id, patientId: c.patientId, doctorId: c.doctorId };
     },
     count: async ({ where }: any) => {
       wheres.push({ modelo: "appointment.count", where });
@@ -112,7 +125,7 @@ const prismaStub: any = {
   },
   $executeRaw: async (tpl: TemplateStringsArray, ...valores: unknown[]) => {
     escrito = { sql: textoDe(tpl), valores };
-    return 1;
+    return filasTocadas;
   },
 };
 
@@ -176,6 +189,21 @@ test("lo pesado de la cita: edad, recurrente, teléfono, alergias, por WhatsApp,
   const deuda = wheres.find((w) => w.modelo === "invoice.findMany")!.where;
   assert.deepEqual(deuda.status, { notIn: ["DRAFT", "CANCELLED"] }, "por cobrar = receivableInvoiceWhere");
   assert.deepEqual(deuda.balance, { gt: 0 });
+});
+
+test("M1 (v2): un DOCTOR con el id de una cita de OTRO doctor → 404 y nada del paciente; recepción sí la ve", async () => {
+  sesion = usuario("DOCTOR");
+  const r = await pedir("a-de-otro-doctor");
+  assert.equal(r.status, 404, "como si no existiera, igual que /api/agenda/range y el PATCH");
+  assert.equal(r.body.alergias, undefined);
+  assert.equal(r.body.paciente, undefined);
+  assert.equal(wheres.filter((w) => w.modelo !== "appointment.findFirst").length, 0, "no se leyó nada más");
+  sesion = usuario("RECEPTIONIST");
+  const recepcion = await pedir("a-de-otro-doctor");
+  assert.equal(recepcion.status, 200, "recepción ve la agenda de todos");
+  assert.deepEqual(recepcion.body.alergias, ["Látex"]);
+  sesion = usuario("ADMIN");
+  assert.equal((await pedir("a-de-otro-doctor")).status, 200);
 });
 
 test("primera vez: sin ninguna cita anterior que cuente", async () => {
@@ -249,12 +277,20 @@ test("preferencia CON el SQL: lee la de quien llama (sin fila = encendida) y gua
   const r = await preferenciaPut({ encendida: false });
   assert.equal(r.status, 200);
   assert.ok(escrito, "escribió");
+  assert.equal(r.body.filas, 1);
   assert.match(escrito!.sql, /UPDATE "users" SET "agendaDetallesAlPasar" = \?/);
-  assert.match(escrito!.sql, /WHERE "supabaseId" = \(SELECT "supabaseId" FROM "users" WHERE "id" = \? AND "clinicId" = \?\)/);
-  assert.deepEqual(escrito!.valores, [false, "u1", "c1"], "la persona sale de la SESIÓN, nunca del cuerpo");
+  // Su propia fila SIEMPRE (también con supabaseId nulo), más las de la misma persona en sus otras sedes.
+  assert.match(escrito!.sql, /WHERE \("id" = \? AND "clinicId" = \?\)\s+OR "supabaseId" = \(SELECT "supabaseId" FROM "users"\s+WHERE "id" = \? AND "clinicId" = \? AND "supabaseId" IS NOT NULL\)/);
+  assert.deepEqual(escrito!.valores, [false, "u1", "c1", "u1", "c1"], "la persona sale de la SESIÓN, nunca del cuerpo");
   assert.equal((await preferenciaPut({ encendida: "no" })).status, 400);
   assert.equal((await preferenciaPut({ encendida: true, userId: "otro" })).status, 200);
-  assert.deepEqual(escrito!.valores, [true, "u1", "c1"], "un userId en el cuerpo no cambia a quién se le guarda");
+  assert.deepEqual(escrito!.valores, [true, "u1", "c1", "u1", "c1"], "un userId en el cuerpo no cambia a quién se le guarda");
+  // m2 (v2): si no tocó ni su fila, no es «guardado».
+  filasTocadas = 0;
+  const nada = await preferenciaPut({ encendida: false });
+  assert.equal(nada.status, 409);
+  assert.equal(nada.body.error, "NO_GUARDADO");
+  filasTocadas = 1;
   sesion = usuario("RECEPTIONIST", ["patients.view"]);
   assert.equal((await preferenciaPut({ encendida: true })).status, 403);
 });

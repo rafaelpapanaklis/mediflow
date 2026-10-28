@@ -107,11 +107,6 @@
   background: currentColor;
 }
 
-.tono_neutro {
-  background: var(--ag-fondo-app);
-  color: var(--ag-texto-3);
-}
-
 .tono_verde {
   background: var(--ag-chip-verde-fondo);
   color: var(--ag-chip-verde-tinta);

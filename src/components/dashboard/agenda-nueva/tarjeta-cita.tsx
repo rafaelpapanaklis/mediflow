@@ -160,11 +160,15 @@ export function TarjetaCita({
       onPointerMove={alPasar ? alPasar.mover : undefined}
       onPointerLeave={alPasar ? alPasar.salir : undefined}
       onPointerDownCapture={alPasar ? alPasar.salir : undefined}
-      aria-describedby={conTarjetaAlPasar ? `detalles-cita-${cita.id}` : undefined}
+      // Con el TECLADO (Tab) la tarjeta sale al enfocar la cita y se va al salir de ella (o con Esc).
+      onFocus={alPasar ? (e) => alPasar.enfocar(cita, e.currentTarget) : undefined}
+      onBlur={alPasar ? alPasar.salir : undefined}
+      // Con la tarjeta encendida el `title` nativo sobra (saldrían los dos a la vez); apagada, o en táctil,
+      // se queda como siempre. Su texto no se pierde para el lector de pantalla: queda como descripción
+      // (el `<span hidden>` de abajo). Mientras la tarjeta se ve, el proveedor le suma su id.
+      aria-describedby={conTarjetaAlPasar ? `titulo-cita-${cita.id}` : undefined}
       data-cita={cita.id}
       aria-pressed={seleccionada}
-      // Con la tarjeta encendida el `title` nativo sobra (saldrían los dos a la vez); apagada, o en táctil,
-      // se queda como siempre.
       title={conTarjetaAlPasar ? undefined : tituloNativo}
       style={{
         top: geometria.top,
@@ -178,6 +182,11 @@ export function TarjetaCita({
         boxShadow: sombra,
       }}
     >
+      {conTarjetaAlPasar && (
+        <span id={`titulo-cita-${cita.id}`} hidden>
+          {tituloNativo}
+        </span>
+      )}
       <span className={s.tarjetaFila1}>
         <span
           className={`${s.tarjetaNombre} ${pinta.tachado ? s.tarjetaNombreTachado : ""}`}

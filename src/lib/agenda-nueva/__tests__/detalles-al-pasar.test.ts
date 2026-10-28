@@ -87,16 +87,25 @@ test("confirmada POR WHATSAPP: la respuesta al recordatorio es la que confirmó 
   assert.equal(confirmoPorWhatsapp(c, []), false);
 });
 
-test("estado: sin confirmar / confirmada (por WhatsApp) / en sala de espera / en consulta, con minutos", () => {
-  const c = (estado: string, e: number | null = null, k: number | null = null) => ({ estado, minutosEsperando: e, minutosEnConsulta: k });
-  assert.deepEqual(estadoAlPasar(c("SCHEDULED"), null), { clave: "sinConfirmar", minutos: null, tono: "neutro" });
-  assert.equal(estadoAlPasar(c("CONFIRMED"), null).clave, "confirmada", "mientras llega lo pesado");
-  assert.equal(estadoAlPasar(c("CONFIRMED"), true).clave, "confirmadaWhatsapp");
-  assert.deepEqual(estadoAlPasar(c("CHECKED_IN", 12), null), { clave: "enSala", minutos: 12, tono: "ambar" });
-  assert.equal(estadoAlPasar(c("CHECKED_IN", 0), null).minutos, null, "«0 min» no se dice");
-  assert.deepEqual(estadoAlPasar(c("IN_PROGRESS", null, 25), null), { clave: "enConsulta", minutos: 25, tono: "morado" });
-  assert.equal(estadoAlPasar(c("NO_SHOW"), null).tono, "rojo");
-  assert.equal(estadoAlPasar(c("PENDING"), null).clave, "sinConfirmar", "el PENDING legacy");
+test("estado (v2, m5): el MISMO chip que la cita, más lo que la cita dice en su segunda línea", () => {
+  const c = (estado: string, chip: string, e: number | null = null, k: number | null = null) => ({
+    estado,
+    chip,
+    minutosEsperando: e,
+    minutosEnConsulta: k,
+  });
+  assert.deepEqual(estadoAlPasar(c("SCHEDULED", "Agendada"), null), { chip: "Agendada", extra: "sinConfirmar", minutos: null });
+  assert.deepEqual(estadoAlPasar(c("CONFIRMED", "Confirmada"), null), { chip: "Confirmada", extra: null, minutos: null }, "mientras llega lo pesado");
+  assert.equal(estadoAlPasar(c("CONFIRMED", "Confirmada"), true).extra, "porWhatsapp");
+  assert.deepEqual(
+    estadoAlPasar(c("CHECKED_IN", "Registrado · 12 min", 12), null),
+    { chip: "Registrado · 12 min", extra: null, minutos: null },
+    "los minutos ya van en el chip: no se repiten",
+  );
+  assert.equal(estadoAlPasar(c("IN_CHAIR", "En sillón", 9), null).minutos, 9);
+  assert.equal(estadoAlPasar(c("IN_CHAIR", "En sillón", 0), null).minutos, null, "«0 min» no se dice");
+  assert.deepEqual(estadoAlPasar(c("IN_PROGRESS", "En consulta", null, 25), null), { chip: "En consulta", extra: null, minutos: 25 });
+  assert.equal(estadoAlPasar(c("NO_SHOW", "No asistió"), null).chip, "No asistió");
 });
 
 test("avisos: anticipo pagado / apartada / pedido, mensualidad de orto vencida, sobreagendada, por validar", () => {

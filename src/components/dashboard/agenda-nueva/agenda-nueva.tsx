@@ -73,13 +73,15 @@ export interface AgendaNuevaProps {
   userRole?: Role;
   /** `?highlight=<id>`: la cita a la que mandan desde fuera. Se abre su panel. */
   highlightId?: string | null;
+  /** La preferencia «Mostrar detalles al pasar el mouse», ya leída en la SSR. */
+  detallesAlPasar?: boolean;
 }
 
 export function AgendaNueva(props: AgendaNuevaProps) {
   return (
     <AgendaNuevaProvider>
       {/* Decisión de Rafael (28-oct): la tarjeta de detalles al pasar el mouse sobre una cita. */}
-      <DetallesAlPasarProvider>
+      <DetallesAlPasarProvider inicial={props.detallesAlPasar}>
         <Armazon {...props} />
       </DetallesAlPasarProvider>
     </AgendaNuevaProvider>
