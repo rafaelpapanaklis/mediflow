@@ -14,7 +14,8 @@
  * Nada de esto cambia lo que recibe `POST /api/treatments`: los mismos siete
  * campos de siempre, con los mismos tipos.
  */
-import { fasesDeHallazgos } from "@/lib/treatments/sugerir-procedimiento";
+import { FASE_DE_PROCEDIMIENTO, fasesDeHallazgos } from "@/lib/treatments/sugerir-procedimiento";
+import { CLAVE_DE_MARCA } from "@/lib/odontogram/estado-marca";
 
 /** Las fases con las que se ordena un plan dental, en su orden clínico. */
 export const FASES = ["urgencia", "sistemica", "higienica", "correctiva", "restauradora", "mantenimiento"] as const;
@@ -346,7 +347,15 @@ export function componerDescripcion(plan: PlanClinico, rot: Rotulos): string {
  */
 export const HALLAZGO_FASE: Record<string, Fase> = fasesDeHallazgos();
 
-export interface EntradaOdontograma { toothNumber: number; surface: string | null; conditionId: string }
+export interface EntradaOdontograma {
+  toothNumber: number;
+  surface: string | null;
+  conditionId: string;
+  /** Rojo/azul (ws1-t6): `por_hacer` = marcado en rojo, sale como procedimiento del plan. */
+  estado?: string | null;
+  /** Cuándo se marcó (ISO; `createdAt` de la marca, o `updatedAt`). Sin ella = lo de la consulta aún sin guardar. */
+  marcadaEn?: string | null;
+}
 
 export interface Hallazgo {
   clave: string;
@@ -354,17 +363,46 @@ export interface Hallazgo {
   caras: string[];
   conditionId: string;
   fase: Fase;
+  /** Una marca ROJA del odontograma (ws1-t6): el procedimiento ya está decidido (resina, corona…). */
+  porHacer?: boolean;
+  /**
+   * Cuándo se marcó (la más nueva de sus caras), solo si TODAS traen fecha (ws1-t6 v5): una fila
+   * hecha en otro plan tapa el chip solo si se hizo después (`ya-en-planes.ts`).
+   */
+  marcadaEn?: string;
 }
 
-/** Un hallazgo por (diente, condición), con sus caras juntas: «16 · MO · Caries». */
+/**
+ * Cuándo se marcó una marca, tal como la devuelve `GET /api/odontogram` (ws1-t6 v5/v6): una ROJA,
+ * desde que pasó a «por hacer» (`estadoDesde`, si la base lo guarda); lo demás, cuando se creó.
+ * Cambiar el color o la nota no mueve `createdAt`; repintar en rojo sí mueve `estadoDesde`.
+ */
+export function fechaDeMarca(e: { estado?: string | null; estadoDesde?: string | null; createdAt?: string | null; updatedAt?: string | null }): string | null {
+  if (e.estado === "por_hacer" && e.estadoDesde) return e.estadoDesde;
+  return e.createdAt ?? e.updatedAt ?? null;
+}
+
+/**
+ * Un hallazgo por (diente, condición), con sus caras juntas: «16 · MO · Caries». Las marcas de
+ * procedimiento en ROJO («por hacer», ws1-t6) entran también, como lo que el doctor ya decidió
+ * hacer: «16 · O · Resina» (`porHacer: true`, clave `16:restoration`).
+ */
 export function hallazgosPorTratar(entradas: EntradaOdontograma[]): Hallazgo[] {
   const mapa = new Map<string, Hallazgo>();
+  const sinFecha = new Set<string>();
   for (const e of entradas) {
-    const fase = HALLAZGO_FASE[e.conditionId];
+    // Realizado o previo (azul): ya está hecho, no es un problema por tratar (p. ej. «Extracción indicada» en azul).
+    if ((e.estado === "hecho" || e.estado === "previo") && CLAVE_DE_MARCA[e.conditionId]) continue;
+    const porHacer = e.estado === "por_hacer" && !!CLAVE_DE_MARCA[e.conditionId];
+    const fase = porHacer ? FASE_DE_PROCEDIMIENTO[CLAVE_DE_MARCA[e.conditionId]] : HALLAZGO_FASE[e.conditionId];
     if (!fase || !esFdi(e.toothNumber)) continue;
     const clave = `${e.toothNumber}:${e.conditionId}`;
-    const h = mapa.get(clave) ?? { clave, diente: e.toothNumber, caras: [], conditionId: e.conditionId, fase };
+    const h = mapa.get(clave) ?? { clave, diente: e.toothNumber, caras: [], conditionId: e.conditionId, fase, ...(porHacer ? { porHacer } : {}) };
     if (e.surface && (CARAS as readonly string[]).includes(e.surface) && !h.caras.includes(e.surface)) h.caras.push(e.surface);
+    // la fecha del hallazgo: la de su cara más nueva; si alguna no la trae, no hay fecha fiable
+    const en = e.marcadaEn ? Date.parse(e.marcadaEn) : NaN;
+    if (!Number.isFinite(en)) { sinFecha.add(clave); delete h.marcadaEn; }
+    else if (!sinFecha.has(clave) && (!h.marcadaEn || en > Date.parse(h.marcadaEn))) h.marcadaEn = new Date(en).toISOString();
     mapa.set(clave, h);
   }
   return [...mapa.values()].sort((a, b) => FASES.indexOf(a.fase) - FASES.indexOf(b.fase) || a.diente - b.diente);

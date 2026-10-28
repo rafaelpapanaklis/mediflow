@@ -6,10 +6,10 @@ import toast from "react-hot-toast";
 import { AlertTriangle, ChevronRight, ClipboardList, Grid3x3, Plus, Sparkles, Trash2, X } from "lucide-react";
 import { useLocale, useT } from "@/i18n/i18n-provider";
 import { CLASES_MENU } from "@/components/dashboard/menu-dos-niveles/clases";
-import { COND_BY_ID, PERM, PRIMARY } from "@/components/dashboard/odontogram-v2/data";
+import { COND_BY_ID, PERM, PRIMARY, SURFACE_NAMES, classify } from "@/components/dashboard/odontogram-v2/data";
 import {
   CARAS, FASES, FASE_CLAVE, PLAN_VACIO, PRONOSTICOS, PRONOSTICO_CLAVE,
-  alternarDiente, avisosDeOrden, componerDescripcion, hallazgosPorTratar, importeRenglon,
+  alternarDiente, avisosDeOrden, componerDescripcion, fechaDeMarca, hallazgosPorTratar, importeRenglon,
   leerDientes, letraCentro, soloEntero, subtotalesPorFase, totalProcedimientos,
   type EntradaOdontograma, type Fase, type Hallazgo, type PlanClinico, type Pronostico, type Renglon,
 } from "./plan-clinico";
@@ -21,7 +21,8 @@ import { renglonesDelPlanSinPrecio, useTextosSinPrecio } from "@/lib/quotes/sin-
 import { dineroExacto } from "@/lib/treatments/dinero-exacto";
 import { PROCEDIMIENTOS, type ProcedimientoTarifario } from "@/lib/treatments/sugerir-procedimiento";
 import { DIAS_ENTRE_SESIONES, agregarDesdeChip, chipsDelPlan, filasParaGuardar, nombrePorDefecto, sillon, type Chip } from "./armar-plan";
-import { guardarPlan, presentarDisponible, presentarPlan } from "./guardar-plan";
+import { filasEnPlanesDelPaciente, guardarPlan, presentarDisponible, presentarPlan } from "./guardar-plan";
+import type { FilaEnPlan } from "@/lib/treatments/ya-en-planes";
 
 /**
  * «Nuevo plan de tratamiento» rápido (ws1-t5, fase 2 · P3), con el lenguaje del menú de dos niveles.
@@ -105,6 +106,10 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
   }));
   const [tarifario, setTarifario] = useState<ProcedimientoTarifario[]>([]);
   const [entradas, setEntradas] = useState<EntradaOdontograma[]>(() => precarga?.entradas ?? []);
+  // Lo que el paciente ya tiene en sus planes (de todos los doctores): lo rojo que ya está en uno no
+  // se ofrece otra vez (v2 M1, v3). undefined = aún no contesta (lo rojo espera); null = no se pudo saber.
+  const [enPlanes, setEnPlanes] = useState<FilaEnPlan[] | null | undefined>(undefined);
+  const comprobandoPlanes = enPlanes === undefined;
   // Lo que trae la consulta no se vuelve a leer: ni su odontograma ni su diagnóstico.
   const odontogramaDeConsulta = precarga?.entradas !== undefined;
   const diagnosticoDeConsulta = precarga?.diagnostico !== undefined;
@@ -136,9 +141,16 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
     if (!odontogramaDeConsulta) {
       fetch(`/api/odontogram?patientId=${encodeURIComponent(paciente.id)}`, { cache: "no-store" })
         .then((r) => (r.ok ? r.json() : null))
-        .then((d) => { if (vivo && d && Array.isArray(d.entries)) setEntradas(d.entries as EntradaOdontograma[]); })
+        .then((d) => {
+          if (!vivo || !d || !Array.isArray(d.entries)) return;
+          // con la fecha de cada marca (ws1-t6 v5): lo hecho en otro plan ANTES de marcarla no la tapa
+          setEntradas((d.entries as Array<EntradaOdontograma & { createdAt?: string; updatedAt?: string; estadoDesde?: string }>)
+            .map((e) => ({ ...e, marcadaEn: fechaDeMarca(e) })));
+        })
         .catch(() => {});
     }
+    // Lo que ya está en los planes del paciente: lo rojo que ya está en uno no se vuelve a ofrecer.
+    filasEnPlanesDelPaciente(paciente.id).then((f) => { if (vivo) setEnPlanes(f); });
     // El diagnóstico de la última consulta (sin `medicalRecord.view` la API dice 403 y no se precarga nada).
     if (!diagnosticoDeConsulta) fetch(`/api/clinical?patientId=${encodeURIComponent(paciente.id)}`, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
@@ -162,7 +174,13 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
   }, [form.name, nombreTocado, idioma, setForm]);
 
   const hallazgos: Hallazgo[] = useMemo(() => hallazgosPorTratar(entradas), [entradas]);
-  const chips = useMemo(() => chipsDelPlan(hallazgos, tarifario, entradas, plan.renglones), [hallazgos, tarifario, entradas, plan.renglones]);
+  const todosLosChips = useMemo(
+    () => chipsDelPlan(hallazgos, tarifario, entradas, plan.renglones, enPlanes ?? []),
+    [hallazgos, tarifario, entradas, plan.renglones, enPlanes],
+  );
+  // Las marcas ROJAS del odontograma (ws1-t6) van en su propia sección, con su precio.
+  const chipsRojos = useMemo(() => todosLosChips.filter((c) => c.tipo === "por_hacer"), [todosLosChips]);
+  const chips = useMemo(() => todosLosChips.filter((c) => c.tipo !== "por_hacer"), [todosLosChips]);
 
   const rotulos = useMemo(() => ({
     diagnostico: t("planTratamiento.texto.diagnostico"),
@@ -217,13 +235,57 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
   const nombreCondicion = (id: string) => COND_BY_ID[id]?.[idioma] ?? id;
   const nombreSugerido = (c: Chip) => (c.sugerencia ? (c.sugerencia.elegir ? c.sugerencia.nombreSugerido[idioma] : c.sugerencia.nombre) : "");
   const motivoDe = (c: Chip) =>
-    c.tipo === "encadenada" && c.sugerencia?.encadenadaDe
+    c.tipo === "por_hacer"
+      ? t("planTratamiento.nuevo.motivoPorHacer")
+      : c.tipo === "encadenada" && c.sugerencia?.encadenadaDe
       ? t("planTratamiento.nuevo.motivoTras", { procedimiento: PROCEDIMIENTOS[c.sugerencia.encadenadaDe].nombre[idioma].toLowerCase() })
       : c.condiciones.map(nombreCondicion).join(" · ");
 
   // El toque en un chip: entra el procedimiento con su precio, sus minutos y su fase.
   const tocarChip = (c: Chip) =>
     cambiarPlan((p) => ({ ...p, renglones: agregarDesdeChip(p.renglones, c, { tarifario, entradas, nuevoId, motivo: motivoDe(c), idioma }) }));
+  // «Agregar todo lo marcado por hacer»: un toque por cada chip rojo que falte.
+  const agregarRojos = () =>
+    !comprobandoPlanes && cambiarPlan((p) => ({
+      ...p,
+      renglones: chipsRojos.filter((c) => !c.puesto && c.enOtroPlan == null).reduce(
+        (rs, c) => agregarDesdeChip(rs, c, { tarifario, entradas, nuevoId, motivo: motivoDe(c), idioma }), p.renglones),
+    }));
+  // «ya en el plan «X»» o, si esa fila ya se hizo, «ya hecha en el plan «X» (3 mar 2025)» (v4, m1).
+  const textoYaEnPlan = (c: Chip) => {
+    if (!c.enOtroPlan) return "";
+    const { plan: nombrePlan, hechoEn, planes } = c.enOtroPlan;
+    // cubierto entre varios planes (v8): «ya en los planes «A» y «B»»
+    if (planes && planes.length > 1) {
+      const lista = planes.map((p) => (idioma === "en" ? `“${p}”` : `«${p}»`));
+      return t("planTratamiento.nuevo.yaEnPlanes", { planes: `${lista.slice(0, -1).join(", ")} ${t("planTratamiento.nuevo.y")} ${lista[lista.length - 1]}` });
+    }
+    if (!hechoEn) return t("planTratamiento.nuevo.yaEnPlan", { plan: nombrePlan });
+    const fecha = new Intl.DateTimeFormat(idioma === "en" ? "en-US" : "es-MX", { day: "numeric", month: "short", year: "numeric" }).format(new Date(hechoEn));
+    return t("planTratamiento.nuevo.yaHechaEnPlan", { plan: nombrePlan, fecha });
+  };
+  // «16 O ya en el plan «A» · 16 D en el «B»»: las caras de ese diente que ya están en otros planes,
+  // por plan (v7 solape parcial; v8 agrupado).
+  const textoCarasEnPlan = (c: Chip) => {
+    if (!c.carasEnOtroPlan?.length || c.dientes.length !== 1) return "";
+    const d = c.dientes[0];
+    const letras = (caras: string[]) => CARAS.filter((x) => caras.includes(x)).map((x) => (x === "O" ? letraCentro([d]) : x)).join("");
+    return c.carasEnOtroPlan
+      .map((g, i) => t(i === 0 ? "planTratamiento.nuevo.carasYaEnPlan" : "planTratamiento.nuevo.carasEnOtroPlanMas", { diente: String(d), caras: letras(g.caras), plan: g.plan }))
+      .join(" · ");
+  };
+  // «pieza 16 oclusal» / «pieza 16 MO» (la cara con su nombre cuando es una).
+  const dondeRojo = (c: Chip) => {
+    if (c.dientes.length !== 1) return t("planTratamiento.nuevo.nDientes", { count: c.dientes.length });
+    const d = c.dientes[0];
+    const letras = CARAS.filter((x) => c.caras.includes(x)).map((x) => (x === "O" ? letraCentro([d]) : x));
+    let caras = letras.join("");
+    if (letras.length === 1) {
+      const nombre = SURFACE_NAMES[letras[0] as keyof typeof SURFACE_NAMES][idioma].split(" / ");
+      caras = (letras[0] === "L" && nombre.length > 1 && !classify(d).upper ? nombre[1] : nombre[0]).toLowerCase();
+    }
+    return [t("planTratamiento.nuevo.pieza", { diente: String(d) }), caras].filter(Boolean).join(" ");
+  };
 
   // Elegir del tarifario trae su nombre, su precio y su tiempo (el precio solo si el renglón no
   // tenía uno tecleado a mano).
@@ -306,6 +368,12 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
         return;
       }
       toast.success(t("patients.createTreatment.success"));
+      // El servidor avisa lo que ya estaba en otro plan (lo que no pasó por los chips, o se tecleó).
+      if (r.yaEnOtrosPlanes?.length) {
+        toast(t("planTratamiento.nuevo.yaEnOtrosPlanesAviso", {
+          lista: r.yaEnOtrosPlanes.map((x) => `${x.nombre}${x.dientes.length ? ` ${x.dientes.join(",")}` : ""} («${x.plan}»)`).join("; "),
+        }), { icon: "⚠️", duration: 9000 });
+      }
       if (accion === "presentar") {
         const p = await presentarPlan(r.plan!.id);
         if (p.ok) toast.success(t("planTratamiento.nuevo.presentado", { folio: p.folio ?? "" }));
@@ -380,10 +448,58 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
             </div>
           </section>
 
+          {/* ── 2a · Marcado por hacer (rojo) en el odontograma → procedimientos (ws1-t6) ── */}
+          {chipsRojos.length > 0 && (
+            <section className={s.seccion} aria-labelledby="plan-por-hacer-titulo" data-plan-por-hacer>
+              <div className={s.porHacerCabeza}>
+                <h4 id="plan-por-hacer-titulo" className={s.seccionTitulo}>
+                  <span className={s.puntoPorHacer} aria-hidden />{t("planTratamiento.nuevo.porHacer")}
+                </h4>
+                {chipsRojos.some((c) => !c.puesto && c.enOtroPlan == null) && (
+                  <button type="button" className={s.ficha} onClick={agregarRojos} disabled={guardando || comprobandoPlanes} data-agregar-por-hacer>
+                    <Plus size={12} strokeWidth={2} aria-hidden />{t("planTratamiento.nuevo.agregarTodoPorHacer")}
+                  </button>
+                )}
+              </div>
+              {comprobandoPlanes && <p className={s.pistaRenglon} role="status" data-comprobando-planes>{t("planTratamiento.nuevo.comprobandoPlanes")}</p>}
+              {enPlanes === null && <p className={s.avisoPorHacer} role="alert" data-planes-sin-comprobar>{t("planTratamiento.nuevo.planesSinComprobar")}</p>}
+              <div className={s.sugerencias}>
+                {chipsRojos.map((c) => {
+                  const sug = nombreSugerido(c);
+                  const precio = c.sugerencia?.precio;
+                  return (
+                    <button
+                      key={c.clave}
+                      type="button"
+                      data-chip={c.clave}
+                      className={`${s.ficha} ${s.fichaPorHacer} ${c.puesto ? s.fichaPuesta : ""} ${c.enOtroPlan != null ? s.fichaEnOtroPlan : ""}`}
+                      disabled={c.puesto || c.enOtroPlan != null || guardando || comprobandoPlanes}
+                      onClick={() => tocarChip(c)}
+                      title={c.enOtroPlan != null ? textoYaEnPlan(c) : t("planTratamiento.nuevo.hallazgoAgregar")}
+                      data-en-otro-plan={c.enOtroPlan?.plan ?? undefined}
+                    >
+                      <span className={c.sugerencia?.elegir ? s.fichaSugeridoSinTarifario : undefined}>{sug || c.condiciones.map(nombreCondicion).join(" · ")}</span>
+                      <span className={s.fichaCuenta}>· {dondeRojo(c)}</span>
+                      {c.enOtroPlan != null ? (
+                        <span className={s.fichaCuenta}>· {textoYaEnPlan(c)}</span>
+                      ) : (
+                        <span className={s.fichaPrecio}>· {precio != null ? dineroExacto(precio) : t("planTratamiento.nuevo.sinPrecio")}</span>
+                      )}
+                      {c.carasEnOtroPlan && <span className={s.fichaCuenta} data-caras-en-otro-plan>· {textoCarasEnPlan(c)}</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+
           {/* ── 2 · Hallazgos → procedimientos (un toque cada uno) ─────────── */}
           {chips.length > 0 && (
             <section className={s.seccion} aria-labelledby="plan-hallazgos-titulo">
               <h4 id="plan-hallazgos-titulo" className={s.seccionTitulo}>{t("planTratamiento.nuevo.hallazgos")}</h4>
+              {/* sin sección roja, el «comprobando / no se pudo comprobar» va aquí (v4, M1) */}
+              {chipsRojos.length === 0 && comprobandoPlanes && <p className={s.pistaRenglon} role="status" data-comprobando-planes>{t("planTratamiento.nuevo.comprobandoPlanes")}</p>}
+              {chipsRojos.length === 0 && enPlanes === null && <p className={s.avisoPorHacer} role="alert" data-planes-sin-comprobar>{t("planTratamiento.nuevo.planesSinComprobar")}</p>}
               <div className={s.sugerencias}>
                 {chips.map((c) => {
                   const sug = nombreSugerido(c);
@@ -393,15 +509,22 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
                       key={c.clave}
                       type="button"
                       data-chip={c.clave}
-                      className={`${s.ficha} ${s.fichaHallazgo} ${c.tipo === "encadenada" ? s.fichaEncadenada : ""} ${c.puesto ? s.fichaPuesta : ""}`}
-                      disabled={c.puesto || guardando}
+                      className={`${s.ficha} ${s.fichaHallazgo} ${c.tipo === "encadenada" ? s.fichaEncadenada : ""} ${c.puesto ? s.fichaPuesta : ""} ${c.enOtroPlan != null ? s.fichaEnOtroPlan : ""}`}
+                      // lo que ya está en otro plan no se ofrece; mientras no se sabe, se espera (v4, M1)
+                      disabled={c.puesto || c.enOtroPlan != null || guardando || (comprobandoPlanes && !!c.sugerencia)}
                       onClick={() => tocarChip(c)}
-                      title={t("planTratamiento.nuevo.hallazgoAgregar")}
+                      title={c.enOtroPlan != null ? textoYaEnPlan(c) : t("planTratamiento.nuevo.hallazgoAgregar")}
+                      data-en-otro-plan={c.enOtroPlan?.plan ?? undefined}
                     >
                       {c.tipo === "encadenada" && <Sparkles size={12} strokeWidth={1.75} aria-hidden />}
                       {c.dientes.length === 1 && <span className={s.fichaDiente}>{c.dientes[0]}</span>}
                       {caras && <span className={s.fichaCaras}>{caras}</span>}
-                      {c.tipo === "encadenada" ? (
+                      {c.enOtroPlan != null ? (
+                        <>
+                          <span>{c.tipo === "encadenada" ? sug : c.condiciones.map(nombreCondicion).join(" · ")}</span>
+                          <span className={s.fichaCuenta}>· {textoYaEnPlan(c)}</span>
+                        </>
+                      ) : c.tipo === "encadenada" ? (
                         <span>{t("planTratamiento.nuevo.sugeridoTras", { procedimiento: sug })}</span>
                       ) : (
                         <>
@@ -412,6 +535,7 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
                               <ChevronRight size={11} strokeWidth={2} aria-hidden />{sug}
                             </span>
                           )}
+                          {c.carasEnOtroPlan && <span className={s.fichaCuenta} data-caras-en-otro-plan>· {textoCarasEnPlan(c)}</span>}
                         </>
                       )}
                     </button>

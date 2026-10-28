@@ -270,6 +270,7 @@ export async function PATCH(req: NextRequest, props: Params) {
         surface: e.surface,
         conditionId: e.conditionId,
         type: "added" as const,
+        estado: e.estado ?? null, // rojo (por hacer) o previo: no se cobra (ws1-t6)
       }));
       suggestedTreatments = await changesToTreatments(changes, session.clinic.id);
     }

@@ -18,12 +18,18 @@ import type {
   Records, ToothRecord, Lang, Numbering, Dentition, ApplyKind, RemoveScope, SurfaceLetter,
   OdontogramV2Props,
 } from "./types";
+import {
+  admiteEstado, estadoDelModo, estadoEn, fijarEstadoEn, podarEstados, tonoDeEstado,
+  type EstadoMarca, type ModoMarca,
+} from "@/lib/odontogram/estado-marca";
+import { VAR_TONO } from "./colores";
+import { ModoSelector } from "./ModoSelector";
 import { EMPTY_RECORD } from "./types";
 import {
   fetchOdontogram, fetchQuienSoy, putFinding, deleteFinding, setNote as apiSetNote, resetOdontogram,
 } from "./adapter";
 import { SaveQueue, saveQueueFor, type SaveOp, type SaveStatus } from "./autosave";
-import { cargarOdontograma, quitarDelDibujo } from "./recuperar";
+import { cargarOdontograma, conservarEstados, quitarDelDibujo } from "./recuperar";
 import { OdoDefs } from "./OdoDefs";
 import { Odontogram } from "./Odontogram";
 import { Palette } from "./Palette";
@@ -40,7 +46,13 @@ function applyToRecords(prev: Records, fdi: number, fn: (r: ToothRecord) => void
   Object.keys(rec.surfaces).forEach((k) => {
     if (!rec.surfaces[k] || !rec.surfaces[k].length) delete rec.surfaces[k];
   });
+  podarEstados(rec); // lo que se quitó no deja su rojo/azul colgado
   return { ...prev, [fdi]: rec };
+}
+
+/** ¿Algo de lo que se ve ya trae rojo/azul? (modo controlado sin `conEstado`: la foto lo dice) */
+function hayEstados(records: Records): boolean {
+  return Object.values(records).some((r) => r?.estados && Object.keys(r.estados).length > 0);
 }
 
 function toggleInArr(arr: string[], id: string) {
@@ -52,7 +64,7 @@ function toggleInArr(arr: string[], id: string) {
 /** La escritura real de cada operación de la cola. */
 function sendOp(patientId: string, op: SaveOp, opts: { keepalive: boolean }): Promise<void> {
   switch (op.kind) {
-    case "put": return putFinding({ patientId, toothNumber: op.toothNumber, surface: op.surface, conditionId: op.conditionId }, opts);
+    case "put": return putFinding({ patientId, toothNumber: op.toothNumber, surface: op.surface, conditionId: op.conditionId, estado: op.estado }, opts);
     case "delete": return deleteFinding({ patientId, toothNumber: op.toothNumber, surface: op.surface, conditionId: op.conditionId }, opts);
     case "note": return apiSetNote(patientId, op.toothNumber, op.text, opts);
     case "reset": return resetOdontogram(patientId, opts);
@@ -96,7 +108,7 @@ function Seg({ value, set, options }: { value: string; set: (v: string) => void;
   );
 }
 
-export const OdontogramV2 = memo(function OdontogramV2({ patientId, value, onChange, dedupeLegend, edgeScrollHint, sesion }: OdontogramV2Props) {
+export const OdontogramV2 = memo(function OdontogramV2({ patientId, value, onChange, dedupeLegend, edgeScrollHint, sesion, conEstado }: OdontogramV2Props) {
   // Modo CONTROLADO (foto por consulta): si llegan value+onChange, el estado lo
   // maneja el padre y NO se toca el servidor. Si no, modo VIVO (como la pestaña).
   const controlled = value !== undefined && !!onChange;
@@ -111,6 +123,13 @@ export const OdontogramV2 = memo(function OdontogramV2({ patientId, value, onCha
   const [loading, setLoading] = useState(!controlled);
   const [error, setError] = useState<string | null>(null);
   const t = I18N[lang];
+  // Rojo = por hacer, azul = realizado (ws1-t6). El selector sale solo si la base guarda el estado
+  // (sql/odontograma-estado-marca.sql): sin la columna, todo como hoy.
+  const [modo, setModo] = useState<ModoMarca>("por_hacer");
+  const [previo, setPrevio] = useState(false);
+  const [conEstadoServidor, setConEstadoServidor] = useState(false);
+  const [estadoNoLeido, setEstadoNoLeido] = useState(false);
+  const modos = controlled ? (conEstado ?? hayEstados(records)) : conEstadoServidor;
 
   // Cola de autoguardado del modo VIVO: una por paciente y por pestaña, que
   // sobrevive a que este componente se desmonte con algo pendiente.
@@ -168,7 +187,10 @@ export const OdontogramV2 = memo(function OdontogramV2({ patientId, value, onCha
     cargarOdontograma({ patientId, queue: queueRef.current, sesion: sesionRef.current, leer: fetchOdontogram, force: true })
       .then((r) => {
         if (cancelled) return;
-        if (r.records) setInternalRecords(r.records);
+        // sin estados leídos (m-d): no se pierden los que ya había
+        if (r.records) setInternalRecords((prev) => (r.estadoNoLeido ? conservarEstados(prev, r.records!) : r.records!));
+        if (r.conEstado !== undefined) setConEstadoServidor(r.conEstado);
+        setEstadoNoLeido(!!r.estadoNoLeido);
         if (r.error) setError(r.error);
       })
       .finally(() => { if (!cancelled) setLoading(false); });
@@ -180,7 +202,14 @@ export const OdontogramV2 = memo(function OdontogramV2({ patientId, value, onCha
   const resync = useCallback(() => {
     if (ctrlRef.current.controlled) return;
     cargarOdontograma({ patientId, queue: queueRef.current, sesion: sesionRef.current, leer: fetchOdontogram, force: false })
-      .then((r) => { if (r.records && !r.error) { setInternalRecords(r.records); setError(null); } });
+      .then((r) => {
+        if (r.records && !r.error) {
+          setInternalRecords((prev) => (r.estadoNoLeido ? conservarEstados(prev, r.records!) : r.records!));
+          setError(null);
+        }
+        if (r.conEstado !== undefined) setConEstadoServidor(r.conEstado);
+        if (!r.error) setEstadoNoLeido(!!r.estadoNoLeido);
+      });
   }, [patientId]);
 
   // Lo que no se guardó (403/404 de verdad, o «Descartar»): se quita del dibujo
@@ -252,6 +281,16 @@ export const OdontogramV2 = memo(function OdontogramV2({ patientId, value, onCha
     const present = toSurface
       ? !!records[fdi]?.surfaces?.[lk as string]?.includes(brush)
       : !!records[fdi]?.tooth?.includes(brush);
+    // Con el selector de modo, un procedimiento queda en el color del modo en el mismo toque.
+    // Tocar una marca que ya está en OTRO estado le cambia el color (no la quita); en el mismo, la quita.
+    // Lo de antes (sin estado) cuenta como realizado (v2, m1): en «Realizado» tocarlo lo quita como
+    // siempre; en «Por hacer» lo pasa a rojo.
+    const estado: EstadoMarca | undefined = modos && admiteEstado(brush) ? estadoDelModo(modo, previo) : undefined;
+    if (present && estado !== undefined && (estadoEn(records[fdi], lk, brush) ?? "hecho") !== estado) {
+      setRecords((prev) => applyToRecords(prev, fdi, (r) => fijarEstadoEn(r, lk, brush, estado)));
+      if (live) save({ kind: "put", toothNumber: fdi, surface: lk, conditionId: brush, estado });
+      return;
+    }
 
     setRecords((prev) => applyToRecords(prev, fdi, (r) => {
       if (toSurface) {
@@ -261,10 +300,22 @@ export const OdontogramV2 = memo(function OdontogramV2({ patientId, value, onCha
       } else {
         toggleInArr(r.tooth, brush);
       }
+      if (!present && estado !== undefined) fijarEstadoEn(r, lk, brush, estado);
     }));
 
-    if (live) save({ kind: present ? "delete" : "put", toothNumber: fdi, surface: lk, conditionId: brush });
-  }, [brush, eraser, save]);
+    if (live) {
+      save(present
+        ? { kind: "delete", toothNumber: fdi, surface: lk, conditionId: brush }
+        : { kind: "put", toothNumber: fdi, surface: lk, conditionId: brush, ...(estado !== undefined ? { estado } : {}) });
+    }
+  }, [brush, eraser, save, modos, modo, previo]);
+
+  // Cambiar el estado de una marca desde la lista del panel del diente («Marcar realizado»).
+  const cambiarEstado = useCallback((fdi: number, scope: RemoveScope, letter: string | undefined, condId: string, estado: EstadoMarca) => {
+    const cara = scope === "surface" ? (letter ?? null) : null;
+    setRecords((prev) => applyToRecords(prev, fdi, (r) => fijarEstadoEn(r, cara, condId, estado)));
+    if (!ctrlRef.current.controlled) save({ kind: "put", toothNumber: fdi, surface: cara, conditionId: condId, estado });
+  }, [save, setRecords]);
 
   const removeFinding = useCallback((fdi: number, scope: RemoveScope, letter: string | undefined, condId: string) => {
     setRecords((prev) => applyToRecords(prev, fdi, (r) => {
@@ -330,6 +381,11 @@ export const OdontogramV2 = memo(function OdontogramV2({ patientId, value, onCha
   });
 
   const activeBrushCond = brush ? COND_BY_ID[brush] : null;
+  // El color del pincel en la ayuda: el del modo si el procedimiento lleva estado.
+  const tonoPincel = activeBrushCond && modos && admiteEstado(activeBrushCond.id) ? tonoDeEstado(estadoDelModo(modo, previo)) : null;
+  const selectorModo = modos
+    ? <ModoSelector lang={lang} modo={modo} previo={previo} onModo={setModo} onPrevio={setPrevio} />
+    : null;
 
   return (
     <div className={`odo-app ${jakarta.variable}`}>
@@ -370,12 +426,20 @@ export const OdontogramV2 = memo(function OdontogramV2({ patientId, value, onCha
       {/* ===== Chart ===== */}
       <section className="odo-main" aria-label="Odontograma">
         <div className="odo-chart-card">
+          {selectorModo}
+          {/* no se pudo leer el rojo/azul: se dice aparte, sin tapar la ayuda del pincel (v2, m5) */}
+          {estadoNoLeido && <div className="odo-estado-aviso" role="alert">{t.estadoNoLeido}</div>}
           <div className="odo-chart-head">
             <div className="odo-hint">
               {error ? (
                 <span style={{ color: "#d8504f" }}>{error}</span>
+
               ) : activeBrushCond ? (
-                <span><b style={{ color: GROUP_COLOR[activeBrushCond.group] }}>{activeBrushCond[lang]}</b> — {t.clickFace}</span>
+                <span>
+                  <b style={{ color: tonoPincel ? `var(${VAR_TONO[tonoPincel]})` : GROUP_COLOR[activeBrushCond.group] }}>{activeBrushCond[lang]}</b>
+                  {tonoPincel ? ` · ${modo === "por_hacer" ? t.estadoPorHacer : previo ? t.estadoPrevio : t.estadoHecho}` : modos ? ` (${t.sinEstado})` : ""}
+                  {" — "}{t.clickFace}
+                </span>
               ) : eraser ? (
                 <span><b>{t.eraser}</b> — {t.clickFace}</span>
               ) : (
@@ -419,11 +483,12 @@ export const OdontogramV2 = memo(function OdontogramV2({ patientId, value, onCha
               <div className="odo-2d-loading" aria-hidden="true">{t.loadingChart}</div>
             )}
           </div>
-          {!dedupeLegend && <Legend lang={lang} />}
+          {!dedupeLegend && <Legend lang={lang} conEstado={modos} />}
+          {dedupeLegend && modos && <Legend lang={lang} conEstado soloEstado />}
         </div>
 
         {/* ===== Palette ===== */}
-        <Palette lang={lang} brush={brush} eraser={eraser} onPick={pickBrush} onEraser={pickEraser} />
+        <Palette lang={lang} brush={brush} eraser={eraser} onPick={pickBrush} onEraser={pickEraser} estado={modos ? estadoDelModo(modo, previo) : null} />
       </section>
 
       {/* ===== Detail panel ===== */}
@@ -443,6 +508,10 @@ export const OdontogramV2 = memo(function OdontogramV2({ patientId, value, onCha
           onNoteFlush={handleNoteFlush}
           onRemove={removeFinding}
           onPick={pickBrushInPanel}
+          conEstado={modos}
+          onEstado={cambiarEstado}
+          estadoPincel={modos ? estadoDelModo(modo, previo) : null}
+          selectorModo={modos ? <ModoSelector lang={lang} modo={modo} previo={previo} onModo={setModo} onPrevio={setPrevio} compacto /> : null}
         />
       )}
     </div>

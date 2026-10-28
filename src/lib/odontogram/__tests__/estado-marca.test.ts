@@ -1,0 +1,589 @@
+/**
+ * Rojo = por hacer, azul = realizado (ws1-t6, decisiones de Rafael del 28-oct): las piezas puras.
+ *
+ *  · qué marcas llevan estado y cómo se guarda en el diente (y que lo de antes se lee como hoy);
+ *  · el adaptador (GET → records, records → servidor), la cola de autoguardado y la mezcla de la
+ *    consulta con el vivo;
+ *  · decisión 2: cada marca roja sale en el plan nuevo con su procedimiento y el precio de la clínica;
+ *  · decisión 3: «Hecho» pasa la marca de rojo a azul (sin crear otra) y su deshacer la regresa.
+ *
+ * Run: npm run test:odontograma-rojo-azul
+ */
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import {
+  CLAVE_DE_MARCA, admiteEstado, claveEstado, estadoDelModo, estadoEn, fijarEstadoEn, podarEstados, tonoDeEstado,
+} from "../estado-marca";
+import { CONDITIONS } from "../../../components/dashboard/odontogram-v2/data";
+import { entriesToRecords, recordsForServer } from "../../../components/dashboard/odontogram-v2/adapter";
+import { applyToothDelta } from "../../../components/dashboard/odontogram-v2/merge-consulta";
+import { SaveQueue } from "../../../components/dashboard/odontogram-v2/autosave";
+import { colorDe, resolverColor } from "../../../components/dashboard/odontogram-v2/colores";
+import type { ToothRecord } from "../../../components/dashboard/odontogram-v2/types";
+import { aplicarAEntradas, aplicarHecho, cambioDeshacer, planearDeshacer, type EntradaConId, type EntradaOdontograma } from "../aplicar-hecho";
+import { CONDICIONES_CLINICAS, PROCEDIMIENTOS, sugerirProcedimiento, type ProcedimientoTarifario } from "../../treatments/sugerir-procedimiento";
+import { hallazgosPorTratar, type EntradaOdontograma as EntradaPlan } from "../../../components/dashboard/plan-tratamiento-rediseno/plan-clinico";
+import { agregarDesdeChip, aplicarCobertura, chipsDelPlan, entradasDeRegistros, fechasDelVivo, type Chip } from "../../../components/dashboard/plan-tratamiento-rediseno/armar-plan";
+import { coberturaEnPlanes } from "../../treatments/ya-en-planes";
+
+/* ─────── Qué lleva estado ─────── */
+
+test("solo las marcas de procedimiento llevan estado; los hallazgos no; cada una con su procedimiento del plan", () => {
+  for (const id of ["caries", "caries_inc", "fracture", "missing", "pulpitis", "calculus", "pocket", "impacted", "root_remnant", "diastema"]) {
+    assert.equal(admiteEstado(id), false, `${id} es un hallazgo: se pinta como hoy`);
+  }
+  for (const id of ["restoration", "crown", "rct", "implant", "ext_indicated", "ext_done", "sealant", "steel_crown"]) {
+    assert.equal(admiteEstado(id), true, `${id} es un procedimiento`);
+  }
+  // Toda condición con estado existe en el catálogo del odontograma y su procedimiento en el plan.
+  const ids = new Set(CONDITIONS.map((c) => c.id));
+  for (const [cond, clave] of Object.entries(CLAVE_DE_MARCA)) {
+    assert.ok(ids.has(cond), `${cond} está en data.ts`);
+    assert.ok(PROCEDIMIENTOS[clave], `${clave} está en el plan`);
+    assert.ok(CONDICIONES_CLINICAS[cond], `${cond} está en la lista compartida`);
+  }
+  assert.equal(tonoDeEstado("por_hacer"), "rojo");
+  assert.equal(tonoDeEstado("hecho"), "azul");
+  assert.equal(tonoDeEstado("previo"), "azul");
+  assert.equal(tonoDeEstado(null), null);
+  assert.equal(estadoDelModo("hecho", true), "previo");
+  assert.equal(estadoDelModo("por_hacer", true), "por_hacer");
+});
+
+test("el estado vive en el diente por «cara:condición» y se poda cuando la marca se va", () => {
+  const r: ToothRecord = { surfaces: { O: ["restoration", "caries"] }, tooth: ["crown"] };
+  fijarEstadoEn(r, "O", "restoration", "por_hacer");
+  fijarEstadoEn(r, null, "crown", "hecho");
+  assert.deepEqual(r.estados, { "O:restoration": "por_hacer", "_:crown": "hecho" });
+  assert.equal(estadoEn(r, "O", "restoration"), "por_hacer");
+  assert.equal(estadoEn(r, "O", "caries"), null, "un hallazgo no tiene estado");
+  r.tooth = [];
+  podarEstados(r);
+  assert.deepEqual(r.estados, { "O:restoration": "por_hacer" });
+  fijarEstadoEn(r, "O", "restoration", null);
+  assert.equal(r.estados, undefined);
+});
+
+test("color: rojo/azul por el estado; sin estado (lo de antes, y los hallazgos), el de la especialidad", () => {
+  const resina = CONDITIONS.find((c) => c.id === "restoration")!;
+  const caries = CONDITIONS.find((c) => c.id === "caries")!;
+  const r: ToothRecord = { surfaces: { O: ["restoration"], M: ["restoration"], D: ["caries"] }, tooth: [], estados: { "O:restoration": "por_hacer" } };
+  assert.equal(colorDe(r, "O", resina), "var(--odo-por-hacer)");
+  assert.equal(colorDe(r, "M", resina), "#2A6FDB", "la resina de antes, sin estado: como hoy");
+  assert.equal(colorDe(r, "D", caries), "#E5484D");
+  r.estados = { "O:restoration": "previo" };
+  assert.equal(colorDe(r, "O", resina), "var(--odo-realizado)");
+  // sin DOM (o sin el token), el 3D cae a un color de respaldo de la paleta
+  assert.equal(resolverColor("var(--odo-por-hacer)", null), "#E5484D");
+  assert.equal(resolverColor("#123456", null), "#123456");
+});
+
+/* ─────── Adaptador, cola y consulta ─────── */
+
+test("GET → records: el estado de cada marca llega al diente; lo viejo (sin estado) se lee como hoy", () => {
+  const recs = entriesToRecords([
+    { toothNumber: 16, surface: "O", conditionId: "restoration", estado: "por_hacer" },
+    { toothNumber: 16, surface: "M", conditionId: "restoration" },
+    { toothNumber: 11, surface: "O", conditionId: "restoration", estado: "hecho" }, // incisal: «I» en pantalla
+    { toothNumber: 26, surface: null, conditionId: "crown", estado: "previo" },
+    { toothNumber: 36, surface: "O", conditionId: "caries", estado: "por_hacer" as never }, // un hallazgo no lleva estado
+  ]);
+  assert.deepEqual(recs[16].estados, { "O:restoration": "por_hacer" });
+  assert.deepEqual(recs[11].estados, { "I:restoration": "hecho" });
+  assert.deepEqual(recs[26].estados, { "_:crown": "previo" });
+  assert.equal(recs[36].estados, undefined);
+  // y de vuelta al servidor, con la letra de la base
+  const srv = recordsForServer(recs);
+  assert.deepEqual(srv[11].estados, { "O:restoration": "hecho" });
+  assert.deepEqual(srv[11].surfaces, { O: ["restoration"] });
+});
+
+test("la cola de autoguardado pinta encima el estado pendiente y junta toques de la misma marca", async () => {
+  const enviados: unknown[] = [];
+  const q = new SaveQueue({ send: async (op) => { enviados.push(op); await new Promise(() => {}); } });
+  q.enqueue({ kind: "put", toothNumber: 16, surface: "O", conditionId: "restoration", estado: "por_hacer" });
+  q.enqueue({ kind: "put", toothNumber: 16, surface: "M", conditionId: "restoration", estado: "por_hacer" });
+  q.enqueue({ kind: "put", toothNumber: 16, surface: "M", conditionId: "restoration", estado: "hecho" });
+  const vista = q.overlay({ 16: { surfaces: {}, tooth: [] } });
+  assert.deepEqual(vista[16].surfaces, { O: ["restoration"], M: ["restoration"] });
+  assert.deepEqual(vista[16].estados, { "O:restoration": "por_hacer", "M:restoration": "hecho" });
+  q.enqueue({ kind: "delete", toothNumber: 16, surface: "M", conditionId: "restoration" });
+  assert.deepEqual(q.overlay({})[16].estados, { "O:restoration": "por_hacer" }, "lo que se quita no deja su color");
+});
+
+test("«Guardar consulta» sobre el vivo: el estado que cambió el doctor manda; el que no tocó, el del vivo", () => {
+  const base: ToothRecord = { surfaces: { O: ["restoration"], M: ["restoration"] }, tooth: [], estados: { "O:restoration": "por_hacer", "M:restoration": "por_hacer" } };
+  const now: ToothRecord = { ...base, estados: { "O:restoration": "hecho", "M:restoration": "por_hacer" } };
+  // mientras, en la otra pestaña, alguien pasó la M a «previo»
+  const vivo: ToothRecord = { ...base, estados: { "O:restoration": "por_hacer", "M:restoration": "previo" } };
+  const r = applyToothDelta(vivo, base, now);
+  assert.deepEqual(r.estados, { "O:restoration": "hecho", "M:restoration": "previo" });
+  // lo de antes (sin estados) sigue igual que siempre
+  const viejo = applyToothDelta({ surfaces: { O: ["caries"] }, tooth: [] }, { surfaces: { O: ["caries"] }, tooth: [] }, { surfaces: {}, tooth: [] });
+  assert.deepEqual(viejo, { surfaces: {}, tooth: [] });
+});
+
+/* ─────── Decisión 2: lo rojo alimenta el plan ─────── */
+
+let n = 0;
+const p = (name: string, basePrice: number, duration: number | null, code: string | null = null): ProcedimientoTarifario =>
+  ({ id: `p${++n}`, name, basePrice, duration, category: "dental", code, isActive: true });
+const TARIFARIO = [
+  p("Restauración resina 1 cara", 700, 30), p("Restauración resina 2 caras", 900, 45),
+  p("Corona metal-porcelana", 4500, 60), p("Extracción simple", 800, 30), p("Endodoncia multirradicular", 4500, 120),
+];
+
+test("cada marca roja sale como «Resina · 16 O · $700» con el precio de la clínica, lista para agregar", () => {
+  const entradas: EntradaPlan[] = [
+    { toothNumber: 16, surface: "O", conditionId: "restoration", estado: "por_hacer" },
+    { toothNumber: 26, surface: null, conditionId: "crown", estado: "por_hacer" },
+    { toothNumber: 36, surface: "O", conditionId: "restoration", estado: "hecho" },   // azul: no
+    { toothNumber: 46, surface: "O", conditionId: "restoration" },                    // de antes: no
+    { toothNumber: 47, surface: null, conditionId: "crown", estado: "previo" },       // previo: no
+  ];
+  const h = hallazgosPorTratar(entradas);
+  assert.deepEqual(h.map((x) => `${x.clave}${x.porHacer ? "·rojo" : ""}`), ["16:restoration·rojo", "26:crown·rojo"]);
+  const chips = chipsDelPlan(h, TARIFARIO, entradas, []);
+  assert.deepEqual(chips.map((c) => `${c.tipo} ${c.clave} → ${c.sugerencia?.nombre} $${c.sugerencia?.precio}`), [
+    "por_hacer r:h:16:restoration → Restauración resina 1 cara $700",
+    "por_hacer r:h:26:crown → Corona metal-porcelana $4500",
+  ]);
+  // el toque: un renglón con el procedimiento, la cara, el precio y su origen
+  let id = 0;
+  const ctx = { tarifario: TARIFARIO, entradas, nuevoId: () => `r${++id}`, motivo: "Marcado por hacer en el odontograma", idioma: "es" as const };
+  const rs = agregarDesdeChip([], chips[0], ctx);
+  assert.equal(rs.length, 1);
+  assert.deepEqual({ p: rs[0].procedimiento, d: rs[0].dientes, c: rs[0].caras, $: rs[0].precio, o: rs[0].origen }, {
+    p: "Restauración resina 1 cara", d: "16", c: ["O"], $: "700", o: ["16:restoration"],
+  });
+  // ya puesto: el chip queda marcado y no se duplica
+  const despues = chipsDelPlan(h, TARIFARIO, entradas, rs);
+  assert.equal(despues.find((c) => c.clave === "r:h:16:restoration")?.puesto, true);
+  assert.equal(agregarDesdeChip(rs, despues[0], ctx).length, 1);
+});
+
+test("si el doctor ya marcó la resina en rojo, la caries de ese diente no propone otra resina", () => {
+  const entradas: EntradaPlan[] = [
+    { toothNumber: 16, surface: "O", conditionId: "caries" },
+    { toothNumber: 16, surface: "O", conditionId: "restoration", estado: "por_hacer" },
+    { toothNumber: 26, surface: "O", conditionId: "caries" },
+  ];
+  const chips = chipsDelPlan(hallazgosPorTratar(entradas), TARIFARIO, entradas, []);
+  assert.deepEqual(chips.map((c) => c.clave), ["r:h:16:restoration", "h:26:caries"]);
+  // sin precio en el tarifario: sale igual, para elegir
+  const sin = sugerirProcedimiento({ diente: 16, caras: ["O"], conditionId: "sealant", porHacer: true }, TARIFARIO);
+  assert.equal(sin.sugerencias[0].elegir, true);
+  assert.equal(sin.sugerencias[0].precio, null);
+});
+
+test("la consulta pasa sus marcas al plan con el rojo/azul (letras de pantalla → base)", () => {
+  const e = entradasDeRegistros({
+    11: { surfaces: { I: ["restoration"] }, tooth: [], estados: { "I:restoration": "por_hacer" } },
+    16: { surfaces: { O: ["caries"] }, tooth: ["crown"], estados: { "_:crown": "hecho" } },
+  });
+  assert.deepEqual(e, [
+    { toothNumber: 11, surface: "O", conditionId: "restoration", estado: "por_hacer" },
+    { toothNumber: 16, surface: "O", conditionId: "caries" },
+    { toothNumber: 16, surface: null, conditionId: "crown", estado: "hecho" },
+  ]);
+});
+
+/* ─────── Decisión 3: «Hecho» pasa de rojo a azul, y su deshacer lo regresa ─────── */
+
+const ent = (toothNumber: number, surface: EntradaOdontograma["surface"], conditionId: string, estado?: EntradaOdontograma["estado"]): EntradaOdontograma =>
+  ({ toothNumber, surface, conditionId, notes: null, ...(estado ? { estado } : {}) });
+const corto = (l: EntradaOdontograma[]) => l.map((x) => `${x.toothNumber}${x.surface ?? "·"}:${x.conditionId}${x.estado ? `(${x.estado})` : ""}`).sort();
+
+test("«Hecho» de la resina 16 O: la marca roja pasa a azul (no se crea otra) y la caries de esa cara se va", () => {
+  const antes = [ent(16, "O", "restoration", "por_hacer"), ent(16, "O", "caries"), ent(16, "M", "restoration", "por_hacer")];
+  const c = aplicarHecho({ nombre: "Restauración resina 1 cara", dientes: [16], caras: ["O"] }, antes);
+  assert.equal(c.sinCambio, null);
+  assert.deepEqual(corto(c.aHecho), ["16O:restoration"]);
+  assert.deepEqual(corto(c.altas), [], "no se duplica la resina");
+  assert.deepEqual(corto(c.bajas), ["16O:caries"]);
+  const despues = aplicarAEntradas(antes, c);
+  assert.deepEqual(corto(despues), ["16M:restoration(por_hacer)", "16O:restoration(hecho)"], "la M (no hecha) sigue roja");
+  // el deshacer lo deja exacto
+  assert.deepEqual(corto(aplicarAEntradas(despues, cambioDeshacer(c))), corto(antes));
+});
+
+test("«Hecho» sin caras en el renglón: va a las caras marcadas en rojo; corona roja → azul", () => {
+  const antes = [ent(16, "M", "restoration", "por_hacer"), ent(16, "O", "restoration", "por_hacer"), ent(26, null, "crown", "por_hacer")];
+  const r = aplicarHecho({ clave: "resina", dientes: [16] }, antes);
+  assert.deepEqual(corto(r.aHecho), ["16M:restoration", "16O:restoration"]);
+  const k = aplicarHecho({ clave: "corona", dientes: [26] }, antes);
+  assert.deepEqual(corto(k.aHecho), ["26·:crown"]);
+  assert.deepEqual(corto(k.altas), []);
+  // ya azul: no hay nada que hacer
+  assert.equal(aplicarHecho({ clave: "corona", dientes: [26] }, [ent(26, null, "crown", "hecho")]).sinCambio, "ya_estaba");
+  // sin marca roja: se pone la corona como siempre (el servidor la deja azul si la base guarda estado)
+  assert.deepEqual(corto(aplicarHecho({ clave: "corona", dientes: [27] }, []).altas), ["27·:crown"]);
+});
+
+test("deshacer en la base: lo que pasó a azul vuelve a rojo, salvo que alguien lo haya cambiado o quitado", () => {
+  const escrito = {
+    altas: [] as EntradaConId[],
+    bajas: [ent(16, "O", "caries")],
+    aHecho: [{ ...ent(16, "O", "restoration", "hecho"), id: "e1" }, { ...ent(16, "M", "restoration", "hecho"), id: "e2" }, { ...ent(26, null, "crown", "hecho"), id: "e3" }],
+  };
+  const hoy: EntradaConId[] = [
+    { ...ent(16, "O", "restoration", "hecho"), id: "e1" },     // sigue azul → vuelve a rojo
+    { ...ent(16, "M", "restoration", "previo"), id: "e2" },    // alguien la cambió → no se toca
+    // e3 (la corona) ya no está → se avisa
+  ];
+  const plan = planearDeshacer(escrito, hoy);
+  assert.deepEqual(plan.aPorHacer.map((x) => x.id), ["e1"]);
+  assert.deepEqual(plan.borrar, []);
+  assert.deepEqual(plan.conflictos.map((x) => `${x.toothNumber}:${x.conditionId}:${x.motivo}`), ["26:crown:alta_ya_no_esta"]);
+  // la caries de la O vuelve: lo que «hecho» puso ahí (la resina, ya azul) sigue
+  assert.deepEqual(corto(plan.crear), ["16O:caries"]);
+});
+
+/* ─────── Revisión adversarial (ws1-t6) ─────── */
+
+test("revisión 3 y 5: un conducto ROJO no hace «retratamiento»; una extracción indicada en azul o previa ya no es por tratar", () => {
+  const entradas: EntradaPlan[] = [
+    { toothNumber: 36, surface: null, conditionId: "periapical2" },
+    { toothNumber: 36, surface: null, conditionId: "rct", estado: "por_hacer" },
+    { toothNumber: 18, surface: null, conditionId: "ext_indicated", estado: "hecho" },
+    { toothNumber: 28, surface: null, conditionId: "ext_indicated", estado: "previo" },
+    { toothNumber: 38, surface: null, conditionId: "ext_indicated" }, // de antes: hallazgo por tratar, como hoy
+  ];
+  const chips = chipsDelPlan(hallazgosPorTratar(entradas), TARIFARIO, entradas, []);
+  assert.deepEqual(chips.map((c) => `${c.clave}→${c.sugerencia?.clave}`), ["r:h:36:rct→endodoncia", "h:38:ext_indicated→extraccion"]);
+});
+
+test("revisión 4: «Hecho» pasa a azul lo rojo que el procedimiento no dibuja (flúor, profilaxis) y la pulpotomía del temporal", () => {
+  const antes = [
+    ent(16, null, "fluoride", "por_hacer"), ent(26, null, "fluoride", "por_hacer"),
+    ent(11, null, "prophylaxis", "por_hacer"), ent(85, null, "pulpotomy", "por_hacer"), ent(85, null, "pulpitis"),
+  ];
+  const fl = aplicarHecho({ clave: "fluor", dientes: [] }, antes);
+  assert.equal(fl.sinCambio, null);
+  assert.deepEqual(corto(fl.aHecho), ["16·:fluoride", "26·:fluoride"], "flúor de toda la boca");
+  assert.deepEqual(corto(aplicarHecho({ clave: "fluor", dientes: [16] }, antes).aHecho), ["16·:fluoride"], "con dientes, solo esos");
+  assert.deepEqual(corto(aplicarHecho({ clave: "limpieza", dientes: [] }, antes).aHecho), ["11·:prophylaxis"]);
+  const pu = aplicarHecho({ clave: "pulpotomia", dientes: [85] }, antes);
+  assert.deepEqual(corto(pu.aHecho), ["85·:pulpotomy"], "la roja pasa a azul…");
+  assert.deepEqual(corto(pu.altas), [], "…sin crear además la pulpotomía de temporal");
+  assert.deepEqual(corto(pu.bajas), ["85·:pulpitis"]);
+  assert.deepEqual(corto(aplicarAEntradas(aplicarAEntradas(antes, pu), cambioDeshacer(pu))), corto(antes));
+});
+
+/* ─────── v2 (revisión de t1) ─────── */
+
+import { redactarMovimiento } from "../../movimientos-paciente/catalogo";
+import { filasRepetidas, planQueYaLoTiene, resumirFilas } from "../../treatments/ya-en-planes";
+import { claveDeProcedimiento } from "../../treatments/sugerir-procedimiento";
+import { rotuloDeEstado } from "../estado-marca";
+
+test("v2 M1 / v3: lo rojo que ya está en un plan (de cualquier doctor) sale «ya en el plan X», no se agrega y «Agregar todo» lo salta", () => {
+  const entradas: EntradaPlan[] = [
+    { toothNumber: 16, surface: "O", conditionId: "restoration", estado: "por_hacer" },
+    { toothNumber: 26, surface: null, conditionId: "crown", estado: "por_hacer" },
+  ];
+  const planes = [{ id: "plan-1", name: "Plan 20 oct 2026", status: "ACTIVE" }];
+  const filas = (lista: Array<[string, number[], string]>) =>
+    new Map([["plan-1", lista.map(([nombre, dientes, estado]) => ({ nombre, procedureId: null, dientes, estado, hechoEn: null }))]]);
+  const enPlanes = resumirFilas(planes, filas([["Restauración resina 2 caras", [16], "pendiente"], ["Corona metal-porcelana", [27], "pendiente"]]));
+  const chips = chipsDelPlan(hallazgosPorTratar(entradas), TARIFARIO, entradas, [], enPlanes);
+  assert.deepEqual(chips.map((c) => `${c.clave}:${c.enOtroPlan?.plan ?? "-"}`), ["r:h:16:restoration:Plan 20 oct 2026", "r:h:26:crown:-"], "la corona del 27 no es la del 26");
+  let id = 0;
+  const ctx = { tarifario: TARIFARIO, entradas, nuevoId: () => `r${++id}`, motivo: "x", idioma: "es" as const };
+  assert.deepEqual(agregarDesdeChip([], chips[0], ctx), [], "no se agrega: serían dos notas de cobro");
+  // una fila cancelada no la tapa
+  const cancelada = resumirFilas(planes, filas([["Restauración resina 2 caras", [16], "cancelado"]]));
+  assert.equal(chipsDelPlan(hallazgosPorTratar(entradas), TARIFARIO, entradas, [], cancelada)[0].enOtroPlan, undefined);
+});
+
+test("v3 MAYOR-A: «posterior» no es «poste»: resina, corona y amalgama posteriores son lo que son; poste de fibra y perno muñón, perno", () => {
+  const casos: Array<[string, string]> = [
+    ["Resina posterior", "resina"], ["Resina compuesta posterior", "resina"], ["Amalgama posterior", "resina"],
+    ["Corona posterior", "corona"], ["Poste de fibra", "perno"], ["Postes de fibra de vidrio", "perno"],
+    ["Perno muñón", "perno"], ["Muñón colado", "perno"], ["Endodoncia posterior", "endodoncia"],
+  ];
+  for (const [nombre, clave] of casos) assert.equal(claveDeProcedimiento({ nombre }), clave, nombre);
+  // y lo que eso arreglaba: «Hecho» de «Resina posterior 16 O» pasa la roja a azul, sin dibujar un perno
+  const c = aplicarHecho({ nombre: "Resina posterior", dientes: [16], caras: ["O"] }, [ent(16, "O", "restoration", "por_hacer")]);
+  assert.deepEqual(corto(c.aHecho), ["16O:restoration"]);
+  assert.deepEqual(corto(c.altas), []);
+  // y «ya en el plan» la reconoce
+  const enPlanes = resumirFilas([{ id: "p", name: "Plan A", status: "ACTIVE" }],
+    new Map([["p", [{ nombre: "Resina posterior", procedureId: null, dientes: [16], estado: "pendiente", hechoEn: null }]]]));
+  assert.equal(planQueYaLoTiene("resina", [16], enPlanes)?.plan, "Plan A");
+});
+
+test("v3 m-b: una fila HECHA de un diente cuenta en cualquier fecha; una de toda la boca solo si es reciente; de un plan cancelado, solo lo hecho", () => {
+  const hace = (dias: number) => new Date(Date.now() - dias * 86_400_000).toISOString();
+  const planes = [{ id: "a", name: "Plan viejo", status: "COMPLETED" }, { id: "b", name: "Plan cancelado", status: "ABANDONED" }];
+  const enPlanes = resumirFilas(planes, new Map([
+    ["a", [
+      { nombre: "Restauración resina 1 cara", procedureId: null, dientes: [16], estado: "hecho", hechoEn: hace(400) },
+      { nombre: "Profilaxis (limpieza)", procedureId: null, dientes: [], estado: "hecho", hechoEn: hace(200) },
+      { nombre: "Aplicación de flúor", procedureId: null, dientes: [], estado: "hecho", hechoEn: hace(0.1) },
+    ]],
+    ["b", [
+      { nombre: "Corona metal-porcelana", procedureId: null, dientes: [26], estado: "pendiente", hechoEn: null },
+      { nombre: "Corona metal-porcelana", procedureId: null, dientes: [36], estado: "hecho", hechoEn: hace(30) },
+    ]],
+  ]));
+  // (sin fecha de la marca, como una marca ROJA de la consulta: `hechoPorSiempre`)
+  assert.equal(planQueYaLoTiene("resina", [16], enPlanes, { hechoPorSiempre: true })?.plan, "Plan viejo", "la resina hecha hace 400 días: la roja no se ofrece otra vez");
+  assert.equal(planQueYaLoTiene("limpieza", [11], enPlanes), null, "la limpieza de hace 200 días no tapa la de hoy");
+  assert.equal(planQueYaLoTiene("fluor", [16], enPlanes)?.plan, "Plan viejo", "el flúor de hace unas horas sí");
+  assert.equal(planQueYaLoTiene("corona", [26], enPlanes), null, "lo pendiente de un plan cancelado no cuenta");
+  assert.equal(planQueYaLoTiene("corona", [36], enPlanes, { hechoPorSiempre: true })?.plan, "Plan cancelado", "lo hecho, aunque el plan se cancelara, sí");
+  // el aviso del servidor: una fila tecleada no tiene marca detrás; lo hecho hace 400 días no es
+  // «ya estaba en otro plan», es trabajo nuevo (v5)
+  assert.deepEqual(
+    filasRepetidas([{ nombre: "Resina posterior", procedureId: null, dientes: [16] }, { nombre: "Corona", procedureId: null, dientes: [26] }], enPlanes),
+    [],
+  );
+  assert.deepEqual(filasRepetidas([{ nombre: "Resina", procedureId: null, dientes: [16] }], enPlanes, { excluirPlanId: "a" }), []);
+});
+
+test("v2 m3: la caries de OTRA cara no se la come la resina roja: sale y se junta en una resina de 2 caras", () => {
+  const entradas: EntradaPlan[] = [
+    { toothNumber: 16, surface: "M", conditionId: "caries" },
+    { toothNumber: 16, surface: "O", conditionId: "caries" },
+    { toothNumber: 16, surface: "O", conditionId: "restoration", estado: "por_hacer" },
+  ];
+  const chips = chipsDelPlan(hallazgosPorTratar(entradas), TARIFARIO, entradas, []);
+  assert.deepEqual(chips.map((c) => c.clave), ["r:h:16:restoration", "h:16:caries"], "la caries (M y O) sale porque la M no está en rojo");
+  let id = 0;
+  const ctx = { tarifario: TARIFARIO, entradas, nuevoId: () => `r${++id}`, motivo: "x", idioma: "es" as const };
+  const rs = agregarDesdeChip(agregarDesdeChip([], chips[0], ctx), chips[1], ctx);
+  assert.equal(rs.length, 1);
+  assert.deepEqual({ c: rs[0].caras, p: rs[0].procedimiento, $: rs[0].precio }, { c: ["M", "O"], p: "Restauración resina 2 caras", $: "900" });
+  // cubierta del todo (solo O): no sale aparte
+  const soloO = entradas.filter((e) => e.surface === "O");
+  assert.deepEqual(chipsDelPlan(hallazgosPorTratar(soloO), TARIFARIO, soloO, []).map((c) => c.clave), ["r:h:16:restoration"]);
+});
+
+test("v2 m4 y M2: Movimientos dice «Marcó por hacer…» sin valores clínicos; el rótulo fuera del odontograma", () => {
+  const fila = (after: Record<string, unknown>) => ({ entityType: "patient", action: "odontogram_write", changes: { _odontogram: { after } } });
+  assert.equal(redactarMovimiento(fila({ toothNumber: 16, surface: "O", conditionId: "restoration", estado: "hecho", existia: true })), "Marcó realizado un procedimiento en el odontograma");
+  assert.equal(redactarMovimiento(fila({ toothNumber: 16, surface: "O", conditionId: "restoration", estado: "por_hacer", existia: true })), "Marcó por hacer un procedimiento en el odontograma");
+  assert.equal(redactarMovimiento(fila({ toothNumber: 26, surface: null, conditionId: "crown", estado: "previo", existia: false })), "Registró un procedimiento previo (de otra clínica) en el odontograma");
+  assert.equal(redactarMovimiento(fila({ toothNumber: 36, surface: "O", conditionId: "caries" })), "Registró un hallazgo en el odontograma", "sin estado, como siempre");
+  assert.equal(rotuloDeEstado("por_hacer"), "(por hacer)");
+  assert.equal(rotuloDeEstado("previo"), "(previo, otra clínica)");
+  assert.equal(rotuloDeEstado("hecho"), "");
+  assert.equal(rotuloDeEstado(null), "");
+});
+
+test("v3 m-d: si la relectura llega sin estados (no se pudieron leer), se conservan los que ya había", async () => {
+  const { conservarEstados } = await import("../../../components/dashboard/odontogram-v2/recuperar");
+  const antes = { 16: { surfaces: { O: ["restoration"], M: ["restoration"] }, tooth: [], estados: { "O:restoration": "por_hacer" as const, "M:restoration": "hecho" as const } } };
+  // en la relectura la M ya no está (otra pestaña la quitó) y llega sin estados
+  const nuevos = { 16: { surfaces: { O: ["restoration"] }, tooth: [] }, 26: { surfaces: {}, tooth: ["crown"] } };
+  const r = conservarEstados(antes, nuevos);
+  assert.deepEqual(r[16].estados, { "O:restoration": "por_hacer" }, "la roja sigue roja; lo que se fue no deja color");
+  assert.equal(r[26].estados, undefined);
+});
+
+test("v4 M1: TODO chip con sugerencia mira los otros planes (caries → resina, pulpitis → endodoncia y la corona encadenada); m1: lo ya hecho lleva su fecha", () => {
+  const entradas: EntradaPlan[] = [
+    { toothNumber: 16, surface: "O", conditionId: "caries" },
+    // la pulpitis se marcó en 2024; la corona se hizo después (2025): esa sí tapa (v5)
+    { toothNumber: 36, surface: null, conditionId: "pulpitis", marcadaEn: "2024-06-01T17:00:00.000Z" },
+    { toothNumber: 46, surface: "O", conditionId: "caries" },
+  ];
+  const enPlanes = resumirFilas([{ id: "a", name: "Plan A", status: "ACTIVE" }], new Map([["a", [
+    { nombre: "Resina posterior", procedureId: null, dientes: [16], estado: "pendiente", hechoEn: null },
+    { nombre: "Endodoncia multirradicular", procedureId: null, dientes: [36], estado: "pendiente", hechoEn: null },
+    { nombre: "Corona metal-porcelana", procedureId: null, dientes: [36], estado: "hecho", hechoEn: "2025-03-03T17:00:00.000Z" },
+  ]]]));
+  const h = hallazgosPorTratar(entradas);
+  // la pulpitis ya «puesta» en este plan (para que salga su corona encadenada)
+  const renglones = [{ id: "x", fase: "urgencia", procedimiento: "Endodoncia", procedimientoId: null, dientes: "36", caras: [], motivo: "", cantidad: "1", precio: "", precioDelTarifario: false, minutos: 0, origen: ["36:pulpitis"], clave: "endodoncia", revisar: false }] as any;
+  const chips = chipsDelPlan(h, TARIFARIO, entradas, renglones, enPlanes);
+  const ver = (clave: string) => chips.find((c) => c.clave === clave)?.enOtroPlan ?? null;
+  assert.deepEqual(ver("h:16:caries"), { plan: "Plan A", hechoEn: null }, "la caries ya no ofrece otra resina del 16");
+  assert.equal(ver("h:46:caries"), null, "la del 46 sí se ofrece");
+  assert.deepEqual(ver("e:corona:36"), { plan: "Plan A", hechoEn: "2025-03-03T17:00:00.000Z" }, "la corona encadenada ya se hizo: con su fecha");
+  let id = 0;
+  const ctx = { tarifario: TARIFARIO, entradas, nuevoId: () => `r${++id}`, motivo: "x", idioma: "es" as const };
+  assert.deepEqual(agregarDesdeChip([], chips.find((c) => c.clave === "h:16:caries")!, ctx), [], "el toque no la agrega");
+});
+
+test("v5 M1-v4: una fila HECHA tapa solo si se hizo DESPUÉS de marcar; lo pendiente tapa siempre (caries 16 M de hoy + resina 16 de 2023 → se ofrece con precio)", () => {
+  const hoy = new Date().toISOString();
+  const plan = (estado: string, hechoEn: string | null) => resumirFilas([{ id: "a", name: "Plan A", status: "COMPLETED" }],
+    new Map([["a", [{ nombre: "Restauración resina 1 cara", procedureId: null, dientes: [16], estado, hechoEn }]]]));
+  const caries = (marcadaEn?: string): EntradaPlan[] => [{ toothNumber: 16, surface: "M", conditionId: "caries", ...(marcadaEn ? { marcadaEn } : {}) }];
+  const chip = (entradas: EntradaPlan[], enPlanes: ReturnType<typeof plan>) =>
+    chipsDelPlan(hallazgosPorTratar(entradas), TARIFARIO, entradas, [], enPlanes).find((c) => c.clave === "h:16:caries")!;
+
+  // 1) la caries de HOY con una resina hecha en 2023: trabajo nuevo, con su precio
+  const nueva = chip(caries(hoy), plan("hecho", "2023-01-01T17:00:00.000Z"));
+  assert.equal(nueva.enOtroPlan ?? null, null);
+  assert.equal(nueva.sugerencia?.precio, 700);
+  let id = 0;
+  const ctx = { tarifario: TARIFARIO, entradas: caries(hoy), nuevoId: () => `r${++id}`, motivo: "Caries", idioma: "es" as const };
+  assert.equal(agregarDesdeChip([], nueva, ctx).length, 1, "se agrega con un toque");
+  // 2) con la resina del 16 PENDIENTE en otro plan: «ya en el plan», sin importar fechas
+  assert.deepEqual(chip(caries(hoy), plan("pendiente", null)).enOtroPlan, { plan: "Plan A", hechoEn: null });
+  // 3) la caries se marcó en 2022 y la resina se hizo en 2023: ese trabajo la atendió
+  assert.deepEqual(chip(caries("2022-05-01T17:00:00.000Z"), plan("hecho", "2023-01-01T17:00:00.000Z")).enOtroPlan,
+    { plan: "Plan A", hechoEn: "2023-01-01T17:00:00.000Z" });
+  // 4) sin fecha fiable (lo marcado en la consulta, aún sin guardar): un hallazgo solo se tapa con lo reciente
+  assert.equal(chip(caries(), plan("hecho", "2023-01-01T17:00:00.000Z")).enOtroPlan ?? null, null);
+  assert.ok(chip(caries(), plan("hecho", new Date(Date.now() - 3_600_000).toISOString())).enOtroPlan, "hecha hace 1 h: sí tapa");
+
+  // y las marcas ROJAS: con fecha, la misma regla; sin fecha, lo hecho de un diente tapa siempre (m-b)
+  const roja = (marcadaEn?: string): EntradaPlan[] => [{ toothNumber: 16, surface: "O", conditionId: "restoration", estado: "por_hacer", ...(marcadaEn ? { marcadaEn } : {}) }];
+  const chipRojo = (e: EntradaPlan[], p: ReturnType<typeof plan>) => chipsDelPlan(hallazgosPorTratar(e), TARIFARIO, e, [], p)[0];
+  assert.ok(chipRojo(roja("2022-05-01T17:00:00.000Z"), plan("hecho", "2023-01-01T17:00:00.000Z")).enOtroPlan, "se quedó roja con el trabajo hecho después: no se ofrece");
+  assert.equal(chipRojo(roja(hoy), plan("hecho", "2023-01-01T17:00:00.000Z")).enOtroPlan ?? null, null, "marcada hoy en rojo: rehacerla se ofrece");
+  assert.ok(chipRojo(roja(), plan("hecho", "2023-01-01T17:00:00.000Z")).enOtroPlan, "roja sin fecha: como la v3 (m-b)");
+});
+
+test("v6 m1: en un procedimiento por caras, la fila tapa solo SUS caras (o todas si no dice)", () => {
+  const plan = (caras: string[], estado: string, hechoEn: string | null) => resumirFilas([{ id: "a", name: "Plan A", status: "ACTIVE" }],
+    new Map([["a", [{ nombre: "Restauración resina 1 cara", procedureId: null, dientes: [16], caras, estado, hechoEn }]]]));
+  const caries = (cara: string, marcadaEn: string): EntradaPlan[] => [{ toothNumber: 16, surface: cara, conditionId: "caries", marcadaEn }];
+  const chip = (e: EntradaPlan[], p: ReturnType<typeof plan>) => chipsDelPlan(hallazgosPorTratar(e), TARIFARIO, e, [], p).find((c) => c.clave === "h:16:caries")!;
+  // F1 de t1: caries 16 M de 2022; la resina de 2023 fue de la O → la M nunca se trató: se ofrece
+  assert.equal(chip(caries("M", "2022-05-01T17:00:00.000Z"), plan(["O"], "hecho", "2023-01-01T17:00:00.000Z")).enOtroPlan ?? null, null);
+  // la misma resina, pero de la M → sí la atendió
+  assert.ok(chip(caries("M", "2022-05-01T17:00:00.000Z"), plan(["M"], "hecho", "2023-01-01T17:00:00.000Z")).enOtroPlan);
+  // la fila no dice caras → tapa todas
+  assert.ok(chip(caries("M", "2022-05-01T17:00:00.000Z"), plan([], "hecho", "2023-01-01T17:00:00.000Z")).enOtroPlan);
+  // pendiente «Resina 16 O» frente a una caries nueva en la M: trabajo nuevo
+  const hoy = new Date().toISOString();
+  assert.equal(chip(caries("M", hoy), plan(["O"], "pendiente", null)).enOtroPlan ?? null, null);
+  assert.deepEqual(chip(caries("O", hoy), plan(["O"], "pendiente", null)).enOtroPlan, { plan: "Plan A", hechoEn: null });
+  // un procedimiento que no va por caras (corona) no mira caras
+  const corona = resumirFilas([{ id: "a", name: "Plan A", status: "ACTIVE" }],
+    new Map([["a", [{ nombre: "Corona", procedureId: null, dientes: [26], caras: ["O"], estado: "pendiente", hechoEn: null }]]]));
+  assert.ok(planQueYaLoTiene("corona", [26], corona, { caras: ["M"] }));
+  // y el aviso del servidor también va por caras
+  assert.deepEqual(filasRepetidas([{ nombre: "Resina", procedureId: null, dientes: [16], caras: ["M"] }], plan(["O"], "pendiente", null)), []);
+  assert.equal(filasRepetidas([{ nombre: "Resina", procedureId: null, dientes: [16], caras: ["O"] }], plan(["O"], "pendiente", null)).length, 1);
+});
+
+test("v6 m3: en la consulta, cada marca lleva la fecha del vivo; lo puesto o repintado en ESTA consulta, ahora", () => {
+  const ahora = new Date("2026-10-28T15:00:00.000Z");
+  const fechas = fechasDelVivo([
+    { toothNumber: 16, surface: "O", conditionId: "restoration", estado: "por_hacer", estadoDesde: "2025-01-10T17:00:00.000Z", createdAt: "2023-01-01T17:00:00.000Z" },
+    { toothNumber: 26, surface: null, conditionId: "crown", estado: "hecho", createdAt: "2023-01-01T17:00:00.000Z" },
+    { toothNumber: 36, surface: "O", conditionId: "caries", createdAt: "2024-02-02T17:00:00.000Z" },
+  ]);
+  const e = entradasDeRegistros({
+    16: { surfaces: { O: ["restoration"] }, tooth: [], estados: { "O:restoration": "por_hacer" } }, // ya roja en el vivo
+    26: { surfaces: {}, tooth: ["crown"], estados: { "_:crown": "por_hacer" } },                   // azul en el vivo, repintada en rojo HOY
+    36: { surfaces: { O: ["caries"] }, tooth: [] },                                                  // del vivo
+    46: { surfaces: { O: ["caries"] }, tooth: [] },                                                  // marcada en esta consulta
+  }, fechas, ahora);
+  const fecha = (d: number) => e.find((x) => x.toothNumber === d)?.marcadaEn;
+  assert.equal(fecha(16), "2025-01-10T17:00:00.000Z", "roja: desde que pasó a rojo");
+  assert.equal(fecha(26), ahora.toISOString(), "repintada en rojo en la consulta: ahora");
+  assert.equal(fecha(36), "2024-02-02T17:00:00.000Z");
+  assert.equal(fecha(46), ahora.toISOString());
+  // con eso la consulta decide como la ficha: la corona roja de HOY sobre una corona hecha en 2023 se ofrece
+  const enPlanes = resumirFilas([{ id: "a", name: "Plan A", status: "COMPLETED" }],
+    new Map([["a", [{ nombre: "Corona metal-porcelana", procedureId: null, dientes: [26], estado: "hecho", hechoEn: "2023-06-01T17:00:00.000Z" }]]]));
+  const c = chipsDelPlan(hallazgosPorTratar(e), TARIFARIO, e, [], enPlanes).find((x) => x.clave === "r:h:26:crown")!;
+  assert.equal(c.enOtroPlan ?? null, null);
+});
+
+test("v7 M1-v6: solape PARCIAL de caras — el chip ofrece solo las que faltan, con su precio y la nota; el aviso del servidor salta con cualquier solape", () => {
+  const hoy = new Date().toISOString();
+  const plan = (estado: string, hechoEn: string | null) => resumirFilas([{ id: "a", name: "Plan A", status: "ACTIVE" }],
+    new Map([["a", [{ nombre: "Restauración resina 1 cara", procedureId: null, dientes: [16], caras: ["O"], estado, hechoEn }]]]));
+  const cariesMO = (marcadaEn: string): EntradaPlan[] => [
+    { toothNumber: 16, surface: "M", conditionId: "caries", marcadaEn },
+    { toothNumber: 16, surface: "O", conditionId: "caries", marcadaEn },
+  ];
+  const chip = (e: EntradaPlan[], p: ReturnType<typeof plan>) => chipsDelPlan(hallazgosPorTratar(e), TARIFARIO, e, [], p)[0];
+  let id = 0;
+  const ctx = (entradas: EntradaPlan[]) => ({ tarifario: TARIFARIO, entradas, nuevoId: () => `r${++id}`, motivo: "Caries", idioma: "es" as const });
+
+  // 1) caries 16 MO de hoy con «Resina 16 O» PENDIENTE en el plan A → solo la M, resina 1 cara a $700, con la nota
+  const c1 = chip(cariesMO(hoy), plan("pendiente", null));
+  assert.equal(c1.enOtroPlan ?? null, null);
+  assert.deepEqual(c1.caras, ["M"]);
+  assert.deepEqual({ n: c1.sugerencia?.nombre, $: c1.sugerencia?.precio, caras: c1.sugerencia?.caras }, { n: "Restauración resina 1 cara", $: 700, caras: ["M"] });
+  assert.deepEqual(c1.carasEnOtroPlan, [{ plan: "Plan A", caras: ["O"] }]);
+  const rs = agregarDesdeChip([], c1, ctx(cariesMO(hoy)));
+  assert.deepEqual(rs.map((r) => `${r.dientes} ${r.caras.join("")} ${r.procedimiento} $${r.precio}`), ["16 M Restauración resina 1 cara $700"], "la O no entra dos veces");
+
+  // 2) lo mismo con la resina 16 O HECHA después de marcar las caries
+  const c2 = chip(cariesMO("2023-01-01T17:00:00.000Z"), plan("hecho", "2024-01-01T17:00:00.000Z"));
+  assert.deepEqual([c2.caras, c2.sugerencia?.precio, c2.carasEnOtroPlan], [["M"], 700, [{ plan: "Plan A", caras: ["O"] }]]);
+  //    (y si se hizo ANTES de marcar, no cuenta: las dos caras son trabajo nuevo)
+  const c2b = chip(cariesMO(hoy), plan("hecho", "2023-01-01T17:00:00.000Z"));
+  assert.deepEqual([c2b.caras, c2b.sugerencia?.precio, c2b.carasEnOtroPlan ?? null], [["M", "O"], 900, null]);
+
+  // la marca ROJA 16 MO frente a «Resina 16 O» pendiente: igual, solo la M
+  const roja: EntradaPlan[] = ["M", "O"].map((cara) => ({ toothNumber: 16, surface: cara, conditionId: "restoration", estado: "por_hacer", marcadaEn: hoy }));
+  const cr = chip(roja, plan("pendiente", null));
+  assert.deepEqual([cr.tipo, cr.caras, cr.sugerencia?.precio, cr.carasEnOtroPlan], ["por_hacer", ["M"], 700, [{ plan: "Plan A", caras: ["O"] }]]);
+
+  // 3) el aviso del servidor: «Resina MO» tecleada frente a la O pendiente → avisa (antes no)
+  assert.deepEqual(filasRepetidas([{ nombre: "Restauración resina 2 caras", procedureId: null, dientes: [16], caras: ["M", "O"] }], plan("pendiente", null)),
+    [{ nombre: "Restauración resina 2 caras", dientes: [16], plan: "Plan A" }]);
+  //    y con una fila sin caras, también
+  const sinCaras = resumirFilas([{ id: "a", name: "Plan A", status: "ACTIVE" }],
+    new Map([["a", [{ nombre: "Resina", procedureId: null, dientes: [16], caras: [], estado: "pendiente", hechoEn: null }]]]));
+  assert.equal(filasRepetidas([{ nombre: "Resina", procedureId: null, dientes: [16], caras: ["D"] }], sinCaras).length, 1);
+});
+
+test("v8 m1: la nota del solape parcial va por plan («16 O ya en el plan «A» · 16 D en el «B»»); cubierto entre varios, todos los planes", () => {
+  const hoy = new Date().toISOString();
+  const planes = (filasB: string[]) => resumirFilas(
+    [{ id: "a", name: "Plan A", status: "ACTIVE" }, { id: "b", name: "Plan B", status: "ACTIVE" }],
+    new Map([
+      ["a", [{ nombre: "Restauración resina 1 cara", procedureId: null, dientes: [16], caras: ["O"], estado: "pendiente", hechoEn: null }]],
+      ["b", [{ nombre: "Restauración resina 1 cara", procedureId: null, dientes: [16], caras: filasB, estado: "pendiente", hechoEn: null }]],
+    ]));
+  const caries = (caras: string[]): EntradaPlan[] => caras.map((cara) => ({ toothNumber: 16, surface: cara, conditionId: "caries", marcadaEn: hoy }));
+  const chip = (e: EntradaPlan[], p: ReturnType<typeof planes>) => chipsDelPlan(hallazgosPorTratar(e), TARIFARIO, e, [], p)[0];
+  // caries MOD; O en A y D en B → se ofrece solo la M, y la nota dice de quién es cada cara
+  const c = chip(caries(["M", "O", "D"]), planes(["D"]));
+  assert.deepEqual([c.caras, c.sugerencia?.precio], [["M"], 700]);
+  assert.deepEqual(c.carasEnOtroPlan, [{ plan: "Plan A", caras: ["O"] }, { plan: "Plan B", caras: ["D"] }]);
+  // caries MO; O en A y MD en B → todo cubierto entre los dos: bloqueado, con los dos planes
+  const t = chip(caries(["M", "O"]), planes(["M", "D"]));
+  assert.deepEqual(t.enOtroPlan, { plan: "Plan A", hechoEn: null, planes: ["Plan A", "Plan B"] });
+  assert.equal(t.carasEnOtroPlan ?? null, null);
+  // una cara que está en los dos planes cuenta en el primero (el por hacer)
+  const cob = coberturaEnPlanes("resina", [16], planes(["O", "D"]), { caras: ["O", "D", "M"] });
+  assert.deepEqual(cob.porPlan.map((g) => `${g.plan}:${g.caras.join("")}`), ["Plan A:O", "Plan B:D"]);
+});
+
+test("v8 m2: si el chip parcial no se puede recalcular, se BLOQUEA (nunca entero con la cara ya planeada)", () => {
+  const enPlanes = resumirFilas([{ id: "a", name: "Plan A", status: "ACTIVE" }],
+    new Map([["a", [{ nombre: "Restauración resina 1 cara", procedureId: null, dientes: [16], caras: ["O"], estado: "pendiente", hechoEn: null }]]]));
+  const cob = coberturaEnPlanes("resina", [16], enPlanes, { caras: ["M", "O"] });
+  assert.deepEqual([cob.cubiertas, cob.faltan], [["O"], ["M"]]);
+  const base = (): Chip => {
+    const e: EntradaPlan[] = [{ toothNumber: 16, surface: "M", conditionId: "caries" }, { toothNumber: 16, surface: "O", conditionId: "caries" }];
+    return chipsDelPlan(hallazgosPorTratar(e), TARIFARIO, e, [])[0];
+  };
+  // 1) el recálculo no devuelve nada
+  const a = base();
+  aplicarCobertura(a, cob, () => undefined);
+  assert.deepEqual([a.enOtroPlan?.plan, a.caras, a.carasEnOtroPlan ?? null], ["Plan A", ["M", "O"], null]);
+  let id = 0;
+  const ctx = { tarifario: TARIFARIO, entradas: [], nuevoId: () => `r${++id}`, motivo: "x", idioma: "es" as const };
+  assert.deepEqual(agregarDesdeChip([], a, ctx), [], "bloqueado: no se agrega");
+  // 2) el recálculo devuelve OTRO tipo de procedimiento
+  const b = base();
+  aplicarCobertura(b, cob, () => ({ ...b.sugerencia!, clave: "corona" }));
+  assert.equal(b.enOtroPlan?.plan, "Plan A");
+  // 3) un chip de varios dientes, o encadenado, no se recalcula: se bloquea
+  const c = base();
+  c.dientes = [16, 17];
+  aplicarCobertura(c, cob, () => base().sugerencia!);
+  assert.equal(c.enOtroPlan?.plan, "Plan A");
+  const d = base();
+  d.tipo = "encadenada";
+  aplicarCobertura(d, cob, () => base().sugerencia!);
+  assert.equal(d.enOtroPlan?.plan, "Plan A");
+  // y con recálculo bueno, el camino normal: solo la M
+  const ok = base();
+  aplicarCobertura(ok, cob, () => ({ ...ok.sugerencia!, caras: ["M"], nombre: "Restauración resina 1 cara", precio: 700 }));
+  assert.deepEqual([ok.enOtroPlan ?? null, ok.caras, ok.sugerencia?.precio], [null, ["M"], 700]);
+});

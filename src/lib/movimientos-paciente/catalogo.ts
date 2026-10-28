@@ -556,9 +556,32 @@ function redactarAccionDeModulo(action: string): string | null {
   return verbo ? `${verbo} un dato en ${modulo[1]}` : `Registró un cambio en ${modulo[1]}`;
 }
 
+/**
+ * El rojo/azul de una marca del odontograma (ws1-t6): «Marcó por hacer un procedimiento en el
+ * odontograma». Sin qué procedimiento ni qué diente, como el resto de esta lista (nunca valores).
+ */
+const TEXTO_ESTADO_MARCA: Record<string, string> = {
+  por_hacer: "por hacer",
+  hecho: "realizado",
+  previo: "previo (de otra clínica)",
+};
+
+function textoDeEstadoDeMarca(changes: unknown): string | null {
+  const d = comoObjeto(comoObjeto(comoObjeto(changes)?._odontogram)?.after);
+  const estado = typeof d?.estado === "string" ? TEXTO_ESTADO_MARCA[d.estado] : undefined;
+  if (!d || !estado) return null;
+  return d.existia === true
+    ? `Marcó ${estado} un procedimiento en el odontograma`
+    : `Registró un procedimiento ${estado} en el odontograma`;
+}
+
 /** Filas del paciente que dicen otra cosa (odontograma, cuestionario, referencia, invitación al portal). */
 function redactarEspecial(fila: FilaParaRedactar): string | null {
   if (fila.entityType !== "patient") return null;
+  if (fila.action === "odontogram_write") {
+    const conEstado = textoDeEstadoDeMarca(fila.changes);
+    if (conEstado) return conEstado;
+  }
   const propio = TEXTO_ODONTOGRAMA[fila.action];
   if (propio) return propio;
   const c = comoObjeto(fila.changes);

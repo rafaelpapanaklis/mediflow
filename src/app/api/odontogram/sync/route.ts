@@ -9,6 +9,8 @@ import {
   isMissingTableError,
   puedeEscribirOdontograma,
 } from "@/lib/odontogram/api-auth";
+import { ESTADOS_MARCA, admiteEstado } from "@/lib/odontogram/estado-marca";
+import { columnaEstadoExiste, fijarEstadoPorLugar } from "@/lib/odontogram/estado-db";
 
 export const dynamic = "force-dynamic";
 
@@ -51,6 +53,8 @@ const RecSchema = z.object({
   surfaces: z.record(SURFACE, z.array(CONDITION_ID)).optional(),
   tooth: z.array(CONDITION_ID).optional(),
   note: z.string().max(2000).optional(),
+  /** Rojo/azul (ws1-t6): `«cara»:«condición»` (`_` = diente completo) → estado. Lo de antes no lo trae. */
+  estados: z.record(z.string().max(80), z.enum(ESTADOS_MARCA)).optional(),
 });
 
 /** Un diente tocado en la consulta: cómo estaba al tocarlo y cómo lo dejó. */
@@ -112,6 +116,20 @@ async function aplicarCambios(
     }
   }
   const dientes = Object.keys(cambios).map(Number);
+  // Rojo/azul: solo si la consulta trae alguno. Si no se puede saber si la base lo guarda, las marcas
+  // se guardan igual y la respuesta lo AVISA (`estadoNoGuardado`): perder toda la consulta por el
+  // color sería peor (v2, m5).
+  const pideEstados = Object.values(cambios).some((c) => Object.keys(c.base?.estados ?? {}).length + Object.keys(c.now?.estados ?? {}).length > 0);
+  let conEstado = false;
+  let estadoNoGuardado = false;
+  if (pideEstados) {
+    try {
+      conEstado = await columnaEstadoExiste({ estricta: true });
+    } catch (e) {
+      console.error("[/api/odontogram/sync] no se pudo saber si la base guarda el estado:", e);
+      estadoNoGuardado = true;
+    }
+  }
   const { ipAddress, userAgent } = extractAuditMeta(req);
   const suplantacion = await suplantacionDeEstaPeticion();
   let detalle: unknown = null;
@@ -121,7 +139,7 @@ async function aplicarCambios(
       select: { toothNumber: true, surface: true, conditionId: true, notes: true },
       orderBy: { toothNumber: "asc" },
     });
-    let borradas = 0, creadas = 0;
+    let borradas = 0, creadas = 0, estados = 0;
     for (const [fdiStr, c] of Object.entries(cambios)) {
       const base = c.base ?? VACIO, now = c.now ?? VACIO;
       const toothNumber = Number(fdiStr);
@@ -150,6 +168,22 @@ async function aplicarCambios(
         const ya = await tx.odontogramEntry.findFirst({ where: { patientId, toothNumber, surface: null, conditionId }, select: { id: true } });
         if (!ya) { await tx.odontogramEntry.create({ data: { patientId, toothNumber, surface: null, conditionId, notes: null } }); creadas++; }
       }
+      // Rojo/azul: el estado de cada marca que queda, si el doctor lo cambió en la consulta
+      // (o la marca es nueva). Lo que no cambió no se toca: otra pestaña pudo cambiarlo.
+      if (conEstado) {
+        const marcas: [string | null, string][] = [
+          ...Object.entries(now.surfaces ?? {}).flatMap(([letra, ids]) => (ids ?? []).map((id): [string | null, string] => [letra, id])),
+          ...(now.tooth ?? []).map((id): [string | null, string] => [null, id]),
+        ];
+        for (const [letra, conditionId] of marcas) {
+          if (!admiteEstado(conditionId)) continue;
+          const k = `${letra === null ? "_" : aBase(letra)}:${conditionId}`; // llaves con letra de la base (recordsForServer)
+          const antes = base.estados?.[k] ?? null, ahora = now.estados?.[k] ?? null;
+          if (antes === ahora) continue;
+          await fijarEstadoPorLugar(tx, { patientId, toothNumber, surface: letra === null ? null : aBase(letra), conditionId }, ahora);
+          estados++;
+        }
+      }
       const notaAntes = (base.note ?? "").trim(), notaAhora = (now.note ?? "").trim();
       if (notaAntes !== notaAhora) {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`odontogram:${patientId}:${toothNumber}:${NOTE_CONDITION}`}))`;
@@ -161,7 +195,7 @@ async function aplicarCambios(
       }
     }
     const changes = {
-      _odontogram: { before: { dientes, rows: prevRows }, after: { borradas, creadas }, modo: "cambios" },
+      _odontogram: { before: { dientes, rows: prevRows }, after: { borradas, creadas, ...(estados ? { estados } : {}) }, modo: "cambios" },
     };
     if (suplantacion) {
       detalle = changes;
@@ -182,7 +216,7 @@ async function aplicarCambios(
       changes: detalle, patientId, ipAddress, userAgent,
     });
   }
-  return NextResponse.json({ ok: true, dientes: dientes.length });
+  return NextResponse.json({ ok: true, dientes: dientes.length, ...(estadoNoGuardado ? { estadoNoGuardado: true } : {}) });
 }
 
 /**

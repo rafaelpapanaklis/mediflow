@@ -54,6 +54,8 @@
 
 import { z } from "zod";
 import { COND_BY_ID } from "@/components/dashboard/odontogram-v2/data";
+import { rotuloDeEstado } from "@/lib/odontogram/estado-marca";
+import { estadosParaMostrar } from "@/lib/odontogram/estado-db";
 import { dbDe, definirHerramienta, pacienteVisibleYActivo, plural } from "./base";
 import type { SabinaCtx } from "../tipos";
 
@@ -189,8 +191,11 @@ export const odontograma = definirHerramienta<ParamsOdontograma, DatosOdontogram
       orderBy: [{ toothNumber: "asc" }],
       // Una de más: si vuelve, es que hay más de las que caben, y se dice.
       take: TOPE_FILAS_ODONTOGRAMA + 1,
-      select: { toothNumber: true, surface: true, conditionId: true, notes: true, updatedAt: true },
+      select: { id: true, toothNumber: true, surface: true, conditionId: true, notes: true, updatedAt: true },
     });
+    // Rojo/azul (ws1-t6, v2 M2): una resina POR HACER no es una resina hecha. Sin la columna, o si no
+    // se pudo leer, se cuenta como hoy.
+    const estados = await estadosParaMostrar(db, patientId);
 
     // Un diente puede tener el mismo hallazgo en varias caras: se agrupa por
     // hallazgo y se cuentan DIENTES distintos, que es lo que contesta la
@@ -204,6 +209,7 @@ export const odontograma = definirHerramienta<ParamsOdontograma, DatosOdontogram
     let ultima: Date | null = null;
 
     for (const f of filas as Array<{
+      id?: string;
       toothNumber: number;
       surface: string | null;
       conditionId: string;
@@ -219,7 +225,7 @@ export const odontograma = definirHerramienta<ParamsOdontograma, DatosOdontogram
         continue;
       }
       dientesTocados.add(f.toothNumber);
-      const nombre = nombreDeCondicion(f.conditionId);
+      const nombre = [nombreDeCondicion(f.conditionId), rotuloDeEstado(f.id ? estados.get(f.id) : null)].filter(Boolean).join(" ");
       const set = porHallazgo.get(nombre) ?? new Set<number>();
       set.add(f.toothNumber);
       porHallazgo.set(nombre, set);

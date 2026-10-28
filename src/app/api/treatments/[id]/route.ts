@@ -14,6 +14,7 @@ import { bloquearPlan, FilaError, procedimientosDeLaClinica, repoFilas, tablaDeF
 import { cuerpoDeErrorDeFila } from "@/lib/treatments/errores";
 import { asegurarNotaDelPlan } from "@/lib/treatments/cobro.server";
 import { accionHecho } from "@/lib/treatments/aplicar-hecho.server";
+import { avisoDeFilasRepetidas } from "@/lib/treatments/ya-en-planes.server";
 import { cuentaDeUnPlanParaLaFicha } from "@/lib/treatments/cuenta-para-la-ficha.server";
 
 export async function PATCH(req: NextRequest, props: { params: Promise<{ id: string }> }) {
@@ -338,10 +339,15 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
     },
   });
 
+  // Filas NUEVAS que ya están en otro plan del paciente (ws1-t6 v3): no se rechaza, se avisa.
+  const nuevasDelPlan = filasDespues.filter((f) => !antes.has(f.id) && f.estado !== "cancelado");
+  const yaEnOtrosPlanes = plan.patientId ? await avisoDeFilasRepetidas(ctx.clinicId, plan.patientId, nuevasDelPlan, params.id) : [];
+
   revalidateAfter("treatments");
   return NextResponse.json({
     success: true,
     ...(entrantes ? { items: filasDespues.map(filaDto), notaDelPlan } : {}),
+    ...(yaEnOtrosPlanes.length ? { yaEnOtrosPlanes } : {}),
   });
 }
 

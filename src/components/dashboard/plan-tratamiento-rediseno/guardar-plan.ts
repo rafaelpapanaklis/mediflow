@@ -14,6 +14,7 @@
  */
 import { CLAVE_DE_CODIGO, type CodigoDeFila, type FilaDto } from "@/lib/treatments/items";
 import type { FilaParaGuardar } from "./armar-plan";
+import type { FilaEnPlan } from "@/lib/treatments/ya-en-planes";
 
 type Fetch = (url: string, init?: RequestInit) => Promise<Response>;
 
@@ -44,6 +45,8 @@ export interface ResultadoGuardar {
   fila?: number;
   error?: string;
   status?: number;
+  /** Filas del plan que ya estaban en OTRO plan del paciente (el servidor avisa, no rechaza; ws1-t6 v3). */
+  yaEnOtrosPlanes?: Array<{ nombre: string; dientes: number[]; plan: string }>;
 }
 
 async function leerJson(res: Response): Promise<Record<string, unknown>> {
@@ -97,7 +100,24 @@ export async function guardarPlan(a: AltaDePlan, f: Fetch = fetch): Promise<Resu
     plan: data as ResultadoGuardar["plan"],
     // La API de P2 contesta `items: []` también cuando NO guardó filas (sin el SQL): lo dice `filasGuardadas`.
     modo: data.filasGuardadas === true || (data.filasGuardadas === undefined && Array.isArray(data.items) && data.items.length > 0) ? "filas" : "texto",
+    ...(Array.isArray(data.yaEnOtrosPlanes) && data.yaEnOtrosPlanes.length ? { yaEnOtrosPlanes: data.yaEnOtrosPlanes as ResultadoGuardar["yaEnOtrosPlanes"] } : {}),
   };
+}
+
+/**
+ * Lo que el paciente ya tiene en sus planes, de TODOS los doctores (ws1-t6 v3, MAYOR-B): tipo,
+ * dientes, nombre del plan y estado, sin precios ni notas (`GET /api/treatments/en-planes`). Solo
+ * LEE. `null` = no se pudo saber (la ventana lo avisa y deja agregar).
+ */
+export async function filasEnPlanesDelPaciente(patientId: string, f: Fetch = fetch): Promise<FilaEnPlan[] | null> {
+  try {
+    const r = await f(`/api/treatments/en-planes?patientId=${encodeURIComponent(patientId)}`, { cache: "no-store" });
+    if (!r.ok) return null;
+    const d = await r.json();
+    return Array.isArray(d?.filas) ? (d.filas as FilaEnPlan[]) : null;
+  } catch {
+    return null;
+  }
 }
 
 /** ¿Ya existe «presentar» (P4)? Un OPTIONS no escribe: Next lo contesta solo si la ruta existe. */

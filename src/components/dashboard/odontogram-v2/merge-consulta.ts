@@ -11,6 +11,7 @@
    revisión t4 O4). Es también lo que guarda el borrador de sesión (ws1-t11).
    ============================================================ */
 import type { Records, ToothRecord } from "./types";
+import { podarEstados, type EstadoMarca } from "@/lib/odontogram/estado-marca";
 
 /** ¿El registro de un diente trae algo marcado? (superficies, hallazgos o nota) */
 export function toothRecordHasContent(rec: ToothRecord | undefined): boolean {
@@ -43,6 +44,15 @@ export function applyToothDelta(live: ToothRecord | undefined, base: ToothRecord
   const out: ToothRecord = { surfaces, tooth: merge(l.tooth, b.tooth, n.tooth) };
   const note = (n.note ?? "") !== (b.note ?? "") ? n.note : l.note;
   if (note) out.note = note;
+  // Rojo/azul (ws1-t6): el estado que el doctor cambió manda; el resto, el del vivo.
+  const estados: Record<string, EstadoMarca> = {};
+  const llaves = new Set([...Object.keys(l.estados ?? {}), ...Object.keys(b.estados ?? {}), ...Object.keys(n.estados ?? {})]);
+  llaves.forEach((k) => {
+    const v = n.estados?.[k] !== b.estados?.[k] ? n.estados?.[k] : l.estados?.[k];
+    if (v) estados[k] = v;
+  });
+  if (Object.keys(estados).length) out.estados = estados;
+  podarEstados(out);
   return out;
 }
 

@@ -12,7 +12,7 @@ import { useLocale, useT } from "@/i18n/i18n-provider";
 import { useZonaDeLaClinica } from "@/lib/fechas/use-zona-de-la-clinica";
 import { fraseDeLaCitaElegida, type CitaElegidaParaLaNota } from "@/lib/treatments/cita-del-hecho";
 import { OdontogramV2 } from "@/components/dashboard/odontogram-v2/App";
-import { fetchRecords, syncCambios, type CambioDiente } from "@/components/dashboard/odontogram-v2/adapter";
+import { fetchOdontogram, syncCambios, type CambioDiente } from "@/components/dashboard/odontogram-v2/adapter";
 import type { Records, ToothRecord } from "@/components/dashboard/odontogram-v2/types";
 import { mergeLiveOdontogram, changedTeeth } from "@/components/dashboard/odontogram-v2/merge-consulta";
 import { Cie10Selector } from "@/components/dashboard/clinical/cie10-selector";
@@ -34,7 +34,7 @@ import {
 } from "@/components/dashboard/plan-tratamiento-rediseno/plan-clinico";
 import { pickSingleAppointmentOfDay } from "@/lib/clinical/note-appointment-link";
 import { VentanaNuevoPlan, type FormPlan, type VentanaNuevoPlanProps } from "@/components/dashboard/plan-tratamiento-rediseno/ventana-nuevo-plan";
-import { precargaDeConsulta } from "@/components/dashboard/plan-tratamiento-rediseno/armar-plan";
+import { fechasDelVivo, precargaDeConsulta, type FechasDelVivo } from "@/components/dashboard/plan-tratamiento-rediseno/armar-plan";
 
 /**
  * La cita de HOY de este paciente, o null si no hay exactamente una. Con dos
@@ -235,6 +235,10 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
   // deja igual: sin ver el vivo, el doctor marcó a ciegas. En edición no hay precarga.
   const [odoStatus, setOdoStatus] = useState<"loading" | "ready" | "error">(isEditing ? "ready" : "loading");
   const [odoRetry, setOdoRetry] = useState(0);
+  // La base guarda rojo/azul por marca (ws1-t6): lo dice la lectura del vivo. En edición no se lee.
+  const [odoConEstado, setOdoConEstado] = useState<boolean | undefined>(undefined);
+  // Cuándo se marcó cada marca del vivo (ws1-t6 v6): «Armar el plan» decide como «Nuevo plan» de la ficha.
+  const odoFechasRef = useRef<FechasDelVivo | undefined>(undefined);
   // true desde que el doctor toca el odontograma; la precarga no pisa sus marcas.
   const odoTouchedRef = useRef(false);
   // Qué dientes tocó en esta consulta y cómo estaban al tocarlos: su cambio es
@@ -247,9 +251,11 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
     if (initialRecord) return; // edición: ya tenemos la foto guardada
     let cancelled = false;
     setOdoStatus("loading");
-    fetchRecords(patientId)
-      .then(live => {
+    fetchOdontogram(patientId)
+      .then(({ records: live, conEstado, entries }) => {
         if (cancelled) return;
+        setOdoConEstado(conEstado);
+        odoFechasRef.current = fechasDelVivo(entries);
         const merged = mergeLiveOdontogram(live, odontogramRef.current, odoTouchedRef.current, odoBasesRef.current);
         // desde aquí el cambio del doctor se mide contra ESTE vivo: si luego
         // alguien quita algo en el vivo, el borrador no lo resucita
@@ -469,6 +475,7 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
       pronostico,
       odontograma: odontogram,
       odontogramaListo: odoStatus === "ready",
+      fechas: odoFechasRef.current,
     }));
     setFormPlan({ doctorId: armarPlan.doctorId, name: "", description: "", totalSessions: "1", sessionIntervalDays: "30", totalCost: "" });
     setPlanAbierto(true);
@@ -807,7 +814,9 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
             odoBasesRef.current.forEach((base, fdi) => {
               cambios[fdi] = { base, now: odontogram[fdi] ?? { surfaces: {}, tooth: [] } };
             });
-            if (Object.keys(cambios).length) await syncCambios(patientId, cambios);
+            if (Object.keys(cambios).length && (await syncCambios(patientId, cambios)).estadoNoGuardado) {
+              toast("El odontograma se actualizó, pero no se pudo guardar qué está por hacer y qué está realizado. Revísalo en la pestaña Odontograma.", { icon: "⚠️", duration: 8000 });
+            }
           } catch {
             toast.error("La consulta se guardó; el odontograma del paciente no se pudo actualizar.", { duration: 7000 });
           }
@@ -1188,7 +1197,7 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
           `disabled` del fieldset no le llega: con la nota firmada se le quitan
           los clics a mano para que no acepte marcas que nunca se guardarían. */}
       <div style={{ width: "100%", overflowX: "auto", pointerEvents: isLocked ? "none" : undefined }} aria-disabled={isLocked}>
-        <OdontogramV2 patientId={patientId} value={odontogram} onChange={handleOdontogramChange} />
+        <OdontogramV2 patientId={patientId} value={odontogram} onChange={handleOdontogramChange} conEstado={odoConEstado} />
       </div>
       {/* Autoguardado (ws1-t11): las marcas de la consulta no se pierden al
           cambiar de pestaña ni al recargar; al odontograma del paciente pasan

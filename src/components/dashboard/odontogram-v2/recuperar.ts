@@ -18,6 +18,7 @@
 import type { SaveOp, SaveQueue, SessionInfo } from "./autosave";
 import type { OdontogramRead } from "./adapter";
 import type { Records, ToothRecord } from "./types";
+import { podarEstados } from "@/lib/odontogram/estado-marca";
 
 export type Sesion = SessionInfo;
 
@@ -25,6 +26,10 @@ export interface ResultadoCarga {
   records: Records | null;
   /** mensaje en español si no se pudo leer (sin red, sesión vencida…) */
   error: string | null;
+  /** la base guarda el estado de las marcas (rojo/azul, ws1-t6); sin lectura, no se sabe (undefined) */
+  conEstado?: boolean;
+  /** el servidor no pudo leer los estados: se avisa */
+  estadoNoLeido?: boolean;
 }
 
 export async function cargarOdontograma(args: {
@@ -42,9 +47,10 @@ export async function cargarOdontograma(args: {
     for (let i = 0; i < 4; i++) {
       const v = queue?.getVersion();
       const r = await leer(patientId);
-      if (!queue) return { records: r.records, error: null };
+      const estado = { conEstado: r.conEstado, ...(r.estadoNoLeido ? { estadoNoLeido: true } : {}) };
+      if (!queue) return { records: r.records, error: null, ...estado };
       if (r.clinicId && r.userId) queue.setOwner({ clinicId: r.clinicId, userId: r.userId });
-      if (queue.getVersion() === v || (force && i === 3)) return { records: queue.overlay(r.records), error: null };
+      if (queue.getVersion() === v || (force && i === 3)) return { records: queue.overlay(r.records), error: null, ...estado };
     }
     return { records: null, error: null };
   } catch (e) {
@@ -68,11 +74,28 @@ export function quitarDelDibujo(records: Records, ops: SaveOp[]): Records {
       const i = arr ? arr.indexOf(op.conditionId) : -1;
       if (arr && i >= 0) arr.splice(i, 1);
       if (op.surface && arr && !arr.length) delete r.surfaces[op.surface];
+      podarEstados(r);
     } else {
       const rec = (out[op.toothNumber] ??= { surfaces: {}, tooth: [] });
       const arr = op.surface ? (rec.surfaces[op.surface] ??= []) : rec.tooth;
       if (!arr.includes(op.conditionId)) arr.push(op.conditionId);
     }
+  }
+  return out;
+}
+
+/**
+ * La relectura llegó SIN estados porque el servidor no pudo leerlos (`estadoNoLeido`, ws1-t6 v3 m-d):
+ * se conservan los rojo/azul que ya se tenían de las marcas que siguen ahí. Sin esto, la marca roja
+ * se veía «de antes» y, en «Realizado», un toque la quitaba en vez de pasarla a azul.
+ */
+export function conservarEstados(antes: Records, nuevos: Records): Records {
+  const out: Records = JSON.parse(JSON.stringify(nuevos));
+  for (const [fdi, r] of Object.entries(out)) {
+    const previos = antes[Number(fdi)]?.estados;
+    if (!previos || r.estados) continue;
+    r.estados = { ...previos };
+    podarEstados(r);
   }
   return out;
 }

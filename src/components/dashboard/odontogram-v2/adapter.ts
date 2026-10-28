@@ -9,6 +9,7 @@ import type { Records, ToothRecord } from "./types";
 import { classify, SURFACE_NAMES } from "./data";
 import { OTRA_SESION, type SessionInfo } from "./autosave";
 import { CABECERA_SESION_ODONTOGRAMA, valorCabeceraSesion } from "@/lib/odontogram/sesion-pestana";
+import { admiteEstado, esEstadoMarca, fijarEstadoEn, type EstadoMarca } from "@/lib/odontogram/estado-marca";
 
 /* ---------- la cara incisal ----------
    La pantalla llama «I» (Incisal) al centro de los anteriores y «O» al de los
@@ -50,6 +51,11 @@ export interface OdontogramEntry {
   conditionId: string;
   notes?: string | null;
   updatedAt?: string;
+  /** Rojo/azul (ws1-t6); sin él = lo de antes, se pinta como hoy. */
+  estado?: EstadoMarca | null;
+  /** Desde cuándo tiene su estado (v6; para una roja, cuándo pasó a rojo) y cuándo se creó. */
+  estadoDesde?: string | null;
+  createdAt?: string | null;
 }
 
 /* ---------- robust response reading (never throws on empty/HTML body) ---------- */
@@ -124,6 +130,7 @@ const MENSAJES: Record<string, string> = {
   schema_not_migrated: "El odontograma no está disponible en este servidor; avisa a soporte.",
   internal_error: "Falló el servidor.",
   otra_sesion: OTRA_SESION,
+  estado_no_disponible: "no se pudo guardar si es por hacer o realizado; se reintenta solo.",
 };
 
 /** El 403 del reto de dos pasos (el guardia no se lleva la pestaña si hay algo pendiente, N3-O1). */
@@ -161,6 +168,7 @@ export function entriesToRecords(entries: OdontogramEntry[]): Records {
       continue;
     }
     const surface = fromServerSurface(fdi, e.surface);
+    if (esEstadoMarca(e.estado) && admiteEstado(e.conditionId)) fijarEstadoEn(rec, surface, e.conditionId, e.estado);
     if (surface != null) {
       if (!rec.surfaces[surface]) rec.surfaces[surface] = [];
       if (!rec.surfaces[surface].includes(e.conditionId)) {
@@ -188,6 +196,10 @@ export interface OdontogramRead {
   userId: string | null;
   /** filas tal cual (letras de la base) */
   entries: OdontogramEntry[];
+  /** La base guarda el estado de las marcas (rojo/azul, ws1-t6): la pantalla enseña el selector. */
+  conEstado?: boolean;
+  /** No se pudo saber si lo guarda (falló la consulta): se avisa y el selector se queda como estaba. */
+  estadoNoLeido?: boolean;
 }
 
 /**
@@ -236,7 +248,7 @@ export async function fetchOdontogram(patientId: string): Promise<OdontogramRead
   if (!res.ok) throw await httpError(res, fallback);
   const data = await safeJson<{
     entries: OdontogramEntry[]; notes?: Record<string, string>;
-    clinicId?: string; userId?: string;
+    clinicId?: string; userId?: string; conEstado?: boolean; estadoNoLeido?: boolean;
   }>(res);
   const records = entriesToRecords(data?.entries ?? []);
   // Per-tooth notes arrive in a SEPARATE `notes` map keyed by toothNumber — the
@@ -253,6 +265,7 @@ export async function fetchOdontogram(patientId: string): Promise<OdontogramRead
     clinicId: typeof data?.clinicId === "string" ? data.clinicId : null,
     userId: typeof data?.userId === "string" ? data.userId : null,
     entries: data?.entries ?? [],
+    ...(data?.estadoNoLeido ? { estadoNoLeido: true } : { conEstado: data?.conEstado === true }),
   };
 }
 
@@ -265,6 +278,8 @@ export interface PutArgs {
   surface?: string | null;
   conditionId: string;
   notes?: string | null;
+  /** Rojo/azul (ws1-t6). `undefined` = no tocar el estado. */
+  estado?: EstadoMarca | null;
 }
 
 /** Add / upsert a condition. Idempotente en el servidor: repetirla no duplica. */
@@ -277,7 +292,9 @@ export async function putFinding(args: PutArgs, opts?: WriteOptions): Promise<vo
       toothNumber: args.toothNumber,
       surface: toServerSurface(args.surface),
       conditionId: args.conditionId,
-      notes: args.notes ?? null,
+      // sin nota que mandar no se manda la clave: la nota que ya tenga la marca se queda (ws1-t6)
+      ...(args.notes !== undefined ? { notes: args.notes } : {}),
+      ...(args.estado !== undefined ? { estado: args.estado } : {}),
     }),
   }, opts, "No se pudo guardar el hallazgo");
 }
@@ -330,7 +347,7 @@ export interface CambioDiente { base: ToothRecord; now: ToothRecord }
  * sobre lo que haya en ese momento (POST /api/odontogram/sync con `cambios`).
  * Así no pisa lo que otra pestaña autoguardó, ni siquiera en el mismo diente.
  */
-export async function syncCambios(patientId: string, cambios: Record<number, CambioDiente>): Promise<void> {
+export async function syncCambios(patientId: string, cambios: Record<number, CambioDiente>): Promise<{ estadoNoGuardado: boolean }> {
   const out: Record<number, CambioDiente> = {};
   for (const [fdi, c] of Object.entries(cambios)) {
     const n = Number(fdi);
@@ -344,6 +361,8 @@ export async function syncCambios(patientId: string, cambios: Record<number, Cam
     body: JSON.stringify({ patientId, cambios: out }),
   });
   if (!res.ok) throw await httpError(res, "No se pudo actualizar el odontograma");
+  // las marcas se guardaron, pero no su rojo/azul (el servidor no pudo leer si la base lo guarda)
+  return { estadoNoGuardado: (await safeJson<{ estadoNoGuardado?: boolean }>(res))?.estadoNoGuardado === true };
 }
 
 /** Las caras con la letra de la base (la «I» de los anteriores viaja como «O»). */
@@ -355,7 +374,16 @@ export function recordsForServer(records: Records): Records {
       const key = toServerSurface(letter) as string;
       surfaces[key] = [...new Set([...(surfaces[key] ?? []), ...ids])];
     }
-    out[Number(fdi)] = { ...rec, surfaces };
+    const conv: Records[number] = { ...rec, surfaces };
+    if (rec.estados) {
+      // las llaves del estado llevan la cara: también con la letra de la base
+      conv.estados = Object.fromEntries(Object.entries(rec.estados).map(([k, v]) => {
+        const i = k.indexOf(":");
+        const cara = k.slice(0, i);
+        return [`${cara === "_" ? "_" : toServerSurface(cara)}${k.slice(i)}`, v];
+      }));
+    }
+    out[Number(fdi)] = conv;
   }
   return out;
 }

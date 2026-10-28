@@ -5,6 +5,8 @@ import { signMaybeUrls } from "@/lib/storage";
 import { logRead, extractAuditMeta } from "@/lib/audit";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { stripPatientSecrets } from "@/lib/patient-secrets";
+import { rotuloDeEstado } from "@/lib/odontogram/estado-marca";
+import { estadosParaMostrar } from "@/lib/odontogram/estado-db";
 
 export const dynamic = "force-dynamic";
 
@@ -106,6 +108,14 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
   }));
   const signedBeforeAfter = beforeAfterPhotos.map((p, i) => ({ ...p, url: beforeAfterUrls[i] }));
 
+  // Rojo/azul del odontograma (ws1-t6, v2 M2): cada marca con su estado (null = sin estado: lo de
+  // antes, o realizado sin marcar) y el rótulo legible.
+  const estados = await estadosParaMostrar(prisma, patient.id);
+  const odontogramaConEstado = odontogramEntries.map((e) => {
+    const estado = estados.get(e.id) ?? null;
+    return { ...e, estado, ...(rotuloDeEstado(estado) ? { estadoTexto: rotuloDeEstado(estado) } : {}) };
+  });
+
   // Bitácora de LECTURA (antes se registraba como un "update" ficticio con
   // `_exported`): exportar no modifica al paciente. Solo ids (ver logRead).
   await logRead({
@@ -132,7 +142,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
     files: signedFiles,
     invoices,
     odontogram: {
-      entries: odontogramEntries,
+      entries: odontogramaConEstado,
       snapshots: odontogramSnapshots,
     },
     treatmentPlans,

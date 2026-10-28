@@ -39,6 +39,9 @@ export interface NumberLabel {
   quad?: PalmerQuad;
 }
 
+import type { ReactNode } from "react";
+import type { EstadoMarca, ModoMarca } from "@/lib/odontogram/estado-marca";
+
 export type ConditionTarget = "surface" | "tooth";
 
 /** How a finding is drawn. See Surface2D / ToothGlyph renderers. */
@@ -88,6 +91,11 @@ export interface ToothRecord {
   tooth: string[];
   /** free clinical note (optional) */
   note?: string;
+  /**
+   * Rojo/azul (ws1-t6): estado de las marcas de procedimiento, por `«cara»:«condición»` (`_` = diente
+   * completo; la cara con la letra de la pantalla). Lo guardado antes no lo trae: se pinta como hoy.
+   */
+  estados?: { [clave: string]: EstadoMarca };
 }
 
 export type Records = { [fdi: number]: ToothRecord };
@@ -182,16 +190,24 @@ export interface PaletteProps {
   eraser: boolean;
   onPick: (id: string) => void;
   onEraser: () => void;
+  /** El estado del modo activo (ws1-t6): los procedimientos se previsualizan en rojo/azul. */
+  estado?: EstadoMarca | null;
 }
 
 /** ConditionSwatch — mini preview of how a condition renders. (design: jsx/odontogram.jsx) */
 export interface ConditionSwatchProps {
   cond: Condition;
+  /** ws1-t6: si el procedimiento lleva estado, se previsualiza con su rojo/azul. */
+  estado?: EstadoMarca | null;
 }
 
 /** Legend — specialty color legend. (design: jsx/odontogram.jsx) */
 export interface LegendProps {
   lang: Lang;
+  /** ws1-t6: delante, «Por hacer» (rojo) y «Realizado» (azul). */
+  conEstado?: boolean;
+  /** Solo esos dos (cuando la paleta ya enseña los colores de especialidad). */
+  soloEstado?: boolean;
 }
 
 /** DetailPanel — slide-over for the selected tooth. (design: jsx/detail.jsx) */
@@ -213,6 +229,20 @@ export interface DetailPanelProps {
   onNoteFlush: (fdi: number) => void;
   onRemove: OnRemove;
   onPick: (id: string) => void;
+  /** ws1-t6: la base guarda el estado (rojo/azul) de las marcas. */
+  conEstado?: boolean;
+  /** Cambiar el estado de una marca de la lista («Marcar realizado» / «Marcar por hacer»). */
+  onEstado?: (fdi: number, scope: RemoveScope, letter: string | undefined, condId: string, estado: EstadoMarca) => void;
+  /** El estado del modo activo (para previsualizar el pincel). */
+  estadoPincel?: EstadoMarca | null;
+  /** El selector «Por hacer / Realizado», también dentro del panel. */
+  selectorModo?: ReactNode;
+}
+
+/** El selector «Por hacer / Realizado» del odontograma (ws1-t6). */
+export interface ModoProps {
+  modo: ModoMarca;
+  previo: boolean;
 }
 
 /** OdontogramV2 root. Modo VIVO: solo `patientId` (lee/escribe odontogram_entries).
@@ -242,4 +272,9 @@ export interface OdontogramV2Props {
    * lados, sin tocar el gesto de scroll que ya existe. Default `false`.
    */
   edgeScrollHint?: boolean;
+  /**
+   * Modo CONTROLADO: si la base guarda el estado de las marcas (rojo/azul). En modo vivo lo dice
+   * la lectura del servidor. Sin él, el selector sale solo si lo que se ve ya trae estados.
+   */
+  conEstado?: boolean;
 }

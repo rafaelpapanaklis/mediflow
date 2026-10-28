@@ -35,6 +35,8 @@ import {
   type SinCambio,
 } from "@/lib/odontogram/aplicar-hecho";
 import { CONDITIONS } from "@/components/dashboard/odontogram-v2/data";
+import { admiteEstado, esEstadoMarca, type EstadoMarca } from "@/lib/odontogram/estado-marca";
+import { EstadoNoDisponible, columnaEstadoExiste, fijarEstado } from "@/lib/odontogram/estado-db";
 import { filaDto, type DbDeFilas, type EstadoDeFila, type FilaDelPlan } from "./items";
 import { bloquearPlan, FilaError, repoFilas, tablaDeFilasExiste } from "./items-db";
 import { columnaOdontogramaHechoExiste, leerRegistro, type RegistroHecho } from "./aplicar-hecho-db";
@@ -48,18 +50,24 @@ export const MAX_FILAS_POR_HECHO = 30;
 
 // ── El odontograma, en SQL crudo y dentro de la transacción ────────────────────────────────────
 
-interface EntradaSql { id: string; toothNumber: number; surface: string | null; conditionId: string; notes: string | null }
+interface EntradaSql { id: string; toothNumber: number; surface: string | null; conditionId: string; notes: string | null; estado?: string | null }
 
-async function leerOdontograma(db: DbDeFilas, patientId: string): Promise<EntradaConId[]> {
-  const filas = await db.$queryRaw<EntradaSql[]>`
-    SELECT "id", "toothNumber", "surface", "conditionId", "notes" FROM "odontogram_entries"
-     WHERE "patientId" = ${patientId} AND "conditionId" <> ${NOTA}`;
+/** `conEstado`: la base tiene `odontogram_entries."estado"` (rojo/azul, ws1-t6); sin ella no se pide. */
+async function leerOdontograma(db: DbDeFilas, patientId: string, conEstado: boolean): Promise<EntradaConId[]> {
+  const filas = conEstado
+    ? await db.$queryRaw<EntradaSql[]>`
+        SELECT "id", "toothNumber", "surface", "conditionId", "notes", "estado" FROM "odontogram_entries"
+         WHERE "patientId" = ${patientId} AND "conditionId" <> ${NOTA}`
+    : await db.$queryRaw<EntradaSql[]>`
+        SELECT "id", "toothNumber", "surface", "conditionId", "notes" FROM "odontogram_entries"
+         WHERE "patientId" = ${patientId} AND "conditionId" <> ${NOTA}`;
   return filas.map((f) => ({
     id: f.id,
     toothNumber: Number(f.toothNumber),
     surface: (f.surface ?? null) as CaraBase | null,
     conditionId: f.conditionId,
     notes: f.notes ?? null,
+    ...(esEstadoMarca(f.estado) ? { estado: f.estado } : {}),
   }));
 }
 
@@ -85,7 +93,7 @@ async function candadoDelPaciente(db: DbDeFilas, patientId: string): Promise<voi
  * que otra pestaña puso en ese instante— no es de «hecho» y su deshacer no lo quita).
  * Diente completo (surface NULL): la unique no lo cubre → mismo candado que /api/odontogram/sync.
  */
-async function ponerEntrada(db: DbDeFilas, patientId: string, e: EntradaOdontograma): Promise<string | null> {
+async function ponerEntrada(db: DbDeFilas, patientId: string, e: EntradaOdontograma, estado: EstadoMarca | null = null): Promise<string | null> {
   const id = randomUUID();
   if (e.surface === null) {
     await db.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`odontogram:${patientId}:${e.toothNumber}:${e.conditionId}`}))`;
@@ -99,7 +107,10 @@ async function ponerEntrada(db: DbDeFilas, patientId: string, e: EntradaOdontogr
     VALUES (${id}, ${patientId}, ${e.toothNumber}::int, ${e.surface}, ${e.conditionId}, ${e.notes ?? null}, now(), now())
     ON CONFLICT DO NOTHING
     RETURNING "id"`;
-  return r[0]?.id ?? null;
+  const creado = r[0]?.id ?? null;
+  // Rojo/azul (ws1-t6): solo con la columna (quien llama ya lo comprobó) y en una marca de procedimiento.
+  if (creado && estado && admiteEstado(e.conditionId)) await fijarEstado(db, patientId, creado, estado);
+  return creado;
 }
 
 const claveDe = (e: { toothNumber: number; surface: string | null; conditionId: string }) =>
@@ -143,6 +154,8 @@ export interface ResultadoDeFila {
   sinCambio: SinCambio | null;
   altas: EntradaOdontograma[];
   bajas: EntradaOdontograma[];
+  /** Lo que estaba en rojo y pasó a azul (ws1-t6). */
+  aHecho: EntradaOdontograma[];
 }
 
 export interface PlanParaHecho { id: string; clinicId: string; patientId: string | null; name: string }
@@ -171,6 +184,9 @@ export async function marcarHecho(args: {
   const { clinicId, plan, userId } = args;
   if (!clinicId) throw new Error("plan:hecho: clinicId ausente — se corta antes de consultar");
   const conColumna = await columnaOdontogramaHechoExiste();
+  // Estricta (v2, m5): sin saber si hay rojo, «hecho» dejaría la marca roja y otra azul al lado. Si no
+  // se puede saber, lanza `EstadoNoDisponible` (503) antes de tocar nada.
+  const conEstado = conColumna && (await columnaEstadoExiste({ estricta: true }));
   const en = new Date();
   const resultados: ResultadoDeFila[] = [];
   let filas: FilaDelPlan[] = [];
@@ -189,12 +205,12 @@ export async function marcarHecho(args: {
     // Se lee aunque quien marca no pueda escribirlo: hace falta saber qué CUBRE el procedimiento.
     const leeOdontograma = conColumna && !!plan.patientId;
     if (leeOdontograma) await candadoDelPaciente(tx, plan.patientId!);
-    let entradas: EntradaConId[] = leeOdontograma ? await leerOdontograma(tx, plan.patientId!) : [];
+    let entradas: EntradaConId[] = leeOdontograma ? await leerOdontograma(tx, plan.patientId!, conEstado) : [];
 
     for (const id of args.itemIds) {
       const f = porId.get(id)!;
       if (f.estado === "hecho") {
-        resultados.push({ itemId: id, estado: "ya_estaba_hecho", sinCambio: null, altas: [], bajas: [] });
+        resultados.push({ itemId: id, estado: "ya_estaba_hecho", sinCambio: null, altas: [], bajas: [], aHecho: [] });
         continue;
       }
       const estadoAntes: RegistroHecho["estadoAntes"] = f.estado === "en_curso" ? "en_curso" : "pendiente";
@@ -212,13 +228,13 @@ export async function marcarHecho(args: {
         ...(args.sinCita ? { sinCita: args.sinCita } : {}),
       };
       if (!conColumna) {
-        resultados.push({ itemId: id, estado: "pendiente_de_base", sinCambio: null, altas: [], bajas: [] });
+        resultados.push({ itemId: id, estado: "pendiente_de_base", sinCambio: null, altas: [], bajas: [], aHecho: [] });
         continue;
       }
       if (!plan.patientId) {
         registro.omitido = "sin_paciente";
         await guardarRegistro(tx, clinicId, plan.id, id, registro);
-        resultados.push({ itemId: id, estado: "sin_paciente", sinCambio: null, altas: [], bajas: [] });
+        resultados.push({ itemId: id, estado: "sin_paciente", sinCambio: null, altas: [], bajas: [], aHecho: [] });
         continue;
       }
 
@@ -232,7 +248,7 @@ export async function marcarHecho(args: {
         // No escribe; lo que el procedimiento cubre queda dicho (si el doctor lo pinta después, no se cobra aparte).
         registro.omitido = "sin_permiso";
         await guardarRegistro(tx, clinicId, plan.id, id, registro);
-        resultados.push({ itemId: id, estado: "sin_permiso", sinCambio: null, altas: [], bajas: [] });
+        resultados.push({ itemId: id, estado: "sin_permiso", sinCambio: null, altas: [], bajas: [], aHecho: [] });
         continue;
       }
       if (!cambio.sinCambio) {
@@ -241,13 +257,25 @@ export async function marcarHecho(args: {
         const quitadas = await quitarEntradas(tx, plan.patientId, quitar.map((e) => e.id));
         const puestas: EntradaConId[] = [];
         for (const a of cambio.altas) {
-          const nuevo = await ponerEntrada(tx, plan.patientId, a);
-          if (nuevo) puestas.push({ ...a, notes: null, id: nuevo });
+          // Lo nuevo que deja «hecho» sale ya en azul (si la base guarda el estado).
+          const estadoAlta: EstadoMarca | null = conEstado && admiteEstado(a.conditionId) ? "hecho" : null;
+          const nuevo = await ponerEntrada(tx, plan.patientId, a, estadoAlta);
+          if (nuevo) puestas.push({ ...a, notes: null, id: nuevo, ...(estadoAlta ? { estado: estadoAlta } : {}) });
+        }
+        // Lo que estaba en rojo pasa a azul (ws1-t6, decisión 3): la misma fila, otro estado.
+        const pasadas: EntradaConId[] = [];
+        for (const r of cambio.aHecho) {
+          const viva = porClave.get(claveDe(r));
+          if (!viva || !conEstado) continue;
+          await fijarEstado(tx, plan.patientId, viva.id, "hecho");
+          pasadas.push({ ...viva, estado: "hecho" });
         }
         registro.altas = puestas;
+        registro.aHecho = pasadas;
         // Solo lo que de verdad se quitó: así un deshacer no resucita lo que otro ya había quitado.
         registro.bajas = quitar.filter((e) => quitadas.has(e.id)).map(({ id: _id, ...e }) => ({ ...e, notes: e.notes ?? null }));
-        entradas = [...entradas.filter((e) => !quitadas.has(e.id)), ...puestas];
+        const azules = new Set(pasadas.map((p) => p.id));
+        entradas = [...entradas.filter((e) => !quitadas.has(e.id)).map((e) => (azules.has(e.id) ? { ...e, estado: "hecho" as const } : e)), ...puestas];
       }
       await guardarRegistro(tx, clinicId, plan.id, id, registro);
       resultados.push({
@@ -256,6 +284,7 @@ export async function marcarHecho(args: {
         sinCambio: cambio.sinCambio,
         altas: registro.altas.map(({ id: _id, ...e }) => e),
         bajas: registro.bajas,
+        aHecho: (registro.aHecho ?? []).map(({ id: _id, ...e }) => e),
       });
     }
     filas = await repoFilas.leer(clinicId, plan.id, { db: tx });
@@ -271,6 +300,8 @@ export interface ResultadoDeshacer {
   estado: EstadoDeFila;
   quitadas: EntradaOdontograma[];
   devueltas: EntradaOdontograma[];
+  /** Lo que «hecho» había pasado a azul y vuelve a rojo (ws1-t6). */
+  aPorHacer: EntradaOdontograma[];
   conflictos: ConflictoDeshacer[];
 }
 
@@ -289,6 +320,9 @@ export async function deshacerHecho(args: {
   const { clinicId, plan, userId, itemId } = args;
   if (!clinicId) throw new Error("plan:hecho: clinicId ausente — se corta antes de consultar");
   const conColumna = await columnaOdontogramaHechoExiste();
+  // Estricta (v2, m5): sin estados, el deshacer no regresaría a rojo lo que «hecho» pasó a azul y aun
+  // así daría la fila por deshecha. Mejor 503 antes de tocar nada.
+  const conEstado = conColumna && (await columnaEstadoExiste({ estricta: true }));
   let out: ResultadoDeshacer | null = null;
 
   await prisma.$transaction(async (tx: DbDeFilas) => {
@@ -301,20 +335,29 @@ export async function deshacerHecho(args: {
 
     const registro = conColumna ? await leerRegistroDeFila(tx, clinicId, plan.id, itemId) : null;
     const vigente = registro && !registro.deshecho ? registro : null;
-    const escribio = !!vigente && (vigente.altas.length > 0 || vigente.bajas.length > 0);
+    const escribio = !!vigente && (vigente.altas.length > 0 || vigente.bajas.length > 0 || (vigente.aHecho ?? []).length > 0);
     if (escribio && !args.puedeOdontograma) throw new FilaError("sin_permiso_odontograma");
 
     let quitadas: EntradaOdontograma[] = [];
     const devueltas: EntradaOdontograma[] = [];
+    const aPorHacer: EntradaOdontograma[] = [];
     let conflictos: ConflictoDeshacer[] = [];
     const patientId = vigente?.patientId ?? plan.patientId;
     if (escribio && patientId) {
       await candadoDelPaciente(tx, patientId);
-      const plan2 = planearDeshacer(vigente!, await leerOdontograma(tx, patientId));
+      const plan2 = planearDeshacer(vigente!, await leerOdontograma(tx, patientId, conEstado));
       const ids = await quitarEntradas(tx, patientId, plan2.borrar.map((e) => e.id));
       for (const e of plan2.crear) {
-        // La nota del hallazgo devuelto vuelve con él.
-        if (await ponerEntrada(tx, patientId, e)) devueltas.push(e);
+        // La nota del hallazgo devuelto vuelve con él (y su rojo/azul, si lo tenía).
+        if (await ponerEntrada(tx, patientId, e, conEstado ? e.estado ?? null : null)) devueltas.push(e);
+      }
+      // Lo que pasó a azul vuelve a rojo.
+      if (conEstado) {
+        for (const e of plan2.aPorHacer) {
+          await fijarEstado(tx, patientId, e.id, "por_hacer");
+          const { id: _id, ...sinId } = e;
+          aPorHacer.push({ ...sinId, estado: "por_hacer" });
+        }
       }
       quitadas = plan2.borrar.filter((e) => ids.has(e.id)).map(({ id: _id, ...e }) => e);
       conflictos = plan2.conflictos;
@@ -335,7 +378,7 @@ export async function deshacerHecho(args: {
         deshecho: { en: new Date().toISOString(), por: userId, devueltas, conflictos },
       });
     }
-    out = { fila, estado, quitadas, devueltas, conflictos };
+    out = { fila, estado, quitadas, devueltas, aPorHacer, conflictos };
   }, { maxWait: 10_000, timeout: 20_000 });
 
   return out!;
@@ -354,6 +397,8 @@ export function mensajeDeHecho(codigo: string, locale: "es" | "en" = "es"): stri
 }
 
 const error = (codigo: string, status: number) => NextResponse.json({ error: mensajeDeHecho(codigo), code: codigo }, { status });
+/** La sonda del rojo/azul no contestó (v2, m5): no se tocó nada; se puede reintentar. */
+const sinEstado = () => error("estado_no_disponible", 503);
 
 /** «Resina 16 (MO)» — la frase de Movimientos, sin datos clínicos de más. */
 const nombreDeFila = (f: Pick<FilaDelPlan, "nombre" | "dientes" | "caras">) =>
@@ -379,6 +424,7 @@ export async function accionHecho(
       r = await deshacerHecho({ clinicId: ctx.clinicId, plan, userId: ctx.userId, itemId, puedeOdontograma });
     } catch (e) {
       if (e instanceof FilaError) return error(e.codigo, e.codigo === "sin_permiso_odontograma" ? 403 : 409);
+      if (e instanceof EstadoNoDisponible) return sinEstado();
       throw e;
     }
     await logMutation({
@@ -391,6 +437,7 @@ export async function accionHecho(
         odontograma: {
           quitadas: r.quitadas.map(marca),
           devueltas: r.devueltas.map(marca),
+          ...(r.aPorHacer.length ? { aRojo: r.aPorHacer.map(marca) } : {}),
           avisos: r.conflictos.map((c) => `${marca(c)} (${c.motivo}${c.nota ? `: «${c.nota}»` : ""})`),
         },
       },
@@ -406,6 +453,7 @@ export async function accionHecho(
       odontograma: {
         quitadas: r.quitadas,
         devueltas: r.devueltas,
+        aPorHacer: r.aPorHacer,
         conflictos: r.conflictos.map((c) => ({
           ...c,
           mensaje: t(`planTratamiento.hecho.conflicto.${c.motivo}`, { diente: String(c.toothNumber), hallazgo: nombreDeHallazgo(c.conditionId), nota: c.nota ?? "" }),
@@ -445,6 +493,7 @@ export async function accionHecho(
     r = await marcarHecho({ clinicId: ctx.clinicId, plan, userId: ctx.userId, itemIds, citaId, sinCita, puedeOdontograma });
   } catch (e) {
     if (e instanceof FilaError) return error(e.codigo, 409);
+    if (e instanceof EstadoNoDisponible) return sinEstado();
     throw e;
   }
 
@@ -464,7 +513,10 @@ export async function accionHecho(
         hechos: nombres,
         ...(citaId ? { citaId } : {}),
         ...(sinCita ? { sinCita: true, motivoSinCita: sinCita.motivo } : {}),
-        odontograma: nuevos.map((x) => ({ estado: x.estado, puso: x.altas.map(marca), quito: x.bajas.map(marca) })),
+        odontograma: nuevos.map((x) => ({
+          estado: x.estado, puso: x.altas.map(marca), quito: x.bajas.map(marca),
+          ...(x.aHecho.length ? { aAzul: x.aHecho.map(marca) } : {}),
+        })),
       },
     });
   }
