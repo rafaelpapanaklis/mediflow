@@ -3,6 +3,10 @@
 // la sesión). Solo a quien puede operar Caja (canUseCaja); en silencio si la
 // caja se abrió hace menos de 24 h, si no hay caja abierta o si algo falla.
 // La pantalla de Caja ya avisaba desde las 18 h; faltaba que se viera en Hoy.
+//
+// Login rápido (28-oct): la lectura la EMPIEZA la página con `leerDiasCajaAbierta`
+// antes de su Promise.all y aquí solo se espera; antes corría después de que la
+// página devolvía su árbol y alargaba el esqueleto de «Hoy» una ida a la base.
 
 import Link from "next/link";
 import { AlertTriangle } from "lucide-react";
@@ -10,22 +14,32 @@ import { diasDeCajaAbierta } from "@/lib/caja";
 import { canUseCaja } from "@/lib/caja-pin";
 import { textosDinero } from "@/lib/dinero/textos";
 
+type QuienMira = { role?: string | null; canAccessCaja?: boolean | null };
+
+/**
+ * Días que lleva abierta la caja de la clínica de la sesión, para el aviso. Sin permiso de
+ * Caja no consulta nada; si algo falla, 0 (el aviso se calla). Nunca rechaza: la página la
+ * empieza antes de sus propias lecturas y puede no llegar a esperarla.
+ */
+export function leerDiasCajaAbierta(clinicId: string, user: QuienMira): Promise<number> {
+  if (!clinicId || !canUseCaja(user)) return Promise.resolve(0);
+  return diasDeCajaAbierta(clinicId).catch(() => 0);
+}
+
 export async function AvisoCajaAbierta({
   clinicId,
   locale,
   user,
+  dias: diasYaPedidos,
 }: {
   clinicId: string;
   locale: string;
-  user: { role?: string | null; canAccessCaja?: boolean | null };
+  user: QuienMira;
+  /** La lectura ya empezada por la página (`leerDiasCajaAbierta`). Sin ella, se lee aquí. */
+  dias?: Promise<number>;
 }) {
   if (!clinicId || !canUseCaja(user)) return null;
-  let dias = 0;
-  try {
-    dias = await diasDeCajaAbierta(clinicId);
-  } catch {
-    return null;
-  }
+  const dias = await (diasYaPedidos ?? leerDiasCajaAbierta(clinicId, user));
   if (dias < 1) return null;
   const tx = textosDinero(locale).caja;
   return (

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
 import { rateLimitKey } from "@/lib/rate-limit";
+import { OPCIONES_UPSTASH_CANDADOS, OPCIONES_UPSTASH_RAPIDAS } from "@/lib/upstash-rapido";
 
 /**
  * Fail-ban persistente: rate-limit por ventana deslizante (punto 2) + lockout
@@ -58,13 +59,20 @@ function resolvePolicy(p?: Partial<LockoutPolicy>): LockoutPolicy {
 }
 
 // ─────────────────────────── Upstash (lazy, seguro) ────────────────────────
-let redisClient: Redis | null | undefined;
+/**
+ * Dos clientes (v2, m-1 de t8): «rapido» para el rate-limit y el bloqueo de intentos (si Redis tarda,
+ * memoria y adelante: el login no espera) y «candados» para acquireLock/releaseLock, que esperan más
+ * porque abrirlos por un timeout es un envío duplicado. Ver @/lib/upstash-rapido.
+ */
+type UsoDeRedis = "rapido" | "candados";
+const redisClients: Record<UsoDeRedis, Redis | null | undefined> = { rapido: undefined, candados: undefined };
 let warnedNoRedis = false;
 let warnedRuntimeFail = false;
 
-/** Cliente Redis o null si faltan envs (warn una sola vez). */
-function getRedis(): Redis | null {
-  if (redisClient !== undefined) return redisClient;
+/** Cliente Redis para ese uso, o null si faltan envs (warn una sola vez). */
+function getRedis(uso: UsoDeRedis = "rapido"): Redis | null {
+  const ya = redisClients[uso];
+  if (ya !== undefined) return ya;
   const url = process.env.UPSTASH_REDIS_REST_URL;
   const token = process.env.UPSTASH_REDIS_REST_TOKEN;
   if (!url || !token) {
@@ -75,16 +83,16 @@ function getRedis(): Redis | null {
       );
       warnedNoRedis = true;
     }
-    redisClient = null;
+    redisClients[uso] = null;
     return null;
   }
   try {
-    redisClient = new Redis({ url, token });
+    redisClients[uso] = new Redis({ url, token, ...(uso === "candados" ? OPCIONES_UPSTASH_CANDADOS : OPCIONES_UPSTASH_RAPIDAS) });
   } catch (err) {
     console.warn("[failban] No se pudo inicializar Upstash Redis; usando memoria:", err);
-    redisClient = null;
+    redisClients[uso] = null;
   }
-  return redisClient;
+  return redisClients[uso] ?? null;
 }
 
 /** true si el backend persistente (Upstash) está activo. */
@@ -272,7 +280,7 @@ export async function persistentRateLimitKey(key: string, limit: number, windowS
 export async function acquireLock(key: string, ttlSec: number, owner?: string): Promise<boolean> {
   sweep();
   const lockKey = `fb:job:${key}`;
-  const redis = getRedis();
+  const redis = getRedis("candados");
   if (redis) {
     try {
       const res = await redis.set(lockKey, owner ?? "1", { nx: true, ex: ttlSec });
@@ -300,7 +308,7 @@ const SOLTAR_SI_ES_MIO = `if redis.call("get", KEYS[1]) == ARGV[1] then return r
  */
 export async function releaseLock(key: string, owner?: string): Promise<void> {
   const lockKey = `fb:job:${key}`;
-  const redis = getRedis();
+  const redis = getRedis("candados");
   if (redis) {
     try {
       if (owner) await redis.eval(SOLTAR_SI_ES_MIO, [lockKey], [owner]);

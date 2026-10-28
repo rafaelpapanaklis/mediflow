@@ -1029,7 +1029,9 @@ const SALDOS_VACIOS = (): SaldosDeLaClinica => ({
  * control de ortodoncia (tolerante). Antes había un `take: 5000` que cortaba
  * en silencio; ahora se lee todo hasta un techo de 100 000 y, si se toca,
  * `incompleto: true` (y un aviso en el log). «Hoy» es el día de la CLÍNICA.
- * Como mucho dos consultas a la vez.
+ * Por tanda, las condiciones, las notas de plan y los casos de ortodoncia se
+ * leen a la vez (solo dependen de los ids de la tanda; cada una es secuencial por
+ * dentro): como mucho tres consultas a la vez.
  */
 export async function computeReceivables(
   clinicId: string,
@@ -1088,7 +1090,15 @@ export async function computeReceivables(
   let incompleto = false;
 
   for (let n = 1; ; n++) {
-    const { porFactura } = await leerCondicionesDeFacturas(db as unknown as typeof prisma, { clinicId, invoiceIds: tanda.map((f) => f.id) });
+    const ids = tanda.map((f) => f.id);
+    // A la vez: las tres solo dependen de los ids de la tanda (login rápido, 28-oct: antes, una tras otra).
+    const [{ porFactura }, notasDePlan, principalesOrto] = await Promise.all([
+      leerCondicionesDeFacturas(db as unknown as typeof prisma, { clinicId, invoiceIds: ids }),
+      // Notas de plan: lo hecho menos lo pagado (tolerante: si no se leen, todo cuenta como antes).
+      lectorDePlan ? lectorDePlan(clinicId, ids).catch(() => new Map()) : new Map(),
+      // Ortodoncia «Precio total a plazos»: de su factura principal solo se debe lo vencido (26-oct).
+      lectorDeOrto ? lectorDeOrto(clinicId, ids).catch(() => new Set<string>()) : new Set<string>(),
+    ]);
     const idsAPlazos = tanda.filter((f) => esPlanAPlazos(porFactura.get(f.id))).map((f) => f.id);
     const cobrosPorFactura = idsAPlazos.length === 0
       ? new Map<string, Array<{ amount: unknown; method: string | null }>>()
@@ -1096,12 +1106,6 @@ export async function computeReceivables(
           where:  { id: { in: idsAPlazos }, clinicId },
           select: { id: true, payments: { select: { amount: true, method: true } } },
         })).map((i) => [i.id, i.payments]));
-
-    // Notas de plan: lo hecho menos lo pagado (tolerante: si no se leen, todo cuenta como antes).
-    const ids = tanda.map((f) => f.id);
-    const notasDePlan = lectorDePlan ? await lectorDePlan(clinicId, ids).catch(() => new Map()) : new Map();
-    // Ortodoncia «Precio total a plazos»: de su factura principal solo se debe lo vencido (26-oct).
-    const principalesOrto = lectorDeOrto ? await lectorDeOrto(clinicId, ids).catch(() => new Set<string>()) : new Set<string>();
 
     for (const f of tanda) {
       const dePlan = notasDePlan.get(f.id);

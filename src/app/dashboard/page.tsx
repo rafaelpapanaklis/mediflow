@@ -21,7 +21,7 @@ import { OnboardingChecklist } from "@/components/dashboard/onboarding-checklist
 import { AiQuotaBanner } from "@/components/dashboard/ai-quota-banner";
 import { StorageQuotaBanner } from "@/components/dashboard/storage-quota-banner";
 import { getOnboardingCompleted } from "@/lib/onboarding-steps-server";
-import { AvisoCajaAbierta } from "@/components/dashboard/aviso-caja-abierta";
+import { AvisoCajaAbierta, leerDiasCajaAbierta } from "@/components/dashboard/aviso-caja-abierta";
 import { localeFromClinic } from "@/i18n/server";
 
 export const dynamic = "force-dynamic";
@@ -54,10 +54,13 @@ export default async function DashboardHomePage(props: PageProps) {
     "";
   const homeUser = { displayName, role: user.role };
   const homeClinic = { name: clinic.name, timezone: clinic.timezone };
-  // ws1-t5 (F7): la caja lleva más de un día abierta sin corte. Se calla sola.
-  const avisoCaja = <AvisoCajaAbierta clinicId={clinic.id} locale={localeFromClinic(clinic)} user={user} />;
-
   const role = user.role;
+  // ws1-t5 (F7): la caja lleva más de un día abierta sin corte. Se calla sola.
+  // Su lectura empieza YA, a la vez que los datos de la vista (antes corría al final y
+  // alargaba el esqueleto). El doctor no ve el aviso: no se lee.
+  const diasCaja = role === "DOCTOR" ? undefined : leerDiasCajaAbierta(clinic.id, user);
+  const avisoCaja = <AvisoCajaAbierta clinicId={clinic.id} locale={localeFromClinic(clinic)} user={user} dias={diasCaja} />;
+
   // walk-in: la API /api/walk-in exige agenda.create para agregar a la fila.
   const puedeAgregarEspera = hasPermission(
     { role: user.role, permissionsOverride: user.permissionsOverride ?? [] },
