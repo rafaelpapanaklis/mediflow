@@ -13,7 +13,7 @@ import { prisma } from "@/lib/prisma";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { receivableInvoiceWhere } from "@/lib/caja";
-import { adelantoEnNotasDePlan, loQueAunNoSeDebe } from "@/lib/dinero/lo-que-se-debe.server";
+import { adelantosEnNotasDePlan, loQueAunNoSeDebe } from "@/lib/dinero/lo-que-se-debe.server";
 import { esIdDeLaBase, MENSAJE_ID_INVALIDO } from "@/lib/validation/id";
 
 export const dynamic = "force-dynamic";
@@ -38,12 +38,14 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ id: stri
   });
   const r = await loQueAunNoSeDebe(ctx.clinicId, { ids: facturas.map((f) => f.id) });
   // v7/v8: de lo por hacer de sus notas de plan, lo ya pagado (también en las ya saldadas). «Estado de
-  // cuenta» lo dice como «De lo por hacer, $X ya están pagados» — NO como saldo a favor (t5, V1).
+  // cuenta» lo dice como «Pagado por adelantado: $X» (v14; antes «De lo por hacer, $X ya están pagados») — NO como saldo a favor (t5, V1).
   const notasDePlan = await prisma.invoice.findMany({
     where: { clinicId: ctx.clinicId, patientId: paciente.id, status: { notIn: ["DRAFT", "CANCELLED"] }, paid: { gt: 0 } },
     select: { id: true },
     take: 500,
   });
-  const adelanto = await adelantoEnNotasDePlan(ctx.clinicId, notasDePlan.map((f) => f.id));
-  return NextResponse.json({ total: r.total, porHacer: r.porHacer, porVencer: r.porVencer, porVencerCuotas: r.porVencerCuotas, porFactura: r.porFactura, adelanto });
+  // v15 (t5 de la v14, M1): el de las notas con cuotas va aparte (`adelantoCuotas`): «Estado de cuenta» lo
+  // suma a «Pagado por adelantado», pero NO a «Además, $X por hacer» (con cuotas manda la mensualidad).
+  const { sinCuotas: adelanto, conCuotas: adelantoCuotas } = await adelantosEnNotasDePlan(ctx.clinicId, notasDePlan.map((f) => f.id));
+  return NextResponse.json({ total: r.total, porHacer: r.porHacer, porVencer: r.porVencer, porVencerCuotas: r.porVencerCuotas, porFactura: r.porFactura, adelanto, adelantoCuotas });
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, FileDown, FileSpreadsheet, History, Loader2 } from "lucide-react";
 import { isAbortError } from "@/lib/fetch-safe";
 import { useT } from "@/i18n/i18n-provider";
@@ -55,15 +55,24 @@ function urlDe(patientId: string, q: Consulta, formato?: "csv" | "pdf"): string 
   return `/api/patients/${patientId}/movimientos?${p.toString()}`;
 }
 
-function useMovimientos(patientId: string, q: Consulta) {
+/**
+ * v14 (QA de Claude, 28-oct): `clave` cambia cuando la ficha cambia algo del paciente (una cita
+ * completada, un cobro, un «Hecho»). Antes la lista solo se leía al montarse: con el Resumen abierto,
+ * «Completó la consulta» no salía hasta cambiar de pestaña o recargar. Releer por la clave no enseña
+ * «Cargando…»: la lista de antes se queda hasta que llega la nueva.
+ */
+function useMovimientos(patientId: string, q: Consulta, clave?: unknown) {
   const t = useT();
   const [datos, setDatos] = useState<PaginaDeMovimientos | null>(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const consultaVista = useRef<string | null>(null);
 
   useEffect(() => {
     const ctrl = new AbortController();
-    setCargando(true);
+    const estaConsulta = urlDe(patientId, q);
+    if (consultaVista.current !== estaConsulta) setCargando(true);
+    consultaVista.current = estaConsulta;
     setError(null);
     fetch(urlDe(patientId, q), { signal: ctrl.signal })
       .then(async (r) => {
@@ -84,7 +93,7 @@ function useMovimientos(patientId: string, q: Consulta) {
       });
     return () => ctrl.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [patientId, q.page, q.pageSize, q.categoria, q.desde, q.hasta]);
+  }, [patientId, q.page, q.pageSize, q.categoria, q.desde, q.hasta, clave]);
 
   return { datos, cargando, error };
 }
@@ -186,12 +195,15 @@ export function VistaMovimientosRecientes({
 export function MovimientosRecientes({
   patientId,
   onVerCompleto,
+  clave,
 }: {
   patientId: string;
   onVerCompleto: () => void;
+  /** Cambia cuando la ficha cambió algo del paciente: la lista se relee (v14). */
+  clave?: unknown;
 }) {
   const consulta = useMemo<Consulta>(() => ({ page: 1, pageSize: RECIENTES, ...SIN_FILTROS }), []);
-  const { datos, cargando, error } = useMovimientos(patientId, consulta);
+  const { datos, cargando, error } = useMovimientos(patientId, consulta, clave);
   return <VistaMovimientosRecientes datos={datos} cargando={cargando} error={error} onVerCompleto={onVerCompleto} />;
 }
 
@@ -327,11 +339,11 @@ export function VistaMovimientosCompleto({
   );
 }
 
-export function MovimientosCompleto({ patientId }: { patientId: string }) {
+export function MovimientosCompleto({ patientId, clave }: { patientId: string; clave?: unknown }) {
   const [page, setPage] = useState(1);
   const [filtros, setFiltros] = useState<FiltrosMovimientos>(SIN_FILTROS);
   const consulta = useMemo<Consulta>(() => ({ page, pageSize: POR_PAGINA, ...filtros }), [page, filtros]);
-  const { datos, cargando, error } = useMovimientos(patientId, consulta);
+  const { datos, cargando, error } = useMovimientos(patientId, consulta, clave);
 
   return (
     <VistaMovimientosCompleto

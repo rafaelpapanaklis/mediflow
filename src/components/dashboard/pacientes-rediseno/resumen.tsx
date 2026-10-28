@@ -10,6 +10,8 @@ import {
   Wallet,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
+import { fmtMXNdec } from "@/lib/format";
+import { textoPagadoPorAdelantado } from "@/lib/dinero/pagado-por-adelantado-texto";
 import { isVoidedInvoice } from "@/components/dashboard/billing/invoice-status";
 import { useLocale, useT } from "@/i18n/i18n-provider";
 import { textosDinero } from "@/lib/dinero/textos";
@@ -391,7 +393,8 @@ export function Resumen({
                   finanzas.saldo > 0 ? s.importeDeuda : s.importePagado,
                 ].join(" ")}
               >
-                {formatCurrency(finanzas.saldo)}
+                {/* v15 (t5 de la v14, M2): todas las cifras del bloque con centavos, como la Cuenta del plan. */}
+                {fmtMXNdec(finanzas.saldo)}
               </div>
               <div className={s.pie} style={{ marginTop: 3 }}>
                 <span>
@@ -402,25 +405,28 @@ export function Resumen({
               </div>
               {(finanzas.aunNoSeDebe ?? 0) > 0.005 && (
                 <div className={s.pie} style={{ marginTop: 3 }} data-aun-no-se-debe>
-                  <span>{t("patients.sideCards.aunNoSeDebe", { monto: formatCurrency(finanzas.aunNoSeDebe ?? 0) })}</span>
+                  <span>{t("patients.sideCards.aunNoSeDebe", { monto: fmtMXNdec(finanzas.aunNoSeDebe ?? 0) })}</span>
                 </div>
               )}
-              {(finanzas.pagadoDeLoPorHacer ?? 0) > 0.005 && (
-                <div className={s.pie} style={{ marginTop: 3 }} data-pagado-de-lo-por-hacer>
-                  <span>{t("patients.sideCards.pagadoDeLoPorHacer", { monto: formatCurrency(finanzas.pagadoDeLoPorHacer ?? 0) })}</span>
-                </div>
-              )}
-              {/* v12 (t5, m1): con cuotas acordadas manda la mensualidad: solo lo que aún no vence, sin «ya pagados». */}
+              {/* v12 (t5, m1): con cuotas acordadas manda la mensualidad: aparte, lo que aún no vence (lo que falta pagar).
+                  v15: su adelanto ya va sumado en «Pagado por adelantado» de arriba, como en la tarjeta. */}
               {(finanzas.cuotasPorVencer ?? 0) > 0.005 && (
                 <div className={s.pie} style={{ marginTop: 3 }} data-cuotas-por-vencer>
-                  <span>{t("patients.sideCards.cuotasPorVencer", { monto: formatCurrency(finanzas.cuotasPorVencer ?? 0) })}</span>
+                  <span>{t("patients.sideCards.cuotasPorVencer", { monto: fmtMXNdec(finanzas.cuotasPorVencer ?? 0) })}</span>
+                </div>
+              )}
+              {/* v16 (t5 de la v15, m1): después de las cuotas, en su línea (no es parte de «Además…»); con Debe, el
+                  texto de la tarjeta («… sobre lo hecho»). */}
+              {(finanzas.pagadoDeLoPorHacer ?? 0) > 0.005 && (
+                <div className={s.pie} style={{ marginTop: 3 }} data-pagado-de-lo-por-hacer>
+                  <span>{textoPagadoPorAdelantado(t, finanzas.pagadoDeLoPorHacer ?? 0, finanzas.saldo)}</span>
                 </div>
               )}
               {sinCargosVigentes ? (
                 <div className={s.pie} style={{ marginTop: 6 }} data-sin-cargos>
                   <span>
                     {pasadoASaldo > 0
-                      ? txReembolso.sinCargosConSaldo(formatCurrency(pasadoASaldo))
+                      ? txReembolso.sinCargosConSaldo(fmtMXNdec(pasadoASaldo))
                       : txReembolso.sinCargos}
                   </span>
                 </div>
@@ -437,8 +443,8 @@ export function Resumen({
                   <div className={s.pie}>
                     <span>
                       {t("pacientesRediseno.resumen.pagadoDeTotal", {
-                        pagado: formatCurrency(finanzas.pagado),
-                        total: formatCurrency(finanzas.total),
+                        pagado: fmtMXNdec(finanzas.pagado),
+                        total: fmtMXNdec(finanzas.total),
                       })}
                     </span>
                     <span className={s.importe}>{pct}%</span>
@@ -448,14 +454,14 @@ export function Resumen({
               {(finanzas.plan ?? 0) > 0 && (
                 <div className={s.pie} style={{ marginTop: 6 }}>
                   <span>{t("patients.sideCards.activePlans")}</span>
-                  <span className={s.importe}>{formatCurrency(finanzas.plan ?? 0)}</span>
+                  <span className={s.importe}>{fmtMXNdec(finanzas.plan ?? 0)}</span>
                 </div>
               )}
               {finanzas.credito > 0 && (
                 <div className={s.pie} style={{ marginTop: 6 }}>
                   <span>{t("pacientesRediseno.resumen.saldoAFavor")}</span>
                   <span className={`${s.importe} ${s.importePagado}`}>
-                    {formatCurrency(finanzas.credito)}
+                    {fmtMXNdec(finanzas.credito)}
                   </span>
                 </div>
               )}
@@ -506,7 +512,7 @@ export function Resumen({
                 {plan.costo !== null && (
                   <div className={s.fila}>
                     <span className={s.filaEtiqueta}>{t("pacientesRediseno.resumen.costoPlan")}</span>
-                    <span className={`${s.filaValor} ${s.importe}`}>{formatCurrency(plan.costo)}</span>
+                    <span className={`${s.filaValor} ${s.importe}`}>{fmtMXNdec(plan.costo)}</span>
                   </div>
                 )}
                 {planesActivos.otros > 0 && (
@@ -514,7 +520,7 @@ export function Resumen({
                     <span className={s.filaEtiqueta}>
                       {txPlanes.masPlanes(planesActivos.otros)} · {txPlanes.totalActivos}
                     </span>
-                    <span className={`${s.filaValor} ${s.importe}`}>{formatCurrency(planesActivos.totalCosto)}</span>
+                    <span className={`${s.filaValor} ${s.importe}`}>{fmtMXNdec(planesActivos.totalCosto)}</span>
                   </div>
                 )}
                 {/* Plan general Y caso de ortodoncia: el plan manda, como

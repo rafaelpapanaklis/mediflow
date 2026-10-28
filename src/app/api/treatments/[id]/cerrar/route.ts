@@ -7,6 +7,7 @@ import { esIdDeLaBase, MENSAJE_ID_INVALIDO } from "@/lib/validation/id";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 import { cerrarPlan, type ResultadoCierre } from "@/lib/treatments/cerrar-plan.server";
 import { motivoDeCierre } from "@/lib/treatments/cerrar-plan";
+import { cuentaDeUnPlanParaLaFicha } from "@/lib/treatments/cuenta-para-la-ficha.server";
 
 export const dynamic = "force-dynamic";
 
@@ -64,5 +65,10 @@ export async function POST(req: NextRequest, props: Params) {
   }
   revalidateAfter("treatments");
   revalidateAfter("invoices");
-  return NextResponse.json(r);
+  // v14 (QA de Claude): la cuenta del plan ya cerrado va en la respuesta; la tarjeta la pinta al momento.
+  // v15 (t5 de la v14, M3): solo si se pide (`conCuenta: true`), igual que en «Hecho».
+  const cuenta = body?.conCuenta !== true || denyIfMissingPermission(ctx, "billing.view") || denyIfMissingPermission(ctx, "treatments.view")
+    ? null
+    : await cuentaDeUnPlanParaLaFicha(ctx.clinicId, plan.id);
+  return NextResponse.json(cuenta ? { ...r, cuenta } : r);
 }

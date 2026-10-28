@@ -10,6 +10,8 @@
 // ⚠ Un PATCH de antes de B no conoce la acción y la trata como «edición general» del plan: contesta
 // `{ success: true }` SIN marcar nada. Eso aquí es «no disponible», nunca un éxito.
 
+import type { PlanConCuenta } from "./sin-doble-cobro";
+
 type Fetch = (url: string, init?: RequestInit) => Promise<Response>;
 
 export const ACCION_MARCAR_HECHO = "marcar_hecho";
@@ -90,6 +92,19 @@ export interface ResultadoMarcarHecho {
   estado?: string;
   /** Deshacer: lo que no se devolvió al odontograma, como datos (la pantalla lo dice en su idioma). */
   conflictos?: ConflictoDelDeshacer[];
+  /**
+   * v14 (QA de Claude): la cuenta del plan ya cambiada, si el servidor la manda (quien ve dinero). La
+   * ficha la pone al momento en «Cuenta del plan» en lugar de esperar a releer todos los planes.
+   */
+  cuenta?: PlanConCuenta;
+}
+
+/** La cuenta que viene en la respuesta de «Hecho», «Deshacer» o «Cerrar plan», si viene bien formada. */
+export function cuentaDeLaRespuesta(data: unknown): PlanConCuenta | undefined {
+  const c = (data as { cuenta?: unknown } | null)?.cuenta as Partial<PlanConCuenta> | undefined;
+  return c && typeof c === "object" && typeof c.planId === "string" && Array.isArray(c.notas) && typeof c.pagado === "number"
+    ? (c as PlanConCuenta)
+    : undefined;
 }
 
 /**
@@ -110,17 +125,31 @@ const errorDe = (status: number, data: Record<string, unknown>): ResultadoMarcar
   ...(typeof data.code === "string" ? { codigo: data.code } : {}),
 });
 
-export function cuerpoMarcarHecho(filaIds: string[], citaId: string | null) {
-  return { action: ACCION_MARCAR_HECHO, itemIds: filaIds, ...(citaId ? { citaId } : {}) };
+/**
+ * v15 (t5 de la v14, M3): `conCuenta` pide que la respuesta traiga la cuenta del plan ya cambiada. Lo
+ * manda la tarjeta del plan (la pinta al momento); «Hoy en el sillón» no (no la usa y cuesta ~2 s por plan).
+ */
+export interface OpcionesDeHecho {
+  conCuenta?: boolean;
 }
 
-export async function marcarHecho(planId: string, filaIds: string[], citaId: string | null, f: Fetch = fetch): Promise<ResultadoMarcarHecho> {
+export function cuerpoMarcarHecho(filaIds: string[], citaId: string | null, opciones: OpcionesDeHecho = {}) {
+  return { action: ACCION_MARCAR_HECHO, itemIds: filaIds, ...(citaId ? { citaId } : {}), ...(opciones.conCuenta ? { conCuenta: true } : {}) };
+}
+
+export async function marcarHecho(
+  planId: string,
+  filaIds: string[],
+  citaId: string | null,
+  f: Fetch = fetch,
+  opciones: OpcionesDeHecho = {},
+): Promise<ResultadoMarcarHecho> {
   let res: Response;
   try {
     res = await f(RUTA_MARCAR_HECHO(planId), {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(cuerpoMarcarHecho(filaIds, citaId)),
+      body: JSON.stringify(cuerpoMarcarHecho(filaIds, citaId, opciones)),
     });
   } catch {
     return { ok: false, status: 0 };
@@ -136,7 +165,10 @@ export async function marcarHecho(planId: string, filaIds: string[], citaId: str
   const marcada = !!data.fila || !!data.item || Array.isArray(data.items) || data.estado === "hecho";
   const resultados = Array.isArray(data.odontograma) ? (data.odontograma as Array<{ estado?: unknown }>) : [];
   const resultado = resultados.length === 1 && typeof resultados[0]?.estado === "string" ? resultados[0].estado : undefined;
-  return marcada ? { ok: true, status: res.status, ...(resultado ? { resultado } : {}) } : { ok: false, noDisponible: true, status: res.status };
+  const cuenta = cuentaDeLaRespuesta(data);
+  return marcada
+    ? { ok: true, status: res.status, ...(resultado ? { resultado } : {}), ...(cuenta ? { cuenta } : {}) }
+    : { ok: false, noDisponible: true, status: res.status };
 }
 
 export const ACCION_DESHACER_HECHO = "deshacer_hecho";
@@ -145,13 +177,13 @@ export const ACCION_DESHACER_HECHO = "deshacer_hecho";
  * v11 (27-oct): «Deshacer» desde la tarjeta del plan — la fila vuelve a «por hacer» (o «en curso») y
  * el odontograma a como estaba; lo que se debe baja. El mismo PATCH, `{ action: "deshacer_hecho", itemId }`.
  */
-export async function deshacerHecho(planId: string, filaId: string, f: Fetch = fetch): Promise<ResultadoMarcarHecho> {
+export async function deshacerHecho(planId: string, filaId: string, f: Fetch = fetch, opciones: OpcionesDeHecho = {}): Promise<ResultadoMarcarHecho> {
   let res: Response;
   try {
     res = await f(RUTA_MARCAR_HECHO(planId), {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: ACCION_DESHACER_HECHO, itemId: filaId }),
+      body: JSON.stringify({ action: ACCION_DESHACER_HECHO, itemId: filaId, ...(opciones.conCuenta ? { conCuenta: true } : {}) }),
     });
   } catch {
     return { ok: false, status: 0 };
@@ -179,5 +211,6 @@ export async function deshacerHecho(planId: string, filaId: string, f: Fetch = f
     status: res.status,
     ...(typeof data.estado === "string" ? { estado: data.estado } : {}),
     ...(conflictos.length ? { conflictos } : {}),
+    ...(cuentaDeLaRespuesta(data) ? { cuenta: cuentaDeLaRespuesta(data) } : {}),
   };
 }

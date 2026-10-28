@@ -3354,7 +3354,7 @@
       "invoiced": "Facturado",
       "moreInvoiced": "+{count} facturadas más",
       "aunNoSeDebe": "Además, {monto} por hacer o por vencer (aún no se debe)",
-      "pagadoDeLoPorHacer": "De lo por hacer, {monto} ya están pagados",
+      "pagadoDeLoPorHacer": "Pagado por adelantado: {monto}",
       "cuotasPorVencer": "Además, {monto} de cuotas que aún no vencen"
     },
     "soapEditor": {
@@ -3436,6 +3436,7 @@
       "subtotal": "Subtotal",
       "discount": "Descuento",
       "cancelInvoice": "Cancelar factura",
+      "noFacturar": "No facturar",
       "creating": "Creando…",
       "createInvoice": "Crear factura {total}",
       "createQuote": "Crear presupuesto",

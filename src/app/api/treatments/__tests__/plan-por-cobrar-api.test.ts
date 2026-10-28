@@ -164,9 +164,9 @@ async function cuenta(planId: string) {
   return r.body.planes.find((p: any) => p.planId === planId);
 }
 
-async function cerrar(planId: string, motivo: unknown = "El paciente ya no continuará") {
+async function cerrar(planId: string, motivo: unknown = "El paciente ya no continuará", extra: Record<string, unknown> = {}) {
   const { POST } = await import("@/app/api/treatments/[id]/cerrar/route");
-  return leer(await POST(pedir(`/api/treatments/${planId}/cerrar`, { motivo }), params(planId)));
+  return leer(await POST(pedir(`/api/treatments/${planId}/cerrar`, { motivo, ...extra }), params(planId)));
 }
 
 // ── «Por cobrar» = lo hecho ─────────────────────────────────────────────────
@@ -602,6 +602,9 @@ test("v12 · m1: «Además» de la ficha — con cuotas, solo lo que aún no ven
   const porHacerCompleto = Math.round((r.body.total - cuotas + r.body.adelanto) * 100) / 100;
   assert.equal(cuotas, 683.5, "plan A: $1,550.50 de saldo − $867 vencidos");
   assert.equal(r.body.adelanto, 300, "solo el plan sin cuotas: los $500 del plan A no son «ya pagados» de lo por hacer");
+  // v15 (t5 de la v14, M1-b): los $500 del plan A van aparte, como la tarjeta («ya están pagados por adelantado sobre lo hecho»).
+  assert.equal(r.body.adelantoCuotas, 500);
+  assert.equal(r.body.adelantoCuotas, (await cuenta(A.planId)).saldoAFavor);
   assert.equal(porHacerCompleto, (await cuenta(B.planId)).porHacer, "sin cuotas, como v8: el «Por hacer» de su tarjeta");
   assert.equal(porHacerCompleto, 2050.5);
   // Y lo que se debe no cambia: plan A debe la cuota vencida, el B nada.
@@ -756,7 +759,9 @@ test("v11: plan cerrado (Abandonado) — no se marca ni se deshace", async (t) =
   const resina = await filaDe(planId, "Resina");
   const limpieza = await filaDe(planId, "Limpieza");
   assert.equal((await hechoDesdeLaTarjeta(planId, { action: "marcar_hecho", itemIds: [resina.id] })).status, 200);
-  assert.equal((await cerrar(planId)).status, 200);
+  const c = await cerrar(planId);
+  assert.equal(c.status, 200);
+  assert.equal(c.body.cuenta, undefined, "v15 (M3): sin conCuenta, la respuesta de siempre");
   const r = await hechoDesdeLaTarjeta(planId, { action: "deshacer_hecho", itemId: resina.id });
   assert.equal(r.status, 409);
   assert.equal(r.body.code, "plan_cerrado");
@@ -810,4 +815,94 @@ test("cerrar con una factura de antes del plan (presupuesto): la confirmación y
   assert.equal(fs.find((f: any) => f.nombre === "Limpieza").estado, "pendiente", "su fila sigue ligada a esa factura");
   assert.equal(fs.find((f: any) => f.nombre === "Resina").estado, "cancelado");
   assert.ok(bitacora.some((b) => b.entityType === "treatment" && /F-VIEJA/.test(b.texto)));
+});
+
+// ── v14 (QA de Claude, 28-oct): la Cuenta del plan cambia con la RESPUESTA de la acción ─────────────
+
+test("v14: «Hecho», «Deshacer» y «Cerrar plan» devuelven la cuenta del plan ya cambiada (la misma de /cuentas); sin ver dinero, no", async (t) => {
+  if (salta(t)) return;
+  await usar();
+  const { marcarHecho, deshacerHecho, cuentaDeLaRespuesta } = await import("@/lib/treatments/marcar-hecho-cliente");
+  const porLaRuta = (planId: string) => async (_url: string, init?: RequestInit) => {
+    const { PATCH } = await import("@/app/api/treatments/[id]/route");
+    await base.db.exec(`ALTER TABLE "procedure_catalog" ADD COLUMN IF NOT EXISTS "code" text`);
+    return PATCH(pedir(`/api/treatments/${planId}`, JSON.parse(String(init?.body)), "PATCH"), params(planId));
+  };
+  const { planId, notaId } = await planAceptado();
+  await pagar(notaId, 500);
+  const resina = await filaDe(planId, "Resina");
+
+  // «Hecho»: la respuesta ya trae Debe $750.50, igual que releer todas las cuentas.
+  // v15 (t5, M3): «Hoy en el sillón» no la pide → no viaja (ni se paga). La tarjeta sí.
+  const sinPedir = await marcarHecho(planId, [resina.id], null, porLaRuta(planId));
+  assert.equal(sinPedir.ok, true);
+  assert.equal(sinPedir.cuenta, undefined);
+  await deshacerHecho(planId, resina.id, porLaRuta(planId));
+  const m = await marcarHecho(planId, [resina.id], null, porLaRuta(planId), { conCuenta: true });
+  assert.equal(m.ok, true);
+  assert.equal(m.cuenta?.planId, planId);
+  assert.equal(m.cuenta?.debe, 750.5);
+  assert.deepEqual(m.cuenta, await cuenta(planId), "la misma cuenta que GET /api/treatments/cuentas");
+  assert.equal(m.cuenta?.filas.find((f) => f.id === resina.id)?.estado, "hecho");
+
+  // «Deshacer»: Debe vuelve a $0 en la misma respuesta.
+  const d = await deshacerHecho(planId, resina.id, porLaRuta(planId), { conCuenta: true });
+  assert.equal(d.ok, true);
+  assert.equal(d.cuenta?.debe, 0);
+  assert.deepEqual(d.cuenta, await cuenta(planId));
+
+  // Quien marca pero no ve dinero: la acción va, la cuenta NO viaja en la respuesta.
+  Object.assign(ctx, { userId: "rec-c1", role: "RECEPTIONIST", isDoctor: false, permissionsOverride: ["treatments.view", "treatments.edit"] });
+  const sinDinero = await hechoDesdeLaTarjeta(planId, { action: "marcar_hecho", itemIds: [resina.id], conCuenta: true });
+  assert.equal(sinDinero.status, 200);
+  assert.equal(sinDinero.body.cuenta, undefined);
+  assert.equal(cuentaDeLaRespuesta(sinDinero.body), undefined);
+
+  // «Cerrar plan»: la cuenta ya cerrada (Abandonado, la nota baja a lo hecho) viene en la respuesta.
+  Object.assign(ctx, { userId: "doc-c1", role: "ADMIN", isDoctor: false, permissionsOverride: null });
+  const c = await cerrar(planId, undefined, { conCuenta: true });
+  assert.equal(c.status, 200);
+  const cerrada = cuentaDeLaRespuesta(c.body);
+  assert.equal(cerrada?.estado, "ABANDONED");
+  assert.equal(cerrada?.porHacer, 0);
+  assert.deepEqual(cerrada, await cuenta(planId));
+});
+
+test("v15 · M1 (opción b): con cuotas, «Estado de cuenta» dice «Pagado por adelantado» con la cifra de la tarjeta, sin contarlo dos veces", async (t) => {
+  if (salta(t)) return;
+  await usar();
+  const { hoyEnZona } = await import("@/lib/fechas/hoy-en-zona");
+  const { GET: FICHA } = await import("@/app/api/patients/[id]/lo-que-aun-no-se-debe/route");
+  const invoiceDePrueba = prismaVivo.invoice;
+  prismaVivo.invoice = {
+    ...invoiceDePrueba,
+    findMany: async (a: any = {}) => {
+      const filas = await invoiceDePrueba.findMany(a);
+      if (!a?.select?.payments) return filas;
+      return Promise.all(filas.map(async (f: any) => ({
+        ...f,
+        payments: (await base.db.query(`SELECT "amount", "method" FROM "payments" WHERE "invoiceId" = $1`, [f.id])).rows,
+      })));
+    },
+  };
+  // El caso de t5 («A 1500/nada»): $2,050.50 en 3 mensualidades (2 vencidas = $1,367), $1,500 pagados, nada hecho.
+  const A = await planAceptado();
+  await conCuotas(A.notaId, { numPagos: 3, primerPago: hoyEnZona(new Date(Date.now() - 40 * 86_400_000), "America/Mexico_City") });
+  await pagar(A.notaId, 1500);
+  const tarjeta = await cuenta(A.planId);
+  assert.equal(tarjeta.aCuotas, true);
+  assert.equal(tarjeta.debe, 0);
+  assert.equal(tarjeta.saldoAFavor, 1500, "la tarjeta dice «Pagado por adelantado $1,500.00»");
+
+  const r = await leer(await FICHA(pedir("/api/patients/pac-c1/lo-que-aun-no-se-debe", undefined, "GET"), params("pac-c1")));
+  assert.equal(r.status, 200);
+  // Lo que arma la ficha (patient-detail-client): igual que allí.
+  const cuotas = Math.min(r.body.total, r.body.porVencerCuotas);
+  const porHacerCompleto = Math.round((r.body.total - cuotas + r.body.adelanto) * 100) / 100;
+  const pagadoPorAdelantado = Math.round((r.body.adelanto + r.body.adelantoCuotas) * 100) / 100;
+  assert.equal(pagadoPorAdelantado, 1500, "«Pagado por adelantado: $1,500.00», la cifra de la tarjeta");
+  assert.equal(cuotas, 550.5, "«Además, $550.50 de cuotas que aún no vencen»: lo que FALTA pagar");
+  assert.equal(porHacerCompleto, 0, "el adelanto con cuotas NO entra en «Además, $X por hacer»");
+  // Nada dos veces: pagado por adelantado + cuotas por vencer = el plan entero.
+  assert.equal(Math.round((pagadoPorAdelantado + cuotas) * 100) / 100, 2050.5);
 });

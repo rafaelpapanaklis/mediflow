@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Wallet } from "lucide-react";
 import toast from "react-hot-toast";
@@ -8,6 +8,7 @@ import { fmtMXNdec } from "@/lib/format";
 import { useT } from "@/i18n/i18n-provider";
 import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
 import { MAX_MOTIVO_CIERRE } from "@/lib/treatments/cerrar-plan";
+import { cuentaDeLaRespuesta } from "@/lib/treatments/marcar-hecho-cliente";
 import type { PlanConCuenta } from "@/lib/treatments/sin-doble-cobro";
 import s from "./expediente.module.css";
 
@@ -24,28 +25,60 @@ import s from "./expediente.module.css";
 
 export type CuentasDelPaciente = Map<string, PlanConCuenta>;
 
-/** `clave` cambia cuando la ficha recibe planes nuevos (refresco, plan recién creado): se relee. */
-export function useCuentasDelPaciente(patientId: string, activo: boolean, clave: unknown): { cuentas: CuentasDelPaciente | null; cargando: boolean } {
+/**
+ * `clave` cambia cuando la ficha recibe planes nuevos (refresco, plan recién creado): se relee.
+ *
+ * v14 (QA de Claude, 28-oct): la tarjeta tardaba 3–8 s tras «Hecho» y ~15 s tras «Cerrar plan». Leer
+ * las cuentas de todos los planes cuesta segundos (≈9 consultas por plan, en serie), y cada cambio de
+ * `clave` (el contador, las notas releídas, el `router.refresh()` con el `updatedAt` nuevo) TIRABA la
+ * lectura en curso y empezaba otra: la tarjeta solo cambiaba al terminar la última. Ahora:
+ *  · `poner(cuenta)`: la cuenta que devuelve la acción («Hecho», «Deshacer», «Cerrar plan») se pinta
+ *    al momento;
+ *  · ninguna lectura se tira por empezar otra: gana la que EMPEZÓ más tarde (también frente a `poner`),
+ *    así una respuesta vieja nunca pisa una nueva y la primera fresca se ve en cuanto llega.
+ */
+export function useCuentasDelPaciente(patientId: string, activo: boolean, clave: unknown): {
+  cuentas: CuentasDelPaciente | null;
+  cargando: boolean;
+  poner: (cuenta: PlanConCuenta) => void;
+} {
   const [cuentas, setCuentas] = useState<CuentasDelPaciente | null>(null);
   const [cargando, setCargando] = useState(false);
+  // Orden de llegada: cada lectura y cada `poner` toman un número; solo se aplica lo más nuevo.
+  const orden = useRef(0);
+  const aplicado = useRef(0);
+  const paciente = useRef(patientId);
+  paciente.current = patientId;
   useEffect(() => {
     if (!activo || !patientId) {
+      aplicado.current = ++orden.current;
       setCuentas(null);
+      setCargando(false);
       return;
     }
-    let vivo = true;
+    const n = ++orden.current;
+    const delPaciente = patientId;
     setCargando(true);
     fetch(`/api/treatments/cuentas?patientId=${encodeURIComponent(patientId)}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((d: { planes?: PlanConCuenta[] } | null) => {
-        if (!vivo) return;
+        if (paciente.current !== delPaciente || n < aplicado.current) return;
+        aplicado.current = n;
         setCuentas(d && Array.isArray(d.planes) ? new Map(d.planes.map((p) => [p.planId, p] as const)) : null);
       })
-      .catch(() => { if (vivo) setCuentas(null); })
-      .finally(() => { if (vivo) setCargando(false); });
-    return () => { vivo = false; };
+      .catch(() => {
+        if (paciente.current !== delPaciente || n < aplicado.current) return;
+        aplicado.current = n;
+        setCuentas(null);
+      })
+      .finally(() => { if (n === orden.current) setCargando(false); });
   }, [patientId, activo, clave]);
-  return { cuentas, cargando };
+  const poner = useCallback((cuenta: PlanConCuenta) => {
+    aplicado.current = ++orden.current;
+    setCargando(false);
+    setCuentas((prev) => new Map(prev ?? []).set(cuenta.planId, cuenta));
+  }, []);
+  return { cuentas, cargando, poner };
 }
 
 /** ¿Hay algo que enseñar? Un plan de texto sin dinero ligado no lleva tarjeta. */
@@ -70,7 +103,7 @@ export function cifrasDeLaCuenta(c: PlanConCuenta) {
   };
 }
 
-export function CuentaDelPlan({ cuenta, cargando, onCobrar, puedeCerrar, onCambio }: {
+export function CuentaDelPlan({ cuenta, cargando, onCobrar, puedeCerrar, onCambio, onCuenta }: {
   cuenta: PlanConCuenta | null | undefined;
   cargando?: boolean;
   onCobrar?: () => void;
@@ -78,6 +111,8 @@ export function CuentaDelPlan({ cuenta, cargando, onCobrar, puedeCerrar, onCambi
   puedeCerrar?: boolean;
   /** v7: el plan se cerró y cambiaron estas notas (la ficha relee la cuenta y las facturas al momento). */
   onCambio?: (invoiceIds: string[]) => void;
+  /** v14: la cuenta del plan ya cerrado, tal como la devuelve el servidor: la ficha la pinta al momento. */
+  onCuenta?: (cuenta: PlanConCuenta) => void;
 }) {
   const t = useT();
   const router = useRouter();
@@ -101,7 +136,8 @@ export function CuentaDelPlan({ cuenta, cargando, onCobrar, puedeCerrar, onCambi
       const res = await fetch(`/api/treatments/${encodeURIComponent(cuenta.planId)}/cerrar`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ motivo }),
+        // v15 (t5, M3): la cuenta del plan cerrado viene en la respuesta solo si se pide.
+        body: JSON.stringify({ motivo, conCuenta: true }),
       });
       const cuerpo = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -126,6 +162,9 @@ export function CuentaDelPlan({ cuenta, cargando, onCobrar, puedeCerrar, onCambi
       const notas: string[] = Array.isArray(cuerpo?.notas)
         ? cuerpo.notas.map((n: { invoiceId?: unknown }) => n?.invoiceId).filter((x: unknown): x is string => typeof x === "string")
         : [];
+      // v14 (QA de Claude): la cuenta ya cerrada viene en la respuesta: se pinta YA (antes, ~15 s).
+      const nueva = cuentaDeLaRespuesta(cuerpo);
+      if (nueva) onCuenta?.(nueva);
       onCambio?.(notas);
       setTimeout(() => router.refresh(), 0);
     } catch (e) {
@@ -163,7 +202,7 @@ export function CuentaDelPlan({ cuenta, cargando, onCobrar, puedeCerrar, onCambi
         {/* v9 (revisión t5 de la v8, M1): lo pagado de más sobre lo hecho SIGUE EN LA NOTA del plan: es un adelanto,
             no saldo a favor (eso es solo el libro `patient_credits`, lo que se descuenta de otra factura). Pasa al
             libro al «Cerrar plan», y entonces aquí da 0 y sale como saldo a favor en «Estado de cuenta». Igual
-            que «De lo por hacer, $X ya están pagados» de «Estado de cuenta». */}
+            que «Pagado por adelantado: $X» (v14; antes «De lo por hacer, $X ya están pagados») de «Estado de cuenta». */}
         {c.saldoAFavor > 0.005 && c.debe <= 0.005 ? (
           <div data-cifra="pagado-por-adelantado">
             <dt>{t("planTratamiento.cobro.pagadoPorAdelantado")}</dt>
