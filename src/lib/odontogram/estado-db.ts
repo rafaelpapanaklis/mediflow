@@ -109,12 +109,13 @@ export async function estadosParaMostrar(db: Lector, patientId: string): Promise
 
 /**
  * Fija el estado de UNA entrada del paciente (por id). Si el estado CAMBIA, `estadoDesde` = ahora
- * (para una roja: cuándo pasó a «por hacer», v6); si es el mismo, no se mueve.
+ * (para una roja: cuándo pasó a «por hacer», v6); si es el mismo, no se mueve. En UTC aunque la
+ * sesión tenga otra zona (v7): la columna es TIMESTAMP sin zona, como `createdAt` y `hechoEn`.
  */
 export async function fijarEstado(db: Db, patientId: string, id: string, estado: EstadoMarca | null): Promise<void> {
   await db.$executeRaw`
     UPDATE "odontogram_entries"
-       SET "estadoDesde" = CASE WHEN "estado" IS DISTINCT FROM ${estado}::text THEN now() ELSE "estadoDesde" END,
+       SET "estadoDesde" = CASE WHEN "estado" IS DISTINCT FROM ${estado}::text THEN timezone('UTC', now()) ELSE "estadoDesde" END,
            "estado" = ${estado}, "updatedAt" = now()
      WHERE "id" = ${id} AND "patientId" = ${patientId}`;
 }
@@ -128,7 +129,7 @@ export async function fijarEstadoPorLugar(
   if (lugar.surface === null) {
     await db.$executeRaw`
       UPDATE "odontogram_entries"
-         SET "estadoDesde" = CASE WHEN "estado" IS DISTINCT FROM ${estado}::text THEN now() ELSE "estadoDesde" END,
+         SET "estadoDesde" = CASE WHEN "estado" IS DISTINCT FROM ${estado}::text THEN timezone('UTC', now()) ELSE "estadoDesde" END,
              "estado" = ${estado}, "updatedAt" = now()
        WHERE "patientId" = ${lugar.patientId} AND "toothNumber" = ${lugar.toothNumber}::int
          AND "surface" IS NULL AND "conditionId" = ${lugar.conditionId}`;
@@ -136,7 +137,7 @@ export async function fijarEstadoPorLugar(
   }
   await db.$executeRaw`
     UPDATE "odontogram_entries"
-       SET "estadoDesde" = CASE WHEN "estado" IS DISTINCT FROM ${estado}::text THEN now() ELSE "estadoDesde" END,
+       SET "estadoDesde" = CASE WHEN "estado" IS DISTINCT FROM ${estado}::text THEN timezone('UTC', now()) ELSE "estadoDesde" END,
            "estado" = ${estado}, "updatedAt" = now()
      WHERE "patientId" = ${lugar.patientId} AND "toothNumber" = ${lugar.toothNumber}::int
        AND "surface" = ${lugar.surface} AND "conditionId" = ${lugar.conditionId}`;

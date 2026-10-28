@@ -486,3 +486,45 @@ test("v6 m3: en la consulta, cada marca lleva la fecha del vivo; lo puesto o rep
   const c = chipsDelPlan(hallazgosPorTratar(e), TARIFARIO, e, [], enPlanes).find((x) => x.clave === "r:h:26:crown")!;
   assert.equal(c.enOtroPlan ?? null, null);
 });
+
+test("v7 M1-v6: solape PARCIAL de caras — el chip ofrece solo las que faltan, con su precio y la nota; el aviso del servidor salta con cualquier solape", () => {
+  const hoy = new Date().toISOString();
+  const plan = (estado: string, hechoEn: string | null) => resumirFilas([{ id: "a", name: "Plan A", status: "ACTIVE" }],
+    new Map([["a", [{ nombre: "Restauración resina 1 cara", procedureId: null, dientes: [16], caras: ["O"], estado, hechoEn }]]]));
+  const cariesMO = (marcadaEn: string): EntradaPlan[] => [
+    { toothNumber: 16, surface: "M", conditionId: "caries", marcadaEn },
+    { toothNumber: 16, surface: "O", conditionId: "caries", marcadaEn },
+  ];
+  const chip = (e: EntradaPlan[], p: ReturnType<typeof plan>) => chipsDelPlan(hallazgosPorTratar(e), TARIFARIO, e, [], p)[0];
+  let id = 0;
+  const ctx = (entradas: EntradaPlan[]) => ({ tarifario: TARIFARIO, entradas, nuevoId: () => `r${++id}`, motivo: "Caries", idioma: "es" as const });
+
+  // 1) caries 16 MO de hoy con «Resina 16 O» PENDIENTE en el plan A → solo la M, resina 1 cara a $700, con la nota
+  const c1 = chip(cariesMO(hoy), plan("pendiente", null));
+  assert.equal(c1.enOtroPlan ?? null, null);
+  assert.deepEqual(c1.caras, ["M"]);
+  assert.deepEqual({ n: c1.sugerencia?.nombre, $: c1.sugerencia?.precio, caras: c1.sugerencia?.caras }, { n: "Restauración resina 1 cara", $: 700, caras: ["M"] });
+  assert.deepEqual(c1.carasEnOtroPlan, { caras: ["O"], plan: "Plan A" });
+  const rs = agregarDesdeChip([], c1, ctx(cariesMO(hoy)));
+  assert.deepEqual(rs.map((r) => `${r.dientes} ${r.caras.join("")} ${r.procedimiento} $${r.precio}`), ["16 M Restauración resina 1 cara $700"], "la O no entra dos veces");
+
+  // 2) lo mismo con la resina 16 O HECHA después de marcar las caries
+  const c2 = chip(cariesMO("2023-01-01T17:00:00.000Z"), plan("hecho", "2024-01-01T17:00:00.000Z"));
+  assert.deepEqual([c2.caras, c2.sugerencia?.precio, c2.carasEnOtroPlan], [["M"], 700, { caras: ["O"], plan: "Plan A" }]);
+  //    (y si se hizo ANTES de marcar, no cuenta: las dos caras son trabajo nuevo)
+  const c2b = chip(cariesMO(hoy), plan("hecho", "2023-01-01T17:00:00.000Z"));
+  assert.deepEqual([c2b.caras, c2b.sugerencia?.precio, c2b.carasEnOtroPlan ?? null], [["M", "O"], 900, null]);
+
+  // la marca ROJA 16 MO frente a «Resina 16 O» pendiente: igual, solo la M
+  const roja: EntradaPlan[] = ["M", "O"].map((cara) => ({ toothNumber: 16, surface: cara, conditionId: "restoration", estado: "por_hacer", marcadaEn: hoy }));
+  const cr = chip(roja, plan("pendiente", null));
+  assert.deepEqual([cr.tipo, cr.caras, cr.sugerencia?.precio, cr.carasEnOtroPlan], ["por_hacer", ["M"], 700, { caras: ["O"], plan: "Plan A" }]);
+
+  // 3) el aviso del servidor: «Resina MO» tecleada frente a la O pendiente → avisa (antes no)
+  assert.deepEqual(filasRepetidas([{ nombre: "Restauración resina 2 caras", procedureId: null, dientes: [16], caras: ["M", "O"] }], plan("pendiente", null)),
+    [{ nombre: "Restauración resina 2 caras", dientes: [16], plan: "Plan A" }]);
+  //    y con una fila sin caras, también
+  const sinCaras = resumirFilas([{ id: "a", name: "Plan A", status: "ACTIVE" }],
+    new Map([["a", [{ nombre: "Resina", procedureId: null, dientes: [16], caras: [], estado: "pendiente", hechoEn: null }]]]));
+  assert.equal(filasRepetidas([{ nombre: "Resina", procedureId: null, dientes: [16], caras: ["D"] }], sinCaras).length, 1);
+});

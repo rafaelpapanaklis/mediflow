@@ -259,6 +259,13 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
     const fecha = new Intl.DateTimeFormat(idioma === "en" ? "en-US" : "es-MX", { day: "numeric", month: "short", year: "numeric" }).format(new Date(hechoEn));
     return t("planTratamiento.nuevo.yaHechaEnPlan", { plan: nombrePlan, fecha });
   };
+  // «16 O ya en el plan «A»»: las caras de ese diente que ya están en otro plan (v7, solape parcial).
+  const textoCarasEnPlan = (c: Chip) => {
+    if (!c.carasEnOtroPlan || c.dientes.length !== 1) return "";
+    const d = c.dientes[0];
+    const caras = CARAS.filter((x) => c.carasEnOtroPlan!.caras.includes(x)).map((x) => (x === "O" ? letraCentro([d]) : x)).join("");
+    return t("planTratamiento.nuevo.carasYaEnPlan", { diente: String(d), caras, plan: c.carasEnOtroPlan.plan });
+  };
   // «pieza 16 oclusal» / «pieza 16 MO» (la cara con su nombre cuando es una).
   const dondeRojo = (c: Chip) => {
     if (c.dientes.length !== 1) return t("planTratamiento.nuevo.nDientes", { count: c.dientes.length });
@@ -470,6 +477,7 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
                       ) : (
                         <span className={s.fichaPrecio}>· {precio != null ? dineroExacto(precio) : t("planTratamiento.nuevo.sinPrecio")}</span>
                       )}
+                      {c.carasEnOtroPlan && <span className={s.fichaCuenta} data-caras-en-otro-plan>· {textoCarasEnPlan(c)}</span>}
                     </button>
                   );
                 })}
@@ -519,6 +527,7 @@ export function VentanaNuevoPlan({ paciente, doctores, form, setForm, sugerencia
                               <ChevronRight size={11} strokeWidth={2} aria-hidden />{sug}
                             </span>
                           )}
+                          {c.carasEnOtroPlan && <span className={s.fichaCuenta} data-caras-en-otro-plan>· {textoCarasEnPlan(c)}</span>}
                         </>
                       )}
                     </button>

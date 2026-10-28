@@ -10912,6 +10912,7 @@
       "sinPrecio": "not in your price list",
       "yaEnPlan": "already in plan “{plan}”",
       "yaHechaEnPlan": "already done in plan “{plan}” ({fecha})",
+      "carasYaEnPlan": "{diente} {caras} already in plan “{plan}”",
       "comprobandoPlanes": "Checking what's already in another plan…",
       "planesSinComprobar": "Couldn't check what's already in another plan for this patient: review it before adding.",
       "yaEnOtrosPlanesAviso": "Heads up: this was already in another plan for this patient: {lista}.",

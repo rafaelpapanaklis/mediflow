@@ -214,3 +214,38 @@ test("v3 m-a: mientras no contesta qué está en otros planes, lo rojo espera; s
     await navegador.close();
   }
 });
+
+test("v7: solape parcial — caries 16 MO con «Resina 16 O» en el plan A: el chip ofrece solo la M a $700 y dice «16 O ya en el plan «Plan A»»", async (t) => {
+  const chromium = await cargarChromium();
+  if (!chromium) { t.skip("Playwright no está en ~/navegador"); return; }
+  const paquete = await empaquetar(`${CARPETA}/__tests__/arnes-ventana.tsx`);
+  const navegador = await chromium.launch();
+  try {
+    const pagina = await navegador.newPage({ viewport: { width: 1440, height: 1000 } });
+    const css = sinGlobal(readFileSync(join(CARPETA, "plan.module.css"), "utf8"));
+    const hoy = new Date().toISOString();
+    await pagina.route("**/*", async (ruta: any) => {
+      const url = new URL(ruta.request().url());
+      const json = (status: number, cuerpo: unknown) => ruta.fulfill({ status, contentType: "application/json", body: JSON.stringify(cuerpo) });
+      if (url.pathname === "/") return ruta.fulfill({ status: 200, contentType: "text/html", body: `<!doctype html><html><head><meta charset="utf-8"><style>${css}</style></head><body><div id="raiz"></div><script>window.__IDIOMA__="es";</script><script src="/paquete.js"></script></body></html>` });
+      if (url.pathname === "/paquete.js") return ruta.fulfill({ status: 200, contentType: "text/javascript", body: paquete });
+      if (url.pathname === "/api/procedures") return json(200, TARIFARIO);
+      if (url.pathname === "/api/odontogram") return json(200, { conEstado: true, entries: [
+        { toothNumber: 16, surface: "M", conditionId: "caries", createdAt: hoy },
+        { toothNumber: 16, surface: "O", conditionId: "caries", createdAt: hoy },
+      ] });
+      if (url.pathname === "/api/treatments/en-planes") return json(200, { filas: [
+        { planId: "a", plan: "Plan A", clave: "resina", dientes: [16], caras: ["O"], estado: "pendiente", hechoEn: null },
+      ] });
+      return ruta.fulfill({ status: 404, body: "" });
+    });
+    await pagina.goto("http://plan.prueba/");
+    await pagina.waitForSelector('[data-chip="h:16:caries"] [data-caras-en-otro-plan]');
+    assert.equal(await chip(pagina, "h:16:caries"), "16 M Caries Restauración resina 1 cara · 16 O ya en el plan «Plan A»");
+    await pagina.click('[data-chip="h:16:caries"]');
+    assert.equal(await pagina.locator("[data-renglon]").count(), 1);
+    assert.equal(await pagina.textContent("[data-plan-total]"), "$700", "la O no entra dos veces");
+  } finally {
+    await navegador.close();
+  }
+});

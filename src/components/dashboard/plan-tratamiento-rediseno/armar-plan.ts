@@ -23,7 +23,7 @@ import {
   type ProcedimientoTarifario, type Sugerencia,
 } from "@/lib/treatments/sugerir-procedimiento";
 import { aCentavos } from "@/lib/treatments/items";
-import { planQueYaLoTiene, type FilaEnPlan } from "@/lib/treatments/ya-en-planes";
+import { coberturaEnPlanes, type FilaEnPlan } from "@/lib/treatments/ya-en-planes";
 
 type Entradas = { toothNumber: number; conditionId: string; estado?: string | null }[];
 
@@ -49,6 +49,12 @@ export interface Chip {
    * de cobro. Las reglas, en `ya-en-planes.ts`.
    */
   enOtroPlan?: { plan: string; hechoEn: string | null } | null;
+  /**
+   * Solape PARCIAL de caras (v7, M1-v6): esas caras ya están en otro plan; el chip ofrece solo las
+   * que faltan (`caras` y `sugerencia` ya recalculadas, con su variante y su precio) y lo dice
+   * («16 O ya en el plan «A»»).
+   */
+  carasEnOtroPlan?: { caras: string[]; plan: string } | null;
 }
 
 const cuadrante = (fdi: number) => Math.floor(fdi / 10);
@@ -156,8 +162,23 @@ export function chipsDelPlan(
         ? new Date(Math.max(...fechas.map((f) => Date.parse(f!)))).toISOString()
         : null;
       // con sus caras: «Resina 16 O» en otro plan no tapa la caries de la M (v6, m1)
-      const ya = planQueYaLoTiene(c.sugerencia.clave, c.dientes, enPlanes, { marcadaEn, hechoPorSiempre: c.tipo === "por_hacer", caras: c.sugerencia.caras });
-      if (ya) c.enOtroPlan = { plan: ya.plan, hechoEn: ya.estado === "hecho" ? ya.hechoEn : null };
+      const cob = coberturaEnPlanes(c.sugerencia.clave, c.dientes, enPlanes, { marcadaEn, hechoPorSiempre: c.tipo === "por_hacer", caras: c.sugerencia.caras });
+      if (!cob.fila) continue;
+      if (cob.faltan.length === 0) {
+        c.enOtroPlan = { plan: cob.fila.plan, hechoEn: cob.fila.estado === "hecho" ? cob.fila.hechoEn : null };
+        continue;
+      }
+      // Solape parcial (v7): solo las caras que faltan, con la variante y el precio de ESAS caras
+      // (caries 16 MO con «Resina 16 O» en el plan A → «Resina 1 cara · 16 M»). La cara ya planeada
+      // no entra dos veces.
+      if (c.dientes.length !== 1 || c.tipo === "encadenada") continue;
+      const h0 = c.hallazgos[0];
+      const otra = sugerirProcedimiento({ diente: c.dientes[0], caras: cob.faltan, conditionId: h0.conditionId, porHacer: h0.porHacer }, tarifario, entradas)
+        .sugerencias.find((x) => x.clave === c.sugerencia!.clave && x.encadenadaDe === null);
+      if (!otra) continue;
+      c.sugerencia = otra;
+      c.caras = CARAS.filter((x) => cob.faltan.includes(x));
+      c.carasEnOtroPlan = { caras: cob.cubiertas, plan: cob.fila.plan };
     }
   }
   // Lo marcado en rojo, primero: es lo que el doctor ya decidió.

@@ -102,29 +102,60 @@ function cuenta(f: FilaEnPlan, ahora: Date, marca: ContextoDeMarca): boolean {
  * La fila de algún plan que ya tiene ese procedimiento en esos dientes (la primera por hacer; si
  * no, la primera hecha), o null. `excluirPlanId`: el plan que se está editando no cuenta.
  */
-export function planQueYaLoTiene(
+type OpcionesDeCobertura = { excluirPlanId?: string | null; ahora?: Date; caras?: readonly string[] } & ContextoDeMarca;
+
+/** Qué de lo que se pide ya está en algún plan: la fila que lo tiene y qué caras cubre y faltan. */
+export interface Cobertura {
+  /** La fila que lo tiene (la primera por hacer; si no, la primera hecha), o null si nada solapa. */
+  fila: FilaEnPlan | null;
+  /** Caras pedidas que ya están en algún plan (letras de la base). */
+  cubiertas: string[];
+  /** Caras pedidas que NO están en ningún plan: lo que sigue siendo trabajo nuevo. */
+  faltan: string[];
+}
+
+/**
+ * Cuánto de un procedimiento (en esos dientes y, si va por caras, esas caras) ya está en los planes.
+ * En un procedimiento por caras (resina, sellante…) una fila cubre solo las caras que trabaja, o
+ * todas si no dice caras (v6, m1); con solape PARCIAL, `faltan` dice lo que queda por ofrecer
+ * (v7, M1-v6: así la cara ya planeada no entra dos veces).
+ */
+export function coberturaEnPlanes(
   clave: ClaveProcedimiento,
   dientes: number[],
   filas: FilaEnPlan[],
-  opciones: { excluirPlanId?: string | null; ahora?: Date; caras?: readonly string[] } & ContextoDeMarca = {},
-): FilaEnPlan | null {
+  opciones: OpcionesDeCobertura = {},
+): Cobertura {
   const ahora = opciones.ahora ?? new Date();
   let candidatas = filas.filter((f) =>
     f.clave === clave
     && f.planId !== opciones.excluirPlanId
     && (f.dientes.length === 0 || dientes.length === 0 || dientes.some((d) => f.dientes.includes(d)))
     && cuenta(f, ahora, opciones));
-  // Procedimiento por caras (resina, sellante…): una fila tapa solo las caras que trabaja (o todas si
-  // no dice caras). Lo que pide caras que ninguna fila cubre es trabajo nuevo (v6, m1).
   const piden = carasBase(opciones.caras);
+  let cubiertas = piden;
   if (PROCEDIMIENTOS[clave].variantes === "caras" && piden.length > 0) {
     // (una respuesta de antes, sin `caras`, cuenta como «no dice caras»)
     const carasDe = (f: FilaEnPlan) => f.caras ?? [];
     candidatas = candidatas.filter((f) => carasDe(f).length === 0 || carasDe(f).some((c) => piden.includes(c)));
-    const cubiertas = candidatas.some((f) => carasDe(f).length === 0) ? CARAS_BASE : candidatas.flatMap(carasDe);
-    if (!piden.every((c) => cubiertas.includes(c))) return null;
+    cubiertas = candidatas.some((f) => carasDe(f).length === 0)
+      ? piden
+      : piden.filter((c) => candidatas.some((f) => carasDe(f).includes(c)));
   }
-  return candidatas.find((f) => f.estado !== "hecho") ?? candidatas[0] ?? null;
+  const fila = candidatas.find((f) => f.estado !== "hecho") ?? candidatas[0] ?? null;
+  if (!fila) return { fila: null, cubiertas: [], faltan: piden };
+  return { fila, cubiertas, faltan: piden.filter((c) => !cubiertas.includes(c)) };
+}
+
+/** La fila de algún plan que ya tiene TODO lo pedido (dientes y, si va por caras, todas sus caras), o null. */
+export function planQueYaLoTiene(
+  clave: ClaveProcedimiento,
+  dientes: number[],
+  filas: FilaEnPlan[],
+  opciones: OpcionesDeCobertura = {},
+): FilaEnPlan | null {
+  const c = coberturaEnPlanes(clave, dientes, filas, opciones);
+  return c.fila && c.faltan.length === 0 ? c.fila : null;
 }
 
 /**
@@ -140,7 +171,8 @@ export function filasRepetidas(
   for (const n of nuevas) {
     const clave = claveDeProcedimiento({ codigo: n.procedureId ? opciones.codigos?.get(n.procedureId) ?? null : null, nombre: n.nombre });
     if (!clave) continue;
-    const ya = planQueYaLoTiene(clave, n.dientes, filas, { ...opciones, caras: n.caras });
+    // avisa con CUALQUIER solape (una cara en común, o una fila sin caras), no solo si lo cubre todo (v7)
+    const ya = coberturaEnPlanes(clave, n.dientes, filas, { ...opciones, caras: n.caras }).fila;
     if (ya) out.push({ nombre: n.nombre, dientes: [...n.dientes], plan: ya.plan });
   }
   return out;

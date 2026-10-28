@@ -642,3 +642,17 @@ test("v6 m2: la sonda pide las DOS columnas del mismo SQL; con solo «estado» (
   assert.equal((await put(16, "O", "restoration", "por_hacer")).status, 200);
   assert.deepEqual(await odontograma(), ["16O:restoration"], "el PUT no escribe estado sin las dos columnas");
 });
+
+test("v7 m1: estadoDesde se guarda en UTC aunque la sesión tenga otra zona horaria", async (t) => {
+  if (salta(t)) return;
+  await usar();
+  await put(16, "O", "restoration", "hecho");
+  await base.db.exec(`SET TIME ZONE 'America/Mexico_City'`); // solo esta base de prueba
+  try {
+    await put(16, "O", "restoration", "por_hacer");
+    const r = (await base.db.query(`SELECT "estadoDesde", timezone('UTC', now()) AS utc FROM "odontogram_entries"`)).rows[0];
+    assert.ok(Math.abs(new Date(r.estadoDesde).getTime() - new Date(r.utc).getTime()) < 60_000, `en UTC (${r.estadoDesde} vs ${r.utc})`);
+  } finally {
+    await base.db.exec(`SET TIME ZONE 'UTC'`);
+  }
+});
