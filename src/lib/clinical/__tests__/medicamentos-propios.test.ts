@@ -70,6 +70,13 @@ function ejecutar(strings: TemplateStringsArray, values: any[]): any {
     const claves = planos.slice(0, -1);
     return tabla.filter((f) => claves.includes(f.clave) && (f.clinicId === null || f.clinicId === clinicId)).map((f) => ({ clave: f.clave, cofeprisGroup: f.cofeprisGroup }));
   }
+  if (sql.includes("count(*)")) {
+    const clinicId = planos[0];
+    const patron = planos.find((v) => typeof v === "string" && v.startsWith("%"));
+    const q = patron ? patron.slice(1, -1).toLowerCase() : "";
+    const n = tabla.filter((f) => (f.clinicId === null || f.clinicId === clinicId) && (!q || f.descripcion.toLowerCase().includes(q) || f.clave.toLowerCase().includes(q))).length;
+    return [{ n }];
+  }
   if (sql.includes('FROM "cums_items" WHERE')) {
     const clinicId = planos[0];
     const patron = planos.find((v) => typeof v === "string" && v.startsWith("%"));
@@ -99,6 +106,11 @@ mock.module("@/lib/prisma", {
       $queryRaw: async (s: TemplateStringsArray, ...v: any[]) => ejecutar(s, v),
       $executeRaw: async (s: TemplateStringsArray, ...v: any[]) => ejecutar(s, v),
       cumsItem: {
+        count: async ({ where }: any) => {
+          findManyTipado++;
+          const q = String(where?.OR?.[1]?.descripcion?.contains ?? "").toLowerCase();
+          return tabla.filter((f) => !q || f.descripcion.toLowerCase().includes(q) || f.clave.toLowerCase().includes(q)).length;
+        },
         findMany: async ({ where, take }: any) => {
           findManyTipado++;
           // El cliente de Prisma NO conoce clinicId: devuelve todo lo que casa (como hoy).
@@ -250,13 +262,100 @@ test("el alta es idempotente: el mismo nombre + presentación devuelve el existe
   assert.equal(bitacora.length, 1, "la repetida no deja segunda fila en bitácora");
 });
 
-test("faltan datos → 400 con el campo", async () => {
+test("faltan datos → 400 con el campo y el motivo", async () => {
   columna = true;
-  assert.deepEqual((await alta({ ...ALTA_OK, nombre: "" })).body, { error: "datos_invalidos", campo: "nombre" });
-  assert.deepEqual((await alta({ ...ALTA_OK, concentracion: " " })).body, { error: "datos_invalidos", campo: "concentracion" });
-  assert.deepEqual((await alta({ ...ALTA_OK, forma: undefined })).body, { error: "datos_invalidos", campo: "forma" });
-  assert.deepEqual((await alta({ ...ALTA_OK, via: "" })).body, { error: "datos_invalidos", campo: "via" });
+  assert.deepEqual((await alta({ ...ALTA_OK, nombre: "" })).body, { error: "datos_invalidos", campo: "nombre", motivo: "vacio" });
+  assert.deepEqual((await alta({ ...ALTA_OK, concentracion: " " })).body, { error: "datos_invalidos", campo: "concentracion", motivo: "vacio" });
+  assert.deepEqual((await alta({ ...ALTA_OK, forma: undefined })).body, { error: "datos_invalidos", campo: "forma", motivo: "vacio" });
+  assert.deepEqual((await alta({ ...ALTA_OK, via: "" })).body, { error: "datos_invalidos", campo: "via", motivo: "vacio" });
   assert.equal(tabla.length, 3);
+});
+
+// ── v2 · M-1 de t8: caracteres permitidos y vía de la lista ───────────────
+
+test("v2 · letras que se ven iguales pero no son latinas → 400 caracteres, con y sin columna (la base no se toca)", async () => {
+  for (const conColumna of [false, true]) {
+    columna = conColumna;
+    const { olvidarSondaDeMedicamentos } = await import("@/lib/clinical/medicamentos-propios.server");
+    olvidarSondaDeMedicamentos();
+    for (const nombre of ["Tramad\u043El", "Tr\u0430madol", "\uFF34\uFF52\uFF41\uFF4D\uFF41\uFF44\uFF4F\uFF4C", "Ibupr\u00F8feno", "Tramad\u03BFl", "Ibuprofeno<script>", "Ibuprofeno; drop", "Ibuprofeno \u00AB600\u00BB"]) {
+      consultas = [];
+      const r = await alta({ ...ALTA_OK, nombre });
+      assert.equal(r.status, 400, JSON.stringify(nombre));
+      assert.deepEqual(r.body, { error: "datos_invalidos", campo: "nombre", motivo: "caracteres" });
+      assert.equal(consultas.length, 0, "no debe tocar la base");
+    }
+    // Lo mismo en concentración y presentación.
+    assert.equal((await alta({ ...ALTA_OK, concentracion: "50 mg (tramad\u043El)" })).body.motivo, "caracteres");
+    assert.equal((await alta({ ...ALTA_OK, presentacion: "caja \u2014 10" })).body.motivo, "caracteres");
+  }
+  assert.equal(tabla.length, 3);
+});
+
+test("v2 · lo normal sigue pasando: acentos, ñ, ü, %, /, +, paréntesis", async () => {
+  columna = true;
+  const r = await alta({ nombre: "Ácido mefenámico (señalado) + ü", concentracion: "500 mg/5 mL, 2.5 %", forma: "Suspensión", via: "Oral", presentacion: "frasco: 60 mL (c/vaso)" });
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+});
+
+test("v2 · la vía y la forma solo de sus listas: «oral (tramadol)» o un texto libre → 400 lista", async () => {
+  columna = true;
+  assert.deepEqual((await alta({ ...ALTA_OK, via: "oral (tramadol)" })).body, { error: "datos_invalidos", campo: "via", motivo: "lista" });
+  assert.deepEqual((await alta({ ...ALTA_OK, via: "Oral tramadol" })).body, { error: "datos_invalidos", campo: "via", motivo: "lista" });
+  assert.deepEqual((await alta({ ...ALTA_OK, forma: "Tableta de tramadol" })).body, { error: "datos_invalidos", campo: "forma", motivo: "lista" });
+  // Las de la lista pasan tal cual (valor en español).
+  assert.equal((await alta({ ...ALTA_OK, via: "Sublingual", forma: "Gotas" })).status, 201);
+  assert.equal(tabla.length, 4);
+});
+
+test("v2 · la tabla de t8 en el servidor: marcas, barbitúricos, dígitos y una letra cambiada → 422", async () => {
+  columna = true;
+  for (const nombre of ["Xanax", "Tradol", "Ultram", "Klonopin", "Rohypnol", "Dilaudid", "Demerol", "Vicodin", "Percocet", "Palexia", "Graten",
+    "Fenobarbital", "Phenobarbital", "Barbital", "Butalbital", "Tiopental", "Tramad0l", "Tr4madol", "M0rfina", "Fentan1lo", "Diazep4m", "Alpraz0lam", "Tramadool", "Clonazepan"]) {
+    const r = await alta({ ...ALTA_OK, nombre });
+    assert.equal(r.status, 422, nombre);
+    assert.equal(r.body.error, "medicamento_controlado", nombre);
+  }
+  assert.equal(tabla.length, 3);
+});
+
+// ── v2 · M-2 de t8: Sabina no ve los propios de otra clínica ─────────────
+
+async function sabinaBusca(clinicId: string, texto: string) {
+  const { recetas } = await import("@/lib/sabina/tools/recetas");
+  const ctx: any = {
+    clinicId, userId: "doc_1", role: "DOCTOR", permissionsOverride: [], timezone: "America/Mexico_City",
+    clinicCategory: "DENTAL", clinicaNombre: "Clínica", clinicaLugar: "CDMX",
+  };
+  const r = await recetas.ejecutar(ctx, { buscarMedicamento: texto } as any);
+  return r.medicamentos!;
+}
+
+test("v2 · Sabina busca en el catálogo con la clínica de la sesión: lo global + lo propio, nunca lo de otra", async () => {
+  columna = true;
+  const propia = (await alta(ALTA_OK)).body.medicamento.clave;
+  const mia = await sabinaBusca("cli_1", "ibu");
+  const claves = mia.filas.map((f: any) => f.clave);
+  assert.ok(claves.includes("MX-0004"));
+  assert.ok(claves.includes(propia), "la propia sí");
+  assert.ok(!claves.includes("CL-otraclinica"), "fuga: Sabina enseña el propio de otra clínica");
+  assert.equal(mia.total, 2);
+  assert.equal(findManyTipado, 0, "con columna no se usa el cliente tipado");
+
+  const otra = await sabinaBusca("cli_OTRA", "ibu");
+  const clavesOtra = otra.filas.map((f: any) => f.clave);
+  assert.ok(clavesOtra.includes("CL-otraclinica"));
+  assert.ok(!clavesOtra.includes(propia));
+  assert.equal(otra.total, 2);
+});
+
+test("v2 · Sabina sin la columna: el catálogo global por Prisma, como siempre, con su total", async () => {
+  columna = false;
+  const r = await sabinaBusca("cli_1", "tramad");
+  assert.equal(r.filas.length, 1);
+  assert.equal(r.filas[0].clave, "MX-0017");
+  assert.equal(r.filas[0].controlado, true);
+  assert.equal(r.total, 1);
 });
 
 test("con la columna: la búsqueda devuelve lo global + lo propio (propio primero) y NUNCA lo de otra clínica", async () => {

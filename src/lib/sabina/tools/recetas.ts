@@ -39,6 +39,7 @@ import {
   type Lista,
 } from "./base";
 import type { SabinaCtx } from "../tipos";
+import { buscarMedicamentos, contarMedicamentos } from "@/lib/clinical/medicamentos-propios.server";
 
 // 🔴 SIN `.refine()` a propósito: un `ZodEffects` encima del objeto le quita el
 // `.shape` que `punta-a-punta.test.ts` usa para comprobar que cada parámetro
@@ -172,15 +173,12 @@ export const recetas = definirHerramienta<ParamsRecetas, DatosRecetas>({
 
     if (params.buscarMedicamento) {
       const texto = params.buscarMedicamento.trim();
-      const where = {
-        OR: [
-          { clave: { contains: texto, mode: "insensitive" } },
-          { descripcion: { contains: texto, mode: "insensitive" } },
-        ],
-      };
+      // ws1-t10 v2 (M-2 de t8): el catálogo tiene filas PROPIAS de cada clínica
+      // (cums_items.clinicId, fuera de schema.prisma). Un `findMany` tipado las
+      // devolvería todas; `buscarMedicamentos` filtra «global + la de la sesión».
       const [total, crudos] = await Promise.all([
-        db.cumsItem.count({ where }),
-        db.cumsItem.findMany({ where, orderBy: { descripcion: "asc" }, take: TOPE_FILAS }),
+        contarMedicamentos({ q: texto, group: "", clinicId: ctx.clinicId }, db),
+        buscarMedicamentos({ q: texto, group: "", limit: TOPE_FILAS, clinicId: ctx.clinicId }, db),
       ]);
       const medicamentos: CumsFila[] = crudos.map((c: any) => ({
         clave: c.clave,

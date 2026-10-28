@@ -8670,6 +8670,7 @@
         "cancel": "Cancel",
         "errorRequired": "Fill in name, strength, dosage form and route.",
         "errorSinSql": "The clinic's own medication list isn't enabled on this database yet. Contact support.",
+        "errorChars": "There is a character that isn't allowed: “{char}”. Use only letters, digits, space and . , % / + - ( ) :",
         "errorGeneric": "The medication couldn't be saved. Try again."
       },
       "controlled": {

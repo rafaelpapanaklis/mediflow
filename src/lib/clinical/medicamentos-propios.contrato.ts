@@ -1,8 +1,9 @@
 /**
  * Lo PURO de los medicamentos propios de la clínica (ws1-t10): tipos, límites,
- * cómo se arma la fila que se guarda en `cums_items` y la validación del alta.
- * Sin Prisma ni Node: lo importan el servidor (`medicamentos-propios.server.ts`)
- * y la pantalla (`cums-selector.tsx`). El diseño completo está explicado en el
+ * caracteres permitidos, listas de forma farmacéutica y vía, cómo se arma la
+ * fila que se guarda en `cums_items` y la validación del alta. Sin Prisma ni
+ * Node: lo importan el servidor (`medicamentos-propios.server.ts`) y la
+ * pantalla (`cums-selector.tsx`). El diseño completo está explicado en el
  * archivo del servidor.
  */
 
@@ -33,6 +34,40 @@ export const LIMITES_PROPIO = {
   presentacionGuardada: 200,
 } as const;
 
+/**
+ * Caracteres permitidos en TODOS los campos del alta (v2, hallazgo M-1 de t8):
+ * letras latinas con acentos, ñ y ü, dígitos, espacio y `. , % / + - ( ) :`.
+ * Nada más. Así una «о» cirílica, una «ο» griega, un «Ｔ» de ancho completo,
+ * «ø» o «ı» —que en pantalla y en la verificación pública del QR se ven
+ * idénticos a la letra latina y al candado se le escapaban— ni siquiera entran:
+ * 400 `datos_invalidos` con `motivo: "caracteres"`.
+ */
+export const CARACTERES_PERMITIDOS = /^[A-Za-zÁÉÍÓÚáéíóúÑñÜü0-9 .,%/+\-():]*$/;
+
+/**
+ * Formas farmacéuticas y vías del alta. El VALOR que se guarda es siempre el
+ * español (la receta es un documento mexicano y así lo lee la farmacia); la
+ * etiqueta se traduce con la clave (`clinical.cumsSelector.forms.*` /
+ * `routes.*`). El servidor solo acepta estos valores (v2: la vía ya no es
+ * texto libre, que se imprimía en la receta sin pasar por el candado).
+ */
+export const FORMAS_FARMACEUTICAS = [
+  ["tableta", "Tableta"], ["capsula", "Cápsula"], ["suspension", "Suspensión"], ["solucion", "Solución"],
+  ["jarabe", "Jarabe"], ["gotas", "Gotas"], ["gel", "Gel"], ["crema", "Crema"], ["pomada", "Pomada"],
+  ["enjuague", "Enjuague"], ["spray", "Spray"], ["inyectable", "Inyectable"], ["parche", "Parche"],
+  ["polvo", "Polvo"], ["supositorio", "Supositorio"], ["otra", "Otra"],
+] as const;
+
+export const VIAS = [
+  ["oral", "Oral"], ["topica", "Tópica"], ["bucal", "Bucal"], ["sublingual", "Sublingual"],
+  ["intramuscular", "Intramuscular"], ["intravenosa", "Intravenosa"], ["subcutanea", "Subcutánea"],
+  ["inhalada", "Inhalada"], ["nasal", "Nasal"], ["oftalmica", "Oftálmica"], ["otica", "Ótica"],
+  ["rectal", "Rectal"], ["vaginal", "Vaginal"], ["otra", "Otra"],
+] as const;
+
+const VALORES_FORMA = new Set<string>(FORMAS_FARMACEUTICAS.map(([, v]) => v));
+const VALORES_VIA = new Set<string>(VIAS.map(([, v]) => v));
+
 export interface AltaMedicamentoPropio {
   nombre: string;
   concentracion: string;
@@ -41,14 +76,24 @@ export interface AltaMedicamentoPropio {
   presentacion?: string | null;
 }
 
+/** Por qué un campo no pasa: vacío, con caracteres que no se permiten, o fuera de la lista (forma y vía). */
+export type MotivoInvalido = "vacio" | "caracteres" | "lista";
+
 export type ResultadoAlta =
   | { ok: true; medicamento: MedicamentoCatalogo; existia: boolean }
   | { ok: false; error: "sin_sql" }
-  | { ok: false; error: "datos_invalidos"; campo: keyof AltaMedicamentoPropio }
+  | { ok: false; error: "datos_invalidos"; campo: keyof AltaMedicamentoPropio; motivo: MotivoInvalido }
   | { ok: false; error: "medicamento_controlado"; controlado: Controlado };
 
 function limpio(v: unknown, max: number): string {
   return typeof v === "string" ? v.replace(/\s+/g, " ").trim().slice(0, max) : "";
+}
+
+/** `null` si el texto solo usa caracteres permitidos; si no, el primer carácter que sobra. */
+export function caracterNoPermitido(texto: string): string | null {
+  if (CARACTERES_PERMITIDOS.test(texto)) return null;
+  for (const ch of texto) if (!CARACTERES_PERMITIDOS.test(ch)) return ch;
+  return "?";
 }
 
 /** Nombre y presentación tal como se guardan (y como salen en el PDF y en el QR). */
@@ -69,15 +114,32 @@ export function armarFilaPropia(alta: AltaMedicamentoPropio): { descripcion: str
   };
 }
 
-/** Valida los campos: nombre, concentración, forma y vía obligatorios. */
-export function validarAlta(alta: Partial<AltaMedicamentoPropio>): { ok: true; alta: AltaMedicamentoPropio } | { ok: false; campo: keyof AltaMedicamentoPropio } {
+/**
+ * Valida los campos: nombre, concentración, forma y vía obligatorios; todos
+ * con solo caracteres permitidos; forma y vía de sus listas.
+ */
+export function validarAlta(
+  alta: Partial<AltaMedicamentoPropio>,
+): { ok: true; alta: AltaMedicamentoPropio } | { ok: false; campo: keyof AltaMedicamentoPropio; motivo: MotivoInvalido } {
   const nombre = limpio(alta.nombre, LIMITES_PROPIO.nombre);
   const concentracion = limpio(alta.concentracion, LIMITES_PROPIO.concentracion);
   const forma = limpio(alta.forma, LIMITES_PROPIO.forma);
   const via = limpio(alta.via, LIMITES_PROPIO.via);
-  if (nombre.length < 2) return { ok: false, campo: "nombre" };
-  if (!concentracion) return { ok: false, campo: "concentracion" };
-  if (!forma) return { ok: false, campo: "forma" };
-  if (!via) return { ok: false, campo: "via" };
-  return { ok: true, alta: { nombre, concentracion, forma, via, presentacion: limpio(alta.presentacion, LIMITES_PROPIO.presentacion) || null } };
+  const presentacion = limpio(alta.presentacion, LIMITES_PROPIO.presentacion);
+
+  const campos: Array<[keyof AltaMedicamentoPropio, string, boolean]> = [
+    ["nombre", nombre, true],
+    ["concentracion", concentracion, true],
+    ["forma", forma, true],
+    ["via", via, true],
+    ["presentacion", presentacion, false],
+  ];
+  for (const [campo, valor, obligatorio] of campos) {
+    if (obligatorio && (campo === "nombre" ? valor.length < 2 : !valor)) return { ok: false, campo, motivo: "vacio" };
+    if (caracterNoPermitido(valor)) return { ok: false, campo, motivo: "caracteres" };
+  }
+  if (!VALORES_FORMA.has(forma)) return { ok: false, campo: "forma", motivo: "lista" };
+  if (!VALORES_VIA.has(via)) return { ok: false, campo: "via", motivo: "lista" };
+
+  return { ok: true, alta: { nombre, concentracion, forma, via, presentacion: presentacion || null } };
 }

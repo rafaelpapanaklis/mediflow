@@ -8670,6 +8670,7 @@
         "cancel": "Cancelar",
         "errorRequired": "Completa nombre, concentración, forma farmacéutica y vía.",
         "errorSinSql": "La lista propia de medicamentos aún no está habilitada en esta base. Avisa a soporte.",
+        "errorChars": "Hay un carácter que no se permite: «{char}». Usa solo letras, números, espacio y . , % / + - ( ) :",
         "errorGeneric": "No se pudo guardar el medicamento. Inténtalo de nuevo."
       },
       "controlled": {

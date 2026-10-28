@@ -155,6 +155,38 @@ export async function buscarMedicamentos(
 }
 
 /**
+ * Cuántas filas casan con la misma búsqueda (para Sabina, que dice «N en
+ * total» cuando recorta). Mismo filtro de clínica que `buscarMedicamentos`.
+ */
+export async function contarMedicamentos(
+  args: { q: string; group: string; clinicId: string },
+  db: Db = prisma,
+): Promise<number> {
+  const { q, group, clinicId } = args;
+  if (!clinicId) throw new Error("sesion_invalida: falta clinicId");
+  if (!(await hayMedicamentosPropios(db))) {
+    const where: Record<string, unknown> = {};
+    if (group) where.grupoTerapeutico = group;
+    if (q) {
+      where.OR = [
+        { clave: { contains: q, mode: "insensitive" } },
+        { descripcion: { contains: q, mode: "insensitive" } },
+      ];
+    }
+    return db.cumsItem.count({ where });
+  }
+  const condiciones: Prisma.Sql[] = [Prisma.sql`("clinicId" IS NULL OR "clinicId" = ${clinicId})`];
+  if (group) condiciones.push(Prisma.sql`"grupoTerapeutico" = ${group}`);
+  if (q) {
+    const p = patron(q);
+    condiciones.push(Prisma.sql`("clave" ILIKE ${p} OR "descripcion" ILIKE ${p})`);
+  }
+  const filas = (await db.$queryRaw`
+    SELECT count(*)::int AS "n" FROM "cums_items" WHERE ${Prisma.join(condiciones, " AND ")}`) as Array<{ n: number }>;
+  return Number(filas?.[0]?.n ?? 0);
+}
+
+/**
  * Las claves que una receta de ESTA clínica puede llevar: catálogo global +
  * sus propias. Es lo que POST /api/prescriptions usa para validar `items` y
  * para sacar el grupo COFEPRIS real. Una clave propia de otra clínica no
@@ -199,11 +231,12 @@ export async function crearMedicamentoPropio(
   if (!clinicId) throw new Error("sesion_invalida: falta clinicId");
 
   const v = validarAlta(args.alta);
-  if (v.ok === false) return { ok: false, error: "datos_invalidos", campo: v.campo };
+  if (v.ok === false) return { ok: false, error: "datos_invalidos", campo: v.campo, motivo: v.motivo };
 
   // El candado, ANTES de mirar la base: un controlado no se guarda nunca, ni
-  // aunque la columna no exista. Se revisa nombre y presentación/concentración.
-  const controlado = detectarControlado(v.alta.nombre, v.alta.concentracion, v.alta.presentacion, v.alta.forma);
+  // aunque la columna no exista. Se revisan los CINCO campos (v2: también la
+  // vía, que se imprime en la receta).
+  const controlado = detectarControlado(v.alta.nombre, v.alta.concentracion, v.alta.presentacion, v.alta.forma, v.alta.via);
   if (controlado) return { ok: false, error: "medicamento_controlado", controlado };
 
   if (!(await hayMedicamentosPropios(db))) return { ok: false, error: "sin_sql" };

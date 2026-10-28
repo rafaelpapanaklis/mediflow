@@ -226,6 +226,29 @@ test("el candado: tramadol o Rivotril en el alta → aviso, Guardar deshabilitad
   await ctx.close();
 });
 
+test("v2 · «Xanax» (la marca que el catálogo no encuentra y el botón precarga) cae en el candado; una letra cirílica no deja guardar", { skip: saltar }, async () => {
+  const { ctx, page, errores, altas } = await abrir();
+  await buscador(page).click();
+  await buscador(page).type("Xanax");
+  await page.waitForSelector("text=Sin resultados.");
+  await page.locator('[data-testid="agregar-medicamento"]').click();
+  await page.waitForSelector('[data-testid="candado-controlado"]');
+  assert.match(await page.locator('[data-testid="candado-controlado"]').innerText(), /«Alprazolam» es un medicamento controlado \(grupo COFEPRIS III\)/);
+  assert.equal(await page.locator('button:has-text("Guardar y agregar a la receta")').isDisabled(), true);
+
+  const nombre = page.locator('[data-testid="alta-medicamento"] input').first();
+  await nombre.fill("Tramad\u043El"); // «о» cirílica: se ve igual que la latina
+  await page.waitForSelector('[data-testid="caracter-no-permitido"]');
+  assert.match(await page.locator('[data-testid="caracter-no-permitido"]').innerText(), /Hay un carácter que no se permite: «\u043E»/);
+  assert.equal(await page.locator('button:has-text("Guardar y agregar a la receta")').isDisabled(), true);
+  await foto(page, "08-caracter-no-permitido-1440");
+  await nombre.fill("Tramad0l"); // cero por o: lo caza el candado
+  await page.waitForSelector('[data-testid="candado-controlado"]');
+  assert.equal(altas.length, 0);
+  assert.deepEqual(errores, []);
+  await ctx.close();
+});
+
 test("si la pantalla no lo ve pero el servidor sí (422), también se cierra el paso", { skip: saltar }, async () => {
   const { ctx, page, altas } = await abrir();
   await buscador(page).click();

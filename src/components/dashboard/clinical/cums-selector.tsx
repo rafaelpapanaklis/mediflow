@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { Search, X, Plus, Pill, ShieldAlert, Loader2, PlusCircle } from "lucide-react";
 import { isAbortError } from "@/lib/fetch-safe";
 import { detectarControlado, type Controlado } from "@/lib/clinical/controlados";
-import { LIMITES_PROPIO } from "@/lib/clinical/medicamentos-propios.contrato";
+import { caracterNoPermitido, FORMAS_FARMACEUTICAS, LIMITES_PROPIO, VIAS } from "@/lib/clinical/medicamentos-propios.contrato";
 import { useT } from "@/i18n/i18n-provider";
 
 interface CumsItem {
@@ -33,24 +33,9 @@ interface Props {
   disabled?: boolean;
 }
 
-/**
- * Formas farmacéuticas y vías del alta de un medicamento propio. El VALOR que
- * se guarda es siempre el español (la receta es un documento mexicano y así
- * lo lee la farmacia); la etiqueta se traduce con la clave.
- */
-export const FORMAS_FARMACEUTICAS = [
-  ["tableta", "Tableta"], ["capsula", "Cápsula"], ["suspension", "Suspensión"], ["solucion", "Solución"],
-  ["jarabe", "Jarabe"], ["gotas", "Gotas"], ["gel", "Gel"], ["crema", "Crema"], ["pomada", "Pomada"],
-  ["enjuague", "Enjuague"], ["spray", "Spray"], ["inyectable", "Inyectable"], ["parche", "Parche"],
-  ["polvo", "Polvo"], ["supositorio", "Supositorio"], ["otra", "Otra"],
-] as const;
-
-export const VIAS = [
-  ["oral", "Oral"], ["topica", "Tópica"], ["bucal", "Bucal"], ["sublingual", "Sublingual"],
-  ["intramuscular", "Intramuscular"], ["intravenosa", "Intravenosa"], ["subcutanea", "Subcutánea"],
-  ["inhalada", "Inhalada"], ["nasal", "Nasal"], ["oftalmica", "Oftálmica"], ["otica", "Ótica"],
-  ["rectal", "Rectal"], ["vaginal", "Vaginal"], ["otra", "Otra"],
-] as const;
+// Las formas farmacéuticas y las vías (valor en español, etiqueta traducida)
+// viven en el contrato: el servidor solo acepta esos valores.
+export { FORMAS_FARMACEUTICAS, VIAS };
 
 const inputStyle: CSSProperties = { width: "100%" };
 const etiqueta: CSSProperties = { display: "block", fontSize: 11, fontWeight: 600, color: "var(--text-2)", marginBottom: 4 };
@@ -187,12 +172,16 @@ export function CumsSelector({ items, onChange, disabled }: Props) {
   }
 
   // El candado, en la pantalla: avisa mientras escribe. La regla la impone el servidor.
-  const controladoLocal = agregando ? detectarControlado(nombre, concentracion, presentacion) : null;
-  const controlado = controladoServidor ?? controladoLocal;
+  const controladoLocal = agregando ? detectarControlado(nombre, concentracion, presentacion, forma, via) : null;
   const faltanDatos = nombre.trim().length < 2 || !concentracion.trim() || !forma || !via;
+  // v2: solo caracteres permitidos (letras latinas, dígitos y `. , % / + - ( ) :`);
+  // el servidor responde 400 a lo demás ANTES de mirar el candado, y la
+  // pantalla sigue el mismo orden: primero el carácter, luego el controlado.
+  const caracterRaro = agregando ? [nombre, concentracion, presentacion].map(caracterNoPermitido).find(Boolean) ?? null : null;
+  const controlado = caracterRaro ? null : (controladoServidor ?? controladoLocal);
 
   async function guardarAlta() {
-    if (guardando || controlado) return;
+    if (guardando || controlado || caracterRaro) return;
     if (faltanDatos) {
       setErrorAlta(t("clinical.cumsSelector.form.errorRequired"));
       return;
@@ -221,7 +210,7 @@ export function CumsSelector({ items, onChange, disabled }: Props) {
         return;
       }
       if (res.status === 400) {
-        setErrorAlta(t("clinical.cumsSelector.form.errorRequired"));
+        setErrorAlta(t(data?.motivo === "caracteres" ? "clinical.cumsSelector.form.errorChars" : "clinical.cumsSelector.form.errorRequired", { char: "" }));
         return;
       }
       setErrorAlta(t("clinical.cumsSelector.form.errorGeneric"));
@@ -401,7 +390,13 @@ export function CumsSelector({ items, onChange, disabled }: Props) {
             </div>
           )}
 
-          {errorAlta && !controlado && (
+          {caracterRaro && (
+            <div role="alert" data-testid="caracter-no-permitido" style={{ fontSize: 12, color: "var(--danger)" }}>
+              {t("clinical.cumsSelector.form.errorChars", { char: caracterRaro })}
+            </div>
+          )}
+
+          {errorAlta && !controlado && !caracterRaro && (
             <div role="alert" style={{ fontSize: 12, color: "var(--danger)" }}>{errorAlta}</div>
           )}
 
@@ -412,9 +407,9 @@ export function CumsSelector({ items, onChange, disabled }: Props) {
             <button
               type="button"
               onClick={() => void guardarAlta()}
-              style={{ ...btnPrimario, opacity: controlado || guardando ? 0.6 : 1, cursor: controlado ? "not-allowed" : "pointer" }}
-              disabled={!!controlado || guardando}
-              aria-disabled={!!controlado || guardando}
+              style={{ ...btnPrimario, opacity: controlado || caracterRaro || guardando ? 0.6 : 1, cursor: controlado || caracterRaro ? "not-allowed" : "pointer" }}
+              disabled={!!controlado || !!caracterRaro || guardando}
+              aria-disabled={!!controlado || !!caracterRaro || guardando}
             >
               {guardando ? <Loader2 size={13} className="animate-spin" aria-hidden /> : <PlusCircle size={13} aria-hidden />}
               {guardando ? t("clinical.cumsSelector.form.saving") : t("clinical.cumsSelector.form.save")}

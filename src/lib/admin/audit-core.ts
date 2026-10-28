@@ -123,6 +123,8 @@ export const AUDIT_ENTITY_OPTIONS = [
   "cash-register",
   "agenda-block",
   "import",
+  // ws1-t10: medicamento que la clínica agregó a mano a su lista de recetas.
+  "clinic-medication",
 ] as const;
 
 export type AuditTone = "success" | "warning" | "danger" | "info" | "brand" | "neutral";
@@ -166,6 +168,7 @@ export function actionMeta(action: string): { label: string; tone: AuditTone } {
 }
 
 const ENTITY_LABELS: Record<string, string> = {
+  "clinic-medication": "Medicamento de la clínica",
   patient: "Paciente",
   appointment: "Cita",
   invoice: "Factura",

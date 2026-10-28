@@ -17,7 +17,9 @@ export const dynamic = "force-dynamic";
  * Respuestas:
  *   201 { medicamento }            creado
  *   200 { medicamento, existia }   ya había uno igual (nombre + presentación): se devuelve ese
- *   400 { error: "datos_invalidos", campo }
+ *   400 { error: "datos_invalidos", campo, motivo: "vacio" | "caracteres" | "lista" }
+ *       ← v2: solo letras latinas (con acentos, ñ, ü), dígitos, espacio y
+ *         `. , % / + - ( ) :`; forma y vía solo de sus listas.
  *   422 { error: "medicamento_controlado", controlado: { nombre, grupo } }
  *       ← el CANDADO: grupos COFEPRIS I, II y III no se agregan a mano; se
  *         recetan desde el catálogo, donde se pide el folio.
@@ -42,7 +44,9 @@ export async function POST(req: NextRequest) {
 
   // `r.ok === false` y no `!r.ok`: sin strictNullChecks la negación no estrecha la unión.
   if (r.ok === false) {
-    if (r.error === "datos_invalidos") return NextResponse.json({ error: r.error, campo: r.campo }, { status: 400 });
+    if (r.error === "datos_invalidos") {
+      return NextResponse.json({ error: r.error, campo: r.campo, motivo: r.motivo }, { status: 400 });
+    }
     if (r.error === "medicamento_controlado") {
       return NextResponse.json({
         error: r.error,

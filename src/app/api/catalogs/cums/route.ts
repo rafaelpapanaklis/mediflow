@@ -15,8 +15,10 @@ export const dynamic = "force-dynamic";
  *
  * Antes este endpoint cacheaba 24 h con unstable_cache por (q, group, limit).
  * Ya no: con medicamentos propios el resultado depende de la clínica y de lo
- * que acaba de dar de alta, y la consulta va por índice (descripción) sobre
- * unas 350 filas globales + las propias: no hace falta caché.
+ * que acaba de dar de alta. Es un `ILIKE '%q%'` (recorrido completo, sin
+ * índice: con comodín delante no lo usaría) sobre unas 350 filas globales +
+ * las propias: milisegundos, no hace falta caché. Si un día los propios
+ * crecen, se cachea solo la parte global.
  */
 export async function GET(req: NextRequest) {
   const ctx = await getAuthContext();
