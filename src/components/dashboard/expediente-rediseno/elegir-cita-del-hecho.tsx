@@ -5,6 +5,11 @@
 // y ya elegida. «Se hizo sin cita» pide un motivo corto y obligatorio. Si la cita elegida no tiene nota
 // clínica, AVISA y ofrece marcar y escribirla; nunca impide marcar. Si las citas no se pueden leer, se
 // puede marcar sin cita.
+//
+// v18 (t5 de la v17, m2): «Marcar y escribir la nota» lleva la cita elegida a «Nueva consulta» y la nota se
+// LIGA a ella (aunque sea de otro día u otro doctor), así el aviso se quita al guardarla. Si esa cita no
+// admite la nota de quien marca (`notaLigable`: la cita de hoy de otro doctor, aún sin terminar), el aviso
+// dice que la escribe su doctor y no hay botón.
 
 import { useEffect, useState } from "react";
 import { AlertTriangle, CheckCircle2 } from "lucide-react";
@@ -22,8 +27,8 @@ export function ElegirCitaDelHecho({ planId, filaId, nombre, enviando, onElegir,
   /** «Resina 16 (MO)». */
   nombre: string;
   enviando: boolean;
-  /** `escribirNota`: después de marcar, abrir la nota de la cita (la cita no tenía). */
-  onElegir: (eleccion: EleccionDeCita, opciones: { escribirNota: boolean }) => void;
+  /** `escribirNota`: después de marcar, abrir la nota LIGADA a la cita (la cita no tenía): su etiqueta para el formulario. */
+  onElegir: (eleccion: EleccionDeCita, opciones: { escribirNota: boolean; etiqueta?: string }) => void;
   onVolver: () => void;
   /** Quien marca puede escribir notas (la ficha sabe a dónde llevarlo). */
   puedeEscribirNota: boolean;
@@ -74,7 +79,7 @@ export function ElegirCitaDelHecho({ planId, filaId, nombre, enviando, onElegir,
     elegida === SIN_CITA ? (motivoListo ? { sinCita: true, motivo: motivoListo } : null) : cita ? { citaId: cita.id } : null;
   const elegir = (escribirNota: boolean) => {
     const e = eleccion();
-    if (e && !enviando) onElegir(e, { escribirNota });
+    if (e && !enviando) onElegir(e, { escribirNota, ...(cita ? { etiqueta: etiqueta(cita).dia } : {}) });
   };
   const grupo = `cita-hecho-${filaId}`;
 
@@ -122,8 +127,12 @@ export function ElegirCitaDelHecho({ planId, filaId, nombre, enviando, onElegir,
       {cita && !cita.tieneNota && (
         <p className={s.citaHechoAviso} role="status" data-cita-hecho-aviso>
           <AlertTriangle size={14} strokeWidth={1.75} aria-hidden />
-          <span>{t("planTratamiento.hecho.cita.avisoSinNota")}</span>
-          {puedeEscribirNota && (
+          <span>
+            {cita.notaLigable
+              ? t("planTratamiento.hecho.cita.avisoSinNota")
+              : t("planTratamiento.hecho.cita.avisoSinNotaDeOtro", { doctor: cita.doctor ?? t("planTratamiento.hecho.cita.suDoctor") })}
+          </span>
+          {puedeEscribirNota && cita.notaLigable && (
             <button type="button" className={`${s.boton} ${s.botonChico}`} onClick={() => elegir(true)} disabled={enviando} data-cita-hecho-escribir>
               {t("planTratamiento.hecho.cita.marcarYEscribir")}
             </button>

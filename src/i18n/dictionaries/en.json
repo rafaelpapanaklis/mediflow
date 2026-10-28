@@ -7115,7 +7115,10 @@
       "nextVisitPlaceholder": "In 3 months, urgent, etc.",
       "savingChanges": "Saving changes…",
       "saveConsultation": "Save consultation",
-      "linkedToTodayAppointment": "This note will be linked to this patient's appointment today."
+      "linkedToTodayAppointment": "This note will be linked to this patient's appointment today.",
+      "linkedToChosenAppointment": "This note will be linked to the appointment on {fecha}, where the procedure was marked as done.",
+      "unlinkChosenAppointment": "Remove",
+      "notLinkedToChosen": "The note was saved, but it wasn't linked to the appointment on {fecha}: that appointment already has its note or no longer accepts one."
     },
     "dermatologyForm": {
       "zoneScalp": "Scalp",
@@ -11057,6 +11060,8 @@
         "motivo": "Reason (required)",
         "motivoPh": "E.g.: emergency, the appointment wasn't recorded…",
         "avisoSinNota": "This appointment has no clinical note. Write it to back up the procedure.",
+        "avisoSinNotaDeOtro": "This appointment has no clinical note. {doctor} writes it when seeing the patient.",
+        "suDoctor": "The appointment's doctor",
         "marcarYEscribir": "Mark and write the note",
         "volver": "Back",
         "confirmar": "Mark as done"

@@ -103,6 +103,14 @@ interface Props {
    */
   citaEnCursoId?: string | null;
   /**
+   * v18 (t5 de la v17, m2): la cita que se eligió al marcar «Hecho» en la tarjeta del plan («Marcar y escribir
+   * la nota»). Si viene, la nota se guarda LIGADA a ella (POST /api/clinical con `citaElegida: true`), aunque
+   * sea de otro día u otro doctor: así respalda el procedimiento y la cita deja de salir «Sin nota».
+   */
+  citaElegida?: { id: string; etiqueta: string } | null;
+  /** v18: «Quitar» — la nota vuelve a la regla de siempre (la cita de hoy). */
+  onQuitarCitaElegida?: () => void;
+  /**
    * v7 (QA de t12): «Completar consulta» (la barra de la ficha) respondía «La nota de la consulta está
    * vacía» con el Motivo y la Exploración escritos aquí, porque solo «Guardar consulta» los manda. La
    * ficha recibe aquí con qué guardar lo escrito antes de cerrar la cita: «guardada», «vacia» (no hay
@@ -165,7 +173,7 @@ function readAddenda(spec: any): Addendum[] {
     }));
 }
 
-export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord, rediseno = false, citaEnCursoId = null, armarPlan, registrarGuardado }: Props) {
+export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord, rediseno = false, citaEnCursoId = null, citaElegida = null, onQuitarCitaElegida, armarPlan, registrarGuardado }: Props) {
   const t = useT();
   const isEditing = !!initialRecord;
   // Dx CIE-10 codificados (NOM-024 §6.3 / NOM-004). Edición: en vivo contra el
@@ -755,13 +763,15 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
         // POST — crea record nuevo. autoInvoice si hay procedimientos con precio.
         // Con la consulta abierta («Iniciar consulta») va a SU cita y el servidor la escribe en el borrador de
         // esa cita; si no, si el paciente tiene UNA cita hoy, la nota va ligada a ella.
-        const appointmentId = citaEnCursoId ?? (await fetchTodayAppointmentId(patientId));
+        // v18: con la cita elegida en «Hecho», la nota va ligada a ELLA (enlace explícito; el servidor lo valida).
+        const appointmentId = citaElegida?.id ?? citaEnCursoId ?? (await fetchTodayAppointmentId(patientId));
         const res = await fetch("/api/clinical", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             patientId,
             ...(appointmentId ? { appointmentId } : {}),
+            ...(citaElegida ? { citaElegida: true } : {}),
             subjective: form.subjective,
             objective: form.objective,
             assessment: form.assessment,
@@ -808,6 +818,10 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
           toast.success(t("clinical.dentalForm.savedToast"));
         }
         if (delPlan.length > 0) toast(t("planTratamiento.cobro.consultaAlPlan", { lista: delPlan.join(", ") }), { duration: 9000 });
+        // v18: el servidor pudo no ligarla (la cita ya tenía su nota, o ya no se puede): se dice.
+        if (citaElegida && record?.specialtyData?.appointmentId !== citaElegida.id) {
+          toast(t("clinical.dentalForm.notLinkedToChosen", { fecha: citaElegida.etiqueta }), { icon: "⚠️", duration: 9000 });
+        }
         // Si aplicaron IA en la consulta NUEVA, adjúntala al record recién creado y
         // mergea el aiAssist devuelto a `record` para que onSaved(record) deje la
         // cajita morada ✨ en el estado del padre sin esperar un reload.
@@ -964,7 +978,19 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
         onRemove={handleAiRemove}
       />
 
-      {!isEditing && todayAppointmentId && (
+      {!isEditing && citaElegida ? (
+        <div className="text-xs text-muted-foreground" data-nota-cita-elegida={citaElegida.id}>
+          {t("clinical.dentalForm.linkedToChosenAppointment", { fecha: citaElegida.etiqueta })}
+          {onQuitarCitaElegida && (
+            <>
+              {" "}
+              <button type="button" className="underline rounded-[4px] focus-visible:outline-none focus-visible:shadow-[var(--ring)]" onClick={onQuitarCitaElegida}>
+                {t("clinical.dentalForm.unlinkChosenAppointment")}
+              </button>
+            </>
+          )}
+        </div>
+      ) : !isEditing && todayAppointmentId && (
         <div className="text-xs text-muted-foreground">{t("clinical.dentalForm.linkedToTodayAppointment")}</div>
       )}
 

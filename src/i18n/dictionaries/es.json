@@ -7115,7 +7115,10 @@
       "nextVisitPlaceholder": "En 3 meses, urgente, etc.",
       "savingChanges": "Guardando cambios…",
       "saveConsultation": "Guardar consulta",
-      "linkedToTodayAppointment": "Esta nota quedará ligada a la cita de hoy de este paciente."
+      "linkedToTodayAppointment": "Esta nota quedará ligada a la cita de hoy de este paciente.",
+      "linkedToChosenAppointment": "Esta nota quedará ligada a la cita del {fecha}, en la que se marcó el procedimiento como hecho.",
+      "unlinkChosenAppointment": "Quitar",
+      "notLinkedToChosen": "La nota se guardó, pero no quedó ligada a la cita del {fecha}: esa cita ya tiene su nota o ya no admite otra."
     },
     "dermatologyForm": {
       "zoneScalp": "Cuero cabelludo",
@@ -11057,6 +11060,8 @@
         "motivo": "Motivo (obligatorio)",
         "motivoPh": "Ej.: urgencia, la cita no quedó registrada…",
         "avisoSinNota": "Esta cita no tiene nota clínica. Escríbela para respaldar el procedimiento.",
+        "avisoSinNotaDeOtro": "Esta cita no tiene nota clínica. La escribe {doctor} al atender la consulta.",
+        "suDoctor": "el doctor de la cita",
         "marcarYEscribir": "Marcar y escribir la nota",
         "volver": "Volver",
         "confirmar": "Marcar hecho"

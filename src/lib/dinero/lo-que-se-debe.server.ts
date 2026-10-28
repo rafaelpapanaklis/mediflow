@@ -20,6 +20,7 @@ import { leerNotasDePlan } from "@/lib/treatments/por-cobrar-db";
 import { deudaDeNotaDelPlan } from "@/lib/treatments/por-cobrar";
 import { leerCondicionesDeFacturas } from "@/lib/invoices/condiciones-pago-db";
 import { esPlanAPlazos } from "@/lib/invoices/plan-de-pagos";
+import { cuentaEnElDebeDeLaFicha, debeDeLaFicha } from "@/lib/dinero/debe-de-la-ficha";
 
 export interface LoQueAunNoSeDebe {
   /** `invoiceId` → pesos de su saldo que aún no se deben. Solo las que tienen algo. */
@@ -220,20 +221,26 @@ export async function loQueAunNoSeDebeDeFacturas(facturas: Array<{ id: string; c
 }
 
 /**
- * v17 (decisión 2 de Rafael, 28-oct): lo que el paciente debe HOY — la cifra de Pacientes (`/api/patients`:
- * saldo de sus facturas por cobrar menos `loQueAunNoSeDebe`) y del «Debe» de la ficha. La dice el detalle
- * de la cita («Debe hoy»); no es una fórmula aparte, son las mismas dos piezas.
+ * v17 (decisión 2 de Rafael, 28-oct): lo que el paciente debe HOY — «Debe hoy» del detalle de la cita.
+ *
+ * v18 (t5 de la v17, m1): es EXACTAMENTE el «Debe» de la ficha, con su regla (`debe-de-la-ficha.ts`): el
+ * saldo de sus facturas de esta clínica que no estén canceladas (los borradores de la consulta incluidos)
+ * menos `loQueAunNoSeDebe`, que se mide —como en la ficha (`/lo-que-aun-no-se-debe`)— sobre las facturas
+ * por cobrar. Pacientes y Caja (`receivableInvoiceWhere`) NO suman los borradores: con un borrador con
+ * saldo, esta cifra y la de Pacientes difieren (decisión de Rafael pendiente, REPORTE-ws1-t12-v18).
  */
 export async function debeDelPaciente(clinicId: string, patientId: string): Promise<number> {
   if (!clinicId) throw new Error("dinero: clinicId ausente — se corta antes de consultar");
   if (!patientId) return 0;
   const facturas = await prisma.invoice.findMany({
-    where: { ...receivableInvoiceWhere(clinicId), patientId },
-    select: { id: true, balance: true },
-    take: 500,
+    where: { clinicId, patientId },
+    select: { id: true, balance: true, status: true },
   });
-  if (facturas.length === 0) return 0;
-  const r = await loQueAunNoSeDebe(clinicId, { ids: facturas.map((f) => f.id) });
-  const saldo = facturas.reduce((s, f) => s + Math.round((Number(f.balance) || 0) * 100), 0) / 100;
-  return Math.max(0, Math.round((saldo - r.total) * 100) / 100);
+  const cuentan = facturas.filter((f) => cuentaEnElDebeDeLaFicha({ status: String(f.status) }));
+  if (cuentan.length === 0) return 0;
+  // Lo que aún no se debe, de las mismas facturas que la ficha le pregunta: las por cobrar.
+  const porCobrar = cuentan.filter((f) => String(f.status) !== "DRAFT" && (Number(f.balance) || 0) > 0).map((f) => f.id);
+  const r = porCobrar.length ? await loQueAunNoSeDebe(clinicId, { ids: porCobrar }) : { total: 0 };
+  const saldo = cuentan.reduce((s, f) => s + (Number(f.balance) || 0), 0);
+  return debeDeLaFicha(saldo, r.total);
 }

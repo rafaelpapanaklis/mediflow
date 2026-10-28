@@ -52,9 +52,11 @@ const planConNota = () => ({
 const planSinNota = () => ({ ...planConNota(), facturado: 0, saldo: 0, porFacturar: 2050.5, notas: [], aceptado: 0, porHacer: 0, filas: FILAS.map((f) => ({ ...f, invoiceId: null })) });
 const AHORA = Date.now();
 const CITAS = [
-  { id: "cita-hoy", startsAt: new Date(AHORA - 30 * 60_000).toISOString(), status: "IN_PROGRESS", doctor: "Ana Ruiz", motivo: "Resina", esHoy: true, tieneNota: false },
-  { id: "cita-ayer", startsAt: new Date(AHORA - 86_400_000).toISOString(), status: "COMPLETED", doctor: "Ana Ruiz", motivo: "Valoración", esHoy: false, tieneNota: true },
+  { id: "cita-hoy", startsAt: new Date(AHORA - 30 * 60_000).toISOString(), status: "IN_PROGRESS", doctor: "Ana Ruiz", motivo: "Resina", esHoy: true, tieneNota: false, notaLigable: true },
+  { id: "cita-ayer", startsAt: new Date(AHORA - 86_400_000).toISOString(), status: "COMPLETED", doctor: "Ana Ruiz", motivo: "Valoración", esHoy: false, tieneNota: true, notaLigable: true },
 ];
+// v18 (t5, m2): la cita de hoy de OTRO doctor, aún sin terminar: su nota la escribe su doctor.
+const CITA_DE_OTRO = { ...CITAS[0], doctor: "Luis Mora", notaLigable: false };
 
 interface Pedida { metodo: string; ruta: string; cuerpo: any }
 interface Opciones {
@@ -62,6 +64,7 @@ interface Opciones {
   locale?: "es" | "en";
   cuentas?: () => unknown[];
   citasFallan?: boolean;
+  citas?: unknown[];
   usuario?: { id: string; esDoctor: boolean };
   viewport?: { width: number; height: number };
 }
@@ -88,7 +91,7 @@ async function abrir(chromium: { launch(o?: any): Promise<any> }, paquete: strin
     if (url.pathname === "/api/treatments" && req.method() === "GET") {
       return json(200, [{ id: "plan1", name: "Plan Ana", status: "ACTIVE", items: FILAS.map((f) => ({ ...f, importe: f.nombre === "Resina" ? 1250.5 : 800, precio: 0, precioCentavos: 0 })) }]);
     }
-    if (url.pathname === "/api/treatments/plan1/citas-para-hecho") return opciones.citasFallan ? json(500, { error: "pooler" }) : json(200, { citas: CITAS });
+    if (url.pathname === "/api/treatments/plan1/citas-para-hecho") return opciones.citasFallan ? json(500, { error: "pooler" }) : json(200, { citas: opciones.citas ?? CITAS });
     if (url.pathname === "/api/treatments/plan1" && req.method() === "PATCH") {
       return json(200, { success: true, items: (cuerpo?.itemIds ?? []).map((id: string) => ({ id, estado: "hecho" })), ...(cuerpo?.citaId === "cita-hoy" && cuerpo?.avisarSinNota ? { citaSinNota: true } : {}) });
     }
@@ -167,7 +170,11 @@ test("1 · «Hecho» pregunta la cita: la de hoy primero y elegida; sin nota →
       await foto(pagina, `hecho-elegir-cita-${viewport.width}.png`);
 
       await pagina.click("[data-cita-hecho-escribir]");
-      await pagina.waitForFunction(() => (window as any).__NOTA__ === 1);
+      // v18 (t5, m2): la ficha recibe LA CITA elegida (y su etiqueta) para ligar la nota a ella.
+      await pagina.waitForFunction(() => !!(window as any).__NOTA__);
+      const nota = await pagina.evaluate(() => (window as any).__NOTA__);
+      assert.equal(nota.id, "cita-hoy");
+      assert.match(nota.etiqueta, /^Hoy, /);
       assert.deepEqual(patches(pedidas), [{ action: "marcar_hecho", itemIds: ["f-resina"], citaId: "cita-hoy", avisarSinNota: true, conCuenta: true }]);
       await pagina.waitForSelector('[data-cita-hecho="f-resina"]', { state: "detached" });
       assert.equal(await pagina.getAttribute('[data-fila-plan="f-resina"]', "data-estado"), "hecho");
@@ -282,3 +289,26 @@ test("3 · «Convertir en presupuesto» junto a «Abonar al plan» (mismo diálo
     }
   }
 });
+
+test("1 · v18: la cita de hoy de otro doctor sin terminar — «la escribe Luis Mora», sin botón; se puede marcar igual", async (t) => {
+  const chromium = await cargarChromium();
+  if (!chromium) { t.skip("Playwright no está en ~/navegador"); return; }
+  const paquete = await empaquetar(ARNES);
+  const { navegador, pagina, pedidas } = await abrir(chromium, paquete, { citas: [CITA_DE_OTRO], viewport: { width: 390, height: 844 } });
+  try {
+    await pagina.waitForSelector('[data-fila-hecho="f-resina"]');
+    await pagina.click('[data-fila-hecho="f-resina"]');
+    await pagina.waitForSelector("[data-cita-hecho-aviso]");
+    assert.match((await pagina.textContent("[data-cita-hecho-aviso]")) ?? "", /Esta cita no tiene nota clínica\. La escribe Luis Mora al atender la consulta\./);
+    assert.equal(await pagina.locator("[data-cita-hecho-escribir]").count(), 0, "sin «Marcar y escribir la nota»");
+    await sinScrollHorizontal(pagina);
+    await foto(pagina, "hecho-cita-de-otro-390.png");
+    await pagina.click("[data-cita-hecho-confirmar]");
+    await pagina.waitForSelector('[data-cita-hecho="f-resina"]', { state: "detached" });
+    assert.equal(patches(pedidas)[0].citaId, "cita-hoy");
+    assert.equal(await pagina.evaluate(() => (window as any).__NOTA__ ?? null), null);
+  } finally {
+    await navegador.close();
+  }
+});
+

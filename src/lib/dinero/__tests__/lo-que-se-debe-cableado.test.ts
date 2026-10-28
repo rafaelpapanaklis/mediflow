@@ -616,10 +616,9 @@ test("v17: las 4 decisiones del 28-oct cableadas — cita del «Hecho», detalle
   assert.doesNotMatch(enCita, /#[0-9a-fA-F]{3,6}\b/, "sin hex: tokens");
   assert.match(leer("src/app/api/appointments/[id]/plan-de-la-cita/route.ts"), /denyIfMissingPermission\(ctx, "agenda\.view"\)/);
   assert.match(leer("src/lib/treatments/plan-de-la-cita.server.ts"), /debeHoy: patientId \? await debeDelPaciente\(clinicId, patientId\) : 0/);
-  // «Debe hoy» = Pacientes: facturas por cobrar menos `loQueAunNoSeDebe`, sin otra fórmula.
+  // «Debe hoy» = el «Debe» de la ficha (v18, t5 m1: con su regla, `debe-de-la-ficha.ts`; candado v18).
   const debe = leer("src/lib/dinero/lo-que-se-debe.server.ts");
-  assert.match(debe, /where: \{ \.\.\.receivableInvoiceWhere\(clinicId\), patientId \}/);
-  assert.match(debe, /const r = await loQueAunNoSeDebe\(clinicId, \{ ids: facturas\.map\(\(f\) => f\.id\) \}\);/);
+  assert.match(debe, /return debeDeLaFicha\(saldo, r\.total\);/);
   // 3. «Convertir en presupuesto» en la tarjeta: el MISMO componente, dentro de «Cuenta del plan», justo tras «Abonar».
   const tarjeta = leer("src/components/dashboard/expediente-rediseno/plan-tratamiento.tsx");
   assert.match(tarjeta, /<ConvertirEnPresupuesto\n\s*planId=\{plan\.id\}/);
@@ -627,7 +626,7 @@ test("v17: las 4 decisiones del 28-oct cableadas — cita del «Hecho», detalle
   assert.match(leer("src/components/dashboard/expediente-rediseno/cuenta-del-plan.tsx"), /\{t\("planTratamiento\.cobro\.abonar"\)\}\n\s*<\/button>\n\s*\)\}\n\s*\{presupuesto\}/);
   const ficha = leer("src/app/dashboard/patients/[id]/patient-detail-client.tsx");
   assert.match(ficha, /onAbrirPresupuesto=\{canCreateQuotes \? \(q\) => \{ setPresupuestoAbrir\(q\.id\); setTab\("presupuestos"\); \} : undefined\}/);
-  assert.match(ficha, /onEscribirNota=\{canEditRecords \?/);
+  assert.match(ficha, /onEscribirNota=\{canEditRecords && formularioConsulta === "dental"/);
   // 4. Otro doctor: SOLO marcar/deshacer; editar, cambiar estado y borrar siguen acotados.
   const ruta = leer("src/app/api/treatments/[id]/route.ts");
   assert.match(ruta, /if \(ctx\.isDoctor && plan\.doctorId !== ctx\.userId && !esHecho\) \{/);
@@ -647,3 +646,42 @@ test("v17: las 4 decisiones del 28-oct cableadas — cita del «Hecho», detalle
   }
   assert.equal(JSON.parse(leer("src/i18n/dictionaries/es.json")).planTratamiento.hecho.cita.avisoSinNota, "Esta cita no tiene nota clínica. Escríbela para respaldar el procedimiento.");
 });
+
+test("v18 (t5 de la v17): «Debe hoy» con la regla de la ficha (m1) y la nota ligada a la cita elegida (m2)", () => {
+  // m1: UNA regla para la ficha y para «Debe hoy»: todo menos canceladas (borradores incluidos) − lo que aún no se debe.
+  const regla = leer("src/lib/dinero/debe-de-la-ficha.ts");
+  assert.match(regla, /export const cuentaEnElDebeDeLaFicha = \(inv: \{ status\?: string \| null \}\): boolean => !isVoidedInvoice\(inv\);/);
+  assert.match(regla, /return Math\.max\(0, Math\.round\(\(saldo - aunNoSeDebe\) \* 100\) \/ 100\);/);
+  assert.doesNotMatch(regla, /^"use client"|@prisma|@\/lib\/prisma/m, "puro: lo usan navegador y servidor");
+  const ficha = leer("src/app/dashboard/patients/[id]/patient-detail-client.tsx");
+  assert.match(ficha, /\.filter\(\(inv\) => cuentaEnElDebeDeLaFicha\(inv\)\)/);
+  assert.match(ficha, /const saldoQueSeDebe = debeDeLaFicha\(totalBalance, aunNoSeDebe\);/);
+  const debe = leer("src/lib/dinero/lo-que-se-debe.server.ts");
+  assert.match(debe, /where: \{ clinicId, patientId \},/, "las facturas de la ficha: las del paciente en ESTA clínica");
+  assert.match(debe, /const cuentan = facturas\.filter\(\(f\) => cuentaEnElDebeDeLaFicha\(\{ status: String\(f\.status\) \}\)\);/);
+  assert.match(debe, /String\(f\.status\) !== "DRAFT" && \(Number\(f\.balance\) \|\| 0\) > 0/, "lo que aún no se debe, de las por cobrar (como /lo-que-aun-no-se-debe)");
+  // Pacientes y Caja NO cambian (decisión de Rafael pendiente).
+  assert.match(leer("src/lib/caja.ts"), /status:  \{ notIn: \["DRAFT", "CANCELLED"\] \},/);
+  // m2: la cita elegida viaja hasta «Nueva consulta» y el servidor la liga con sus guardas.
+  const proc = leer("src/components/dashboard/expediente-rediseno/procedimientos-del-plan.tsx");
+  assert.match(proc, /onEscribirNota\(\{ id: eleccion\.citaId, etiqueta: opciones\.etiqueta \?\? "" \}\)/);
+  assert.match(ficha, /\(cita\) => \{ setCitaParaLaNota\(cita\); setTab\(CONSULT_FORM_TAB\); \}/);
+  assert.equal((ficha.match(/citaElegida=\{citaParaLaNota\} onQuitarCitaElegida=\{\(\) => setCitaParaLaNota\(null\)\}/g) ?? []).length, 2, "las dos ropas de «Nueva consulta»");
+  const form = leer("src/components/clinical/dental-form.tsx");
+  assert.match(form, /const appointmentId = citaElegida\?\.id \?\? citaEnCursoId \?\? \(await fetchTodayAppointmentId\(patientId\)\);/);
+  assert.match(form, /\.\.\.\(citaElegida \? \{ citaElegida: true \} : \{\}\),/);
+  const ruta = leer("src/app/api/clinical/route.ts");
+  assert.match(ruta, /if \(citaPedida && data\.citaElegida === true\) \{/);
+  assert.match(ruta, /else if \(esBorradorAdoptable\(yaLigada\) && yaLigada\.doctorId === dbUser\.id\) \{/, "solo adopta el borrador de quien escribe");
+  const reglaNota = leer("src/lib/treatments/cita-del-hecho.ts");
+  assert.match(reglaNota, /return CITA_TERMINADA\.includes\(cita\.status\) \|\| cita\.momento === "pasado";/);
+  const elegir = leer("src/components/dashboard/expediente-rediseno/elegir-cita-del-hecho.tsx");
+  assert.match(elegir, /\{puedeEscribirNota && cita\.notaLigable && \(/, "sin botón donde no se puede ligar");
+  for (const idioma of ["es", "en"]) {
+    const d = JSON.parse(leer(`src/i18n/dictionaries/${idioma}.json`));
+    for (const k of ["avisoSinNotaDeOtro", "suDoctor"]) assert.ok(d.planTratamiento.hecho.cita[k], `${idioma}: ${k}`);
+    for (const k of ["linkedToChosenAppointment", "unlinkChosenAppointment", "notLinkedToChosen"]) assert.ok(d.clinical.dentalForm[k], `${idioma}: clinical.dentalForm.${k}`);
+    assert.match(d.planTratamiento.hecho.cita.avisoSinNotaDeOtro, /\{doctor\}/);
+  }
+});
+

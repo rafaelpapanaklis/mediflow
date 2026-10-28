@@ -67,7 +67,9 @@ const DDL = `
   ALTER TABLE "procedure_catalog" ADD COLUMN "code" text;
   ALTER TABLE "appointments" ADD COLUMN "doctorId" text, ADD COLUMN "type" text, ADD COLUMN "startsAt" timestamptz,
     ADD COLUMN "status" text NOT NULL DEFAULT 'SCHEDULED';
-  ALTER TABLE "medical_records" ADD COLUMN "subjective" text, ADD COLUMN "objective" text, ADD COLUMN "assessment" text, ADD COLUMN "plan" text;
+  ALTER TABLE "medical_records" ADD COLUMN "subjective" text, ADD COLUMN "objective" text, ADD COLUMN "assessment" text, ADD COLUMN "plan" text,
+    ADD COLUMN "doctorId" text, ADD COLUMN "visitDate" timestamp(3), ADD COLUMN "diagnoses" jsonb, ADD COLUMN "vitals" jsonb,
+    ADD COLUMN "createdAt" timestamp(3) NOT NULL DEFAULT clock_timestamp(), ADD COLUMN "updatedAt" timestamp(3) NOT NULL DEFAULT clock_timestamp();
 `;
 
 async function usar() {
@@ -170,6 +172,34 @@ async function citasParaHecho(planId: string) {
 async function planDeLaCita(citaId: string) {
   const { GET } = await import("@/app/api/appointments/[id]/plan-de-la-cita/route");
   return leer(await GET(pedir(`/api/appointments/${citaId}/plan-de-la-cita`, undefined, "GET"), params(citaId)));
+}
+
+/**
+ * El «Debe» de la ficha tal como lo calcula patient-detail-client.tsx: sus facturas de esta clínica (las de
+ * page.tsx), las que cuentan (`cuentaEnElDebeDeLaFicha`: todo menos canceladas), su saldo, menos lo que aún no
+ * se debe que le da `/lo-que-aun-no-se-debe` (la ruta real), con `debeDeLaFicha`.
+ */
+async function debeComoLaFicha(paciente = "pac-c1") {
+  const { cuentaEnElDebeDeLaFicha, debeDeLaFicha } = await import("@/lib/dinero/debe-de-la-ficha");
+  const facturas = (await base.db.query(`SELECT "status"::text AS "status", "balance" FROM "invoices" WHERE "clinicId" = 'c1' AND "patientId" = $1`, [paciente])).rows;
+  const saldo = facturas.filter((f: any) => cuentaEnElDebeDeLaFicha(f)).reduce((s: number, f: any) => s + Number(f.balance), 0);
+  const { GET: AUN } = await import("@/app/api/patients/[id]/lo-que-aun-no-se-debe/route");
+  const aun = await leer(await AUN(pedir(`/api/patients/${paciente}/lo-que-aun-no-se-debe`, undefined, "GET"), params(paciente)));
+  return debeDeLaFicha(saldo, aun.body.total);
+}
+/** La columna «Saldo» de Pacientes (`/api/patients`): facturas por cobrar (sin borradores) menos lo que aún no se debe. */
+async function debeComoPacientes(paciente = "pac-c1") {
+  const { loQueAunNoSeDebe } = await import("@/lib/dinero/lo-que-se-debe.server");
+  const f = (await base.db.query(`SELECT "id", "balance" FROM "invoices" WHERE "clinicId" = 'c1' AND "patientId" = $1 AND "status"::text NOT IN ('DRAFT','CANCELLED') AND "balance" > 0`, [paciente])).rows;
+  const r = await loQueAunNoSeDebe("c1", { ids: f.map((x: any) => x.id) });
+  return Math.round(f.reduce((s: number, x: any) => s + Number(x.balance) - (r.porFactura[x.id] ?? 0), 0) * 100) / 100;
+}
+async function factura(id: string, status: string, total: number, opciones: { paciente?: string; clinica?: string } = {}) {
+  await base.db.query(
+    `INSERT INTO "invoices" ("id","clinicId","patientId","invoiceNumber","items","subtotal","total","balance","status")
+     VALUES ($1,$2,$3,$1,'[]'::jsonb,$4,$4,$4,$5::"InvoiceStatus")`,
+    [id, opciones.clinica ?? "c1", opciones.paciente ?? "pac-c1", total, status],
+  );
 }
 
 // ── 1. «Hecho» pregunta en qué cita se hizo ──────────────────────────────────────────────────────
@@ -344,12 +374,9 @@ test("v17 · 2: «En esta cita: Resina $1,250.50 (hecho) · Debe hoy» — agend
   const { GET: CUENTAS } = await import("@/app/api/treatments/cuentas/route");
   const cuentas = await leer(await CUENTAS(pedir(`/api/treatments/cuentas?patientId=pac-c1`, undefined, "GET")));
   assert.equal(cuentas.body.planes[0].debe, 750.5);
-  const { GET: AUN } = await import("@/app/api/patients/[id]/lo-que-aun-no-se-debe/route");
-  const aun = await leer(await AUN(pedir(`/api/patients/pac-c1/lo-que-aun-no-se-debe`, undefined, "GET"), params("pac-c1")));
-  const saldo = (await base.db.query(`SELECT SUM("balance") AS s FROM "invoices" WHERE "patientId" = 'pac-c1' AND "status"::text NOT IN ('DRAFT','CANCELLED')`)).rows[0].s;
-  assert.equal(Math.round((Number(saldo) - aun.body.total) * 100) / 100, 750.5, "ficha: «Debe»");
-  const { debeDelPaciente } = await import("@/lib/dinero/lo-que-se-debe.server");
-  assert.equal(await debeDelPaciente("c1", "pac-c1"), 750.5, "Pacientes");
+  // v18 (t5 de la v17, m1): el «Debe» de la ficha con SU regla (borradores incluidos), no con la de Pacientes.
+  assert.equal(await debeComoLaFicha(), 750.5, "ficha: «Debe»");
+  assert.equal(await debeComoPacientes(), 750.5, "Pacientes (sin borradores, aquí no hay)");
 
   // Deshecha la resina, en la cita queda solo lo agendado y la deuda baja (pagó de más: Debe $0).
   await hecho(planId, { action: "deshacer_hecho", itemId: resina.id });
@@ -445,3 +472,163 @@ test("v17 · 4: la ficha le trae al doctor los procedimientos del plan ajeno (`t
   assert.deepEqual(todos.body[0].items.map((f: any) => f.nombre), ["Resina", "Limpieza"]);
   assert.deepEqual(await ids("/api/treatments?todosLosDoctores=1"), [], "sin paciente no abre la clínica entera");
 });
+
+// ── v18 (revisión t5 de la v17) ──────────────────────────────────────────────────────────────────
+
+test("v18 · m1: «Debe hoy» = el «Debe» de la ficha SIEMPRE — también con un borrador de la consulta (Pacientes no lo suma: decisión pendiente)", async (t) => {
+  if (salta(t)) return;
+  await usar();
+  const { planId, notaId } = await planAceptado();
+  await pagar(notaId, 500);
+  await cita("c-hoy", new Date());
+  const resina = await filaDe(planId, "Resina");
+  await hecho(planId, { action: "marcar_hecho", itemIds: [resina.id], citaId: "c-hoy" });
+  const debeHoy = async () => (await planDeLaCita("c-hoy")).body.debeHoy;
+
+  assert.deepEqual([await debeHoy(), await debeComoLaFicha(), await debeComoPacientes()], [750.5, 750.5, 750.5]);
+  await factura("F-PEND", "PENDING", 300);
+  assert.deepEqual([await debeHoy(), await debeComoLaFicha(), await debeComoPacientes()], [1050.5, 1050.5, 1050.5]);
+  // El borrador que arma «Nueva consulta» con lo de fuera del plan: la ficha lo suma, «Debe hoy» también.
+  await factura("F-BORR", "DRAFT", 200);
+  assert.deepEqual([await debeHoy(), await debeComoLaFicha()], [1250.5, 1250.5]);
+  assert.equal(await debeComoPacientes(), 1050.5, "Pacientes y Caja no suman borradores (DECISIONES PARA RAFAEL)");
+  // Cancelada: no cuenta en ninguna. Otra clínica u otro paciente: tampoco.
+  await factura("F-CANC", "CANCELLED", 99);
+  await factura("F-C2", "PENDING", 777, { clinica: "c2", paciente: "pac-c1" });
+  await factura("F-OTRO", "DRAFT", 555, { paciente: "pac-otro" });
+  assert.deepEqual([await debeHoy(), await debeComoLaFicha()], [1250.5, 1250.5]);
+});
+
+/** El expediente que usa POST /api/clinical, sobre la tabla del arnés (lo justo: buscar por cita, crear, adoptar). */
+function conExpediente() {
+  const q = (sql: string, v: unknown[]) => base.db.query(sql, v);
+  prismaVivo.medicalRecord = {
+    async findFirst(a: any) {
+      const w = a.where;
+      const r = await q(
+        `SELECT * FROM "medical_records" WHERE "clinicId" = $1 AND "patientId" = $2 AND "specialtyData"->>'appointmentId' = $3 ORDER BY "createdAt" DESC LIMIT 1`,
+        [w.clinicId, w.patientId, w.specialtyData.equals],
+      );
+      return r.rows[0] ?? null;
+    },
+    async create(a: any) {
+      const d = a.data;
+      const r = await q(
+        `INSERT INTO "medical_records" ("id","clinicId","patientId","doctorId","visitDate","subjective","objective","assessment","plan","specialtyData")
+         VALUES ($1,$2,$3,$4,now(),$5,$6,$7,$8,$9) RETURNING *`,
+        [`nota-${Math.random()}`, d.clinicId, d.patientId, d.doctorId, d.subjective, d.objective, d.assessment, d.plan, JSON.stringify(d.specialtyData)],
+      );
+      return { ...r.rows[0], doctor: null };
+    },
+    async update(a: any) {
+      const d = a.data;
+      const r = await q(
+        `UPDATE "medical_records" SET "doctorId" = $2, "subjective" = $3, "objective" = $4, "assessment" = $5, "plan" = $6, "specialtyData" = $7 WHERE "id" = $1 RETURNING *`,
+        [a.where.id, d.doctorId, d.subjective, d.objective, d.assessment, d.plan, JSON.stringify(d.specialtyData)],
+      );
+      return { ...r.rows[0], doctor: null };
+    },
+    async updateMany() { return { count: 0 }; },
+  };
+}
+/** «Guardar consulta» (DentalForm): POST /api/clinical, como lo manda el formulario. */
+async function guardarNota(quien: { id: string; role: string }, cuerpo: Record<string, unknown>) {
+  Object.assign(ctx, { userId: quien.id, role: quien.role, isDoctor: quien.role === "DOCTOR", permissionsOverride: null });
+  ctx.user = { id: quien.id, clinicId: ctx.clinicId, role: quien.role, permissionsOverride: null, clinic: { timezone: "America/Mexico_City" } };
+  const { POST } = await import("@/app/api/clinical/route");
+  return leer(await POST(pedir("/api/clinical", { patientId: "pac-c1", subjective: "Resina 16 MO, sin complicaciones", specialtyData: { status: "SIGNED" }, ...cuerpo })));
+}
+const LUIS = { id: "doc-luis", role: "DOCTOR" };
+const ANA = { id: "doc-c1", role: "DOCTOR" };
+
+test("v18 · m2: «Marcar y escribir la nota» liga la nota a la cita ELEGIDA — de otro día u otro doctor — y el aviso «Sin nota» se quita", async (t) => {
+  if (salta(t)) return;
+  await usar();
+  conExpediente();
+  const { planId } = await planAceptado();
+  // La cita de AYER de la Dra. Ana, ya atendida; Luis marca en ella la resina del plan de Ana.
+  await cita("c-ayer", new Date(Date.now() - DIA));
+  const resina = await filaDe(planId, "Resina");
+  Object.assign(ctx, { userId: LUIS.id, role: "DOCTOR", isDoctor: true });
+  const m = await hecho(planId, { action: "marcar_hecho", itemIds: [resina.id], citaId: "c-ayer", avisarSinNota: true });
+  assert.equal(m.body.citaSinNota, true);
+  const deLuis = async () => {
+    Object.assign(ctx, { userId: LUIS.id, role: "DOCTOR", isDoctor: true });
+    return (await citasParaHecho(planId)).body.citas.find((c: any) => c.id === "c-ayer");
+  };
+  assert.deepEqual([(await deLuis()).tieneNota, (await deLuis()).notaLigable], [false, true]);
+
+  // Sin el enlace explícito, la regla de siempre NO la liga (no es de hoy ni de Luis): el aviso seguiría.
+  const suelta = await guardarNota(LUIS, { appointmentId: "c-ayer" });
+  assert.equal(suelta.status, 201);
+  assert.equal(suelta.body.specialtyData.appointmentId, undefined);
+  assert.equal((await deLuis()).tieneNota, false);
+
+  // Con la cita elegida, sí: la nota es de Luis y va a la cita de Ana de ayer.
+  const ligada = await guardarNota(LUIS, { appointmentId: "c-ayer", citaElegida: true });
+  assert.equal(ligada.status, 201);
+  assert.equal(ligada.body.specialtyData.appointmentId, "c-ayer");
+  assert.equal(ligada.body.doctorId, LUIS.id, "la nota es de quien la escribe");
+  assert.equal((await deLuis()).tieneNota, true, "el aviso «Sin nota» se quita");
+  // Una segunda nota para la misma cita ya no se liga (una cita, una nota): va suelta.
+  const otra = await guardarNota(LUIS, { appointmentId: "c-ayer", citaElegida: true });
+  assert.equal(otra.body.specialtyData.appointmentId, undefined);
+});
+
+test("v18 · m2: el enlace explícito no vale para una cita sin «Hecho», de otro paciente, de otra clínica, cancelada, ni la de hoy de otro doctor sin terminar; un borrador vacío ajeno no se toca", async (t) => {
+  if (salta(t)) return;
+  await usar();
+  conExpediente();
+  const { planId } = await planAceptado();
+  const resina = await filaDe(planId, "Resina");
+  const limpieza = await filaDe(planId, "Limpieza");
+  const ligaA = async (quien: typeof LUIS, citaId: string) => (await guardarNota(quien, { appointmentId: citaId, citaElegida: true })).body.specialtyData.appointmentId ?? null;
+
+  // Sin nada del plan hecho en ella: no.
+  await cita("c-sin-hecho", new Date(Date.now() - DIA));
+  assert.equal(await ligaA(LUIS, "c-sin-hecho"), null);
+  // De otro paciente o de otra clínica (aunque tenga el id): no.
+  await cita("c-otro-pac", new Date(Date.now() - DIA), { patientId: "pac-otro" });
+  await cita("c-otra-clinica", new Date(Date.now() - DIA), { clinicId: "c2", patientId: "pac-c1" });
+  await base.db.query(`UPDATE "treatment_plan_items" SET "estado" = 'hecho', "citaId" = 'c-otro-pac' WHERE "id" = $1`, [limpieza.id]);
+  assert.equal(await ligaA(LUIS, "c-otro-pac"), null);
+  await base.db.query(`UPDATE "treatment_plan_items" SET "citaId" = 'c-otra-clinica' WHERE "id" = $1`, [limpieza.id]);
+  assert.equal(await ligaA(LUIS, "c-otra-clinica"), null);
+  // Cancelada: no.
+  await cita("c-cancelada", new Date(Date.now() - 2 * DIA), { status: "CANCELLED" });
+  await base.db.query(`UPDATE "treatment_plan_items" SET "citaId" = 'c-cancelada' WHERE "id" = $1`, [limpieza.id]);
+  assert.equal(await ligaA(LUIS, "c-cancelada"), null);
+
+  // La cita de HOY de Ana, por atender (o en consulta): Luis marca «Hecho» en ella, pero la nota es de Ana.
+  await cita("c-hoy-ana", new Date(), { status: "SCHEDULED" });
+  Object.assign(ctx, { userId: LUIS.id, role: "DOCTOR", isDoctor: true });
+  await hecho(planId, { action: "marcar_hecho", itemIds: [resina.id], citaId: "c-hoy-ana" });
+  const paraLuis = (await citasParaHecho(planId)).body.citas.find((c: any) => c.id === "c-hoy-ana");
+  assert.deepEqual([paraLuis.tieneNota, paraLuis.notaLigable], [false, false], "a Luis: sin botón, «la escribe la Dra. Ana»");
+  assert.equal(await ligaA(LUIS, "c-hoy-ana"), null);
+  await base.db.query(`UPDATE "appointments" SET "status" = 'IN_PROGRESS' WHERE "id" = 'c-hoy-ana'`);
+  assert.equal(await ligaA(LUIS, "c-hoy-ana"), null, "ni con la consulta abierta");
+  Object.assign(ctx, { userId: ANA.id, role: "DOCTOR", isDoctor: true });
+  assert.equal((await citasParaHecho(planId)).body.citas.find((c: any) => c.id === "c-hoy-ana").notaLigable, true, "a Ana sí");
+  // Ana tiene el borrador vacío de «Iniciar consulta»: su nota lo ADOPTA (mismo registro).
+  await base.db.query(`INSERT INTO "medical_records" ("id","clinicId","patientId","doctorId","specialtyData") VALUES ('borrador-ana','c1','pac-c1','doc-c1',$1)`, [JSON.stringify({ appointmentId: "c-hoy-ana", status: "DRAFT" })]);
+  const deAna = await guardarNota(ANA, { appointmentId: "c-hoy-ana", citaElegida: true });
+  assert.equal(deAna.body.id, "borrador-ana");
+  assert.equal(deAna.body.specialtyData.appointmentId, "c-hoy-ana");
+
+  // Terminada, la de Ana sí admite la de Luis… pero un borrador VACÍO de Ana no se le pasa a Luis: va aparte.
+  await cita("c-terminada", new Date(Date.now() - 3 * DIA), { status: "COMPLETED" });
+  await base.db.query(`UPDATE "treatment_plan_items" SET "citaId" = 'c-terminada' WHERE "id" = $1`, [limpieza.id]);
+  await base.db.query(`INSERT INTO "medical_records" ("id","clinicId","patientId","doctorId","specialtyData","createdAt") VALUES ('vacio-ana','c1','pac-c1','doc-c1',$1, now() - interval '1 day')`, [JSON.stringify({ appointmentId: "c-terminada", status: "DRAFT" })]);
+  const deLuis = await guardarNota(LUIS, { appointmentId: "c-terminada", citaElegida: true });
+  assert.equal(deLuis.body.specialtyData.appointmentId, "c-terminada");
+  assert.notEqual(deLuis.body.id, "vacio-ana");
+  const vacio = (await base.db.query(`SELECT "doctorId", "subjective" FROM "medical_records" WHERE "id" = 'vacio-ana'`)).rows[0];
+  assert.deepEqual([vacio.doctorId, vacio.subjective], ["doc-c1", null], "el borrador de Ana sigue siendo de Ana");
+  // Sin `medicalRecord.edit`, nada (los permisos de siempre).
+  Object.assign(ctx, { userId: "rec-c1", role: "RECEPTIONIST", isDoctor: false });
+  ctx.user = { id: "rec-c1", clinicId: "c1", role: "RECEPTIONIST", permissionsOverride: ["treatments.view"], clinic: { timezone: "America/Mexico_City" } };
+  const { POST } = await import("@/app/api/clinical/route");
+  assert.equal((await POST(pedir("/api/clinical", { patientId: "pac-c1", subjective: "x", appointmentId: "c-terminada", citaElegida: true }))).status, 403);
+});
+

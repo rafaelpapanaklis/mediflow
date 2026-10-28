@@ -62,8 +62,8 @@ export interface PlanTratamientoProps {
   patientId?: string;
   puedeMarcarHecho?: boolean;
   refresco?: unknown;
-  /** v17: «Hecho» en una cita sin nota clínica → escribirla (solo si quien marca puede escribir notas). */
-  onEscribirNota?: () => void;
+  /** v17: «Hecho» en una cita sin nota clínica → escribirla (solo si quien marca puede escribir notas). v18: ligada a esa cita. */
+  onEscribirNota?: (cita: { id: string; etiqueta: string }) => void;
   /**
    * v17 (decisión 3 de Rafael): «Convertir en presupuesto» también en la tarjeta, junto a «Abonar al plan».
    * Solo llega con `billing.create` + `treatments.view` (lo de hoy); abre el presupuesto creado o el que ya había.

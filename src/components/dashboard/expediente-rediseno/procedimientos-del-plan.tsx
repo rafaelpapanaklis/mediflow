@@ -78,8 +78,11 @@ export function ProcedimientosDelPlan({ planId, estadoDelPlan, filas, puede, deb
   onCuenta?: (cuenta: PlanConCuenta) => void;
   /** Cambió lo hecho: la ficha relee cuentas, «Estado de cuenta» y el odontograma. */
   onCambio?: () => void;
-  /** v17: lleva a escribir la nota de la consulta (solo si quien marca puede escribir notas). */
-  onEscribirNota?: () => void;
+  /**
+   * v17: lleva a escribir la nota de la consulta (solo si quien marca puede escribir notas).
+   * v18 (t5, m2): con la cita elegida — la nota se liga a ella.
+   */
+  onEscribirNota?: (cita: { id: string; etiqueta: string }) => void;
 }) {
   const t = useT();
   const locale = useLocale();
@@ -97,7 +100,7 @@ export function ProcedimientosDelPlan({ planId, estadoDelPlan, filas, puede, deb
   // v13 (t5, n1): «pasa a Debe» solo si lo que falta por hacer ya está en una nota de cobro.
   const conDebe = ayudaHablaDeDebe(debeSigueLoHecho, vivas);
 
-  async function marcar(f: FilaDto, eleccion: EleccionDeCita, opciones: { escribirNota: boolean }) {
+  async function marcar(f: FilaDto, eleccion: EleccionDeCita, opciones: { escribirNota: boolean; etiqueta?: string }) {
     if (ocupada) return;
     setOcupada(f.id);
     try {
@@ -118,7 +121,7 @@ export function ProcedimientosDelPlan({ planId, estadoDelPlan, filas, puede, deb
       // v12 (t5, m3): en el idioma de la pantalla, por lo que pasó (no el texto español del servidor).
       toast.success(avisoDeHecho(t, r));
       // v17: la cita no tiene nota clínica — se avisa (ya está marcado) o se lleva a escribirla.
-      if (r.citaSinNota && opciones.escribirNota && onEscribirNota) onEscribirNota();
+      if (r.citaSinNota && opciones.escribirNota && onEscribirNota && "citaId" in eleccion) onEscribirNota({ id: eleccion.citaId, etiqueta: opciones.etiqueta ?? "" });
       else if (r.citaSinNota) toast(t("planTratamiento.hecho.cita.avisoSinNota"), { icon: "⚠️", duration: 8000 });
       onCambio?.();
     } finally {

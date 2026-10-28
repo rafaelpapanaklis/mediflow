@@ -17,7 +17,7 @@ const w = window as unknown as {
   __ESCENA__?: string;
   __LOCALE__?: "es" | "en";
   __USUARIO__?: { id: string; esDoctor: boolean };
-  __NOTA__?: number;
+  __NOTA__?: { id: string; etiqueta: string };
   __PRESUPUESTO__?: unknown;
   __ABONAR__?: boolean;
 };
@@ -39,7 +39,7 @@ function Tarjeta() {
       patientId="pac1"
       puedeMarcarHecho
       refresco={1}
-      onEscribirNota={() => { w.__NOTA__ = (w.__NOTA__ ?? 0) + 1; }}
+      onEscribirNota={(cita) => { w.__NOTA__ = cita; }}
       onAbrirPresupuesto={(q) => { w.__PRESUPUESTO__ = q; }}
       usuario={w.__USUARIO__ ?? { id: "admin1", esDoctor: false }}
     />

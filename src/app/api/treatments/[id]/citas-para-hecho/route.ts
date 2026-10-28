@@ -32,6 +32,6 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ id: stri
   if (oculto) return oculto;
 
   const clinica = await prisma.clinic.findUnique({ where: { id: ctx.clinicId }, select: { timezone: true } }).catch(() => null);
-  const citas = await citasParaHecho(ctx.clinicId, plan.patientId, { timezone: clinica?.timezone ?? null });
+  const citas = await citasParaHecho(ctx.clinicId, plan.patientId, { timezone: clinica?.timezone ?? null, quienPregunta: ctx.userId });
   return NextResponse.json({ citas });
 }

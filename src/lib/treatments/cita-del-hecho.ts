@@ -32,6 +32,35 @@ export interface CitaParaHecho {
   esHoy: boolean;
   /** Tiene nota clínica con algo escrito (ligada por `specialtyData.appointmentId`). */
   tieneNota: boolean;
+  /**
+   * v18 (t5 de la v17, m2): quien pregunta puede escribir AHORA la nota ligada a esta cita
+   * («Marcar y escribir la nota»; regla en `notaLigable`).
+   */
+  notaLigable: boolean;
+}
+
+/** Estados en los que una cita no respalda nada: no se pasó (cancelada) o el paciente no vino. */
+const CITA_SIN_CONSULTA = ["CANCELLED", "NO_SHOW"];
+/** La consulta de la cita ya se cerró. */
+const CITA_TERMINADA = ["COMPLETED", "CHECKED_OUT"];
+
+/** Cuándo es la cita respecto de hoy, en la zona de la clínica. */
+export type MomentoDeLaCita = "pasado" | "hoy" | "futuro";
+
+/**
+ * v18 (t5 de la v17, m2): ¿se puede ligar EXPLÍCITAMENTE una nota nueva de `quienEscribe` a esta cita
+ * («Marcar y escribir la nota»)? Sí aunque sea de otro día o de otro doctor, salvo:
+ *  · cancelada, «no vino» o de un día que aún no llega;
+ *  · la cita de HOY de OTRO doctor que aún no termina (por atender, en sala o en consulta): esa consulta la
+ *    escribe y la firma su doctor. «Completar consulta» firma la nota más reciente de la cita y «Nueva
+ *    consulta» adopta el borrador de la cita: otra nota ligada antes le cambiaría cuál firma, o dejaría la
+ *    suya suelta («una cita, una nota»).
+ * El servidor exige además misma clínica y paciente, y algo del plan marcado «Hecho» en esa cita.
+ */
+export function notaLigable(cita: { status: string; doctorId: string | null; momento: MomentoDeLaCita }, quienEscribe: string): boolean {
+  if (CITA_SIN_CONSULTA.includes(cita.status) || cita.momento === "futuro") return false;
+  if (cita.doctorId === quienEscribe) return true;
+  return CITA_TERMINADA.includes(cita.status) || cita.momento === "pasado";
 }
 
 /** Las de hoy primero (en orden de hora); después las demás, de la más reciente a la más vieja. */
