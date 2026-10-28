@@ -78,6 +78,7 @@ import { CODIGO_PLAN_CON_NOTA } from "@/lib/treatments/borrar-plan";
 import { useCuentasDelPaciente } from "@/components/dashboard/expediente-rediseno/cuenta-del-plan";
 import { useLoQueAunNoSeDebe } from "@/components/dashboard/patient-detail/use-lo-que-aun-no-se-debe";
 import { cuentaEnElDebeDeLaFicha, debeDeLaFicha } from "@/lib/dinero/debe-de-la-ficha";
+import type { CitaElegidaParaLaNota } from "@/lib/treatments/cita-del-hecho";
 import { cancelarCitaEnServidor, useCancelarCita } from "@/components/dashboard/agenda/cancelar-cita";
 import { planSinCosto } from "@/lib/treatments/plan-sin-costo";
 import { DentalForm, type MotivoEnLaBarra } from "@/components/clinical/dental-form";
@@ -1517,7 +1518,7 @@ export function PatientDetailClient({
 
   // v18 (t5 de la v17, m2): la cita elegida en «Hecho» para escribir su nota («Marcar y escribir la nota»).
   // «Nueva consulta» (dental) la liga a esa cita; se olvida al guardar la nota o con «Quitar».
-  const [citaParaLaNota, setCitaParaLaNota] = useState<{ id: string; etiqueta: string } | null>(null);
+  const [citaParaLaNota, setCitaParaLaNota] = useState<CitaElegidaParaLaNota | null>(null);
   function handleRecordSaved(record: any) {
     setCitaParaLaNota(null);
     // ws1-t8 (revisión de ws1-t9, fallo 1): con la consulta abierta, «Guardar consulta» escribe en el borrador

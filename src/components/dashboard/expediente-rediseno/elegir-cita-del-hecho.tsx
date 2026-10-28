@@ -16,7 +16,7 @@ import { AlertTriangle, CheckCircle2 } from "lucide-react";
 import { useLocale, useT } from "@/i18n/i18n-provider";
 import { formatoEnZona } from "@/lib/fechas/fecha-en-zona";
 import { useZonaDeLaClinica } from "@/lib/fechas/use-zona-de-la-clinica";
-import { limpiarMotivoSinCita, MAX_MOTIVO_SIN_CITA, type CitaParaHecho, type EleccionDeCita } from "@/lib/treatments/cita-del-hecho";
+import { limpiarMotivoSinCita, MAX_MOTIVO_SIN_CITA, type CitaElegidaParaLaNota, type CitaParaHecho, type EleccionDeCita } from "@/lib/treatments/cita-del-hecho";
 import s from "./expediente.module.css";
 
 const SIN_CITA = "__sin_cita__";
@@ -27,8 +27,8 @@ export function ElegirCitaDelHecho({ planId, filaId, nombre, enviando, onElegir,
   /** «Resina 16 (MO)». */
   nombre: string;
   enviando: boolean;
-  /** `escribirNota`: después de marcar, abrir la nota LIGADA a la cita (la cita no tenía): su etiqueta para el formulario. */
-  onElegir: (eleccion: EleccionDeCita, opciones: { escribirNota: boolean; etiqueta?: string }) => void;
+  /** `escribirNota`: después de marcar, abrir la nota LIGADA a la cita (la cita no tenía). v19: viaja la cita con su fecha. */
+  onElegir: (eleccion: EleccionDeCita, opciones: { escribirNota: boolean; cita?: CitaElegidaParaLaNota }) => void;
   onVolver: () => void;
   /** Quien marca puede escribir notas (la ficha sabe a dónde llevarlo). */
   puedeEscribirNota: boolean;
@@ -79,7 +79,7 @@ export function ElegirCitaDelHecho({ planId, filaId, nombre, enviando, onElegir,
     elegida === SIN_CITA ? (motivoListo ? { sinCita: true, motivo: motivoListo } : null) : cita ? { citaId: cita.id } : null;
   const elegir = (escribirNota: boolean) => {
     const e = eleccion();
-    if (e && !enviando) onElegir(e, { escribirNota, ...(cita ? { etiqueta: etiqueta(cita).dia } : {}) });
+    if (e && !enviando) onElegir(e, { escribirNota, ...(cita ? { cita: { id: cita.id, startsAt: cita.startsAt } } : {}) });
   };
   const grupo = `cita-hecho-${filaId}`;
 

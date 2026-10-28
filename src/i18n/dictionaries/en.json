@@ -7116,9 +7116,14 @@
       "savingChanges": "Saving changes…",
       "saveConsultation": "Save consultation",
       "linkedToTodayAppointment": "This note will be linked to this patient's appointment today.",
-      "linkedToChosenAppointment": "This note will be linked to the appointment on {fecha}, where the procedure was marked as done.",
+      "linkedToChosenAppointment": "This note will be linked to {cita}, where the procedure was marked as done.",
       "unlinkChosenAppointment": "Remove",
-      "notLinkedToChosen": "The note was saved, but it wasn't linked to the appointment on {fecha}: that appointment already has its note or no longer accepts one."
+      "notLinkedToChosen": "The note was saved, but it wasn't linked to {cita}: that appointment already has its note or no longer accepts one.",
+      "citaDeHoy": "today's appointment {aLas}",
+      "citaDelDia": "the appointment on {dia} {aLas}",
+      "horaALas": "at {hora}",
+      "horaALaUna": "at {hora}",
+      "citaSinFecha": "the chosen appointment"
     },
     "dermatologyForm": {
       "zoneScalp": "Scalp",

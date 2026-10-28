@@ -632,3 +632,35 @@ test("v18 · m2: el enlace explícito no vale para una cita sin «Hecho», de ot
   assert.equal((await POST(pedir("/api/clinical", { patientId: "pac-c1", subjective: "x", appointmentId: "c-terminada", citaElegida: true }))).status, 403);
 });
 
+/**
+ * El caso 4 de t5 sobre la v17 (`t5-v17-api.test.ts`, que vive en la copia de t5, no en la rama), traído aquí y
+ * al día con la v18: con un BORRADOR con saldo, «Debe hoy» ya no se queda en la cifra de Pacientes ($1,050.50),
+ * sino en la de la ficha ($1,250.50). La ficha se calcula aparte, con SQL directo (como lo escribió t5), para no
+ * depender del ayudante que prueba.
+ */
+test("t5 v17 · 4 (al día con la v18): «Debe hoy» = «Debe» de la ficha — sin borradores, con un borrador, con una cancelada y con otra clínica", async (t) => {
+  if (salta(t)) return;
+  await usar();
+  const debeDeLaFichaSql = async () => {
+    const saldo = (await base.db.query(`SELECT COALESCE(SUM("balance"),0) AS s FROM "invoices" WHERE "patientId" = 'pac-c1' AND "clinicId" = 'c1' AND "status"::text <> 'CANCELLED'`)).rows[0].s;
+    const { GET: AUN } = await import("@/app/api/patients/[id]/lo-que-aun-no-se-debe/route");
+    const aun = await leer(await AUN(pedir(`/api/patients/pac-c1/lo-que-aun-no-se-debe`, undefined, "GET"), params("pac-c1")));
+    return Math.max(0, Math.round((Number(saldo) - Number(aun.body.total ?? 0)) * 100) / 100);
+  };
+  const { planId, notaId } = await planAceptado();
+  await pagar(notaId, 500);
+  await cita("c-hoy", new Date());
+  const resina = await filaDe(planId, "Resina");
+  assert.equal((await hecho(planId, { action: "marcar_hecho", itemIds: [resina.id], citaId: "c-hoy" })).status, 200);
+  const debeHoy = async () => (await planDeLaCita("c-hoy")).body.debeHoy;
+  assert.deepEqual([await debeHoy(), await debeDeLaFichaSql()], [750.5, 750.5], "sin borradores");
+  await factura("F-300", "PENDING", 300);
+  assert.deepEqual([await debeHoy(), await debeDeLaFichaSql()], [1050.5, 1050.5]);
+  await factura("F-BORR", "DRAFT", 200);
+  assert.deepEqual([await debeHoy(), await debeDeLaFichaSql()], [1250.5, 1250.5], "con borrador: la misma cifra (antes «Debe hoy» se quedaba en 1,050.50)");
+  await factura("F-CANC", "CANCELLED", 99);
+  assert.deepEqual([await debeHoy(), await debeDeLaFichaSql()], [1250.5, 1250.5], "la cancelada no cuenta en ninguno");
+  await factura("F-C2", "PENDING", 777, { clinica: "c2" });
+  assert.equal(await debeHoy(), 1250.5, "nada de la otra clínica (sede)");
+});
+

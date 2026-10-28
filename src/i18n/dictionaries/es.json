@@ -7116,9 +7116,14 @@
       "savingChanges": "Guardando cambios…",
       "saveConsultation": "Guardar consulta",
       "linkedToTodayAppointment": "Esta nota quedará ligada a la cita de hoy de este paciente.",
-      "linkedToChosenAppointment": "Esta nota quedará ligada a la cita del {fecha}, en la que se marcó el procedimiento como hecho.",
+      "linkedToChosenAppointment": "Esta nota quedará ligada a {cita}, en la que se marcó el procedimiento como hecho.",
       "unlinkChosenAppointment": "Quitar",
-      "notLinkedToChosen": "La nota se guardó, pero no quedó ligada a la cita del {fecha}: esa cita ya tiene su nota o ya no admite otra."
+      "notLinkedToChosen": "La nota se guardó, pero no quedó ligada a {cita}: esa cita ya tiene su nota o ya no admite otra.",
+      "citaDeHoy": "la cita de hoy {aLas}",
+      "citaDelDia": "la cita del {dia} {aLas}",
+      "horaALas": "a las {hora}",
+      "horaALaUna": "a la {hora}",
+      "citaSinFecha": "la cita elegida"
     },
     "dermatologyForm": {
       "zoneScalp": "Cuero cabelludo",

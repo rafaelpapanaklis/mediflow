@@ -173,8 +173,8 @@ test("1 · «Hecho» pregunta la cita: la de hoy primero y elegida; sin nota →
       // v18 (t5, m2): la ficha recibe LA CITA elegida (y su etiqueta) para ligar la nota a ella.
       await pagina.waitForFunction(() => !!(window as any).__NOTA__);
       const nota = await pagina.evaluate(() => (window as any).__NOTA__);
-      assert.equal(nota.id, "cita-hoy");
-      assert.match(nota.etiqueta, /^Hoy, /);
+      // v19 (t5 de la v18, m1): viaja la cita con su FECHA (no la etiqueta de la lista); el formulario arma la frase.
+      assert.deepEqual(nota, { id: "cita-hoy", startsAt: CITAS[0].startsAt });
       assert.deepEqual(patches(pedidas), [{ action: "marcar_hecho", itemIds: ["f-resina"], citaId: "cita-hoy", avisarSinNota: true, conCuenta: true }]);
       await pagina.waitForSelector('[data-cita-hecho="f-resina"]', { state: "detached" });
       assert.equal(await pagina.getAttribute('[data-fila-plan="f-resina"]', "data-estado"), "hecho");

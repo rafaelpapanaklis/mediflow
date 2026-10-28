@@ -12,6 +12,7 @@ import { ConvertirEnPresupuesto, type PresupuestoDelPlan } from "@/components/da
 import { AgendarLoPendiente } from "@/components/dashboard/plan-a-agenda/agendar-lo-pendiente";
 import { ProcedimientosDelPlan, useFilasDePlanes } from "./procedimientos-del-plan";
 import type { PlanConCuenta } from "@/lib/treatments/sin-doble-cobro";
+import type { CitaElegidaParaLaNota } from "@/lib/treatments/cita-del-hecho";
 import s from "./expediente.module.css";
 
 /**
@@ -63,7 +64,7 @@ export interface PlanTratamientoProps {
   puedeMarcarHecho?: boolean;
   refresco?: unknown;
   /** v17: «Hecho» en una cita sin nota clínica → escribirla (solo si quien marca puede escribir notas). v18: ligada a esa cita. */
-  onEscribirNota?: (cita: { id: string; etiqueta: string }) => void;
+  onEscribirNota?: (cita: CitaElegidaParaLaNota) => void;
   /**
    * v17 (decisión 3 de Rafael): «Convertir en presupuesto» también en la tarjeta, junto a «Abonar al plan».
    * Solo llega con `billing.create` + `treatments.view` (lo de hoy); abre el presupuesto creado o el que ya había.

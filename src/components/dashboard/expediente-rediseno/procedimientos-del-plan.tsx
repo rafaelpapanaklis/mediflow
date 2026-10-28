@@ -22,7 +22,7 @@ import { CheckCircle2, Circle, RotateCcw } from "lucide-react";
 import { useLocale, useT } from "@/i18n/i18n-provider";
 import { fechaPanel } from "@/lib/formato-fecha-panel";
 import { avisoDeDeshacer, avisoDeHecho, ayudaHablaDeDebe, deshacerHecho, errorDeHecho, ESTADOS_DE_PLAN_SIN_HECHO, marcarHecho } from "@/lib/treatments/marcar-hecho-cliente";
-import type { EleccionDeCita } from "@/lib/treatments/cita-del-hecho";
+import type { CitaElegidaParaLaNota, EleccionDeCita } from "@/lib/treatments/cita-del-hecho";
 import { ElegirCitaDelHecho } from "./elegir-cita-del-hecho";
 import { CONDITIONS } from "@/components/dashboard/odontogram-v2/data";
 import type { FilaDto } from "@/lib/treatments/items";
@@ -82,7 +82,7 @@ export function ProcedimientosDelPlan({ planId, estadoDelPlan, filas, puede, deb
    * v17: lleva a escribir la nota de la consulta (solo si quien marca puede escribir notas).
    * v18 (t5, m2): con la cita elegida — la nota se liga a ella.
    */
-  onEscribirNota?: (cita: { id: string; etiqueta: string }) => void;
+  onEscribirNota?: (cita: CitaElegidaParaLaNota) => void;
 }) {
   const t = useT();
   const locale = useLocale();
@@ -100,7 +100,7 @@ export function ProcedimientosDelPlan({ planId, estadoDelPlan, filas, puede, deb
   // v13 (t5, n1): «pasa a Debe» solo si lo que falta por hacer ya está en una nota de cobro.
   const conDebe = ayudaHablaDeDebe(debeSigueLoHecho, vivas);
 
-  async function marcar(f: FilaDto, eleccion: EleccionDeCita, opciones: { escribirNota: boolean; etiqueta?: string }) {
+  async function marcar(f: FilaDto, eleccion: EleccionDeCita, opciones: { escribirNota: boolean; cita?: CitaElegidaParaLaNota }) {
     if (ocupada) return;
     setOcupada(f.id);
     try {
@@ -121,7 +121,7 @@ export function ProcedimientosDelPlan({ planId, estadoDelPlan, filas, puede, deb
       // v12 (t5, m3): en el idioma de la pantalla, por lo que pasó (no el texto español del servidor).
       toast.success(avisoDeHecho(t, r));
       // v17: la cita no tiene nota clínica — se avisa (ya está marcado) o se lleva a escribirla.
-      if (r.citaSinNota && opciones.escribirNota && onEscribirNota && "citaId" in eleccion) onEscribirNota({ id: eleccion.citaId, etiqueta: opciones.etiqueta ?? "" });
+      if (r.citaSinNota && opciones.escribirNota && onEscribirNota && opciones.cita) onEscribirNota(opciones.cita);
       else if (r.citaSinNota) toast(t("planTratamiento.hecho.cita.avisoSinNota"), { icon: "⚠️", duration: 8000 });
       onCambio?.();
     } finally {

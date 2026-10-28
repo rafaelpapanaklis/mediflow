@@ -8,7 +8,9 @@ import { formatCurrency } from "@/lib/utils";
 import toast from "react-hot-toast";
 import { TreatmentTimeline } from "@/components/clinical/shared";
 import { PrescriptionModal } from "@/components/clinical/shared/prescription-modal";
-import { useT } from "@/i18n/i18n-provider";
+import { useLocale, useT } from "@/i18n/i18n-provider";
+import { useZonaDeLaClinica } from "@/lib/fechas/use-zona-de-la-clinica";
+import { fraseDeLaCitaElegida, type CitaElegidaParaLaNota } from "@/lib/treatments/cita-del-hecho";
 import { OdontogramV2 } from "@/components/dashboard/odontogram-v2/App";
 import { fetchRecords, syncCambios, type CambioDiente } from "@/components/dashboard/odontogram-v2/adapter";
 import type { Records, ToothRecord } from "@/components/dashboard/odontogram-v2/types";
@@ -107,7 +109,7 @@ interface Props {
    * la nota»). Si viene, la nota se guarda LIGADA a ella (POST /api/clinical con `citaElegida: true`), aunque
    * sea de otro día u otro doctor: así respalda el procedimiento y la cita deja de salir «Sin nota».
    */
-  citaElegida?: { id: string; etiqueta: string } | null;
+  citaElegida?: CitaElegidaParaLaNota | null;
   /** v18: «Quitar» — la nota vuelve a la regla de siempre (la cita de hoy). */
   onQuitarCitaElegida?: () => void;
   /**
@@ -175,6 +177,9 @@ function readAddenda(spec: any): Addendum[] {
 
 export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord, rediseno = false, citaEnCursoId = null, citaElegida = null, onQuitarCitaElegida, armarPlan, registrarGuardado }: Props) {
   const t = useT();
+  // v19 (t5 de la v18, m1): la frase de la cita elegida («la cita de hoy a las 10:00»), en la zona de la clínica.
+  const locale = useLocale();
+  const zonaClinica = useZonaDeLaClinica();
   const isEditing = !!initialRecord;
   // Dx CIE-10 codificados (NOM-024 §6.3 / NOM-004). Edición: en vivo contra el
   // expediente existente; consulta nueva: local y se vuelca tras crear el record.
@@ -820,7 +825,7 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
         if (delPlan.length > 0) toast(t("planTratamiento.cobro.consultaAlPlan", { lista: delPlan.join(", ") }), { duration: 9000 });
         // v18: el servidor pudo no ligarla (la cita ya tenía su nota, o ya no se puede): se dice.
         if (citaElegida && record?.specialtyData?.appointmentId !== citaElegida.id) {
-          toast(t("clinical.dentalForm.notLinkedToChosen", { fecha: citaElegida.etiqueta }), { icon: "⚠️", duration: 9000 });
+          toast(t("clinical.dentalForm.notLinkedToChosen", { cita: fraseDeLaCitaElegida(t, citaElegida.startsAt, { zona: zonaClinica, locale }) }), { icon: "⚠️", duration: 9000 });
         }
         // Si aplicaron IA en la consulta NUEVA, adjúntala al record recién creado y
         // mergea el aiAssist devuelto a `record` para que onSaved(record) deje la
@@ -980,7 +985,7 @@ export function DentalForm({ patientId, onSaved, onAiAssistChange, initialRecord
 
       {!isEditing && citaElegida ? (
         <div className="text-xs text-muted-foreground" data-nota-cita-elegida={citaElegida.id}>
-          {t("clinical.dentalForm.linkedToChosenAppointment", { fecha: citaElegida.etiqueta })}
+          {t("clinical.dentalForm.linkedToChosenAppointment", { cita: fraseDeLaCitaElegida(t, citaElegida.startsAt, { zona: zonaClinica, locale }) })}
           {onQuitarCitaElegida && (
             <>
               {" "}

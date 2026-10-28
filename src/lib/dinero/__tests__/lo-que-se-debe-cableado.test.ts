@@ -664,7 +664,7 @@ test("v18 (t5 de la v17): «Debe hoy» con la regla de la ficha (m1) y la nota l
   assert.match(leer("src/lib/caja.ts"), /status:  \{ notIn: \["DRAFT", "CANCELLED"\] \},/);
   // m2: la cita elegida viaja hasta «Nueva consulta» y el servidor la liga con sus guardas.
   const proc = leer("src/components/dashboard/expediente-rediseno/procedimientos-del-plan.tsx");
-  assert.match(proc, /onEscribirNota\(\{ id: eleccion\.citaId, etiqueta: opciones\.etiqueta \?\? "" \}\)/);
+  assert.match(proc, /if \(r\.citaSinNota && opciones\.escribirNota && onEscribirNota && opciones\.cita\) onEscribirNota\(opciones\.cita\);/);
   assert.match(ficha, /\(cita\) => \{ setCitaParaLaNota\(cita\); setTab\(CONSULT_FORM_TAB\); \}/);
   assert.equal((ficha.match(/citaElegida=\{citaParaLaNota\} onQuitarCitaElegida=\{\(\) => setCitaParaLaNota\(null\)\}/g) ?? []).length, 2, "las dos ropas de «Nueva consulta»");
   const form = leer("src/components/clinical/dental-form.tsx");
@@ -683,5 +683,47 @@ test("v18 (t5 de la v17): «Debe hoy» con la regla de la ficha (m1) y la nota l
     for (const k of ["linkedToChosenAppointment", "unlinkChosenAppointment", "notLinkedToChosen"]) assert.ok(d.clinical.dentalForm[k], `${idioma}: clinical.dentalForm.${k}`);
     assert.match(d.planTratamiento.hecho.cita.avisoSinNotaDeOtro, /\{doctor\}/);
   }
+});
+
+test("v19 (t5 de la v18, m1): «Nueva consulta» dice bien la cita elegida — «la cita de hoy a las 10:00», «la cita del martes 27 de octubre a las 10:00» (es/en)", async () => {
+  const { getDict } = await import("@/i18n/dictionaries");
+  const { makeT } = await import("@/i18n/t");
+  const { fraseDeLaCitaElegida } = await import("@/lib/treatments/cita-del-hecho");
+  const es = makeT(getDict("es"));
+  const en = makeT(getDict("en"));
+  const zona = "America/Mexico_City";
+  const ahora = new Date("2026-10-28T17:00:00Z"); // miércoles 28 de octubre, 11:00 en CDMX
+  const frase = (t: typeof es, iso: string, locale: "es" | "en") => fraseDeLaCitaElegida(t, iso, { zona, locale, ahora });
+  // Hoy a las 10:00 (CDMX = UTC−6).
+  assert.equal(frase(es, "2026-10-28T16:00:00Z", "es"), "la cita de hoy a las 10:00");
+  assert.equal(frase(en, "2026-10-28T16:00:00Z", "en"), "today's appointment at 10:00 AM");
+  // Otro día.
+  assert.equal(frase(es, "2026-10-27T16:00:00Z", "es"), "la cita del martes 27 de octubre a las 10:00");
+  assert.equal(frase(en, "2026-10-27T16:00:00Z", "en"), "the appointment on Tuesday, October 27 at 10:00 AM");
+  // La 1 de la tarde va en 24 h; la 1 de la madrugada, en singular.
+  assert.equal(frase(es, "2026-10-27T19:30:00Z", "es"), "la cita del martes 27 de octubre a las 13:30");
+  assert.equal(frase(es, "2026-10-28T07:05:00Z", "es"), "la cita de hoy a la 1:05");
+  // Otro año, con el año.
+  assert.equal(frase(es, "2025-12-30T16:00:00Z", "es"), "la cita del martes 30 de diciembre de 2025 a las 10:00");
+  assert.equal(frase(en, "2025-12-30T16:00:00Z", "en"), "the appointment on Tuesday, December 30, 2025 at 10:00 AM");
+  // El día de hoy se decide en la zona de la clínica: a las 23:30 de CDMX ya es mañana en UTC, y sigue siendo «hoy».
+  assert.equal(fraseDeLaCitaElegida(es, "2026-10-29T05:30:00Z", { zona, locale: "es", ahora: new Date("2026-10-29T05:40:00Z") }), "la cita de hoy a las 23:30");
+  // Las dos frases completas del formulario, con los diccionarios reales: ya no «la cita del Hoy, 10:00 a.m.».
+  const hoyEs = frase(es, "2026-10-28T16:00:00Z", "es");
+  assert.equal(es("clinical.dentalForm.linkedToChosenAppointment", { cita: hoyEs }), "Esta nota quedará ligada a la cita de hoy a las 10:00, en la que se marcó el procedimiento como hecho.");
+  assert.equal(
+    es("clinical.dentalForm.notLinkedToChosen", { cita: frase(es, "2026-10-27T16:00:00Z", "es") }),
+    "La nota se guardó, pero no quedó ligada a la cita del martes 27 de octubre a las 10:00: esa cita ya tiene su nota o ya no admite otra.",
+  );
+  assert.equal(
+    en("clinical.dentalForm.linkedToChosenAppointment", { cita: frase(en, "2026-10-28T16:00:00Z", "en") }),
+    "This note will be linked to today's appointment at 10:00 AM, where the procedure was marked as done.",
+  );
+  // Sin fecha legible, una frase neutra (nunca «Invalid Date»).
+  assert.equal(frase(es, "no-es-fecha", "es"), "la cita elegida");
+  // El formulario arma la frase él mismo (de la fecha que viaja); ya no recibe una etiqueta.
+  const form = leer("src/components/clinical/dental-form.tsx");
+  assert.match(form, /t\("clinical\.dentalForm\.linkedToChosenAppointment", \{ cita: fraseDeLaCitaElegida\(t, citaElegida\.startsAt, \{ zona: zonaClinica, locale \}\) \}\)/);
+  assert.doesNotMatch(form + leer("src/components/dashboard/expediente-rediseno/elegir-cita-del-hecho.tsx"), /etiqueta: etiqueta\(|citaElegida\.etiqueta/);
 });
 

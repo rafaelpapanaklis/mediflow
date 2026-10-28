@@ -17,7 +17,7 @@ const w = window as unknown as {
   __ESCENA__?: string;
   __LOCALE__?: "es" | "en";
   __USUARIO__?: { id: string; esDoctor: boolean };
-  __NOTA__?: { id: string; etiqueta: string };
+  __NOTA__?: { id: string; startsAt: string };
   __PRESUPUESTO__?: unknown;
   __ABONAR__?: boolean;
 };

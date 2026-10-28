@@ -8,6 +8,8 @@
 //  · Si la cita elegida no tiene nota clínica, la pantalla AVISA y ofrece escribirla. Nunca bloquea el
 //    «Hecho» ni el cobro.
 
+import { diaEnZona } from "@/lib/fechas/fecha-en-zona";
+
 export const MIN_MOTIVO_SIN_CITA = 3;
 export const MAX_MOTIVO_SIN_CITA = 200;
 
@@ -74,3 +76,55 @@ export function ordenarCitasParaHecho<T extends Pick<CitaParaHecho, "startsAt" |
 
 /** Lo que la tarjeta manda en el PATCH según lo elegido: la cita, o «sin cita» con su motivo. */
 export type EleccionDeCita = { citaId: string } | { sinCita: true; motivo: string };
+
+// ── v19 (t5 de la v18, m1): la cita elegida, dicha en una frase ────────────────────────────────────
+
+/** La cita que «Marcar y escribir la nota» lleva a «Nueva consulta». */
+export interface CitaElegidaParaLaNota {
+  id: string;
+  /** ISO: el formulario arma la frase («la cita de hoy a las 10:00») en la zona de la clínica. */
+  startsAt: string;
+}
+
+type T = (clave: string, vars?: Record<string, string | number>) => string;
+
+/**
+ * «la cita de hoy a las 10:00» · «la cita del martes 27 de octubre a las 10:00» · «a la 1:00» (es);
+ * «today's appointment at 10:00 AM» · «the appointment on Tuesday, October 27 at 10:00 AM» (en). Con el año
+ * solo si no es el de hoy. Antes se metía la etiqueta de la lista («Hoy, 10:00 a.m.», «mar 27 de oct…») en
+ * «…la cita del {fecha}…» y salía «la cita del Hoy, 10:00 a.m.».
+ */
+export function fraseDeLaCitaElegida(
+  t: T,
+  startsAt: string,
+  /** `locale`: «en» = inglés; cualquier otro, español (el de `useLocale()`). */
+  opciones: { zona: string | null; locale: string; ahora?: Date },
+): string {
+  const inicio = new Date(startsAt);
+  if (Number.isNaN(inicio.getTime())) return t("clinical.dentalForm.citaSinFecha");
+  const en = opciones.locale === "en";
+  const ahora = opciones.ahora ?? new Date();
+  const conZona = (o: Intl.DateTimeFormatOptions): Intl.DateTimeFormatOptions => (opciones.zona ? { ...o, timeZone: opciones.zona } : o);
+  const partes = (o: Intl.DateTimeFormatOptions, fecha: Date) => {
+    let p: Intl.DateTimeFormatPart[];
+    try {
+      p = new Intl.DateTimeFormat(en ? "en-US" : "es-MX", conZona(o)).formatToParts(fecha);
+    } catch {
+      p = new Intl.DateTimeFormat(en ? "en-US" : "es-MX", o).formatToParts(fecha); // zona inválida
+    }
+    return (tipo: Intl.DateTimeFormatPartTypes) => p.find((x) => x.type === tipo)?.value ?? "";
+  };
+  const h = partes(en ? { hour: "numeric", minute: "2-digit" } : { hour: "numeric", minute: "2-digit", hourCycle: "h23" }, inicio);
+  // es-MX en 24 h escribe «01»: sin el cero («a la 1:05», «a las 9:30»).
+  const horaSola = String(Number(h("hour")));
+  const hora = en ? `${horaSola}:${h("minute")} ${h("dayPeriod")}`.trim() : `${horaSola}:${h("minute")}`;
+  const aLas = t(!en && horaSola === "1" ? "clinical.dentalForm.horaALaUna" : "clinical.dentalForm.horaALas", { hora });
+  if (diaEnZona(inicio, opciones.zona) === diaEnZona(ahora, opciones.zona)) return t("clinical.dentalForm.citaDeHoy", { aLas });
+  const d = partes({ weekday: "long", day: "numeric", month: "long", year: "numeric" }, inicio);
+  const anio = partes({ year: "numeric" }, ahora)("year") !== d("year") ? d("year") : "";
+  const dia = en
+    ? `${d("weekday")}, ${d("month")} ${d("day")}${anio ? `, ${anio}` : ""}`
+    : `${d("weekday")} ${d("day")} de ${d("month")}${anio ? ` de ${anio}` : ""}`;
+  return t("clinical.dentalForm.citaDelDia", { dia, aLas });
+}
+
