@@ -65,6 +65,8 @@ const RUTAS = [
   { nombre: "POST dicom-set/register", mod: "@/app/api/patients/[id]/dicom-set/register/route", metodo: "POST", permiso: "xrays.upload" },
   // Auditoría cloudflare nº11: la URL firmada del CBCT lite tampoco es para un READONLY.
   { nombre: "POST dicom-set/lite",     mod: "@/app/api/patients/[id]/dicom-set/[fileId]/lite/route", metodo: "POST", permiso: "xrays.view" },
+  // Ídem: abortar una subida BORRA el objeto del bucket, así que pide la misma llave que la subida.
+  { nombre: "POST uploads/abort",      mod: "@/app/api/patients/[id]/uploads/abort/route",    metodo: "POST", permiso: "xrays.upload" },
 ] as const;
 
 // La ruta lite comprueba que Storage esté configurado antes de la visibilidad (el centinela): valores
