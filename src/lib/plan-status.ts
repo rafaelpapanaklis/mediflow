@@ -22,6 +22,7 @@
 // Cualquier pantalla, cron o gate que compare trialEndsAt contra hoy por su
 // cuenta es una copia a ojo de estas reglas; la prueba
 // src/lib/__tests__/plan-status-guard.test.ts la caza.
+import { RUTA_SEDE_CON_CLAVE } from "@/lib/sede-clave/constantes";
 
 export const ACTIVE_SUBSCRIPTION_STATUSES = new Set(["active", "trialing", "paid"]);
 
@@ -193,6 +194,14 @@ export function isApiPathBlockedForExpiredPlan(pathname: string | null | undefin
 //   • /dashboard/soporte(/...)   → abrir y responder tickets de soporte, para
 //                                  pedir ayuda mientras reactiva su plan (incluye
 //                                  el detalle /dashboard/soporte/[id]).
+//   • /dashboard/sede-con-clave  → «Esta sede tiene clave» (ws1-t1, 29-oct). Es
+//                                  una barrera, no enseña datos. Sin ella, con
+//                                  la pestaña abierta y el plan vencido, el guard
+//                                  de cliente mandaba a suspended, suspended
+//                                  (getCurrentUser) a la clave al caducar el
+//                                  desbloqueo, y la clave otra vez a suspended,
+//                                  sin fin; y una sede incluida no podía teclear
+//                                  la clave de la principal para ir a pagar.
 // FUENTE ÚNICA: la usan a la vez el redirect server-side (layout) y el guard
 // de cliente (ExpiredPlanModal). Centralizarla evita que ambas superficies se
 // desincronicen y una permita navegar a donde la otra rebota.
@@ -202,6 +211,7 @@ export function isAllowedWhileSuspended(pathname: string | null | undefined): bo
     pathname === "/dashboard/suspended" ||
     pathname.startsWith("/dashboard/suspended/") ||
     pathname === "/dashboard/soporte" ||
-    pathname.startsWith("/dashboard/soporte/")
+    pathname.startsWith("/dashboard/soporte/") ||
+    pathname === RUTA_SEDE_CON_CLAVE
   );
 }

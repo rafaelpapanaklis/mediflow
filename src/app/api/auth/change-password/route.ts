@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
-import { getAuthContext } from "@/lib/auth-context";
+import { getAuthContextParaClaveDeSede } from "@/lib/auth-context";
+import { sedeCerradaPara } from "@/lib/sede-clave/gate.server";
 import { logMutation } from "@/lib/audit";
 import { clearMustChangePassword } from "@/lib/auth/must-change-password";
 import { scorePassword } from "@/components/public/auth/password-strength";
@@ -24,14 +25,26 @@ function getAdminClient() {
 // plan-status) para que una clínica suspendida también pueda salir del bloqueo.
 //
 // Multi-tenant: NADA sale del body salvo la contraseña. El usuario objetivo es
-// SIEMPRE el de la sesión (getAuthContext), nunca un id recibido — este endpoint
+// SIEMPRE el de la sesión (getAuthContextParaClaveDeSede), nunca un id recibido — este endpoint
 // no puede usarse para cambiarle la contraseña a nadie más.
 //
 // La contraseña NO se registra en ningún sitio: ni la vieja, ni la nueva, ni en
 // el AuditLog ni en consola.
 export async function POST(req: NextRequest) {
-  const ctx = await getAuthContext();
+  // Sin el gate de la clave de la sede SOLO para el cambio forzado (ws1-t1,
+  // 29-oct): la contraseña temporal es una barrera ANTERIOR a la clave (orden
+  // del layout de /dashboard), así que quien la tiene pendiente en una sede con
+  // clave tiene que poder salir de ella; con getAuthContext recibía 401 y se
+  // quedaba sin salida. El 2FA sí se exige. Un cambio voluntario sigue
+  // pidiendo la sede abierta, como antes.
+  const ctx = await getAuthContextParaClaveDeSede();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (
+    ctx.user.mustChangePassword !== true &&
+    (await sedeCerradaPara({ supabaseId: ctx.user.supabaseId, clinicId: ctx.clinicId }))
+  ) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
     return NextResponse.json(

@@ -76,7 +76,10 @@ export async function getAuthContext(): Promise<AuthContext | null> {
  * desbloquear una sede cerrada (si no, nadie entraría nunca), y una sede con
  * clave y el plan vencido tiene que poder desbloquearse para llegar a la
  * pantalla de pago. El 2FA SÍ se exige: la clave de la sede va después del
- * segundo factor, nunca en su lugar. La lista de quién la usa la fija
+ * segundo factor, nunca en su lugar. También /api/auth/change-password (ws1-t1,
+ * 29-oct): la contraseña temporal es una barrera ANTERIOR a la clave y su
+ * cambio tiene que funcionar con la sede cerrada; la ruta vuelve a pedir la
+ * sede abierta para un cambio voluntario. La lista de quién la usa la fija
  * src/lib/sede-clave/__tests__/sede-clave.test.ts.
  */
 export async function getAuthContextParaClaveDeSede(): Promise<AuthContext | null> {

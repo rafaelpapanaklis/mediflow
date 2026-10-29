@@ -149,7 +149,10 @@ export const getCurrentUser = cache(async () => {
 /**
  * ⚠ CON el 2FA pero SIN el gate de la clave de la sede (ws1-t4). Solo para la
  * pantalla «Esta sede tiene clave» (/dashboard/sede-con-clave), que tiene que
- * pintarse justo cuando la sede está cerrada. La lista de quién la usa la fija
+ * pintarse justo cuando la sede está cerrada, y para el cambio forzado de
+ * contraseña (/dashboard/cambiar-contrasena), barrera que el layout pone ANTES
+ * de la clave: con el gate, las dos pantallas se mandaban una a la otra sin fin
+ * (ws1-t1, 29-oct). La lista de quién la usa la fija
  * src/lib/sede-clave/__tests__/sede-clave.test.ts.
  */
 export const getCurrentUserSinClaveDeSede = cache(async () => {

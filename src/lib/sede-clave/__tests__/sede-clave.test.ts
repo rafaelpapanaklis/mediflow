@@ -40,6 +40,9 @@ interface Ficha {
   totpEnabled: boolean;
   createdAt: Date;
   permissionsOverride: string[];
+  /** ws1-t1: contraseña temporal pendiente (alta de miembro o «Restablecer»). */
+  mustChangePassword?: boolean;
+  email?: string;
   clinic: { id: string; name: string; category: string; require2fa: boolean; archivedAt: null; createdAt: Date };
 }
 
@@ -243,6 +246,8 @@ let respuestas: string[] = [];
 let archivadas: string[] = [];
 let consultadasReporte: string[] = [];
 let activasEscritas: string[] = [];
+let contrasenasCambiadas: string[] = [];
+let marcasLevantadas: string[] = [];
 
 class Redireccion extends Error {
   constructor(public destino: string) { super(`NEXT_REDIRECT ${destino}`); }
@@ -309,6 +314,22 @@ const dobles: Record<string, unknown> = {
     cargarOcupacionDelPeriodo: async (cid: string) => { consultadasReporte.push(cid); return { porcentaje: 40, minutosOcupados: 40, minutosDisponibles: 100 }; },
   },
   "@/lib/plans": { getPlanLimitsForClinic: async () => ({ maxClinics: 6 }) },
+  // ws1-t1 · /api/auth/change-password: Auth de Supabase y la marca, de mentira.
+  "@supabase/supabase-js": {
+    createClient: () => ({
+      auth: {
+        signInWithPassword: async () => ({ data: { user: null }, error: null }),
+        signOut: async () => ({ error: null }),
+        admin: { updateUserById: async (id: string) => { contrasenasCambiadas.push(id); return { error: null }; } },
+      },
+    }),
+  },
+  "@/lib/auth/must-change-password": {
+    clearMustChangePassword: async (sb: string) => {
+      marcasLevantadas.push(sb);
+      for (const f of fichas) if (f.supabaseId === sb) f.mustChangePassword = false;
+    },
+  },
 };
 const Mod = Module as unknown as { _load: (req: string, ...r: unknown[]) => unknown };
 const cargaOriginal = Mod._load;
@@ -352,6 +373,8 @@ beforeEach(async () => {
   archivadas = [];
   consultadasReporte = [];
   activasEscritas = [];
+  contrasenasCambiadas = [];
+  marcasLevantadas = [];
 });
 
 // ══════════════════ Utilería ══════════════════
@@ -1085,11 +1108,17 @@ function archivos(dir: string, out: string[] = []): string[] {
 const sinComentarios = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:"'`])\/\/.*$/gm, "$1");
 const TODOS = archivos(SRC).map((p) => ({ rel: relative(join(SRC, ".."), p).replace(/\\/g, "/"), src: sinComentarios(readFileSync(p, "utf8")) }));
 
-test("las salidas sin el gate de la clave solo las usan la pantalla de la clave y sus rutas", () => {
+test("las salidas sin el gate de la clave solo las usan la pantalla de la clave, sus rutas y el cambio forzado de contraseña", () => {
+  // ws1-t1 (29-oct): el cambio forzado de contraseña es una barrera ANTERIOR a
+  // la clave; con el gate rebotaba contra la pantalla de la clave sin fin.
   const usanCtx = TODOS.filter((f) => /getAuthContextParaClaveDeSede\s*\(/.test(f.src)).map((f) => f.rel).sort();
-  assert.deepEqual(usanCtx, ["src/app/api/sede-clave/desbloquear/route.ts", "src/lib/auth-context.ts"]);
+  assert.deepEqual(usanCtx, [
+    "src/app/api/auth/change-password/route.ts",
+    "src/app/api/sede-clave/desbloquear/route.ts",
+    "src/lib/auth-context.ts",
+  ]);
   const usanUser = TODOS.filter((f) => /getCurrentUserSinClaveDeSede\s*\(/.test(f.src)).map((f) => f.rel).sort();
-  assert.deepEqual(usanUser, ["src/app/dashboard/sede-con-clave/page.tsx"]);
+  assert.deepEqual(usanUser, ["src/app/dashboard/cambiar-contrasena/page.tsx", "src/app/dashboard/sede-con-clave/page.tsx"]);
 });
 
 test("el gate de la clave está en los dos caminos de la sesión y en el layout", () => {
@@ -1359,4 +1388,125 @@ test("v6 (m-1) · con una sola sede, el ADMIN que ya tiene la clave de la sede n
   // El modal usa esa misma función sin quitarle las ocultas por sede.
   const modal = readFileSync(join(SRC, "components/dashboard/team/permissions-modal.tsx"), "utf8");
   assert.match(modal, /diferenciasConElRol\(selected, roleDefaults\)/);
+});
+
+// ══════════════════ ws1-t1 (29-oct) · contraseña temporal + sede con clave ══════════════════
+//
+// El bucle del iPad de San Felipe: un miembro con contraseña temporal entra a
+// una sede con clave desde un navegador sin desbloqueo. El layout manda a
+// /dashboard/cambiar-contrasena (barrera ANTERIOR a la clave) y pinta esa ruta
+// sin mirar la clave; la página, con getCurrentUser, mandaba a
+// /dashboard/sede-con-clave; el layout la devolvía por la marca… sin fin. Y la
+// salida tampoco servía: /api/auth/change-password daba 401 con la sede cerrada.
+
+const rutaCambioContrasena = async () => (await import("@/app/api/auth/change-password/route")).POST;
+const getCurrentUserSinClaveDeSede = async (): Promise<any> => (await import("@/lib/auth")).getCurrentUserSinClaveDeSede();
+
+/** El admin de la sede 3 con contraseña temporal, en un navegador limpio (sin desbloqueo). */
+async function admin3ConTemporalEnNavegadorLimpio() {
+  await activarComoAdmin3();
+  const f = fichas.find((x) => x.id === "u-admin-3")!;
+  f.mustChangePassword = true;
+  f.email = "admin3@example.com";
+  navegadores.delete(SB_ADMIN3);
+  como(SB_ADMIN3, CLI_3);
+  process.env.NEXT_PUBLIC_SUPABASE_URL ??= "http://supabase.invalid";
+  process.env.SUPABASE_SERVICE_ROLE_KEY ??= "clave-de-prueba";
+}
+
+test("ws1-t1 · con contraseña temporal y la sede cerrada, la pantalla del cambio NO manda a la de la clave", async () => {
+  await admin3ConTemporalEnNavegadorLimpio();
+  ruta = "/dashboard/cambiar-contrasena";
+  // Lo que usaba la página: rebota a la clave (y el layout la devolvería aquí).
+  await assert.rejects(getCurrentUser(), redirigeA("/dashboard/sede-con-clave"));
+  // Lo que usa ahora: se pinta.
+  const u = await getCurrentUserSinClaveDeSede();
+  assert.equal(u.clinicId, CLI_3);
+  assert.equal(u.mustChangePassword, true);
+});
+
+test("ws1-t1 · con contraseña temporal y la sede cerrada, cambiar la contraseña funciona; después se pide la clave", async () => {
+  await admin3ConTemporalEnNavegadorLimpio();
+  const POST = await rutaCambioContrasena();
+  const r = await llamar(POST, "/api/auth/change-password", { password: "Nueva-Segura-2026" });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.deepEqual(contrasenasCambiadas, [SB_ADMIN3]);
+  assert.deepEqual(marcasLevantadas, [SB_ADMIN3]);
+  // Sin la marca, la siguiente barrera es la de siempre: la clave de la sede.
+  ruta = "/dashboard";
+  await assert.rejects(getCurrentUser(), redirigeA("/dashboard/sede-con-clave"));
+});
+
+test("ws1-t1 · un cambio VOLUNTARIO de contraseña sigue pidiendo la sede abierta", async () => {
+  await admin3ConTemporalEnNavegadorLimpio();
+  fichas.find((x) => x.id === "u-admin-3")!.mustChangePassword = false;
+  const POST = await rutaCambioContrasena();
+  const r = await llamar(POST, "/api/auth/change-password", { password: "Nueva-Segura-2026" });
+  assert.equal(r.status, 401);
+  assert.deepEqual(contrasenasCambiadas, []);
+  // Con la clave tecleada, sí.
+  const desbloquear = await rutaDesbloquear();
+  assert.equal((await llamar(desbloquear, "/api/sede-clave/desbloquear", { clave: CLAVE })).status, 200);
+  assert.equal((await llamar(POST, "/api/auth/change-password", { password: "Nueva-Segura-2026" })).status, 200);
+});
+
+test("ws1-t1 · cada pantalla de barrera solo aplica los gates de las barreras ANTERIORES (nunca A→B→A)", () => {
+  // El orden lo fija el layout: 2FA → contraseña temporal → clave de la sede, y
+  // cada ruta de barrera se pinta (return minimalShell) antes del gate siguiente.
+  const layout = sinComentarios(readFileSync(join(SRC, "app/dashboard/layout.tsx"), "utf8"));
+  const marcas = [
+    "decidirDosPasos(user)",
+    "if (isTwoFaRoute) return minimalShell;",
+    "redirect(MUST_CHANGE_PASSWORD_PATH)",
+    "if (isPasswordChangeRoute) return minimalShell;",
+    "await sedeCerradaPara(",
+  ].map((m) => ({ m, i: layout.indexOf(m) }));
+  for (const { m, i } of marcas) assert.ok(i >= 0, `el layout ya no tiene «${m}»: revisa el orden de las barreras`);
+  for (let k = 1; k < marcas.length; k++) assert.ok(marcas[k - 1].i < marcas[k].i, `orden de barreras cambiado: «${marcas[k - 1].m}» / «${marcas[k].m}»`);
+
+  // Qué gates aplica cada forma de pedir la sesión.
+  const GATES: Record<string, string[]> = {
+    getCurrentUser: ["dosPasos", "clave"],
+    getAuthContext: ["dosPasos", "clave"],
+    getCurrentUserSinClaveDeSede: ["dosPasos"],
+    getAuthContextParaClaveDeSede: ["dosPasos"],
+    getCurrentUserSinDosPasos: [],
+    getTwoFactorActor: [],
+  };
+  // Cada pantalla de barrera (y la ruta que la resuelve) con las barreras que van ANTES.
+  const BARRERAS: Array<{ archivo: string; antes: string[] }> = [
+    { archivo: "app/dashboard/2fa/page.tsx", antes: [] },
+    { archivo: "app/dashboard/2fa/setup/page.tsx", antes: [] },
+    { archivo: "app/api/auth/2fa/verify/route.ts", antes: [] },
+    { archivo: "app/api/auth/2fa/setup/route.ts", antes: [] },
+    { archivo: "app/api/auth/2fa/enable/route.ts", antes: [] },
+    { archivo: "app/api/auth/2fa/recovery-codes/route.ts", antes: [] },
+    { archivo: "app/dashboard/cambiar-contrasena/page.tsx", antes: ["dosPasos"] },
+    { archivo: "app/api/auth/change-password/route.ts", antes: ["dosPasos"] },
+    { archivo: "app/dashboard/sede-con-clave/page.tsx", antes: ["dosPasos", "contrasena"] },
+    { archivo: "app/api/sede-clave/desbloquear/route.ts", antes: ["dosPasos", "contrasena"] },
+  ];
+  for (const { archivo, antes } of BARRERAS) {
+    const src = sinComentarios(readFileSync(join(SRC, archivo), "utf8"));
+    const usadas = Object.keys(GATES).filter((f) => new RegExp(`\\b${f}\\s*\\(`).test(src));
+    assert.ok(usadas.length > 0, `${archivo}: no se encontró cómo pide la sesión`);
+    for (const f of usadas) {
+      for (const g of GATES[f]) {
+        assert.ok(antes.includes(g), `${archivo} usa ${f}(), que aplica el gate «${g}» de una barrera POSTERIOR: bucle de redirecciones`);
+      }
+    }
+  }
+});
+
+test("ws1-t1 · suspendida + clave: la pantalla de la clave se puede abrir con el plan vencido (sin rebote a suspended)", async () => {
+  // El doble de @/lib/plan-status de este archivo no sirve aquí: se carga el real por ruta.
+  const { isAllowedWhileSuspended } = await import("../../plan-status");
+  assert.equal(isAllowedWhileSuspended("/dashboard/sede-con-clave"), true);
+  assert.equal(isAllowedWhileSuspended("/dashboard/suspended"), true);
+  assert.equal(isAllowedWhileSuspended("/dashboard"), false);
+  assert.equal(isAllowedWhileSuspended("/dashboard/sede-con-clave-falsa"), false);
+  // Y /dashboard/suspended manda a la clave cuando la sede está cerrada: con la
+  // clave fuera de la lista, el guard de cliente la devolvía a suspended sin fin.
+  const suspendida = sinComentarios(readFileSync(join(SRC, "app/dashboard/suspended/page.tsx"), "utf8"));
+  assert.match(suspendida, /\bgetCurrentUser\s*\(/);
 });

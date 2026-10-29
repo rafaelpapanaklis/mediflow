@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUserSinClaveDeSede } from "@/lib/auth";
 import { clearMustChangePassword, hasPasswordIdentity } from "@/lib/auth/must-change-password";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { RaizCuenta } from "@/components/dashboard/cuenta-rediseno/raiz";
@@ -11,7 +11,12 @@ export const dynamic = "force-dynamic";
 // ruta del gate y la renderiza con layout mínimo (sin sidebar/topbar). Aquí sólo
 // se enrutan los casos borde; el formulario lo maneja el componente cliente.
 export default async function ChangePasswordPage() {
-  const user = await getCurrentUser();
+  // SIN el gate de la clave de la sede (ws1-t1, 29-oct): el layout pone esta
+  // barrera ANTES de la clave y pinta esta ruta sin mirarla. Con getCurrentUser
+  // la página mandaba a /dashboard/sede-con-clave, el layout la devolvía aquí
+  // por la marca, y así sin fin (el bucle del iPad de San Felipe: un miembro
+  // con contraseña temporal en una sede con clave). El 2FA sí se exige.
+  const user = await getCurrentUserSinClaveDeSede();
 
   // Nadie que no deba estar aquí se queda aquí: sin la marca, al panel. Cubre
   // tanto al usuario normal que escribe la URL a mano como al que ya la cambió
