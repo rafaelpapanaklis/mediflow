@@ -271,13 +271,24 @@ export async function PATCH(req: NextRequest) {
   // Multi-tenant: el record debe ser de la clínica de la sesión
   const record = await prisma.medicalRecord.findFirst({
     where: { id: recordId, clinicId: ctx.clinicId },
-    select: { id: true, patientId: true, aiAssist: true },
+    select: { id: true, patientId: true, aiAssist: true, doctorId: true },
   });
   if (!record) return NextResponse.json({ error: "Consulta no encontrada" }, { status: 404 });
 
   // Visibilidad por paciente
   const hidden = await assertPatientVisible(record.patientId, { userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId });
   if (hidden) return hidden;
+
+  // Auditoría cloudflare nº16: el análisis se pega a la nota de UN doctor. Solo su autor o un admin
+  // (la misma regla que PATCH /api/clinical-notes/[id]); antes cualquiera con «Editar expediente»
+  // ponía o quitaba la procedencia IA de la consulta de un colega. Tras la visibilidad (404 primero).
+  // El estado SIGNED NO se bloquea aquí a propósito: «Guardar consulta» crea la nota ya firmada y
+  // este PATCH le adjunta el análisis justo después (dental-form.tsx) — ver DECISIONES del reporte.
+  const esAutor = record.doctorId === ctx.userId;
+  const esAdmin = ctx.role === "ADMIN" || ctx.role === "SUPER_ADMIN";
+  if (!esAutor && !esAdmin) {
+    return NextResponse.json({ error: "Solo el autor de la consulta o un administrador" }, { status: 403 });
+  }
 
   const now = new Date();
   const wasApplied = (record.aiAssist as any)?.applied === true;

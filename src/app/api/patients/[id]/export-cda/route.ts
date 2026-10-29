@@ -5,6 +5,7 @@ import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { buildCdaXml, readCdaAddenda } from "@/lib/hl7/cda";
 import { logRead, extractAuditMeta } from "@/lib/audit";
+import { ownPrivateRecordsOnly } from "@/lib/clinical/record-scope";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -48,7 +49,9 @@ export async function GET(req: NextRequest, props: Params) {
       select: { id: true, name: true, clues: true, address: true, phone: true },
     }),
     prisma.medicalRecord.findMany({
-      where: { patientId: patient.id, clinicId: user.clinicId },
+      // Auditoría cloudflare nº10: la nota PRIVADA de un doctor solo la exporta su autor, como en la
+      // ficha (P1-N2). Antes el CDA la sacaba entera para cualquiera con «Ver expediente clínico».
+      where: { patientId: patient.id, clinicId: user.clinicId, AND: [ownPrivateRecordsOnly(user.id)] },
       orderBy: { visitDate: "desc" },
       include: {
         diagnoses_v2: { include: { cie10: true } },

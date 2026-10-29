@@ -294,27 +294,31 @@ describe("fetchClinicLogo — el PDF sale aunque el logo no", () => {
     base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   });
 
+  // El servidor de esta prueba vive en 127.0.0.1, que la reja de SSRF rechaza a propósito (auditoría
+  // nº2): estas pruebas son de FORMATO y de plazos, así que la dejan pasar. La reja se prueba aparte.
+  const servidorDePrueba = async () => true;
+
   after(async () => {
     for (const s of colgados) s.destroy();
     await new Promise<void>((r) => server.close(() => r()));
   });
 
   it("un PNG bueno vuelve como data URL con su proporción", async () => {
-    const logo = await fetchClinicLogo(`${base}/ok.png`, 2000);
+    const logo = await fetchClinicLogo(`${base}/ok.png`, 2000, servidorDePrueba);
     assert.ok(logo, "debería haber logo");
     assert.match(logo!.dataUrl, /^data:image\/png;base64,/);
     assert.equal(logo!.aspect, 4);
   });
 
   it("un JPEG bueno también", async () => {
-    const logo = await fetchClinicLogo(`${base}/ok.jpg`, 2000);
+    const logo = await fetchClinicLogo(`${base}/ok.jpg`, 2000, servidorDePrueba);
     assert.ok(logo);
     assert.match(logo!.dataUrl, /^data:image\/jpeg;base64,/);
     assert.equal(logo!.aspect, 1);
   });
 
   it("un bucket que sirve octet-stream no pierde su logo: mandan los bytes", async () => {
-    const logo = await fetchClinicLogo(`${base}/octet.png`, 2000);
+    const logo = await fetchClinicLogo(`${base}/octet.png`, 2000, servidorDePrueba);
     assert.ok(logo, "un PNG válido no se descarta por el content-type");
     assert.equal(logo!.aspect, 1);
   });
@@ -331,18 +335,18 @@ describe("fetchClinicLogo — el PDF sale aunque el logo no", () => {
   ];
   for (const [nombre, ruta] of rotos) {
     it(`${nombre} → null, sin lanzar`, async () => {
-      assert.equal(await fetchClinicLogo(`${base}${ruta}`, 2000), null);
+      assert.equal(await fetchClinicLogo(`${base}${ruta}`, 2000, servidorDePrueba), null);
     });
   }
 
   it("servidor mudo → null en cuanto vence el plazo, no se queda colgado", async () => {
     const t0 = Date.now();
-    assert.equal(await fetchClinicLogo(`${base}/mudo.png`, 300), null);
+    assert.equal(await fetchClinicLogo(`${base}/mudo.png`, 300, servidorDePrueba), null);
     assert.ok(Date.now() - t0 < 3000, "el plazo no cortó la espera");
   });
 
   it("puerto cerrado (bucket caído) → null", async () => {
-    assert.equal(await fetchClinicLogo("http://127.0.0.1:1/logo.png", 1000), null);
+    assert.equal(await fetchClinicLogo("http://127.0.0.1:1/logo.png", 1000, servidorDePrueba), null);
   });
 
   it("sin logoUrl, o con algo que no es http, → null y ni se intenta", async () => {

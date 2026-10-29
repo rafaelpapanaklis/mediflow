@@ -100,6 +100,54 @@ export async function signMaybeUrl(
 }
 
 /**
+ * ¿`path` es un objeto de ESTA clínica dentro del bucket? (auditoría cloudflare nº1). Todo lo que la
+ * app sube de un paciente vive bajo `<clinicId>/…` (xrays, estudios, importación, fotos); lo demás
+ * —otra clínica, `db-backups/…` del cron, `../`— no se firma desde una ruta que mandó el cliente.
+ */
+export function esPathDeLaClinica(path: string | null | undefined, clinicId: string | null | undefined): boolean {
+  if (!path || !clinicId) return false;
+  if (!path.startsWith(`${clinicId}/`)) return false;
+  // `%`: el path se pega TAL CUAL en la URL que firma Supabase y `fetch` normaliza `%2e%2e` como `..`
+  // (`cA/%2e%2e/db-backups/…` saltaba fuera de la carpeta). Ningún nombre que genera la app lleva `%`.
+  if (path.includes("%") || path.includes("\\")) return false;
+  // nada de caracteres de control (un %00 o un salto de línea decodificados)
+  if (/[\u0000-\u001f\u007f]/.test(path)) return false;
+  // ni segmentos vacíos (`//`), ni `.`/`..`
+  return path.split("/").every((s) => s !== "" && s !== "." && s !== "..");
+}
+
+/**
+ * Como `signMaybeUrl`, pero SOLO firma objetos de la clínica de la sesión (`clinicId` obligatorio):
+ * un path de otra clínica o de la plataforma devuelve "" sin firmar. Para rutas que vinieron del
+ * cliente y se guardaron (fotos de antes/después). Una URL externa (no del bucket) pasa tal cual.
+ */
+export async function signMaybeUrlDeLaClinica(
+  urlOrPath: string | null | undefined,
+  clinicId: string,
+  ttlSeconds: number = SIGNED_URL_TTL_SECONDS,
+): Promise<string> {
+  if (!urlOrPath) return "";
+  const path = extractStoragePath(urlOrPath, BUCKETS.PATIENT_FILES);
+  if (!path) return urlOrPath;
+  if (!esPathDeLaClinica(path, clinicId)) return "";
+  return createSignedFileUrl(path, ttlSeconds, BUCKETS.PATIENT_FILES);
+}
+
+/** Versión batch de `signMaybeUrlDeLaClinica`: lo que no es de la clínica queda "" y no se firma. */
+export async function signMaybeUrlsDeLaClinica(
+  urls: Array<string | null | undefined>,
+  clinicId: string,
+  ttlSeconds: number = SIGNED_URL_TTL_SECONDS,
+): Promise<string[]> {
+  const propias = urls.map((u) => {
+    if (!u) return u;
+    const path = extractStoragePath(u, BUCKETS.PATIENT_FILES);
+    return !path || esPathDeLaClinica(path, clinicId) ? u : null;
+  });
+  return signMaybeUrls(propias, ttlSeconds, BUCKETS.PATIENT_FILES);
+}
+
+/**
  * Versión batch — útil para listas de archivos. Firma TODAS las URLs internas
  * en UN solo round-trip con `createSignedUrls` (plural) en vez de N× llamadas
  * a `createSignedUrl`. Las URLs externas / fuera del bucket se devuelven tal

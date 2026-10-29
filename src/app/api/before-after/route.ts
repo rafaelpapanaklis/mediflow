@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { assertPatientVisible } from "@/lib/patient-visibility";
-import { BUCKETS, extractStoragePath, signMaybeUrl, signMaybeUrls } from "@/lib/storage";
+import { BUCKETS, esPathDeLaClinica, extractStoragePath, signMaybeUrlDeLaClinica, signMaybeUrlsDeLaClinica } from "@/lib/storage";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { registrarMovimientoDelPaciente } from "@/lib/movimientos-paciente/registrar";
 
@@ -38,7 +38,8 @@ export async function GET(req: NextRequest) {
   // Firma cada URL on-demand (TTL 5 min). Tolera tanto paths nuevos como
   // URLs legacy guardadas antes de la migración a bucket privado.
   // Firma todas las URLs en UN round-trip (createSignedUrls) en vez de N×.
-  const urls = await signMaybeUrls(photos.map((p) => p.url));
+  // Solo objetos de ESTA clínica (auditoría nº1): una fila vieja con un path ajeno no se firma.
+  const urls = await signMaybeUrlsDeLaClinica(photos.map((p) => p.url), ctx.clinicId);
   const signed = photos.map((p, i) => ({ ...p, url: urls[i] }));
 
   return NextResponse.json(signed);
@@ -93,6 +94,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "URL inválida" }, { status: 400 });
     }
   }
+  // Auditoría cloudflare nº1: el path lo manda el cliente. Solo se acepta un objeto de la carpeta de
+  // ESTA clínica (`<clinicId>/…`, donde la app guarda todo lo del paciente): ni el de otra clínica ni
+  // los respaldos de la plataforma (`db-backups/…`) ni `..`. Antes se guardaba y se firmaba cualquiera.
+  if (!esPathDeLaClinica(storedPath, ctx.clinicId)) {
+    return NextResponse.json({ error: "El archivo no es de esta clínica" }, { status: 400 });
+  }
 
   // Verify patient belongs to clinic
   const patient = await prisma.patient.findFirst({
@@ -134,6 +141,6 @@ export async function POST(req: NextRequest) {
   });
 
   // Devolvemos URL ya firmada al cliente para render inmediato.
-  const signedUrl = await signMaybeUrl(storedPath).catch(() => "");
+  const signedUrl = await signMaybeUrlDeLaClinica(storedPath, ctx.clinicId).catch(() => "");
   return NextResponse.json({ ...photo, url: signedUrl }, { status: 201 });
 }

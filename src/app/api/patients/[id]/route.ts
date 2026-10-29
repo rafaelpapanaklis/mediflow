@@ -27,6 +27,10 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
   const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Auditoría cloudflare nº12 (B7): la ficha entera pide «Ver pacientes». Todos los roles de fábrica
+  // lo tienen; cierra a quien el dueño se lo quitó a mano. Antes de consultar: no revela si existe.
+  const sinVer = denyIfMissingPermission(ctx, "patients.view");
+  if (sinVer) return sinVer;
 
   // MULTI-CLÍNICA · FASE 2 — la ficha se puede LEER desde una sede vinculada.
   // Con el flag apagado, clinicIds = [ctx.clinicId] y esto es la query de hoy.
@@ -74,16 +78,15 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
   // rol y se salta `permissionsOverride` (es el bug P1-7 que ya se cerró en
   // /api/records). La forma correcta es la de objeto, la misma que usa la ficha
   // SSR. `ctx.role` viene tipado como string del contexto de auth.
-  const records = hasPermission(
-    { role: ctx.role as Role, permissionsOverride: ctx.permissionsOverride ?? [] },
-    "medicalRecord.view",
-  )
-    ? patient.records
-    : [];
+  const quien = { role: ctx.role as Role, permissionsOverride: ctx.permissionsOverride ?? [] };
+  const records = hasPermission(quien, "medicalRecord.view") ? patient.records : [];
+  // Lo mismo con las facturas y sus pagos (nº12): sin «Ver cobros» no viajan, como en la ficha SSR.
+  const invoices = hasPermission(quien, "billing.view") ? patient.invoices : [];
 
   return NextResponse.json({
     ...stripPatientSecrets(patient),
     records,
+    invoices,
     originClinicName:
       patient.clinicId === ctx.clinicId
         ? null

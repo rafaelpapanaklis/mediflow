@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthContext } from "@/lib/auth-context";
 import { assertPatientVisible } from "@/lib/patient-visibility";
+import { puedeLeerOdontograma } from "@/lib/odontogram/api-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +31,9 @@ export async function GET(req: NextRequest, props: Params) {
   try {
     const dbUser = await getDbUser();
     if (!dbUser) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    // Auditoría cloudflare nº11: el historial del odontograma es expediente (hallazgos y notas por
+    // diente): el mismo permiso que GET /api/odontogram (medicalRecord.view, M6). Antes bastaba la sesión.
+    if (!puedeLeerOdontograma(dbUser)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
     // Visibilidad por paciente: 404 si el viewer no puede ver este paciente.
     const denied = await assertPatientVisible(params.id, { userId: dbUser.id, role: dbUser.role, clinicId: dbUser.clinicId });
     if (denied) return denied;

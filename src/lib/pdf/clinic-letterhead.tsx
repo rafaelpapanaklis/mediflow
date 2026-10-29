@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Text, View, StyleSheet, Image as PdfImage } from "@react-pdf/renderer";
+import { descargarLogoRemoto } from "@/lib/logo-remoto";
 import { direccionYaDiceLaCiudad } from "@/lib/clinica/lugar-de-la-clinica";
 
 /**
@@ -273,15 +274,15 @@ export async function fetchClinicLogo(
   url: string | null | undefined,
   /** Solo para las pruebas, que no pueden esperar 4 s a un servidor mudo. */
   timeoutMs: number = LOGO_TIMEOUT_MS,
+  /** Solo para las pruebas, que sirven el logo desde 127.0.0.1: quién decide si la URL se visita. */
+  esSegura?: (url: string) => Promise<boolean>,
 ): Promise<{ dataUrl: string; aspect: number } | null> {
-  if (!url || !/^https?:\/\//i.test(url)) return null;
+  // Con la reja de SSRF (auditoría nº2, `logo-remoto.ts`): IP pública, sin redirecciones, con
+  // tiempo límite y tope de bytes.
+  const r = await descargarLogoRemoto(url, { timeoutMs, maxBytes: LOGO_MAX_BYTES, esSegura });
+  if (!r) return null;
   try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
-    if (!res.ok) return null;
-    const declarado = Number(res.headers.get("content-length"));
-    if (Number.isFinite(declarado) && declarado > LOGO_MAX_BYTES) return null;
-    const buf = Buffer.from(await res.arrayBuffer());
-    if (buf.byteLength === 0 || buf.byteLength > LOGO_MAX_BYTES) return null;
+    const buf = r.buf;
     const aspect = imageAspect(buf);
     if (aspect == null) return null;
     const mime = buf[0] === 0x89 ? "image/png" : "image/jpeg";
