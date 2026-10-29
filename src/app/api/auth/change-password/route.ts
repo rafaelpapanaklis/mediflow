@@ -17,6 +17,13 @@ function getAdminClient() {
   );
 }
 
+// Lo que ve la persona: la pantalla «Crea tu contraseña» enseña `error` tal cual,
+// así que todo va en español y sin jerga. `code` le dice al cliente qué salida
+// ofrecer (sin sesión → volver a entrar).
+const SIN_SESION = { error: "Tu sesión se cerró. Vuelve a entrar para cambiar tu contraseña.", code: "sin_sesion" } as const;
+const SEDE_CERRADA = { error: "Escribe la clave de la sede antes de cambiar tu contraseña.", code: "sede_con_clave" } as const;
+const NO_SE_PUDO = "No pudimos actualizar la contraseña. Inténtalo de nuevo.";
+
 // POST /api/auth/change-password
 //
 // El propio usuario cambia SU contraseña. Es el único modo de levantar la marca
@@ -38,26 +45,24 @@ export async function POST(req: NextRequest) {
   // quedaba sin salida. El 2FA sí se exige. Un cambio voluntario sigue
   // pidiendo la sede abierta, como antes.
   const ctx = await getAuthContextParaClaveDeSede();
-  if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!ctx) return NextResponse.json(SIN_SESION, { status: 401 });
   if (
     ctx.user.mustChangePassword !== true &&
     (await sedeCerradaPara({ supabaseId: ctx.user.supabaseId, clinicId: ctx.clinicId }))
   ) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return NextResponse.json(SEDE_CERRADA, { status: 401 });
   }
 
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    return NextResponse.json(
-      { error: "Supabase service role no está configurado en el servidor" },
-      { status: 500 },
-    );
+    console.error("[/api/auth/change-password] falta SUPABASE_SERVICE_ROLE_KEY o NEXT_PUBLIC_SUPABASE_URL");
+    return NextResponse.json({ error: NO_SE_PUDO }, { status: 500 });
   }
 
   let body: any;
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json({ error: "Body inválido" }, { status: 400 });
+    return NextResponse.json({ error: "No pudimos leer la contraseña. Inténtalo de nuevo." }, { status: 400 });
   }
 
   const password = typeof body?.password === "string" ? body.password : "";
@@ -106,9 +111,12 @@ export async function POST(req: NextRequest) {
       });
       const { data: probeData } = await probe.auth.signInWithPassword({ email, password });
       if (probeData?.user) {
-        // Cierra el refresh token que acaba de nacer; la sesión del navegador
-        // no se toca (este client es aparte y no persiste nada).
-        try { await probe.auth.signOut(); } catch { /* ignore */ }
+        // Cierra SOLO la sesión que acaba de nacer. scope "local" a propósito:
+        // signOut() sin scope es "global" en supabase-js y revoca TODAS las
+        // sesiones de la persona, la del navegador incluida — quien tecleaba
+        // la temporal como nueva veía «debe ser distinta», escribía otra y le
+        // salía 401 (repaso iPad ws1-t1, 29-oct).
+        try { await probe.auth.signOut({ scope: "local" }); } catch { /* ignore */ }
         return NextResponse.json(
           { error: "La contraseña nueva debe ser distinta de la temporal." },
           { status: 400 },

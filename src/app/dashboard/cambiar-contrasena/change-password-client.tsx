@@ -20,6 +20,8 @@ export function ChangePasswordClient() {
   const [touchedConfirm, setTouchedConfirm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // La sesión ya no existe (401): reintentar no sirve, la salida es volver a entrar.
+  const [sinSesion, setSinSesion] = useState(false);
 
   const pwValid      = isStrongEnough(password);
   const confirmValid = confirm.length > 0 && confirm === password;
@@ -38,7 +40,13 @@ export function ChangePasswordClient() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(data?.error ?? "No pudimos actualizar la contraseña. Inténtalo de nuevo.");
+        setSinSesion(res.status === 401);
+        setError(
+          data?.error ??
+            (res.status === 401
+              ? "Tu sesión se cerró. Vuelve a entrar para cambiar tu contraseña."
+              : "No pudimos actualizar la contraseña. Inténtalo de nuevo."),
+        );
         setSaving(false);
         return;
       }
@@ -129,6 +137,15 @@ export function ChangePasswordClient() {
               }}
             >
               {error}
+              {sinSesion && (
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  style={{ display: "block", marginTop: 6, padding: 0, background: "none", border: 0, color: "inherit", fontSize: 12, fontWeight: 600, textDecoration: "underline", cursor: "pointer" }}
+                >
+                  Volver a entrar
+                </button>
+              )}
             </div>
           )}
 

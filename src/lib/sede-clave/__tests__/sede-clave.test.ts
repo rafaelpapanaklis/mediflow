@@ -247,6 +247,10 @@ let archivadas: string[] = [];
 let consultadasReporte: string[] = [];
 let activasEscritas: string[] = [];
 let contrasenasCambiadas: string[] = [];
+/** La contraseña con la que la sonda de change-password «entra» (la temporal vigente). */
+let contrasenaVigente: string | null = null;
+/** El scope de cada signOut de la sonda. */
+let cierresDeSonda: Array<string | undefined> = [];
 let marcasLevantadas: string[] = [];
 
 class Redireccion extends Error {
@@ -318,8 +322,15 @@ const dobles: Record<string, unknown> = {
   "@supabase/supabase-js": {
     createClient: () => ({
       auth: {
-        signInWithPassword: async () => ({ data: { user: null }, error: null }),
-        signOut: async () => ({ error: null }),
+        signInWithPassword: async ({ password }: any) =>
+          password === contrasenaVigente ? { data: { user: { id: sesion } }, error: null } : { data: { user: null }, error: null },
+        // Como Supabase: sin scope (o "global") revoca TODAS las sesiones de la
+        // persona, también la del navegador que pidió el cambio.
+        signOut: async (opts?: { scope?: string }) => {
+          cierresDeSonda.push(opts?.scope);
+          if ((opts?.scope ?? "global") === "global") sesion = null;
+          return { error: null };
+        },
         admin: { updateUserById: async (id: string) => { contrasenasCambiadas.push(id); return { error: null }; } },
       },
     }),
@@ -375,6 +386,8 @@ beforeEach(async () => {
   activasEscritas = [];
   contrasenasCambiadas = [];
   marcasLevantadas = [];
+  contrasenaVigente = null;
+  cierresDeSonda = [];
 });
 
 // ══════════════════ Utilería ══════════════════
@@ -1448,6 +1461,44 @@ test("ws1-t1 · un cambio VOLUNTARIO de contraseña sigue pidiendo la sede abier
   const desbloquear = await rutaDesbloquear();
   assert.equal((await llamar(desbloquear, "/api/sede-clave/desbloquear", { clave: CLAVE })).status, 200);
   assert.equal((await llamar(POST, "/api/auth/change-password", { password: "Nueva-Segura-2026" })).status, 200);
+});
+
+// Repaso iPad (29-oct): quien tecleaba la MISMA temporal como nueva veía «debe
+// ser distinta»… y la sonda cerraba todas sus sesiones (signOut global): el
+// siguiente intento, ya con una buena, salía 401 «Unauthorized», en inglés.
+test("ws1-t1 · la misma temporal como nueva: aviso en español y la sesión SIGUE (la sonda solo cierra la suya)", async () => {
+  await admin3ConTemporalEnNavegadorLimpio();
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ??= "anon-de-prueba";
+  contrasenaVigente = "Temporal-Generada-77";
+  const POST = await rutaCambioContrasena();
+  const r1 = await llamar(POST, "/api/auth/change-password", { password: "Temporal-Generada-77" });
+  assert.equal(r1.status, 400);
+  assert.match(r1.body.error, /distinta de la temporal/);
+  assert.deepEqual(cierresDeSonda, ["local"]);
+  assert.deepEqual(contrasenasCambiadas, []);
+  // Escribe otra: entra, sin volver a iniciar sesión.
+  const r2 = await llamar(POST, "/api/auth/change-password", { password: "Nueva-Segura-2026" });
+  assert.equal(r2.status, 200, JSON.stringify(r2.body));
+  assert.deepEqual(contrasenasCambiadas, [SB_ADMIN3]);
+});
+
+test("ws1-t1 · change-password no contesta en inglés ni con jerga: sin sesión → español y código para volver a entrar", async () => {
+  await admin3ConTemporalEnNavegadorLimpio();
+  const POST = await rutaCambioContrasena();
+  sesion = null;
+  const r = await llamar(POST, "/api/auth/change-password", { password: "Nueva-Segura-2026" });
+  assert.equal(r.status, 401);
+  assert.equal(r.body.code, "sin_sesion");
+  assert.match(r.body.error, /sesión se cerró/);
+  // Ningún texto de la ruta en inglés ni técnico (la pantalla los enseña tal cual).
+  const fuente = readFileSync(join(SRC, "app/api/auth/change-password/route.ts"), "utf8");
+  for (const malo of ["Unauthorized", "Body inválido", "service role no está configurado"]) {
+    assert.ok(!fuente.includes(`"${malo}`) && !fuente.includes(`${malo}"`), `mensaje que ve la persona: «${malo}»`);
+  }
+  // Y la pantalla, ante un 401, ofrece volver a entrar en vez de dejar reintentar.
+  const cliente = readFileSync(join(SRC, "app/dashboard/cambiar-contrasena/change-password-client.tsx"), "utf8");
+  assert.match(cliente, /res\.status === 401/);
+  assert.match(cliente, /Volver a entrar/);
 });
 
 test("ws1-t1 · cada pantalla de barrera solo aplica los gates de las barreras ANTERIORES (nunca A→B→A)", () => {
