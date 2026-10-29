@@ -33,6 +33,7 @@ import {
   findPatientsByWhatsAppPhone,
   upsertWhatsAppThread,
 } from "@/lib/whatsapp/inbox-log";
+import { recordatoriosDeEseNumero } from "@/lib/whatsapp/recordatorio-destino";
 import {
   BOT_REPLY_EXTERNAL_ID_PREFIX,
   SYSTEM_EXTERNAL_ID_PREFIX,
@@ -544,7 +545,7 @@ async function procesarMensajeEntrante(value: any, msg: any): Promise<void> {
   // que de verdad pide confirmar/cancelar por encima de uno más nuevo que no
   // lo pide — p. ej. una encuesta post-cita encolada después del recordatorio
   // de una cita futura.
-  const pendingReminders = phoneOwners.length > 0
+  const pendientesDeLosDuenos = phoneOwners.length > 0
     ? await prisma.whatsAppReminder.findMany({
         where: {
           clinicId:    clinic.id,
@@ -553,7 +554,9 @@ async function procesarMensajeEntrante(value: any, msg: any): Promise<void> {
           status:      WA_REMINDER_STATUS.SENT,
           repliedAt:   null,
         },
-        include: { appointment: true },
+        // El teléfono del paciente de la cita: destino de los recordatorios
+        // enviados antes de que se guardara `payload.enviadoA` (nº9).
+        include: { appointment: { include: { patient: { select: { phone: true } } } } },
         orderBy: { sentAt: "desc" },
         // Tope de seguridad: con más de 20 recordatorios sin contestar el
         // accionable podría quedar fuera (peor caso: la confirmación no se
@@ -562,6 +565,10 @@ async function procesarMensajeEntrante(value: any, msg: any): Promise<void> {
         take: 20,
       })
     : [];
+  // Seguridad (auditoría «cloudflare», nº9): solo cuenta el recordatorio que
+  // de verdad salió a ESTE número. Un «CANCELAR» de otro número no toca una
+  // cita aunque el remitente se pareciera al paciente.
+  const pendingReminders = recordatoriosDeEseNumero(pendientesDeLosDuenos, from);
 
   // Selección + clasificación, ambas puras y testeadas sin BD
   // (lib/whatsapp/reminder-pick.ts y reminder-reply.ts; npm run

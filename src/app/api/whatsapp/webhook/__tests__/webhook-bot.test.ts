@@ -287,16 +287,21 @@ function peticion(body: unknown) {
 const enviar = (texto: string) => POST(peticion({ entry: [{ id: "waba", changes: [cambio([mensaje(texto)])] }] }));
 
 function recordatorio(over: Partial<any> = {}) {
-  return {
+  const r = {
     id: "rec1",
     clinicId: CLINICA.id,
     type: "APPT_AUTO",
     status: "SENT",
     sentAt: new Date(Date.now() - 3_600_000),
     appointmentId: "cita1",
-    appointment: { id: "cita1", status: "SCHEDULED", patientId: "pac1", startsAt: new Date("2026-10-08T16:00:00Z") },
+    // `patient.phone`: el webhook lo carga para saber a qué número salió el
+    // recordatorio (seguridad nº9); aquí el recordatorio salió al número que escribe.
+    appointment: { id: "cita1", status: "SCHEDULED", patientId: "pac1", startsAt: new Date("2026-10-08T16:00:00Z"), patient: { phone: TEL } },
     ...over,
   };
+  // Una cita a medida conserva el `patient.phone` de la base salvo que la prueba lo cambie.
+  if (over.appointment) r.appointment = { patient: { phone: TEL }, ...over.appointment };
+  return r;
 }
 const cancelo = () => e.citasActualizadas.some((a) => a.data?.status === "CANCELLED");
 
@@ -613,5 +618,33 @@ describe("WS1-T3 v7 — la clínica cambió la cita justo cuando el paciente con
     assert.equal(cancelo(), false);
     assert.ok(e.enviados.at(-1)?.body.includes("ya no está activa"));
     assert.ok(!e.enviados.some((m) => m.body.includes("ha sido *cancelada*")));
+  });
+});
+
+// ── Seguridad (auditoría «cloudflare», nº9) ─────────────────────────────────
+describe("nº9 — la respuesta a un recordatorio cuenta solo desde el número al que salió", () => {
+  it("un «CANCELAR» de un +1 que acaba igual que el paciente mexicano NO cancela su cita", async () => {
+    // El recordatorio salió al 33 1234 5678 (México); escribe +1 331 234 5678.
+    TEL = "13312345678";
+    e.recordatorios = [recordatorio({ payload: { enviadoA: "523312345678" }, appointment: { ...recordatorio().appointment, patient: { phone: "33 1234 5678" } } })];
+    await enviar("cancelar");
+    assert.equal(cancelo(), false, "la cita no se toca");
+    assert.ok(!e.enviados.some((m) => m.body.includes("cancelada")), "no se le dice «cita cancelada»");
+  });
+
+  it("un «CONFIRMAR» desde otro número tampoco confirma ni enseña la fecha de la cita", async () => {
+    // Un número distinto por prueba (el bot limita por remitente y recuerda lo ya contestado).
+    TEL = "13312345670";
+    e.recordatorios = [recordatorio({ appointment: { ...recordatorio().appointment, patient: { phone: "33 1234 5670" } } })];
+    await enviar("confirmar");
+    assert.ok(!e.citasActualizadas.some((a) => a.data?.status === "CONFIRMED"), "la cita no se confirma");
+    assert.ok(!e.enviados.some((m) => m.body.includes("confirmada")), "no se contesta con la cita");
+  });
+
+  it("el paciente de verdad (wa_id 521…) sigue cancelando su cita como siempre", async () => {
+    TEL = "5213312345671";
+    e.recordatorios = [recordatorio({ payload: { enviadoA: "523312345671" } })];
+    await enviar("cancelar");
+    assert.equal(cancelo(), true);
   });
 });

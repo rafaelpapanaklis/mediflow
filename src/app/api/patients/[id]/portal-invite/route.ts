@@ -4,10 +4,12 @@
 // /paciente/recuperar). La clínica NUNCA ve la contraseña.
 //
 // Guard idéntico a /api/portal (staff que PUEDE ver al paciente de su clínica).
-// Estados de respuesta { status }:
-//   · "invited"        → no existía cuenta: se creó invitada + correo.
-//   · "resent"         → existía invitada (sin activar): token nuevo + reenvío.
-//   · "already_active" → ya tiene contraseña: NO se reenvía; solo se asegura el link.
+// Lo que hace según la cuenta (la RESPUESTA es la misma en los tres casos,
+// `{ ok: true, status: "invited" }`; ver nº8 abajo):
+//   · no existía cuenta: se crea invitada + correo.
+//   · existía invitada (sin activar): token nuevo + reenvío.
+//   · ya tiene contraseña: NO se reenvía; solo se asegura el link.
+// Exige `patients.edit`.
 //
 // TODO el cuerpo va envuelto en try/catch: cualquier fallo de Prisma/email/infra
 // responde `{ error }` con status 500 en vez de un cuerpo vacío que reventaría
@@ -15,6 +17,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { assertPatientVisible } from "@/lib/patient-visibility";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
 import { persistentRateLimit } from "@/lib/failban";
 import { sendEmail } from "@/lib/email";
@@ -30,6 +33,11 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
   try {
     const ctx = await getAuthContext();
     if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+    // Seguridad (auditoría «cloudflare», nº8): invitar crea o liga una cuenta
+    // del portal al expediente: es editar al paciente. Antes bastaba la sesión
+    // (también un usuario de solo lectura).
+    const deniedPerm = denyIfMissingPermission(ctx, "patients.edit");
+    if (deniedPerm) return deniedPerm;
 
     // Anti-abuso: freno de spam de invitaciones por IP (bombardeo de correo a un
     // paciente). Generoso; el endpoint ya exige sesión de staff.
@@ -144,7 +152,14 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
       ...extractAuditMeta(req),
     });
 
-    return NextResponse.json({ ok: true, status });
+    // Seguridad (auditoría «cloudflare», nº8): la cuenta del portal es GLOBAL
+    // (un email = una cuenta para todas las clínicas). Contestar «ya estaba
+    // activa» / «se reenvió» le decía a CUALQUIER clínica si ese email ya tiene
+    // portal en DaleControl —es decir, que esa persona es paciente en algún
+    // lado—. La respuesta es la MISMA en los tres casos; el estado real queda
+    // solo en la bitácora interna de arriba.
+    void status;
+    return NextResponse.json({ ok: true, status: "invited" as const });
   } catch (err) {
     // Red de seguridad: cualquier throw de Prisma/infra sale como JSON 500 (no
     // como respuesta vacía). Logueamos el error real para poder diagnosticarlo.

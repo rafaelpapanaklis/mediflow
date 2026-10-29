@@ -11,6 +11,7 @@
 //   frena a las demás.
 // - No usa el bot IA: cero tokens, cero tope diario del bot.
 
+import { mismoEmailDePortal } from "@/lib/patient-portal/link";
 import { randomBytes } from "crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -181,10 +182,13 @@ export async function sweepAppointmentReminders(opts?: {
       const accountByPatient = new Map<string, string>();
       let prefsByAccount = new Map<string, NotifPrefs>();
       try {
-        const links = await prisma.patientAccountLink.findMany({
+        const crudos = await prisma.patientAccountLink.findMany({
           where: { patientId: { in: candidatePatientIds }, clinicId: clinic.id },
-          select: { patientId: true, accountId: true },
+          select: { patientId: true, accountId: true, account: { select: { email: true } }, patient: { select: { email: true } } },
         });
+        // Seguridad (auditoría «cloudflare», nº7): el aviso in-app solo va a la
+        // cuenta cuyo email sigue siendo el del paciente.
+        const links = crudos.filter((l) => mismoEmailDePortal(l.account?.email, l.patient?.email));
         for (const l of links) {
           if (!accountByPatient.has(l.patientId)) {
             accountByPatient.set(l.patientId, l.accountId);

@@ -18,6 +18,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { sendWhatsAppLogged } from "@/lib/whatsapp/send-and-log";
+import { claveWhatsApp } from "@/lib/whatsapp/bot/booking-parse";
 import { sendEmail } from "@/lib/email";
 import { buildAppointmentReminderEmail } from "@/lib/reminders/email";
 import {
@@ -378,16 +379,18 @@ export async function processWhatsAppQueue(opts?: {
       // para siempre por más que el mensaje nunca llegara. Va en `payload`
       // porque la tabla no tiene columna propia y ese Json ya es libre.
       const wamid: string | null = sent?.messages?.[0]?.id ?? null;
-      if (wamid) {
-        await prisma.whatsAppReminder
-          .update({
-            where: { id: r.id },
-            // Spread del payload existente: `channel` y `offsetMin` son la
-            // llave del dedup del encolador y perderlos duplicaría envíos.
-            data: { payload: { ...((r.payload ?? {}) as object), wamid } },
-          })
-          .catch(() => {});
-      }
+      // Seguridad (auditoría «cloudflare», nº9): también A QUÉ NÚMERO salió
+      // (`enviadoA`, número completo con código de país). El webhook solo deja
+      // contestar este recordatorio —confirmar, cancelar— desde ese número.
+      const enviadoA = claveWhatsApp(patientCtx.phone);
+      await prisma.whatsAppReminder
+        .update({
+          where: { id: r.id },
+          // Spread del payload existente: `channel` y `offsetMin` son la
+          // llave del dedup del encolador y perderlos duplicaría envíos.
+          data: { payload: { ...((r.payload ?? {}) as object), ...(wamid ? { wamid } : {}), enviadoA } },
+        })
+        .catch(() => {});
       summary.sent++;
       // Pausa breve para respetar rate limits.
       await new Promise((resolve) => setTimeout(resolve, 200));

@@ -1,3 +1,4 @@
+import { revocarEnlacesDeOtroEmail } from "@/lib/patient-portal/link";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getAuthContext } from "@/lib/auth-context";
@@ -169,6 +170,13 @@ export async function POST(req: NextRequest) {
           where: { id: patient.id },
           data:  updates,
         });
+        // Seguridad (auditoría «cloudflare», nº7): una rectificación del email
+        // revoca los enlaces del portal de cuentas con el email anterior.
+        if ("email" in updates) {
+          await revocarEnlacesDeOtroEmail({ patientId: patient.id, clinicId: ctx.clinicId }).catch((e) => {
+            console.error("[arco-request] revocar enlaces del portal falló (el guard los filtra):", e);
+          });
+        }
 
         await logMutation({
           req,

@@ -31,7 +31,8 @@ export async function GET() {
     if (!account) return pacienteUnauthorized();
 
     const links = await prisma.patientAccountLink.findMany({
-      where: { accountId: account.id, patient: { deletedAt: null } },
+      // Seguridad (auditoría «cloudflare», nº7): solo expedientes que siguen con el email de esta cuenta.
+      where: { accountId: account.id, patient: { deletedAt: null, email: { equals: account.email, mode: "insensitive" } } },
       orderBy: { createdAt: "asc" },
       select: {
         clinicId: true,

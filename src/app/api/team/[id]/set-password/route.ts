@@ -73,6 +73,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     contrasena,
     nombreBoton: "Establecer contraseña nueva",
     origen: "/api/team/[id]/set-password",
+    sesion: { clinicId: ctx.clinicId, userId: ctx.userId },
   });
   if (aplicada.ok === false) {
     return NextResponse.json(

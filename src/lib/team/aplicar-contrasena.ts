@@ -19,6 +19,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { prisma } from "@/lib/prisma";
 import { clasificarErrorAuth, esCorreoMarcador, esUuid, ERROR_SIN_CUENTA } from "@/lib/team/auth-errors";
+import { cuentaCompartidaFueraDeLaClinica, MENSAJE_CUENTA_COMPARTIDA } from "@/lib/team/cuenta-compartida";
 
 export interface MiembroConCuenta {
   supabaseId: string;
@@ -42,8 +43,23 @@ export async function aplicarContrasenaAlMiembro(opts: {
   nombreBoton: string;
   /** Prefijo de los console.error (nunca se registra la contraseña). */
   origen: string;
+  /**
+   * Seguridad (auditoría «cloudflare», nº5): la clínica y el usuario de la
+   * SESIÓN. La contraseña es global: si la cuenta la usa también otro lugar
+   * (otra clínica, el Instituto, su cuenta de afiliado), no se fija desde aquí.
+   */
+  sesion: { clinicId: string; userId: string };
 }): Promise<ResultadoContrasena> {
-  const { admin, miembro, contrasena, nombreBoton, origen } = opts;
+  const { admin, miembro, contrasena, nombreBoton, origen, sesion } = opts;
+
+  const compartida = await cuentaCompartidaFueraDeLaClinica({
+    supabaseId: miembro.supabaseId,
+    clinicId: sesion.clinicId,
+    actorUserId: sesion.userId,
+  });
+  if (compartida.compartida) {
+    return { ok: false, status: 409, error: MENSAJE_CUENTA_COMPARTIDA, code: "CUENTA_COMPARTIDA" };
+  }
 
   // Un supabaseId que no es UUID (demo, muestra de QA) haría LANZAR a supabase-js.
   const updateError: any = !esUuid(miembro.supabaseId)

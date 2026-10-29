@@ -89,8 +89,37 @@ const NOMBRES_DE_MES = [
   "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
 ];
 
+/**
+ * Los últimos 10 dígitos. Ya NO identifica a nadie (auditoría «cloudflare»,
+ * nº9): un número extranjero puede terminar en los mismos 10 dígitos que el de
+ * un paciente mexicano (+1 331… y 33 1…). Solo sirve de PRE-FILTRO en la base;
+ * la comparación que decide es `claveWhatsApp`.
+ */
 export function normalizeLast10(phone: string): string {
   return phone.replace(/\D/g, "").slice(-10);
+}
+
+/**
+ * La IDENTIDAD de un número de WhatsApp: los dígitos en formato internacional
+ * completo (E.164 sin «+»), con el código de país. Seguridad (auditoría
+ * «cloudflare», nº9): antes el remitente se identificaba por los últimos 10
+ * dígitos y el código de país se tiraba.
+ *
+ * Solo se pliegan las variantes de MÉXICO, que son la misma línea:
+ *   · «521» + 10 (formato viejo de celular, el wa_id que aún manda Meta) → «52» + 10;
+ *   · «044»/«045» + 10 (marcación nacional vieja) → «52» + 10;
+ *   · 10 dígitos sin código de país (como la recepción teclea el teléfono) → «52» + 10;
+ *   · un «00» delante (salida internacional) se quita.
+ * Cualquier otro número se queda con su código de país: «+1 331 234 5678»
+ * es «13312345678», distinto de «52 33 1234 5678».
+ */
+export function claveWhatsApp(phone: string | null | undefined): string {
+  let d = String(phone ?? "").replace(/\D/g, "");
+  if (d.startsWith("00")) d = d.slice(2);
+  if (d.length === 13 && (d.startsWith("044") || d.startsWith("045"))) return `52${d.slice(3)}`;
+  if (d.length === 13 && d.startsWith("521")) return `52${d.slice(3)}`;
+  if (d.length === 10) return `52${d}`;
+  return d;
 }
 
 export function addDaysISO(iso: string, days: number): string {

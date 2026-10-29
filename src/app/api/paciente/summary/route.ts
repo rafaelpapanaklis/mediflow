@@ -49,7 +49,8 @@ export async function GET() {
     const [links, appointments, invoices] = await Promise.all([
       // Clínicas vinculadas (solo pacientes no borrados).
       prisma.patientAccountLink.findMany({
-        where: { accountId: ctx.account.id, patient: { deletedAt: null } },
+        // Seguridad (auditoría «cloudflare», nº7): solo expedientes que siguen con el email de esta cuenta.
+        where: { accountId: ctx.account.id, patient: { deletedAt: null, email: { equals: ctx.account.email, mode: "insensitive" } } },
         select: {
           clinicId: true,
           patient: {

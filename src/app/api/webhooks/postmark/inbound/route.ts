@@ -33,14 +33,32 @@ export async function POST(req: NextRequest) {
       for (const t of payload.ToFull) candidates.push(t.Email.toLowerCase());
     }
 
-    const clinic = candidates.length
-      ? await prisma.clinic.findFirst({
+    // Seguridad (auditoría «cloudflare», nº3): antes era un findFirst sin
+    // ORDER BY. Si dos clínicas tenían la misma dirección, el correo iba a una
+    // cualquiera. Ahora se leen TODAS las que casan: una dirección que tienen
+    // dos clínicas es un error y el correo no se entrega a ninguna (409; Postmark
+    // lo reintenta, y entra en cuanto se corrija la dirección duplicada). Con
+    // varios destinatarios de clínicas distintas manda el primero del To.
+    const dueños = candidates.length
+      ? await prisma.clinic.findMany({
           where: {
             postmarkInboundEmail: { in: candidates, mode: "insensitive" },
           },
-          select: { id: true },
+          select: { id: true, postmarkInboundEmail: true },
         })
-      : null;
+      : [];
+
+    let clinic: { id: string } | null = null;
+    for (const direccion of candidates) {
+      const deEsta = dueños.filter((c) => (c.postmarkInboundEmail ?? "").toLowerCase() === direccion);
+      if (deEsta.length > 1) {
+        console.error("[postmark-inbound] dirección de entrada en más de una clínica; no se entrega", {
+          clinicas: deEsta.map((c) => c.id),
+        });
+        return NextResponse.json({ error: "ambiguous_inbound_address" }, { status: 409 });
+      }
+      if (deEsta.length === 1 && !clinic) clinic = { id: deEsta[0].id };
+    }
 
     if (!clinic) {
       return NextResponse.json({ ok: true, ignored: "clinic_not_found" });
