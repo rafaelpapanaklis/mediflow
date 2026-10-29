@@ -21,10 +21,12 @@ import type { Metadata } from "next";
 import { crmTextosListar } from "@/lib/admin/crm/textos-service";
 import { CrmTabs } from "../crm-tabs";
 import { CrmTextosClient } from "./textos-client";
+import { requireAdminPage } from "@/lib/admin-page-guard";
 
 export const metadata: Metadata = { title: "Mis textos — CRM — Admin DaleControl" };
 
 export default async function Page() {
+  await requireAdminPage();
   // crmTextosListar NO lanza: si la tabla todavía no existe devuelve
   // `falta: true` y la pantalla lo dice con esas palabras, en vez de
   // enseñar una libreta vacía que se leería como "no has escrito nada".

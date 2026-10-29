@@ -101,6 +101,12 @@ mock.module("@/lib/prisma", {
           return { count };
         },
       },
+      // La sonda de la clave de la sede: «sin tablas» (sin el SQL, función apagada). Desde la auditoría «cloudflare»
+      // nº14 una sonda que falla ya no abre la sede, así que el doble tiene que contestarla.
+      $queryRaw: async (q: TemplateStringsArray) => {
+        if (q.join("?").includes("to_regclass('public.sede_claves')")) return [{ existe: false }];
+        throw new Error("SQL crudo no previsto en el doble");
+      },
       supplierUser: { findFirst: async () => null },
       dentalLabUser: { findFirst: async () => null },
       barberUser: { findFirst: async () => null },

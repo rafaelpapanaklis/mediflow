@@ -5,10 +5,12 @@ import { ArrowLeft } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { isCFDIConfigured, cfdiNotConfiguredInstructions } from "@/lib/cfdi";
 import { CfdiClient } from "./cfdi-client";
+import { requireAdminPage } from "@/lib/admin-page-guard";
 
 export const metadata: Metadata = { title: "CFDI — Admin DaleControl" };
 
 export default async function CfdiPaymentPage(props: { params: Promise<{ id: string }> }) {
+  await requireAdminPage();
   const params = await props.params;
   const payment = await prisma.subscriptionInvoice.findUnique({
     where: { id: params.id },

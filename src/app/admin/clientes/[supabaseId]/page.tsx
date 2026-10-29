@@ -6,6 +6,7 @@ import { getClienteDetalle } from "@/lib/admin/clientes";
 import { isStripeConfigured, STRIPE_SETUP_INSTRUCTIONS } from "@/lib/stripe";
 import { cargarCliente } from "../datos";
 import { ClienteDetalleClient } from "./cliente-detalle-client";
+import { requireAdminPage } from "@/lib/admin-page-guard";
 
 export const metadata: Metadata = { title: "Detalle de cliente — Admin DaleControl" };
 
@@ -23,6 +24,7 @@ export const metadata: Metadata = { title: "Detalle de cliente — Admin DaleCon
  * consultas: juntas pasarían de 7 en vuelo y el pooler empieza a dar timeouts.
  */
 export default async function AdminClienteDetallePage(props: { params: Promise<{ supabaseId: string }> }) {
+  await requireAdminPage();
   const params = await props.params;
   const cliente = await getClienteDetalle(params.supabaseId);
   if (!cliente) notFound();

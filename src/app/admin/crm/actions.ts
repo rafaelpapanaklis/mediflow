@@ -19,7 +19,7 @@
 // ═══════════════════════════════════════════════════════════════════════
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
-import { getAdminSession } from "@/lib/admin-auth";
+import { sesionAdminDeAccion } from "@/lib/admin-page-guard";
 import {
   crmActualizar,
   crmCrear,
@@ -79,7 +79,7 @@ function refrescar(id?: string | null): void {
 export async function crearProspectoAccion(
   entrada: CrmProspectoEntrada & { tags?: string[] | string },
 ): Promise<CrmResultado<CrmProspectoDTO>> {
-  const admin = await getAdminSession();
+  const admin = await sesionAdminDeAccion();
   if (!admin) return NO_AUTORIZADO;
 
   const r = await crmCrear(entrada, admin.user.email);
@@ -96,7 +96,7 @@ export async function actualizarProspectoAccion(
   id: string,
   entrada: CrmProspectoEntrada & { tags?: string[] | string },
 ): Promise<CrmResultado<CrmProspectoDTO>> {
-  const admin = await getAdminSession();
+  const admin = await sesionAdminDeAccion();
   if (!admin) return NO_AUTORIZADO;
 
   const r = await crmActualizar(id, entrada);
@@ -105,7 +105,7 @@ export async function actualizarProspectoAccion(
 }
 
 export async function eliminarProspectoAccion(id: string): Promise<CrmResultado> {
-  const admin = await getAdminSession();
+  const admin = await sesionAdminDeAccion();
   if (!admin) return NO_AUTORIZADO;
 
   const r = await crmEliminar(id);
@@ -125,7 +125,7 @@ export async function moverEtapaAccion(
   etapa: string,
   opciones?: { nota?: string | null; motivoPerdida?: string | null },
 ): Promise<CrmResultado<CrmProspectoDTO>> {
-  const admin = await getAdminSession();
+  const admin = await sesionAdminDeAccion();
   if (!admin) return NO_AUTORIZADO;
 
   const r = await crmMoverEtapa(id, etapa, admin.user.email, opciones);
@@ -142,7 +142,7 @@ export async function registrarActividadAccion(
   prospectId: string,
   entrada: CrmActividadEntrada,
 ): Promise<CrmResultado<{ actividad: unknown; etapaNueva: string | null }>> {
-  const admin = await getAdminSession();
+  const admin = await sesionAdminDeAccion();
   if (!admin) return NO_AUTORIZADO;
 
   const r = await crmRegistrarActividad(prospectId, entrada, admin.user.email);
@@ -160,7 +160,7 @@ export async function contactoRapidoAccion(
   prospectId: string,
   kind: string,
 ): Promise<CrmResultado<{ actividad: unknown; etapaNueva: string | null }>> {
-  const admin = await getAdminSession();
+  const admin = await sesionAdminDeAccion();
   if (!admin) return NO_AUTORIZADO;
 
   const texto =
@@ -182,7 +182,7 @@ export async function programarSeguimientoAccion(
   fecha: string | null,
   nota: string | null,
 ): Promise<CrmResultado<CrmProspectoDTO>> {
-  const admin = await getAdminSession();
+  const admin = await sesionAdminDeAccion();
   if (!admin) return NO_AUTORIZADO;
 
   const r = await crmProgramarSeguimiento(id, fecha, nota);
@@ -196,7 +196,7 @@ export async function importarAccion(
   filas: CrmFilaImportada[],
   comunes: { vertical?: string; source?: string; stage?: string },
 ): Promise<CrmResultado<CrmImportResumen>> {
-  const admin = await getAdminSession();
+  const admin = await sesionAdminDeAccion();
   if (!admin) return NO_AUTORIZADO;
 
   const r = await crmImportar(filas, comunes ?? {}, admin.user.email);

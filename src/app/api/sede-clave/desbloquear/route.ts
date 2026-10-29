@@ -6,7 +6,7 @@ import { logError } from "@/lib/safe-log";
 import { writeActiveClinicCookie } from "@/lib/active-clinic";
 import { applyTwoFactorLoginCookies } from "@/lib/auth/two-factor-cookie";
 import { destinoSeguro, minutosHasta } from "@/lib/sede-clave/core";
-import { tablaExiste } from "@/lib/sede-clave/estado.server";
+import { sondaDeTablas } from "@/lib/sede-clave/estado.server";
 import { ponerDesbloqueo } from "@/lib/sede-clave/gate.server";
 import { bitacoraClave, verificarClave } from "@/lib/sede-clave/servicio.server";
 
@@ -68,8 +68,13 @@ export async function POST(req: NextRequest) {
       return res;
     };
 
-    // Sin el SQL no hay claves: nada que desbloquear.
-    if (!(await tablaExiste(true))) return responderOk(null);
+    // Sin el SQL no hay claves: nada que desbloquear. Si la base no contesta a la
+    // pregunta, no se sabe (nº14): no se abre la sede sin comprobar la clave.
+    const sonda = await sondaDeTablas(true);
+    if (sonda === "desconocido") {
+      return NextResponse.json({ error: "No pudimos comprobar la clave de la sede. Intenta de nuevo en unos segundos." }, { status: 503 });
+    }
+    if (sonda === "no") return responderOk(null);
 
     const verif = await verificarClave({ clinicId: ficha.clinicId, supabaseId, clave: body?.clave });
     if (verif.ok) {

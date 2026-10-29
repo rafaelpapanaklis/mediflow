@@ -15,7 +15,7 @@
 // queda es el correo de quien lo escribió, en la propia fila.
 // ═══════════════════════════════════════════════════════════════════════
 import { revalidatePath } from "next/cache";
-import { getAdminSession } from "@/lib/admin-auth";
+import { sesionAdminDeAccion } from "@/lib/admin-page-guard";
 import type { CrmResultado } from "@/lib/admin/crm/service";
 import {
   crmTextoActualizar,
@@ -41,7 +41,7 @@ function refrescar(): void {
 export async function crearTextoAccion(
   entrada: CrmTextoEntrada,
 ): Promise<CrmResultado<CrmTextoDTO>> {
-  const admin = await getAdminSession();
+  const admin = await sesionAdminDeAccion();
   if (!admin) return NO_AUTORIZADO;
 
   const r = await crmTextoCrear(entrada, admin.user.email);
@@ -53,7 +53,7 @@ export async function actualizarTextoAccion(
   id: string,
   entrada: CrmTextoEntrada,
 ): Promise<CrmResultado<CrmTextoDTO>> {
-  const admin = await getAdminSession();
+  const admin = await sesionAdminDeAccion();
   if (!admin) return NO_AUTORIZADO;
 
   const r = await crmTextoActualizar(id, entrada);
@@ -62,7 +62,7 @@ export async function actualizarTextoAccion(
 }
 
 export async function eliminarTextoAccion(id: string): Promise<CrmResultado> {
-  const admin = await getAdminSession();
+  const admin = await sesionAdminDeAccion();
   if (!admin) return NO_AUTORIZADO;
 
   const r = await crmTextoEliminar(id);
@@ -71,7 +71,7 @@ export async function eliminarTextoAccion(id: string): Promise<CrmResultado> {
 }
 
 export async function reordenarTextosAccion(ids: string[]): Promise<CrmResultado> {
-  const admin = await getAdminSession();
+  const admin = await sesionAdminDeAccion();
   if (!admin) return NO_AUTORIZADO;
 
   const r = await crmTextosReordenar(ids);

@@ -107,31 +107,48 @@ function conTope<T>(p: Promise<T>, ms: number = TOPE_LECTURA_MS): Promise<T> {
 }
 
 /**
+ * Lo que contestó la sonda: "si" / "no" = la base respondió; "desconocido" = la
+ * pregunta falló o tardó más del tope (auditoría «cloudflare» nº14). Antes los
+ * dos últimos eran el mismo `false`, y un fallo de la sonda dejaba entrar a una
+ * sede CON clave como si la función estuviera apagada.
+ */
+export type SondaDeTablas = "si" | "no" | "desconocido";
+
+/**
  * ¿Están las tablas? Una vez que existen se recuerda para siempre (no se
  * borran). Si no existen, se vuelve a preguntar a los 2 min o cuando se fuerza
  * (las rutas de la clave fuerzan, para que la función se encienda en cuanto se
- * pegue el SQL). Un error de la base al PREGUNTAR se lee como «no está» (el
- * patrón de la casa para «sin SQL todo sigue igual») y se recuerda 5 s (M4).
+ * pegue el SQL). Un error de la base al PREGUNTAR es "desconocido" y se
+ * recuerda 5 s (M4); las puertas lo tratan como «sin comprobar» (no abren).
  */
-export async function tablaExiste(forzar = false): Promise<boolean> {
+export async function sondaDeTablas(forzar = false): Promise<SondaDeTablas> {
   const m = memoria();
   const s = m.sonda;
-  if (s?.existe) return true;
+  if (s?.existe) return "si";
   const ahora = Date.now();
-  if (s?.fallo && ahora - s.en < RECORDAR_FALLO_SONDA_MS) return false;
-  if (s && !s.fallo && !forzar && ahora - s.en < REPREGUNTAR_MS) return false;
+  if (s?.fallo && ahora - s.en < RECORDAR_FALLO_SONDA_MS) return "desconocido";
+  if (s && !s.fallo && !forzar && ahora - s.en < REPREGUNTAR_MS) return "no";
   try {
     const r = await conTope(prisma.$queryRaw<{ existe: boolean }[]>`
       SELECT (to_regclass('public.sede_claves') IS NOT NULL
           AND to_regclass('public.sede_clave_intentos') IS NOT NULL) AS existe`);
     const existe = r[0]?.existe === true;
     m.sonda = { existe, en: Date.now() };
-    return existe;
+    return existe ? "si" : "no";
   } catch (e) {
     m.sonda = { existe: false, en: Date.now(), fallo: true };
     console.warn("[sede-clave] no se pudo saber si existen las tablas:", e instanceof Error ? e.message : e);
-    return false;
+    return "desconocido";
   }
+}
+
+/**
+ * true solo si la base dijo que las tablas están. Para lo que ENSEÑA la función
+ * (tarjeta de Configuración, permisos, rutas de gestión): ahí un «no sé» se lee
+ * como apagada y no abre nada. Las PUERTAS usan `sondaDeTablas`.
+ */
+export async function tablaExiste(forzar = false): Promise<boolean> {
+  return (await sondaDeTablas(forzar)) === "si";
 }
 
 async function leerLista(): Promise<Map<string, number>> {
@@ -152,7 +169,10 @@ async function leerLista(): Promise<Map<string, number>> {
  * consultar nada.
  */
 export async function sedesConClaveActiva(): Promise<Map<string, number>> {
-  if (!(await tablaExiste())) return new Map();
+  const sonda = await sondaDeTablas();
+  if (sonda === "no") return new Map();
+  // nº14: sin saber si hay tablas no se dice «ninguna sede tiene clave»: quien llama cae a la fila de cada sede.
+  if (sonda === "desconocido") throw new EstadoDesconocido("no se pudo saber si existen las tablas");
   const m = memoria();
   if (m.lista && Date.now() - m.lista.en < VIDA_LISTA_MS) return m.lista.mapa;
   // v3 (m2): la lista acaba de fallar → no se relanza en cada petición.

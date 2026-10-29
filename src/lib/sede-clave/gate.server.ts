@@ -19,7 +19,7 @@ import {
   sedeBloqueada,
   VIGENCIA_DESBLOQUEO_MS,
 } from "./core";
-import { estadoDeClave, estadosDeClaves, tablaExiste } from "./estado.server";
+import { estadoDeClave, estadosDeClaves, sondaDeTablas } from "./estado.server";
 
 const isProd = process.env.NODE_ENV === "production";
 
@@ -46,7 +46,10 @@ export type EstadoGate = "libre" | "cerrada" | "sin_comprobar";
 
 export async function estadoGateSede(u: { supabaseId: string; clinicId: string }): Promise<EstadoGate> {
   if (!u?.supabaseId || !u?.clinicId) return "sin_comprobar";
-  if (!(await tablaExiste())) return "libre";
+  // nº14: solo un «no hay tablas» de la base apaga la función; si la sonda falló, no se sabe → se corta.
+  const sonda = await sondaDeTablas();
+  if (sonda === "no") return "libre";
+  if (sonda === "desconocido") return "sin_comprobar";
   let estado;
   try {
     estado = await estadoDeClave(u.clinicId);
@@ -83,7 +86,9 @@ export async function sedesCerradasPara(supabaseId: string, clinicIds: readonly 
   const ids = Array.from(new Set((clinicIds ?? []).filter((x) => typeof x === "string" && x)));
   if (ids.length === 0) return new Set();
   if (!supabaseId) return new Set(ids);
-  if (!(await tablaExiste())) return new Set();
+  const sonda = await sondaDeTablas();
+  if (sonda === "no") return new Set();
+  if (sonda === "desconocido") return new Set(ids); // nº14: sin poder comprobar, todas cerradas
   const estados = await estadosDeClaves(ids);
   const cerradas = new Set<string>();
   for (const clinicId of ids) {
@@ -114,7 +119,9 @@ export async function sedesCerradasPara(supabaseId: string, clinicIds: readonly 
 export async function sedesConClave(clinicIds: readonly string[]): Promise<Set<string>> {
   const ids = Array.from(new Set((clinicIds ?? []).filter((x) => typeof x === "string" && x)));
   if (ids.length === 0) return new Set();
-  if (!(await tablaExiste())) return new Set();
+  const sonda = await sondaDeTablas();
+  if (sonda === "no") return new Set();
+  if (sonda === "desconocido") return new Set(ids); // nº14: una sede que no se puede comprobar cuenta como con clave
   const estados = await estadosDeClaves(ids);
   return new Set(ids.filter((id) => { const e = estados.get(id); return !e || e.activa; }));
 }

@@ -85,6 +85,7 @@ import { subscriptionPeriodEndSeconds } from "@/lib/billing/proration";
 import { notifyModuleActivated } from "@/lib/marketplace/module-activated-email";
 import { enviarCompraMetaDeSesion } from "@/lib/analytics/meta-capi.server";
 import { enviarCompraTiktokDeSesion } from "@/lib/analytics/tiktok-capi.server";
+import { aplicarActivacionUnaVez, type DbActivacion } from "@/lib/billing/activacion-unica";
 
 // Next.js App Router: no hace body-parsing automático aquí porque leemos el
 // raw body para verificar la firma de Stripe.
@@ -1345,16 +1346,28 @@ async function activatePlatformSubscription(
     ? { plan: source.plan, aiTokensLimit: (await getPlanLimits(source.plan)).aiTokensDefault }
     : {};
 
-  await prisma.clinic.update({
-    where: { id: clinicId },
-    data: {
-      subscriptionStatus: "active",
-      stripeSubscriptionId: subscriptionId ?? undefined,
-      trialEndsAt: next,
-      nextBillingDate: next,
-      ...planFields,
-    },
-  });
+  // Auditoría «cloudflare» nº13: UNA activación por sesión de checkout. Una reentrega del mismo evento
+  // (Stripe entrega «al menos una vez», reintenta tras un 500, o alguien pulsa «Resend») ya no suma otro
+  // periodo: se reclama session.id en la misma transacción que la escritura (@/lib/billing/activacion-unica).
+  const activacion = await aplicarActivacionUnaVez(
+    prisma as unknown as DbActivacion,
+    { clinicId, sessionId: source.sessionId, evento: source.event },
+    (db) =>
+      db.clinic.update({
+        where: { id: clinicId },
+        data: {
+          subscriptionStatus: "active",
+          stripeSubscriptionId: subscriptionId ?? undefined,
+          trialEndsAt: next,
+          nextBillingDate: next,
+          ...planFields,
+        },
+      }),
+  );
+  if (!activacion.aplicada) {
+    console.warn(`[stripe webhook] ${source.event} ${source.sessionId} ya activó el plan de ${clinicId}: reentrega ignorada (no suma otro periodo).`);
+    return;
+  }
   // A1 (ws1-t5): las sedes incluidas siguen a la madre también al reactivar/renovar.
   await sincronizarSedesIncluidas(clinicId);
 

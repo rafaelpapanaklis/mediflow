@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { formatWhatsappDisplay, type AccountManagerDTO } from "@/lib/account-manager/types";
 import { AffiliateDetailClient } from "./affiliate-detail-client";
+import { requireAdminPage } from "@/lib/admin-page-guard";
 
 /**
  * Ficha de un afiliado. Affiliate es global (sin clinicId): el middleware y el
@@ -37,6 +38,7 @@ export async function generateMetadata(
     params: Promise<{ id: string }>;
   }
 ): Promise<Metadata> {
+  await requireAdminPage();
   const params = await props.params;
   const affiliate = await prisma.affiliate
     .findUnique({ where: { id: params.id }, select: { name: true } })
@@ -49,6 +51,7 @@ export async function generateMetadata(
 }
 
 export default async function AdminAffiliateDetailPage(props: { params: Promise<{ id: string }> }) {
+  await requireAdminPage();
   const params = await props.params;
   const affiliate = await prisma.affiliate
     .findUnique({ where: { id: params.id }, select: AFFILIATE_SELECT })

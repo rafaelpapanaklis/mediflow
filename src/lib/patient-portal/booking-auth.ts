@@ -14,6 +14,7 @@
    guardado mientras va y vuelve del login.
    ============================================================ */
 import { useCallback, useEffect, useRef, useState } from "react";
+import { rutaInternaSegura } from "@/lib/url-interna";
 
 /* ---------- la cuenta del portal ---------- */
 
@@ -167,8 +168,8 @@ const PATIENT_AUTH_PATHS = { login: "/paciente/login", registro: "/paciente/regi
 
 /** Solo rutas internas (mismo criterio que login-form / registro-form). */
 export function safeNextPath(raw: string | null | undefined): string | null {
-  if (!raw || !raw.startsWith("/") || raw.startsWith("//") || raw.startsWith("/\\")) return null;
-  return raw;
+  // La regla común (auditoría «cloudflare», nº17): sin tabuladores ni saltos que el navegador quite.
+  return rutaInternaSegura(raw, "") || null;
 }
 
 /** /paciente/login|registro con ?next= de vuelta a ESTA reserva. */

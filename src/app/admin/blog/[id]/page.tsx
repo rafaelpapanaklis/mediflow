@@ -4,10 +4,12 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { toBlogPostDTO } from "@/lib/blog/types";
 import { PostEditor } from "../post-editor";
+import { requireAdminPage } from "@/lib/admin-page-guard";
 
 export const metadata: Metadata = { title: "Editar artículo — Admin DaleControl" };
 
 export default async function AdminBlogEditPage(props: { params: Promise<{ id: string }> }) {
+  await requireAdminPage();
   const params = await props.params;
   const row = await prisma.blogPost.findUnique({ where: { id: params.id } });
   if (!row) notFound();

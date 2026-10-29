@@ -3,11 +3,13 @@ import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { LabsClient } from "./labs-client";
 import { LAB_SELECT } from "@/lib/b2b/vendor-fields";
+import { requireAdminPage } from "@/lib/admin-page-guard";
 
 export const metadata: Metadata = { title: "Laboratorios — Admin DaleControl" };
 
 // DentalLab es global (sin clinicId): el admin ve TODOS los laboratorios.
 export default async function AdminLabsPage() {
+  await requireAdminPage();
   // Tope de seguridad: LabsClient lista en memoria sin paginación. Acota a 100
   // para no traer toda la tabla global de laboratorios. TODO: paginar admin.
   // B2B-12: LabsClient es "use client", así que TODO lo que se le pase viaja

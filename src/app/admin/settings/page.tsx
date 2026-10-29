@@ -5,10 +5,12 @@ import { getResolvedPlans } from "@/lib/plans";
 import { leerCuentaSpeiParaEditar } from "@/lib/billing/spei-directo";
 import { leerModulosEnVenta } from "@/lib/marketplace/module-price-admin";
 import { computeMrrModulos, loadModulosContratados } from "@/lib/admin/modulos";
+import { requireAdminPage } from "@/lib/admin-page-guard";
 
 export const metadata: Metadata = { title: "Configuración — Admin DaleControl" };
 
 export default async function AdminSettingsPage() {
+  await requireAdminPage();
   // Sólo podemos leer env vars en el server. Las exponemos como booleanos al
   // cliente (no filtramos ningún secreto, solo si están definidas).
   const envStatus = {

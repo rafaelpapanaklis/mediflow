@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { toBlogPostDTO } from "@/lib/blog/types";
 import { BlogClient } from "./blog-client";
+import { requireAdminPage } from "@/lib/admin-page-guard";
 
 export const metadata: Metadata = { title: "Blog — Admin DaleControl" };
 
@@ -12,6 +13,7 @@ const PAGE_SIZE = 25;
 // en cualquier estado. La primera página llega renderizada desde el server; los
 // filtros y la paginación siguen por GET /api/admin/blog.
 export default async function AdminBlogPage() {
+  await requireAdminPage();
   const [total, rows] = await Promise.all([
     prisma.blogPost.count(),
     prisma.blogPost.findMany({ orderBy: { updatedAt: "desc" }, take: PAGE_SIZE }),

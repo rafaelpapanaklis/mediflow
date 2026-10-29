@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { AdminBarberSoporteClient } from "./soporte-client";
+import { requireAdminPage } from "@/lib/admin-page-guard";
 
 // Ruta HERMANA estática de /admin/barberias/[id]: en el App Router el
 // segmento estático gana al dinámico, así que "soporte" nunca se resuelve
@@ -15,6 +16,7 @@ export default async function AdminBarberSoportePage(
     searchParams?: Promise<{ barbershopId?: string }>;
   }
 ) {
+  await requireAdminPage();
   const searchParams = await props.searchParams;
   // Se lee aquí (server) y no con useSearchParams para no obligar a envolver
   // el cliente en un <Suspense> sólo por el filtro de entrada.

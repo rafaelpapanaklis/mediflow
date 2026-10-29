@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { persistentRateLimit } from "@/lib/failban";
 import { logError } from "@/lib/safe-log";
+import { origenParaEnlaceDeAuth } from "@/lib/auth/origen-de-enlaces";
 
 export const dynamic = "force-dynamic";
 
@@ -41,11 +42,10 @@ export async function POST(req: NextRequest) {
   const rlAcct = await persistentRateLimit(req, { id: `acct:${email}`, limit: 3, windowSec: 300 });
   if (rlAcct) return rlAcct;
 
-  // El enlace del correo debe volver al MISMO origen que lo pidió (prod o
-  // Preview de Vercel). Supabase solo redirige a URLs de su allowlist
-  // (Authentication → URL Configuration), así que un Origin ajeno no llega
-  // a ningún lado. Fallback: origen de la request.
-  const origin = req.headers.get("origin") ?? new URL(req.url).origin;
+  // El enlace del correo vuelve al origen desde el que se pidió SOLO si es uno
+  // de los nuestros (lista fija del servidor); si no, al canónico. Nunca al que
+  // diga el header Origin: con curl se pone cualquiera (auditoría nº6).
+  const origin = origenParaEnlaceDeAuth(req.headers.get("origin"));
   const redirectTo = `${origin}/auth/confirm?next=/reset-password`;
 
   try {

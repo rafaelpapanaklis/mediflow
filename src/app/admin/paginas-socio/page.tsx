@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import type { Metadata } from "next";
 import { loadModerationQueue, type ModerationQueue } from "@/lib/affiliates/page-moderation";
 import { PaginasSocioClient } from "./paginas-client";
+import { requireAdminPage } from "@/lib/admin-page-guard";
 
 export const metadata: Metadata = { title: "Páginas de socio — Admin DaleControl" };
 
@@ -14,6 +15,7 @@ export const metadata: Metadata = { title: "Páginas de socio — Admin DaleCont
  * cuenta después de cada decisión.
  */
 export default async function AdminPaginasSocioPage() {
+  await requireAdminPage();
   let queue: ModerationQueue = { pending: [], published: [] };
   let loadError = false;
 

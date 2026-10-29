@@ -11,6 +11,7 @@ import { loadModulosContratados, computeMrrModulos, modulosDeClinica, type FilaM
 import { cargarOrigenes } from "@/lib/admin/origen-clinica";
 import { AdminClinicsClient, type FilaClinica } from "./clinics-client";
 import { sinActivacionManual } from "@/lib/billing/pagos-reales";
+import { requireAdminPage } from "@/lib/admin-page-guard";
 
 export const metadata: Metadata = { title: "Clínicas — Admin DaleControl" };
 
@@ -33,6 +34,7 @@ export const metadata: Metadata = { title: "Clínicas — Admin DaleControl" };
  * siguiente.
  */
 export default async function AdminClinicsPage() {
+  await requireAdminPage();
   const ahora = new Date();
   // Ventana de actividad y la ANTERIOR, para la tendencia.
   const desdeVentana = inicioDeHaceDias(DIAS_VENTANA_ACTIVIDAD, ahora);

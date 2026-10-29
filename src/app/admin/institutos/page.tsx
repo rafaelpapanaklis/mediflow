@@ -26,10 +26,12 @@ import {
   listEduAlmacenamientoAdmin,
 } from "@/lib/edu/almacenamiento";
 import { AdminInstitutosClient } from "./institutos-client";
+import { requireAdminPage } from "@/lib/admin-page-guard";
 
 export const metadata: Metadata = { title: "Institutos — Admin DaleControl" };
 
 export default async function Page() {
+  await requireAdminPage();
   let rows;
   try {
     rows = await listEduAlmacenamientoAdmin();

@@ -2,10 +2,12 @@ export const dynamic = "force-dynamic";
 import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { CouponsClient } from "./coupons-client";
+import { requireAdminPage } from "@/lib/admin-page-guard";
 
 export const metadata: Metadata = { title: "Cupones — Admin DaleControl" };
 
 export default async function AdminCouponsPage() {
+  await requireAdminPage();
   const coupons = await prisma.coupon.findMany({
     orderBy: { createdAt: "desc" },
   });

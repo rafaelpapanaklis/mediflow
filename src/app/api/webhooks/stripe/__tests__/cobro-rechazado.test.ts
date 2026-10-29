@@ -61,6 +61,9 @@ let bitacoraAdmin: any[];
 let correosRenovacion: any[];
 let correosSuspendida: any[];
 let pagosDeSubscripcion: any[];
+/** nº13: sesiones reclamadas en `stripe_activaciones_plataforma`; null = el SQL no está pegado. */
+let activacionesReclamadas: Set<string> | null;
+let updateDeClinicaFalla = false;
 
 function coincideWhere(fila: any, where: any): boolean {
   return Object.entries(where ?? {}).every(([k, v]: [string, any]) => {
@@ -87,6 +90,7 @@ const prismaBase: any = {
       where?.id?.in ? [...clinicas.values()].filter((c) => where.id.in.includes(c.id) && c.stripeSubscriptionId != null) : [],
     findUnique: async ({ where }: any) => clinicas.get(where.id) ?? null,
     update: async ({ where, data }: any) => {
+      if (updateDeClinicaFalla) throw new Error("pooler caído a media escritura");
       const c = clinicas.get(where.id);
       if (!c) throw new Error("clínica inexistente");
       escrituras.push({ id: where.id, data });
@@ -131,7 +135,41 @@ const prismaBase: any = {
       return fila;
     },
   },
-  $transaction: async (ops: any[]) => Promise.all(ops),
+  // Con función: transacción interactiva; si lanza, se deshace el candado de la activación (como en Postgres).
+  $transaction: async (ops: any) => {
+    if (typeof ops !== "function") return Promise.all(ops);
+    const antes = activacionesReclamadas ? new Set(activacionesReclamadas) : null;
+    try {
+      return await ops(prismaDoble);
+    } catch (e) {
+      activacionesReclamadas = antes;
+      throw e;
+    }
+  },
+  // nº13: el ÚNICO SQL crudo que acepta el doble — la sonda y el candado de la activación. Lo demás revienta.
+  $queryRaw: async (q: TemplateStringsArray) => {
+    const texto = q.join("?");
+    if (/to_regclass\('public\.stripe_activaciones_plataforma'\)/.test(texto)) return [{ existe: activacionesReclamadas !== null }];
+    throw new Error(`SQL crudo no permitido en el doble: ${texto.slice(0, 80)}`);
+  },
+  $executeRaw: async (q: TemplateStringsArray, ...v: any[]) => {
+    const texto = q.join("?");
+    if (!/^\s*INSERT INTO "stripe_activaciones_plataforma"[\s\S]*ON CONFLICT \("sessionId"\) DO NOTHING\s*$/.test(texto) || !activacionesReclamadas) {
+      throw new Error(`SQL crudo no permitido en el doble: ${texto.slice(0, 80)}`);
+    }
+    if (activacionesReclamadas.has(v[0])) return 0;
+    activacionesReclamadas.add(v[0]);
+    return 1;
+  },
+  // nº13: la bitácora (lo que escribió logAudit) como respaldo sin el SQL, con el filtro de ruta JSON real.
+  auditLog: {
+    findFirst: async ({ where }: any) =>
+      bitacora.find((b) => {
+        const ruta = where.changes?.path as string[] | undefined;
+        const valor = ruta?.reduce((o: any, k) => o?.[k], b.changes);
+        return b.clinicId === where.clinicId && b.entityType === where.entityType && ruta && valor === where.changes.equals;
+      }) ?? null,
+  },
   billingEmailLog: {
     create: async ({ data }: any) => {
       if (logsCorreo.some((l) => l.invoiceId === data.invoiceId)) throw Object.assign(new Error("dup"), { code: "P2002" });
@@ -380,6 +418,9 @@ function reiniciar(sobre: Record<string, unknown> = {}) {
   bitacoraAdmin = [];
   correosRenovacion = [];
   idEvento = 0;
+  activacionesReclamadas = new Set();
+  updateDeClinicaFalla = false;
+  delete (globalThis as { __sondaActivacionesStripe?: unknown }).__sondaActivacionesStripe;
 }
 beforeEach(() => reiniciar());
 
@@ -2792,5 +2833,66 @@ test("AC8 camino tardío: si el ciclo de Stripe ya coincide con lo pagado no se 
   assert.equal(await entregar(evento("invoice.paid", pagada, Date.now())), 200);
   assert.equal(llamadasAnular.length, 3, "sí anula los meses sin servicio");
   assert.equal(correosAdmin.length, 0, "ciclo ya coincide: sin aviso");
+  assert.equal(clinica().subscriptionStatus, "active");
+});
+
+/* ── nº13 · Una sesión de checkout = UN periodo (auditoría «cloudflare», seguridad admin-auth) ─────────────────────────────
+ * Antes: reentregar el MISMO evento firmado (Stripe entrega «al menos una vez», reintenta tras un 500, «Resend») extendía
+ * desde la fecha que la entrega anterior acababa de escribir: otro mes por un solo pago.
+ */
+
+const sesionSpei = (id = "cs_spei_rep") =>
+  evento("checkout.session.async_payment_succeeded", { id, mode: "payment", payment_status: "paid", subscription: null, amount_total: 68900, metadata: { kind: "platform-subscription", clinicId: CLINIC, plan: "PRO", billing: "monthly" } });
+const sesionTarjeta = (id = "cs_card_rep") =>
+  evento("checkout.session.completed", { id, mode: "subscription", payment_status: "paid", subscription: "sub_nueva", metadata: { kind: "platform-subscription", clinicId: CLINIC, plan: "PRO", billing: "monthly" } });
+
+test("🔴 nº13 SPEI/OXXO: el MISMO async_payment_succeeded entregado dos veces da UN periodo, no dos", async () => {
+  reiniciar({ stripeSubscriptionId: null, trialEndsAt: new Date(Date.now() + 10 * DIA), nextBillingDate: new Date(Date.now() + 10 * DIA) });
+  const ev = sesionSpei();
+  assert.equal(await entregar(ev), 200);
+  const tras1 = clinica().trialEndsAt.getTime();
+  assert.equal(await entregar(ev), 200, "la reentrega responde 200 (Stripe no reintenta más)");
+  assert.equal(clinica().trialEndsAt.getTime(), tras1, "la segunda entrega no suma otro mes");
+  assert.equal(clinica().nextBillingDate.getTime(), tras1);
+  assert.equal(escrituras.filter((e) => e.data.subscriptionStatus === "active").length, 1);
+  assert.deepEqual([...activacionesReclamadas!], ["cs_spei_rep"]);
+});
+
+test("🔴 nº13 tarjeta: el MISMO checkout.session.completed dos veces da UN periodo", async () => {
+  reiniciar({ trialEndsAt: new Date(Date.now() + 10 * DIA), nextBillingDate: new Date(Date.now() + 10 * DIA) });
+  const ev = sesionTarjeta();
+  await entregar(ev);
+  const tras1 = clinica().trialEndsAt.getTime();
+  await entregar(ev);
+  assert.equal(clinica().trialEndsAt.getTime(), tras1);
+});
+
+test("🔴 nº13 sin el SQL pegado: la bitácora de la primera activación frena la reentrega", async () => {
+  reiniciar({ stripeSubscriptionId: null, trialEndsAt: new Date(Date.now() + 10 * DIA), nextBillingDate: new Date(Date.now() + 10 * DIA) });
+  activacionesReclamadas = null;
+  const ev = sesionSpei("cs_sin_tabla");
+  await entregar(ev);
+  const tras1 = clinica().trialEndsAt.getTime();
+  assert.equal(await entregar(ev), 200);
+  assert.equal(clinica().trialEndsAt.getTime(), tras1);
+});
+
+test("nº13 dos pagos de verdad (dos sesiones) siguen dando dos periodos: renovar por adelantado SUMA", async () => {
+  reiniciar({ stripeSubscriptionId: null, trialEndsAt: new Date(Date.now() + 10 * DIA), nextBillingDate: new Date(Date.now() + 10 * DIA) });
+  await entregar(sesionSpei("cs_mes_1"));
+  const tras1 = clinica().trialEndsAt.getTime();
+  await entregar(sesionSpei("cs_mes_2"));
+  const dias = (clinica().trialEndsAt.getTime() - tras1) / DIA;
+  assert.ok(dias > 27 && dias < 32, `el segundo pago suma un mes (salió ${dias.toFixed(1)} días)`);
+});
+
+test("nº13 si la escritura de la clínica falla, el candado se deshace: el reintento de Stripe SÍ activa", async () => {
+  reiniciar({ stripeSubscriptionId: null, subscriptionStatus: "pending_payment", trialEndsAt: new Date(Date.now() - DIA), nextBillingDate: null });
+  const ev = sesionSpei("cs_falla");
+  updateDeClinicaFalla = true;
+  assert.equal(await entregar(ev), 500, "Stripe reintentará");
+  assert.equal(activacionesReclamadas!.has("cs_falla"), false, "la transacción se deshizo");
+  updateDeClinicaFalla = false;
+  assert.equal(await entregar(ev), 200);
   assert.equal(clinica().subscriptionStatus, "active");
 });

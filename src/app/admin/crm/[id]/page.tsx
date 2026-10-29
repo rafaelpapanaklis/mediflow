@@ -19,6 +19,7 @@ import { prisma } from "@/lib/prisma";
 import { crmObtener } from "@/lib/admin/crm/service";
 import { crmTextosListar } from "@/lib/admin/crm/textos-service";
 import { CrmProspectoClient } from "./prospecto-client";
+import { requireAdminPage } from "@/lib/admin-page-guard";
 
 /** El mismo tope que el listado: es el <select> de "¿qué cuenta nació de aquí?". */
 const CLINICAS_MAX = 500;
@@ -28,6 +29,7 @@ export async function generateMetadata(
     params: Promise<{ id: string }>;
   }
 ): Promise<Metadata> {
+  await requireAdminPage();
   const params = await props.params;
   const ficha = await crmObtener(params.id).catch(() => null);
   return {
@@ -38,6 +40,7 @@ export async function generateMetadata(
 }
 
 export default async function Page(props: { params: Promise<{ id: string }> }) {
+  await requireAdminPage();
   const params = await props.params;
   let ficha;
   try {

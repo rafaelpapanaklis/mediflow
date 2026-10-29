@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
 import { urlPublica } from "@/lib/url-publica";
+import { origenNoCoincide } from "@/lib/csrf-origen";
 // Edge-safe: solo una constante string, sin node:crypto/otplib/prisma.
 import { TWO_FA_PENDING_COOKIE } from "@/lib/auth/two-factor-constants";
 // Edge-safe: allowlist de strings y funciones puras, sin prisma/node:crypto.
@@ -28,17 +29,7 @@ const RESERVED_PATHS = new Set([
 const UNSAFE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
 function csrfOriginMismatch(request: NextRequest): boolean {
-  if (!UNSAFE_METHODS.has(request.method)) return false;
-  const origin = request.headers.get("origin");
-  const referer = request.headers.get("referer");
-  const host = request.headers.get("host");
-  if (!host) return true;
-  const sourceHost = (() => {
-    try { return origin ? new URL(origin).host : referer ? new URL(referer).host : null; }
-    catch { return null; }
-  })();
-  if (!sourceHost) return true;
-  return sourceHost !== host;
+  return origenNoCoincide(request.headers, request.method);
 }
 
 export async function middleware(request: NextRequest) {

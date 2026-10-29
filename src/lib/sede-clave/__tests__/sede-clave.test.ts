@@ -938,8 +938,39 @@ test("M2 · una lectura que tarda más que el tope cuenta como fallo (y se cae a
 test("M4 · si to_regclass falla, no se repite en cada petición durante unos segundos", async () => {
   db.falloSonda = true;
   como(SB_OTRO, CLI_OTRA);
-  for (let i = 0; i < 10; i++) assert.equal((await getAuthContext())?.clinicId, CLI_OTRA, "sin saber si hay tablas: como sin SQL");
+  // nº14 (auditoría «cloudflare»): sin saber si hay tablas ya NO es «como sin SQL»: no se abre a ciegas.
+  for (let i = 0; i < 10; i++) assert.equal(await getAuthContext(), null, "sin saber si hay tablas: sin comprobar");
   assert.equal(db.consultas.filter((q) => q.includes("to_regclass")).length, 1);
+});
+
+test("🔴 nº14 · si la sonda falla en una instancia fría, una sede CON clave NO se abre (ni gate, ni vistas, ni desbloquear sin clave)", async () => {
+  await activarComoAdmin3();
+  const { _olvidarEstado } = await import("../estado.server");
+  _olvidarEstado(); // instancia que todavía no vio las tablas
+  db.falloSonda = true;
+  como(SB_DUENO, CLI_3); // el dueño, sin desbloqueo en este navegador
+  assert.equal(await estadoGate(SB_DUENO, CLI_3), "sin_comprobar", "antes: «libre»");
+  assert.equal(await getAuthContext(), null, "antes: entraba a la sede con clave");
+  const gate = await import("../gate.server");
+  assert.deepEqual([...(await gate.sedesCerradasPara(SB_DUENO, [CLI_1, CLI_3]))].sort(), [CLI_1, CLI_3].sort(), "las vistas de varias sedes no enseñan cifras");
+  assert.deepEqual([...(await gate.sedesConClave([CLI_1, CLI_3]))].sort(), [CLI_1, CLI_3].sort(), "ni se comparten pacientes ni se copia");
+  // Desbloquear SIN la clave: antes respondía ok y dejaba la sede activa en la cookie.
+  como(SB_DUENO, CLI_1);
+  const r = await llamar(await rutaDesbloquear(), "/api/sede-clave/desbloquear", { clinicId: CLI_3 });
+  assert.equal(r.status, 503, JSON.stringify(r.body));
+  assert.match(r.body.error, /No pudimos comprobar/);
+  assert.deepEqual(activasEscritas, [], "no se cambió de sede");
+  assert.deepEqual(desbloqueosEnElNavegador(), []);
+});
+
+test("nº14 · un «no hay tablas» de la base sigue siendo la función apagada (sin SQL, todo como hoy)", async () => {
+  db.tablas = false;
+  como(SB_OTRO, CLI_OTRA);
+  assert.equal(await estadoGate(SB_OTRO, CLI_OTRA), "libre");
+  assert.equal((await getAuthContext())?.clinicId, CLI_OTRA);
+  const gate = await import("../gate.server");
+  assert.equal((await gate.sedesCerradasPara(SB_DUENO, [CLI_1, CLI_3])).size, 0);
+  assert.equal((await gate.sedesConClave([CLI_1, CLI_3])).size, 0);
 });
 
 test("M5 · al registrar un intento se purgan los de más de 1 día (como mucho una vez por hora)", async () => {
