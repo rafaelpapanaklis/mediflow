@@ -194,11 +194,14 @@ test("m5 · tras el cambio forzado, /login dice «Listo. Entra con tu contraseñ
 
 /* ══════════════════ m6 · la píldora del login no tapa el texto ══════════════════ */
 
-test("m6 · el texto del panel del login deja libre la franja de la píldora «Datos cifrados»", () => {
+test("m6 · la píldora «Datos cifrados» del login va en el flujo, debajo del sello CFDI (no choca en ningún alto)", () => {
   const src = fuente("components/public/auth/login/login-visual.tsx");
-  // La píldora: absoluta, abajo, ~32 px de alto a 18 px del borde.
-  assert.match(src, /position: "absolute", zIndex: 4, right: 20, bottom: 18/);
-  assert.match(src, /maxWidth: 460, paddingBottom: 40 \}/);
+  const cfdi = src.indexOf("Facturación timbrada ante el SAT");
+  const pildora = src.indexOf('title="Cifrado TLS en tránsito y AES-256 en reposo"');
+  assert.ok(cfdi > 0 && pildora > cfdi, "la píldora tiene que ir después del sello CFDI");
+  const estilo = src.slice(pildora, src.indexOf("</span>", pildora));
+  assert.doesNotMatch(estilo, /position: "absolute"/, "absoluta: en iPad horizontal tapaba el texto");
+  assert.match(estilo, /alignSelf: "flex-start"/);
 });
 
 /* ══════════════════ m7 · contraseña y 2FA propios en Mi perfil, para todo rol ══════════════════ */

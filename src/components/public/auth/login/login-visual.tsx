@@ -136,11 +136,7 @@ export function LoginVisual() {
           <Logo size={26} color="#ffffff" />
         </div>
 
-        {/* paddingBottom: deja libre la franja de la píldora «Datos cifrados»
-            (absoluta, abajo a la derecha). Con el panel angosto —iPad en
-            horizontal, 1180–1300 px de pantalla— la tapaba sobre «Facturación
-            timbrada ante el SAT» (repaso iPad ws1-t1, m6). */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 18, maxWidth: 460, paddingBottom: 40 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 18, maxWidth: 460 }}>
           <div
             style={{
               fontFamily: "var(--font-mono, ui-monospace, monospace)",
@@ -171,30 +167,33 @@ export function LoginVisual() {
             <span style={{ fontWeight: 700, fontSize: 17, letterSpacing: "-0.02em", color: "#ffffff" }}>CFDI 4.0</span>
             <span style={{ fontSize: 12, color: "rgba(237,233,254,0.75)" }}>Facturación timbrada ante el SAT</span>
           </div>
+          {/* Píldora «Datos cifrados»: EN EL FLUJO, debajo del sello CFDI. Antes iba
+              absoluta abajo a la derecha (también para tapar la marca del visor
+              3D, que ya se quita en onLoad y se recorta con el overflow de
+              arriba) y en iPad horizontal —panel angosto y pantalla baja— caía
+              encima de «Facturación timbrada ante el SAT» (repaso iPad ws1-t1,
+              m6). En el flujo no puede chocar con nada, en ningún ancho ni alto. */}
+          <span
+            title="Cifrado TLS en tránsito y AES-256 en reposo"
+            style={{
+              alignSelf: "flex-start", pointerEvents: "auto",
+              display: "inline-flex", alignItems: "center", gap: 9,
+              padding: "7px 14px", borderRadius: 999,
+              background: "rgba(18,14,40,0.72)", border: "1px solid rgba(255,255,255,0.14)",
+              lineHeight: 1, whiteSpace: "nowrap", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)",
+            }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ flexShrink: 0 }}>
+              <path d="M7.5 10.5V7a4.5 4.5 0 0 1 9 0v3.5" stroke="#a78bfa" strokeWidth="2" strokeLinecap="round" />
+              <rect x="4" y="10.5" width="16" height="10.5" rx="2.5" fill="#a78bfa" />
+              <path d="M9.3 15.9l1.9 1.9 3.5-3.7" stroke="#120e2a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            <span style={{ fontSize: 13, color: "#f5f5f7" }}>Datos cifrados</span>
+            <span aria-hidden="true" style={{ width: 1, height: 13, background: "rgba(255,255,255,0.18)" }} />
+            <span style={{ fontSize: 12, color: "rgba(237,233,254,0.75)", letterSpacing: "0.02em" }}>TLS + AES-256</span>
+          </span>
         </div>
       </div>
-
-      {/* Pill "Datos cifrados" anclada abajo-derecha del panel: refuerza
-          confianza y cubre la esquina donde el runtime dibuja su marca. */}
-      <span
-        title="Cifrado TLS en tránsito y AES-256 en reposo"
-        style={{
-          position: "absolute", zIndex: 4, right: 20, bottom: 18,
-          display: "inline-flex", alignItems: "center", gap: 9,
-          padding: "7px 14px", borderRadius: 999,
-          background: "rgba(18,14,40,0.72)", border: "1px solid rgba(255,255,255,0.14)",
-          lineHeight: 1, whiteSpace: "nowrap", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)",
-        }}
-      >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ flexShrink: 0 }}>
-          <path d="M7.5 10.5V7a4.5 4.5 0 0 1 9 0v3.5" stroke="#a78bfa" strokeWidth="2" strokeLinecap="round" />
-          <rect x="4" y="10.5" width="16" height="10.5" rx="2.5" fill="#a78bfa" />
-          <path d="M9.3 15.9l1.9 1.9 3.5-3.7" stroke="#120e2a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-        <span style={{ fontSize: 13, color: "#f5f5f7" }}>Datos cifrados</span>
-        <span aria-hidden="true" style={{ width: 1, height: 13, background: "rgba(255,255,255,0.18)" }} />
-        <span style={{ fontSize: 12, color: "rgba(237,233,254,0.75)", letterSpacing: "0.02em" }}>TLS + AES-256</span>
-      </span>
     </div>
   );
 }
