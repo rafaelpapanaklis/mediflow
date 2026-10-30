@@ -67,7 +67,11 @@ export const dosFactoresDeLaPersona = cache(
 export const personaTieneDosFactores = cache(async (supabaseId: string): Promise<boolean> => {
   if (!supabaseId) return false;
   const alguna = await prisma.user.findFirst({
-    where: { supabaseId, isActive: true, totpEnabled: true },
+    // Solo sedes vivas, como el gate (resolverSesion filtra archivedAt: null):
+    // un 2FA enrolado en una sede archivada sembraba df_2fa_pending en el login
+    // y el reto, que no lo ve, mandaba al panel… y el middleware de vuelta al
+    // reto, sin fin (repaso iPad ws1-t1, M2).
+    where: { supabaseId, isActive: true, totpEnabled: true, clinic: { archivedAt: null } },
     select: { id: true },
   });
   return alguna !== null;

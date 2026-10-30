@@ -11740,6 +11740,7 @@
       "comprobando": "Comprobando…",
       "olvido": "¿Olvidaste la clave? Pídele a soporte de DaleControl que la restablezca.",
       "incorrecta": "La clave no es correcta. Te quedan {restantes} intentos.",
+      "incorrectaUna": "La clave no es correcta. Te queda 1 intento.",
       "bloqueo": "Demasiados intentos. Espera {minutos} min y vuelve a intentarlo.",
       "error": "No pudimos comprobar la clave. Inténtalo de nuevo.",
       "errorCambio": "No pudimos cambiarte de sede. Inténtalo de nuevo.",

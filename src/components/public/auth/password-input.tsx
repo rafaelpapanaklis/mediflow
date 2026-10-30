@@ -6,10 +6,12 @@ interface PasswordInputProps
   extends Omit<InputHTMLAttributes<HTMLInputElement>, "className" | "style" | "type"> {
   label?: string;
   error?: string;
+  /** Letra del campo. 14 en el sitio público; las barreras del panel piden 16 (iOS hace zoom al enfocar si es menor). */
+  fontSize?: number;
 }
 
 export const PasswordInput = forwardRef<HTMLInputElement, PasswordInputProps>(function PasswordInput(
-  { label, error, ...rest },
+  { label, error, fontSize = 14, ...rest },
   ref,
 ) {
   const [show, setShow] = useState(false);
@@ -45,7 +47,7 @@ export const PasswordInput = forwardRef<HTMLInputElement, PasswordInputProps>(fu
             background: "#ffffff",
             border: "1px solid var(--ld-border)",
             color: "var(--ld-fg)",
-            fontSize: 14,
+            fontSize,
             fontFamily: "inherit",
             outline: "none",
             transition: "border-color .15s, box-shadow .15s",

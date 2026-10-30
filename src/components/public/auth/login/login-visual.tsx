@@ -136,7 +136,11 @@ export function LoginVisual() {
           <Logo size={26} color="#ffffff" />
         </div>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: 18, maxWidth: 460 }}>
+        {/* paddingBottom: deja libre la franja de la píldora «Datos cifrados»
+            (absoluta, abajo a la derecha). Con el panel angosto —iPad en
+            horizontal, 1180–1300 px de pantalla— la tapaba sobre «Facturación
+            timbrada ante el SAT» (repaso iPad ws1-t1, m6). */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 18, maxWidth: 460, paddingBottom: 40 }}>
           <div
             style={{
               fontFamily: "var(--font-mono, ui-monospace, monospace)",

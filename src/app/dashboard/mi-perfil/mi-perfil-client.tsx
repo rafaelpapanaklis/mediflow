@@ -1,13 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { BadgeCheck, UserRound } from "lucide-react";
+import { BadgeCheck, KeyRound, UserRound } from "lucide-react";
 import toast from "react-hot-toast";
 import { useLocale, useT } from "@/i18n/i18n-provider";
 import { RaizRediseno } from "@/components/dashboard/piezas-rediseno/raiz";
 import { Boton, Cabecera, Campo, Tarjeta, clases as s } from "@/components/dashboard/piezas-rediseno/piezas";
 import { ESPECIALIDADES_EQUIPO, opcionFueraDeLista } from "@/lib/team/especialidad-equipo";
 import { LLAVE_ESPECIALIDAD, cambiosDeMiPerfil, textosMiPerfil, type CampoPropio } from "@/lib/team/mis-datos-profesionales";
+import { TwoFactorCard } from "@/components/dashboard/security/two-factor-card";
+import { useCambioDeContrasena } from "@/components/dashboard/security/use-cambio-de-contrasena";
 
 type Datos = Record<CampoPropio, string>;
 
@@ -22,18 +24,25 @@ const ROL: Record<string, string> = {
   READONLY: "settings.team.roleReadonly",
 };
 
-export function MiPerfilClient({ inicial, email, role, clinico }: {
+export function MiPerfilClient({ inicial, email, role, clinico, totpEnabled, require2fa }: {
   inicial: Datos;
   email: string;
   role: string;
   /** Recepción y solo lectura no llevan datos de médico. */
   clinico: boolean;
+  /** El 2FA de la persona (resuelto por persona, no por fila) y si su clínica lo exige. */
+  totpEnabled: boolean;
+  require2fa: boolean;
 }) {
   const t = useT();
   const tx = textosMiPerfil(useLocale());
   const [guardado, setGuardado] = useState<Datos>(inicial);
   const [datos, setDatos] = useState<Datos>(inicial);
   const [guardando, setGuardando] = useState(false);
+  // Contraseña y 2FA propios, para TODO rol (repaso iPad ws1-t1, m7): un rol sin
+  // `settings.view` no tenía dónde cambiarlos. Lo mismo que Configuración →
+  // Seguridad (mismo hook, misma tarjeta), solo lo de la propia cuenta.
+  const pw = useCambioDeContrasena("mi-perfil");
   const set = (k: CampoPropio) => (e: { target: { value: string } }) => setDatos((d) => ({ ...d, [k]: e.target.value }));
   const parche = cambiosDeMiPerfil(guardado, datos);
   const hayCambios = Object.keys(parche).length > 0;
@@ -119,6 +128,27 @@ export function MiPerfilClient({ inicial, email, role, clinico }: {
             </div>
           </Tarjeta>
         )}
+
+        <Tarjeta icono={<KeyRound size={15} strokeWidth={1.75} />} titulo={t("settings.client.changePasswordTitle")}>
+          <div className={s.campoFila} style={FILA}>
+            <Campo etiqueta={t("settings.client.newPasswordLabel")} htmlFor="mp-pw-nueva">
+              <input id="mp-pw-nueva" className={s.campoEntrada} type="password" autoComplete="new-password"
+                placeholder={t("settings.client.newPasswordPlaceholder")} value={pw.form.next}
+                onChange={(e) => pw.setForm((f) => ({ ...f, next: e.target.value }))} />
+            </Campo>
+            <Campo etiqueta={t("settings.client.confirmPasswordLabel")} htmlFor="mp-pw-confirma">
+              <input id="mp-pw-confirma" className={s.campoEntrada} type="password" autoComplete="new-password"
+                placeholder={t("settings.client.confirmPasswordPlaceholder")} value={pw.form.confirm}
+                onChange={(e) => pw.setForm((f) => ({ ...f, confirm: e.target.value }))} />
+            </Campo>
+          </div>
+          <Boton variante="principal" onClick={() => void pw.cambiar()} disabled={pw.guardando || !pw.form.next}>
+            {pw.guardando ? t("settings.client.changingPasswordBtn") : t("settings.client.changePasswordBtn")}
+          </Boton>
+        </Tarjeta>
+
+        {/* La política de la clínica («exigir 2FA a todos») se queda en Configuración: aquí, solo lo propio. */}
+        <TwoFactorCard initialEnabled={totpEnabled} initialRequire2fa={require2fa} isAdmin={false} />
       </div>
     </RaizRediseno>
   );

@@ -53,7 +53,12 @@ export function ChangePasswordClient() {
       // Navegación dura: el gate vive en el layout del servidor, así que hay que
       // volver a montarlo para que lea la marca ya limpia (un router.push
       // reusaría el árbol y rebotaría de vuelta aquí).
-      window.location.href = "/dashboard";
+      //
+      // A /login con aviso (repaso iPad, m5, decisión de Rafael): cambiar la
+      // contraseña cierra las sesiones (updateUserById de Supabase), y sin el
+      // aviso la persona caía en el login sin saber por qué. Si la sesión
+      // siguiera viva, /login la manda al panel igual.
+      window.location.href = "/login?cambiada=1";
     } catch {
       setError("No pudimos actualizar la contraseña. Revisa tu conexión e inténtalo de nuevo.");
       setSaving(false);
@@ -155,6 +160,7 @@ export function ChangePasswordClient() {
               placeholder="Mínimo 8 caracteres"
               autoComplete="new-password"
               autoFocus
+              fontSize={16}
               value={password}
               onChange={e => setPassword(e.target.value)}
               onBlur={() => setTouchedPwd(true)}
@@ -168,6 +174,7 @@ export function ChangePasswordClient() {
             label="Confirmar contraseña"
             placeholder="Repite la contraseña"
             autoComplete="new-password"
+            fontSize={16}
             value={confirm}
             onChange={e => setConfirm(e.target.value)}
             onBlur={() => setTouchedConfirm(true)}

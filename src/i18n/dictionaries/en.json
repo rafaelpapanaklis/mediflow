@@ -11740,6 +11740,7 @@
       "comprobando": "Checking…",
       "olvido": "Forgot the passcode? Ask DaleControl support to reset it.",
       "incorrecta": "That passcode is not correct. You have {restantes} attempts left.",
+      "incorrectaUna": "That passcode is not correct. You have 1 attempt left.",
       "bloqueo": "Too many attempts. Wait {minutos} min and try again.",
       "error": "We couldn't check the passcode. Please try again.",
       "errorCambio": "We couldn't switch locations. Please try again.",

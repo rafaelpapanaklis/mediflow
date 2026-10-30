@@ -18,6 +18,10 @@ export const TWO_FA_PENDING_COOKIE = "df_2fa_pending";
 export const TWO_FA_ROUTE_PREFIX = "/dashboard/2fa";
 export const TWO_FA_CHALLENGE_PATH = "/dashboard/2fa";
 export const TWO_FA_SETUP_PATH = "/dashboard/2fa/setup";
+// Salida del reto cuando ya no hay nada que retar: borra df_2fa_pending y manda
+// al panel (repaso iPad ws1-t1, M2). Vive bajo /api/auth, exenta del corte del
+// middleware, así que se alcanza con la cookie puesta.
+export const RUTA_SIN_RETO = "/api/auth/2fa/sin-reto";
 // ws1-t8: «Ver como clínica» desde /admin. Prueba firmada (HMAC con un secreto
 // DERIVADO, distinto del de df_2fa) de que esta sesión la abrió un admin de
 // plataforma con su propio TOTP. Solo la emite /api/admin/impersonate.

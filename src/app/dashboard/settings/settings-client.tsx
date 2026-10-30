@@ -9,6 +9,7 @@ import type { MetodosDisponibles } from "@/lib/billing/metodos-de-pago";
 import { RemindersSection } from "./reminders-section";
 import { TwoFactorCard } from "@/components/dashboard/security/two-factor-card";
 import { SedeClaveCard } from "@/components/dashboard/security/sede-clave-card";
+import { useCambioDeContrasena } from "@/components/dashboard/security/use-cambio-de-contrasena";
 import { CfdiReadinessCard } from "@/components/dashboard/settings/cfdi-readiness-card";
 // ws1-t4, vuelta 2 (F-01): «Facturar a empresas con retención», apagado por defecto.
 import { AjusteRetencionesCfdi } from "@/components/dashboard/settings/ajuste-retenciones-cfdi";
@@ -19,8 +20,6 @@ import { CobradoSinCfdiCard } from "@/components/dashboard/settings/cobrado-sin-
 import { regimenesEmisorParaElegir, faltantesDelEmisor } from "@/lib/cfdi/emisor";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { createClient } from "@/lib/supabase/client";
-import { leerErrorContrasena } from "@/lib/auth/errores-contrasena";
 import { DIRECTORY_CATEGORIES } from "@/lib/directory/types";
 import { esCategoriaFija } from "@/lib/clinic/categoria-fija";
 import { useT, useLocale } from "@/i18n/i18n-provider";
@@ -218,7 +217,9 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
   const [schedule, setSchedule] = useState<Record<number,{enabled:boolean;open:string;close:string}>>(
     Object.fromEntries((initClinic.schedules ?? []).map((s: any) => [s.dayOfWeek, { enabled:s.enabled, open:s.openTime, close:s.closeTime }]))
   );
-  const [pwForm,   setPwForm]   = useState({ current:"", next:"", confirm:"" });
+  // El cambio de contraseña vive en un hook que comparte con Mi perfil (m7).
+  const pw = useCambioDeContrasena("settings");
+  const changePassword = pw.cambiar;
   // Portal del paciente — cambios de cita (WS1-T5). Draft local del input de
   // horas; se guarda al blur. `?? 24` tolera clínicas sin los campos nuevos.
   const [minHoursDraft, setMinHoursDraft] = useState<string>(String(initClinic.patientChangesMinHours ?? 24));
@@ -609,28 +610,6 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
     } finally { setCsdUploading(false); }
   }
 
-  async function changePassword() {
-    if (pwForm.next !== pwForm.confirm) { toast.error(t("settings.client.pwMismatchToast")); return; }
-    if (pwForm.next.length < 8) { toast.error(t("settings.client.pwMinLengthToast")); return; }
-    setSaving(true);
-    try {
-      const supabase = createClient();
-      const { error } = await supabase.auth.updateUser({ password: pwForm.next });
-      if (error) throw error;
-      toast.success(t("settings.client.pwUpdatedToast"));
-      setPwForm({ current:"", next:"", confirm:"" });
-    } catch (e: any) {
-      // Supabase contesta en inglés; su message nunca se enseña. El motivo se
-      // traduce con el diccionario para que salga en el idioma del panel.
-      const deContrasena = leerErrorContrasena(e);
-      if (!deContrasena) console.error("[settings] cambio de contraseña falló:", e);
-      toast.error(
-        deContrasena
-          ? t(`settings.client.pwError.${deContrasena.motivo}`, { min: deContrasena.minimo ?? 8 })
-          : t("settings.client.pwError.otro"),
-      );
-    } finally { setSaving(false); }
-  }
 
   async function disconnectGcal() {
     if (gcalBusy) return;
@@ -1584,14 +1563,14 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
               <Columna>
                 <Seccion
                   titulo={t("settings.client.changePasswordTitle")}
-                  pie={<BotonGuardar onClick={changePassword} guardando={saving} disabled={!pwForm.next} texto={t("settings.client.changePasswordBtn")} textoGuardando={t("settings.client.changingPasswordBtn")} />}
+                  pie={<BotonGuardar onClick={changePassword} guardando={pw.guardando} disabled={!pw.form.next} texto={t("settings.client.changePasswordBtn")} textoGuardando={t("settings.client.changingPasswordBtn")} />}
                 >
                   <Campos2>
                     <Campo etiqueta={t("settings.client.newPasswordLabel")}>
-                      <Entrada type="password" autoComplete="new-password" placeholder={t("settings.client.newPasswordPlaceholder")} value={pwForm.next} onChange={e => setPwForm(f => ({ ...f, next:e.target.value }))} />
+                      <Entrada type="password" autoComplete="new-password" placeholder={t("settings.client.newPasswordPlaceholder")} value={pw.form.next} onChange={e => pw.setForm(f => ({ ...f, next:e.target.value }))} />
                     </Campo>
                     <Campo etiqueta={t("settings.client.confirmPasswordLabel")}>
-                      <Entrada type="password" autoComplete="new-password" placeholder={t("settings.client.confirmPasswordPlaceholder")} value={pwForm.confirm} onChange={e => setPwForm(f => ({ ...f, confirm:e.target.value }))} />
+                      <Entrada type="password" autoComplete="new-password" placeholder={t("settings.client.confirmPasswordPlaceholder")} value={pw.form.confirm} onChange={e => pw.setForm(f => ({ ...f, confirm:e.target.value }))} />
                     </Campo>
                   </Campos2>
                 </Seccion>
@@ -2604,12 +2583,12 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
           <div className="bg-card border border-border rounded-2xl p-6 shadow-card space-y-4">
             <h2 className="text-base font-bold">{t("settings.client.changePasswordTitle")}</h2>
             <div className="field-new"><label className="field-new__label">{t("settings.client.newPasswordLabel")}</label>
-              <Input type="password" autoComplete="new-password" placeholder={t("settings.client.newPasswordPlaceholder")} value={pwForm.next} onChange={e => setPwForm(f => ({ ...f, next:e.target.value }))} />
+              <Input type="password" autoComplete="new-password" placeholder={t("settings.client.newPasswordPlaceholder")} value={pw.form.next} onChange={e => pw.setForm(f => ({ ...f, next:e.target.value }))} />
             </div>
             <div className="field-new"><label className="field-new__label">{t("settings.client.confirmPasswordLabel")}</label>
-              <Input type="password" autoComplete="new-password" placeholder={t("settings.client.confirmPasswordPlaceholder")} value={pwForm.confirm} onChange={e => setPwForm(f => ({ ...f, confirm:e.target.value }))} />
+              <Input type="password" autoComplete="new-password" placeholder={t("settings.client.confirmPasswordPlaceholder")} value={pw.form.confirm} onChange={e => pw.setForm(f => ({ ...f, confirm:e.target.value }))} />
             </div>
-            <Button onClick={changePassword} disabled={saving || !pwForm.next}>{saving ? t("settings.client.changingPasswordBtn") : t("settings.client.changePasswordBtn")}</Button>
+            <Button onClick={changePassword} disabled={pw.guardando || !pw.form.next}>{pw.guardando ? t("settings.client.changingPasswordBtn") : t("settings.client.changePasswordBtn")}</Button>
           </div>
           <TwoFactorCard
             initialEnabled={!!(user as any).totpEnabled}

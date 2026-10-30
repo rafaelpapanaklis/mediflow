@@ -11,7 +11,8 @@ import { FormField } from "../form-field";
 import { PasswordInput } from "../password-input";
 import { playLoginSuccessAnimation } from "./login-success-animation";
 
-export function LoginForm() {
+/** `aviso`: un mensaje de éxito que trae la página (p. ej. tras cambiar la contraseña temporal). */
+export function LoginForm({ aviso = null }: { aviso?: string | null } = {}) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(true);
@@ -121,6 +122,21 @@ export function LoginForm() {
 
       {/* Form */}
       <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+        {aviso && !error && (
+          <div
+            role="status"
+            style={{
+              padding: "10px 14px",
+              borderRadius: 10,
+              background: "rgba(22,163,74,0.07)",
+              border: "1px solid rgba(22,163,74,0.3)",
+              color: "#15803d",
+              fontSize: 13,
+            }}
+          >
+            {aviso}
+          </div>
+        )}
         {error && (
           <div
             role="alert"

@@ -3,6 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { ShieldCheck } from "lucide-react";
 import { useT } from "@/i18n/i18n-provider";
+import { CerrarSesionBarrera } from "./cerrar-sesion-barrera";
 
 // Solo aceptamos `next` interno a /dashboard (evita open-redirect). El layout y
 // el middleware lo pasan como ?next=<ruta original>.
@@ -37,7 +38,15 @@ export function TwoFactorChallenge() {
         body: JSON.stringify({ code: code.trim() }),
       });
       if (!res.ok) {
-        setError(t("settings.client.tfa.genericError"));
+        // Sin sesión no hay código que valga: a entrar otra vez.
+        if (res.status === 401) {
+          window.location.href = "/login";
+          return;
+        }
+        // El servidor ya lo dice en español y con el motivo real: código
+        // reusado («Ese código ya se usó…»), demasiados intentos (429)…
+        const data = await res.json().catch(() => ({}));
+        setError(typeof data?.error === "string" && data.error ? data.error : t("settings.client.tfa.genericError"));
         setLoading(false);
         return;
       }
@@ -145,6 +154,8 @@ export function TwoFactorChallenge() {
             {recovery ? t("settings.client.tfa.useApp") : t("settings.client.tfa.useRecovery")}
           </button>
         </form>
+
+        <CerrarSesionBarrera origen="TwoFactorChallenge" />
       </div>
     </div>
   );

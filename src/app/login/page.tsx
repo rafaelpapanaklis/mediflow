@@ -16,7 +16,16 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export default async function LoginPage() {
+// Avisos que puede traer /login por la URL: solo textos fijos de aquí, nunca
+// texto de la URL.
+const AVISOS: Record<string, string> = {
+  // El cambio forzado de la contraseña temporal cierra la sesión (repaso iPad, m5).
+  cambiada: "Listo. Entra con tu contraseña nueva.",
+};
+
+export default async function LoginPage(props: { searchParams?: Promise<{ cambiada?: string }> }) {
+  const sp = (await props.searchParams) ?? {};
+  const aviso = sp.cambiada === "1" ? AVISOS.cambiada : null;
   // Este es el login de CLÍNICA. Solo saltamos al dashboard si la sesión de
   // Supabase corresponde a un User de clínica activo. Si la sesión es de un
   // laboratorio/proveedor (o huérfana), RENDERIZAMOS el formulario en lugar de
@@ -33,5 +42,5 @@ export default async function LoginPage() {
     // sesión de lab/proveedor (o huérfana): mostrar el form (no redirigir)
   }
   // visualVariant="dark": panel izquierdo casi negro para la escena 3D.
-  return <AuthShell split="50/50" visualVariant="dark" visual={<LoginVisual />} form={<LoginForm />} />;
+  return <AuthShell split="50/50" visualVariant="dark" visual={<LoginVisual />} form={<LoginForm aviso={aviso} />} />;
 }

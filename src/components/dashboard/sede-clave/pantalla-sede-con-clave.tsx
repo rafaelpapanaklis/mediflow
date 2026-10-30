@@ -46,11 +46,18 @@ export function PantallaSedeConClave({ clinicId, nombre, esLaActiva, abierta, si
         body: JSON.stringify({ clave, clinicId: esLaActiva ? undefined : clinicId, next }),
       });
       const data = await res.json().catch(() => ({}));
+      // Sin sesión no hay clave que comprobar: reintentar no sirve (repaso iPad, m4).
+      if (res.status === 401) {
+        window.location.href = "/login";
+        return;
+      }
       if (!res.ok) {
         setClave("");
         if (data?.code === "bloqueo") setError(t("sedeClave.pantalla.bloqueo", { minutos: data?.minutos ?? 15 }));
         else if (data?.code === "en_curso") setError(t("sedeClave.pantalla.enCurso"));
-        else if (data?.code === "clave_incorrecta") setError(t("sedeClave.pantalla.incorrecta", { restantes: data?.restantes ?? 0 }));
+        else if (data?.code === "clave_incorrecta") {
+          setError(data?.restantes === 1 ? t("sedeClave.pantalla.incorrectaUna") : t("sedeClave.pantalla.incorrecta", { restantes: data?.restantes ?? 0 }));
+        }
         else setError(t("sedeClave.pantalla.error"));
         setOcupado(false);
         return;
@@ -151,11 +158,14 @@ export function PantallaSedeConClave({ clinicId, nombre, esLaActiva, abierta, si
                 type="password"
                 value={clave}
                 onChange={(e) => setClave(e.target.value)}
-                autoComplete="off"
+                // one-time-code: el Llavero no la ofrece guardar como contraseña de
+                // la cuenta (un solo campo de contraseña sin usuario). Sin
+                // inputmode: la clave admite letras. 16 px: iOS no hace zoom.
+                autoComplete="one-time-code"
                 autoFocus
                 maxLength={72}
                 className="input-new"
-                style={{ height: 44 }}
+                style={{ height: 44, fontSize: 16 }}
               />
             </div>
             <button

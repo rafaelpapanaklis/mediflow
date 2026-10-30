@@ -37,6 +37,9 @@ export default async function MiPerfilPage() {
       email={fila.email}
       role={fila.role}
       clinico={rolLlevaDatosClinicos(fila.role)}
+      // De la sesión: el 2FA ya resuelto por persona (cualquier sede) y la política de la sede activa.
+      totpEnabled={!!(user as { totpEnabled?: boolean }).totpEnabled}
+      require2fa={!!(user.clinic as { require2fa?: boolean } | null)?.require2fa}
     />
   );
 }

@@ -4,6 +4,8 @@ import { decidirDosPasos } from "@/lib/auth/two-factor-decision";
 import { TwoFactorSetup } from "@/components/dashboard/security/two-factor-setup";
 import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { RaizCuenta } from "@/components/dashboard/cuenta-rediseno/raiz";
+import { CerrarSesionBarrera } from "@/components/dashboard/security/cerrar-sesion-barrera";
+import { RUTA_SIN_RETO } from "@/lib/auth/two-factor-constants";
 
 export const dynamic = "force-dynamic";
 
@@ -16,9 +18,11 @@ export default async function TwoFactorSetupPage() {
   const { decision } = await decidirDosPasos(user);
 
   // Ya tiene 2FA: no hay nada que configurar → reto pendiente o panel.
+  // Al panel por RUTA_SIN_RETO, que borra df_2fa_pending (repaso iPad, M2):
+  // con la cookie puesta, un redirect directo a /dashboard volvía aquí.
   if ((user as { totpEnabled?: boolean }).totpEnabled) {
     if (decision === "challenge") redirect("/dashboard/2fa");
-    redirect("/dashboard");
+    redirect(RUTA_SIN_RETO);
   }
 
   const forced = !!(user.clinic as { require2fa?: boolean })?.require2fa;
@@ -28,16 +32,22 @@ export default async function TwoFactorSetupPage() {
   // El enrolamiento es el mismo componente encendido o apagado; la raíz solo
   // lo viste (mismo ancho que el max-w-md de siempre).
   const rediseno = await menuDosNivelesEncendido(user.clinicId);
+  // Con salida (M3): quien no puede enrolarse ahora (sin el teléfono a mano)
+  // tiene que poder cerrar sesión; sin esto, /login la devolvía aquí.
   if (rediseno) {
     return (
       <RaizCuenta barrera>
         <TwoFactorSetup forced={forced} />
+        <CerrarSesionBarrera origen="TwoFactorSetup" />
       </RaizCuenta>
     );
   }
   return (
     <div className="w-full max-w-md">
       <TwoFactorSetup forced={forced} />
+      <div style={{ marginTop: 12 }}>
+        <CerrarSesionBarrera origen="TwoFactorSetup" />
+      </div>
     </div>
   );
 }
