@@ -219,6 +219,23 @@ test("m7 · Mi perfil trae «Contraseña» y «Verificación en dos pasos», con
   assert.doesNotMatch(pagina, /["']settings\.view["']|hasPermission\(|requirePermission\(/);
 });
 
+/* ══════════════════ Revisión ws1-t9 · m1: el cambio voluntario pide la actual, por el servidor ══════════════════ */
+
+test("t9 m1 · Mi perfil y Configuración piden la contraseña actual y nunca llaman a Supabase desde el navegador", () => {
+  const hook = fuente("components/dashboard/security/use-cambio-de-contrasena.ts");
+  assert.doesNotMatch(hook, /updateUser\(|@\/lib\/supabase\/client/, "el navegador cambia la contraseña por su cuenta");
+  assert.match(hook, /fetch\("\/api\/auth\/change-password"/);
+  assert.match(hook, /currentPassword: form\.actual/);
+  for (const pantalla of ["app/dashboard/mi-perfil/mi-perfil-client.tsx", "app/dashboard/settings/settings-client.tsx"]) {
+    const src = fuente(pantalla);
+    assert.match(src, /autoComplete="current-password"/, `${pantalla}: sin el campo de la contraseña actual`);
+    assert.match(src, /pw\.form\.actual/);
+  }
+  const ruta = fuente("app/api/auth/change-password/route.ts");
+  assert.match(ruta, /"La contraseña actual no es correcta\."/);
+  assert.match(ruta, /persistentRateLimit\(req, \{ id: d\.supabaseId/);
+});
+
 /* ══════════════════ iPad real · 16 px y el Llavero ══════════════════ */
 
 test("iPad · los campos de las barreras van a 16 px y la clave no se ofrece como contraseña de la cuenta", () => {

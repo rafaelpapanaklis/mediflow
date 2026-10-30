@@ -6,6 +6,8 @@ import { logMutation } from "@/lib/audit";
 import { clearMustChangePassword } from "@/lib/auth/must-change-password";
 import { scorePassword } from "@/components/public/auth/password-strength";
 import { leerErrorContrasena } from "@/lib/auth/errores-contrasena";
+import { createClient as createSessionClient } from "@/lib/supabase/server";
+import { persistentRateLimit } from "@/lib/failban";
 
 // Service-role client. Mismo patrón que /api/team/[id]/reset-password —
 // SUPABASE_SERVICE_ROLE_KEY NUNCA se expone al cliente.
@@ -92,6 +94,12 @@ export async function POST(req: NextRequest) {
   // transición true→false que nunca ocurrió (el AuditLog se lee como fuente de
   // datos, no sólo como bitácora).
   const wasForced = ctx.user.mustChangePassword === true;
+
+  // El cambio VOLUNTARIO (Mi perfil, Configuración → Seguridad) va aparte: pide
+  // la contraseña actual. El forzado sigue abajo, como estaba.
+  if (!wasForced) {
+    return cambioVoluntario(req, { clinicId: ctx.clinicId, userId: ctx.userId, supabaseId, email, password, actual: body?.currentPassword });
+  }
 
   // ── Rechazar quedarse con la temporal ────────────────────────────────────
   // La temporal no se guarda en ningún lado (a propósito), así que no hay nada
@@ -185,5 +193,82 @@ export async function POST(req: NextRequest) {
     after:      { passwordChangedByOwner: true,  mustChangePassword: false     },
   });
 
+  return NextResponse.json({ success: true });
+}
+
+// ── Cambio VOLUNTARIO: con la contraseña actual (revisión ws1-t9, m1) ──────────
+// Antes el navegador llamaba a supabase.auth.updateUser() directo: no pedía la
+// contraseña actual, y la sede desbloqueada y el 2FA solo los exigía la
+// pantalla. Quien tuviera una sesión abierta en un iPad compartido podía
+// cambiarla. Ahora pasa por aquí: la sesión (2FA superado) y la sede abierta
+// ya se exigieron arriba, y además la contraseña actual.
+async function cambioVoluntario(
+  req: NextRequest,
+  d: { clinicId: string; userId: string; supabaseId: string; email: string; password: string; actual: unknown },
+) {
+  const actual = typeof d.actual === "string" ? d.actual : "";
+  if (!actual) {
+    return NextResponse.json({ error: "Escribe tu contraseña actual.", code: "falta_actual" }, { status: 400 });
+  }
+  // Adivinar la actual con una sesión ajena abierta: tope por persona.
+  const rl = await persistentRateLimit(req, { id: d.supabaseId, scope: "cambio-contrasena:actual", limit: 10, windowSec: 15 * 60 });
+  if (rl) return rl;
+
+  // La actual se comprueba como en el login, en un cliente desechable (sin
+  // persistencia: no toca las cookies del navegador). Sin cómo comprobarla,
+  // no se cambia nada (falla cerrado).
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!d.email || !anonKey) {
+    console.error("[/api/auth/change-password] sin correo o sin NEXT_PUBLIC_SUPABASE_ANON_KEY: no se puede comprobar la contraseña actual");
+    return NextResponse.json({ error: NO_SE_PUDO }, { status: 500 });
+  }
+  let correcta = false;
+  try {
+    const probe = createAdminClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, anonKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    const { data } = await probe.auth.signInWithPassword({ email: d.email, password: actual });
+    if (data?.user) {
+      correcta = true;
+      // Solo la sesión de la sonda: "global" cerraría también la del navegador.
+      try { await probe.auth.signOut({ scope: "local" }); } catch { /* ignore */ }
+    }
+  } catch {
+    return NextResponse.json({ error: "No pudimos comprobar tu contraseña actual. Inténtalo de nuevo." }, { status: 500 });
+  }
+  if (!correcta) {
+    return NextResponse.json({ error: "La contraseña actual no es correcta.", code: "actual_incorrecta" }, { status: 400 });
+  }
+  if (d.password === actual) {
+    return NextResponse.json({ error: "La contraseña nueva debe ser distinta de la actual." }, { status: 400 });
+  }
+
+  // Con la sesión de la propia persona (no con la service role): GoTrue cierra
+  // sus OTRAS sesiones y conserva esta, así que sigue dentro tras el cambio.
+  const sb = await createSessionClient();
+  const { error } = await sb.auth.updateUser({ password: d.password });
+  if (error) {
+    const deContrasena = leerErrorContrasena(error);
+    if (deContrasena?.motivo === "igual") {
+      return NextResponse.json({ error: "La contraseña nueva debe ser distinta de la actual." }, { status: 400 });
+    }
+    if (deContrasena) {
+      return NextResponse.json({ error: deContrasena.mensaje, code: "weak_password", reason: deContrasena.motivo }, { status: 400 });
+    }
+    console.error("[/api/auth/change-password] cambio voluntario: supabase falló:", error.message ?? "");
+    return NextResponse.json({ error: NO_SE_PUDO }, { status: 500 });
+  }
+
+  // Mismo rastro que el forzado (el hecho, nunca la contraseña).
+  await logMutation({
+    req,
+    clinicId:   d.clinicId,
+    userId:     d.userId,
+    entityType: "user",
+    entityId:   d.userId,
+    action:     "update",
+    before:     { passwordChangedByOwner: false, mustChangePassword: false },
+    after:      { passwordChangedByOwner: true,  mustChangePassword: false },
+  });
   return NextResponse.json({ success: true });
 }

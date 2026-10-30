@@ -251,6 +251,8 @@ let contrasenasCambiadas: string[] = [];
 let contrasenaVigente: string | null = null;
 /** El scope de cada signOut de la sonda. */
 let cierresDeSonda: Array<string | undefined> = [];
+/** Cambios de contraseña hechos con la sesión de la propia persona (updateUser del cliente de servidor). */
+let cambiosPropios: string[] = [];
 let marcasLevantadas: string[] = [];
 
 class Redireccion extends Error {
@@ -284,6 +286,8 @@ const dobles: Record<string, unknown> = {
         exchangeCodeForSession: async (code: string) =>
           code === "ok" ? { data: { user: { id: sesion, email: "dueno@example.com" } }, error: null } : { data: { user: null }, error: { message: "bad code" } },
         verifyOtp: async ({ token_hash }: any) => ({ error: token_hash === "ok" ? null : { message: "otp_expired" } }),
+        // Revisión ws1-t9, m1: el cambio voluntario, con la sesión de la persona.
+        updateUser: async () => { if (sesion) cambiosPropios.push(sesion); return { data: {}, error: sesion ? null : { message: "no session" } }; },
       },
     }),
   },
@@ -388,6 +392,7 @@ beforeEach(async () => {
   marcasLevantadas = [];
   contrasenaVigente = null;
   cierresDeSonda = [];
+  cambiosPropios = [];
 });
 
 // ══════════════════ Utilería ══════════════════
@@ -1457,10 +1462,70 @@ test("ws1-t1 · un cambio VOLUNTARIO de contraseña sigue pidiendo la sede abier
   const r = await llamar(POST, "/api/auth/change-password", { password: "Nueva-Segura-2026" });
   assert.equal(r.status, 401);
   assert.deepEqual(contrasenasCambiadas, []);
-  // Con la clave tecleada, sí.
+  // Con la clave tecleada (y la contraseña actual, revisión ws1-t9 m1), sí.
   const desbloquear = await rutaDesbloquear();
   assert.equal((await llamar(desbloquear, "/api/sede-clave/desbloquear", { clave: CLAVE })).status, 200);
-  assert.equal((await llamar(POST, "/api/auth/change-password", { password: "Nueva-Segura-2026" })).status, 200);
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ??= "anon-de-prueba";
+  contrasenaVigente = "Actual-Segura-2025";
+  assert.equal((await llamar(POST, "/api/auth/change-password", { currentPassword: "Actual-Segura-2025", password: "Nueva-Segura-2026" })).status, 200);
+});
+
+// Revisión ws1-t9, m1: el cambio voluntario (Mi perfil, Configuración) pedía
+// solo la nueva y el navegador la mandaba directo a Supabase; quien encontrara
+// una sesión abierta podía cambiarla. Ahora: la actual, comprobada aquí.
+async function voluntarioConSedeAbierta() {
+  await admin3ConTemporalEnNavegadorLimpio();
+  fichas.find((x) => x.id === "u-admin-3")!.mustChangePassword = false;
+  const desbloquear = await rutaDesbloquear();
+  assert.equal((await llamar(desbloquear, "/api/sede-clave/desbloquear", { clave: CLAVE })).status, 200);
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ??= "anon-de-prueba";
+  contrasenaVigente = "Actual-Segura-2025";
+  return rutaCambioContrasena();
+}
+
+test("t9 m1 · el cambio voluntario sin la contraseña actual no cambia nada", async () => {
+  const POST = await voluntarioConSedeAbierta();
+  const r = await llamar(POST, "/api/auth/change-password", { password: "Nueva-Segura-2026" });
+  assert.equal(r.status, 400);
+  assert.equal(r.body.code, "falta_actual");
+  assert.match(r.body.error, /contraseña actual/);
+  assert.deepEqual(cambiosPropios, []);
+  assert.deepEqual(contrasenasCambiadas, []);
+});
+
+test("t9 m1 · con la contraseña actual equivocada: «La contraseña actual no es correcta» y no cambia nada", async () => {
+  const POST = await voluntarioConSedeAbierta();
+  const r = await llamar(POST, "/api/auth/change-password", { currentPassword: "No-Es-La-Mia-1", password: "Nueva-Segura-2026" });
+  assert.equal(r.status, 400);
+  assert.equal(r.body.error, "La contraseña actual no es correcta.");
+  assert.deepEqual(cambiosPropios, []);
+  assert.deepEqual(contrasenasCambiadas, []);
+});
+
+test("t9 m1 · con la actual buena cambia con la sesión de la persona, que sigue abierta", async () => {
+  const POST = await voluntarioConSedeAbierta();
+  const r = await llamar(POST, "/api/auth/change-password", { currentPassword: "Actual-Segura-2025", password: "Nueva-Segura-2026" });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.deepEqual(cambiosPropios, [SB_ADMIN3], "no pasó por updateUser con la sesión de la persona");
+  assert.deepEqual(contrasenasCambiadas, [], "el voluntario no usa la service role (cerraría todas sus sesiones)");
+  assert.deepEqual(cierresDeSonda, ["local"], "la sonda de la actual solo cierra su propia sesión");
+  assert.equal(sesion, SB_ADMIN3, "la sesión del navegador sigue viva");
+  // La nueva igual a la actual, en español.
+  const igual = await llamar(POST, "/api/auth/change-password", { currentPassword: "Actual-Segura-2025", password: "Actual-Segura-2025" });
+  assert.equal(igual.status, 400);
+  assert.match(igual.body.error, /distinta de la actual/);
+});
+
+test("t9 m1 · el voluntario sigue pidiendo la sede abierta y la sesión (sin la clave: 401, sin sesión: 401)", async () => {
+  await admin3ConTemporalEnNavegadorLimpio();
+  fichas.find((x) => x.id === "u-admin-3")!.mustChangePassword = false;
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ??= "anon-de-prueba";
+  contrasenaVigente = "Actual-Segura-2025";
+  const POST = await rutaCambioContrasena();
+  const cerrada = await llamar(POST, "/api/auth/change-password", { currentPassword: "Actual-Segura-2025", password: "Nueva-Segura-2026" });
+  assert.equal(cerrada.status, 401);
+  assert.equal(cerrada.body.code, "sede_con_clave");
+  assert.deepEqual(cambiosPropios, []);
 });
 
 // Repaso iPad (29-oct): quien tecleaba la MISMA temporal como nueva veía «debe

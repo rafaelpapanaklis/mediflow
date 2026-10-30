@@ -130,6 +130,14 @@ export function MiPerfilClient({ inicial, email, role, clinico, totpEnabled, req
         )}
 
         <Tarjeta icono={<KeyRound size={15} strokeWidth={1.75} />} titulo={t("settings.client.changePasswordTitle")}>
+          {/* revisión ws1-t9, m1: la actual se comprueba en el servidor. */}
+          <div className={s.campoFila} style={FILA}>
+            <Campo etiqueta={t("settings.client.currentPasswordLabel")} htmlFor="mp-pw-actual">
+              <input id="mp-pw-actual" className={s.campoEntrada} type="password" autoComplete="current-password"
+                placeholder={t("settings.client.currentPasswordPlaceholder")} value={pw.form.actual}
+                onChange={(e) => pw.setForm((f) => ({ ...f, actual: e.target.value }))} />
+            </Campo>
+          </div>
           <div className={s.campoFila} style={FILA}>
             <Campo etiqueta={t("settings.client.newPasswordLabel")} htmlFor="mp-pw-nueva">
               <input id="mp-pw-nueva" className={s.campoEntrada} type="password" autoComplete="new-password"
@@ -142,7 +150,7 @@ export function MiPerfilClient({ inicial, email, role, clinico, totpEnabled, req
                 onChange={(e) => pw.setForm((f) => ({ ...f, confirm: e.target.value }))} />
             </Campo>
           </div>
-          <Boton variante="principal" onClick={() => void pw.cambiar()} disabled={pw.guardando || !pw.form.next}>
+          <Boton variante="principal" onClick={() => void pw.cambiar()} disabled={pw.guardando || !pw.form.next || !pw.form.actual}>
             {pw.guardando ? t("settings.client.changingPasswordBtn") : t("settings.client.changePasswordBtn")}
           </Boton>
         </Tarjeta>

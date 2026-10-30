@@ -252,9 +252,10 @@ const SUPERFICIES: Array<{ ruta: string; usa: RegExp }> = [
   },
   { ruta: "src/app/api/afiliados/auth/register/route.ts", usa: /traducirErrorDeAuth\(/ },
   { ruta: "src/components/public/auth/recovery/reset-password-form.tsx", usa: /leerErrorContrasena\(/ },
-  // Configuración y Mi perfil cambian la contraseña con el mismo hook (repaso iPad ws1-t1, m7).
-  { ruta: "src/components/dashboard/security/use-cambio-de-contrasena.ts", usa: /leerErrorContrasena\(/ },
 ];
+// Configuración y Mi perfil cambian la contraseña con el mismo hook, que va por
+// /api/auth/change-password (revisión ws1-t9, m1): el error de Supabase lo
+// traduce esa ruta (arriba), no el navegador.
 
 for (const { ruta, usa } of SUPERFICIES) {
   test(`cableado: ${ruta} pasa el error de Supabase por el traductor`, () => {
@@ -278,7 +279,8 @@ test("cableado: Configuración ya no enseña e.message al cambiar la contraseña
   // La lógica vive en el hook que comparten Configuración y Mi perfil.
   assert.match(fuente("src/app/dashboard/settings/settings-client.tsx"), /useCambioDeContrasena\(/);
   const cuerpo = fuente("src/components/dashboard/security/use-cambio-de-contrasena.ts");
-  assert.match(cuerpo, /updateUser\(/);
+  assert.match(cuerpo, /fetch\("\/api\/auth\/change-password"/);
+  assert.doesNotMatch(cuerpo, /updateUser\(/);
   assert.doesNotMatch(cuerpo, /toast\.error\(e\.message/);
   assert.doesNotMatch(cuerpo, /\.message\b(?![^\n]*console)/);
 });

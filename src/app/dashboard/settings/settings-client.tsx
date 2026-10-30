@@ -1563,8 +1563,12 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
               <Columna>
                 <Seccion
                   titulo={t("settings.client.changePasswordTitle")}
-                  pie={<BotonGuardar onClick={changePassword} guardando={pw.guardando} disabled={!pw.form.next} texto={t("settings.client.changePasswordBtn")} textoGuardando={t("settings.client.changingPasswordBtn")} />}
+                  pie={<BotonGuardar onClick={changePassword} guardando={pw.guardando} disabled={!pw.form.next || !pw.form.actual} texto={t("settings.client.changePasswordBtn")} textoGuardando={t("settings.client.changingPasswordBtn")} />}
                 >
+                  {/* revisión ws1-t9, m1: la actual se comprueba en el servidor. */}
+                  <Campo etiqueta={t("settings.client.currentPasswordLabel")}>
+                    <Entrada type="password" autoComplete="current-password" placeholder={t("settings.client.currentPasswordPlaceholder")} value={pw.form.actual} onChange={e => pw.setForm(f => ({ ...f, actual:e.target.value }))} />
+                  </Campo>
                   <Campos2>
                     <Campo etiqueta={t("settings.client.newPasswordLabel")}>
                       <Entrada type="password" autoComplete="new-password" placeholder={t("settings.client.newPasswordPlaceholder")} value={pw.form.next} onChange={e => pw.setForm(f => ({ ...f, next:e.target.value }))} />
@@ -2582,13 +2586,16 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
         <div className="space-y-5 max-w-lg">
           <div className="bg-card border border-border rounded-2xl p-6 shadow-card space-y-4">
             <h2 className="text-base font-bold">{t("settings.client.changePasswordTitle")}</h2>
+            <div className="field-new"><label className="field-new__label">{t("settings.client.currentPasswordLabel")}</label>
+              <Input type="password" autoComplete="current-password" placeholder={t("settings.client.currentPasswordPlaceholder")} value={pw.form.actual} onChange={e => pw.setForm(f => ({ ...f, actual:e.target.value }))} />
+            </div>
             <div className="field-new"><label className="field-new__label">{t("settings.client.newPasswordLabel")}</label>
               <Input type="password" autoComplete="new-password" placeholder={t("settings.client.newPasswordPlaceholder")} value={pw.form.next} onChange={e => pw.setForm(f => ({ ...f, next:e.target.value }))} />
             </div>
             <div className="field-new"><label className="field-new__label">{t("settings.client.confirmPasswordLabel")}</label>
               <Input type="password" autoComplete="new-password" placeholder={t("settings.client.confirmPasswordPlaceholder")} value={pw.form.confirm} onChange={e => pw.setForm(f => ({ ...f, confirm:e.target.value }))} />
             </div>
-            <Button onClick={changePassword} disabled={pw.guardando || !pw.form.next}>{pw.guardando ? t("settings.client.changingPasswordBtn") : t("settings.client.changePasswordBtn")}</Button>
+            <Button onClick={changePassword} disabled={pw.guardando || !pw.form.next || !pw.form.actual}>{pw.guardando ? t("settings.client.changingPasswordBtn") : t("settings.client.changePasswordBtn")}</Button>
           </div>
           <TwoFactorCard
             initialEnabled={!!(user as any).totpEnabled}
