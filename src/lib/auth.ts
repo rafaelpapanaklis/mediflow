@@ -62,12 +62,13 @@ function normalizeUser<T extends { permissionsOverride?: string[] | null } & obj
  */
 function conDosFactoresDeLaPersona<T extends { supabaseId: string; totpEnabled?: boolean | null }>(
   u: T,
-  filasDeLaPersona: ReadonlyArray<{ totpEnabled?: boolean | null }>,
+  dosFactoresEnAlguna: boolean,
 ): T {
   if (u.totpEnabled) return u;
-  // Las filas ya vienen leídas (todas las activas de este supabaseId): es la
-  // misma pregunta que hacía personaTieneDosFactores, sin otra consulta.
-  return filasDeLaPersona.some((f) => !!f.totpEnabled) ? { ...u, totpEnabled: true } : u;
+  // Ya resuelto en la misma lectura de las filas (resolverSesion), contando
+  // también las de sedes ARCHIVADAS (revisión ws1-t9, M1): es la misma
+  // pregunta que hace personaTieneDosFactores, sin otra consulta.
+  return dosFactoresEnAlguna ? { ...u, totpEnabled: true } : u;
 }
 
 // Gate de 2FA de getCurrentUser — el SEGUNDO camino además de getAuthContext,
@@ -185,12 +186,12 @@ const resolverUsuarioActual = cache(async () => {
   // que getAuthContext (@/lib/auth-context), y la misma caché de 10 s en las
   // lecturas de /api, con llave persona + clínica de la cookie
   // (@/lib/auth/sesion-en-cache). Los gates siguen corriendo en cada petición.
-  const { filas: candidates, deLaCookie } = await resolverSesion(supabaseUser.id, activeClinicId);
+  const { filas: candidates, deLaCookie, dosFactoresEnAlguna } = await resolverSesion(supabaseUser.id, activeClinicId);
 
   if (activeClinicId) {
     const user = deLaCookie;
     if (user) {
-      return normalizeUser(conDosFactoresDeLaPersona(user, candidates));
+      return normalizeUser(conDosFactoresDeLaPersona(user, dosFactoresEnAlguna));
     }
   }
 
@@ -285,7 +286,7 @@ const resolverUsuarioActual = cache(async () => {
   // Camino de fallback (primer User por createdAt asc). Los gates ya no viven
   // en cada rama sino en getCurrentUser, sobre lo que devuelva cualquiera de
   // las dos: no hay rama que se los pueda olvidar.
-  return normalizeUser(conDosFactoresDeLaPersona(user, candidates));
+  return normalizeUser(conDosFactoresDeLaPersona(user, dosFactoresEnAlguna));
 });
 
 export const getUserClinics = cache(async () => {

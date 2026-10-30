@@ -67,11 +67,11 @@ export const dosFactoresDeLaPersona = cache(
 export const personaTieneDosFactores = cache(async (supabaseId: string): Promise<boolean> => {
   if (!supabaseId) return false;
   const alguna = await prisma.user.findFirst({
-    // Solo sedes vivas, como el gate (resolverSesion filtra archivedAt: null):
-    // un 2FA enrolado en una sede archivada sembraba df_2fa_pending en el login
-    // y el reto, que no lo ve, mandaba al panel… y el middleware de vuelta al
-    // reto, sin fin (repaso iPad ws1-t1, M2).
-    where: { supabaseId, isActive: true, totpEnabled: true, clinic: { archivedAt: null } },
+    // También las sedes ARCHIVADAS, igual que el gate (resolverSesion →
+    // dosFactoresEnAlguna): el 2FA es de la persona y no se apaga porque se
+    // archive la sede donde lo enroló. Filtrarlas aquí abría la entrada sin
+    // segundo factor (revisión ws1-t9, M1).
+    where: { supabaseId, isActive: true, totpEnabled: true },
     select: { id: true },
   });
   return alguna !== null;

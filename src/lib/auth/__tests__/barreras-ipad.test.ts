@@ -27,8 +27,18 @@ const fuente = (rel: string) => readFileSync(join(SRC, rel), "utf8");
 
 // ── Dobles: la base (que apunta qué se preguntó) y el `cache` de React ──
 const consultas: Array<Record<string, unknown>> = [];
+/** Lo que devuelve user.findMany: las fichas de la persona, con su clínica. */
+let fichasFalsas: Array<Record<string, unknown>> = [];
 const prismaFalso = {
-  user: { findFirst: async (q: { where: Record<string, unknown> }) => { consultas.push(q.where); return null; } },
+  user: {
+    findFirst: async (q: { where: Record<string, unknown> }) => { consultas.push(q.where); return null; },
+    findMany: async (q: { where: Record<string, unknown> }) => {
+      consultas.push(q.where);
+      // Como la base: si la consulta filtrara las sedes archivadas, no llegarían.
+      const filtraArchivadas = JSON.stringify(q.where).includes("archivedAt");
+      return fichasFalsas.filter((f) => !filtraArchivadas || !(f.clinic as { archivedAt?: unknown })?.archivedAt);
+    },
+  },
 };
 const Mod = Module as unknown as { _load: (req: string, ...r: unknown[]) => unknown };
 const cargaOriginal = Mod._load;
@@ -83,12 +93,60 @@ test("M2 · el reto y el enrolamiento salen al panel por la salida, nunca direct
   }
 });
 
-test("M2 · un 2FA enrolado en una sede ARCHIVADA no siembra el reto", async () => {
+/* ── Revisión ws1-t9 · M1: el 2FA de una sede ARCHIVADA sigue contando (falla cerrado) ──
+   Un doctor enrola su 2FA en la sede B; después le dan acceso a C (su ficha
+   nace sin 2FA) y cierran B. Si el gate contara solo las sedes vivas, quien
+   tuviera solo su contraseña entraría a C sin segundo factor, y con
+   require2fa en C quedaría en un callejón (setup dice «ya está activo»). */
+const SECRETO_B = "JBSWY3DPEHPK3PXP";
+function fichasDelDoctor(require2faEnC = false) {
+  return [
+    { id: "u-b", clinicId: "cli-b", supabaseId: "sb-doc", totpEnabled: true, totpSecret: SECRETO_B, recoveryCodes: ["$2b$10$x"],
+      clinic: { id: "cli-b", archivedAt: new Date("2026-10-20"), require2fa: false } },
+    { id: "u-c", clinicId: "cli-c", supabaseId: "sb-doc", totpEnabled: false, totpSecret: null, recoveryCodes: [],
+      clinic: { id: "cli-c", archivedAt: null, require2fa: require2faEnC } },
+  ];
+}
+
+test("t9 M1 · personaTieneDosFactores cuenta también las sedes archivadas", async () => {
   const { personaTieneDosFactores } = await import("@/lib/auth/two-factor-identity");
   consultas.length = 0;
   await personaTieneDosFactores("sb-persona");
   assert.equal(consultas.length, 1);
-  assert.deepEqual(consultas[0], { supabaseId: "sb-persona", isActive: true, totpEnabled: true, clinic: { archivedAt: null } });
+  assert.deepEqual(consultas[0], { supabaseId: "sb-persona", isActive: true, totpEnabled: true });
+});
+
+test("t9 M1 · el gate: B archivada no se elige como sede, pero su 2FA cuenta → login a C pide el reto", async () => {
+  const { resolverSesion } = await import("@/lib/auth/sesion-en-cache");
+  const { decisionDosPasos } = await import("@/lib/auth/two-factor-gate");
+  fichasFalsas = fichasDelDoctor();
+  const r = await resolverSesion("sb-doc", "cli-c");
+  assert.deepEqual(r.filas.map((f) => f.clinicId), ["cli-c"], "una sede archivada no existe para elegir");
+  assert.equal(r.elegida?.clinicId, "cli-c");
+  assert.equal(r.dosFactoresEnAlguna, true, "el 2FA de B se perdió al archivarla: entrada sin segundo factor");
+  // Con la cookie apuntando a B (archivada) tampoco se elige B.
+  assert.equal((await resolverSesion("sb-doc", "cli-b")).elegida?.clinicId, "cli-c");
+  // La decisión del gate, con lo que le pasa el resolver (getCurrentUser y getAuthContext).
+  assert.equal(decisionDosPasos({ totpEnabled: r.dosFactoresEnAlguna, require2fa: false, hasValidCookie: false }), "challenge");
+  // Con require2fa en C: reto, NO «setup» (el setup diría «ya está activo»: callejón).
+  fichasFalsas = fichasDelDoctor(true);
+  const r2 = await resolverSesion("sb-doc", "cli-c");
+  assert.equal(decisionDosPasos({ totpEnabled: r2.dosFactoresEnAlguna, require2fa: true, hasValidCookie: false }), "challenge");
+});
+
+test("t9 M1 · getCurrentUser y getAuthContext deciden con el 2FA de TODAS las fichas", () => {
+  assert.match(fuente("lib/auth.ts"), /conDosFactoresDeLaPersona\(user, dosFactoresEnAlguna\)/);
+  assert.match(fuente("lib/auth-context.ts"), /\.totpEnabled \|\| dosFactoresEnAlguna;/);
+});
+
+test("t9 M1 · verify valida en C con el secreto enrolado en B (archivada)", async () => {
+  const { dosFactoresDeLaPersona } = await import("@/lib/auth/two-factor-identity");
+  fichasFalsas = fichasDelDoctor();
+  consultas.length = 0;
+  const d = await dosFactoresDeLaPersona("sb-doc");
+  assert.deepEqual(consultas[0], { supabaseId: "sb-doc", isActive: true });
+  assert.equal(d.enrolado, true);
+  assert.equal(d.totpSecret, SECRETO_B, "sin el secreto de B nadie podría contestar el reto en C");
 });
 
 /* ══════════════════ M3 · ninguna barrera del 2FA sin salida ══════════════════ */

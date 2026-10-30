@@ -56,8 +56,10 @@ export const VIDA_SESION_MS = 10_000;
 
 function leerFilas(supabaseId: string) {
   return prisma.user.findMany({
-    // M3: una sede archivada no existe para la sesión (ni sede activa ni fila).
-    where: { supabaseId, isActive: true, clinic: { archivedAt: null } },
+    // TODAS las fichas activas, también las de sedes archivadas: esas se
+    // descartan para elegir la sede (abajo, en `elegir`), pero su 2FA sigue
+    // contando (ver `dosFactoresEnAlguna`).
+    where: { supabaseId, isActive: true },
     include: { clinic: true },
     orderBy: { createdAt: "asc" },
   });
@@ -66,8 +68,16 @@ function leerFilas(supabaseId: string) {
 type Fila = Awaited<ReturnType<typeof leerFilas>>[number];
 
 export interface SesionResuelta {
-  /** Todas las filas ACTIVAS de la persona, de la más antigua a la más nueva. */
+  /** Las filas ACTIVAS de la persona en sedes NO archivadas, de la más antigua a la más nueva. */
   filas: Fila[];
+  /**
+   * ¿Alguna ficha activa de la persona —también en una sede ARCHIVADA— tiene
+   * el 2FA puesto? (revisión ws1-t9, M1.) El 2FA es de la persona: que la
+   * sede donde lo enroló se archive no lo apaga. Si contara solo las sedes
+   * vivas, quien tuviera solo la contraseña entraría a una sede donde su
+   * ficha nació sin 2FA: el gate tiene que fallar cerrado.
+   */
+  dosFactoresEnAlguna: boolean;
   /** La fila de la clínica de la cookie, si la persona está activa ahí. */
   deLaCookie: Fila | null;
   /** La que manda: la de la cookie o, si no, la primera por createdAt. */
@@ -126,11 +136,18 @@ async function modoDeEstaPeticion(): Promise<Modo> {
   return "cache";
 }
 
-function elegir(filas: Fila[], clinicaDeLaCookie: string | null): SesionResuelta {
+function elegir(todas: Fila[], clinicaDeLaCookie: string | null): SesionResuelta {
+  // M3: una sede archivada no existe para la sesión (ni sede activa ni fila).
+  const filas = todas.filter((f) => !f.clinic?.archivedAt);
   const deLaCookie = clinicaDeLaCookie
     ? filas.find((f) => f.clinicId === clinicaDeLaCookie) ?? null
     : null;
-  return { filas, deLaCookie, elegida: deLaCookie ?? filas[0] ?? null };
+  return {
+    filas,
+    dosFactoresEnAlguna: todas.some((f) => !!f.totpEnabled),
+    deLaCookie,
+    elegida: deLaCookie ?? filas[0] ?? null,
+  };
 }
 
 // Cada petición recibe SUS objetos: si una ruta tocara `ctx.clinic` o la fila,
@@ -140,6 +157,7 @@ function copia(s: SesionResuelta): SesionResuelta {
   const i = (f: Fila | null) => (f ? s.filas.indexOf(f) : -1);
   return {
     filas,
+    dosFactoresEnAlguna: s.dosFactoresEnAlguna,
     deLaCookie: i(s.deLaCookie) >= 0 ? filas[i(s.deLaCookie)] : null,
     elegida: i(s.elegida) >= 0 ? filas[i(s.elegida)] : null,
   };

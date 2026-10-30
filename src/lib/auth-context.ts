@@ -136,7 +136,7 @@ async function resolverAuthContext(opciones: { paraClaveDeSede?: boolean } = {})
     // En las lecturas de /api esa resolución va en caché 10 s, con llave
     // persona + clínica de la cookie: ver @/lib/auth/sesion-en-cache. Los gates
     // de abajo (2FA, plan) NO se cachean: corren en cada petición.
-    const { filas, deLaCookie: dbUser, elegida } = await resolverSesion(user.id, activeClinicId);
+    const { deLaCookie: dbUser, elegida, dosFactoresEnAlguna } = await resolverSesion(user.id, activeClinicId);
 
     if (dbUser) {
       authDebug("log", "[AUTH-DEBUG getAuthContext] cookie OK", JSON.stringify({ picked: dbUser.clinicId }));
@@ -195,10 +195,11 @@ async function resolverAuthContext(opciones: { paraClaveDeSede?: boolean } = {})
     // middleware; ver @/lib/auth/two-factor-gate.
     //
     // EQ-02: `totpEnabled` es una columna de la FILA, y una persona tiene una
-    // fila por clínica: se pregunta a todas las suyas (ya leídas en `filas`).
+    // fila por clínica: se pregunta a todas las suyas, también las de sedes
+    // ARCHIVADAS (revisión ws1-t9, M1: el 2FA no se apaga porque se archive
+    // la sede donde se enroló; el gate falla cerrado).
     const enrolado =
-      !!(finalUser as { totpEnabled?: boolean | null }).totpEnabled ||
-      filas.some((f) => !!(f as { totpEnabled?: boolean | null }).totpEnabled);
+      !!(finalUser as { totpEnabled?: boolean | null }).totpEnabled || dosFactoresEnAlguna;
 
     const { decision } = await decidirDosPasos({
       supabaseId: finalUser.supabaseId,
