@@ -119,7 +119,9 @@ test("estado que no dice cómo terminó (ws1-t10): la cita ENTRA como «sin regi
   await correr(csv("c4.csv", texto), { dryRun: false });
   const v = tabla("migratedVisit")[0];
   assert.match(v.notes, /^Resultado: Sin registro de asistencia/);
-  assert.match(v.notes, /Estado en Dentalink: Notificado via email/);
+  // Este archivo entra SIN perfil (origin null = «Mi Excel» / «Otro»): la nota no puede decir «Dentalink» (ws1-t9).
+  assert.match(v.notes, /^Estado en el sistema anterior: Notificado via email$/m);
+  assert.doesNotMatch(v.notes, /Dentalink/);
   assert.equal(tabla("appointment").length, 0);
 });
 

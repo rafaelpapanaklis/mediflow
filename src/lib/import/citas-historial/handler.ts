@@ -32,7 +32,7 @@ import { cellText, oneLine, nombreOrigen, newId } from "../migrado";
 import { parseHora, horaLocalAUtc, textoLocal } from "../valores";
 import { loadPatientIndex, resolvePaymentPatient } from "../pagos-historial/paciente";
 import { TIPO_CITA_CONTROL_ORTO } from "@/lib/orthodontics/agenda-constants";
-import { elegirRecurso, esSobreagendamiento, notasDeCita, tipoParaCaso, visitaDeEstado, type EnlaceDeCita, type RecursoDeClinica } from "../dentalink/citas";
+import { elegirRecurso, esSobreagendamiento, lineaSillonOcupado, notasDeCita, tipoParaCaso, visitaDeEstado, type EnlaceDeCita, type RecursoDeClinica } from "../dentalink/citas";
 import { cargarOcupadas, cargarRecursos, leerDuracionDeCita, solapa, soltarConsultoriosQueChocan, tramoLocal } from "../dentalink/citas-agenda";
 import { cargarControlesOrto, claveControlCaso, diaLocal, guardarControlesOrto, limpiarId } from "../dentalink/control-ortodoncia";
 import { cargarEnlaces, enlaceDe, enlacesVacios, type Enlaces } from "../dentalink/enlace-tratamientos";
@@ -265,6 +265,7 @@ export const appointmentHistoryHandler: EntityHandler = {
         : null;
       const sobre = esSobreagendamiento(mapped.chair);
       const notes = notasDeCita({
+        origen: ctx.originName,
         resultado: visita.resultado,
         comentario: mapped.notes,
         observaciones: mapped.observations,
@@ -370,7 +371,7 @@ export const appointmentHistoryHandler: EntityHandler = {
       for (const r of aceptadas) {
         if (r.data.consultorioSoltado) {
           const chair = cellText(parciales.find((p) => p.pr === r)?.mapped.chair);
-          r.data.notes = [r.data.notes, chair ? `Sillón en Dentalink: ${chair} (no se asignó consultorio: estaba ocupado)` : null].filter(Boolean).join("\n");
+          r.data.notes = [r.data.notes, chair ? lineaSillonOcupado(chair, ctx.originName) : null].filter(Boolean).join("\n");
         }
       }
     }
