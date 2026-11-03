@@ -100,6 +100,13 @@ export async function POST(req: NextRequest) {
   if (!esPathDeLaClinica(storedPath, ctx.clinicId)) {
     return NextResponse.json({ error: "El archivo no es de esta clínica" }, { status: 400 });
   }
+  // m3 (revisión ws1-t2): y del MISMO paciente. Toda carpeta de archivos del paciente lleva su id como
+  // segmento (`<clinicId>/<patientId>/…`, `<clinicId>/models-3d/<patientId>/…`, `…/orthodontics/<patientId>/…`,
+  // `…/dicom-sets/<patientId>/…`). Sin esto, quien sube fotos podía atar a un paciente que ve el archivo de
+  // otro paciente —oculto para él, o sin «Ver radiografías»— y el 201 le devolvía la URL firmada.
+  if (!storedPath!.split("/").slice(1).includes(String(patientId))) {
+    return NextResponse.json({ error: "El archivo no es de este paciente" }, { status: 400 });
+  }
 
   // Verify patient belongs to clinic
   const patient = await prisma.patient.findFirst({

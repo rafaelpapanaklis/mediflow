@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { PatientPortalClient } from "./portal-client";
 import { dateISOInTz, timeHHMMInTz, durationMinutes } from "@/lib/agenda/legacy-helpers";
 import { signMaybeUrls } from "@/lib/storage";
+import { soloDeSuClinica } from "@/lib/storage-paths";
 import type { Metadata } from "next";
 
 interface Props { params: Promise<{ token: string }> }
@@ -72,7 +73,7 @@ export default async function PatientPortalPage(props: Props) {
         orderBy: { createdAt: "desc" },
         take: 20,
         select: {
-          id: true, name: true, url: true, category: true,
+          id: true, name: true, url: true, category: true, clinicId: true,
           mimeType: true, createdAt: true, notes: true, takenAt: true,
         },
       },
@@ -104,8 +105,10 @@ export default async function PatientPortalPage(props: Props) {
 
   // El bucket patient-files es privado: las URLs guardadas se firman
   // on-demand con TTL corto (como /api/consent), todas en UN round-trip.
+  // Auditoría cloudflare (v2-m1): solo se firma lo que vive bajo la carpeta de la clínica de la fila; una
+  // fila plantada antes del arreglo con `cB/…` o `signatures/cB/…` sale vacía en vez de firmada.
   const signed = await signMaybeUrls([
-    ...patient.files.map((f) => f.url),
+    ...patient.files.map((f) => soloDeSuClinica(f.url, f.clinicId)),
     ...patient.consentForms.map((c) => c.signatureUrl),
   ]);
   const fileUrls = signed.slice(0, patient.files.length);

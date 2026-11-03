@@ -7,6 +7,7 @@ import { assertPatientVisible } from "@/lib/patient-visibility";
 import { ownPrivateRecordsOnly } from "@/lib/branches";
 import { logRead, extractAuditMeta } from "@/lib/audit";
 import { signMaybeUrls, BUCKETS } from "@/lib/storage";
+import { extractStoragePath, soloDeSuClinica } from "@/lib/storage-paths";
 import { consentTimeZone } from "@/lib/consent/dates";
 import { leerOrtodonciaDelExpediente } from "@/lib/orthodontics/expediente-ortodoncia-db";
 import { buildSignatureBlocks } from "@/lib/consent/signers";
@@ -338,6 +339,7 @@ export async function GET(req: NextRequest, props0: Params) {
       orderBy: { createdAt: "asc" },
       select: {
         name: true,
+        clinicId: true,
         url: true,
         category: true,
         mimeType: true,
@@ -972,6 +974,7 @@ function esImagenIncrustable(mimeType: string | null | undefined): boolean {
 type FilaArchivo = {
   name: string;
   url: string;
+  clinicId: string;
   category: string;
   mimeType: string | null;
   size: number | null;
@@ -1032,6 +1035,13 @@ async function armarEstudios(
     }
     if ((f.size ?? 0) > presupuesto) {
       base[i].motivoSinImagen = `se alcanzó el tope de ${pesoLegible(MAX_BYTES_IMAGENES)} de imágenes por documento`;
+      continue;
+    }
+    // Auditoría cloudflare (v2-m1): solo se incrusta un objeto del BUCKET bajo la carpeta de la clínica
+    // de la fila. Una fila plantada con un path de otra clínica no se firma, y una URL externa no se baja
+    // (el servidor haría el `fetch` a donde diga la fila: SSRF ciego). Las que sube la app son paths.
+    if (!extractStoragePath(f.url) || !soloDeSuClinica(f.url, f.clinicId)) {
+      base[i].motivoSinImagen = "el archivo no está en la carpeta de la clínica";
       continue;
     }
     cupo--;

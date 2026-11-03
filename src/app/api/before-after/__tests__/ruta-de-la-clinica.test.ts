@@ -110,3 +110,24 @@ test("nº1: esPathDeLaClinica", async () => {
   }
   assert.equal(esPathDeLaClinica("cA/x.jpg", ""), false, "sin clínica, nada");
 });
+
+test("m3: un archivo de OTRO paciente de la misma clínica no se ata a éste (400 y nada firmado)", async () => {
+  const bucket = "https://proyecto.supabase.co/storage/v1/object/public/patient-files";
+  for (const url of [
+    "cA/pB/1_x.jpg",
+    "cA/models-3d/pB/arcada.jpg",
+    `${bucket}/cA/orthodontics/pB/frontal.jpg`,
+    "cA/pB/pA.jpg", // el id como nombre de archivo no cuenta: tiene que ser una carpeta del paciente
+  ]) {
+    const r = await post(url);
+    assert.equal(r.status, 400, `${url} → ${r.status}`);
+  }
+  assert.deepEqual(firmados, []);
+  assert.equal(filas.length, 0);
+});
+
+test("m3: las carpetas legítimas del paciente siguen valiendo", async () => {
+  for (const url of ["cA/pA/1_foto.jpg", "cA/models-3d/pA/arcada.jpg", "cA/orthodontics/pA/frontal.jpg", "cA/dicom-sets/pA/x.jpg", "cA/pA/ortho-monitoreo/1.jpg"]) {
+    assert.equal((await post(url)).status, 201, url);
+  }
+});
