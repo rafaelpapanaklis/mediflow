@@ -13,6 +13,7 @@
 import type Stripe from "stripe";
 import { PLAN_UPGRADE_DIFF_KIND } from "@/lib/billing/proration";
 import type { AvisoAdmin } from "@/lib/billing/avisos-admin";
+import { prisma } from "@/lib/prisma";
 
 const DAY_MS = 86_400_000;
 
@@ -91,4 +92,33 @@ export function avisoDiferencialDescartado(a: {
       "Qué hacer: revisa el pago en Stripe y, si procede, devuélvelo a la clínica (o aplícale el plan a mano desde /admin).",
     ],
   };
+}
+
+// ── Marca «este diferencial YA se aplicó» (revisión t8, m3) ─────────────────
+// Va en billing_email_logs (`invoiceId` ÚNICO, la misma tabla que el candado de
+// los avisos; sin SQL). Distingue a Stripe reenviando una sesión ya aplicada
+// (silencio) de un SEGUNDO voucher pagado del mismo upgrade (dinero cobrado dos
+// veces → aviso).
+
+const claveAplicado = (sessionId: string) => `${sessionId}:diferencial_aplicado`;
+
+/** Deja la marca de la sesión aplicada. Nunca lanza: sin marca solo se pierde silenciar un reenvío. */
+export async function marcarDiferencialAplicado(sessionId: string | null | undefined, clinicId: string): Promise<void> {
+  if (!sessionId) return;
+  try {
+    await prisma.billingEmailLog.create({ data: { invoiceId: claveAplicado(sessionId), clinicId, kind: "diferencial_aplicado", email: "" } });
+  } catch (e) {
+    const code = (e as { code?: string } | null)?.code;
+    if (code !== "P2002") console.error("[billing] no se pudo marcar el diferencial aplicado:", sessionId, code ?? e);
+  }
+}
+
+/** ¿Esta sesión del diferencial ya se aplicó? Si no se puede leer, false: ante la duda, se avisa. */
+export async function diferencialYaAplicado(sessionId: string | null | undefined): Promise<boolean> {
+  if (!sessionId) return false;
+  try {
+    return !!(await prisma.billingEmailLog.findUnique({ where: { invoiceId: claveAplicado(sessionId) }, select: { id: true } }));
+  } catch {
+    return false;
+  }
 }

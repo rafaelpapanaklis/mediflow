@@ -43,7 +43,7 @@ import {
   manualPaidUntil,
   subscriptionPeriodFields,
 } from "@/lib/billing/proration";
-import { avisoDiferencialDescartado, expirarDiferencialesAbiertos, finDelPeriodoCotizado } from "@/lib/billing/diferencial-vigente";
+import { avisoDiferencialDescartado, diferencialYaAplicado, expirarDiferencialesAbiertos, finDelPeriodoCotizado, marcarDiferencialAplicado } from "@/lib/billing/diferencial-vigente";
 import { avisarAdminUnaVez } from "@/lib/billing/aviso-admin-envio.server";
 import { estadoDeSuscripcionAEscribir } from "@/lib/billing/estado-suscripcion";
 import { recordStripeInvoice } from "@/lib/billing/record-stripe-invoice";
@@ -1285,8 +1285,10 @@ async function applyPlanUpgradeDiff(
   // pero un SEGUNDO voucher pagado por el mismo upgrade también — ahí sí hay
   // dinero cobrado dos veces. La fila de bitácora es la que permite detectarlo.
   if (!isPlanTierUpgrade(before.plan, plan)) {
-    // Ya en ESE plan: casi siempre es Stripe reenviando un diferencial ya aplicado → sin aviso (no hay nada que devolver).
-    await drop("not-a-tier-upgrade", { currentPlan: before.plan }, before.plan !== plan);
+    // Ya en ESE plan: si es ESTA sesión ya aplicada (Stripe la reenvía) → sin aviso; si es OTRA sesión, es un segundo
+    // voucher del mismo upgrade, cobrado dos veces → aviso (revisión t8, m3).
+    const reenvio = before.plan === plan && (await diferencialYaAplicado(source.sessionId));
+    await drop("not-a-tier-upgrade", { currentPlan: before.plan }, !reenvio);
     return;
   }
 
@@ -1322,9 +1324,13 @@ async function applyPlanUpgradeDiff(
     data: { plan, aiTokensLimit: limits.aiTokensDefault },
   });
   if (count === 0) {
+    // ¿La otra escritura fue OTRA entrega de esta misma sesión, que ya aplicó el plan? Entonces no hay nada que avisar.
+    const ahora = await prisma.clinic.findUnique({ where: { id: clinicId }, select: { plan: true } });
+    if (ahora?.plan === plan && (await diferencialYaAplicado(source.sessionId))) return;
     await drop("period-changed", { concurrentWrite: true });
     return;
   }
+  await marcarDiferencialAplicado(source.sessionId, clinicId);
   await sincronizarSedesIncluidas(clinicId);
 
   await logAudit({

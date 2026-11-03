@@ -50,8 +50,8 @@ export class SpeiError extends Error {
   }
 }
 
-/** P2021 / P2010 (42P01): la tabla aún no existe → el SQL no se ha pegado. */
-function esTablaInexistente(err: unknown): boolean {
+/** P2021 / P2010 (42P01): la tabla aún no existe → el SQL no se ha pegado. También lo usa manual-upgrade.ts. */
+export function esTablaInexistente(err: unknown): boolean {
   const e = err as { code?: string; message?: string; meta?: { code?: string } } | null;
   return (
     e?.code === "P2021" ||

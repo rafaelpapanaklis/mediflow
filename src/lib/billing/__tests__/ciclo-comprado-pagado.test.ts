@@ -31,6 +31,8 @@ let clienteStripe: string | null;
 let llamadasStripe: number;
 let stripeFalla: boolean;
 let reloj: number;
+let consultasSpei: number;
+let errorSpei: Error | null;
 
 const prismaDoble: any = {
   auditLog: {
@@ -45,6 +47,8 @@ const prismaDoble: any = {
   },
   speiTransferRequest: {
     findFirst: async ({ where, orderBy }: any) => {
+      consultasSpei++;
+      if (errorSpei) throw errorSpei;
       assert.equal(where.clinicId, CLINIC, "las transferencias se leen SOLO de la clínica");
       const f = spei.filter((x) => x.clinicId === where.clinicId && x.status === where.status && x.resolvedAt);
       if (orderBy?.resolvedAt === "desc") f.sort((a, b) => b.resolvedAt!.getTime() - a.resolvedAt!.getTime());
@@ -113,7 +117,15 @@ beforeEach(() => {
   llamadasStripe = 0;
   stripeFalla = false;
   reloj = Math.floor(Date.UTC(2026, 9, 1) / 1000);
+  consultasSpei = 0;
+  errorSpei = null;
+  // La ausencia de la tabla de SPEI directo se recuerda en globalThis: cada prueba empieza sin ese recuerdo.
+  delete (globalThis as Record<symbol, unknown>)[Symbol.for("dalecontrol.spei-directo.sin-tabla")];
 });
+
+/** El error que da Prisma cuando `sql/spei-transferencia-directa.sql` no está pegado. */
+const sinTablaSpei = () =>
+  Object.assign(new Error("The table `public.spei_transfer_requests` does not exist in the current database."), { code: "P2021" });
 
 /**
  * Un checkout del plan: la sesión en Stripe y la fila que /api/billing/checkout deja en la bitácora al crearla.
@@ -216,4 +228,37 @@ test("si Stripe no contesta: null, no se adivina", async () => {
 
 test("sin clinicId no se lee nada (Prisma descartaría el filtro)", async () => {
   assert.equal(await inferManualInterval(""), null);
+});
+
+// ── v3 (delta t8, M3): la tabla de SPEI directo es OPCIONAL ──
+
+test("M3 (caso 3 de t8): sin la tabla de SPEI directo, la compra mensual pagada en Stripe sigue mandando", async () => {
+  checkout("cs_pagada_mensual", "monthly", "pagada");
+  errorSpei = sinTablaSpei();
+  assert.equal(await inferManualInterval(CLINIC), "month");
+  const precios = { currentPlan: { priceMxn: 419, priceMxnAnnual: 3264 }, targetPlan: { priceMxn: 1489, priceMxnAnnual: 11614 } };
+  const now = new Date("2026-11-02T12:00:00Z");
+  const q = computeManualUpgradeQuote({ interval: await inferManualInterval(CLINIC), paidUntil: new Date(now.getTime() + 30 * 86_400_000), now, ...precios });
+  assert.equal(q.diffCents, 107000);
+});
+
+test("M3: también con el 42P01 crudo de Postgres", async () => {
+  checkout("cs_pagada_anual", "annual", "pagada");
+  errorSpei = Object.assign(new Error('relation "spei_transfer_requests" does not exist'), { code: "P2010", meta: { code: "42P01" } });
+  assert.equal(await inferManualInterval(CLINIC), "year");
+});
+
+test("M3: la ausencia se recuerda: la siguiente cotización no vuelve a consultar la tabla (no llena los logs de Postgres)", async () => {
+  checkout("cs_pagada_mensual", "monthly", "pagada");
+  errorSpei = sinTablaSpei();
+  await inferManualInterval(CLINIC);
+  await inferManualInterval(CLINIC);
+  await inferManualInterval(CLINIC);
+  assert.equal(consultasSpei, 1);
+});
+
+test("M3: otro error al leer SPEI directo (no «tabla inexistente») → null, como antes: no se adivina", async () => {
+  checkout("cs_pagada_mensual", "monthly", "pagada");
+  errorSpei = Object.assign(new Error("Timed out fetching a new connection from the connection pool"), { code: "P2024" });
+  assert.equal(await inferManualInterval(CLINIC), null);
 });

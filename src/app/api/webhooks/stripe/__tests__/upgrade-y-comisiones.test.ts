@@ -36,6 +36,7 @@ let disputas: any[];
 let idEvento = 0;
 let avisosAdmin: Array<{ clave: string; clinicId: string; aviso: any }>;
 let antesDeEscribirElPlan: null | (() => void);
+let registrosCorreo: Map<string, any>;
 
 function coincide(fila: any, where: any): boolean {
   return Object.entries(where ?? {}).every(([k, v]: [string, any]) => {
@@ -76,6 +77,15 @@ const prismaBase: any = {
       );
       return { count: filas.length };
     },
+  },
+  // billing_email_logs: `invoiceId` es ÚNICO (el candado de avisos y de la marca «diferencial aplicado»).
+  billingEmailLog: {
+    create: async ({ data }: any) => {
+      if (registrosCorreo.has(data.invoiceId)) throw Object.assign(new Error("Unique constraint failed"), { code: "P2002" });
+      registrosCorreo.set(data.invoiceId, { ...data });
+      return data;
+    },
+    findUnique: async ({ where }: any) => registrosCorreo.get(where.invoiceId) ?? null,
   },
   affiliateCommission: {
     findMany: async ({ where }: any) => comisiones.filter((c) => coincide(c, where)).map((c) => ({ ...c })),
@@ -249,6 +259,7 @@ beforeEach(() => {
   idEvento = 0;
   avisosAdmin = [];
   antesDeEscribirElPlan = null;
+  registrosCorreo = new Map();
 });
 
 const clinica = () => clinicas.get(CLINIC);
@@ -365,6 +376,35 @@ test("m1: Stripe reenvía un diferencial YA aplicado: no hay aviso falso de «pa
   await entregar("checkout.session.async_payment_succeeded", sesionDiff({}, { paidUntil: MANANA.toISOString() }));
   assert.equal(clinica().plan, "CLINIC");
   assert.equal(avisosAdmin.length, 0);
+});
+
+// ── v3 (delta t8, m3) ─────────────────────────────────────────────────────
+
+test("m3: un SEGUNDO voucher pagado del mismo upgrade (otra sesión) avisa: es dinero cobrado dos veces", async () => {
+  await entregar("checkout.session.async_payment_succeeded", sesionDiff({}, { paidUntil: MANANA.toISOString() }));
+  assert.equal(clinica().plan, "CLINIC");
+  await entregar("checkout.session.async_payment_succeeded", sesionDiff({ id: "cs_diff_2" }, { paidUntil: MANANA.toISOString() }));
+  assert.equal(avisosAdmin.length, 1);
+  assert.equal(avisosAdmin[0].clave, "cs_diff_2:diferencial_descartado");
+});
+
+test("m3: al aplicar queda la marca «<sesión>:diferencial_aplicado» en billing_email_logs", async () => {
+  await entregar("checkout.session.async_payment_succeeded", sesionDiff({}, { paidUntil: MANANA.toISOString() }));
+  assert.ok(registrosCorreo.has("cs_diff:diferencial_aplicado"));
+  assert.equal(registrosCorreo.get("cs_diff:diferencial_aplicado").clinicId, CLINIC);
+});
+
+test("m3: dos entregas SIMULTÁNEAS de la misma sesión: la que pierde la escritura no manda un «pagado y no aplicado» falso", async () => {
+  // Mientras esta entrega va entre su lectura y su escritura, la otra entrega del MISMO evento aplica el plan.
+  antesDeEscribirElPlan = () => {
+    clinica().plan = "CLINIC";
+    clinica().aiTokensLimit = 90000;
+    registrosCorreo.set("cs_diff:diferencial_aplicado", { invoiceId: "cs_diff:diferencial_aplicado", clinicId: CLINIC });
+  };
+  assert.equal(await entregar("checkout.session.async_payment_succeeded", sesionDiff({}, { paidUntil: MANANA.toISOString() })), 200);
+  assert.equal(clinica().plan, "CLINIC");
+  assert.equal(avisosAdmin.length, 0);
+  assert.equal(bitacora.filter((b) => b.changes?._source?.after?.result === "not_applied").length, 0);
 });
 
 test("m2: si la renovación se escribe ENTRE la lectura y la escritura del diferencial, el plan alto no cae sobre el periodo nuevo", async () => {

@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
 import { getStripeSafe } from "@/lib/stripe";
+import { esTablaInexistente } from "@/lib/billing/spei-directo";
 import {
   computeManualUpgradeQuote,
   pickPurchasedInterval,
@@ -47,6 +48,34 @@ type PlanPrices = { priceMxn: number; priceMxnAnnual: number };
  * Si Stripe no contesta → null (y el cobro del diferencial, que también va por
  * Stripe, no se puede crear).
  */
+/**
+ * `spei_transfer_requests` es OPCIONAL (la crea sql/spei-transferencia-directa.sql). Sin ella, SPEI directo no
+ * aporta dato y manda Stripe: antes la lectura iba en el mismo `try` y su error tiraba también la compra pagada
+ * de Stripe → null → se cobraba el ciclo menor a TODAS las clínicas (revisión t8, M3). La ausencia se recuerda en
+ * globalThis (sobrevive a las recargas de `next dev`) para no repetir la consulta fallida en cada cotización, que
+ * deja un error en los logs de Postgres. Cualquier otro error SÍ lanza (y la cotización cae a null, como antes).
+ */
+const SIN_TABLA_SPEI = Symbol.for("dalecontrol.spei-directo.sin-tabla");
+/** Cada cuánto se vuelve a probar si ya se pegó el SQL. Técnico, no de negocio. */
+const REPROBAR_TABLA_SPEI_MS = 10 * 60_000;
+
+async function ultimaTransferenciaConfirmada(clinicId: string): Promise<{ billing: string; resolvedAt: Date | null } | null> {
+  const g = globalThis as Record<symbol, number | undefined>;
+  const hasta = g[SIN_TABLA_SPEI];
+  if (hasta && hasta > Date.now()) return null;
+  try {
+    return await prisma.speiTransferRequest.findFirst({
+      where: { clinicId, status: "confirmed", resolvedAt: { not: null } },
+      orderBy: { resolvedAt: "desc" },
+      select: { billing: true, resolvedAt: true },
+    });
+  } catch (e) {
+    if (!esTablaInexistente(e)) throw e;
+    g[SIN_TABLA_SPEI] = Date.now() + REPROBAR_TABLA_SPEI_MS;
+    return null;
+  }
+}
+
 export async function inferManualInterval(clinicId: string): Promise<BillingInterval | null> {
   // Sin clinicId, Prisma DESCARTA el filtro y leería datos de otras clínicas.
   if (!clinicId) return null;
@@ -77,11 +106,7 @@ export async function inferManualInterval(clinicId: string): Promise<BillingInte
       }
     }
 
-    const transferencia = await prisma.speiTransferRequest.findFirst({
-      where: { clinicId, status: "confirmed", resolvedAt: { not: null } },
-      orderBy: { resolvedAt: "desc" },
-      select: { billing: true, resolvedAt: true },
-    });
+    const transferencia = await ultimaTransferenciaConfirmada(clinicId);
     const cicloSpei = transferencia ? pickPurchasedInterval([{ _created: { after: { billing: transferencia.billing } } }]) : null;
     const porSpei = cicloSpei && transferencia?.resolvedAt ? { en: transferencia.resolvedAt.getTime(), ciclo: cicloSpei } : null;
 
