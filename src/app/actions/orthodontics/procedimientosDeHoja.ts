@@ -201,6 +201,8 @@ export async function cobrarProcedimientoDeHoja(input: {
           invoiceNumber = huerfana.invoiceNumber;
           yaExistia = true;
         } else {
+          // ws1-t11 v4: con el `tx`: la factura nace DENTRO de esta transacción (antes quedaba fuera y
+          // ocupaba otra conexión del pooler mientras esta seguía abierta).
           const factura = await crearFacturaDesdeCita({
             clinicId: ctx.clinicId,
             appointmentId: null,
@@ -208,13 +210,13 @@ export async function cobrarProcedimientoDeHoja(input: {
             lineItems: [{ description: linea.name, unitPrice: linea.unitPrice, quantity: linea.quantity }],
             notes: notaDeFacturaDeExtra(card.id, linea, card.cardNumber),
             userId: ctx.userId,
-          });
+          }, tx);
           if (!factura.ok || !factura.invoice) return { error: "No se pudo crear la factura del extra. Inténtalo de nuevo o cóbralo con «Cobrar extra»." } as const;
           invoiceId = factura.invoice.id;
           invoiceNumber = factura.invoice.invoiceNumber;
         }
 
-        await vincularExtraAlCaso({ invoiceId, treatmentPlanId: card.treatmentPlanId, clinicId: ctx.clinicId });
+        await vincularExtraAlCaso({ invoiceId, treatmentPlanId: card.treatmentPlanId, clinicId: ctx.clinicId }, tx);
 
         const nuevas = lineas.map((l) =>
           l.procedureId === linea.procedureId ? { ...l, invoiceId, invoiceNumber, facturadoAt: new Date().toISOString() } : l,

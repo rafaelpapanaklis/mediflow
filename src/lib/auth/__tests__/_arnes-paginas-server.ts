@@ -129,6 +129,11 @@ export function preparar(opciones: {
     const abs = resolve(raiz, pagina);
     for (const imp of importsDe(abs)) {
       if (opciones.reales.includes(imp.especificador)) continue;
+      // También por ruta de archivo («src/...»): dos «./_helpers» de carpetas distintas no son el mismo.
+      if (imp.especificador.startsWith(".")) {
+        const rel = resolve(dirname(abs), imp.especificador).slice(raiz.length + 1);
+        if (opciones.reales.some((r) => r.startsWith("src/") && (r === rel || r === rel + ".ts" || r === rel + ".tsx"))) continue;
+      }
       let url = imp.especificador;
       // «./x», «../x» y «@/lib/x» pueden ser el MISMO archivo: se agrupan por su ruta real.
       if (url.startsWith(".") || url.startsWith("@/")) {

@@ -5,6 +5,7 @@
 // `clinicId: undefined` no filtraría).
 
 import { prisma } from "@/lib/prisma";
+import { conPuntoDeGuardado, type ClienteDb } from "@/lib/db/punto-de-guardado";
 import { ATIENDE_WHERE } from "@/lib/agenda/roles-que-atienden";
 import { hoyEnZona, inicioDelDiaEnZona } from "@/lib/inventory/fecha-calendario";
 import { diaSiguiente, elegirDoctorDeFactura, unicoDoctor, type DoctorDeFactura } from "./doctor-de-factura";
@@ -32,25 +33,30 @@ export interface ArgsDoctorDeFactura {
  * la lista de «Nueva factura»); si no, nace sin doctor.
  * Consultas: 1 (cita ligada) o hasta 4 (citas de hoy, planes en paralelo y la validación).
  */
-export async function doctorDeFacturaNueva(args: ArgsDoctorDeFactura): Promise<DoctorDeFactura> {
+export async function doctorDeFacturaNueva(
+  args: ArgsDoctorDeFactura,
+  // ws1-t11 v4: el `tx` de quien llama, si está en una transacción. El punto de guardado hace que un
+  // fallo de esta lectura (que aquí se traga a propósito) no deje abortada esa transacción.
+  db: ClienteDb = prisma,
+): Promise<DoctorDeFactura> {
   // El doctor es atribución para reportes: si su lectura falla, la factura nace sin doctor
   // (como antes) en vez de no nacer.
   try {
-    return await leerDoctorDeFactura(args);
+    return await conPuntoDeGuardado(db, () => leerDoctorDeFactura(args, db));
   } catch (err) {
     console.warn("[facturas] no se pudo heredar el doctor de la factura:", (err as Error)?.message ?? err);
     return { doctorId: null, origen: "ninguno" };
   }
 }
 
-async function leerDoctorDeFactura(args: ArgsDoctorDeFactura): Promise<DoctorDeFactura> {
+async function leerDoctorDeFactura(args: ArgsDoctorDeFactura, db: ClienteDb): Promise<DoctorDeFactura> {
   const { clinicId, patientId } = args;
   if (args.pedido !== undefined) return elegirDoctorDeFactura(args.pedido, {});
   if (!clinicId || !patientId) return { doctorId: null, origen: "ninguno" };
 
   let propuesta: DoctorDeFactura;
   if (args.appointmentId) {
-    const cita = await prisma.appointment.findFirst({
+    const cita = await db.appointment.findFirst({
       // La cita tiene que ser del MISMO paciente (doctor-sugerido la recibe del cliente).
       where: { id: args.appointmentId, clinicId, patientId },
       select: { doctorId: true },
@@ -63,7 +69,7 @@ async function leerDoctorDeFactura(args: ArgsDoctorDeFactura): Promise<DoctorDeF
     const desde = inicioDelDiaEnZona(hoy, args.timezone);
     const hasta = inicioDelDiaEnZona(diaSiguiente(hoy), args.timezone);
     const citasDeHoy = desde && hasta
-      ? await prisma.appointment.findMany({
+      ? await db.appointment.findMany({
           where: { clinicId, patientId, startsAt: { gte: desde, lt: hasta }, status: { notIn: ["CANCELLED", "NO_SHOW"] } },
           select: { doctorId: true },
           take: 20,
@@ -79,13 +85,13 @@ async function leerDoctorDeFactura(args: ArgsDoctorDeFactura): Promise<DoctorDeF
       // TEXT y Prisma lo compara como su enum (`text = "TreatmentStatus"`, error 42883). Lo cazó la
       // QA de ws1-t2 contra la clínica de prueba; leer el valor sí funciona.
       const [planes, casos] = await Promise.all([
-        prisma.treatmentPlan.findMany({
+        db.treatmentPlan.findMany({
           where: { clinicId, patientId },
           select: { doctorId: true, status: true },
           orderBy: { startDate: "desc" },
           take: 50,
         }),
-        prisma.orthodonticTreatmentPlan.findMany({
+        db.orthodonticTreatmentPlan.findMany({
           where: { clinicId, patientId, deletedAt: null, treatingDoctorId: { not: null } },
           select: { treatingDoctorId: true, status: true },
           take: 20,
@@ -99,13 +105,13 @@ async function leerDoctorDeFactura(args: ArgsDoctorDeFactura): Promise<DoctorDeF
       // C-07: sin plan que lo diga, el doctor de cabecera del paciente.
       const cabecera = unicoDoctor(pistasPlan)
         ? null
-        : (await prisma.patient.findFirst({ where: { id: patientId, clinicId }, select: { primaryDoctorId: true } }))?.primaryDoctorId ?? null;
+        : (await db.patient.findFirst({ where: { id: patientId, clinicId }, select: { primaryDoctorId: true } }))?.primaryDoctorId ?? null;
       propuesta = elegirDoctorDeFactura(undefined, { planes: pistasPlan, cabecera });
     }
   }
 
   if (!propuesta.doctorId) return propuesta;
-  const atiende = await prisma.user.findFirst({
+  const atiende = await db.user.findFirst({
     where: { id: propuesta.doctorId, clinicId, ...ATIENDE_WHERE },
     select: { id: true },
   });

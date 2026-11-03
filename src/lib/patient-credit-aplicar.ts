@@ -28,6 +28,7 @@
 
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { conPuntoDeGuardado, esTransaccion, type ClienteDb } from "@/lib/db/punto-de-guardado";
 import { round2 } from "@/lib/quotes/compute";
 import {
   APLICAR_SALDO_DESDE,
@@ -45,7 +46,10 @@ import {
 import { REEMBOLSO_A_SALDO_A_FAVOR } from "@/lib/dinero/reembolsos";
 
 type Tx = Prisma.TransactionClient;
-type Db = Pick<typeof prisma, "$transaction">;
+// ws1-t11 v4: también el `tx` de una transacción interactiva que ya abrió quien llama
+// (crear una factura dentro de otra transacción): entonces se aplica en ESA, con un
+// punto de guardado para que un fallo de aquí (que se traga a propósito) no la aborte.
+type Db = Pick<typeof prisma, "$transaction"> | Prisma.TransactionClient;
 
 export interface ResultadoAplicacion {
   /** Lo que se descontó de la factura (0 si no había saldo o no aplicaba). */
@@ -116,7 +120,11 @@ export async function aplicarSaldoAFavor(
 ): Promise<ResultadoAplicacion> {
   if (!args.clinicId || !args.invoiceId) return NADA("faltan datos");
   try {
-    return await db.$transaction((tx) => aplicarEnTx(tx, args));
+    if (esTransaccion(db as ClienteDb)) {
+      const tx = db as Prisma.TransactionClient;
+      return await conPuntoDeGuardado(tx, () => aplicarEnTx(tx, args));
+    }
+    return await (db as Pick<typeof prisma, "$transaction">).$transaction((tx) => aplicarEnTx(tx, args));
   } catch (e) {
     if (faltaLaTabla(e)) return NADA("patient_credits sin las columnas nuevas (falta aplicar el SQL)");
     if (chocaConUnaAplicacionPorFactura(e)) {

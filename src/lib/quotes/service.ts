@@ -3,6 +3,7 @@
 
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { conPuntoDeGuardado, type ClienteDb } from "@/lib/db/punto-de-guardado";
 import { MAX_INVOICE_FOLIO_DIGITS } from "@/lib/invoices/next-invoice-number-core";
 import { computeTotals, formatFolio } from "./compute";
 import type { QuoteItemInput } from "./types";
@@ -30,6 +31,7 @@ function sanitizeFdi(s?: string | null): string | null {
 export async function sanitizeItems(
   clinicId: string,
   rawItems: QuoteItemInput[],
+  db: ClienteDb = prisma,
 ): Promise<QuoteItemInput[]> {
   const items = Array.isArray(rawItems) ? rawItems : [];
   const ids = Array.from(
@@ -37,7 +39,7 @@ export async function sanitizeItems(
   );
   let validIds = new Set<string>();
   if (ids.length > 0) {
-    const found = await prisma.procedureCatalog.findMany({
+    const found = await db.procedureCatalog.findMany({
       where: { clinicId, id: { in: ids } },
       select: { id: true },
     });
@@ -81,8 +83,8 @@ function buildItemsData(items: ReturnType<typeof computeTotals>["items"]): any[]
  * compara como NÚMERO; el filtro por longitud evita que un folio absurdo
  * reviente el CAST (22003). Tabla física: "quotes" (@@map del modelo Quote).
  */
-async function lastQuoteFolio(clinicId: string): Promise<number | null> {
-  const rows = await prisma.$queryRaw<{ max: bigint | number | null }[]>`
+async function lastQuoteFolio(clinicId: string, db: ClienteDb = prisma): Promise<number | null> {
+  const rows = await db.$queryRaw<{ max: bigint | number | null }[]>`
     SELECT MAX(CAST(digits AS BIGINT)) AS max
     FROM (
       SELECT substring("folio" from '([0-9]+)[^0-9]*$') AS digits
@@ -129,8 +131,12 @@ export async function createQuoteWithFolio(args: {
   notes: string | null;
   /** Plan de tratamiento del que nace (ws1-t3, «Convertir en presupuesto»); lo valida quien llama. */
   treatmentPlanId?: string | null;
-}) {
-  const sanitized = await sanitizeItems(args.clinicId, args.items);
+},
+  // ws1-t11 v4: el `tx` de quien llama si ya está dentro de una transacción (presentar el plan, con el
+  // plan bloqueado). Sin él, el cliente global, como siempre.
+  db: ClienteDb = prisma,
+) {
+  const sanitized = await sanitizeItems(args.clinicId, args.items, db);
   const totals = computeTotals(sanitized, {
     discountPct: args.discountPct,
     discountAmount: args.discountAmount,
@@ -138,9 +144,10 @@ export async function createQuoteWithFolio(args: {
   const itemsData = buildItemsData(totals.items);
 
   for (let attempt = 0; attempt < 8; attempt++) {
-    const folio = formatFolio(((await lastQuoteFolio(args.clinicId)) ?? 0) + 1);
+    const folio = formatFolio(((await lastQuoteFolio(args.clinicId, db)) ?? 0) + 1);
     try {
-      return await prisma.quote.create({
+      // En una transacción, cada intento va en su punto de guardado: un P2002 del folio no la aborta.
+      return await conPuntoDeGuardado(db, () => db.quote.create({
         data: {
           clinicId: args.clinicId,
           patientId: args.patientId,
@@ -157,7 +164,7 @@ export async function createQuoteWithFolio(args: {
           items: { create: itemsData },
         },
         include: QUOTE_INCLUDE,
-      });
+      }));
     } catch (e) {
       // Solo la carrera de folio se reintenta (recalculando el MAX); cualquier
       // otro error —incluido un P2002 de otro índice con target— se propaga.

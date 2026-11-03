@@ -143,6 +143,7 @@
     "test:chat-solo-aprobados": "tsx --test --experimental-test-module-mocks src/lib/laboratorios/__tests__/chat-solo-aprobados.test.ts",
     "test:orto-plan-visible": "tsx --test --experimental-test-module-mocks src/app/actions/orthodontics/__tests__/plan-visible.test.ts",
     "test:admin-con-override": "tsx --test --experimental-test-module-mocks src/lib/auth/__tests__/admin-con-override.test.ts",
+    "test:tx-sin-cliente-global": "tsx --test --experimental-test-module-mocks src/lib/db/__tests__/tx-sin-cliente-global.test.ts",
     "test:sede-clave": "tsx --test --experimental-test-module-mocks src/lib/sede-clave/__tests__/sede-clave.test.ts src/lib/sabina/tools/__tests__/comparar-sedes-clave.test.ts src/app/api/clinics/__tests__/copia-sede-con-clave.test.ts src/lib/admin/__tests__/audit-sedes-ajenas.test.ts",
     "test:barreras-ipad": "tsx --test src/lib/auth/__tests__/barreras-ipad.test.ts",
     "test:patient-visibility": "tsx --test src/lib/__tests__/patient-visibility.test.ts",

@@ -176,7 +176,8 @@ export async function setPrimaryGuardian(args: { guardianId: string }): Promise<
       where: { id: guardian.id },
       data: { principal: true },
     });
-    const record = await ensurePediatricRecord({ ctx, patientId: guardian.patientId });
+    // ws1-t11 v4: dentro de la transacción, con su `tx` (antes, el cliente global: otra conexión y fuera de la tx).
+    const record = await ensurePediatricRecord({ ctx, patientId: guardian.patientId }, tx);
     await tx.pediatricRecord.update({
       where: { id: record.id },
       data: { primaryGuardianId: guardian.id },
