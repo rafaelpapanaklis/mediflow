@@ -938,3 +938,27 @@ test("🔴 cerrar plan con un CFDI POR PAGO vigente en la nota: 409 CFDI_POR_PAG
     cfdiPago._olvidarColumnaCfdiPago();
   }
 });
+
+// Revisión t5 (m5): un CFDI por pago «apartado» (Facturapi lo está timbrando ahora mismo) también bloquea:
+// si no, el plan se cerraba en esos segundos y luego el CFDI quedaba `valid` con el dinero ya en saldo a favor.
+test("🔴 cerrar plan mientras se timbra un CFDI POR PAGO («apartado»): 409 y no se toca nada", async (t) => {
+  if (salta(t)) return;
+  await usar();
+  const cfdiPago = await import("@/lib/invoices/cfdi-pago-db");
+  try {
+    const { planId, notaId } = await planAceptado();
+    const pagoId = await pagar(notaId, 1000);
+    await base.db.exec(`CREATE TABLE IF NOT EXISTS "cfdi_records" ("id" text PRIMARY KEY, "clinicId" text NOT NULL,
+      "invoiceId" text, "paymentId" text, "status" text NOT NULL, "total" float8)`);
+    await base.db.query(`INSERT INTO "cfdi_records" VALUES ('cf-ap', 'c1', $1, $2, 'apartado', 1000)`, [notaId, pagoId]);
+    cfdiPago._olvidarColumnaCfdiPago();
+    const r = await cerrar(planId);
+    assert.equal(r.status, 409, JSON.stringify(r.body));
+    assert.equal(r.body.code, "CFDI_POR_PAGO_VIGENTE");
+    const [n] = await notas(planId);
+    assert.equal(n.paid, 1000);
+    assert.equal((await base.db.query(`SELECT count(*)::int AS c FROM "patient_credits"`)).rows[0].c, 0);
+  } finally {
+    cfdiPago._olvidarColumnaCfdiPago();
+  }
+});

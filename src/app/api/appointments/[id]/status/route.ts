@@ -10,6 +10,7 @@ import {
 import { revalidateAfter, revalidatePatientProfile } from "@/lib/cache/revalidate";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
+import { hasPermission } from "@/lib/auth/permissions";
 import { cancelPendingRemindersForAppointment } from "@/lib/reminders/reschedule.server";
 import type { StatusChangeInput } from "@/lib/agenda/types";
 import { avisarCitaPorWhatsApp } from "@/lib/whatsapp/avisos-cita";
@@ -474,7 +475,12 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
       if (d) {
         const puedeCobrar = denyIfMissingPermission(session.user, "billing.charge") === null;
         const pedida = decisionEfectiva(body.dineroCita, puedeCobrar);
-        const base = { clinicId: session.clinic.id, invoiceId: d.facturaId, userId: session.user.id, quien: session.user.displayName };
+        const base = {
+          clinicId: session.clinic.id, invoiceId: d.facturaId, userId: session.user.id, quien: session.user.displayName,
+          // Seguridad ola 2b (lead 3, M1 de t5): si el paciente ya había llegado (o la factura es posterior a
+          // la cancelación), «a favor» pide billing.refund; sin él queda «pendiente de decidir».
+          puedeReembolsar: hasPermission({ role: session.user.role, permissionsOverride: session.user.permissionsOverride ?? [] }, "billing.refund"),
+        };
         let r = await decidirDineroDeCitaCancelada({ ...base, decision: pedida });
         let motivo = r.motivo;
         if (!r.ok && pedida !== "pendiente") {

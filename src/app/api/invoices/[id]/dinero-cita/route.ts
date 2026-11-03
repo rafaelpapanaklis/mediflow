@@ -54,8 +54,8 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     ? await registrarDevolucionYCancelar({ clinicId: ctx.clinicId, invoiceId: params.id, userId: ctx.userId, quien, refundMethod })
     : await decidirDineroDeCitaCancelada({
         clinicId: ctx.clinicId, invoiceId: params.id, decision, userId: ctx.userId, quien,
-        // Lead 3 (ola 2b): sin cita cancelada, «a favor» es un reembolso a saldo y pide billing.refund.
-        puedeSinCita: hasPermission({ role: ctx.role, permissionsOverride: ctx.permissionsOverride ?? [] }, "billing.refund"),
+        // Lead 3 (ola 2b): si no es dinero de una cita cancelada sin atenderse, «a favor» es un reembolso a saldo y pide billing.refund.
+        puedeReembolsar: hasPermission({ role: ctx.role, permissionsOverride: ctx.permissionsOverride ?? [] }, "billing.refund"),
       });
   if (!r.ok) return NextResponse.json({ error: r.motivo ?? "No se pudo." }, { status: 409 });
   revalidateAfter("invoices");

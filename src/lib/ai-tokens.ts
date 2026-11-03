@@ -101,24 +101,38 @@ function errorSinCupo(used: number, limit: number): ErrorCupoIa {
 
 /**
  * Lee el contador de la clínica y lo resetea si cambió el mes (reseteo
- * perezoso). null si la clínica no existe.
+ * perezoso). null si la clínica no existe. `resetAt` = el aiLastResetAt
+ * vigente (el del mes al que pertenece `used`).
+ *
+ * Revisión t5 (m1): el reseteo va CONDICIONADO al aiLastResetAt leído. Antes
+ * era un update a secas: dos peticiones el día 1 leían el mes viejo, la segunda
+ * volvía a poner 0 y BORRABA la reserva que la primera acababa de apartar. Si
+ * otra ya reseteó (count 0), se relee su contador.
  */
-async function contadorDelMes(clinicId: string): Promise<{ used: number; limit: number } | null> {
-  const clinic = await prisma.clinic.findUnique({
+async function contadorDelMes(clinicId: string): Promise<{ used: number; limit: number; resetAt: Date } | null> {
+  for (let intento = 0; intento < 3; intento++) {
+    const clinic = await prisma.clinic.findUnique({
+      where: { id: clinicId },
+      select: { aiTokensUsed: true, aiTokensLimit: true, aiLastResetAt: true },
+    });
+    if (!clinic) return null;
+    const lastReset = new Date(clinic.aiLastResetAt);
+    const now = new Date();
+    const monthsDiff =
+      (now.getFullYear() - lastReset.getFullYear()) * 12 + (now.getMonth() - lastReset.getMonth());
+    if (monthsDiff < 1) return { used: clinic.aiTokensUsed, limit: clinic.aiTokensLimit, resetAt: clinic.aiLastResetAt };
+    const r = await prisma.clinic.updateMany({
+      where: { id: clinicId, aiLastResetAt: clinic.aiLastResetAt },
+      data: { aiTokensUsed: 0, aiLastResetAt: now },
+    });
+    if (r.count === 1) return { used: 0, limit: clinic.aiTokensLimit, resetAt: now };
+    // Otra petición reseteó entre la lectura y la escritura: se relee.
+  }
+  const c = await prisma.clinic.findUnique({
     where: { id: clinicId },
     select: { aiTokensUsed: true, aiTokensLimit: true, aiLastResetAt: true },
   });
-  if (!clinic) return null;
-  const lastReset = new Date(clinic.aiLastResetAt);
-  const now = new Date();
-  const monthsDiff =
-    (now.getFullYear() - lastReset.getFullYear()) * 12 + (now.getMonth() - lastReset.getMonth());
-  let used = clinic.aiTokensUsed;
-  if (monthsDiff >= 1) {
-    await prisma.clinic.update({ where: { id: clinicId }, data: { aiTokensUsed: 0, aiLastResetAt: now } });
-    used = 0;
-  }
-  return { used, limit: clinic.aiTokensLimit };
+  return c ? { used: c.aiTokensUsed, limit: c.aiTokensLimit, resetAt: c.aiLastResetAt } : null;
 }
 
 export async function aiTokenLimitError(
@@ -149,6 +163,12 @@ export async function aiTokenLimitError(
 export interface ReservaCupoIa {
   clinicId: string;
   tokens: number;
+  /**
+   * Revisión t5 (m2): el aiLastResetAt del mes en que se apartó. Si al liquidar
+   * el contador ya se reseteó (cambio de mes), lo que sobró NO se descuenta del
+   * mes nuevo (la reserva se borró con el reseteo); lo que faltó sí se suma.
+   */
+  resetAt: Date | null;
 }
 
 /** Techo de tokens de una llamada a Claude: la entrada a 2 caracteres por token, más toda la salida permitida. */
@@ -169,7 +189,7 @@ export async function reservarCupoIa(
 ): Promise<{ reserva: ReservaCupoIa | null; error: ErrorCupoIa | null }> {
   const techo = Math.max(0, Math.ceil(tokens || 0));
   const c = await contadorDelMes(clinicId);
-  if (!c) return { reserva: { clinicId, tokens: 0 }, error: null };
+  if (!c) return { reserva: { clinicId, tokens: 0, resetAt: null }, error: null };
   const otras = (await tokensDeLasOtrasSedes(clinicId)).tokens;
   const tope = c.limit - otras - techo;
   if (c.used + otras >= c.limit || c.used > tope) {
@@ -184,7 +204,7 @@ export async function reservarCupoIa(
     const ahora = await contadorDelMes(clinicId);
     return { reserva: null, error: errorSinCupo((ahora?.used ?? c.used) + otras, c.limit) };
   }
-  return { reserva: { clinicId, tokens: techo }, error: null };
+  return { reserva: { clinicId, tokens: techo, resetAt: c.resetAt }, error: null };
 }
 
 /**
@@ -204,9 +224,13 @@ export async function liquidarCupoIa(
     if (delta > 0) {
       await prisma.clinic.update({ where: { id: reserva.clinicId }, data: { aiTokensUsed: { increment: delta } } });
     } else if (delta < 0) {
-      // Con suelo: si entre medias el contador se reseteó (cambio de mes), no se va a negativo.
+      // Solo si el contador sigue en el mes de la reserva (m2 de t5) y con suelo.
       await prisma.clinic.updateMany({
-        where: { id: reserva.clinicId, aiTokensUsed: { gte: -delta } },
+        where: {
+          id: reserva.clinicId,
+          aiTokensUsed: { gte: -delta },
+          ...(reserva.resetAt ? { aiLastResetAt: reserva.resetAt } : {}),
+        },
         data: { aiTokensUsed: { decrement: -delta } },
       });
     }

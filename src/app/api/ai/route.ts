@@ -52,8 +52,10 @@ export async function POST(req: NextRequest) {
   const monthsDiff = (now.getFullYear() - lastReset.getFullYear()) * 12 + (now.getMonth() - lastReset.getMonth());
 
   if (monthsDiff >= 1) {
-    await prisma.clinic.update({
-      where: { id: ctx.clinicId },
+    // Revisión t5 (m1): condicionado al mes leído; si otra petición ya reseteó
+    // (y quizá ya apartó su reserva), no se vuelve a poner en 0.
+    await prisma.clinic.updateMany({
+      where: { id: ctx.clinicId, aiLastResetAt: clinic.aiLastResetAt },
       data:  { aiTokensUsed: 0, aiLastResetAt: now },
     });
     currentTokensUsed = 0;

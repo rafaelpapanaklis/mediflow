@@ -69,6 +69,7 @@ before(async () => {
 beforeEach(() => {
   db = new DobleBase();
   (db.tablas as any).user = [{ id: "u_rec", clinicId: CLINICA, firstName: "Rita", lastName: "Recepción", email: "r@x" }];
+  (db.tablas as any).appointmentTimeline = [];
   sesion.ctx = null;
 });
 
@@ -166,7 +167,7 @@ test("el servicio, llamado sin el permiso explícito, también se niega (falla c
 // ANTES de que se cancelara la cita (createdAt <= cancelledAt). Una factura hecha DESPUÉS sobre una
 // cita ya cancelada no es «el dinero de una cita cancelada»: pide billing.refund.
 
-test("🔴 v2: factura creada DESPUÉS de cancelar la cita → recepción no la pasa a favor", async () => {
+test("🔴 v2 · camino A (t5): factura creada DESPUÉS de cancelar la cita → recepción no la pasa a favor", async () => {
   db.tablas.appointment.push({ id: "apt1", clinicId: CLINICA, status: "CANCELLED", cancelledAt: FACTURADA });
   facturaPagada({ appointmentId: "apt1", createdAt: CANCELADA });
   const r = await llamarRuta("RECEPTIONIST");
@@ -195,6 +196,54 @@ test("🔴 v2: cita cancelada SIN fecha de cancelación (filas viejas) → falla
 test("v2: factura y cancelación en el mismo instante cuentan como «antes» (<=)", async () => {
   db.tablas.appointment.push({ id: "apt1", clinicId: CLINICA, status: "CANCELLED", cancelledAt: FACTURADA });
   facturaPagada({ appointmentId: "apt1", createdAt: FACTURADA });
+  const r = await llamarRuta("RECEPTIONIST");
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+});
+
+// ── v2 · M1 de la revisión t5, camino B: una cita que el paciente SÍ llegó a usar (llegó, pasó al sillón o
+// empezó la consulta) y luego se canceló. Lo cobrado es de un servicio que pudo darse: «a favor» pide
+// billing.refund aunque la factura sea anterior a la cancelación. «pendiente» sigue disponible.
+
+function citaCanceladaAtendida(extra: Record<string, unknown>) {
+  db.tablas.appointment.push({ id: "apt1", clinicId: CLINICA, status: "CANCELLED", cancelledAt: CANCELADA, checkedInAt: null, startedAt: null, completedAt: null, ...extra });
+  facturaPagada({ appointmentId: "apt1", createdAt: FACTURADA });
+}
+
+test("🔴 v2 · camino B (t5): la cita llegó a CHECK-IN y luego se canceló → recepción no la pasa a favor", async () => {
+  citaCanceladaAtendida({ checkedInAt: FACTURADA });
+  const r = await llamarRuta("RECEPTIONIST");
+  assert.equal(r.status, 409, JSON.stringify(r.body));
+  assert.match(r.body.error, /reembols/i);
+  assert.equal(inv().status, "PAID");
+  assert.equal(creditos().length, 0);
+});
+
+test("🔴 v2 · camino B: la consulta ya había empezado (startedAt) → 409", async () => {
+  citaCanceladaAtendida({ startedAt: FACTURADA });
+  assert.equal((await llamarRuta("RECEPTIONIST")).status, 409);
+  assert.equal(inv().status, "PAID");
+});
+
+test("🔴 v2 · camino B: «En sillón» sin check-in (solo queda en el timeline) → 409", async () => {
+  citaCanceladaAtendida({});
+  (db.tablas as any).appointmentTimeline.push({ id: "tl1", appointmentId: "apt1", arrivedAt: null, inChairAt: FACTURADA, consultStartAt: null, consultEndAt: null });
+  assert.equal((await llamarRuta("RECEPTIONIST")).status, 409);
+  assert.equal(inv().status, "PAID");
+});
+
+test("v2 · camino B: con billing.refund (ADMIN) sí se puede, y «pendiente» siempre queda", async () => {
+  citaCanceladaAtendida({ checkedInAt: FACTURADA });
+  const pend = await decidir({ clinicId: CLINICA, invoiceId: "inv1", decision: "pendiente", userId: "u", quien: "x" });
+  assert.equal(pend.ok, true);
+  assert.equal(pend.aplicada, "pendiente");
+  const r = await llamarRuta("ADMIN");
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(inv().status, "CANCELLED");
+});
+
+test("v2: cita cancelada SIN atenderse y factura anterior → recepción sí (timeline vacío o con solo checkout no cuenta)", async () => {
+  citaCanceladaAtendida({});
+  (db.tablas as any).appointmentTimeline.push({ id: "tl1", appointmentId: "apt1", arrivedAt: null, inChairAt: null, consultStartAt: null, consultEndAt: null });
   const r = await llamarRuta("RECEPTIONIST");
   assert.equal(r.status, 200, JSON.stringify(r.body));
 });
