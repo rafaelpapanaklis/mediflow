@@ -194,7 +194,9 @@ export async function replaceQuoteContent(args: {
   notes: string | null;
   tx?: Prisma.TransactionClient;
 }) {
-  const sanitized = await sanitizeItems(args.clinicId, args.items);
+  // ws1-t11 v6: con el `tx` de quien llama (presentar el plan, PATCH del presupuesto): antes se saneaba con el
+  // cliente global, otra conexión del pooler mientras la transacción de fuera seguía abierta.
+  const sanitized = await sanitizeItems(args.clinicId, args.items, args.tx ?? prisma);
   const totals = computeTotals(sanitized, {
     discountPct: args.discountPct,
     discountAmount: args.discountAmount,

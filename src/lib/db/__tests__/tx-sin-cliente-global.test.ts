@@ -216,3 +216,88 @@ test("esTransaccion: el tx sí; el cliente global no; un doble de prisma sin $tr
   assert.equal(esTransaccion(doble as never), false, "un doble de pruebas no es una transacción");
   assert.equal(await conPuntoDeGuardado(doble as never, async () => 7), 7, "con un doble, el paso corre tal cual");
 });
+
+// ═══════════ ws1-t11 v6 (m1 de t2): los pasos que se tragan el error, y el P2002 del presupuesto ═══════════
+// Cada uno falla si se quita su conPuntoDeGuardado: sin él, el error deja la transacción abortada
+// («current transaction is aborted») y tumba el cobro o el presupuesto enteros.
+
+test("cobrarProcedimientoDeHoja: si falla la lectura del doctor, la factura nace sin doctor y el cobro sigue (punto de guardado)", async () => {
+  prepararHoja();
+  fallos.push({ quien: "treatmentPlan.findMany", error: new Error("lectura del doctor caída") });
+  const { cobrarProcedimientoDeHoja } = await import(`../../../../${ACCIONES.hoja}`);
+  const r = await cobrarProcedimientoDeHoja({ cardId: "card1", procedureId: "proc1" });
+  assert.equal(fallos.length, 0, "la prueba no llegó a la lectura del doctor");
+  assert.equal(r.ok, true, `el fallo del doctor tumbó el cobro: ${JSON.stringify(r)}`);
+  assert.ok(sentencias.some((s) => s.startsWith("ROLLBACK TO SAVEPOINT")), "no se deshizo con su punto de guardado");
+});
+
+test("cobrarProcedimientoDeHoja: si falla el saldo a favor, la factura nace sin él y el cobro sigue (punto de guardado)", async () => {
+  prepararHoja();
+  let lecturasDeFactura = 0;
+  respuestas.set("invoice.findFirst", () => {
+    lecturasDeFactura++;
+    // 1.ª: la factura huérfana de la línea (no hay); 2.ª: la que lee aplicarEnTx.
+    if (lecturasDeFactura === 2) throw new Error("saldo a favor caído");
+    return null;
+  });
+  const { cobrarProcedimientoDeHoja } = await import(`../../../../${ACCIONES.hoja}`);
+  const r = await cobrarProcedimientoDeHoja({ cardId: "card1", procedureId: "proc1" });
+  assert.ok(lecturasDeFactura >= 2, "la prueba no llegó al saldo a favor");
+  assert.equal(r.ok, true, `el fallo del saldo a favor tumbó el cobro: ${JSON.stringify(r)}`);
+  assert.ok(sentencias.some((s) => s.startsWith("ROLLBACK TO SAVEPOINT")), "no se deshizo con su punto de guardado");
+});
+
+test("presupuestoDesdeElPlan: un folio repetido (P2002) dentro de la tx se reintenta y el presupuesto se crea", async () => {
+  respuestas.set("./leer-plan#leerPlan", () => ({ fuente: "texto", textoRedondeado: "" }));
+  respuestas.set("quote.findFirst", () => null);
+  let altas = 0;
+  respuestas.set("quote.create", ({ data }: any) => {
+    altas++;
+    return { id: "q1", folio: data.folio, patientId: "p1", status: "DRAFT", total: 600, title: data.title, items: [], acceptToken: null, validUntil: null };
+  });
+  fallos.push({
+    quien: "quote.create",
+    error: new Prisma.PrismaClientKnownRequestError("Unique constraint failed", { code: "P2002", clientVersion: "x", meta: { target: ["clinicId", "folio"] } }),
+  });
+  const { presupuestoDesdeElPlan } = await import(`../../../../${ACCIONES.presentar}`);
+  let error: unknown = null;
+  const r = await presupuestoDesdeElPlan({
+    clinicId: "cli_a", userId: "u1", presentar: false,
+    plan: { id: "plan1", patientId: "p1", name: "Plan", description: "", totalCost: 600 } as never,
+  }).catch((e: unknown) => { error = e; return null; });
+  assert.equal(fallos.length, 0, "la prueba no llegó al alta del presupuesto");
+  assert.equal(error, null, `con el folio repetido falló el presupuesto: ${String(error)}`);
+  assert.equal(altas, 1, "el reintento no creó el presupuesto");
+  assert.equal((r as { quote?: { id?: string } } | null)?.quote?.id, "q1");
+  assert.ok(sentencias.some((s) => s.startsWith("ROLLBACK TO SAVEPOINT")), "el intento fallido no se deshizo con su punto de guardado");
+});
+
+// ═══════════ ws1-t11 v6: replaceQuoteContent con el tx ═══════════
+
+test("replaceQuoteContent dentro de una transacción sanea los ítems con su tx, no con el cliente global", async () => {
+  const { replaceQuoteContent } = await import("@/lib/quotes/service");
+  respuestas.set("procedureCatalog.findMany", () => [{ id: "proc1" }]);
+  respuestas.set("quote.update", () => ({ id: "q1", items: [] }));
+  let r: unknown = null;
+  await prisma.$transaction(async (tx: never) => {
+    r = await replaceQuoteContent({
+      quoteId: "q1", clinicId: "cli_a", title: "Presupuesto", validUntil: null, notes: null,
+      items: [{ procedureId: "proc1", name: "Limpieza", quantity: 1, unitPrice: 600 }] as never,
+      tx,
+    });
+  });
+  assert.deepEqual(usosGlobalesConTx, [], "saneó los ítems con el cliente global con la transacción abierta");
+  assert.ok(r, "no devolvió el presupuesto");
+});
+
+test("replaceQuoteContent sin transacción sigue igual: abre la suya con el cliente global", async () => {
+  const { replaceQuoteContent } = await import("@/lib/quotes/service");
+  respuestas.set("procedureCatalog.findMany", () => [{ id: "proc1" }]);
+  respuestas.set("quote.update", () => ({ id: "q1", items: [] }));
+  const r = await replaceQuoteContent({
+    quoteId: "q1", clinicId: "cli_a", title: "Presupuesto", validUntil: null, notes: null,
+    items: [{ procedureId: "proc1", name: "Limpieza", quantity: 1, unitPrice: 600 }] as never,
+  });
+  assert.ok(r);
+  assert.deepEqual(usosGlobalesConTx, []);
+});
