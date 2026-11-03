@@ -64,6 +64,13 @@ let pagosDeSubscripcion: any[];
 /** nº13: sesiones reclamadas en `stripe_activaciones_plataforma`; null = el SQL no está pegado. */
 let activacionesReclamadas: Set<string> | null;
 let updateDeClinicaFalla = false;
+/** M1: cuántas veces se leyó audit_logs (la activación no debe leerla). */
+let lecturasDeBitacora = 0;
+/**
+ * `audit_logs."userId"` tiene FK a `users`: un id que no es de un usuario NO se guarda (logAudit se traga el error).
+ * En el contexto del webhook no hay ningún usuario del equipo. Antes el doble guardaba `userId: clinicId` sin más.
+ */
+const USUARIOS_DE_LA_BASE = new Set<string>();
 
 function coincideWhere(fila: any, where: any): boolean {
   return Object.entries(where ?? {}).every(([k, v]: [string, any]) => {
@@ -161,14 +168,12 @@ const prismaBase: any = {
     activacionesReclamadas.add(v[0]);
     return 1;
   },
-  // nº13: la bitácora (lo que escribió logAudit) como respaldo sin el SQL, con el filtro de ruta JSON real.
+  // nº13 (revisión ws1-t8, M1): la activación ya NO busca en la bitácora; si alguien lo vuelve a hacer, se nota aquí.
   auditLog: {
-    findFirst: async ({ where }: any) =>
-      bitacora.find((b) => {
-        const ruta = where.changes?.path as string[] | undefined;
-        const valor = ruta?.reduce((o: any, k) => o?.[k], b.changes);
-        return b.clinicId === where.clinicId && b.entityType === where.entityType && ruta && valor === where.changes.equals;
-      }) ?? null,
+    findFirst: async () => {
+      lecturasDeBitacora++;
+      return null;
+    },
   },
   billingEmailLog: {
     create: async ({ data }: any) => {
@@ -295,7 +300,14 @@ before(async () => {
   });
   dobles.set(path.join(RAIZ, "src/lib/audit.ts"), {
     logAudit: async (a: any) => {
+      if (!a.userId || !USUARIOS_DE_LA_BASE.has(a.userId)) return; // FK a users: la fila no se escribe
       bitacora.push(a);
+    },
+    // Actor externo (sql/audit-logs-actor-externo.sql): userId NULL con actorType patient|public|bot.
+    logAuditExterno: async (a: any) => {
+      assert.ok(["patient", "public", "bot"].includes(a.actor), `actor externo inválido: ${a.actor}`);
+      assert.equal("userId" in a, false, "un actor externo no lleva userId");
+      bitacora.push({ ...a, userId: null, actorType: a.actor });
     },
     extractAuditMeta: () => ({}),
   });
@@ -420,6 +432,7 @@ function reiniciar(sobre: Record<string, unknown> = {}) {
   idEvento = 0;
   activacionesReclamadas = new Set();
   updateDeClinicaFalla = false;
+  lecturasDeBitacora = 0;
   delete (globalThis as { __sondaActivacionesStripe?: unknown }).__sondaActivacionesStripe;
 }
 beforeEach(() => reiniciar());
@@ -2867,14 +2880,42 @@ test("🔴 nº13 tarjeta: el MISMO checkout.session.completed dos veces da UN pe
   assert.equal(clinica().trialEndsAt.getTime(), tras1);
 });
 
-test("🔴 nº13 sin el SQL pegado: la bitácora de la primera activación frena la reentrega", async () => {
+test("nº13 sin el SQL pegado NO hay candado: la reentrega suma otro periodo (el SQL es requisito) y no se lee la bitácora", async () => {
+  // Revisión ws1-t8, M1: el «respaldo» de v1 buscaba en audit_logs una fila que nunca existía (FK de userId). Se quitó.
   reiniciar({ stripeSubscriptionId: null, trialEndsAt: new Date(Date.now() + 10 * DIA), nextBillingDate: new Date(Date.now() + 10 * DIA) });
   activacionesReclamadas = null;
   const ev = sesionSpei("cs_sin_tabla");
   await entregar(ev);
   const tras1 = clinica().trialEndsAt.getTime();
   assert.equal(await entregar(ev), 200);
-  assert.equal(clinica().trialEndsAt.getTime(), tras1);
+  const dias = (clinica().trialEndsAt.getTime() - tras1) / DIA;
+  assert.ok(dias > 27 && dias < 32, `sin la tabla, la reentrega SÍ suma (salió ${dias.toFixed(1)} días): por eso el SQL es requisito`);
+  assert.equal(lecturasDeBitacora, 0, "en 3d51d9a94 la activación leía audit_logs buscando una fila que no se escribe");
+});
+
+test("🔴 hermano 2 · la bitácora del webhook se escribe: actor externo «Stripe (webhook)», sin userId de mentira", async () => {
+  reiniciar({ stripeSubscriptionId: null, trialEndsAt: new Date(Date.now() + 10 * DIA), nextBillingDate: new Date(Date.now() + 10 * DIA) });
+  await entregar(sesionSpei("cs_bitacora"));
+  const fila = bitacora.find((b) => b.entityType === "subscription" && b.changes?._source?.after?.sessionId === "cs_bitacora");
+  assert.ok(fila, "en 3d51d9a94 iba con userId = clinicId y la FK la tiraba: no quedaba rastro del cobro");
+  assert.equal(fila.userId, null);
+  assert.equal(fila.actorType, "public");
+  assert.equal(fila.origen, "Stripe (webhook)");
+  assert.equal(fila.clinicId, CLINIC);
+  assert.ok(bitacora.every((b) => b.userId === null), "ninguna fila del webhook con userId");
+});
+
+test("🔴 m2 · una reentrega no suma otro periodo pero SÍ vuelve a sincronizar las sedes incluidas (y no repite el marcado)", async () => {
+  reiniciar({ stripeSubscriptionId: null, trialEndsAt: new Date(Date.now() + 10 * DIA), nextBillingDate: new Date(Date.now() + 10 * DIA) });
+  const ev = sesionSpei("cs_m2");
+  await entregar(ev);
+  const tras1 = clinica().trialEndsAt.getTime();
+  const bitacoraTras1 = bitacora.length;
+  assert.equal(sedesSincronizadas.filter((id) => id === CLINIC).length, 1);
+  await entregar(ev);
+  assert.equal(clinica().trialEndsAt.getTime(), tras1, "sin otro periodo");
+  assert.equal(sedesSincronizadas.filter((id) => id === CLINIC).length, 2, "en 3d51d9a94 la reentrega volvía antes de sincronizar");
+  assert.equal(bitacora.length, bitacoraTras1, "ni otra fila de activación");
 });
 
 test("nº13 dos pagos de verdad (dos sesiones) siguen dando dos periodos: renovar por adelantado SUMA", async () => {

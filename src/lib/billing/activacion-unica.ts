@@ -6,13 +6,14 @@
  * `checkout.session.completed` / `async_payment_succeeded` (entrega «al menos una vez», un 500 después de
  * escribir, un «Resend» del panel de Stripe), cada entrega sumaba otro mes (u otro año) por un solo pago.
  *
- * Ahora la activación se RECLAMA por `session.id`:
- *  · Con `sql/stripe-activaciones-plataforma.sql` aplicado: INSERT … ON CONFLICT DO NOTHING en la tabla
- *    `stripe_activaciones_plataforma` (llave primaria = session.id) DENTRO de la misma transacción que
- *    actualiza la clínica. Dos entregas a la vez: la segunda espera el candado y no inserta nada.
- *  · Sin el SQL (como hoy): se busca en la bitácora una activación de esa misma sesión y, si la hay, no
- *    se vuelve a extender. Es lo que hay sin tabla: no es atómico y depende de que esa fila exista.
- *  · En los dos casos, antes se mira la bitácora: cubre las sesiones activadas antes de pegar el SQL.
+ * Ahora la activación se RECLAMA por `session.id` en la tabla `stripe_activaciones_plataforma` (llave
+ * primaria = session.id): INSERT … ON CONFLICT DO NOTHING DENTRO de la misma transacción que actualiza la
+ * clínica. Dos entregas a la vez: la segunda espera el candado y no inserta nada.
+ *
+ * ⚠ REQUISITO: sql/stripe-activaciones-plataforma.sql. Sin la tabla NO hay candado y una reentrega suma
+ * otro periodo, igual que antes de este arreglo. v1 buscaba además en la bitácora una activación de la
+ * misma sesión, pero esa fila nunca existió: el webhook la escribía con `userId = clinicId` y
+ * `audit_logs."userId"` tiene FK a `users` (revisión ws1-t8, M1). Se quitó para no dar falsa confianza.
  * Si la comprobación misma falla (base lenta, tabla rara), la activación SIGUE como hoy: una clínica que
  * pagó nunca se queda sin su plan por esto.
  */
@@ -22,7 +23,6 @@ import type { Prisma } from "@prisma/client";
 export interface DbActivacion {
   $queryRaw<T = unknown>(q: TemplateStringsArray | Prisma.Sql, ...v: unknown[]): Promise<T>;
   $transaction<T>(f: (tx: any) => Promise<T>): Promise<T>;
-  auditLog: { findFirst(args: any): Promise<unknown | null> };
 }
 
 export const TABLA_ACTIVACIONES = "stripe_activaciones_plataforma";
@@ -47,23 +47,10 @@ async function tablaExiste(db: DbActivacion): Promise<boolean | null> {
     const r = await db.$queryRaw<{ existe: boolean }[]>`SELECT to_regclass('public.stripe_activaciones_plataforma') IS NOT NULL AS existe`;
     const existe = r?.[0]?.existe === true;
     g.__sondaActivacionesStripe = existe ? { existe: true } : { existe: false, hasta: Date.now() + REPREGUNTA_SIN_TABLA_MS };
+    if (!existe) console.warn("[stripe webhook] falta sql/stripe-activaciones-plataforma.sql: una reentrega del mismo checkout suma otro periodo");
     return existe;
   } catch (e) {
     console.warn("[stripe webhook] no se pudo saber si existe la tabla de activaciones; se sigue sin ella:", e instanceof Error ? e.message : e);
-    return null;
-  }
-}
-
-/** ¿La bitácora ya tiene una activación de ESTA sesión para ESTA clínica? null = no se pudo leer. */
-async function yaActivadaEnBitacora(db: DbActivacion, clinicId: string, sessionId: string): Promise<boolean | null> {
-  try {
-    const fila = await db.auditLog.findFirst({
-      where: { clinicId, entityType: "subscription", changes: { path: ["_source", "after", "sessionId"], equals: sessionId } },
-      select: { id: true },
-    });
-    return fila != null;
-  } catch (e) {
-    console.warn("[stripe webhook] no se pudo leer la bitácora de activaciones:", e instanceof Error ? e.message : e);
     return null;
   }
 }
@@ -81,8 +68,6 @@ export async function aplicarActivacionUnaVez<T>(
 ): Promise<ResultadoActivacion<T>> {
   const { clinicId, sessionId, evento } = args;
   if (!sessionId) return { aplicada: true, valor: await aplicar(db) };
-
-  if ((await yaActivadaEnBitacora(db, clinicId, sessionId)) === true) return { aplicada: false };
 
   if ((await tablaExiste(db)) !== true) return { aplicada: true, valor: await aplicar(db) };
 

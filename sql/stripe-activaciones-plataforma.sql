@@ -11,10 +11,13 @@
 --
 -- Se corre en Supabase (SQL Editor). Lo aplica Rafael, nunca una terminal.
 --
--- ORDEN RESPECTO AL DEPLOY: antes o después, da igual. Sin la tabla el código
--- sigue como hoy, salvo que, si la bitácora ya tiene una activación de esa
--- misma sesión, no vuelve a extender (comprobación que no es atómica). Lo
--- pregunta con to_regclass, así que su ausencia no genera errores.
+-- ES REQUISITO DEL ARREGLO: pégalo ANTES del deploy o junto con él. Sin la
+-- tabla NO hay ninguna protección: el código funciona como hoy y una
+-- reentrega SÍ suma otro periodo (deja un aviso en los logs). No hay
+-- respaldo: la v1 miraba la bitácora, pero el webhook no podía escribir esa
+-- fila (audit_logs."userId" tiene FK a users; revisión ws1-t8, M1) y se quitó.
+-- El código lo pregunta con to_regclass, así que la ausencia de la tabla no
+-- genera errores; en cuanto exista, la usa (vuelve a preguntar cada 5 min).
 --
 -- ADITIVO e IDEMPOTENTE: seguro de re-correr. No toca ninguna tabla
 -- existente y no borra nada. Sin modelo de Prisma (SQL crudo).

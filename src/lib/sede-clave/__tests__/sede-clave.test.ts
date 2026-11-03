@@ -938,9 +938,11 @@ test("M2 · una lectura que tarda más que el tope cuenta como fallo (y se cae a
 test("M4 · si to_regclass falla, no se repite en cada petición durante unos segundos", async () => {
   db.falloSonda = true;
   como(SB_OTRO, CLI_OTRA);
-  // nº14 (auditoría «cloudflare»): sin saber si hay tablas ya NO es «como sin SQL»: no se abre a ciegas.
-  for (let i = 0; i < 10; i++) assert.equal(await getAuthContext(), null, "sin saber si hay tablas: sin comprobar");
+  // nº14 (auditoría «cloudflare», m1 de la revisión): sin saber si hay tablas no se abre a ciegas, pero
+  // tampoco se corta la instancia: se lee la fila de la sede, y esta clínica no tiene clave.
+  for (let i = 0; i < 10; i++) assert.equal((await getAuthContext())?.clinicId, CLI_OTRA, "sin saber si hay tablas: manda la fila");
   assert.equal(db.consultas.filter((q) => q.includes("to_regclass")).length, 1);
+  assert.equal(db.consultas.filter((q) => q.includes(`SELECT "claveHash", "version" FROM "sede_claves"`)).length, 1, "la fila, una vez (se recuerda 5 s)");
 });
 
 test("🔴 nº14 · si la sonda falla en una instancia fría, una sede CON clave NO se abre (ni gate, ni vistas, ni desbloquear sin clave)", async () => {
@@ -949,11 +951,11 @@ test("🔴 nº14 · si la sonda falla en una instancia fría, una sede CON clave
   _olvidarEstado(); // instancia que todavía no vio las tablas
   db.falloSonda = true;
   como(SB_DUENO, CLI_3); // el dueño, sin desbloqueo en este navegador
-  assert.equal(await estadoGate(SB_DUENO, CLI_3), "sin_comprobar", "antes: «libre»");
+  assert.equal(await estadoGate(SB_DUENO, CLI_3), "cerrada", "antes: «libre»; su fila dice que tiene clave");
   assert.equal(await getAuthContext(), null, "antes: entraba a la sede con clave");
   const gate = await import("../gate.server");
-  assert.deepEqual([...(await gate.sedesCerradasPara(SB_DUENO, [CLI_1, CLI_3]))].sort(), [CLI_1, CLI_3].sort(), "las vistas de varias sedes no enseñan cifras");
-  assert.deepEqual([...(await gate.sedesConClave([CLI_1, CLI_3]))].sort(), [CLI_1, CLI_3].sort(), "ni se comparten pacientes ni se copia");
+  assert.deepEqual([...(await gate.sedesCerradasPara(SB_DUENO, [CLI_1, CLI_3]))], [CLI_3], "las vistas no enseñan las cifras de la sede con clave");
+  assert.deepEqual([...(await gate.sedesConClave([CLI_1, CLI_3]))], [CLI_3], "ni se comparten sus pacientes ni se copia");
   // Desbloquear SIN la clave: antes respondía ok y dejaba la sede activa en la cookie.
   como(SB_DUENO, CLI_1);
   const r = await llamar(await rutaDesbloquear(), "/api/sede-clave/desbloquear", { clinicId: CLI_3 });
@@ -961,6 +963,33 @@ test("🔴 nº14 · si la sonda falla en una instancia fría, una sede CON clave
   assert.match(r.body.error, /No pudimos comprobar/);
   assert.deepEqual(activasEscritas, [], "no se cambió de sede");
   assert.deepEqual(desbloqueosEnElNavegador(), []);
+});
+
+test("🔴 nº14 (m1) · con la sonda caída no se corta la instancia: la sede SIN clave del dueño sigue abierta", async () => {
+  await activarComoAdmin3();
+  const { _olvidarEstado } = await import("../estado.server");
+  _olvidarEstado();
+  db.falloSonda = true;
+  como(SB_DUENO, CLI_1); // la principal, sin clave
+  assert.equal(await estadoGate(SB_DUENO, CLI_1), "libre", "en 3d51d9a94: «sin comprobar» para cualquier clínica");
+  assert.equal((await getAuthContext())?.clinicId, CLI_1);
+  const gate = await import("../gate.server");
+  assert.ok(!(await gate.sedesCerradasPara(SB_DUENO, [CLI_1, CLI_3])).has(CLI_1));
+  assert.ok(!(await gate.sedesConClave([CLI_1, CLI_3])).has(CLI_1));
+});
+
+test("nº14 (m1) · con la sonda Y la fila caídas: «sin comprobar», y en las vistas todas cuentan como cerradas", async () => {
+  await activarComoAdmin3();
+  const { _olvidarEstado } = await import("../estado.server");
+  _olvidarEstado();
+  db.falloSonda = true;
+  db.falloFila = true;
+  como(SB_DUENO, CLI_1);
+  assert.equal(await estadoGate(SB_DUENO, CLI_1), "sin_comprobar");
+  assert.equal(await getAuthContext(), null, "no se abre a ciegas");
+  const gate = await import("../gate.server");
+  assert.deepEqual([...(await gate.sedesCerradasPara(SB_DUENO, [CLI_1, CLI_3]))].sort(), [CLI_1, CLI_3].sort());
+  assert.deepEqual([...(await gate.sedesConClave([CLI_1, CLI_3]))].sort(), [CLI_1, CLI_3].sort());
 });
 
 test("nº14 · un «no hay tablas» de la base sigue siendo la función apagada (sin SQL, todo como hoy)", async () => {

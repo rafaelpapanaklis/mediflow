@@ -109,7 +109,11 @@ function paginas(dir: string): string[] {
   });
 }
 
-/** Lo que va desde la `{` del cuerpo de la función que empieza en `desde` (sin comentarios ni espacios). */
+/**
+ * La primera sentencia del cuerpo de la función cuyos parámetros abren en el primer `(` desde `desde` (sin
+ * comentarios ni espacios). Sirve para `function` y para flechas; una flecha sin llaves (`=> expr`) devuelve
+ * `=> …`, que nunca es el guard.
+ */
 function primeraSentencia(src: string, desde: number): string {
   let i = src.indexOf("(", desde);
   for (let d = 0; ; i++) {
@@ -119,12 +123,35 @@ function primeraSentencia(src: string, desde: number): string {
   let j = i + 1;
   for (let ang = 0; ; j++) {
     if (src[j] === "<") ang++;
-    else if (src[j] === ">") ang--;
-    else if (src[j] === "{" && ang === 0) break;
+    else if (src[j] === ">" && src[j - 1] !== "=") ang--;
+    else if (src[j] === "=" && src[j + 1] === ">" && ang === 0) {
+      const k = src.slice(j + 2).search(/\S/) + j + 2;
+      if (src[k] !== "{") return `=> ${src.slice(k).split("\n")[0].trim()}`;
+      j = k;
+      break;
+    } else if (src[j] === "{" && ang === 0) break;
   }
   return src.slice(j + 1).replace(/^(\s|\/\/[^\n]*\n|\/\*[\s\S]*?\*\/)*/, "").split("\n")[0].trim();
 }
 const LLAMA_AL_GUARD = /^(const \w+ = )?await requireAdminPage\(\);$/;
+
+/**
+ * Revisión ws1-t8, m3: TODO export de función de un archivo, sea `function` (con nombre o default, async o no),
+ * `const x = async (…) =>`, `const x = function` o `export default (…) =>`. `export { … }` y `export * from`
+ * cuentan como «no se puede comprobar»: podrían reexportar una función de otro archivo sin guard.
+ */
+function exportsDeFuncion(src: string): Array<{ nombre: string; inicio: number } | { nombre: string; opaco: true }> {
+  const salida: Array<{ nombre: string; inicio: number } | { nombre: string; opaco: true }> = [];
+  for (const m of src.matchAll(/export\s+(default\s+)?(async\s+)?function\s*\*?\s*(\w*)/g)) {
+    salida.push({ nombre: m[1] ? "default" : m[3], inicio: m.index! });
+  }
+  for (const m of src.matchAll(/export\s+const\s+(\w+)\s*(?::[^=]*)?=\s*(async\b|function\b|\(|<)/g)) {
+    salida.push({ nombre: m[1], inicio: m.index! });
+  }
+  for (const m of src.matchAll(/export\s+default\s+(async\s*)?\(/g)) salida.push({ nombre: "default", inicio: m.index! });
+  for (const m of src.matchAll(/export\s*(\{[^}]*\}|\*)/g)) salida.push({ nombre: m[0], opaco: true });
+  return salida;
+}
 
 test("🔴 CADA page.tsx de /admin (salvo el login) empieza con requireAdminPage(), y su generateMetadata también", () => {
   const todas = paginas(ADMIN);
@@ -134,13 +161,33 @@ test("🔴 CADA page.tsx de /admin (salvo el login) empieza con requireAdminPage
     const rel = path.relative(RAIZ, p);
     if (rel === path.join("src/app/admin/login/page.tsx")) continue;
     const src = readFileSync(p, "utf8");
-    const pag = src.search(/export default (async )?function/);
-    assert.ok(pag >= 0, `${rel}: sin export default function`);
-    if (!LLAMA_AL_GUARD.test(primeraSentencia(src, pag))) sinGuard.push(rel);
-    const meta = src.search(/export async function generateMetadata/);
-    if (meta >= 0 && !LLAMA_AL_GUARD.test(primeraSentencia(src, meta))) sinGuard.push(`${rel} (generateMetadata)`);
+    const funciones = exportsDeFuncion(src);
+    assert.ok(funciones.some((f) => f.nombre === "default"), `${rel}: sin export default de función`);
+    for (const f of funciones) {
+      if ("opaco" in f) sinGuard.push(`${rel} (${f.nombre}: no se puede comprobar)`);
+      else if (!LLAMA_AL_GUARD.test(primeraSentencia(src, f.inicio))) sinGuard.push(`${rel} (${f.nombre})`);
+    }
   }
   assert.deepEqual(sinGuard, [], "páginas de /admin que se fían del layout");
+});
+
+test("🔴 m3 · el candado ve también las formas nuevas: const async, flecha sin llaves, generateViewport y export { }", () => {
+  const conGuard = "{\n  await requireAdminPage();\n  return 1;\n}";
+  const casos: Array<[string, string[]]> = [
+    [`export default async function P() ${conGuard}\nexport const generateMetadata = async ({ params }: Props) => {\n  const d = await prisma.x();\n}`, ["generateMetadata"]],
+    [`export default async function P() ${conGuard}\nexport const generateMetadata = async () => ({ title: (await prisma.x()).name });`, ["generateMetadata"]],
+    [`export default async function P() ${conGuard}\nexport async function generateViewport() {\n  return leer();\n}`, ["generateViewport"]],
+    [`export default async function P() ${conGuard}\nexport const generateMetadata = async (): Promise<Metadata> => ${conGuard}`, []],
+    [`export default async function P() ${conGuard}\nexport { generateMetadata } from "./meta";`, ["export { generateMetadata }"]],
+    [`export default async (props: Props) => {\n  const d = await prisma.x();\n};`, ["default"]],
+    [`export const dynamic = "force-dynamic";\nexport const metadata = { title: "x" };\nexport default async function P() ${conGuard}`, []],
+  ];
+  for (const [src, esperadas] of casos) {
+    const malas = exportsDeFuncion(src)
+      .filter((f) => ("opaco" in f) || !LLAMA_AL_GUARD.test(primeraSentencia(src, f.inicio)))
+      .map((f) => f.nombre);
+    assert.deepEqual(malas, esperadas, src);
+  }
 });
 
 test("el login de /admin sigue abierto (si no, nadie entra)", () => {
@@ -183,18 +230,25 @@ test("generateMetadata de un prospecto del CRM sin sesión → redirect, sin lee
 });
 
 // ── Server actions de admin (nº9) ───────────────────────────────────────────
+/**
+ * Los `"use server"` de admin: todos los de src/app/admin y src/app/actions/admin, y (m3) cualquier otro de
+ * src/ que importe admin-auth o admin-page-guard, esté donde esté.
+ */
 function archivosDeAcciones(): string[] {
-  const dirs = [ADMIN, path.join(RAIZ, "src/app/actions/admin")];
+  const dirsDeAdmin = [ADMIN, path.join(RAIZ, "src/app/actions/admin")];
   const salida: string[] = [];
   const recorrer = (d: string) => {
     for (const n of readdirSync(d)) {
       const p = path.join(d, n);
-      if (statSync(p).isDirectory()) { if (n !== "__tests__") recorrer(p); continue; }
+      if (statSync(p).isDirectory()) { if (n !== "__tests__" && n !== "node_modules") recorrer(p); continue; }
       if (!/\.(ts|tsx)$/.test(n) || /\.test\./.test(n)) continue;
-      if (/^\s*["']use server["']/.test(readFileSync(p, "utf8"))) salida.push(p);
+      const src = readFileSync(p, "utf8");
+      if (!/^\s*(\/\/[^\n]*\n\s*|\/\*[\s\S]*?\*\/\s*)*["']use server["']/.test(src)) continue;
+      const deAdmin = dirsDeAdmin.some((dir) => p.startsWith(dir + path.sep)) || /from\s+["'][^"']*\/(admin-auth|admin-page-guard)["']/.test(src);
+      if (deAdmin) salida.push(p);
     }
   };
-  dirs.forEach(recorrer);
+  recorrer(path.join(RAIZ, "src"));
   return salida;
 }
 
@@ -205,10 +259,10 @@ test("🔴 toda server action de admin empieza con sesionAdminDeAccion() (sesió
   let acciones = 0;
   for (const p of archivos) {
     const src = readFileSync(p, "utf8");
-    for (const m of src.matchAll(/export async function (\w+)/g)) {
+    for (const f of exportsDeFuncion(src)) {
       acciones++;
-      if (!/^const \w+ = await sesionAdminDeAccion\(\);$/.test(primeraSentencia(src, m.index!))) {
-        malas.push(`${path.relative(RAIZ, p)} · ${m[1]}`);
+      if ("opaco" in f || !/^const \w+ = await sesionAdminDeAccion\(\);$/.test(primeraSentencia(src, f.inicio))) {
+        malas.push(`${path.relative(RAIZ, p)} · ${f.nombre}`);
       }
     }
   }

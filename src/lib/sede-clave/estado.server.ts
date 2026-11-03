@@ -119,7 +119,9 @@ export type SondaDeTablas = "si" | "no" | "desconocido";
  * borran). Si no existen, se vuelve a preguntar a los 2 min o cuando se fuerza
  * (las rutas de la clave fuerzan, para que la función se encienda en cuanto se
  * pegue el SQL). Un error de la base al PREGUNTAR es "desconocido" y se
- * recuerda 5 s (M4); las puertas lo tratan como «sin comprobar» (no abren).
+ * recuerda 5 s (M4); las puertas no abren a ciegas: miran la fila de cada sede
+ * (`estadoDeClave`) y solo la que tampoco se lea queda «sin comprobar».
+ * `desbloquear` sí responde 503 mientras tanto.
  */
 export async function sondaDeTablas(forzar = false): Promise<SondaDeTablas> {
   const m = memoria();

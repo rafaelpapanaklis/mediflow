@@ -172,7 +172,7 @@
     "test:patient-secrets": "tsx --test src/lib/__tests__/patient-secrets.test.ts",
     "test:private-records": "tsx --test src/lib/__tests__/private-records-scope.test.ts",
     "test:active-clinic": "tsx --test src/lib/active-clinic-core.test.ts",
-    "test:seg-admin-auth": "tsx --test src/app/admin/__tests__/admin-paginas-guard.test.ts src/app/api/auth/__tests__/forgot-password-origen.test.ts src/components/paciente/auth/__tests__/next-seguro.test.ts",
+    "test:seg-admin-auth": "tsx --test src/app/admin/__tests__/admin-paginas-guard.test.ts src/app/api/auth/__tests__/forgot-password-origen.test.ts src/components/paciente/auth/__tests__/next-seguro.test.ts src/lib/__tests__/bitacora-actor-externo.test.ts",
     "test:admin-modules": "tsx --test src/app/actions/admin/toggle-clinic-module-core.test.ts",
     "test:admin-portada": "tsx --test src/components/admin/portada/__tests__/atencion-core.test.ts",
     "test:portada-vs-clinicas": "tsx --test src/components/admin/portada/__tests__/portada-vs-clinicas.test.ts",
