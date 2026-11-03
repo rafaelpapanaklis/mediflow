@@ -7,11 +7,12 @@
 // por ahora — decisión de negocio pendiente, ver ORQUESTA.md).
 //
 // Resolución de "la cuenta de la clínica" (no existe campo clinic-level en el
-// schema y el schema está congelado): el ADMIN más antiguo de la clínica con
-// Stripe Connect; si ningún ADMIN tiene, el ÚNICO usuario activo con cuenta
-// Connect (sin ambigüedad). Con 2+ doctores con Connect y ningún ADMIN
-// conectado NO habilitamos pago en línea (evita enviar dinero al doctor
-// equivocado).
+// schema y el schema está congelado): el ADMIN/SUPER_ADMIN activo más antiguo
+// de la clínica con Stripe Connect y el alta TERMINADA (stripeOnboarded). Nadie
+// más: antes, sin ADMIN conectado, servía «el único usuario con Connect» de
+// cualquier rol, y una recepcionista que ligaba su cuenta se quedaba con los
+// cobros del portal de toda la clínica (ola 2b, lead 1). Sin ADMIN conectado
+// NO hay pago en línea ("Paga en tu clínica").
 //
 // Idempotencia / anti doble cobro: réplica del patrón de
 // src/lib/ai-billing/recharge.ts — $transaction + SELECT ... FOR UPDATE sobre
@@ -42,7 +43,8 @@ function round2(x: number): number {
 
 /**
  * Devuelve, para cada clínica del array, el stripeAccountId que recibe los
- * pagos de facturas, aplicando la regla ADMIN-más-antiguo → único-usuario.
+ * pagos de facturas: el del ADMIN/SUPER_ADMIN activo más antiguo con el alta
+ * de Stripe terminada.
  * Si Stripe no está configurado a nivel plataforma devuelve un mapa vacío.
  */
 export async function getClinicConnectAccounts(
@@ -56,6 +58,8 @@ export async function getClinicConnectAccounts(
     where: {
       clinicId: { in: clinicIds },
       isActive: true,
+      role: { in: ["ADMIN", "SUPER_ADMIN"] },
+      stripeOnboarded: true,
       stripeAccountId: { not: null },
     },
     select: { clinicId: true, role: true, createdAt: true, stripeAccountId: true },
@@ -70,13 +74,10 @@ export async function getClinicConnectAccounts(
   }
 
   byClinic.forEach((list, clinicId) => {
-    // orderBy createdAt asc → el primer ADMIN es el más antiguo.
+    // orderBy createdAt asc → el primer ADMIN es el más antiguo. El filtro de
+    // rol se repite aquí a propósito: es el punto de confianza del dinero.
     const admin = list.find((u) => u.role === "ADMIN" || u.role === "SUPER_ADMIN");
-    if (admin?.stripeAccountId) {
-      result.set(clinicId, admin.stripeAccountId);
-    } else if (list.length === 1 && list[0].stripeAccountId) {
-      result.set(clinicId, list[0].stripeAccountId);
-    }
+    if (admin?.stripeAccountId) result.set(clinicId, admin.stripeAccountId);
   });
   return result;
 }

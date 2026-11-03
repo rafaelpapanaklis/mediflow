@@ -186,6 +186,14 @@ test("la clave de idempotencia lleva `:iva16` (las sesiones viejas sin IVA no ch
   assert.match(opcionesSesion[0].idempotencyKey, /:oxxo:iva16$/);
 });
 
+test("ola 2b, lead 6: la sesión del diferencial lleva el «pagado-hasta» cotizado (metadata y clave), para que el webhook no la aplique en otro periodo", async () => {
+  await subir();
+  const esperado = clinica.trialEndsAt.toISOString();
+  assert.equal(sesiones[0].metadata.paidUntil, esperado);
+  assert.equal(sesiones[0].payment_intent_data.metadata.paidUntil, esperado);
+  assert.ok(opcionesSesion[0].idempotencyKey.includes(`:p${esperado}:`), "otro periodo, otra sesión");
+});
+
 test("sin IVA configurado: 503, cero sesiones y ni siquiera se crea el cliente de Stripe", async () => {
   delete process.env.STRIPE_IVA_TAX_RATE_ID;
   clinica.stripeCustomerId = null;

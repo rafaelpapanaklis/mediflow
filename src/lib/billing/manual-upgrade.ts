@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
+import { getStripeSafe } from "@/lib/stripe";
 import {
   computeManualUpgradeQuote,
   pickPurchasedInterval,
@@ -39,6 +40,15 @@ const AUDIT_LOOKBACK = 50;
  * (ver `pickPurchasedInterval`: las filas sin `billing` se saltan, no se toman
  * como mensuales).
  *
+ * PERO esa fila se escribe al CREAR la sesión, pagada o no, y el checkout de un
+ * MÓDULO deja una con la misma forma (ola 2b, retenido run-2): un checkout anual
+ * abandonado bajaba ~36 % los upgrades de un pagador mensual. Por eso solo cuenta
+ * una fila de compra DEL PLAN cuya sesión Stripe confirma pagada y de ESTA
+ * clínica (`metadata.kind`/`clinicId`); se pregunta de la más reciente a la más
+ * antigua y se para en la primera pagada. Las activaciones del webhook no dejan
+ * una fila propia que sirva (su `userId` de relleno no pasa la FK de
+ * `audit_logs`), así que Stripe es la fuente. Si Stripe no contesta → null.
+ *
  * Cuando no hay dato NO se asume "month": eso sobre-cobraba ~56% a las clínicas
  * anuales (el anual cuesta mucho menos por día). Se devuelve null y
  * `computeManualUpgradeQuote` cotiza por el criterio conservador. Hay clínicas
@@ -53,9 +63,30 @@ export async function inferManualInterval(clinicId: string): Promise<BillingInte
       where: { clinicId, entityType: "subscription", action: "create" },
       orderBy: { createdAt: "desc" },
       take: AUDIT_LOOKBACK,
-      select: { changes: true },
+      select: { changes: true, entityId: true },
     });
-    return pickPurchasedInterval(rows.map((r) => r.changes));
+    const stripe = getStripeSafe();
+    if (!stripe) return null;
+    for (const r of rows) {
+      const after = (r.changes as { _created?: { after?: { billing?: unknown; moduleKey?: unknown; sessionId?: unknown } } } | null)
+        ?._created?.after;
+      const ciclo = pickPurchasedInterval([r.changes]);
+      if (!ciclo || after?.moduleKey) continue; // sin ciclo, o checkout de un módulo
+      const sessionId = typeof after?.sessionId === "string" ? after.sessionId : r.entityId;
+      if (!sessionId || !sessionId.startsWith("cs_")) continue;
+      let s: { payment_status?: string | null; metadata?: Record<string, string> | null };
+      try {
+        s = await stripe.checkout.sessions.retrieve(sessionId);
+      } catch (e) {
+        if ((e as { code?: string })?.code === "resource_missing") continue;
+        return null; // Stripe no contesta: no se adivina con una fila sin confirmar
+      }
+      if (s.payment_status === "paid" && s.metadata?.kind === "platform-subscription" && s.metadata?.clinicId === clinicId) {
+        // Manda lo que Stripe cobró; la fila de bitácora solo dijo qué sesión mirar.
+        return pickPurchasedInterval([{ _created: { after: { billing: s.metadata?.billing } } }]) ?? ciclo;
+      }
+    }
+    return null;
   } catch {
     return null;
   }
