@@ -86,12 +86,13 @@ import { notifyModuleActivated } from "@/lib/marketplace/module-activated-email"
 import { enviarCompraMetaDeSesion } from "@/lib/analytics/meta-capi.server";
 import { enviarCompraTiktokDeSesion } from "@/lib/analytics/tiktok-capi.server";
 import { aplicarActivacionUnaVez, type DbActivacion } from "@/lib/billing/activacion-unica";
+import { ORIGEN_STRIPE_WEBHOOK } from "@/lib/billing/origen-bitacora";
 
 /**
  * Quién firma la bitácora de este webhook (revisión ws1-t8): no hay usuario del equipo y `audit_logs."userId"`
  * tiene FK a `users`, así que va como actor externo ("public": llega de fuera, sin sesión) con este nombre.
  */
-const ORIGEN_STRIPE = "Stripe (webhook)";
+const ORIGEN_STRIPE = ORIGEN_STRIPE_WEBHOOK;
 
 // Next.js App Router: no hace body-parsing automático aquí porque leemos el
 // raw body para verificar la firma de Stripe.

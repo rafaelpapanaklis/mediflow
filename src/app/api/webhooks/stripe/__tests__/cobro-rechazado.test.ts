@@ -2918,6 +2918,49 @@ test("🔴 m2 · una reentrega no suma otro periodo pero SÍ vuelve a sincroniza
   assert.equal(bitacora.length, bitacoraTras1, "ni otra fila de activación");
 });
 
+test("🔴 m4 · `invoice.paid` reactiva y su fila de bitácora SÍ queda, firmada «Stripe (webhook)» (regla-cobro-tarjeta, no route.ts)", async () => {
+  await entregar(evento("invoice.payment_failed", facturaFallida(), Date.now()));
+  suscripcionesVivas.set(SUB, suscripcion("active", Date.now() + 30 * DIA));
+  facturasVivas.set(FACTURA, { id: FACTURA, status: "paid" });
+  bitacora.length = 0;
+  assert.equal(await entregar(evento("invoice.paid", facturaPagada())), 200);
+  assert.equal(clinica().subscriptionStatus, "active");
+  const fila = bitacora.find((b) => b.changes?.subscriptionStatus?.after === "active" && b.changes?._source?.after?.event === "invoice.paid");
+  assert.ok(fila, "en e0272cbfe reactivarSiStripeYaCobro escribía userId = clinic.id y la FK la tiraba");
+  assert.equal(fila.userId, null);
+  assert.equal(fila.origen, "Stripe (webhook)");
+});
+
+test("🔴 m4 · el reintento de una regla de tarjeta a medias firma con quién la corrió: el cron o «Reintentar» de /admin", async () => {
+  const { registrarReglaFallida, reintentarReglasPendientes } = await import("@/lib/billing/regla-cobro-tarjeta.server");
+  const { ORIGEN_REINTENTO_ADMIN, ORIGEN_REINTENTO_CRON } = await import("@/lib/billing/origen-bitacora");
+  for (const origen of [ORIGEN_REINTENTO_CRON, ORIGEN_REINTENTO_ADMIN]) {
+    suspendidaCuatroMeses();
+    const pago = Date.now() - 3 * DIA; // camino tardío
+    facturasVivas.set(FACTURA, {
+      id: FACTURA, status: "paid", billing_reason: "subscription_cycle", amount_paid: 68900, created: Math.floor(pago / 1000),
+      status_transitions: { finalized_at: Math.floor(pago / 1000) - 3600, paid_at: Math.floor(pago / 1000) },
+      parent: { subscription_details: { subscription: SUB } },
+    });
+    suscripcionesVivas.set(SUB, suscripcion("active", Date.now() + 27 * DIA));
+    await registrarReglaFallida(FACTURA, CLINIC);
+    bitacora.length = 0;
+    const r = await reintentarReglasPendientes(stripeDoble, CLINIC, origen);
+    assert.deepEqual(r.fallos, [], origen);
+    assert.equal(clinica().subscriptionStatus, "active", origen);
+    const tardia = bitacora.find((b) => b.changes?._source?.after?.reglaTardia === true);
+    assert.ok(tardia, `${origen}: en e0272cbfe la fila de la regla tardía no se escribía (userId = clinic.id)`);
+    assert.equal(tardia.origen, origen);
+    assert.ok(bitacora.every((b) => b.userId === null && b.origen === origen), JSON.stringify(bitacora.map((b) => b.origen)));
+  }
+});
+
+test("m4 · el «Reintentar» de /admin pasa su origen y el cron el suyo (no el del webhook)", async () => {
+  const { readFileSync } = await import("node:fs");
+  assert.match(readFileSync(path.join(RAIZ, "src/lib/billing/factura-fuera-de-stripe.server.ts"), "utf8"), /reintentarReglasPendientes\(stripe, clinicId, ORIGEN_REINTENTO_ADMIN\)/);
+  assert.match(readFileSync(path.join(RAIZ, "src/lib/billing/facturas-tarjeta-pendientes.server.ts"), "utf8"), /reintentarReglasPendientes\(stripe, p\.clinicId, ORIGEN_REINTENTO_CRON\)/);
+});
+
 test("nº13 dos pagos de verdad (dos sesiones) siguen dando dos periodos: renovar por adelantado SUMA", async () => {
   reiniciar({ stripeSubscriptionId: null, trialEndsAt: new Date(Date.now() + 10 * DIA), nextBillingDate: new Date(Date.now() + 10 * DIA) });
   await entregar(sesionSpei("cs_mes_1"));

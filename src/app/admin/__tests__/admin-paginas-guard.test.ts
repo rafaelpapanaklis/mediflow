@@ -109,19 +109,29 @@ function paginas(dir: string): string[] {
   });
 }
 
+/** El código sin comentarios (de bloque y de línea, sin tocar `https://`): lo que se ejecuta. */
+function sinComentarios(src: string): string {
+  return src.replace(/\/\*[\s\S]*?\*\//g, (c) => c.replace(/[^\n]/g, " ")).replace(/(^|[^:"'`\\])\/\/[^\n]*/g, "$1");
+}
+
 /**
- * La primera sentencia del cuerpo de la función cuyos parámetros abren en el primer `(` desde `desde` (sin
- * comentarios ni espacios). Sirve para `function` y para flechas; una flecha sin llaves (`=> expr`) devuelve
- * `=> …`, que nunca es el guard.
+ * La primera sentencia del cuerpo de la función cuyo valor empieza en `desde`: `function …(`, `async (…) =>`,
+ * `(…) =>` o `x =>`. Una flecha sin llaves (`=> expr`) devuelve `=> …`, que nunca es el guard.
  */
 function primeraSentencia(src: string, desde: number): string {
-  let i = src.indexOf("(", desde);
-  for (let d = 0; ; i++) {
-    if (src[i] === "(") d++;
-    else if (src[i] === ")" && --d === 0) break;
+  let j: number;
+  const sola = /^(async\s+)?(\w+)\s*=>/.exec(src.slice(desde));
+  if (sola && sola[2] !== "function") {
+    j = desde + sola[0].length - 2;
+  } else {
+    let i = src.indexOf("(", desde);
+    for (let d = 0; ; i++) {
+      if (src[i] === "(") d++;
+      else if (src[i] === ")" && --d === 0) break;
+    }
+    j = i + 1;
   }
-  let j = i + 1;
-  for (let ang = 0; ; j++) {
+  for (let ang = 0; j < src.length; j++) {
     if (src[j] === "<") ang++;
     else if (src[j] === ">" && src[j - 1] !== "=") ang--;
     else if (src[j] === "=" && src[j + 1] === ">" && ang === 0) {
@@ -131,26 +141,98 @@ function primeraSentencia(src: string, desde: number): string {
       break;
     } else if (src[j] === "{" && ang === 0) break;
   }
-  return src.slice(j + 1).replace(/^(\s|\/\/[^\n]*\n|\/\*[\s\S]*?\*\/)*/, "").split("\n")[0].trim();
+  return src.slice(j + 1).replace(/^\s*/, "").split("\n")[0].trim();
 }
 const LLAMA_AL_GUARD = /^(const \w+ = )?await requireAdminPage\(\);$/;
 
+/** Las constantes de configuración de segmento que Next lee de una página (con valor literal no ejecutan nada). */
+const CONFIG_DE_NEXT = new Set(["dynamic", "revalidate", "runtime", "metadata", "viewport", "fetchCache", "preferredRegion", "maxDuration", "dynamicParams"]);
+
+/** Desde `desde`, el texto hasta el `;` o el salto de línea de nivel 0 (el valor de una constante). */
+function hastaFinDeSentencia(src: string, desde: number): string {
+  let d = 0;
+  for (let k = desde; k < src.length; k++) {
+    const c = src[k];
+    if ("([{".includes(c)) d++;
+    else if (")]}".includes(c)) d--;
+    else if (d === 0 && (c === ";" || c === "\n")) return src.slice(desde, k);
+  }
+  return src.slice(desde);
+}
+
+/** Un valor que no ejecuta nada: texto, número, booleano, o un objeto / arreglo sin llamadas, flechas ni plantillas. */
+function esLiteral(valor: string): boolean {
+  const v = valor.trim();
+  if (!/^(["'\-\d{[]|true\b|false\b|null\b)/.test(v)) return false;
+  return !/[(]|=>|\$\{|\bawait\b|\.\.\.|\bget\s+\w+\s*\(|\bnew\b/.test(v);
+}
+
+type Exportado =
+  | { nombre: string; clase: "tipo" | "config" }
+  | { nombre: string; clase: "funcion"; inicio: number }
+  | { nombre: string; clase: "opaco" };
+
 /**
- * Revisión ws1-t8, m3: TODO export de función de un archivo, sea `function` (con nombre o default, async o no),
- * `const x = async (…) =>`, `const x = function` o `export default (…) =>`. `export { … }` y `export * from`
- * cuentan como «no se puede comprobar»: podrían reexportar una función de otro archivo sin guard.
+ * Revisión ws1-t8, m5 · FALLA CERRADO. Todo `export` de nivel superior se clasifica, y lo que no se reconoce es
+ * «opaco» (no se puede comprobar → rojo):
+ *  · `type` / `interface` → sin código;
+ *  · una constante de configuración de Next (`CONFIG_DE_NEXT`) con valor literal → sin código;
+ *  · una función reconocida: `function` (default o con nombre), `export default (async) (…) =>` y
+ *    `export const x[: tipo] = (async) (…) => / x => / function` → hay que mirar su primera sentencia;
+ *  · todo lo demás: `export let/var`, una función envuelta (`cache(async () => …)`), `export { … }`, `export *`,
+ *    `export default identificador`, `class`, `enum`… → opaco.
+ * Además, un `export` que no empieza línea (`; export const …`) también es opaco.
  */
-function exportsDeFuncion(src: string): Array<{ nombre: string; inicio: number } | { nombre: string; opaco: true }> {
-  const salida: Array<{ nombre: string; inicio: number } | { nombre: string; opaco: true }> = [];
-  for (const m of src.matchAll(/export\s+(default\s+)?(async\s+)?function\s*\*?\s*(\w*)/g)) {
-    salida.push({ nombre: m[1] ? "default" : m[3], inicio: m.index! });
+function clasificarExports(srcOriginal: string): Exportado[] {
+  const src = sinComentarios(srcOriginal);
+  const salida: Exportado[] = [];
+  const alInicio = new Set<number>();
+  for (const m of src.matchAll(/^export\b/gm)) {
+    alInicio.add(m.index!);
+    const resto = src.slice(m.index!);
+    let r: RegExpExecArray | null;
+    if ((r = /^export\s+(declare\s+)?(type|interface)\s+(\w+)/.exec(resto))) {
+      salida.push({ nombre: r[3], clase: "tipo" });
+    } else if (/^export\s+type\s*\{[^}]*\}(\s*from\s*["'][^"']+["'])?\s*;?\s*$/m.test(resto.split("\n")[0])) {
+      salida.push({ nombre: resto.split("\n")[0].trim(), clase: "tipo" }); // `export type { A } from "./x"`: solo tipos
+    } else if ((r = /^export\s+(default\s+)?(async\s+)?function\b\s*\*?\s*(\w*)/.exec(resto))) {
+      salida.push({ nombre: r[1] ? "default" : r[3], clase: "funcion", inicio: m.index! });
+    } else if ((r = /^export\s+default\s+(?=(async\s*)?\()/.exec(resto))) {
+      salida.push({ nombre: "default", clase: "funcion", inicio: m.index! + r[0].length });
+    } else if ((r = /^export\s+const\s+(\w+)\s*/.exec(resto))) {
+      const nombre = r[1];
+      // Se salta la anotación de tipo (puede llevar `=>` y genéricos) hasta el `=` de nivel 0.
+      let k = m.index! + r[0].length;
+      if (src[k] === ":") {
+        for (let d = 0; k < src.length; k++) {
+          const c = src[k];
+          if ("([{<".includes(c)) d++;
+          else if (")]}".includes(c) || (c === ">" && src[k - 1] !== "=")) d--;
+          else if (c === "=" && d === 0 && src[k + 1] !== ">") break;
+        }
+      }
+      if (src[k] !== "=") { salida.push({ nombre, clase: "opaco" }); continue; }
+      const inicio = k + 1 + src.slice(k + 1).search(/\S/);
+      const valor = src.slice(inicio);
+      if (CONFIG_DE_NEXT.has(nombre) && esLiteral(hastaFinDeSentencia(src, inicio))) salida.push({ nombre, clase: "config" });
+      else if (/^(async\s+)?(function\b|\(|<|\w+\s*=>)/.test(valor)) salida.push({ nombre, clase: "funcion", inicio });
+      else salida.push({ nombre, clase: "opaco" });
+    } else {
+      salida.push({ nombre: resto.split("\n")[0].trim(), clase: "opaco" });
+    }
   }
-  for (const m of src.matchAll(/export\s+const\s+(\w+)\s*(?::[^=]*)?=\s*(async\b|function\b|\(|<)/g)) {
-    salida.push({ nombre: m[1], inicio: m.index! });
+  for (const m of src.matchAll(/\bexport\s/g)) {
+    if (!alInicio.has(m.index!)) salida.push({ nombre: `export a media línea: ${src.slice(m.index!, m.index! + 30).split("\n")[0]}`, clase: "opaco" });
   }
-  for (const m of src.matchAll(/export\s+default\s+(async\s*)?\(/g)) salida.push({ nombre: "default", inicio: m.index! });
-  for (const m of src.matchAll(/export\s*(\{[^}]*\}|\*)/g)) salida.push({ nombre: m[0], opaco: true });
   return salida;
+}
+
+/** Lo que el candado deja pasar de un archivo: los exports que no cumplen (`guard` = la primera sentencia exigida). */
+function exportsSinGuard(src: string, guard: RegExp): string[] {
+  const codigo = sinComentarios(src);
+  return clasificarExports(src)
+    .filter((e) => e.clase === "opaco" || (e.clase === "funcion" && !guard.test(primeraSentencia(codigo, e.inicio))))
+    .map((e) => (e.clase === "opaco" ? `${e.nombre} (no se puede comprobar)` : e.nombre));
 }
 
 test("🔴 CADA page.tsx de /admin (salvo el login) empieza con requireAdminPage(), y su generateMetadata también", () => {
@@ -161,33 +243,72 @@ test("🔴 CADA page.tsx de /admin (salvo el login) empieza con requireAdminPage
     const rel = path.relative(RAIZ, p);
     if (rel === path.join("src/app/admin/login/page.tsx")) continue;
     const src = readFileSync(p, "utf8");
-    const funciones = exportsDeFuncion(src);
-    assert.ok(funciones.some((f) => f.nombre === "default"), `${rel}: sin export default de función`);
-    for (const f of funciones) {
-      if ("opaco" in f) sinGuard.push(`${rel} (${f.nombre}: no se puede comprobar)`);
-      else if (!LLAMA_AL_GUARD.test(primeraSentencia(src, f.inicio))) sinGuard.push(`${rel} (${f.nombre})`);
-    }
+    assert.ok(clasificarExports(src).some((e) => e.nombre === "default" && e.clase === "funcion"), `${rel}: sin export default de función`);
+    for (const malo of exportsSinGuard(src, LLAMA_AL_GUARD)) sinGuard.push(`${rel} · ${malo}`);
   }
   assert.deepEqual(sinGuard, [], "páginas de /admin que se fían del layout");
 });
 
-test("🔴 m3 · el candado ve también las formas nuevas: const async, flecha sin llaves, generateViewport y export { }", () => {
+test("🔴 m3/m5 · el candado falla cerrado: formas nuevas, funciones envueltas, let, tipos con =>, y solo config literal", () => {
   const conGuard = "{\n  await requireAdminPage();\n  return 1;\n}";
+  const P = `export default async function P() ${conGuard}\n`;
   const casos: Array<[string, string[]]> = [
-    [`export default async function P() ${conGuard}\nexport const generateMetadata = async ({ params }: Props) => {\n  const d = await prisma.x();\n}`, ["generateMetadata"]],
-    [`export default async function P() ${conGuard}\nexport const generateMetadata = async () => ({ title: (await prisma.x()).name });`, ["generateMetadata"]],
-    [`export default async function P() ${conGuard}\nexport async function generateViewport() {\n  return leer();\n}`, ["generateViewport"]],
-    [`export default async function P() ${conGuard}\nexport const generateMetadata = async (): Promise<Metadata> => ${conGuard}`, []],
-    [`export default async function P() ${conGuard}\nexport { generateMetadata } from "./meta";`, ["export { generateMetadata }"]],
+    // m3
+    [`${P}export const generateMetadata = async ({ params }: Props) => {\n  const d = await prisma.x();\n}`, ["generateMetadata"]],
+    [`${P}export const generateMetadata = async () => ({ title: (await prisma.x()).name });`, ["generateMetadata"]],
+    [`${P}export async function generateViewport() {\n  return leer();\n}`, ["generateViewport"]],
+    [`${P}export const generateMetadata = async (): Promise<Metadata> => ${conGuard}`, []],
+    [`${P}export { generateMetadata } from "./meta";`, ["export { generateMetadata } from \"./meta\"; (no se puede comprobar)"]],
     [`export default async (props: Props) => {\n  const d = await prisma.x();\n};`, ["default"]],
-    [`export const dynamic = "force-dynamic";\nexport const metadata = { title: "x" };\nexport default async function P() ${conGuard}`, []],
+    [`export const dynamic = "force-dynamic";\nexport const metadata = { title: "x" };\n${P}`, []],
+    // m5: los tres mutantes de t8 (en e0272cbfe pasaban en verde)
+    [`${P}export const generateViewport = cacheR(async () => {\n  return prisma.x();\n});`, ["generateViewport (no se puede comprobar)"]],
+    [`${P}export let generateViewport = async () => {\n  return prisma.x();\n};`, ["export let generateViewport = async () => { (no se puede comprobar)"]],
+    [`${P}export const generateViewport: (p: Props) => Promise<object> = async (p) => {\n  return prisma.x();\n};`, ["generateViewport"]],
+    // m5: más formas
+    [`${P}export const generateViewport: (p: Props) => Promise<object> = async (p) => ${conGuard}`, []],
+    [`${P}export type { A, B } from "./tipos";`, []],
+    [`${P}export const generateMetadata = async props => ${conGuard}`, []],
+    [`${P}export const generateMetadata = async props => {\n  return prisma.x();\n}`, ["generateMetadata"]],
+    [`${P}export const revalidate = calcular();`, ["revalidate (no se puede comprobar)"]],
+    [`${P}export const metadata = { title: \`\${await nombre()}\` };`, ["metadata (no se puede comprobar)"]],
+    [`${P}export const otraCosa = 5;`, ["otraCosa (no se puede comprobar)"]],
+    [`${P}export * from "./x";`, ["export * from \"./x\"; (no se puede comprobar)"]],
+    [`${P}const g = async () => prisma.x(); export { g as generateViewport };`, ["export a media línea: export { g as generateViewport (no se puede comprobar)"]],
+    [`export type Props = { params: Promise<{ id: string }> };\nexport interface X { a: number }\n${P}`, []],
+    // un comentario con «export» no cuenta
+    [`// export const generateViewport = cacheR(async () => prisma.x());\n${P}`, []],
   ];
-  for (const [src, esperadas] of casos) {
-    const malas = exportsDeFuncion(src)
-      .filter((f) => ("opaco" in f) || !LLAMA_AL_GUARD.test(primeraSentencia(src, f.inicio)))
-      .map((f) => f.nombre);
-    assert.deepEqual(malas, esperadas, src);
+  for (const [src, esperadas] of casos) assert.deepEqual(exportsSinGuard(src, LLAMA_AL_GUARD), esperadas, src);
+});
+
+/** Los `.ts`/`.tsx` de un directorio (sin pruebas). */
+function fuentes(dir: string): string[] {
+  const salida: string[] = [];
+  for (const n of readdirSync(dir)) {
+    const p = path.join(dir, n);
+    if (statSync(p).isDirectory()) { if (n !== "__tests__") salida.push(...fuentes(p)); continue; }
+    if (/\.(ts|tsx)$/.test(n) && !/\.test\./.test(n)) salida.push(p);
   }
+  return salida;
+}
+
+/** ¿Hay un "use server" que no sea la primera sentencia del archivo (una acción en línea, dentro de una función)? */
+function useServerEnLinea(src: string): boolean {
+  const codigo = sinComentarios(src);
+  const todas = [...codigo.matchAll(/["']use server["']/g)].map((m) => m.index!);
+  const alPrincipio = /^\s*["']use server["']/.exec(codigo) ? codigo.search(/["']use server["']/) : -1;
+  return todas.some((i) => i !== alPrincipio);
+}
+
+test("🔴 m5 · ningún \"use server\" en línea dentro de src/app/admin (una acción así no la ve el candado de acciones)", () => {
+  const malos = fuentes(ADMIN).filter((p) => useServerEnLinea(readFileSync(p, "utf8"))).map((p) => path.relative(RAIZ, p));
+  assert.deepEqual(malos, []);
+  // El detector, con fuentes sintéticas.
+  assert.equal(useServerEnLinea(`"use server";\nexport async function a() {}`), false);
+  assert.equal(useServerEnLinea(`export default async function P() {\n  async function borrar() {\n    "use server";\n  }\n}`), true);
+  assert.equal(useServerEnLinea(`"use server";\nexport async function a() {\n  'use server';\n}`), true);
+  assert.equal(useServerEnLinea(`// "use server" en un comentario\nexport default function P() {}`), false);
 });
 
 test("el login de /admin sigue abierto (si no, nadie entra)", () => {
@@ -259,12 +380,10 @@ test("🔴 toda server action de admin empieza con sesionAdminDeAccion() (sesió
   let acciones = 0;
   for (const p of archivos) {
     const src = readFileSync(p, "utf8");
-    for (const f of exportsDeFuncion(src)) {
-      acciones++;
-      if ("opaco" in f || !/^const \w+ = await sesionAdminDeAccion\(\);$/.test(primeraSentencia(src, f.inicio))) {
-        malas.push(`${path.relative(RAIZ, p)} · ${f.nombre}`);
-      }
-    }
+    // m5: en un "use server" todo export cuenta (ni config ni tipos tienen sentido como acción, pero un tipo no ejecuta nada).
+    acciones += clasificarExports(src).filter((e) => e.clase === "funcion").length;
+    for (const e of clasificarExports(src)) if (e.clase === "config") malas.push(`${path.relative(RAIZ, p)} · ${e.nombre} (config en un "use server")`);
+    for (const malo of exportsSinGuard(src, /^const \w+ = await sesionAdminDeAccion\(\);$/)) malas.push(`${path.relative(RAIZ, p)} · ${malo}`);
   }
   assert.ok(acciones >= 17, `solo ${acciones} acciones`);
   assert.deepEqual(malas, []);

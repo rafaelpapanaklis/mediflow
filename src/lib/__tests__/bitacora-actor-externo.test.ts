@@ -86,7 +86,28 @@ test("logAuditExterno sin clinicId no escribe ni lanza", async () => {
 test("el webhook de Stripe ya no escribe ningún userId de mentira", async () => {
   const { readFileSync } = await import("node:fs");
   const fuente = readFileSync("src/app/api/webhooks/stripe/route.ts", "utf8");
-  assert.doesNotMatch(fuente, /userId:\s*clinic(Id|\.id)\b/);
   assert.doesNotMatch(fuente, /\blogAudit\(/);
   assert.equal((fuente.match(/logAuditExterno\(\{/g) ?? []).length, 14);
+});
+
+/** El código sin comentarios (los de bloque y los de línea): lo que se ejecuta, no lo que se cuenta. */
+function sinComentarios(src: string): string {
+  return src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:"'`])\/\/[^\n]*/g, "$1");
+}
+
+test("🔴 m4 · en TODO src/ no queda ningún `userId: clinicId` / `userId: clinic.id` (la FK tira la fila en silencio)", async () => {
+  const { readFileSync, readdirSync, statSync } = await import("node:fs");
+  const path = await import("node:path");
+  const malas: string[] = [];
+  const recorrer = (d: string) => {
+    for (const n of readdirSync(d)) {
+      const p = path.join(d, n);
+      if (statSync(p).isDirectory()) { if (n !== "__tests__" && n !== "node_modules") recorrer(p); continue; }
+      if (!/\.(ts|tsx)$/.test(n) || /\.test\./.test(n)) continue;
+      const lineas = sinComentarios(readFileSync(p, "utf8")).split("\n");
+      lineas.forEach((l, i) => { if (/userId:\s*clinic(Id|\.id)\b/.test(l)) malas.push(`${p}:${i + 1}`); });
+    }
+  };
+  recorrer("src");
+  assert.deepEqual(malas, [], "en e0272cbfe quedaban 3 en src/lib/billing/regla-cobro-tarjeta.server.ts");
 });

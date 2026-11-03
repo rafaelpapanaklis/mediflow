@@ -13,6 +13,7 @@ import {
 } from "@/lib/billing/factura-fuera-de-stripe.server";
 import { facturasAbiertasDelPlan, realinearActivo } from "@/lib/billing/reactivacion-tras-suspension.server";
 import { reintentarReglasPendientes, reglasPendientes } from "@/lib/billing/regla-cobro-tarjeta.server";
+import { ORIGEN_REINTENTO_CRON } from "@/lib/billing/origen-bitacora";
 import { subscriptionPeriodEndSeconds } from "@/lib/billing/proration";
 
 /**
@@ -160,7 +161,7 @@ export async function reintentarMarcadoPendiente(
     resumen.revisadas = pendientes.length;
     for (const p of pendientes) {
       if (p.tarjetaPendiente.length > 0 && stripe) {
-        const t = await reintentarReglasPendientes(stripe, p.clinicId);
+        const t = await reintentarReglasPendientes(stripe, p.clinicId, ORIGEN_REINTENTO_CRON);
         resumen.marcadas.push(...t.completadas.map((id) => `${id} (tarjeta)`));
         if (t.fallos.length > 0) resumen.fallos.push(p.clinicId);
       }
