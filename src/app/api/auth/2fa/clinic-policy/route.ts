@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { rateLimit } from "@/lib/rate-limit";
 import { getAuthContext, requireAdmin } from "@/lib/auth-context";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
 
 // POST /api/auth/2fa/clinic-policy — exigir (o no) 2FA a todo el equipo.
@@ -13,6 +14,13 @@ export async function POST(req: NextRequest) {
   const ctx = await getAuthContext();
   const denied = requireAdmin(ctx);
   if (denied) return denied;
+  // ws1-t11 v3 (H3 de la revisión de t2): además del rol, «Editar configuración» (settings.edit) con el
+  // override por persona: un ADMIN al que el dueño se lo apagó ya no pasa. El
+  // SUPER_ADMIN (el dueño) no se bloquea. Misma decisión que WhatsApp Cloud (lead 15).
+  if (!ctx!.isSuperAdmin) {
+    const sinPermiso = denyIfMissingPermission(ctx!, "settings.edit");
+    if (sinPermiso) return sinPermiso;
+  }
 
   const body = await req.json().catch(() => ({}));
   const require2fa = body?.require2fa;

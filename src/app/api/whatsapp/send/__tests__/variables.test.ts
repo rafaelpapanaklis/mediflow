@@ -92,7 +92,7 @@ const prismaStub: any = {
 (mock as any).module("@/lib/prisma", { namedExports: { prisma: prismaStub } });
 (mock as any).module("@/lib/auth-context", {
   namedExports: {
-    getAuthContext: async () => ({ clinicId: "c1", isAdmin: true }),
+    getAuthContext: async () => ({ clinicId: "c1", isAdmin: true, role: "ADMIN", permissionsOverride: [] }),
     requireAdmin: () => null,
   },
 });

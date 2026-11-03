@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { sendWhatsAppLogged } from "@/lib/whatsapp/send-and-log";
 import { getAuthContext, requireAdmin } from "@/lib/auth-context";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { timeHHMMInTz } from "@/lib/agenda/legacy-helpers";
 import { WA_REMINDER_STATUS } from "@/lib/whatsapp/reminder-status";
 import {
@@ -24,6 +25,13 @@ export async function POST(req: NextRequest) {
   const ctx = await getAuthContext();
   const denied = requireAdmin(ctx);
   if (denied) return denied;
+  // ws1-t11 v3 (H3 de la revisión de t2): además del rol, «Enviar WhatsApp» (whatsapp.send) con el
+  // override por persona: un ADMIN al que el dueño se lo apagó ya no pasa. El
+  // SUPER_ADMIN (el dueño) no se bloquea. Misma decisión que WhatsApp Cloud (lead 15).
+  if (!ctx!.isSuperAdmin) {
+    const sinPermiso = denyIfMissingPermission(ctx!, "whatsapp.send");
+    if (sinPermiso) return sinPermiso;
+  }
   const clinicId = ctx!.clinicId;
 
   const { appointmentId } = await req.json();

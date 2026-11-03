@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext, requireAdmin } from "@/lib/auth-context";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
 import { extractAuditMeta, logAudit } from "@/lib/audit";
 import { conFuncionIa, esFuncionIa, sanitizeAiSettings } from "@/lib/ai-billing/interruptores";
@@ -44,6 +45,13 @@ export async function PATCH(req: NextRequest) {
     if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const err = requireAdmin(ctx);
     if (err) return err;
+    // ws1-t11 v3 (H3 de la revisión de t2): además del rol, «Editar configuración» (settings.edit) con el
+    // override por persona: un ADMIN al que el dueño se lo apagó ya no pasa. El
+    // SUPER_ADMIN (el dueño) no se bloquea. Misma decisión que WhatsApp Cloud (lead 15).
+    if (!ctx!.isSuperAdmin) {
+      const sinPermiso = denyIfMissingPermission(ctx!, "settings.edit");
+      if (sinPermiso) return sinPermiso;
+    }
 
     const body = await req.json().catch(() => null);
     const funcion = body?.funcion;

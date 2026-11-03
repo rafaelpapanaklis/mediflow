@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext, requireAdmin } from "@/lib/auth-context";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { textoSoloDuenoTimbra } from "@/lib/cfdi/mensajes";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { prisma } from "@/lib/prisma";
@@ -28,6 +29,13 @@ export async function POST(req: NextRequest, props: { params: Promise<{ cfdiId: 
   const err = requireAdmin(ctx);
   // C-57: sin «Solo administradores» (decisión 13: solo dueño/admin, como hoy).
   if (err) return ctx ? NextResponse.json({ error: textoSoloDuenoTimbra(), code: "CFDI_SOLO_DUENO" }, { status: 403 }) : err;
+  // ws1-t11 v3 (H3 de la revisión de t2): además del rol, «Reembolsar / cancelar» (billing.refund) con el
+  // override por persona: un ADMIN al que el dueño se lo apagó ya no pasa. El
+  // SUPER_ADMIN (el dueño) no se bloquea. Misma decisión que WhatsApp Cloud (lead 15).
+  if (!ctx!.isSuperAdmin) {
+    const sinPermiso = denyIfMissingPermission(ctx!, "billing.refund");
+    if (sinPermiso) return sinPermiso;
+  }
   const { clinicId, userId } = ctx!;
 
   // Visibilidad por paciente, como el PDF/XML: el CFDI lleva su identidad fiscal.

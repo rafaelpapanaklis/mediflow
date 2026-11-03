@@ -31,7 +31,8 @@ export async function POST(req: NextRequest) {
   // con el override por persona — el número y el token de WhatsApp son una
   // integración, igual que PATCH /api/settings y la conexión de Mercado Pago.
   // Un ADMIN al que el dueño le apagó el interruptor ya no los cambia.
-  const sinConfig = denyIfMissingPermission(ctx!, "settings.edit");
+  // El SUPER_ADMIN (el dueño) no se bloquea (ws1-t11 v3).
+  const sinConfig = ctx!.isSuperAdmin ? null : denyIfMissingPermission(ctx!, "settings.edit");
   if (sinConfig) return sinConfig;
   const clinicId = ctx!.clinicId;
 

@@ -104,3 +104,11 @@ test("un DOCTOR sigue fuera (el arreglo solo estrecha, no abre a nadie nuevo)", 
   assert.equal(r.status, 403);
   assert.equal(escrituras.length, 0);
 });
+
+test("el SUPER_ADMIN no se bloquea aunque su override no traiga «Editar configuración» (ws1-t11 v3)", async () => {
+  como("SUPER_ADMIN", SIN_CONFIG);
+  const r = await (await connect()).POST(req("http://x/api/whatsapp/connect", "POST", { phoneNumberId: "111", accessToken: "tok" }));
+  assert.equal(r.status, 200);
+  const e = await (await exchange()).POST(req("http://x/api/whatsapp/embedded/exchange", "POST", { code: "codigo-12345", wabaId: "w1", phoneNumberId: "111" }));
+  assert.notEqual(e.status, 403);
+});
