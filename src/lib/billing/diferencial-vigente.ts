@@ -12,6 +12,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import type Stripe from "stripe";
 import { PLAN_UPGRADE_DIFF_KIND } from "@/lib/billing/proration";
+import type { AvisoAdmin } from "@/lib/billing/avisos-admin";
 
 const DAY_MS = 86_400_000;
 
@@ -64,4 +65,30 @@ export async function expirarDiferencialesAbiertos(
     console.error("[billing] no se pudieron leer las sesiones abiertas del diferencial", clinicId, e);
   }
   return expiradas;
+}
+
+/**
+ * Aviso para quien administra la plataforma: la clínica PAGÓ un diferencial que
+ * no se aplicó (revisión t8, m1). Sin él, el cobro solo dejaba un log y una
+ * fila de bitácora que no avisa a nadie; hay que revisarlo y devolverlo a mano.
+ */
+export function avisoDiferencialDescartado(a: {
+  clinicId: string;
+  sessionId: string | null | undefined;
+  motivo: string;
+  planCotizado: string | null;
+  detalle: Record<string, unknown>;
+}): AvisoAdmin {
+  return {
+    asunto: `Diferencial de plan PAGADO y no aplicado (${a.motivo}): clínica ${a.clinicId}`,
+    lineas: [
+      "Una clínica pagó en Stripe la diferencia de un cambio de plan y el plan NO se aplicó.",
+      `Clínica: ${a.clinicId}`,
+      `Sesión de Checkout: ${a.sessionId ?? "(sin id)"}`,
+      `Plan cotizado: ${a.planCotizado ?? "(inválido)"} · motivo: ${a.motivo}`,
+      `Detalle: ${JSON.stringify(a.detalle)}`,
+      "Motivos: period-changed = el periodo pagado cambió (renovó antes de pagar el voucher); period-expired = pagó con el periodo ya vencido; from-plan-changed = hoy está en un plan menor que el cotizado; not-a-tier-upgrade = ya tenía ese plan o uno mayor.",
+      "Qué hacer: revisa el pago en Stripe y, si procede, devuélvelo a la clínica (o aplícale el plan a mano desde /admin).",
+    ],
+  };
 }

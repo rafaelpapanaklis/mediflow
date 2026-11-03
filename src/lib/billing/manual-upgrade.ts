@@ -23,70 +23,70 @@ export type { ManualUpgradeQuote };
 type PlanPrices = { priceMxn: number; priceMxnAnnual: number };
 
 /**
- * Cuántas filas de bitácora se revisan hacia atrás buscando la última COMPRA.
- * Entre una compra y otra pueden acumularse filas de `entityType: "subscription"`
- * / `action: "create"` que no son compras (cada intento de Checkout del
- * diferencial deja una), así que no alcanza con mirar la más reciente.
- */
-const AUDIT_LOOKBACK = 50;
-
-/**
  * Ciclo (mensual/anual) que compró una clínica que paga por SPEI/OXXO, o `null`
  * si NO se pudo confirmar.
  *
- * `Clinic` no guarda el ciclo, pero `/api/billing/checkout` deja el `billing`
- * elegido en la bitácora (`entityType: "subscription"`, `action: "create"`,
- * `changes._created.after.billing`). Se busca la última fila que SÍ lo registre
- * (ver `pickPurchasedInterval`: las filas sin `billing` se saltan, no se toman
- * como mensuales).
- *
- * PERO esa fila se escribe al CREAR la sesión, pagada o no, y el checkout de un
- * MÓDULO deja una con la misma forma (ola 2b, retenido run-2): un checkout anual
- * abandonado bajaba ~36 % los upgrades de un pagador mensual. Por eso solo cuenta
- * una fila de compra DEL PLAN cuya sesión Stripe confirma pagada y de ESTA
- * clínica (`metadata.kind`/`clinicId`); se pregunta de la más reciente a la más
- * antigua y se para en la primera pagada. Las activaciones del webhook no dejan
- * una fila propia que sirva (su `userId` de relleno no pasa la FK de
- * `audit_logs`), así que Stripe es la fuente. Si Stripe no contesta → null.
+ * `Clinic` no guarda el ciclo. Sale de los PAGOS CONFIRMADOS, nunca de la
+ * intención (ola 2b, retenido run-2 + revisión t8 M1):
+ *  · las sesiones de Checkout de Stripe COMPLETAS y PAGADAS del plan
+ *    (`metadata.kind = platform-subscription`, el mismo `clinicId`) del cliente
+ *    de Stripe de la clínica; el ciclo es `metadata.billing`, lo que se cobró;
+ *  · las transferencias SPEI directo CONFIRMADAS (`spei_transfer_requests`,
+ *    que guardan su `billing`).
+ * Gana la más reciente de las dos. Las sesiones se recorren TODAS (página a
+ * página, de la más reciente a la más antigua) hasta la primera pagada: no hay
+ * ventana que una clínica pueda inundar. Antes se leía la fila de bitácora que
+ * deja /api/billing/checkout al CREAR la sesión (pagada o no; también la del
+ * checkout de un módulo), y con «sin dato» se cobra el menor de los dos ciclos:
+ * abrir y abandonar checkouts anuales abarataba ~36 % los upgrades mensuales.
  *
  * Cuando no hay dato NO se asume "month": eso sobre-cobraba ~56% a las clínicas
  * anuales (el anual cuesta mucho menos por día). Se devuelve null y
- * `computeManualUpgradeQuote` cotiza por el criterio conservador. Hay clínicas
- * que legítimamente no tienen la fila: las que activó un admin a mano
- * (`/api/admin/billing`, que audita con otro `entityType`).
+ * `computeManualUpgradeQuote` cotiza por el criterio conservador. Hoy quedan sin
+ * dato las que activó un admin a mano (`/api/admin/billing` no registra ciclo).
+ * Si Stripe no contesta → null (y el cobro del diferencial, que también va por
+ * Stripe, no se puede crear).
  */
 export async function inferManualInterval(clinicId: string): Promise<BillingInterval | null> {
-  // Sin clinicId, Prisma DESCARTA el filtro y leería bitácora de otras clínicas.
+  // Sin clinicId, Prisma DESCARTA el filtro y leería datos de otras clínicas.
   if (!clinicId) return null;
   try {
-    const rows = await prisma.auditLog.findMany({
-      where: { clinicId, entityType: "subscription", action: "create" },
-      orderBy: { createdAt: "desc" },
-      take: AUDIT_LOOKBACK,
-      select: { changes: true, entityId: true },
-    });
-    const stripe = getStripeSafe();
-    if (!stripe) return null;
-    for (const r of rows) {
-      const after = (r.changes as { _created?: { after?: { billing?: unknown; moduleKey?: unknown; sessionId?: unknown } } } | null)
-        ?._created?.after;
-      const ciclo = pickPurchasedInterval([r.changes]);
-      if (!ciclo || after?.moduleKey) continue; // sin ciclo, o checkout de un módulo
-      const sessionId = typeof after?.sessionId === "string" ? after.sessionId : r.entityId;
-      if (!sessionId || !sessionId.startsWith("cs_")) continue;
-      let s: { payment_status?: string | null; metadata?: Record<string, string> | null };
-      try {
-        s = await stripe.checkout.sessions.retrieve(sessionId);
-      } catch (e) {
-        if ((e as { code?: string })?.code === "resource_missing") continue;
-        return null; // Stripe no contesta: no se adivina con una fila sin confirmar
-      }
-      if (s.payment_status === "paid" && s.metadata?.kind === "platform-subscription" && s.metadata?.clinicId === clinicId) {
-        // Manda lo que Stripe cobró; la fila de bitácora solo dijo qué sesión mirar.
-        return pickPurchasedInterval([{ _created: { after: { billing: s.metadata?.billing } } }]) ?? ciclo;
+    const clinica = await prisma.clinic.findUnique({ where: { id: clinicId }, select: { stripeCustomerId: true } });
+    let porStripe: { en: number; ciclo: BillingInterval } | null = null;
+    if (clinica?.stripeCustomerId) {
+      const stripe = getStripeSafe();
+      if (!stripe) return null;
+      let despuesDe: string | undefined;
+      buscar: for (;;) {
+        const pagina = await stripe.checkout.sessions.list({
+          customer: clinica.stripeCustomerId,
+          status: "complete",
+          limit: 100,
+          ...(despuesDe ? { starting_after: despuesDe } : {}),
+        });
+        for (const s of pagina.data) {
+          if (s.payment_status !== "paid" || s.metadata?.kind !== "platform-subscription" || s.metadata?.clinicId !== clinicId) continue;
+          const ciclo = pickPurchasedInterval([{ _created: { after: { billing: s.metadata?.billing } } }]);
+          if (ciclo) {
+            porStripe = { en: s.created * 1000, ciclo };
+            break buscar;
+          }
+        }
+        despuesDe = pagina.data[pagina.data.length - 1]?.id;
+        if (!pagina.has_more || !despuesDe) break;
       }
     }
-    return null;
+
+    const transferencia = await prisma.speiTransferRequest.findFirst({
+      where: { clinicId, status: "confirmed", resolvedAt: { not: null } },
+      orderBy: { resolvedAt: "desc" },
+      select: { billing: true, resolvedAt: true },
+    });
+    const cicloSpei = transferencia ? pickPurchasedInterval([{ _created: { after: { billing: transferencia.billing } } }]) : null;
+    const porSpei = cicloSpei && transferencia?.resolvedAt ? { en: transferencia.resolvedAt.getTime(), ciclo: cicloSpei } : null;
+
+    if (porStripe && porSpei) return porSpei.en > porStripe.en ? porSpei.ciclo : porStripe.ciclo;
+    return (porStripe ?? porSpei)?.ciclo ?? null;
   } catch {
     return null;
   }

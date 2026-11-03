@@ -1,14 +1,16 @@
 /**
- * EL CICLO COMPRADO SALE DE UN CHECKOUT PAGADO (ws1-t1, ola 2b, retenido de la auditoría run-2:
- * `billing/manual-upgrade:inferManualInterval-trusts-unpaid-checkout-billing-row`).
+ * EL CICLO COMPRADO SALE DE UN PAGO CONFIRMADO (ws1-t1, ola 2b, retenido de la auditoría run-2:
+ * `billing/manual-upgrade:inferManualInterval-trusts-unpaid-checkout-billing-row`; v2 tras la revisión t8, M1).
  *
  * Run: npm run test:billing
  *
- * `inferManualInterval` DE VERDAD con prisma y Stripe dobles (⛔ sin red ni base). El prorrateo del upgrade
- * de una clínica que paga SPEI/OXXO depende del ciclo que compró (mensual o anual). Ese ciclo se leía de la
- * fila de bitácora que deja /api/billing/checkout AL CREAR la sesión, pagada o no, y también de la que deja
- * el checkout de un MÓDULO (misma forma). Un pagador mensual que abría y abandonaba un checkout anual
- * pasaba a cotizar sus upgrades al precio por día anual (~36 % menos).
+ * `inferManualInterval` DE VERDAD con prisma y Stripe dobles (⛔ sin red ni base). El prorrateo del upgrade de una
+ * clínica que paga SPEI/OXXO depende del ciclo que compró (mensual o anual). Antes se leía de la fila de bitácora
+ * que deja /api/billing/checkout AL CREAR la sesión (pagada o no; también la del checkout de un MÓDULO), y la v1
+ * solo miraba las últimas 50: 50 checkouts abandonados sacaban de la ventana la compra pagada y, sin dato, se cobra
+ * el MENOR de los dos ciclos (el anual). Ahora el ciclo sale solo de pagos CONFIRMADOS: las sesiones de Stripe
+ * completas y pagadas del plan de esa clínica (todas las páginas, sin ventana) y las transferencias SPEI directo
+ * confirmadas. Los dobles respetan `take`, `limit` y `starting_after`: un doble que los ignora esconde la inundación.
  */
 import Module from "node:module";
 import path from "node:path";
@@ -18,17 +20,35 @@ import { computeManualUpgradeQuote } from "@/lib/billing/proration";
 
 const RAIZ = path.resolve(__dirname, "../../../..");
 const CLINIC = "clinic_mensual";
+const CUS = "cus_mensual";
+
+type Sesion = { id: string; customer: string; created: number; status: string; payment_status: string; metadata: Record<string, string> };
 
 let filas: Array<{ entityId: string; changes: any }>;
-let sesiones: Map<string, any>;
-let consultadas: string[];
+let sesiones: Sesion[];
+let spei: Array<{ clinicId: string; billing: string; status: string; resolvedAt: Date | null }>;
+let clienteStripe: string | null;
+let llamadasStripe: number;
 let stripeFalla: boolean;
+let reloj: number;
 
 const prismaDoble: any = {
   auditLog: {
-    findMany: async ({ where }: any) => {
+    findMany: async ({ where, take }: any) => {
       assert.equal(where.clinicId, CLINIC, "la bitácora se lee SOLO de la clínica");
-      return filas.map((f) => ({ ...f }));
+      const todas = filas.map((f) => ({ ...f }));
+      return typeof take === "number" ? todas.slice(0, take) : todas; // respeta `take`, como Postgres
+    },
+  },
+  clinic: {
+    findUnique: async ({ where }: any) => (where.id === CLINIC ? { stripeCustomerId: clienteStripe } : null),
+  },
+  speiTransferRequest: {
+    findFirst: async ({ where, orderBy }: any) => {
+      assert.equal(where.clinicId, CLINIC, "las transferencias se leen SOLO de la clínica");
+      const f = spei.filter((x) => x.clinicId === where.clinicId && x.status === where.status && x.resolvedAt);
+      if (orderBy?.resolvedAt === "desc") f.sort((a, b) => b.resolvedAt!.getTime() - a.resolvedAt!.getTime());
+      return f[0] ?? null;
     },
   },
 };
@@ -37,11 +57,22 @@ const stripeDoble: any = {
   checkout: {
     sessions: {
       retrieve: async (id: string) => {
-        consultadas.push(id);
+        llamadasStripe++;
         if (stripeFalla) throw new Error("Stripe no contesta");
-        const s = sesiones.get(id);
+        const s = sesiones.find((x) => x.id === id);
         if (!s) throw Object.assign(new Error("No such checkout.session"), { code: "resource_missing" });
         return s;
+      },
+      // Como Stripe: de la más reciente a la más antigua, `limit` por página, `starting_after` para la siguiente.
+      list: async ({ customer, status, limit = 10, starting_after }: any) => {
+        llamadasStripe++;
+        if (stripeFalla) throw new Error("Stripe no contesta");
+        const todas = sesiones
+          .filter((s) => s.customer === customer && (status === undefined || s.status === status))
+          .sort((a, b) => b.created - a.created);
+        const desde = starting_after ? todas.findIndex((s) => s.id === starting_after) + 1 : 0;
+        const pagina = todas.slice(desde, desde + Math.min(limit, 100));
+        return { data: pagina, has_more: desde + pagina.length < todas.length };
       },
     },
   },
@@ -76,31 +107,49 @@ before(async () => {
 
 beforeEach(() => {
   filas = [];
-  sesiones = new Map();
-  consultadas = [];
+  sesiones = [];
+  spei = [];
+  clienteStripe = CUS;
+  llamadasStripe = 0;
   stripeFalla = false;
+  reloj = Math.floor(Date.UTC(2026, 9, 1) / 1000);
 });
 
-/** La fila que deja /api/billing/checkout al crear la sesión (route.ts, logAudit tras crearla). */
-function filaPlan(sessionId: string, billing: "monthly" | "annual") {
-  return { entityId: sessionId, changes: { _created: { before: null, after: { plan: "BASIC", priceMxn: 419, billing, sessionId } } } };
-}
-/** La que deja /api/marketplace/module-checkout: misma forma, otro producto. */
-function filaModulo(sessionId: string, billing: "monthly" | "annual") {
-  return { entityId: sessionId, changes: { _created: { before: null, after: { moduleKey: "ortodoncia", billing, method: "spei", sessionId } } } };
-}
-/** La del diferencial de change-plan: sin `billing` (no es una compra). */
-function filaDiferencial(sessionId: string) {
-  return { entityId: sessionId, changes: { _created: { before: null, after: { event: "self-service-change-plan-manual-diff", interval: "year" } } } };
-}
-function sesion(id: string, pagada: boolean, billing: "monthly" | "annual", clinicId = CLINIC) {
-  sesiones.set(id, { id, payment_status: pagada ? "paid" : "unpaid", metadata: { kind: "platform-subscription", clinicId, plan: "BASIC", billing } });
+/**
+ * Un checkout del plan: la sesión en Stripe y la fila que /api/billing/checkout deja en la bitácora al crearla.
+ * Se llaman en orden cronológico (cada una, más reciente que la anterior); las filas quedan de la más reciente a la
+ * más antigua, como las lee el código.
+ */
+function checkout(id: string, billing: "monthly" | "annual", estado: "pagada" | "abandonada" | "voucher-sin-pagar", extra: Partial<Sesion> = {}) {
+  reloj += 60;
+  sesiones.push({
+    id,
+    customer: CUS,
+    created: reloj,
+    status: estado === "abandonada" ? "expired" : "complete",
+    payment_status: estado === "pagada" ? "paid" : "unpaid",
+    metadata: { kind: "platform-subscription", clinicId: CLINIC, plan: "BASIC", billing },
+    ...extra,
+  });
+  filas.unshift({ entityId: id, changes: { _created: { before: null, after: { plan: "BASIC", priceMxn: 419, billing, sessionId: id } } } });
 }
 
 test("retenido: un checkout ANUAL abandonado (más reciente) no cambia el ciclo de quien pagó MENSUAL", async () => {
-  filas = [filaPlan("cs_abandonada", "annual"), filaPlan("cs_pagada", "monthly")];
-  sesion("cs_abandonada", false, "annual");
-  sesion("cs_pagada", true, "monthly");
+  checkout("cs_pagada", "monthly", "pagada");
+  checkout("cs_abandonada", "annual", "abandonada");
+  assert.equal(await inferManualInterval(CLINIC), "month");
+});
+
+test("M1 (t8): 60 checkouts anuales abandonados NO sacan de la ventana la compra mensual pagada", async () => {
+  checkout("cs_pagada", "monthly", "pagada");
+  for (let i = 0; i < 60; i++) checkout(`cs_abandonada_${i}`, "annual", "abandonada");
+  assert.equal(await inferManualInterval(CLINIC), "month");
+  assert.ok(llamadasStripe <= 2, `una consulta a Stripe, no una por fila: ${llamadasStripe}`);
+});
+
+test("M1: tampoco 150 vouchers OXXO generados y sin pagar (sesiones «complete» sin pago): se pagina hasta la pagada", async () => {
+  checkout("cs_pagada", "monthly", "pagada");
+  for (let i = 0; i < 150; i++) checkout(`cs_voucher_${i}`, "annual", "voucher-sin-pagar");
   assert.equal(await inferManualInterval(CLINIC), "month");
 });
 
@@ -114,44 +163,55 @@ test("retenido: el dinero en juego — cotizar al ciclo correcto (30 días, BASI
   assert.ok(anual.diffCents < 70000, `al ciclo anual sale ${anual.diffCents} (~36 % menos)`);
 });
 
-test("retenido (fase 5): la fila de un checkout de MÓDULO no es el ciclo del plan, ni pagada", async () => {
-  filas = [filaModulo("cs_modulo", "annual"), filaPlan("cs_pagada", "monthly")];
-  sesiones.set("cs_modulo", { id: "cs_modulo", payment_status: "paid", metadata: { kind: "module-subscription", clinicId: CLINIC, billing: "annual" } });
-  sesion("cs_pagada", true, "monthly");
+test("retenido (fase 5): un MÓDULO anual pagado no es el ciclo del plan", async () => {
+  checkout("cs_pagada", "monthly", "pagada");
+  checkout("cs_modulo", "annual", "pagada", { metadata: { kind: "module-subscription", clinicId: CLINIC, moduleKey: "ortodoncia", billing: "annual" } });
+  filas[0] = { entityId: "cs_modulo", changes: { _created: { before: null, after: { moduleKey: "ortodoncia", billing: "annual", method: "spei", sessionId: "cs_modulo" } } } };
   assert.equal(await inferManualInterval(CLINIC), "month");
 });
 
-test("legítimo: quien PAGÓ el anual cotiza anual; las filas del diferencial se saltan", async () => {
-  filas = [filaDiferencial("cs_diff1"), filaPlan("cs_anual", "annual"), filaPlan("cs_mensual_vieja", "monthly")];
-  sesion("cs_anual", true, "annual");
-  sesion("cs_mensual_vieja", true, "monthly");
+test("legítimo: quien PAGÓ el anual cotiza anual", async () => {
+  checkout("cs_mensual_vieja", "monthly", "pagada");
+  checkout("cs_anual", "annual", "pagada");
   assert.equal(await inferManualInterval(CLINIC), "year");
-  assert.deepEqual(consultadas, ["cs_anual"], "solo se pregunta a Stripe por filas de compra del plan, y se para en la primera pagada");
 });
 
-test("una sesión de OTRA clínica (fila manipulada o mal atribuida) no cuenta", async () => {
-  filas = [filaPlan("cs_ajena", "annual"), filaPlan("cs_pagada", "monthly")];
-  sesion("cs_ajena", true, "annual", "otra_clinica");
-  sesion("cs_pagada", true, "monthly");
+test("una sesión pagada de OTRA clínica bajo el mismo cliente de Stripe no cuenta", async () => {
+  checkout("cs_pagada", "monthly", "pagada");
+  checkout("cs_ajena", "annual", "pagada", { metadata: { kind: "platform-subscription", clinicId: "otra_clinica", billing: "annual" } });
   assert.equal(await inferManualInterval(CLINIC), "month");
 });
 
-test("sin ninguna compra pagada confirmada: null (cotiza por el criterio conservador de siempre)", async () => {
-  filas = [filaPlan("cs_abandonada", "annual")];
-  sesion("cs_abandonada", false, "annual");
+test("SPEI directo confirmado DESPUÉS de la última compra por Stripe: manda su ciclo (la renovación más reciente)", async () => {
+  checkout("cs_anual_vieja", "annual", "pagada");
+  spei = [{ clinicId: CLINIC, billing: "monthly", status: "confirmed", resolvedAt: new Date((reloj + 3600) * 1000) }];
+  assert.equal(await inferManualInterval(CLINIC), "month");
+});
+
+test("SPEI directo confirmado ANTES de la última compra por Stripe: manda Stripe; una transferencia sin confirmar no cuenta", async () => {
+  spei = [
+    { clinicId: CLINIC, billing: "monthly", status: "confirmed", resolvedAt: new Date((reloj - 3600) * 1000) },
+    { clinicId: CLINIC, billing: "monthly", status: "pending", resolvedAt: null },
+  ];
+  checkout("cs_anual", "annual", "pagada");
+  assert.equal(await inferManualInterval(CLINIC), "year");
+});
+
+test("clínica sin cliente de Stripe que pagó por SPEI directo: su ciclo", async () => {
+  clienteStripe = null;
+  spei = [{ clinicId: CLINIC, billing: "annual", status: "confirmed", resolvedAt: new Date() }];
+  assert.equal(await inferManualInterval(CLINIC), "year");
+});
+
+test("sin ningún pago confirmado: null (cotiza por el criterio conservador de siempre)", async () => {
+  checkout("cs_abandonada", "annual", "abandonada");
   assert.equal(await inferManualInterval(CLINIC), null);
 });
 
-test("si Stripe no contesta: null, no se adivina con una fila sin confirmar", async () => {
-  filas = [filaPlan("cs_abandonada", "annual"), filaPlan("cs_pagada", "monthly")];
+test("si Stripe no contesta: null, no se adivina", async () => {
+  checkout("cs_pagada", "monthly", "pagada");
   stripeFalla = true;
   assert.equal(await inferManualInterval(CLINIC), null);
-});
-
-test("una sesión que Stripe ya no encuentra se salta y se sigue con la anterior", async () => {
-  filas = [filaPlan("cs_borrada", "annual"), filaPlan("cs_pagada", "monthly")];
-  sesion("cs_pagada", true, "monthly");
-  assert.equal(await inferManualInterval(CLINIC), "month");
 });
 
 test("sin clinicId no se lee nada (Prisma descartaría el filtro)", async () => {

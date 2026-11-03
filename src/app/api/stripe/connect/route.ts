@@ -3,6 +3,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { createConnectAccount, createOnboardingLink } from "@/lib/stripe-connect";
 import { logAudit, extractAuditMeta } from "@/lib/audit";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import getStripe from "@/lib/stripe";
 
 /**
@@ -30,6 +31,13 @@ export async function POST(req: NextRequest) {
     }
     if (!ROLES_CON_CUENTA_CONNECT.includes(ctx.role)) {
       return NextResponse.json({ error: "Tu rol no puede conectar una cuenta de cobro." }, { status: 403 });
+    }
+    // Un ADMIN puede acabar siendo el destino de los cobros del portal (online-payment.ts): como la cuenta de
+    // cobro de Mercado Pago, eso pide «Editar configuración» (revisión t8, M2). El doctor liga la suya para su
+    // teleconsulta y no la necesita.
+    if (ctx.role === "ADMIN") {
+      const denied = denyIfMissingPermission(ctx, "settings.edit");
+      if (denied) return denied;
     }
 
     const doctor = await prisma.user.findFirst({

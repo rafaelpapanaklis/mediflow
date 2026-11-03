@@ -31,6 +31,7 @@ type Usuario = {
   createdAt: Date;
   stripeAccountId: string | null;
   stripeOnboarded: boolean;
+  permissionsOverride?: string[];
 };
 
 let usuarios: Usuario[];
@@ -120,7 +121,7 @@ before(async () => {
         clinicId: sesion.clinicId,
         role,
         user: sesion,
-        permissionsOverride: [],
+        permissionsOverride: sesion.permissionsOverride ?? [],
         isSuperAdmin: role === "SUPER_ADMIN",
         isAdmin: role === "ADMIN" || role === "SUPER_ADMIN",
         isDoctor: role === "DOCTOR",
@@ -312,6 +313,53 @@ test("«Ver como clínica» (admin de plataforma con la sesión del dueño) no l
   assert.equal(r.status, 403);
   assert.equal(quien("dueno").stripeAccountId, null);
   assert.equal(cuentasCreadas.length, 0);
+});
+
+// ── v2 (revisión t8, M2): ser el destino del portal exige «Editar configuración» ──
+
+/** Un ADMIN al que el dueño le quitó «Editar configuración» (override sin settings.edit). */
+const SIN_CONFIG = ["today.view", "agenda.view", "settings.view"];
+
+test("M2: un ADMIN sin «Editar configuración» NO liga una cuenta Connect (403), como en Mercado Pago", async () => {
+  quien("admin").permissionsOverride = SIN_CONFIG;
+  const r = await ligar("admin");
+  assert.equal(r.status, 403);
+  assert.equal(cuentasCreadas.length, 0);
+  assert.equal(quien("admin").stripeAccountId, null);
+});
+
+test("M2: un ADMIN con su permiso por defecto sí liga la suya", async () => {
+  const r = await ligar("admin");
+  assert.equal(r.status, 200);
+  assert.equal(quien("admin").stripeAccountId, "acct_1");
+});
+
+test("M2: un DOCTOR sigue ligando la suya (teleconsulta) sin «Editar configuración»", async () => {
+  const r = await ligar("doctora");
+  assert.equal(r.status, 200);
+});
+
+test("M2: el portal cobra PRIMERO al dueño con el alta terminada, aunque un ADMIN sea más antiguo", async () => {
+  // El ADMIN es anterior al dueño (alta por importación, cambio de dueño…).
+  quien("admin").createdAt = new Date(Date.UTC(2025, 0, 1));
+  quien("admin").stripeAccountId = "acct_admin";
+  quien("admin").stripeOnboarded = true;
+  quien("dueno").stripeAccountId = "acct_dueno";
+  quien("dueno").stripeOnboarded = true;
+  assert.equal(await getClinicConnectAccount(CLINIC), "acct_dueno");
+});
+
+test("M2: sin dueño conectado, un ADMIN SIN «Editar configuración» no es el destino del portal (fila vieja)", async () => {
+  quien("admin").permissionsOverride = SIN_CONFIG;
+  quien("admin").stripeAccountId = "acct_admin";
+  quien("admin").stripeOnboarded = true;
+  assert.equal(await getClinicConnectAccount(CLINIC), null);
+});
+
+test("M2: sin dueño conectado, el ADMIN con «Editar configuración» y el alta terminada sí lo es", async () => {
+  quien("admin").stripeAccountId = "acct_admin";
+  quien("admin").stripeOnboarded = true;
+  assert.equal(await getClinicConnectAccount(CLINIC), "acct_admin");
 });
 
 test("sin sesión: 401", async () => {

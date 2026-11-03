@@ -34,11 +34,14 @@ let sesionesExpiradas: string[];
 let cargos: any[];
 let disputas: any[];
 let idEvento = 0;
+let avisosAdmin: Array<{ clave: string; clinicId: string; aviso: any }>;
+let antesDeEscribirElPlan: null | (() => void);
 
 function coincide(fila: any, where: any): boolean {
   return Object.entries(where ?? {}).every(([k, v]: [string, any]) => {
     const valor = fila[k];
-    if (v && typeof v === "object" && !(v instanceof Date)) {
+    if (v instanceof Date) return valor instanceof Date && valor.getTime() === v.getTime();
+    if (v && typeof v === "object") {
       if ("in" in v) return v.in.includes(valor);
       if ("not" in v) return v.not === null ? valor != null : valor !== v.not;
       throw new Error(`operador no soportado en el doble: ${JSON.stringify(v)}`);
@@ -62,6 +65,16 @@ const prismaBase: any = {
         if (v !== undefined) c[k] = v;
       });
       return c;
+    },
+    // Evalúa el `where` REAL (igualdad, fechas por valor): una escritura condicionada al estado leído se prueba de verdad.
+    updateMany: async ({ where, data }: any) => {
+      const filas = [...clinicas.values()].filter((c) => coincide(c, where));
+      filas.forEach((c) =>
+        Object.entries(data).forEach(([k, v]) => {
+          if (v !== undefined) c[k] = v;
+        }),
+      );
+      return { count: filas.length };
     },
   },
   affiliateCommission: {
@@ -167,7 +180,13 @@ before(async () => {
     marcarFacturasDeLaClinica: async () => ({ tipo: "sin_tarjeta" }),
   });
   dobles.set(path.join(RAIZ, "src/lib/plans.ts"), {
-    getPlanLimits: async (plan: string) => ({ aiTokensDefault: plan === "CLINIC" ? 90000 : 5000, maxClinics: null }),
+    getPlanLimits: async (plan: string) => {
+      // Entre la lectura de la clínica y la escritura del plan (m2): aquí se cuela, si la prueba lo pide, otra escritura.
+      const antes = antesDeEscribirElPlan;
+      antesDeEscribirElPlan = null;
+      antes?.();
+      return { aiTokensDefault: plan === "CLINIC" ? 90000 : 5000, maxClinics: null };
+    },
     getResolvedPlan: async (id: string) => ({ id, name: id, priceMxn: 419, priceMxnAnnual: 3264, aiTokensDefault: 5000 }),
     getResolvedPlans: async () => [],
   });
@@ -183,6 +202,14 @@ before(async () => {
   dobles.set(path.join(RAIZ, "src/lib/affiliate-emails.ts"), {
     sendAffiliatePayoutPaidEmail: async () => {},
     sendAffiliateConversionEmail: async () => {},
+  });
+  dobles.set(path.join(RAIZ, "src/lib/billing/aviso-admin-envio.server.ts"), {
+    avisarAdminUnaVez: async (clave: string, clinicId: string, aviso: any) => {
+      if (avisosAdmin.some((a) => a.clave === clave)) return false; // el candado real es la fila única de billing_email_logs
+      avisosAdmin.push({ clave, clinicId, aviso });
+      return true;
+    },
+    enviarAvisoAlAdmin: async () => true,
   });
   dobles.set(path.join(RAIZ, "src/lib/admin-audit.ts"), { logAdminGlobalEvent: () => {}, logAdminClinicMutation: async () => {} });
   dobles.set(path.join(RAIZ, "src/lib/analytics/meta-capi.server.ts"), { enviarCompraMetaDeSesion: async () => {} });
@@ -220,6 +247,8 @@ beforeEach(() => {
   cargos = [];
   disputas = [];
   idEvento = 0;
+  avisosAdmin = [];
+  antesDeEscribirElPlan = null;
 });
 
 const clinica = () => clinicas.get(CLINIC);
@@ -308,6 +337,46 @@ test("lead 6: el voucher pagado cuando el periodo cotizado YA VENCIÓ (sin renov
   await entregar("checkout.session.async_payment_succeeded", sesion);
   assert.equal(clinica().plan, "BASIC");
   assert.equal(bitacora.at(-1).changes._source.after.reason, "period-expired");
+});
+
+// ── v2 (revisión t8) ──────────────────────────────────────────────────────
+
+test("m1: un diferencial PAGADO y descartado avisa una vez al admin de la plataforma (para devolverlo)", async () => {
+  await entregar("checkout.session.async_payment_succeeded", renovacionAnual());
+  await entregar("checkout.session.async_payment_succeeded", sesionDiff({}, { paidUntil: MANANA.toISOString() }));
+  // Stripe reenvía el mismo evento: no sale un segundo correo.
+  await entregar("checkout.session.async_payment_succeeded", sesionDiff({}, { paidUntil: MANANA.toISOString() }));
+  assert.equal(avisosAdmin.length, 1);
+  assert.equal(avisosAdmin[0].clave, "cs_diff:diferencial_descartado");
+  assert.equal(avisosAdmin[0].clinicId, CLINIC);
+  const texto = [avisosAdmin[0].aviso.asunto, ...avisosAdmin[0].aviso.lineas].join("\n");
+  assert.match(texto, /cs_diff/);
+  assert.match(texto, /period-changed/);
+});
+
+test("m1: un diferencial aplicado NO avisa a nadie", async () => {
+  await entregar("checkout.session.async_payment_succeeded", sesionDiff({}, { paidUntil: MANANA.toISOString() }));
+  assert.equal(clinica().plan, "CLINIC");
+  assert.equal(avisosAdmin.length, 0);
+});
+
+test("m1: Stripe reenvía un diferencial YA aplicado: no hay aviso falso de «pagado y no aplicado»", async () => {
+  await entregar("checkout.session.async_payment_succeeded", sesionDiff({}, { paidUntil: MANANA.toISOString() }));
+  await entregar("checkout.session.async_payment_succeeded", sesionDiff({}, { paidUntil: MANANA.toISOString() }));
+  assert.equal(clinica().plan, "CLINIC");
+  assert.equal(avisosAdmin.length, 0);
+});
+
+test("m2: si la renovación se escribe ENTRE la lectura y la escritura del diferencial, el plan alto no cae sobre el periodo nuevo", async () => {
+  antesDeEscribirElPlan = () => {
+    const unAnio = new Date(MANANA.getTime() + 365 * DIA);
+    Object.assign(clinica(), { trialEndsAt: unAnio, nextBillingDate: unAnio, plan: "BASIC" });
+  };
+  assert.equal(await entregar("checkout.session.async_payment_succeeded", sesionDiff({}, { paidUntil: MANANA.toISOString() })), 200);
+  assert.equal(clinica().plan, "BASIC");
+  assert.equal(clinica().aiTokensLimit, 5000);
+  assert.equal(bitacora.at(-1).changes._source.after.reason, "period-changed");
+  assert.equal(avisosAdmin.length, 1);
 });
 
 test("lead 6 (legítimo): el voucher pagado dentro del MISMO periodo sube el plan y no mueve el periodo", async () => {

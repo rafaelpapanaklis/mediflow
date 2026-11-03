@@ -173,7 +173,9 @@ test("un pago acreditado que no aplica el plan SIEMPRE deja rastro", () => {
   // cobrado: sin bitácora, el dinero se pierde en silencio.
   const source = read("src/app/api/webhooks/stripe/route.ts");
   const start = source.indexOf("async function applyPlanUpgradeDiff(");
-  const body = source.slice(start, start + 2600);
+  // El cuerpo entero (hasta la siguiente función de nivel superior), no una ventana fija de caracteres.
+  const fin = source.indexOf("\nasync function ", start + 10);
+  const body = source.slice(start, fin > 0 ? fin : source.length);
   assert.match(body, /invalid-plan/);
   assert.match(body, /clinic-not-found/);
   assert.match(body, /not-a-tier-upgrade/);

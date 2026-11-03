@@ -43,7 +43,8 @@ import {
   manualPaidUntil,
   subscriptionPeriodFields,
 } from "@/lib/billing/proration";
-import { expirarDiferencialesAbiertos, finDelPeriodoCotizado } from "@/lib/billing/diferencial-vigente";
+import { avisoDiferencialDescartado, expirarDiferencialesAbiertos, finDelPeriodoCotizado } from "@/lib/billing/diferencial-vigente";
+import { avisarAdminUnaVez } from "@/lib/billing/aviso-admin-envio.server";
 import { estadoDeSuscripcionAEscribir } from "@/lib/billing/estado-suscripcion";
 import { recordStripeInvoice } from "@/lib/billing/record-stripe-invoice";
 import { sendPlanActivatedEmail, sendPlanRenewedEmail } from "@/lib/email";
@@ -1231,7 +1232,7 @@ async function applyPlanUpgradeDiff(
   // Todo descarte se REGISTRA: en los tres casos el cliente YA pagó el
   // diferencial. Un return mudo dejaba un cobro acreditado sin plan aplicado y
   // sin rastro para detectarlo ni devolverlo.
-  const drop = async (reason: string, extra: Record<string, unknown>) => {
+  const drop = async (reason: string, extra: Record<string, unknown>, avisar = true) => {
     console.error(
       `[stripe webhook] plan-upgrade-diff PAGADO pero NO aplicado (${reason}):`,
       JSON.stringify({ clinicId, incomingPlan: plan, ...extra, ...source }),
@@ -1256,6 +1257,8 @@ async function applyPlanUpgradeDiff(
         },
       },
     }).catch(() => {});
+    // Una vez por sesión (candado de billing_email_logs): Stripe reintenta y reenvía (revisión t8, m1).
+    if (avisar) await avisarAdminUnaVez(`${source.sessionId ?? clinicId}:diferencial_descartado`, clinicId, avisoDiferencialDescartado({ clinicId, sessionId: source.sessionId, motivo: reason, planCotizado: plan, detalle: extra }));
   };
 
   if (!isPlanId(plan)) {
@@ -1282,7 +1285,8 @@ async function applyPlanUpgradeDiff(
   // pero un SEGUNDO voucher pagado por el mismo upgrade también — ahí sí hay
   // dinero cobrado dos veces. La fila de bitácora es la que permite detectarlo.
   if (!isPlanTierUpgrade(before.plan, plan)) {
-    await drop("not-a-tier-upgrade", { currentPlan: before.plan });
+    // Ya en ESE plan: casi siempre es Stripe reenviando un diferencial ya aplicado → sin aviso (no hay nada que devolver).
+    await drop("not-a-tier-upgrade", { currentPlan: before.plan }, before.plan !== plan);
     return;
   }
 
@@ -1310,10 +1314,17 @@ async function applyPlanUpgradeDiff(
   }
 
   const limits = await getPlanLimits(plan);
-  await prisma.clinic.update({
-    where: { id: clinicId },
+  // Escritura condicionada a lo LEÍDO (revisión t8, m2): si una renovación se escribió entre la lectura y aquí,
+  // no se pone el plan alto sobre el periodo nuevo.
+  const comoSeLeyo = { id: clinicId, plan: before.plan, trialEndsAt: before.trialEndsAt, nextBillingDate: before.nextBillingDate };
+  const { count } = await prisma.clinic.updateMany({
+    where: comoSeLeyo,
     data: { plan, aiTokensLimit: limits.aiTokensDefault },
   });
+  if (count === 0) {
+    await drop("period-changed", { concurrentWrite: true });
+    return;
+  }
   await sincronizarSedesIncluidas(clinicId);
 
   await logAudit({
