@@ -3,6 +3,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { pacienteOcultoPara } from "@/lib/clinical-shared/auth/paciente-oculto";
 import { createOrthodonticConsentSchema } from "@/lib/validation/orthodontics";
 import { auditOrtho, getOrthoActionContext } from "./_helpers";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
@@ -28,6 +29,8 @@ export async function createOrthodonticConsent(
     select: { id: true },
   });
   if (!plan) return fail("Plan no encontrado");
+  // ws1-t11 · lead 14: el paciente del registro puede estar restringido (visibleUserIds).
+  if (await pacienteOcultoPara(ctx, parsed.data.patientId)) return fail("Plan no encontrado");
 
   try {
     const created = await prisma.orthodonticConsent.create({

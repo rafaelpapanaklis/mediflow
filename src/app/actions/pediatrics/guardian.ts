@@ -4,6 +4,7 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { pacienteOcultoPara } from "@/lib/clinical-shared/auth/paciente-oculto";
 import { getAuthContext } from "@/lib/auth-context";
 import { PEDIATRIC_AUDIT_ACTIONS } from "@/lib/pediatrics/audit";
 import { auditPediatric, ensurePediatricRecord, fail, isFailure, loadPatientForPediatrics, ok, type ActionResult, requirePediatricsPermission } from "./_helpers";
@@ -109,6 +110,8 @@ export async function updateGuardian(
     select: { id: true, clinicId: true, patientId: true },
   });
   if (!guardian || guardian.clinicId !== ctx.clinicId) return fail("Tutor no encontrado");
+  // ws1-t11 · lead 14: el paciente del registro puede estar restringido (visibleUserIds).
+  if (await pacienteOcultoPara(ctx, guardian.patientId)) return fail("Tutor no encontrado");
 
   await prisma.$transaction(async (tx) => {
     if (parsed.data.principal) {
@@ -161,6 +164,8 @@ export async function setPrimaryGuardian(args: { guardianId: string }): Promise<
     select: { id: true, clinicId: true, patientId: true },
   });
   if (!guardian || guardian.clinicId !== ctx.clinicId) return fail("Tutor no encontrado");
+  // ws1-t11 · lead 14: el paciente del registro puede estar restringido (visibleUserIds).
+  if (await pacienteOcultoPara(ctx, guardian.patientId)) return fail("Tutor no encontrado");
 
   await prisma.$transaction(async (tx) => {
     await tx.guardian.updateMany({
@@ -202,6 +207,8 @@ export async function deleteGuardian(args: { guardianId: string }): Promise<Acti
     select: { id: true, clinicId: true, patientId: true },
   });
   if (!guardian || guardian.clinicId !== ctx.clinicId) return fail("Tutor no encontrado");
+  // ws1-t11 · lead 14: el paciente del registro puede estar restringido (visibleUserIds).
+  if (await pacienteOcultoPara(ctx, guardian.patientId)) return fail("Tutor no encontrado");
 
   await prisma.guardian.update({
     where: { id: guardian.id },

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getAuthContext, requireAdmin } from "@/lib/auth-context";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { encryptField } from "@/lib/crypto/envelope";
 import { WA_GRAPH_VERSION } from "@/lib/whatsapp/embedded/types";
 import { provisionClinicTemplates } from "@/lib/whatsapp/provision-templates";
@@ -26,6 +27,12 @@ export async function POST(req: NextRequest) {
   const ctx = await getAuthContext();
   const denied = requireAdmin(ctx);
   if (denied) return denied;
+  // ws1-t11 · lead 15: además del rol, «Editar configuración» (settings.edit),
+  // con el override por persona — el número y el token de WhatsApp son una
+  // integración, igual que PATCH /api/settings y la conexión de Mercado Pago.
+  // Un ADMIN al que el dueño le apagó el interruptor ya no los cambia.
+  const sinConfig = denyIfMissingPermission(ctx!, "settings.edit");
+  if (sinConfig) return sinConfig;
   const clinicId = ctx!.clinicId;
 
   const parsed = Body.safeParse(await req.json().catch(() => null));

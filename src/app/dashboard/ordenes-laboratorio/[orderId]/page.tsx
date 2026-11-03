@@ -7,6 +7,7 @@ import { notFound } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { getServerT } from "@/i18n/server";
 import { prisma } from "@/lib/prisma";
+import { ordenDePacienteVisible } from "@/lib/laboratorios/ordenes-visibles";
 import { Landmark, Banknote, CreditCard, CheckCircle2, Info, ClipboardList, ArrowLeft } from "lucide-react";
 import { CardNew, BadgeNew } from "@/components/ui/design-system";
 import { fmtMXNdec } from "@/lib/format";
@@ -87,6 +88,12 @@ export default async function Page(props: { params: Promise<{ orderId: string }>
   });
 
   if (!order) notFound();
+  // ws1-t11 · lead 13: la orden enseña el nombre y las notas del paciente; si
+  // es un restringido que esta persona no puede ver, la orden no existe (404),
+  // igual que en GET /api/ordenes-laboratorio/[orderId].
+  if (!(await ordenDePacienteVisible(order.patientId, { userId: user.id, role: user.role, clinicId: user.clinicId }))) {
+    notFound();
+  }
 
   const labName = order.lab?.name ?? t("procurement.orderDetail.labFallback");
   const status = order.status as DentalLabOrderStatus;

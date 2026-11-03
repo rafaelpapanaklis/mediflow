@@ -5,6 +5,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { ClinicalModule, ClinicalPhotoStage, ClinicalPhotoType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { pacienteOcultoPara } from "@/lib/clinical-shared/auth/paciente-oculto";
 import { getAuthContext } from "@/lib/auth-context";
 import { signMaybeUrls } from "@/lib/storage";
 import { storageQuotaError } from "@/lib/storage-quota";
@@ -272,6 +273,8 @@ export async function deleteClinicalPhotoAction(
   });
   if (!photo || photo.deletedAt) return fail("Foto no encontrada");
   if (photo.clinicId !== ctx.clinicId) return fail("Sin acceso a esta foto");
+  // ws1-t11 · lead 14: el paciente del registro puede estar restringido (visibleUserIds).
+  if (await pacienteOcultoPara(ctx, photo.patientId)) return fail("Foto no encontrada");
 
   await prisma.clinicalPhoto.update({
     where: { id: photo.id },
@@ -379,6 +382,8 @@ export async function updatePhotoAnnotationsAction(
   });
   if (!photo || photo.deletedAt) return fail("Foto no encontrada");
   if (photo.clinicId !== ctx.clinicId) return fail("Sin acceso");
+  // ws1-t11 · lead 14: el paciente del registro puede estar restringido (visibleUserIds).
+  if (await pacienteOcultoPara(ctx, photo.patientId)) return fail("Foto no encontrada");
 
   await prisma.clinicalPhoto.update({
     where: { id: photo.id },

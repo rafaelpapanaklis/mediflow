@@ -22,6 +22,9 @@ const dobles: Record<string, unknown> = {
   "next/cache": { revalidatePath: () => undefined },
   "@/lib/prisma": {
     prisma: {
+      // ws1-t11 · lead 14: listOpenTreatmentSessions mira antes si el paciente
+      // está restringido (visibleUserIds). Aquí no lo está.
+      patient: { findUnique: async () => ({ visibleUserIds: [] }) },
       treatmentSession: {
         findMany: async (a: any) => {
           pedidos.push(a);

@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import type { Metadata } from "next";
 import { exigirCategoriaParaPagina } from "@/lib/dashboard/guardia-categoria.server";
 import { prisma } from "@/lib/prisma";
+import { relatedPatientVisibilityAnd } from "@/lib/patient-visibility";
 import { PackagesClient } from "./packages-client";
 
 export const metadata: Metadata = { title: "Paquetes — DaleControl" };
@@ -20,7 +21,9 @@ export default async function PackagesPage() {
   });
 
   const redemptions = await prisma.packageRedemption.findMany({
-    where: { clinicId, status: "ACTIVE" },
+    // ws1-t11 · lead 13: sin los paquetes de pacientes restringidos que esta
+    // persona no puede ver (/api/packages/redeem ya lo exigía).
+    where: { clinicId, status: "ACTIVE", AND: relatedPatientVisibilityAnd({ userId: user.id, role: user.role, clinicId }) },
     include: {
       patient: { select: { id: true, firstName: true, lastName: true } },
       package: { select: { id: true, name: true } },

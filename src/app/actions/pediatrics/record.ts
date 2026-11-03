@@ -4,6 +4,7 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { pacienteOcultoPara } from "@/lib/clinical-shared/auth/paciente-oculto";
 import { getAuthContext } from "@/lib/auth-context";
 import { PEDIATRIC_AUDIT_ACTIONS } from "@/lib/pediatrics/audit";
 import { auditPediatric, fail, isFailure, loadPatientForPediatrics, ok, requirePediatricsPermission, type ActionResult } from "./_helpers";
@@ -90,6 +91,8 @@ export async function updatePediatricRecord(
     select: { id: true, clinicId: true, patientId: true },
   });
   if (!record || record.clinicId !== ctx.clinicId) return fail("Registro no encontrado");
+  // ws1-t11 · lead 14: el paciente del registro puede estar restringido (visibleUserIds).
+  if (await pacienteOcultoPara(ctx, record.patientId)) return fail("Registro no encontrado");
 
   const updated = await prisma.pediatricRecord.update({
     where: { id: record.id },
@@ -126,6 +129,8 @@ export async function getPediatricRecord(patientId: string): Promise<ActionResul
   if (!ctx) return fail("No autenticado");
   const permRes = requirePediatricsPermission(ctx, { write: false });
   if (isFailure(permRes)) return permRes;
+  // ws1-t11 · lead 14: un paciente restringido no existe para quien no está en su lista.
+  if (await pacienteOcultoPara(ctx, patientId)) return fail("Paciente no encontrado");
 
   const record = await prisma.pediatricRecord.findUnique({
     where: { patientId },

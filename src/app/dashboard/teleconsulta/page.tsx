@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 import { exigirCategoriaParaPagina } from "@/lib/dashboard/guardia-categoria.server";
 import { prisma } from "@/lib/prisma";
+import { relatedPatientVisibilityAnd } from "@/lib/patient-visibility";
 import { timeHHMMInTz } from "@/lib/agenda/legacy-helpers";
 import { getServerT } from "@/i18n/server";
 import Link from "next/link";
@@ -15,7 +16,13 @@ export default async function TeleconsultaPage() {
   const user = await exigirCategoriaParaPagina("/dashboard/teleconsulta");
   const tz = user.clinic.timezone;
   const appointments = await prisma.appointment.findMany({
-    where: { clinicId: user.clinicId, mode: "TELECONSULTATION" },
+    // ws1-t11 · lead 13: sin las citas de pacientes restringidos que esta
+    // persona no puede ver (visibleUserIds).
+    where: {
+      clinicId: user.clinicId,
+      mode: "TELECONSULTATION",
+      AND: relatedPatientVisibilityAnd({ userId: user.id, role: user.role, clinicId: user.clinicId }),
+    },
     include: {
       patient: { select: { firstName: true, lastName: true } },
       doctor: { select: { firstName: true, lastName: true } },

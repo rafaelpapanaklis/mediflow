@@ -9,6 +9,7 @@ import {
   ClinicalReminderStatus,
 } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { pacienteOcultoPara } from "@/lib/clinical-shared/auth/paciente-oculto";
 import { getAuthContext } from "@/lib/auth-context";
 import { auditClinicalShared, guardPatient, sinPermisoClinico } from "@/lib/clinical-shared/auth/guard";
 import { fail, isFailure, ok, type ActionResult } from "@/lib/clinical-shared/result";
@@ -81,10 +82,12 @@ export async function cancelClinicalReminder(
 
   const r = await prisma.clinicalReminder.findUnique({
     where: { id: parsed.data.id },
-    select: { id: true, clinicId: true, deletedAt: true },
+    select: { id: true, clinicId: true, patientId: true, deletedAt: true },
   });
   if (!r || r.deletedAt) return fail("Recordatorio no encontrado");
   if (r.clinicId !== ctx.clinicId) return fail("Sin acceso");
+  // ws1-t11 · lead 14: el paciente del registro puede estar restringido (visibleUserIds).
+  if (await pacienteOcultoPara(ctx, r.patientId)) return fail("Recordatorio no encontrado");
 
   await prisma.clinicalReminder.update({
     where: { id: r.id },

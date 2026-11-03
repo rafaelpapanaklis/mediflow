@@ -6,6 +6,8 @@ export const dynamic = "force-dynamic";
 
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
+import { puedeClinico } from "@/lib/auth/guardia-clinica";
+import { SinAccesoClinico } from "@/components/dashboard/sin-permiso-rediseno/sin-acceso-clinico";
 import { prisma } from "@/lib/prisma";
 import {
   patientVisibilityFilter,
@@ -38,6 +40,10 @@ export default async function EndodonticsIndexPage() {
   if (!access.hasAccess) {
     redirect(await destinoModuloVencido(user.clinicId, ENDODONTICS_MODULE_KEY));
   }
+
+  // ws1-t11 · lead 12: lo clínico pide «Ver expediente clínico» también en la
+  // página (guardia-clinica, con el override por persona), antes de cargar nada.
+  if (!puedeClinico(user, "ver")) return <SinAccesoClinico />;
 
   const now = new Date();
 

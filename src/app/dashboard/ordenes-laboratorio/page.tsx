@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import type { Prisma } from "@prisma/client";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { filtroOrdenesVisibles } from "@/lib/laboratorios/ordenes-visibles";
 import type {
   DentalLabDTO,
   DentalLabOrderDTO,
@@ -113,8 +114,11 @@ function toDentalLabOrderDTO(o: OrderWith): DentalLabOrderDTO {
 export default async function OrdenesLaboratorioPage() {
   const user = await getCurrentUser();
 
+  // ws1-t11 · lead 13: sin las órdenes de pacientes restringidos que esta
+  // persona no puede ver (mismo criterio que GET /api/ordenes-laboratorio).
+  const visibles = await filtroOrdenesVisibles({ userId: user.id, role: user.role, clinicId: user.clinicId });
   const orders = await prisma.dentalLabOrder.findMany({
-    where: { clinicId: user.clinicId },
+    where: { clinicId: user.clinicId, ...visibles },
     include: orderInclude,
     orderBy: { createdAt: "desc" },
   });

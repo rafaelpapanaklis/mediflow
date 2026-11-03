@@ -5,6 +5,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { ClinicalModule } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { pacienteOcultoPara } from "@/lib/clinical-shared/auth/paciente-oculto";
 import { getAuthContext } from "@/lib/auth-context";
 import { auditClinicalShared, sinPermisoClinico } from "@/lib/clinical-shared/auth/guard";
 import { linkSessionToPlan, findLinksFor } from "@/lib/clinical-shared/treatment-link/link";
@@ -30,6 +31,15 @@ export async function linkSessionToTreatmentPlan(
   // M6: permiso de rol de lo clínico (guardia compartido).
   const sinPermiso = sinPermisoClinico(ctx, "editar");
   if (sinPermiso) return sinPermiso;
+  // ws1-t11 · lead 14: la sesión es del plan de UN paciente, que puede estar
+  // restringido (visibleUserIds). Mismo texto que si la sesión no existiera.
+  const sesion = await prisma.treatmentSession.findFirst({
+    where: { id: parsed.data.treatmentSessionId, treatment: { clinicId: ctx.clinicId } },
+    select: { treatment: { select: { patientId: true } } },
+  });
+  if (sesion && (await pacienteOcultoPara(ctx, sesion.treatment?.patientId))) {
+    return fail("TreatmentSession no encontrada");
+  }
 
   try {
     const result = await linkSessionToPlan({
@@ -116,6 +126,8 @@ export async function listOpenTreatmentSessions(
   // M6: permiso de rol de lo clínico (guardia compartido).
   const sinPermiso = sinPermisoClinico(ctx, "ver");
   if (sinPermiso) return sinPermiso;
+  // ws1-t11 · lead 14: un paciente restringido no existe para quien no está en su lista.
+  if (await pacienteOcultoPara(ctx, parsed.data.patientId)) return fail("Paciente no encontrado");
 
   // ws1-t12 v21 (t5 de la v20, m1): el estado del plan se filtra en JS. En la base real
   // `treatment_plans.status` es TEXT y schema.prisma lo declara enum: un filtro por relación

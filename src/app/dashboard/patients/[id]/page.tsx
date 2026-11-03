@@ -17,6 +17,7 @@ import { dateISOInTz, timeHHMMInTz, durationMinutes } from "@/lib/agenda/legacy-
 import { fetchActiveDoctors, fetchResources } from "@/lib/agenda/server";
 import { RECIBE_CITAS_WHERE } from "@/lib/agenda/roles-que-atienden";
 import { hasPermission } from "@/lib/auth/permissions";
+import { puedeClinico } from "@/lib/auth/guardia-clinica";
 import { canSeePediatrics, PEDIATRICS_MODULE_KEY } from "@/lib/pediatrics/permissions";
 import { loadPediatricsData } from "@/lib/pediatrics/load-data";
 import type { PediatricsTabData } from "@/components/patient-detail/pediatrics/PediatricsTab";
@@ -371,15 +372,26 @@ export default async function PatientDetailPage(
   const questionnaireFilledAt  = latestQuestionnaire?.filledAt ? latestQuestionnaire.filledAt.toISOString() : null;
   const questionnaireStatus    = questionnaireFreshness(latestQuestionnaire?.filledAt ?? null, Date.now());
   const isDental = user.clinic.category === "DENTAL";
+  // ws1-t11 · lead 12 (auditoría run-2): los cargadores de pediatría,
+  // periodoncia, endodoncia e implantes son EXPEDIENTE. Lo que se carga aquí
+  // viaja en el payload RSC aunque la pestaña no se pinte, así que sin «Ver
+  // expediente clínico» (guardia-clinica, con el override por persona) ni se
+  // cargan: el cliente recibe null y no enseña esas pestañas. Recepción y solo
+  // lectura siguen abriendo la ficha (contacto, citas, cobros). Ortodoncia ya
+  // lo hacía con vistaOrtoPorPermisos.
+  const verClinico = puedeClinico(permsUser, "ver");
 
   // Pediatría — predicado puro existente: categoría DENTAL|MEDICINE +
   // módulo activo + DOB + edad < cutoff (default 18, LGDNNA). Reportamos
   // por separado al cliente si la clínica tiene el módulo activo
   // (`pediatricsModuleActive`) para que el tab pueda mostrarse en estado
   // disabled cuando el admin lo contrató pero el paciente actual es adulto.
-  const pediatricsModuleActive = clinicModuleKeys.includes(PEDIATRICS_MODULE_KEY);
+  // Sin «Ver expediente clínico» la pestaña no se ofrece (si no, salía
+  // desactivada con el texto de «solo menores de 18»).
+  const pediatricsModuleActive = verClinico && clinicModuleKeys.includes(PEDIATRICS_MODULE_KEY);
   let pediatricsData: PediatricsTabData | null = null;
   if (
+    verClinico &&
     canSeePediatrics({
       clinicCategory: user.clinic.category,
       clinicModules: clinicModuleKeys,
@@ -395,7 +407,7 @@ export default async function PatientDetailPage(
   // Periodoncia — solo DENTAL con el módulo activo. Sin gate por edad
   // (aplica a adultos y adolescentes con dentición permanente).
   let perioData: PerioTabData | null = null;
-  if (isDental && clinicModuleKeys.includes(PERIODONTICS_MODULE_KEY)) {
+  if (verClinico && isDental && clinicModuleKeys.includes(PERIODONTICS_MODULE_KEY)) {
     perioData = await loadPerioData({
       clinicId: user.clinicId,
       patientId: patient.id,
@@ -410,7 +422,7 @@ export default async function PatientDetailPage(
   // tab no se renderiza.
   let endoSummaries: EndoToothSummary[] | null = null;
   let endoSoapPrefill: SoapPrefill | null = null;
-  if (isDental && clinicModuleKeys.includes(ENDODONTICS_MODULE_KEY)) {
+  if (verClinico && isDental && clinicModuleKeys.includes(ENDODONTICS_MODULE_KEY)) {
     [endoSummaries, endoSoapPrefill] = await Promise.all([
       loadEndoToothSummaries({ clinicId: user.clinicId, patientId: patient.id }),
       loadEndoSoapPrefill({ clinicId: user.clinicId, patientId: patient.id }),
@@ -423,7 +435,7 @@ export default async function PatientDetailPage(
   // replicamos los mismos includes para que ImplantsTab reciba la shape
   // ImplantFull que espera. null cuando módulo inactivo.
   let implants: ImplantFull[] | null = null;
-  if (isDental && clinicModuleKeys.includes(IMPLANTS_MODULE_KEY)) {
+  if (verClinico && isDental && clinicModuleKeys.includes(IMPLANTS_MODULE_KEY)) {
     implants = (await prisma.implant.findMany({
       where: { patientId: patient.id, clinicId: user.clinicId },
       include: {

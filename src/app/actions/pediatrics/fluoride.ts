@@ -4,6 +4,7 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { pacienteOcultoPara } from "@/lib/clinical-shared/auth/paciente-oculto";
 import { getAuthContext } from "@/lib/auth-context";
 import { PEDIATRIC_AUDIT_ACTIONS } from "@/lib/pediatrics/audit";
 import { auditPediatric, ensurePediatricRecord, fail, isFailure, loadPatientForPediatrics, ok, requirePediatricsPermission, type ActionResult } from "./_helpers";
@@ -85,6 +86,8 @@ export async function getFluorideHistory(patientId: string): Promise<ActionResul
   if (!ctx) return fail("No autenticado");
   const permRes = requirePediatricsPermission(ctx, { write: false });
   if (isFailure(permRes)) return permRes;
+  // ws1-t11 · lead 14: un paciente restringido no existe para quien no está en su lista.
+  if (await pacienteOcultoPara(ctx, patientId)) return fail("Paciente no encontrado");
   const rows = await prisma.fluorideApplication.findMany({
     where: { patientId, clinicId: ctx.clinicId, deletedAt: null },
     orderBy: { appliedAt: "desc" },
