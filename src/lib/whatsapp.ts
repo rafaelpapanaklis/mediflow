@@ -6,8 +6,21 @@ import { componentesDeRespuestaRapida, payloadsDeBotonesDePlantilla } from "@/li
 /**
  * Normaliza a 52 + 10 dígitos (México). Exportada para poder probarla y para
  * que el resto del código no vuelva a escribir estas reglas a mano.
+ *
+ * Seguridad (auditoría «cloudflare», nº9, revisión t12 dh1): un número que trae
+ * su código de país explícito («+…» o «00…») ya es internacional y NO se le
+ * antepone 52 — misma regla que `claveWhatsApp` (bot/booking-parse.ts). Antes un
+ * paciente guardado como «+45 21 23 45 67» (Dinamarca, 10 dígitos con la lada)
+ * recibía sus recordatorios —nombre, cita, clínica— en el +52 452 123 4567, el
+ * WhatsApp de un desconocido. Solo se pliega el 521 viejo de México.
  */
 export function normalizeMxWhatsAppPhone(to: string): string {
+  if (/^\s*(?:\+|00)/.test(to)) {
+    let intl = to.replace(/\D/g, "");
+    if (intl.startsWith("00")) intl = intl.slice(2);
+    if (intl.startsWith("521") && intl.length === 13) intl = `52${intl.slice(3)}`;
+    return intl;
+  }
   let phone = to.replace(/[\s\-\(\)\+]/g, "");
   // Strip country code if present to get raw 10 digits
   if (phone.startsWith("521") && phone.length === 13) phone = phone.slice(3); // 521XXXXXXXXXX → 10 digits (old MX mobile format)

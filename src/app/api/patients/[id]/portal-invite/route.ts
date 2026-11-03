@@ -160,24 +160,30 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
       console.error("[patients/portal-invite] sendEmail error:", err);
     }
 
-    // Auditoría (sin token ni datos sensibles): quién invitó, a qué paciente, resultado.
+    // Auditoría (sin token ni datos sensibles): quién invitó y a qué paciente.
+    //
+    // Seguridad (auditoría «cloudflare», nº8, revisión t12 DM1): la bitácora la
+    // LEE la clínica (la tarjeta «Bitácora» de la ficha, /dashboard/auditoria),
+    // así que dice lo mismo en los tres casos: «invited». Antes guardaba
+    // `already_active` / `resent` y la clínica, abriéndola, sabía si ese email ya
+    // tiene portal en DaleControl. La ficha solo mira que exista `portalInvite`
+    // (estado-en-ficha.ts). El estado real va únicamente al log del servidor.
     await logAudit({
       clinicId: ctx.clinicId,
       userId: ctx.userId,
       entityType: "patient",
       entityId: patient.id,
       action: "update",
-      changes: { portalInvite: { before: null, after: status } },
+      changes: { portalInvite: { before: null, after: "invited" } },
       ...extractAuditMeta(req),
     });
+    console.info(`[patients/portal-invite] clínica ${ctx.clinicId} · paciente ${patient.id} · cuenta: ${status}`);
 
     // Seguridad (auditoría «cloudflare», nº8): la cuenta del portal es GLOBAL
     // (un email = una cuenta para todas las clínicas). Contestar «ya estaba
     // activa» / «se reenvió» le decía a CUALQUIER clínica si ese email ya tiene
     // portal en DaleControl —es decir, que esa persona es paciente en algún
-    // lado—. La respuesta es la MISMA en los tres casos; el estado real queda
-    // solo en la bitácora interna de arriba.
-    void status;
+    // lado—. La respuesta es la MISMA en los tres casos.
     return NextResponse.json({ ok: true, status: "invited" as const });
   } catch (err) {
     // Red de seguridad: cualquier throw de Prisma/infra sale como JSON 500 (no

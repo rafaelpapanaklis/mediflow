@@ -96,8 +96,8 @@ test("nº8 · la respuesta es la MISMA con cuenta nueva, invitada pendiente o ya
   assert.deepEqual(nueva.body, { ok: true, status: "invited" });
   assert.deepEqual(pendiente.body, nueva.body);
   assert.deepEqual(activa.body, nueva.body);
-  // El estado real sigue en la bitácora interna.
-  assert.deepEqual(bitacora.map((b) => b.changes.portalInvite.after), ["invited", "resent", "already_active"]);
+  // La bitácora también es la misma (la lee la clínica): revisión t12, DM1.
+  assert.deepEqual(bitacora.map((b) => b.changes.portalInvite.after), ["invited", "invited", "invited"]);
 });
 
 test("nº8 · el flujo legítimo sigue: recepción invita, se crea la cuenta, se liga y sale el correo", async () => {
@@ -146,4 +146,17 @@ test("M2 · la ficha dice «invitada» igual con una cuenta nueva que con una ya
   // Sin invitar y sin enlace: «sin cuenta». Ligada y con contraseña: «activa».
   assert.equal(estadoPortalEnFicha(null, false), "none");
   assert.equal(estadoPortalEnFicha({ passwordHash: "h" }, true), "active");
+});
+
+test("DM1 · la bitácora que ve la clínica es IDÉNTICA en los tres casos (no guarda el estado real de la cuenta)", async () => {
+  await invitar();
+  cuenta = { id: "acc_1", email: "ana@correo.test", name: "Ana", passwordHash: null };
+  await invitar();
+  cuenta = { id: "acc_1", email: "ana@correo.test", name: "Ana", passwordHash: "hash-de-otra-clinica" };
+  await invitar();
+  assert.equal(bitacora.length, 3);
+  const [nueva, pendiente, activa] = bitacora.map((b) => JSON.stringify(b.changes));
+  assert.equal(pendiente, nueva);
+  assert.equal(activa, nueva, "«already_active» no llega a audit_logs");
+  assert.ok(!bitacora.some((b) => /already_active|resent/.test(JSON.stringify(b))));
 });

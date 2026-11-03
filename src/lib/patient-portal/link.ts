@@ -89,27 +89,39 @@ export async function resolveBookingPatient(
   const { accountId, accountEmail, clinicId, firstName, lastName, phone, primaryDoctorId } = args;
 
   // 1. Link existente de la cuenta en esa clínica (validando que el Patient siga vivo).
-  const existingLink = await prisma.patientAccountLink.findFirst({
-    // nº7 (auditoría «cloudflare»): un enlace cuyo expediente ya no tiene el
-    // email de la cuenta no cuenta (la clínica le cambió el email al paciente).
-    where: { accountId, clinicId, patient: { email: { equals: accountEmail, mode: "insensitive" } } },
+  //    nº7 (auditoría «cloudflare»): un enlace cuyo expediente ya no tiene el
+  //    email de la cuenta no cuenta (la clínica le cambió el email al paciente).
+  //    El email se compara con `mismoEmailDePortal` (sin mayúsculas NI espacios),
+  //    el mismo criterio que el guard (revisión t12, dm2): con un `equals` en SQL,
+  //    un paciente importado con «ana@x.com » no encontraba su enlace y la reserva
+  //    le creaba un expediente duplicado.
+  const enlaces = await prisma.patientAccountLink.findMany({
+    where: { accountId, clinicId },
     orderBy: { createdAt: "asc" },
-    select: { patientId: true, patient: { select: { deletedAt: true } } },
+    select: { patientId: true, patient: { select: { deletedAt: true, email: true } } },
   });
-  if (existingLink && existingLink.patient && !existingLink.patient.deletedAt) {
+  const existingLink = enlaces.find(
+    (l) => l.patient && !l.patient.deletedAt && mismoEmailDePortal(l.patient.email, accountEmail),
+  );
+  if (existingLink) {
     return { patientId: existingLink.patientId, created: false };
   }
 
   // 2. Patient existente en la clínica con el email VERIFICADO de la cuenta.
   //    (NUNCA buscar por teléfono: permitiría adoptar el expediente de otro.)
-  const byEmail = await prisma.patient.findFirst({
+  //    El `contains` solo pre-filtra (el email guardado puede traer espacios);
+  //    decide `mismoEmailDePortal`, igual que en el paso 1.
+  const candidatos = await prisma.patient.findMany({
     where: {
       clinicId,
-      email: { equals: accountEmail, mode: "insensitive" },
+      email: { contains: accountEmail.trim(), mode: "insensitive" },
       deletedAt: null,
     },
-    select: { id: true },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, email: true },
+    take: 20,
   });
+  const byEmail = candidatos.find((p) => mismoEmailDePortal(p.email, accountEmail));
   if (byEmail) {
     await createLinkIgnoringDuplicate(accountId, byEmail.id, clinicId);
     return { patientId: byEmail.id, created: false };

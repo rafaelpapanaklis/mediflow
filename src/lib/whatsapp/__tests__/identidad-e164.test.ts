@@ -111,17 +111,19 @@ test("nº9 · el bot no le agenda al extranjero a nombre del paciente mexicano (
 test("nº9 · un aviso para el paciente mexicano no cae en el hilo del número extranjero (su bot lee ese historial)", async () => {
   hilos.push({ id: "thExtranjero", clinicId: CLINICA, channel: "WHATSAPP", externalId: EXTRANJERO, patientId: null, botActive: true, botState: null, lastMessageAt: new Date() });
   const { upsertWhatsAppThread } = await import("@/lib/whatsapp/inbox-log");
+  // El caller real (send-and-log) pasa whatsappThreadKey("33 1234 5678") = "5213312345678".
   const t = await upsertWhatsAppThread({
-    clinicId: CLINICA, externalId: "33 1234 5678", now: new Date(), createSubject: "WhatsApp · Ana",
+    clinicId: CLINICA, externalId: "5213312345678", now: new Date(), createSubject: "WhatsApp · Ana",
     createStatus: "READ", matchByLast10: true,
   });
   assert.notEqual(t.id, "thExtranjero");
   // Con el wa_id mexicano sí encuentra el hilo del paciente (sin el hilo que
   // acaba de crear la llamada de arriba, que casaría exacto).
   hilos = hilos.filter((h) => h.id === "thExtranjero");
-  hilos.push({ id: "thAna", clinicId: CLINICA, channel: "WHATSAPP", externalId: "5213312345678", patientId: "pacMX", botActive: true, botState: null, lastMessageAt: new Date() });
+  // El hilo de Ana con su wa_id en formato 52 (sin el 1): casa por el respaldo de 10 dígitos, no exacto.
+  hilos.push({ id: "thAna", clinicId: CLINICA, channel: "WHATSAPP", externalId: "523312345678", patientId: "pacMX", botActive: true, botState: null, lastMessageAt: new Date() });
   const t2 = await upsertWhatsAppThread({
-    clinicId: CLINICA, externalId: "33 1234 5678", now: new Date(), createSubject: "WhatsApp · Ana",
+    clinicId: CLINICA, externalId: "5213312345678", now: new Date(), createSubject: "WhatsApp · Ana",
     createStatus: "READ", matchByLast10: true,
   });
   assert.equal(t2.id, "thAna");
@@ -234,4 +236,45 @@ test("M1 · claveRemitente y claveWhatsApp con código de país", async () => {
   assert.equal(claveWhatsApp("452 123 4567"), "524521234567");
   assert.equal(claveWhatsApp("+52 1 452 123 4567"), "524521234567");
   assert.equal(claveWhatsApp("+52 452 123 4567"), "524521234567");
+});
+
+// ── Revisión t12 (dh1): el ENVÍO respeta el código de país ─────────────────
+test("dh1 · normalizeMxWhatsAppPhone: con «+»/«00» no se antepone 52 (el danés no recibe en un número mexicano)", async () => {
+  const { normalizeMxWhatsAppPhone } = await import("@/lib/whatsapp");
+  assert.equal(normalizeMxWhatsAppPhone("+45 21 23 45 67"), "4521234567");
+  assert.equal(normalizeMxWhatsAppPhone("0045 21 23 45 67"), "4521234567");
+  assert.equal(normalizeMxWhatsAppPhone("+65 8123 4567"), "6581234567");
+  // México, igual que siempre.
+  assert.equal(normalizeMxWhatsAppPhone("33 1234 5678"), "523312345678");
+  assert.equal(normalizeMxWhatsAppPhone("+52 33 1234 5678"), "523312345678");
+  assert.equal(normalizeMxWhatsAppPhone("+52 1 33 1234 5678"), "523312345678");
+  assert.equal(normalizeMxWhatsAppPhone("5213312345678"), "523312345678");
+  assert.equal(normalizeMxWhatsAppPhone("+1 (331) 234-5678"), "13312345678");
+});
+
+test("dh1 · whatsappThreadKey: el hilo del danés no es el del paciente de Uruapan", async () => {
+  const { whatsappThreadKey } = await import("@/lib/whatsapp/send-and-log");
+  assert.equal(whatsappThreadKey("+45 21 23 45 67"), "4521234567");
+  assert.notEqual(whatsappThreadKey("+45 21 23 45 67"), whatsappThreadKey("452 123 4567"));
+  assert.equal(whatsappThreadKey("452 123 4567"), "5214521234567");
+  assert.equal(whatsappThreadKey("+52 452 123 4567"), "5214521234567");
+  assert.equal(whatsappThreadKey("+52 1 452 123 4567"), "5214521234567");
+  assert.equal(whatsappThreadKey("+1 331 234 5678"), "13312345678");
+});
+
+test("dh1 · un aviso al paciente danés (guardado con «+») no cae en el hilo del paciente de Uruapan", async () => {
+  hilos.push({ id: "thUruapan", clinicId: CLINICA, channel: "WHATSAPP", externalId: "5214521234567", patientId: "pacUruapan", botActive: true, botState: null, lastMessageAt: new Date() });
+  const { upsertWhatsAppThread } = await import("@/lib/whatsapp/inbox-log");
+  const { whatsappThreadKey } = await import("@/lib/whatsapp/send-and-log");
+  const t = await upsertWhatsAppThread({
+    clinicId: CLINICA, externalId: whatsappThreadKey("+45 21 23 45 67"), now: new Date(), createSubject: "WhatsApp · Freja",
+    createStatus: "READ", matchByLast10: true,
+  });
+  assert.notEqual(t.id, "thUruapan");
+  // Y el aviso al de Uruapan sí cae en su hilo.
+  const u = await upsertWhatsAppThread({
+    clinicId: CLINICA, externalId: whatsappThreadKey("452 123 4567"), now: new Date(), createSubject: "WhatsApp · Lupe",
+    createStatus: "READ", matchByLast10: true,
+  });
+  assert.equal(u.id, "thUruapan");
 });
