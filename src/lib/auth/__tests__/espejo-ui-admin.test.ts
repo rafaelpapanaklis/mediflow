@@ -32,12 +32,31 @@ const vigente: CfdiVista = {
   relationType: null, relatedUuid: null, total: 100,
 } as unknown as CfdiVista;
 
-test("CFDI · ADMIN sin «Reembolsar / cancelar»: no ve Cancelar, sí Sustituir y Nota de crédito (bonificación)", () => {
+test("CFDI · ADMIN sin «Reembolsar / cancelar»: no ve Cancelar ni Sustituir; sí Nota de crédito (bonificación)", () => {
   const a = accionesDe(vigente, [vigente], { listo: true, admin: true, cancelar: false, invoiceCfdiUuid: "U-1" });
   assert.equal(a.cancelar, false);
   assert.equal(a.cancelarSustituido, false);
-  assert.equal(a.sustituir, true, "timbrar el sustituto solo pide administrador");
+  // ws1-t11 v7 (m2 de t2): sustituir es timbrar el nuevo Y cancelar el original; sin poder cancelar, no se ofrece.
+  assert.equal(a.sustituir, false, "timbraría un sustituto que luego no puede cerrar");
   assert.equal(a.notaCredito, true, "la nota como bonificación solo pide administrador");
+});
+
+test("CFDI · con «Reembolsar / cancelar» Sustituir sigue saliendo (nada se esconde a quien sí puede)", () => {
+  const a = accionesDe(vigente, [vigente], { listo: true, admin: true, cancelar: true, invoiceCfdiUuid: "U-1" });
+  assert.equal(a.sustituir, true);
+  assert.equal(a.cancelar, true);
+});
+
+test("CFDI · nota de crédito sin «Reembolsar / cancelar»: en lugar de la casilla, el aviso; y el porqué del tope dice lo mismo", async () => {
+  const { textosCfdiSat } = await import("@/components/dashboard/billing/cfdi-ante-el-sat-core");
+  assert.equal(
+    textosCfdiSat("es").nSinDevolver,
+    "Sin el permiso «Reembolsar / cancelar» esta nota solo baja lo que se debe; para devolver dinero, pídeselo a quien lo tenga.",
+  );
+  assert.ok(textosCfdiSat("en").nSinDevolver.length > 20, "falta la versión en inglés");
+  const src = leer("src/components/dashboard/billing/cfdi-ante-el-sat.tsx");
+  assert.match(src, /\{puedeDevolver \? \(\s*<label[\s\S]*?\) : \([\s\S]*?\{tx\.nSinDevolver\}<\/p>/, "sin el permiso no sale el aviso en lugar de la casilla");
+  assert.match(src, /montoNum > tope \+ 0\.001 \? \(!puedeDevolver[\s\S]{0,200}?\? tx\.nSinDevolver/, "el porqué del tope sigue mandando a marcar una casilla que no existe");
 });
 
 test("CFDI · sin el flag nuevo, todo sigue como antes (cancelar = admin)", () => {
@@ -50,7 +69,7 @@ test("CFDI · la pantalla pasa cada permiso y esconde «devolver dinero» a quie
   assert.match(src, /cancelar: datos\.puedeCancelar/);
   assert.match(src, /puedeDevolver=\{datos\.puedeDevolver \?\? true\}/);
   assert.match(src, /useState\(puedeDevolver\)/, "sin el permiso, la nota nace como bonificación");
-  assert.match(src, /\{puedeDevolver && \(\s*<label/, "la casilla «se le devuelve el dinero» solo a quien la ruta se lo acepta");
+  assert.match(src, /\{puedeDevolver \? \(\s*<label/, "la casilla «se le devuelve el dinero» solo a quien la ruta se lo acepta");
 });
 
 // ── 2FA de la clínica e interruptores de IA ──

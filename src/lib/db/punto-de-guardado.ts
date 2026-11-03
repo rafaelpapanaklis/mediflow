@@ -43,7 +43,13 @@ export async function conPuntoDeGuardado<T>(db: ClienteDb, paso: () => Promise<T
     await db.$executeRawUnsafe(`RELEASE SAVEPOINT ${nombre}`);
     return r;
   } catch (e) {
-    await db.$executeRawUnsafe(`ROLLBACK TO SAVEPOINT ${nombre}`);
+    // Si la transacción de fuera ya murió (p. ej. por timeout), el ROLLBACK TO también falla: ese error
+    // no debe tapar el original, que es el que explica qué pasó (nota de t2, ws1-t11 v7).
+    try {
+      await db.$executeRawUnsafe(`ROLLBACK TO SAVEPOINT ${nombre}`);
+    } catch (eRollback) {
+      console.warn("[punto-de-guardado] no se pudo deshacer el punto de guardado (¿la transacción ya terminó?):", (eRollback as Error)?.message ?? eRollback);
+    }
     throw e;
   }
 }

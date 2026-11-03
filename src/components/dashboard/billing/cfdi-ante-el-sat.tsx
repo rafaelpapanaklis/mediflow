@@ -283,7 +283,10 @@ function DialogoNota({ cfdi, disponible, rediseno, onClose, onHecho, saldo, pued
   const porQue = enviando ? null
     : !(isFinite(montoNum) && montoNum > 0) ? (en ? "Enter the amount." : "Escribe el monto.")
     : montoNum > disponible + 0.001 ? (en ? `It can't exceed ${f$(disponible)} available on this CFDI.` : `No puede pasar de ${f$(disponible)} disponibles en este CFDI.`)
-    : montoNum > tope + 0.001 ? (en ? `Without returning money it only lowers what is owed (${f$(tope)}). If you return money, tick «the money is returned».` : `Sin devolver dinero solo baja lo que se debe (${f$(tope)}). Si devuelves dinero, marca «se le devuelve el dinero».`)
+    : montoNum > tope + 0.001 ? (!puedeDevolver
+        // ws1-t11 v7 (m1 de t2): sin el permiso no hay casilla que marcar: el mismo aviso que sale en su lugar.
+        ? tx.nSinDevolver
+        : en ? `Without returning money it only lowers what is owed (${f$(tope)}). If you return money, tick «the money is returned».` : `Sin devolver dinero solo baja lo que se debe (${f$(tope)}). Si devuelves dinero, marca «se le devuelve el dinero».`)
     : razon.trim().length < 5 ? (en ? "Write the reason (at least 5 letters)." : "Escribe el motivo (al menos 5 letras).")
     : !forma ? (en ? "Choose the payment form." : "Elige la forma de pago.")
     : null;
@@ -319,11 +322,14 @@ function DialogoNota({ cfdi, disponible, rediseno, onClose, onHecho, saldo, pued
             <Label htmlFor="cfdi-nota-razon">{tx.nRazon}</Label>
             <Input id="cfdi-nota-razon" value={razon} onChange={(e) => setRazon(e.target.value)} placeholder={tx.nRazonPh} maxLength={300} disabled={enviando} />
           </div>
-          {puedeDevolver && (
+          {puedeDevolver ? (
             <label className="flex items-start gap-2 text-xs">
               <input type="checkbox" checked={devolver} onChange={(e) => setDevolver(e.target.checked)} disabled={enviando} />
               <span>{tx.nDevolver}</span>
             </label>
+          ) : (
+            // ws1-t11 v7 (m1 de t2): en lugar de la casilla, por qué esta nota solo baja lo que se debe.
+            <p className={cx("text-xs text-muted-foreground", c.texto)} data-nota-sin-devolver>{tx.nSinDevolver}</p>
           )}
           <div className={cx("space-y-1.5", c.campo)}>
             <Label htmlFor="cfdi-nota-forma">{devolver ? tx.nForma : tx.nFormaBonif}</Label>

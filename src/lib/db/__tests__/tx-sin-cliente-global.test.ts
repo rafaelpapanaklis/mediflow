@@ -301,3 +301,27 @@ test("replaceQuoteContent sin transacción sigue igual: abre la suya con el clie
   assert.ok(r);
   assert.deepEqual(usosGlobalesConTx, []);
 });
+
+// ═══════════ ws1-t11 v7 (nota de t2): el error original no se pierde si la tx ya murió ═══════════
+
+test("conPuntoDeGuardado: si el ROLLBACK TO falla (tx muerta), se relanza el error ORIGINAL", async () => {
+  const { conPuntoDeGuardado } = await import("@/lib/db/punto-de-guardado");
+  const txMuerta = {
+    $executeRawUnsafe: async (sql: string) => {
+      if (sql.startsWith("ROLLBACK")) throw new Error("Transaction already closed");
+      return 0;
+    },
+  };
+  const avisos: unknown[] = [];
+  const warn = console.warn;
+  console.warn = (...a: unknown[]) => { avisos.push(a); };
+  try {
+    await assert.rejects(
+      () => conPuntoDeGuardado(txMuerta as never, async () => { throw new Error("el error que explica qué pasó"); }),
+      /el error que explica qué pasó/,
+    );
+  } finally {
+    console.warn = warn;
+  }
+  assert.equal(avisos.length, 1, "el fallo del ROLLBACK se anota aparte, sin tapar el original");
+});
