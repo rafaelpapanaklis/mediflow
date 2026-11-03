@@ -647,4 +647,30 @@ describe("nº9 — la respuesta a un recordatorio cuenta solo desde el número a
     await enviar("cancelar");
     assert.equal(cancelo(), true);
   });
+
+  // Revisión t12 (M1): hay países cuyo número completo mide 10 dígitos. El wa_id
+  // danés «4521234567» no es el paciente de Uruapan «452 123 4567», ni el
+  // noruego «4741234567» el de Lagos de Moreno «474 123 4567».
+  it("un «CANCELAR» de un wa_id danés de 10 dígitos NO cancela la cita del paciente de Uruapan", async () => {
+    TEL = "4521234567";
+    e.recordatorios = [recordatorio({ payload: { enviadoA: "524521234567" }, appointment: { ...recordatorio().appointment, patient: { phone: "452 123 4567" } } })];
+    await enviar("cancelar");
+    assert.equal(cancelo(), false, "la cita no se toca");
+    assert.ok(!e.enviados.some((m) => m.body.includes("cancelada")), "no se le dice «cita cancelada»");
+  });
+
+  it("un «CONFIRMAR» de un wa_id noruego no confirma el recordatorio viejo (sin enviadoA) del paciente de Lagos", async () => {
+    TEL = "4741234567";
+    e.recordatorios = [recordatorio({ appointment: { ...recordatorio().appointment, patient: { phone: "474 123 4567" } } })];
+    await enviar("confirmar");
+    assert.ok(!e.citasActualizadas.some((a) => a.data?.status === "CONFIRMED"), "la cita no se confirma");
+    assert.ok(!e.enviados.some((m) => m.body.includes("confirmada")), "no se contesta con la cita");
+  });
+
+  it("el paciente de Uruapan (wa_id 521 452…) sí cancela su cita", async () => {
+    TEL = "5214521234568";
+    e.recordatorios = [recordatorio({ payload: { enviadoA: "524521234568" }, appointment: { ...recordatorio().appointment, patient: { phone: "452 123 4568" } } })];
+    await enviar("cancelar");
+    assert.equal(cancelo(), true);
+  });
 });

@@ -23,7 +23,7 @@ import {
 } from "@/lib/whatsapp/interactivo";
 import { isBookingInProgress } from "@/lib/whatsapp/bot/booking-core";
 import { esRespuestaDeEncuesta } from "@/lib/whatsapp/reminder-reply";
-import { detectaIntencionDeAgenda } from "@/lib/whatsapp/bot/booking-parse";
+import { detectaIntencionDeAgenda, numeroDeMeta } from "@/lib/whatsapp/bot/booking-parse";
 import { extraerEventosDelWebhook, phoneNumberIdDe } from "@/lib/whatsapp/webhook-eventos";
 import { conTurnoDelHilo } from "@/lib/whatsapp/bot-turno";
 import { persistentRateLimitKey } from "@/lib/failban";
@@ -431,7 +431,9 @@ async function procesarMensajeEntrante(value: any, msg: any): Promise<void> {
   // bot; lo que cambia es que la búsqueda del recordatorio ya no se queda con
   // él: si la cita era de otro hermano, antes no se encontraba nada y el
   // "CONFIRMAR" moría en silencio.
-  const phoneOwners = await findPatientsByWhatsAppPhone(clinic.id, from);
+  // nº9: `from` es el wa_id completo; va con su «+» para que un número
+  // extranjero de 10 dígitos (Dinamarca, Noruega…) no se lea como mexicano.
+  const phoneOwners = await findPatientsByWhatsAppPhone(clinic.id, numeroDeMeta(from));
   const patient = phoneOwners[0] ?? null;
 
   // ── Ingest al Inbox unificado (generalizado para Meta, igual que Twilio) ──
@@ -1352,7 +1354,7 @@ async function ingestBusinessAppEchoes(value: any) {
 
     // Empareja al paciente por los últimos 10 dígitos normalizados (igual que el
     // flujo entrante). El `contains` solo pre-filtra en la BD; el match es exacto.
-    const patient = await findPatientByWhatsAppPhone(clinic.id, to);
+    const patient = await findPatientByWhatsAppPhone(clinic.id, numeroDeMeta(to));
 
     const now = new Date();
     const thread = await upsertWhatsAppThread({

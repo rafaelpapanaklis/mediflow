@@ -152,3 +152,86 @@ test("nº9 · un recordatorio solo lo contesta el número al que salió", async 
   assert.deepEqual(recordatoriosDeEseNumero([nuevo, viejo, movido, recall], "5213312345678").map((r) => r.id), ["r1", "r2", "r3", "r4"]);
   assert.deepEqual(recordatoriosDeEseNumero([movido], "5215599990000"), [], "el número nuevo no contesta el que salió al viejo");
 });
+
+// ── Revisión t12 (M1): números completos de 10 dígitos de otros países ──────
+// Dinamarca +45, Noruega +47, Singapur +65… miden 10 dígitos con el código de
+// país. Lo que llega de Meta (wa_id, externalId de hilos) NUNCA se rellena con
+// 52; un teléfono guardado con «+» se respeta tal cual.
+const DANES = "4521234567"; // wa_id de un móvil +45 21 23 45 67
+const NORUEGO = "4741234567"; // wa_id de un móvil +47 41 23 45 67
+
+test("M1 · el wa_id danés o noruego NO es el paciente de Uruapan (452) ni el de Lagos (474)", async () => {
+  pacientes = [
+    { id: "pacUruapan", clinicId: CLINICA, phone: "452 123 4567", firstName: "Lupe" },
+    { id: "pacLagos", clinicId: CLINICA, phone: "474 123 4567", firstName: "Toño" },
+  ];
+  const { findPatientsByWhatsAppPhone } = await import("@/lib/whatsapp/inbox-log");
+  const { numeroDeMeta } = await import("@/lib/whatsapp/bot/booking-parse");
+  assert.deepEqual(await findPatientsByWhatsAppPhone(CLINICA, numeroDeMeta(DANES)), []);
+  assert.deepEqual(await findPatientsByWhatsAppPhone(CLINICA, numeroDeMeta(NORUEGO)), []);
+  // Los pacientes de verdad, con su wa_id mexicano, sí.
+  assert.deepEqual((await findPatientsByWhatsAppPhone(CLINICA, numeroDeMeta("5214521234567"))).map((p) => p.id), ["pacUruapan"]);
+  assert.deepEqual((await findPatientsByWhatsAppPhone(CLINICA, numeroDeMeta("524741234567"))).map((p) => p.id), ["pacLagos"]);
+});
+
+test("M1 · un paciente extranjero guardado con «+» es su número completo, no un mexicano", async () => {
+  pacientes = [
+    { id: "pacDK", clinicId: CLINICA, phone: "+45 21 23 45 67", firstName: "Freja" },
+    { id: "pacUruapan", clinicId: CLINICA, phone: "452 123 4567", firstName: "Lupe" },
+  ];
+  const { findPatientsByWhatsAppPhone } = await import("@/lib/whatsapp/inbox-log");
+  const { numeroDeMeta } = await import("@/lib/whatsapp/bot/booking-parse");
+  assert.deepEqual((await findPatientsByWhatsAppPhone(CLINICA, numeroDeMeta(DANES))).map((p) => p.id), ["pacDK"]);
+  // Y el de Uruapan no se vuelve dueño de la ficha danesa.
+  assert.deepEqual((await findPatientsByWhatsAppPhone(CLINICA, numeroDeMeta("5214521234567"))).map((p) => p.id), ["pacUruapan"]);
+});
+
+test("M1 · el hilo del wa_id danés no es el hilo del paciente de Uruapan (ni para buscarlo ni para los avisos)", async () => {
+  hilos.push({ id: "thDanes", clinicId: CLINICA, channel: "WHATSAPP", externalId: DANES, patientId: null, botActive: true, botState: null, lastMessageAt: new Date() });
+  const { findWhatsAppThreadsForPhone, upsertWhatsAppThread } = await import("@/lib/whatsapp/inbox-log");
+  assert.deepEqual(await findWhatsAppThreadsForPhone(CLINICA, "452 123 4567"), []);
+  const t = await upsertWhatsAppThread({
+    clinicId: CLINICA, externalId: "5214521234567", now: new Date(), createSubject: "WhatsApp · Lupe",
+    createStatus: "READ", matchByLast10: true,
+  });
+  assert.notEqual(t.id, "thDanes", "el aviso no cae en el hilo del danés, cuyo bot lee ese historial");
+  // El paciente danés guardado con «+» sí encuentra su hilo.
+  assert.deepEqual((await findWhatsAppThreadsForPhone(CLINICA, "+45 21 23 45 67")).map((h) => h.id), ["thDanes"]);
+});
+
+test("M1 · el bot no agenda al danés a nombre del paciente de Uruapan, y lo guarda con su código de país", async () => {
+  pacientes = [{ id: "pacUruapan", clinicId: CLINICA, phone: "4521234567", firstName: "Lupe" }];
+  const { findOrCreateWhatsAppPatient } = await import("@/lib/whatsapp/bot/booking-helpers");
+  const { numeroDeMeta } = await import("@/lib/whatsapp/bot/booking-parse");
+  const r = await findOrCreateWhatsAppPatient(CLINICA, numeroDeMeta(DANES), "Freja Jensen");
+  assert.equal(r?.id, "pacNuevo");
+  assert.equal(creados[0]?.phone, "+4521234567", "se guarda con el «+»: la próxima vez se le reconoce");
+});
+
+test("M1 · un recordatorio de Uruapan o de Lagos no lo contesta el danés ni el noruego", async () => {
+  const { recordatoriosDeEseNumero } = await import("@/lib/whatsapp/recordatorio-destino");
+  const nuevo = { id: "r1", payload: { enviadoA: "524521234567" }, appointment: { patient: { phone: "452 123 4567" } } };
+  const viejo = { id: "r2", payload: null, appointment: { patient: { phone: "474 123 4567" } } };
+  const aDK = { id: "r3", payload: { enviadoA: "4521234567" }, appointment: { patient: { phone: "+45 21 23 45 67" } } };
+  assert.deepEqual(recordatoriosDeEseNumero([nuevo, viejo], DANES), []);
+  assert.deepEqual(recordatoriosDeEseNumero([nuevo, viejo], NORUEGO), []);
+  assert.deepEqual(recordatoriosDeEseNumero([nuevo, viejo, aDK], "5214521234567").map((r) => r.id), ["r1"]);
+  assert.deepEqual(recordatoriosDeEseNumero([nuevo, viejo, aDK], "5214741234567").map((r) => r.id), ["r2"]);
+  assert.deepEqual(recordatoriosDeEseNumero([nuevo, viejo, aDK], DANES).map((r) => r.id), ["r3"]);
+});
+
+test("M1 · claveRemitente y claveWhatsApp con código de país", async () => {
+  const { claveRemitente, claveWhatsApp, numeroDeMeta } = await import("@/lib/whatsapp/bot/booking-parse");
+  assert.equal(claveRemitente(DANES), DANES, "nunca se rellena con 52");
+  assert.equal(claveRemitente("6581234567"), "6581234567", "Singapur");
+  assert.equal(claveRemitente("5214521234567"), "524521234567");
+  assert.equal(claveRemitente("524521234567"), "524521234567");
+  assert.equal(claveRemitente("13312345678"), "13312345678");
+  assert.equal(numeroDeMeta(DANES), "+4521234567");
+  assert.equal(numeroDeMeta(""), "");
+  assert.equal(claveWhatsApp("+45 21 23 45 67"), DANES);
+  assert.equal(claveWhatsApp("0045 21 23 45 67"), DANES);
+  assert.equal(claveWhatsApp("452 123 4567"), "524521234567");
+  assert.equal(claveWhatsApp("+52 1 452 123 4567"), "524521234567");
+  assert.equal(claveWhatsApp("+52 452 123 4567"), "524521234567");
+});

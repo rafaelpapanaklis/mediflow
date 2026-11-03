@@ -12,6 +12,7 @@ import {
   mediadosDeMes,
   mesPedidoSinDia,
   nombreDeMes,
+  numeroDeMeta,
   parseChoiceIndex,
   parseDateInput,
   parseFechaConPalabras,
@@ -453,7 +454,11 @@ function askDateText(state: BookingState): string {
 
 async function resolvePhone(input: BotTurnInput, deps: BookingDeps): Promise<string | null> {
   if (input.patient?.phone) return input.patient.phone;
-  return deps.findThreadExternalId(input.threadId, input.clinicId);
+  // El externalId del hilo es el wa_id de Meta, completo: va con su «+» para que
+  // la búsqueda de dueños no lo rellene con 52 (nº9) y, si el bot crea al
+  // paciente, su teléfono quede guardado con el código de país.
+  const externalId = await deps.findThreadExternalId(input.threadId, input.clinicId);
+  return externalId ? numeroDeMeta(externalId) || null : null;
 }
 
 /** Lo que se arrastra desde el mensaje que abrió el flujo (fecha y turno pedidos). */

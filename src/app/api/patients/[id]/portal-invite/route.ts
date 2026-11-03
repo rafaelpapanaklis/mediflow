@@ -8,7 +8,9 @@
 // `{ ok: true, status: "invited" }`; ver nº8 abajo):
 //   · no existía cuenta: se crea invitada + correo.
 //   · existía invitada (sin activar): token nuevo + reenvío.
-//   · ya tiene contraseña: NO se reenvía; solo se asegura el link.
+//   · ya tiene contraseña: NO se liga ni se toca la cuenta; sale el correo «ya
+//     tienes cuenta, entra aquí» y el expediente se liga solo cuando la persona
+//     inicia sesión (autoLinkPatientsByEmail, por su email verificado).
 // Exige `patients.edit`.
 //
 // TODO el cuerpo va envuelto en try/catch: cualquier fallo de Prisma/email/infra
@@ -22,7 +24,7 @@ import { prisma } from "@/lib/prisma";
 import { persistentRateLimit } from "@/lib/failban";
 import { sendEmail } from "@/lib/email";
 import { generateResetToken, sha256 } from "@/lib/patient-portal/crypto";
-import { buildInviteEmail } from "@/lib/patient-portal/emails";
+import { buildInviteEmail, buildInviteExistingAccountEmail } from "@/lib/patient-portal/emails";
 import { INVITE_TOKEN_TTL_DAYS } from "@/lib/patient-portal/types";
 import { logAudit, extractAuditMeta } from "@/lib/audit";
 
@@ -108,37 +110,54 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
       });
       status = "resent";
     } else {
-      // Ya activa → NO se reenvía contraseña; solo aseguramos el link (abajo).
+      // Ya activa → no se toca la cuenta ni se liga (abajo).
       status = "already_active";
     }
 
     // Link cuenta↔paciente idempotente (@@unique([accountId, patientId])).
-    try {
-      await prisma.patientAccountLink.create({
-        data: { accountId: account.id, patientId: patient.id, clinicId: ctx.clinicId },
-      });
-    } catch (err) {
-      // Ya existía (violación de @@unique) → idempotente, seguimos. Cualquier
-      // otro error se propaga al catch externo para responder 500 con JSON.
-      if ((err as { code?: string })?.code !== "P2002") throw err;
+    //
+    // Seguridad (auditoría «cloudflare», nº8, revisión t12 M2, decisión de
+    // Rafael): con la cuenta YA activa NO se crea el enlace. La ficha derivaba
+    // «activa» de ese enlace, así que cualquier clínica sabía, al recargar, si ese
+    // email ya tiene portal en DaleControl (= es paciente en otro lado). El enlace
+    // lo crea autoLinkPatientsByEmail cuando la persona inicia sesión; hasta
+    // entonces la ficha dice «invitación enviada», igual que con una cuenta nueva.
+    if (status !== "already_active") {
+      try {
+        await prisma.patientAccountLink.create({
+          data: { accountId: account.id, patientId: patient.id, clinicId: ctx.clinicId },
+        });
+      } catch (err) {
+        // Ya existía (violación de @@unique) → idempotente, seguimos. Cualquier
+        // otro error se propaga al catch externo para responder 500 con JSON.
+        if ((err as { code?: string })?.code !== "P2002") throw err;
+      }
     }
 
-    // Correo solo cuando (re)generamos un token de invitación.
-    if (status !== "already_active") {
-      const origin = (process.env.NEXT_PUBLIC_APP_URL || req.nextUrl.origin).replace(/\/+$/, "");
-      const inviteUrl = `${origin}/paciente/recuperar?token=${inviteToken}`;
-      try {
-        const content = buildInviteEmail({
-          name: account.name,
-          inviteUrl,
-          clinicName: ctx.clinic?.name ?? null,
-        });
-        await sendEmail({ to: email, subject: content.subject, html: content.html, text: content.text });
-      } catch (err) {
-        // El correo es best-effort: la cuenta/link ya existen, así que un fallo
-        // de envío NO tumba la invitación (se puede reenviar). Solo lo logueamos.
-        console.error("[patients/portal-invite] sendEmail error:", err);
-      }
+    // Correo en LOS TRES casos (M2): igual respuesta y mismo tiempo de respuesta
+    // —antes solo se esperaba al correo cuando la cuenta no estaba activa y la
+    // diferencia de cientos de ms delataba la cuenta—. Con la cuenta activa el
+    // correo es «ya tienes cuenta, entra aquí» (sin token: nada cambia).
+    const origin = (process.env.NEXT_PUBLIC_APP_URL || req.nextUrl.origin).replace(/\/+$/, "");
+    try {
+      const content =
+        status === "already_active"
+          ? buildInviteExistingAccountEmail({
+              name: account.name,
+              loginUrl: `${origin}/paciente/login`,
+              resetUrl: `${origin}/paciente/recuperar`,
+              clinicName: ctx.clinic?.name ?? null,
+            })
+          : buildInviteEmail({
+              name: account.name,
+              inviteUrl: `${origin}/paciente/recuperar?token=${inviteToken}`,
+              clinicName: ctx.clinic?.name ?? null,
+            });
+      await sendEmail({ to: email, subject: content.subject, html: content.html, text: content.text });
+    } catch (err) {
+      // El correo es best-effort: la cuenta/link ya existen, así que un fallo
+      // de envío NO tumba la invitación (se puede reenviar). Solo lo logueamos.
+      console.error("[patients/portal-invite] sendEmail error:", err);
     }
 
     // Auditoría (sin token ni datos sensibles): quién invitó, a qué paciente, resultado.

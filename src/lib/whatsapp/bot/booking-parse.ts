@@ -100,25 +100,66 @@ export function normalizeLast10(phone: string): string {
 }
 
 /**
- * La IDENTIDAD de un número de WhatsApp: los dígitos en formato internacional
- * completo (E.164 sin «+»), con el código de país. Seguridad (auditoría
- * «cloudflare», nº9): antes el remitente se identificaba por los últimos 10
- * dígitos y el código de país se tiraba.
+ * La IDENTIDAD de un número de WhatsApp GUARDADO (el teléfono de la ficha, el de
+ * la clínica, el que se teclea al escribir): los dígitos en formato
+ * internacional completo (E.164 sin «+»), con el código de país. Seguridad
+ * (auditoría «cloudflare», nº9): antes el remitente se identificaba por los
+ * últimos 10 dígitos y el código de país se tiraba.
  *
- * Solo se pliegan las variantes de MÉXICO, que son la misma línea:
+ * Si el número trae su código de país explícito («+…» o «00…»), se respeta tal
+ * cual: «+45 21 23 45 67» es Dinamarca, no un 45 mexicano. Sin «+», solo se
+ * pliegan las variantes de MÉXICO, que son la misma línea:
  *   · «521» + 10 (formato viejo de celular, el wa_id que aún manda Meta) → «52» + 10;
  *   · «044»/«045» + 10 (marcación nacional vieja) → «52» + 10;
- *   · 10 dígitos sin código de país (como la recepción teclea el teléfono) → «52» + 10;
- *   · un «00» delante (salida internacional) se quita.
+ *   · 10 dígitos sin código de país (como la recepción teclea el teléfono) → «52» + 10.
  * Cualquier otro número se queda con su código de país: «+1 331 234 5678»
  * es «13312345678», distinto de «52 33 1234 5678».
+ *
+ * ⚠ Un número que llega de META (el `from` del webhook, el `externalId` de un
+ * hilo) NO se pasa por aquí tal cual: ver `claveRemitente` y `numeroDeMeta`.
  */
 export function claveWhatsApp(phone: string | null | undefined): string {
-  let d = String(phone ?? "").replace(/\D/g, "");
+  const crudo = String(phone ?? "");
+  let d = crudo.replace(/\D/g, "");
   if (d.startsWith("00")) d = d.slice(2);
+  if (/^\s*(?:\+|00)/.test(crudo)) return plegarMexico(d);
+  if (d.length === 10) return `52${d}`;
+  return plegarMexico(d);
+}
+
+/**
+ * La IDENTIDAD de un número que llega de META: el `from` (wa_id) del webhook o
+ * el `externalId` de un hilo de WhatsApp. Meta siempre lo manda completo, con
+ * su código de país, así que NUNCA se rellena con «52».
+ *
+ * Seguridad (revisión de nº9): hay países cuyo número completo mide 10 dígitos
+ * (Dinamarca +45, Noruega +47, Singapur +65…). Rellenar el wa_id danés
+ * «4521234567» con 52 lo hacía el paciente de Uruapan «452 123 4567».
+ *
+ * Solo pliega lo que no puede ser otro país: «521» + 10 → «52» + 10, y
+ * «044»/«045» + 10 (ningún código de país empieza por 0; aparecen en hilos
+ * viejos creados desde un teléfono guardado así).
+ */
+export function claveRemitente(waId: string | null | undefined): string {
+  let d = String(waId ?? "").replace(/\D/g, "");
+  if (d.startsWith("00")) d = d.slice(2);
+  return plegarMexico(d);
+}
+
+/**
+ * Un número de Meta listo para los helpers que reciben «un teléfono» (que lo
+ * leen con `claveWhatsApp`): con su «+» delante, así nadie le añade un 52. El
+ * paciente que crea el bot se guarda también así, y la siguiente vez que
+ * escribe se le reconoce por su número completo.
+ */
+export function numeroDeMeta(waId: string | null | undefined): string {
+  const clave = claveRemitente(waId);
+  return clave ? `+${clave}` : "";
+}
+
+function plegarMexico(d: string): string {
   if (d.length === 13 && (d.startsWith("044") || d.startsWith("045"))) return `52${d.slice(3)}`;
   if (d.length === 13 && d.startsWith("521")) return `52${d.slice(3)}`;
-  if (d.length === 10) return `52${d}`;
   return d;
 }
 

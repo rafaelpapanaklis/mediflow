@@ -9,7 +9,7 @@
 //
 // PURO: sin Prisma. Lo usa el webhook.
 
-import { claveWhatsApp } from "@/lib/whatsapp/bot/booking-parse";
+import { claveRemitente, claveWhatsApp } from "@/lib/whatsapp/bot/booking-parse";
 
 export interface RecordatorioConDestino {
   payload?: unknown;
@@ -21,14 +21,20 @@ export interface RecordatorioConDestino {
 export function destinoDelRecordatorio(r: RecordatorioConDestino): string {
   const p = r.payload as Record<string, unknown> | null | undefined;
   const guardado = p && typeof p === "object" && typeof p.enviadoA === "string" ? p.enviadoA : "";
-  if (guardado) return claveWhatsApp(guardado);
+  // `enviadoA` ya es una clave completa (E.164 sin «+»): no se vuelve a pasar
+  // por `claveWhatsApp`, que le pondría un 52 a una clave extranjera de 10 dígitos.
+  if (guardado) return claveRemitente(guardado);
   const telefono = r.appointment?.patient?.phone ?? r.patientPhone ?? "";
   return claveWhatsApp(telefono);
 }
 
-/** Los recordatorios que de verdad se le mandaron a `from` (el que escribe). */
+/**
+ * Los recordatorios que de verdad se le mandaron a `from` (el wa_id de quien
+ * escribe). `from` viene de Meta, completo: `claveRemitente`, nunca rellenado con
+ * 52 (el danés «4521234567» no contesta el recordatorio de «452 123 4567»).
+ */
 export function recordatoriosDeEseNumero<T extends RecordatorioConDestino>(lista: T[], from: string): T[] {
-  const clave = claveWhatsApp(from);
+  const clave = claveRemitente(from);
   if (!clave) return [];
   return lista.filter((r) => destinoDelRecordatorio(r) === clave);
 }

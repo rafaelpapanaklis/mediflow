@@ -34,20 +34,6 @@ export async function POST(req: NextRequest) {
   }
   const { code, wabaId, phoneNumberId } = parsed.data;
 
-  // Seguridad (auditoría «cloudflare», nº4): el número entra del cuerpo de la
-  // petición y el webhook enruta por él. Si ya es de OTRA clínica dental, no se
-  // toca (409) — antes de cambiar nada en Meta.
-  const otraClinica = await prisma.clinic.findFirst({
-    where: { waPhoneNumberId: phoneNumberId, id: { not: clinicId } },
-    select: { id: true },
-  });
-  if (otraClinica) {
-    return NextResponse.json(
-      { success: false, error: "Ese número de WhatsApp ya está conectado a otra clínica." },
-      { status: 409 },
-    );
-  }
-
   const appId = process.env.META_APP_ID ?? process.env.NEXT_PUBLIC_META_APP_ID;
   const appSecret = process.env.META_APP_SECRET ?? process.env.WHATSAPP_APP_SECRET;
   if (!appId || !appSecret) {
@@ -80,6 +66,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { success: false, error: "Ese número no pertenece a la cuenta de WhatsApp Business que conectaste." },
         { status: 403 },
+      );
+    }
+
+    // 1c) Seguridad (auditoría «cloudflare», nº4): el número entra del cuerpo de
+    //     la petición y el webhook enruta por él. Si ya es de OTRA clínica
+    //     dental, no se toca (409) — antes de cambiar nada en Meta. Va DESPUÉS
+    //     de la prueba de propiedad (revisión t12, m2): si fuera antes,
+    //     cualquier ADMIN, sin un code válido, podría preguntar si un
+    //     phone_number_id ajeno ya está conectado a otra clínica.
+    const otraClinica = await prisma.clinic.findFirst({
+      where: { waPhoneNumberId: phoneNumberId, id: { not: clinicId } },
+      select: { id: true },
+    });
+    if (otraClinica) {
+      return NextResponse.json(
+        { success: false, error: "Ese número de WhatsApp ya está conectado a otra clínica." },
+        { status: 409 },
       );
     }
 

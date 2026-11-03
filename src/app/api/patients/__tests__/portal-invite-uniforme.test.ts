@@ -56,7 +56,10 @@ mock.module("@/lib/patient-visibility", { namedExports: { assertPatientVisible: 
 mock.module("@/lib/failban", { namedExports: { persistentRateLimit: async () => null } });
 mock.module("@/lib/email", { namedExports: { sendEmail: async (m: any) => { correos.push(m); } } });
 mock.module("@/lib/patient-portal/emails", {
-  namedExports: { buildInviteEmail: () => ({ subject: "Invitación", html: "<p>x</p>", text: "x" }) },
+  namedExports: {
+    buildInviteEmail: () => ({ subject: "Invitación", html: "<p>x</p>", text: "x" }),
+    buildInviteExistingAccountEmail: () => ({ subject: "Ya tienes cuenta", html: "<p>y</p>", text: "y" }),
+  },
 });
 mock.module("@/lib/audit", {
   namedExports: { logAudit: async (o: any) => { bitacora.push(o); }, extractAuditMeta: () => ({}) },
@@ -104,4 +107,43 @@ test("nº8 · el flujo legítimo sigue: recepción invita, se crea la cuenta, se
   assert.equal(enlaces[0].clinicId, "cli_B");
   assert.equal(correos.length, 1);
   assert.equal(correos[0].to, "ana@correo.test");
+});
+
+// ── Revisión t12 (M2), decisión de Rafael ──────────────────────────────────
+// La respuesta uniforme no bastaba: la ficha derivaba «activa» del enlace que
+// se creaba igual con la cuenta ya activa, y el correo solo se esperaba cuando
+// no lo estaba (el tiempo de respuesta la delataba).
+
+test("M2 · con la cuenta YA activa no se liga el expediente (lo liga ella al entrar) y sí sale el correo «ya tienes cuenta»", async () => {
+  cuenta = { id: "acc_1", email: "ana@correo.test", name: "Ana", passwordHash: "hash-de-otra-clinica" };
+  const r = await invitar();
+  assert.equal(r.status, 200);
+  assert.deepEqual(r.body, { ok: true, status: "invited" });
+  assert.equal(enlaces.length, 0, "sin enlace: la ficha no puede decir «activa»");
+  assert.equal(correos.length, 1, "también hay correo (mismo trabajo, mismo tiempo)");
+  assert.equal(correos[0].to, "ana@correo.test");
+  assert.equal(correos[0].subject, "Ya tienes cuenta");
+  assert.equal(cuenta.passwordHash, "hash-de-otra-clinica", "la cuenta no cambia");
+});
+
+test("M2 · sale un correo en los tres casos (nueva, pendiente y activa)", async () => {
+  await invitar();
+  cuenta = { id: "acc_1", email: "ana@correo.test", name: "Ana", passwordHash: null };
+  await invitar();
+  cuenta = { id: "acc_1", email: "ana@correo.test", name: "Ana", passwordHash: "hash" };
+  await invitar();
+  assert.equal(correos.length, 3);
+});
+
+test("M2 · la ficha dice «invitada» igual con una cuenta nueva que con una ya activa en otra clínica", async () => {
+  const { estadoPortalEnFicha } = await import("@/lib/patient-portal/estado-en-ficha");
+  // Cuenta nueva: enlace con cuenta sin contraseña.
+  const nueva = estadoPortalEnFicha({ passwordHash: null }, true);
+  // Cuenta ya activa: sin enlace, pero la invitación está en la bitácora de la clínica.
+  const activaEnOtroLado = estadoPortalEnFicha(null, true);
+  assert.equal(nueva, "invited");
+  assert.equal(activaEnOtroLado, nueva);
+  // Sin invitar y sin enlace: «sin cuenta». Ligada y con contraseña: «activa».
+  assert.equal(estadoPortalEnFicha(null, false), "none");
+  assert.equal(estadoPortalEnFicha({ passwordHash: "h" }, true), "active");
 });

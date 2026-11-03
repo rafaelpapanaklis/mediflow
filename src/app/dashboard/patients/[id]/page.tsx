@@ -50,6 +50,7 @@ import { CONSENT_DTO_SELECT, toConsentDTO } from "@/lib/consent/types";
 import { getEffectiveReminderSettings } from "@/lib/reminders/config";
 import { resolveReminderOutcome } from "@/lib/reminders/promise";
 import { parseNotifPrefs } from "@/lib/patient-notifications/types";
+import { estadoPortalEnFicha, invitadoAlPortalDesdeEstaClinica } from "@/lib/patient-portal/estado-en-ficha";
 
 export default async function PatientDetailPage(
   props: {
@@ -273,13 +274,16 @@ export default async function PatientDetailPage(
     },
   }));
   // Estado del portal con cuenta real: "none" sin cuenta ligada; "invited" ligada
-  // pero sin contraseña (invitación pendiente); "active" ya con contraseña.
+  // pero sin contraseña (invitación pendiente) o invitada desde esta clínica y aún
+  // sin ligar; "active" ligada y con contraseña. Seguridad (nº8, M2): una cuenta
+  // que ya estaba activa no se liga al invitar, y la ficha dice «invitada» igual
+  // que con una nueva (ver estado-en-ficha.ts). La bitácora solo se lee si no hay
+  // enlace.
   const linkedPortalAccount = portalAccountLink?.account ?? null;
-  const portalAccountStatus: "none" | "invited" | "active" = !linkedPortalAccount
-    ? "none"
-    : linkedPortalAccount.passwordHash === null
-      ? "invited"
-      : "active";
+  const portalAccountStatus = estadoPortalEnFicha(
+    linkedPortalAccount,
+    linkedPortalAccount ? false : await invitadoAlPortalDesdeEstaClinica(user.clinicId, patient.id),
+  );
 
   // RECORDATORIOS — qué va a pasar DE VERDAD con este paciente.
   // La tarjeta "Reglas automáticas" del rail prometía a todo el mundo un

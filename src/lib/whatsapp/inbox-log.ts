@@ -11,7 +11,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
-import { claveWhatsApp, normalizeLast10 } from "@/lib/whatsapp/bot/booking-parse";
+import { claveRemitente, claveWhatsApp, normalizeLast10 } from "@/lib/whatsapp/bot/booking-parse";
 
 /**
  * Empareja al paciente por teléfono comparando los últimos 10 dígitos
@@ -70,6 +70,8 @@ export async function findPatientsByWhatsAppPhone(
   // el paciente es el número COMPLETO con su código de país (`claveWhatsApp`).
   // Antes un +1 que terminara en los mismos 10 dígitos que un paciente mexicano
   // era ese paciente: confirmaba o cancelaba sus citas y veía su saldo.
+  // ⚠ `phone` se lee como teléfono GUARDADO: un número de Meta (wa_id) llega
+  // como `numeroDeMeta(from)`, con su «+», para que nadie lo rellene con 52.
   const clave = claveWhatsApp(phone);
   try {
     // `firstName` (ws1-t3/#17): el bot saluda al paciente por su nombre.
@@ -126,9 +128,11 @@ export async function findWhatsAppThreadsForPhone(
     select: { id: true, externalId: true, patientId: true },
   });
   // nº9: el pre-filtro es por los 10 dígitos; el hilo es de ESE número entero.
+  // El externalId del hilo es un número de Meta, completo: `claveRemitente`, que
+  // nunca le pone un 52 (un wa_id danés de 10 dígitos no es un 45 mexicano).
   const clave = claveWhatsApp(phone);
   return candidates
-    .filter((t) => claveWhatsApp(t.externalId) === clave)
+    .filter((t) => claveRemitente(t.externalId) === clave)
     .map((t) => ({ id: t.id, patientId: t.patientId }));
 }
 
@@ -242,15 +246,15 @@ export interface WhatsAppThreadRef {
  */
 async function findThreadByPhone(
   clinicId: string,
-  externalId: string,
+  phone: string,
 ): Promise<{ id: string } | null> {
   const exact = await prisma.inboxThread.findFirst({
-    where: { clinicId, channel: "WHATSAPP", externalId },
+    where: { clinicId, channel: "WHATSAPP", externalId: phone },
     select: { id: true },
   });
   if (exact) return exact;
 
-  const last10 = normalizeLast10(externalId);
+  const last10 = normalizeLast10(phone);
   if (last10.length !== 10) return null;
 
   const candidates = await prisma.inboxThread.findMany({
@@ -261,8 +265,9 @@ async function findThreadByPhone(
   });
   // El `contains` solo pre-filtra: el match real es el número completo con su
   // código de país (nº9: nunca el hilo de un número extranjero que acabe igual).
-  const clave = claveWhatsApp(externalId);
-  const match = candidates.find((t) => claveWhatsApp(t.externalId) === clave);
+  // `phone` es un teléfono guardado; el externalId del hilo, un número de Meta.
+  const clave = claveWhatsApp(phone);
+  const match = candidates.find((t) => claveRemitente(t.externalId) === clave);
   return match ? { id: match.id } : null;
 }
 
@@ -353,9 +358,11 @@ export async function upsertWhatsAppThread(
       // El `contains` solo pre-filtra: el match real es el número completo con
       // su código de país (nº9: un aviso para un paciente mexicano nunca cae en
       // el hilo de un número extranjero que acabe en los mismos 10 dígitos, cuyo
-      // historial lee después el bot de ese remitente).
+      // historial lee después el bot de ese remitente). El externalId de los
+      // hilos guardados es un número de Meta: `claveRemitente`, sin rellenar
+      // con 52 (el hilo de un wa_id danés «4521234567» no es el de «452 123 4567»).
       const clave = claveWhatsApp(externalId);
-      const match = candidates.find((t) => claveWhatsApp(t.externalId) === clave);
+      const match = candidates.find((t) => claveRemitente(t.externalId) === clave);
       if (match) {
         thread = {
           id: match.id,

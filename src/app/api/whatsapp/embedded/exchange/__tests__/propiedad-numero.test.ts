@@ -97,12 +97,25 @@ test("nº4 · si Meta no deja leer los números del WABA (token sin permiso) →
   assert.equal(guardado, null);
 });
 
-test("nº4 · un número que ya tiene OTRA clínica dental → 409, antes de cualquier llamada a Meta", async () => {
+test("nº4 · un número que ya tiene OTRA clínica dental → 409, sin suscribir, registrar ni guardar", async () => {
   numerosDelWaba["W-A"] = ["PNID-B"];
   const r = await exchange({ code: "codigo-prueba-123", wabaId: "W-A", phoneNumberId: "PNID-B" });
   assert.equal(r.status, 409);
   assert.equal(guardado, null);
-  assert.equal(llamadas.length, 0, "ni siquiera se canjea el code");
+  assert.ok(!llamadas.some((l) => l.includes("/subscribed_apps") || l.includes("/register")), "sin efectos en Meta");
+});
+
+// Revisión t12 (m2): el 409 va DESPUÉS de la prueba de propiedad. Antes, un
+// ADMIN cualquiera, sin un code válido ni un WABA que liste el número, podía
+// preguntar si un phone_number_id ajeno ya estaba conectado a otra clínica.
+test("m2 · sin probar que el número es suyo, no se revela si otra clínica lo tiene (ni 409)", async () => {
+  // El WABA del intercambio no lista PNID-B (es de la clínica B).
+  const r = await exchange({ code: "codigo-prueba-123", wabaId: "W-A", phoneNumberId: "PNID-B" });
+  assert.equal(r.status, 403, "lo mismo que con un número que no existe");
+  const nadie = await exchange({ code: "codigo-prueba-123", wabaId: "W-A", phoneNumberId: "PNID-DE-NADIE" });
+  assert.equal(nadie.status, r.status);
+  assert.deepEqual(nadie.body, r.body, "misma respuesta para el número de otra clínica y para uno libre");
+  assert.equal(guardado, null);
 });
 
 test("nº4 · el caso legítimo sigue igual: el WABA lista el número → se guarda en la clínica de la sesión", async () => {
