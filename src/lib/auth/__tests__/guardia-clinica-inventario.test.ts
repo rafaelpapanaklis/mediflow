@@ -118,8 +118,6 @@ const EXCEPCIONES: Record<string, string> = {
     "ficha de salud del paciente: patients.view (auditoría cloudflare nº11; la fija seg-archivos-permisos)",
   "src/app/api/patients/[id]/health-questionnaire/route.ts#POST":
     "lo llena RECEPCIÓN (patient-nav-items.ts): patients.edit, no medicalRecord.edit (auditoría cloudflare nº11; la fija seg-archivos-permisos)",
-  "src/app/actions/clinical-shared/share-links.ts#resolvePublicShareToken":
-    "lo resuelve la página pública /share/p/[token] con un token aleatorio de 32 bytes; no hay sesión que revisar",
   "src/app/actions/orthodontics/alineadores/logElasticsComplianceFromPortal.ts#logElasticsComplianceFromPortal":
     "la usa el PACIENTE desde su portal (getOrthoPatientPortalContext); no es personal de la clínica",
   "src/app/actions/orthodontics/alineadores/submitMonitoringPhoto.ts#submitMonitoringPhoto":

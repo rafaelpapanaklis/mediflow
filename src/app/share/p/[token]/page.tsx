@@ -9,7 +9,7 @@
 
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { resolvePublicShareToken } from "@/app/actions/clinical-shared/share-links";
+import { resolvePublicShareToken } from "@/lib/clinical-shared/share/resolve-public-token";
 import { isFailure } from "@/lib/clinical-shared/result";
 import ImplantShareTimeline from "./ImplantShareTimeline";
 import { PerioShareView } from "./PerioShareView";
