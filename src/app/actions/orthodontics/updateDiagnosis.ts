@@ -6,6 +6,7 @@
 // guardado del paso SOLO: los tres seguidos, sin transacción de nadie más.
 
 import { revalidatePath } from "next/cache";
+import { pacienteOcultoPara } from "@/lib/clinical-shared/auth/paciente-oculto";
 import {
   ejecutarGuardadoDelDiagnostico,
   movimientoDelGuardado,
@@ -32,6 +33,8 @@ async function actualizarDiagnostico(
 
   const prep = await prepararGuardadoDelDiagnostico(ctx, input);
   if (prep.ok === false) return fail(prep.error);
+  // ws1-t11 v2: el paciente del diagnóstico puede estar restringido (visibleUserIds).
+  if (await pacienteOcultoPara(ctx, prep.preparado.patientId)) return fail("Diagnóstico no encontrado");
   const p = prep.preparado;
 
   try {

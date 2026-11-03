@@ -7,7 +7,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { idDeLaBase } from "@/lib/validation/id";
 import { prisma } from "@/lib/prisma";
-import { auditOrtho, getOrthoActionContext } from "./_helpers";
+import { auditOrtho, getOrthoActionContext, cargarPlanVisible } from "./_helpers";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
 import { fail, isFailure, ok, type ActionResult } from "./result";
 
@@ -31,6 +31,9 @@ export async function toggleRetentionPreSurvey(
     select: { id: true, clinicId: true, patientId: true },
   });
   if (!plan) return fail("Plan no encontrado");
+  // ws1-t11 v2: el paciente del caso puede estar restringido (visibleUserIds).
+  const visible = await cargarPlanVisible(ctx, parsed.data.treatmentPlanId);
+  if (isFailure(visible)) return visible;
 
   try {
     const regimen = await prisma.orthoRetentionRegimen.upsert({

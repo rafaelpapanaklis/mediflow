@@ -37,6 +37,9 @@ export async function createPaymentPlan(
     include: { paymentPlan: { select: { id: true } } },
   });
   if (!plan) return fail("Plan de tratamiento no encontrado");
+  // ws1-t11 v2: el caso tiene que ser de ESTE paciente (el que se validó arriba,
+  // visibilidad incluida). Antes valía el caso de cualquier otro paciente.
+  if (plan.patientId !== parsed.data.patientId) return fail("Plan de tratamiento no encontrado");
   if (plan.paymentPlan) {
     return fail("El plan ya tiene un acuerdo de pagos", plan.paymentPlan.id);
   }

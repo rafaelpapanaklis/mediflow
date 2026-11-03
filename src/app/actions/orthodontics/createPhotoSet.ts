@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { createPhotoSetSchema } from "@/lib/validation/orthodontics";
 import { conMovimientosSoloDeBitacora, esPasoDeOtraAccion } from "@/lib/movimientos-paciente/una-accion";
-import { auditOrtho, getOrthoActionContext } from "./_helpers";
+import { auditOrtho, getOrthoActionContext, cargarPlanVisible } from "./_helpers";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
 import { fail, isFailure, ok, type ActionResult } from "./result";
 
@@ -33,6 +33,9 @@ async function crearJuegoDeFotos(input: unknown): Promise<ActionResult<{ id: str
     include: { photoSets: { select: { setType: true } } },
   });
   if (!plan) return fail("Plan no encontrado");
+  // ws1-t11 v2: el paciente del caso puede estar restringido (visibleUserIds).
+  const visible = await cargarPlanVisible(ctx, parsed.data.treatmentPlanId);
+  if (isFailure(visible)) return visible;
 
   // T0/T1/T2 son singleton por plan. CONTROL puede repetirse.
   if (parsed.data.setType !== "CONTROL") {

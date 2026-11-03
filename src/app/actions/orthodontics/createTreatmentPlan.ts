@@ -73,6 +73,9 @@ async function crearPlanDeTratamiento(input: unknown): Promise<ResultadoDelPlan>
     include: { treatmentPlan: { select: { id: true } } },
   });
   if (!dx) return fail("Diagnóstico no encontrado");
+  // ws1-t11 v2: el diagnóstico tiene que ser de ESTE paciente (validado arriba,
+  // visibilidad incluida). Antes se podía colgar el de otro paciente (restringido).
+  if (dx.patientId !== parsed.data.patientId) return fail("Diagnóstico no encontrado");
   if (dx.treatmentPlan)
     return fail("Ya existe un plan para este diagnóstico", dx.treatmentPlan.id);
 

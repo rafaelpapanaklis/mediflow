@@ -123,24 +123,29 @@ export async function crearPromesaDePago(args: {
   }
 }
 
-/** Marca una promesa como cumplida o cancelada. Nunca sobre una ya resuelta. */
+/**
+ * Marca una promesa como cumplida o cancelada. Nunca sobre una ya resuelta.
+ * ws1-t11 v2: solo la del CASO que el que llama ya validó (visibilidad por
+ * paciente incluida): antes bastaba el id de cualquier promesa de la clínica.
+ */
 export async function resolverPromesaDePago(args: {
   id: string;
   clinicId: string;
+  treatmentPlanId: string;
   resultado: "cumplida" | "cancelada";
 }): Promise<{ ok: boolean; sinTabla: boolean }> {
-  const { id, clinicId, resultado } = args;
-  if (!id || !clinicId) return { ok: false, sinTabla: false };
+  const { id, clinicId, treatmentPlanId, resultado } = args;
+  if (!id || !clinicId || !treatmentPlanId) return { ok: false, sinTabla: false };
   if (!(await tablaExiste())) return { ok: false, sinTabla: true };
   try {
     const filas = resultado === "cumplida"
       ? await prisma.$queryRaw<{ id: string }[]>`
           UPDATE "orthodontic_payment_promises" SET "fulfilledAt" = CURRENT_TIMESTAMP
-           WHERE "id" = ${id} AND "clinicId" = ${clinicId} AND "fulfilledAt" IS NULL AND "cancelledAt" IS NULL
+           WHERE "id" = ${id} AND "clinicId" = ${clinicId} AND "treatmentPlanId" = ${treatmentPlanId} AND "fulfilledAt" IS NULL AND "cancelledAt" IS NULL
            RETURNING "id"`
       : await prisma.$queryRaw<{ id: string }[]>`
           UPDATE "orthodontic_payment_promises" SET "cancelledAt" = CURRENT_TIMESTAMP
-           WHERE "id" = ${id} AND "clinicId" = ${clinicId} AND "fulfilledAt" IS NULL AND "cancelledAt" IS NULL
+           WHERE "id" = ${id} AND "clinicId" = ${clinicId} AND "treatmentPlanId" = ${treatmentPlanId} AND "fulfilledAt" IS NULL AND "cancelledAt" IS NULL
            RETURNING "id"`;
     return { ok: filas.length > 0, sinTabla: false };
   } catch (e) {

@@ -130,8 +130,9 @@ export function preparar(opciones: {
     for (const imp of importsDe(abs)) {
       if (opciones.reales.includes(imp.especificador)) continue;
       let url = imp.especificador;
-      if (url.startsWith(".")) {
-        const base = resolve(dirname(abs), url);
+      // «./x», «../x» y «@/lib/x» pueden ser el MISMO archivo: se agrupan por su ruta real.
+      if (url.startsWith(".") || url.startsWith("@/")) {
+        const base = url.startsWith("@/") ? resolve(raiz, "src", url.slice(2)) : resolve(dirname(abs), url);
         const conExt = [".tsx", ".ts", "/index.tsx", "/index.ts"].map((e) => base + e).find((c) => {
           try { readFileSync(c); return true; } catch { return false; }
         });

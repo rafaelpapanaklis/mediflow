@@ -7,7 +7,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { idDeLaBase } from "@/lib/validation/id";
 import { prisma } from "@/lib/prisma";
-import { auditOrtho, getOrthoActionContext } from "./_helpers";
+import { auditOrtho, getOrthoActionContext, cargarPlanVisible } from "./_helpers";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
 import { fail, isFailure, ok, type ActionResult } from "./result";
 
@@ -46,6 +46,8 @@ export async function updateQuoteScenario(
     where: { id: data.scenarioId, clinicId: ctx.clinicId },
   });
   if (!before) return fail("Escenario no encontrado");
+  // ws1-t11 v2: el paciente del caso puede estar restringido (visibleUserIds).
+  if (isFailure(await cargarPlanVisible(ctx, before.treatmentPlanId))) return fail("Escenario no encontrado");
 
   // Validación: enganche < total cuando ambos están presentes.
   const newDown = data.downPayment ?? Number(before.downPayment);

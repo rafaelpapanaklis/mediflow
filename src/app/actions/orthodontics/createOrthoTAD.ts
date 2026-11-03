@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { idDeLaBase } from "@/lib/validation/id";
 import { prisma } from "@/lib/prisma";
-import { auditOrtho, getOrthoActionContext } from "./_helpers";
+import { auditOrtho, getOrthoActionContext, cargarPlanVisible } from "./_helpers";
 import { locationHasValidFdi } from "./_predicates";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
 import { fail, isFailure, ok, type ActionResult } from "./result";
@@ -47,6 +47,9 @@ export async function createOrthoTAD(
     select: { id: true, clinicId: true, patientId: true },
   });
   if (!plan) return fail("Plan no encontrado");
+  // ws1-t11 v2: el paciente del caso puede estar restringido (visibleUserIds).
+  const visible = await cargarPlanVisible(ctx, data.treatmentPlanId);
+  if (isFailure(visible)) return visible;
 
   const placedDate = data.placedDate ? new Date(data.placedDate) : new Date();
 

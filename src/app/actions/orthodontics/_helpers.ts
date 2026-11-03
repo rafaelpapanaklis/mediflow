@@ -195,6 +195,41 @@ export async function getOrthoPlanActionContext(
 }
 
 /**
+ * El CASO de ortodoncia por id, solo si es de la clínica de la sesión y su
+ * paciente es visible para quien llama (patients.visibleUserIds). ws1-t11 v2:
+ * ~20 actions cargaban el caso por { id, clinicId } y escribían sin mirar la
+ * visibilidad; un paciente restringido «no existe» para el staff no-admin que
+ * no está en su lista, así que aquí devuelve el MISMO «Plan no encontrado» que
+ * si el caso no existiera. No filtra `deletedAt`: eso lo sigue decidiendo cada
+ * action con su propia carga, como antes. El ADMIN ve todo.
+ *
+ * Uso: `const visible = await cargarPlanVisible(ctx, planId); if (isFailure(visible)) return visible;`
+ */
+export async function cargarPlanVisible(
+  ctx: AuthContext,
+  planId: string | null | undefined,
+): Promise<ActionResult<{ id: string; patientId: string }>> {
+  if (!planId || !ctx.clinicId) return fail("Plan no encontrado");
+  // N-31: en la precarga varias lecturas del mismo caso comparten la consulta.
+  const plan = await memoDePeticion(`plan-visible:${ctx.clinicId}:${planId}`, () =>
+    prisma.orthodonticTreatmentPlan.findFirst({
+      where: { id: planId, clinicId: ctx.clinicId },
+      select: { id: true, patientId: true, patient: { select: { visibleUserIds: true } } },
+    }),
+  );
+  if (!plan) return fail("Plan no encontrado");
+  if (
+    !canSeePatient(
+      { userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId },
+      plan.patient?.visibleUserIds,
+    )
+  ) {
+    return fail("Plan no encontrado");
+  }
+  return { ok: true, data: { id: plan.id, patientId: plan.patientId } };
+}
+
+/**
  * Verifica que un paciente exista, no esté borrado y pertenezca al clinicId
  * activo. Defensivo aunque RLS lo cubra.
  */

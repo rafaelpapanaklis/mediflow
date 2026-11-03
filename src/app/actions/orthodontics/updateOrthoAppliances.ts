@@ -11,7 +11,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { idDeLaBase } from "@/lib/validation/id";
 import { prisma } from "@/lib/prisma";
-import { auditOrtho, getOrthoActionContext } from "./_helpers";
+import { auditOrtho, getOrthoActionContext, cargarPlanVisible } from "./_helpers";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
 import { fail, isFailure, ok, type ActionResult } from "./result";
 
@@ -70,6 +70,9 @@ export async function updateOrthoAppliances(
     },
   });
   if (!before) return fail("Plan no encontrado");
+  // ws1-t11 v2: el paciente del caso puede estar restringido (visibleUserIds).
+  const visible = await cargarPlanVisible(ctx, data.treatmentPlanId);
+  if (isFailure(visible)) return visible;
 
   // `techniqueLabel` no es columna de Prisma (SQL crudo): se saca de lo que va al update.
   const { treatmentPlanId, techniqueLabel, ...rest } = data;

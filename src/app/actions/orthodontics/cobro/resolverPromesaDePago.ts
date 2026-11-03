@@ -20,7 +20,8 @@ export async function resolverPromesaDePago(args: {
   const casoResult = await loadCasoParaCobro({ ctx, treatmentPlanId: args.treatmentPlanId });
   if (isFailure(casoResult)) return casoResult;
 
-  const r = await resolverEnDb({ id: args.promiseId, clinicId: ctx.clinicId, resultado: args.resultado });
+  // ws1-t11 v2: la promesa tiene que ser de ESTE caso (el que se acaba de validar, visibilidad incluida).
+  const r = await resolverEnDb({ id: args.promiseId, clinicId: ctx.clinicId, treatmentPlanId: casoResult.data.id, resultado: args.resultado });
   if (!r.ok) return fail(r.sinTabla ? "Falta aplicar sql/ortodoncia-cobro.sql" : "No se pudo resolver la promesa (¿ya estaba resuelta?)");
 
   await auditarCobro({ ctx, action: "resolver-promesa-de-pago", entityId: args.treatmentPlanId, patientId: casoResult.data.patientId, meta: { promiseId: args.promiseId, resultado: args.resultado } });

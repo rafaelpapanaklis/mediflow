@@ -67,6 +67,8 @@ mock.module("@/lib/orthodontics/material-de-arco-db", {
 mock.module("../_helpers", {
   namedExports: {
     getOrthoActionContext: async () => ({ ok: true, data: { ctx: { clinicId: CLINICA, userId: "doc-1", role: "DOCTOR" } } }),
+    // ws1-t11 v2: el caso de esta prueba es de un paciente visible.
+    cargarPlanVisible: async (_ctx: unknown, id: string) => ({ ok: true, data: { id, patientId: "pac-1" } }),
     auditOrtho: async (a: Record<string, unknown>) => {
       state.auditorias.push(a);
     },
