@@ -5,6 +5,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { adminConPermiso } from "@/lib/auth/admin-con-permiso";
 import { SettingsClient } from "./settings-client";
 import { hayColumnaReservaWeb, reservaWebAbierta } from "@/lib/reserva-web/db";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
@@ -40,6 +41,10 @@ export default async function SettingsPage(props: Props) {
   // (ni el nombre, ni el logo). Se resuelve en el servidor: es la MISMA
   // llave que exige el PATCH (/api/clinic, /api/settings), no una nueva.
   const puedeEditarClinica = hasPermission(user, "settings.edit");
+  // ws1-t11 v5: «Exigir 2FA a todo el equipo» — el mismo criterio que POST
+  // /api/auth/2fa/clinic-policy (administrador + «Editar configuración» con el
+  // override; el dueño siempre). A quien el servidor rechazaría, no se le enseña.
+  const puedeExigir2fa = adminConPermiso(user, "settings.edit");
 
   // REDISEÑO DE CONFIGURACIÓN (ws1-t2) — el MISMO interruptor por clínica que
   // enciende el menú de dos niveles (`clinic_feature_flags`, bandera
@@ -116,6 +121,7 @@ export default async function SettingsPage(props: Props) {
         cfdiLive={isFacturapiLive()}
         teamMembers={teamMembers as any}
         puedeEditarClinica={puedeEditarClinica}
+        puedeExigir2fa={puedeExigir2fa}
         rediseno={rediseno}
         metodosPago={metodosPago}
         sedeIncluida={sedeIncluida}

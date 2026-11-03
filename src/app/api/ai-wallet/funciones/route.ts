@@ -4,6 +4,7 @@ import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
 import { extractAuditMeta, logAudit } from "@/lib/audit";
 import { conFuncionIa, esFuncionIa, sanitizeAiSettings } from "@/lib/ai-billing/interruptores";
+import { adminConPermiso } from "@/lib/auth/admin-con-permiso";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +31,10 @@ export async function GET() {
     return NextResponse.json({
       apagadas: sanitizeAiSettings(clinic?.aiSettings).apagadas,
       isAdmin: ctx.isAdmin,
+      // ws1-t11 v5: ¿puede cambiarlas? El MISMO criterio que el PATCH de abajo
+      // (administrador + «Editar configuración» con el override; el dueño
+      // siempre). La pantalla deja los interruptores quietos si no.
+      puedeCambiar: adminConPermiso(ctx, "settings.edit"),
       // Categoría de la clínica, de la SESIÓN: la pantalla la usa para no
       // pintar funciones que no son de su giro (Homeopatía en una dental).
       categoria: ctx.clinicCategory,

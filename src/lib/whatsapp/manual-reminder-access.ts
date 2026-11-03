@@ -9,13 +9,11 @@
 //
 // ⚠️ Si la ruta cambia, esto tiene que cambiar con ella; el test
 // manual-reminder-access.test.ts se rompe a propósito si se separan.
-import { hasPermission } from "@/lib/auth/permissions";
+import { adminConPermiso } from "@/lib/auth/admin-con-permiso";
 
 export function canSendManualReminder(
   role: string | null | undefined,
   permissionsOverride?: string[] | null,
 ): boolean {
-  if (role === "SUPER_ADMIN") return true;
-  if (role !== "ADMIN") return false;
-  return hasPermission({ role, permissionsOverride: permissionsOverride ?? [] }, "whatsapp.send");
+  return adminConPermiso({ role, permissionsOverride }, "whatsapp.send");
 }

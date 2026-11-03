@@ -38,7 +38,8 @@ export function useFuncionesIa() {
         const d = await res.json();
         if (!vivo) return;
         setApagadas(Array.isArray(d.apagadas) ? d.apagadas : []);
-        setIsAdmin(d.isAdmin === true);
+        // ws1-t11 v5: no basta el rol — a un ADMIN sin «Editar configuración» el PATCH le da 403.
+        setIsAdmin(d.puedeCambiar === true);
         setCategoria(typeof d.categoria === "string" ? d.categoria : null);
       } catch {
         if (vivo) setError(true);
@@ -86,7 +87,7 @@ export type FuncionesIaVM = ReturnType<typeof useFuncionesIa>;
 export const FUNCIONES_IA_TITULO = "Funciones de IA";
 export const FUNCIONES_IA_SUB =
   "Apaga lo que no quieras que gaste. Una función apagada no llama a la IA: no gasta nada hasta que la vuelvas a encender.";
-export const FUNCIONES_IA_SOLO_ADMIN = "Solo un administrador puede encender o apagar funciones.";
+export const FUNCIONES_IA_SOLO_ADMIN = "Solo un administrador con «Editar configuración» puede encender o apagar funciones.";
 
 /** Vista de siempre (sin el rediseño). El estado lo pone SaldoClient. */
 export function FuncionesIaCard({ vm }: { vm: FuncionesIaVM }) {

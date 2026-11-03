@@ -48,7 +48,8 @@ test("nadie llama a /api/whatsapp/send sin gatear su botón", () => {
   const pantallas: Array<[string, RegExp, number]> = [
     ["src/components/dashboard/agenda/agenda-detail-panel.tsx", /permissions\.canSendReminder !== false && \(\s*<button[^>]*?onClick=\{sendWhatsapp\}/s, 1],
     ["src/app/dashboard/appointments/appointments-client.tsx", /waConnected && canSendReminder && \(\s*<(button|Button)[^\n]*?onClick=\{\(\) => sendWA\(/g, 2],
-    ["src/components/dashboard/agenda-nueva/panel-cita.tsx", /esAdmin && \(\s*<button[^>]*?onClick=\{enviarWhatsapp\}/s, 1],
+    // ws1-t11 v5 (m1 de t2): con el permiso que calcula la agenda (canSendManualReminder), no con el rol.
+    ["src/components/dashboard/agenda-nueva/panel-cita.tsx", /permissions\.canSendReminder === true && \(\s*<button[^>]*?onClick=\{enviarWhatsapp\}/s, 1],
   ];
   for (const [rel, guarda, veces] of pantallas) {
     const src = leer(rel);
@@ -71,6 +72,12 @@ test("nadie llama a /api/whatsapp/send sin gatear su botón", () => {
   andar("src/app/dashboard");
   andar("src/components");
   assert.deepEqual(huerfanas, [], "pantalla nueva que llama a la ruta: añádela arriba con su guarda");
+});
+
+test("ws1-t11 v5 · el panel de la agenda nueva no decide el botón de WhatsApp por el rol", () => {
+  const src = leer("src/components/dashboard/agenda-nueva/panel-cita.tsx");
+  assert.doesNotMatch(src, /esAdmin/, "volvió el atajo por rol: ignora el interruptor «Enviar WhatsApp» del dueño");
+  assert.doesNotMatch(src, /userRole === "(ADMIN|SUPER_ADMIN)"/);
 });
 
 test("las dos páginas de servidor calculan el permiso con el espejo, no a mano", () => {

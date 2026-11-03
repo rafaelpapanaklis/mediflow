@@ -25,12 +25,13 @@ const R = {
   politica2fa: "src/app/api/auth/2fa/clinic-policy/route.ts",
   funcionesIa: "src/app/api/ai-wallet/funciones/route.ts",
   whatsapp: "src/app/api/whatsapp/send/route.ts",
+  facturaCfdi: "src/app/api/cfdi/factura/[invoiceId]/route.ts",
 };
 
 const prisma = prismaFalso();
 preparar({
   paginas: Object.values(R),
-  reales: ["next/server", "@/lib/auth/require-permission", "@/lib/auth/permissions", "@/lib/ai-billing/interruptores", "@/lib/cfdi/mensajes", "@/lib/invoices/cfdi-cancelacion"],
+  reales: ["next/server", "@/lib/auth/require-permission", "@/lib/auth/permissions", "@/lib/ai-billing/interruptores", "@/lib/cfdi/mensajes", "@/lib/invoices/cfdi-cancelacion", "@/lib/auth/admin-con-permiso"],
   fijos: {
     "@/lib/prisma": { prisma },
     "next/navigation": { redirect: (d: string) => { throw new Redireccion(d); }, notFound: () => { throw new Error("404"); } },
@@ -67,7 +68,7 @@ const escrituras = () =>
 const json = (url: string, method: string, body: unknown) =>
   new NextRequest(url, { method, body: JSON.stringify(body), headers: { "content-type": "application/json" } });
 
-const LLAMADAS: Record<keyof typeof R, { llave: string; correr: () => Promise<Response> }> = {
+const LLAMADAS: Record<Exclude<keyof typeof R, "facturaCfdi">, { llave: string; correr: () => Promise<Response> }> = {
   cancelar: {
     llave: "billing.refund",
     correr: async () => (await import(`../../../../${R.cancelar}`)).POST(
@@ -89,7 +90,8 @@ const LLAMADAS: Record<keyof typeof R, { llave: string; correr: () => Promise<Re
   },
 };
 
-for (const [nombre, { llave, correr }] of Object.entries(LLAMADAS)) {
+const LLAMADAS_DE_CAMBIO = LLAMADAS;
+for (const [nombre, { llave, correr }] of Object.entries(LLAMADAS_DE_CAMBIO)) {
   test(`${nombre} · ADMIN al que el dueño le apagó «${llave}»: 403 y no toca nada`, async () => {
     como("ADMIN", RECORTADO);
     const r = await correr();
@@ -118,3 +120,45 @@ for (const [nombre, { llave, correr }] of Object.entries(LLAMADAS)) {
     assert.deepEqual(escrituras(), []);
   });
 }
+
+// ══════════════════ ws1-t11 v5 · el espejo de la UI dice lo mismo que el servidor ══════════════════
+
+test("adminConPermiso (lo que la UI enseña) == lo que cada ruta acepta, rol por rol y override por override", async () => {
+  const { adminConPermiso } = await import("@/lib/auth/admin-con-permiso");
+  for (const [nombre, { llave, correr }] of Object.entries(LLAMADAS_DE_CAMBIO)) {
+    for (const role of ["SUPER_ADMIN", "ADMIN", "DOCTOR", "RECEPTIONIST", "READONLY"]) {
+      for (const override of [[], RECORTADO, [llave], [...RECORTADO, llave]]) {
+        como(role, override);
+        const r = await correr();
+        const servidor = r.status !== 403 && r.status !== 401;
+        assert.equal(adminConPermiso(ctx, llave as never), servidor, `${nombre} · ${role} · [${override.join(",")}]: la UI y el servidor no coinciden`);
+      }
+    }
+  }
+});
+
+test("GET /api/ai-wallet/funciones: «puedeCambiar» sigue el criterio del PATCH", async () => {
+  const { GET } = await import(`../../../../${R.funcionesIa}`);
+  const casos: Array<[string, string[], boolean]> = [["ADMIN", [], true], ["ADMIN", RECORTADO, false], ["SUPER_ADMIN", RECORTADO, true], ["DOCTOR", ["settings.edit"], false]];
+  for (const [role, override, esperado] of casos) {
+    como(role, override);
+    const d = await (await GET()).json();
+    assert.equal(d.puedeCambiar, esperado, `${role} [${override.join(",")}]`);
+  }
+});
+
+test("GET /api/cfdi/factura/[invoiceId]: cancelar, timbrar y devolver salen con el criterio de SU ruta", async () => {
+  respuestas.set("prisma.invoice.findFirst", () => ({ patientId: null, cfdiUuid: "U-1", paid: 100, balance: 0 }));
+  respuestas.set("@/lib/invoices/cfdi-cancelacion.server#cfdisDeLaFactura", async () => ({ listo: true, sqlPendiente: null, cfdis: [] }));
+  const { GET } = await import(`../../../../${R.facturaCfdi}`);
+  const pedir = async () => (await GET(new NextRequest("http://x/api/cfdi/factura/f1"), { params: Promise.resolve({ invoiceId: "f1" }) })).json();
+  como("ADMIN", RECORTADO);
+  let d = await pedir();
+  assert.deepEqual([d.puedeCancelar, d.puedeTimbrar, d.puedeDevolver], [false, true, false], "ADMIN sin «Reembolsar / cancelar»");
+  como("ADMIN");
+  d = await pedir();
+  assert.deepEqual([d.puedeCancelar, d.puedeTimbrar, d.puedeDevolver], [true, true, true], "ADMIN por defecto");
+  como("SUPER_ADMIN", RECORTADO);
+  d = await pedir();
+  assert.equal(d.puedeCancelar, true, "el dueño cancela aunque su override no traiga la llave (como la ruta)");
+});
