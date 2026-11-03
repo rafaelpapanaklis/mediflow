@@ -3,6 +3,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { pacienteOcultoPara } from "@/lib/clinical-shared/auth/paciente-oculto";
 import { assertPatientFileInClinic } from "@/lib/patient-files/archivo-del-paciente";
 import {
   scheduleFollowUpSchema,
@@ -34,6 +35,8 @@ export async function scheduleFollowUp(
     select: { id: true, clinicId: true, patientId: true },
   });
   if (!tx || tx.clinicId !== ctx.clinicId) return fail("Tratamiento no encontrado");
+  // Seguridad ola 2b (lead 14 / H1 de t2): el paciente del registro puede estar restringido (visibleUserIds).
+  if (await pacienteOcultoPara(ctx, tx.patientId)) return fail("Tratamiento no encontrado");
 
   try {
     const created = await prisma.endodonticFollowUp.create({
@@ -83,6 +86,8 @@ export async function completeFollowUp(
   if (!followUp || followUp.treatment.clinicId !== ctx.clinicId) {
     return fail("Control no encontrado");
   }
+  // Seguridad ola 2b (lead 14 / H1 de t2): el paciente del registro puede estar restringido (visibleUserIds).
+  if (await pacienteOcultoPara(ctx, followUp.treatment.patientId)) return fail("Control no encontrado");
   // Auditoría ola 3 (BAJA): la radiografía de control, de esta clínica y de este paciente.
   const archivoOk = await assertPatientFileInClinic({
     id: parsed.data.controlFileId,

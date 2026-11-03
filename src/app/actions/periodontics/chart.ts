@@ -4,6 +4,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { pacienteOcultoPara } from "@/lib/clinical-shared/auth/paciente-oculto";
 import {
   createPeriodontalRecordSchema,
   updatePeriodontalRecordSchema,
@@ -105,6 +106,8 @@ export async function updatePeriodontalRecord(
     select: { id: true, notes: true, durationMinutes: true, patientId: true },
   });
   if (!before) return fail("Periodontograma no encontrado");
+  // Seguridad ola 2b (lead 14 / H1 de t2): el paciente del registro puede estar restringido (visibleUserIds).
+  if (await pacienteOcultoPara(ctx, before.patientId)) return fail("Periodontograma no encontrado");
 
   try {
     const next = await prisma.periodontalRecord.update({
@@ -153,6 +156,8 @@ export async function finalizePerioChart(
     select: { id: true, sites: true, toothLevel: true, patientId: true },
   });
   if (!record) return fail("Periodontograma no encontrado");
+  // Seguridad ola 2b (lead 14 / H1 de t2): el paciente del registro puede estar restringido (visibleUserIds).
+  if (await pacienteOcultoPara(ctx, record.patientId)) return fail("Periodontograma no encontrado");
 
   const sites = (record.sites as unknown as Site[]) ?? [];
   const teeth = (record.toothLevel as unknown as ToothLevel[]) ?? [];
@@ -314,6 +319,8 @@ export async function deletePeriodontalRecord(
     select: { id: true, patientId: true },
   });
   if (!before) return fail("Periodontograma no encontrado");
+  // Seguridad ola 2b (lead 14 / H1 de t2): el paciente del registro puede estar restringido (visibleUserIds).
+  if (await pacienteOcultoPara(ctx, before.patientId)) return fail("Periodontograma no encontrado");
 
   try {
     await prisma.periodontalRecord.update({

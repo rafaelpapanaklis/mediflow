@@ -3,6 +3,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
+import { pacienteOcultoPara } from "@/lib/clinical-shared/auth/paciente-oculto";
 import {
   upsertSiteDataSchema,
   upsertToothDataSchema,
@@ -45,9 +46,11 @@ export async function upsertSiteData(
     const result = await prisma.$transaction(async (tx) => {
       const record = await tx.periodontalRecord.findFirst({
         where: { id: parsed.data.recordId, clinicId: ctx.clinicId, deletedAt: null },
-        select: { id: true, sites: true, toothLevel: true },
+        select: { id: true, patientId: true, sites: true, toothLevel: true },
       });
       if (!record) throw new Error("RECORD_NOT_FOUND");
+      // Seguridad ola 2b (lead 14 / H1 de t2): el paciente del registro puede estar restringido (visibleUserIds).
+      if (await pacienteOcultoPara(ctx, record.patientId)) throw new Error("RECORD_NOT_FOUND");
 
       const sites = ((record.sites as unknown) as Site[]) ?? [];
       const teeth = ((record.toothLevel as unknown) as ToothLevel[]) ?? [];
@@ -123,9 +126,11 @@ export async function upsertToothData(
     const result = await prisma.$transaction(async (tx) => {
       const record = await tx.periodontalRecord.findFirst({
         where: { id: parsed.data.recordId, clinicId: ctx.clinicId, deletedAt: null },
-        select: { id: true, sites: true, toothLevel: true },
+        select: { id: true, patientId: true, sites: true, toothLevel: true },
       });
       if (!record) throw new Error("RECORD_NOT_FOUND");
+      // Seguridad ola 2b (lead 14 / H1 de t2): el paciente del registro puede estar restringido (visibleUserIds).
+      if (await pacienteOcultoPara(ctx, record.patientId)) throw new Error("RECORD_NOT_FOUND");
 
       const sites = ((record.sites as unknown) as Site[]) ?? [];
       const teeth = ((record.toothLevel as unknown) as ToothLevel[]) ?? [];
@@ -201,9 +206,11 @@ export async function bulkUpsertSiteData(
     const result = await prisma.$transaction(async (tx) => {
       const record = await tx.periodontalRecord.findFirst({
         where: { id: parsed.data.recordId, clinicId: ctx.clinicId, deletedAt: null },
-        select: { id: true, sites: true, toothLevel: true },
+        select: { id: true, patientId: true, sites: true, toothLevel: true },
       });
       if (!record) throw new Error("RECORD_NOT_FOUND");
+      // Seguridad ola 2b (lead 14 / H1 de t2): el paciente del registro puede estar restringido (visibleUserIds).
+      if (await pacienteOcultoPara(ctx, record.patientId)) throw new Error("RECORD_NOT_FOUND");
 
       const sites = ((record.sites as unknown) as Site[]) ?? [];
       const teeth = ((record.toothLevel as unknown) as ToothLevel[]) ?? [];

@@ -5,6 +5,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { pacienteOcultoPara } from "@/lib/clinical-shared/auth/paciente-oculto";
 import { esPathBajo, extractStoragePath } from "@/lib/storage";
 import {
   PERIO_PHOTO_DEFAULT_STAGE,
@@ -142,6 +143,8 @@ export async function softDeletePerioPhoto(
     select: { id: true, patientId: true, photoType: true, stage: true },
   });
   if (!photo) return fail("Foto no encontrada");
+  // Seguridad ola 2b (lead 14 / H1 de t2): el paciente del registro puede estar restringido (visibleUserIds).
+  if (await pacienteOcultoPara(ctx, photo.patientId)) return fail("Foto no encontrada");
 
   try {
     await prisma.clinicalPhoto.update({

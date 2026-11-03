@@ -5,6 +5,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { pacienteOcultoPara } from "@/lib/clinical-shared/auth/paciente-oculto";
 import { assertPatientFileInClinic } from "@/lib/patient-files/archivo-del-paciente";
 import { Prisma } from "@prisma/client";
 import { WA_REMINDER_STATUS } from "@/lib/whatsapp/reminder-status";
@@ -150,6 +151,8 @@ export async function updateTreatmentStep<S extends 1 | 2 | 3 | 4>(
     },
   });
   if (!tx || tx.clinicId !== ctx.clinicId) return fail("Tratamiento no encontrado");
+  // Seguridad ola 2b (lead 14 / H1 de t2): el paciente del registro puede estar restringido (visibleUserIds).
+  if (await pacienteOcultoPara(ctx, tx.patientId)) return fail("Tratamiento no encontrado");
   if (tx.outcomeStatus !== "EN_CURSO") return fail("El tratamiento ya está cerrado");
 
   const data: Prisma.EndodonticTreatmentUpdateInput = {};
@@ -223,6 +226,8 @@ export async function upsertRootCanal(
     select: { id: true, clinicId: true, patientId: true },
   });
   if (!tx || tx.clinicId !== ctx.clinicId) return fail("Tratamiento no encontrado");
+  // Seguridad ola 2b (lead 14 / H1 de t2): el paciente del registro puede estar restringido (visibleUserIds).
+  if (await pacienteOcultoPara(ctx, tx.patientId)) return fail("Tratamiento no encontrado");
 
   // Auditoría ola 3 (BAJA): la radiografía de conductometría tiene que ser de esta clínica y de este
   // paciente; antes se guardaba cualquier id y el panel mostraba la fila del archivo ajeno.
@@ -307,6 +312,8 @@ export async function recordIntracanalMedication(
     select: { id: true, clinicId: true, patientId: true, isMultiSession: true },
   });
   if (!tx || tx.clinicId !== ctx.clinicId) return fail("Tratamiento no encontrado");
+  // Seguridad ola 2b (lead 14 / H1 de t2): el paciente del registro puede estar restringido (visibleUserIds).
+  if (await pacienteOcultoPara(ctx, tx.patientId)) return fail("Tratamiento no encontrado");
   if (!tx.isMultiSession) {
     return fail("Solo TCs multi-sesión registran medicación intracanal");
   }
@@ -372,6 +379,8 @@ export async function completeTreatment(
     },
   });
   if (!tx || tx.clinicId !== ctx.clinicId) return fail("Tratamiento no encontrado");
+  // Seguridad ola 2b (lead 14 / H1 de t2): el paciente del registro puede estar restringido (visibleUserIds).
+  if (await pacienteOcultoPara(ctx, tx.patientId)) return fail("Tratamiento no encontrado");
   if (tx.outcomeStatus === "COMPLETADO") return fail("El tratamiento ya está completado");
 
   // Validaciones spec §5.8: todos los conductos con calidad + plan de restauración.

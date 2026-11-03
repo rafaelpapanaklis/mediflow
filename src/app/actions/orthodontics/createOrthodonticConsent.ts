@@ -3,11 +3,11 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { assertPatientFileInClinic } from "@/lib/patient-files/archivo-del-paciente";
 import { createOrthodonticConsentSchema } from "@/lib/validation/orthodontics";
 import { auditOrtho, getOrthoActionContext } from "./_helpers";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
 import { fail, isFailure, ok, type ActionResult } from "./result";
+import { assertPatientFileInClinic } from "@/lib/patient-files/archivo-del-paciente";
 
 export async function createOrthodonticConsent(
   input: unknown,

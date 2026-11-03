@@ -30,6 +30,7 @@ let filasXrays: any[] = [];
 let filasMonitoreo: any[] = [];
 
 const prisma: any = {
+  patient: { findUnique: async () => ({ visibleUserIds: [] }) },
   patientFile: {
     findMany: async () => structuredClone(filasXrays),
     create: async (a: any) => { creados.push({ modelo: "patientFile", data: a.data }); return { id: "f1" }; },
@@ -70,7 +71,8 @@ const dobles: Record<string, unknown> = {
   },
   "@/lib/prisma": { prisma },
   "@/lib/auth-context": { getAuthContext: async () => ctx },
-  "@/lib/patient-visibility": { assertPatientVisible: async () => null },
+  // Estas pruebas no son de visibilidad (las fija endo-perio-visibilidad-v6): el paciente se ve.
+  "@/lib/patient-visibility": { assertPatientVisible: async () => null, isVisibilityAdmin: () => false, canSeePatient: () => true },
   "@/lib/branches": {
     getVisiblePatientClinicIds: async () => ["cA", "cB"],
     clinicScopeFilter: (ids: string[]) => ({ in: ids }),

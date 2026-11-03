@@ -133,7 +133,8 @@ const dobles: Record<string, unknown> = {
   "server-only": {},
   "next/cache": { revalidatePath: () => undefined, revalidateTag: () => undefined },
   "@/lib/prisma": { prisma },
-  "@/lib/patient-visibility": { patientVisibilityAnd: () => [] },
+  // Estas pruebas no son de visibilidad (las fija endo-perio-visibilidad-v6): el paciente se ve.
+  "@/lib/patient-visibility": { patientVisibilityAnd: () => [], isVisibilityAdmin: () => false, canSeePatient: () => true },
   "@/lib/auth-context": { getAuthContext: async () => ctx },
   "@/lib/clinical-shared/auth/guard": {
     auditClinicalShared: async () => undefined,
