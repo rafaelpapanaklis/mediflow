@@ -3,6 +3,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { assertPatientFileInClinic } from "@/lib/patient-files/archivo-del-paciente";
 import { Prisma } from "@prisma/client";
 import {
   createRetreatmentInfoSchema,
@@ -102,6 +103,13 @@ export async function createApicalSurgery(
   if (tx.treatmentType !== "APICECTOMIA") {
     return fail("Solo aplica a tratamientos tipo APICECTOMIA");
   }
+  // Auditoría ola 3 (BAJA): la radiografía intraoperatoria, de esta clínica y de este paciente.
+  const archivoOk = await assertPatientFileInClinic({
+    id: parsed.data.intraoperativeFileId,
+    clinicId: ctx.clinicId,
+    patientId: tx.patientId,
+  });
+  if (!archivoOk) return fail("Archivo no encontrado");
 
   try {
     const created = await prisma.apicalSurgery.upsert({

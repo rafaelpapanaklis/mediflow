@@ -4,6 +4,7 @@
 // el editor cuando el doctor abre la nota.
 
 import { prisma } from "@/lib/prisma";
+import { soloArchivosDelTratamiento } from "@/lib/patient-files/archivo-del-paciente";
 import { prefillSoapForEndo } from "@/lib/helpers/soapPrefillEndo";
 import type {
   EndodonticDiagnosisRow,
@@ -45,6 +46,9 @@ export async function loadEndoSoapPrefill(args: {
       include: TREATMENT_INCLUDE,
     })) as EndodonticTreatmentFull | null;
   }
+
+  // Auditoría ola 3 (BAJA): nada de archivos enlazados de otra clínica u otro paciente.
+  if (tx) soloArchivosDelTratamiento(tx);
 
   let toothFdi: number;
   let activeTreatment: EndodonticTreatmentFull | null = null;

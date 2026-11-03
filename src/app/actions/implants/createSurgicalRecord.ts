@@ -5,6 +5,7 @@
 // derivado de la densidad ósea (LEKHOLM_ZARB_INFO).
 
 import { prisma } from "@/lib/prisma";
+import { assertPatientFileInClinic } from "@/lib/patient-files/archivo-del-paciente";
 import {
   createSurgicalRecordSchema,
   type CreateSurgicalRecordInput,
@@ -36,6 +37,15 @@ export async function createSurgicalRecord(
     implantId: parsed.data.implantId,
   });
   if (isFailure(implantRes)) return implantRes;
+
+  // Auditoría ola 3 (BAJA, mismo patrón que endodoncia): la foto intraoperatoria, de esta clínica
+  // y de este paciente; antes se guardaba cualquier id de PatientFile que mandara el cliente.
+  const archivoOk = await assertPatientFileInClinic({
+    id: parsed.data.intraoperativePhotoFileId,
+    clinicId: ctx.clinicId,
+    patientId: implantRes.data.patientId,
+  });
+  if (!archivoOk) return fail("Archivo no encontrado");
 
   try {
     const result = await prisma.$transaction(async (tx) => {

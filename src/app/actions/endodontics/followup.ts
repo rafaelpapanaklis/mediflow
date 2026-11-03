@@ -3,6 +3,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { assertPatientFileInClinic } from "@/lib/patient-files/archivo-del-paciente";
 import {
   scheduleFollowUpSchema,
   completeFollowUpSchema,
@@ -82,6 +83,13 @@ export async function completeFollowUp(
   if (!followUp || followUp.treatment.clinicId !== ctx.clinicId) {
     return fail("Control no encontrado");
   }
+  // Auditoría ola 3 (BAJA): la radiografía de control, de esta clínica y de este paciente.
+  const archivoOk = await assertPatientFileInClinic({
+    id: parsed.data.controlFileId,
+    clinicId: ctx.clinicId,
+    patientId: followUp.treatment.patientId,
+  });
+  if (!archivoOk) return fail("Archivo no encontrado");
 
   try {
     const updated = await prisma.endodonticFollowUp.update({

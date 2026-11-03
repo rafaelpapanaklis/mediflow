@@ -4,6 +4,7 @@
 // Albrektsson y se persiste meetsAlbrektssonCriteria.
 
 import { prisma } from "@/lib/prisma";
+import { assertPatientFileInClinic } from "@/lib/patient-files/archivo-del-paciente";
 import {
   createFollowUpSchema,
   type CreateFollowUpInput,
@@ -53,6 +54,15 @@ export async function createFollowUp(
       years,
     ).meetsCriteria;
   }
+
+  // Auditoría ola 3 (BAJA, mismo patrón que endodoncia): la radiografía del control, de esta clínica
+  // y de este paciente; antes se guardaba cualquier id de PatientFile que mandara el cliente.
+  const archivoOk = await assertPatientFileInClinic({
+    id: parsed.data.radiographFileId,
+    clinicId: ctx.clinicId,
+    patientId: before.patientId,
+  });
+  if (!archivoOk) return fail("Archivo no encontrado");
 
   try {
     const created = await prisma.implantFollowUp.create({

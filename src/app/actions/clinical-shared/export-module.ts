@@ -6,6 +6,7 @@ import { z } from "zod";
 import { renderToStream } from "@react-pdf/renderer";
 import { ClinicalModule } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { soloArchivosDelTratamiento } from "@/lib/patient-files/archivo-del-paciente";
 import { getAuthContext } from "@/lib/auth-context";
 import { auditClinicalShared, guardPatient, sinPermisoClinico } from "@/lib/clinical-shared/auth/guard";
 import { fail, isFailure, ok, type ActionResult } from "@/lib/clinical-shared/result";
@@ -325,6 +326,8 @@ async function renderEndodonticsPdf(args: {
                 name: true,
                 category: true,
                 takenAt: true,
+                clinicId: true,
+                patientId: true,
               },
             },
           },
@@ -333,14 +336,14 @@ async function renderEndodonticsPdf(args: {
           orderBy: { scheduledAt: "asc" },
           include: {
             controlFile: {
-              select: { id: true, name: true, category: true, takenAt: true },
+              select: { id: true, name: true, category: true, takenAt: true, clinicId: true, patientId: true },
             },
           },
         },
         apicalSurgery: {
           include: {
             intraoperativeFile: {
-              select: { id: true, name: true, category: true, takenAt: true },
+              select: { id: true, name: true, category: true, takenAt: true, clinicId: true, patientId: true },
             },
           },
         },
@@ -363,6 +366,8 @@ async function renderEndodonticsPdf(args: {
 
   const radiographs: EndoExportRadiograph[] = [];
   for (const t of treatments) {
+    // Auditoría ola 3 (BAJA): un archivo enlazado de otra clínica u otro paciente no entra al export.
+    soloArchivosDelTratamiento(t);
     for (const rc of t.rootCanals) {
       if (rc.conductometryFile) {
         radiographs.push({

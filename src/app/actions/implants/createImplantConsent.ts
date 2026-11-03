@@ -5,6 +5,7 @@
 // se referencia con signedFileId.
 
 import { prisma } from "@/lib/prisma";
+import { assertPatientFileInClinic } from "@/lib/patient-files/archivo-del-paciente";
 import {
   createImplantConsentSchema,
   type CreateImplantConsentInput,
@@ -40,6 +41,15 @@ export async function createImplantConsent(
   if (parsed.data.patientId !== before.patientId) {
     return fail("patientId no coincide con el implante");
   }
+
+  // Auditoría ola 3 (BAJA, mismo patrón que endodoncia): el consentimiento firmado, de esta clínica
+  // y de este paciente; antes se guardaba cualquier id de PatientFile que mandara el cliente.
+  const archivoOk = await assertPatientFileInClinic({
+    id: parsed.data.signedFileId,
+    clinicId: ctx.clinicId,
+    patientId: before.patientId,
+  });
+  if (!archivoOk) return fail("Archivo no encontrado");
 
   try {
     const created = await prisma.implantConsent.create({

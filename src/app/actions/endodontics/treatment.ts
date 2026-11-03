@@ -5,6 +5,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { assertPatientFileInClinic } from "@/lib/patient-files/archivo-del-paciente";
 import { Prisma } from "@prisma/client";
 import { WA_REMINDER_STATUS } from "@/lib/whatsapp/reminder-status";
 import {
@@ -223,6 +224,15 @@ export async function upsertRootCanal(
   });
   if (!tx || tx.clinicId !== ctx.clinicId) return fail("Tratamiento no encontrado");
 
+  // Auditoría ola 3 (BAJA): la radiografía de conductometría tiene que ser de esta clínica y de este
+  // paciente; antes se guardaba cualquier id y el panel mostraba la fila del archivo ajeno.
+  const archivoOk = await assertPatientFileInClinic({
+    id: parsed.data.conductometryFileId,
+    clinicId: ctx.clinicId,
+    patientId: tx.patientId,
+  });
+  if (!archivoOk) return fail("Archivo no encontrado");
+
   try {
     const data = {
       treatmentId: tx.id,
@@ -244,16 +254,18 @@ export async function upsertRootCanal(
       notes: parsed.data.notes ?? null,
     };
 
+    // Auditoría ola 3 (MEDIA): `RootCanal` no tiene `clinicId`, así que el conducto se ata al
+    // tratamiento ya verificado contra la sesión. Con `where: { id }` pelado, un conducto de OTRA clínica
+    // se sobrescribía y se movía bajo este tratamiento.
     const upserted = parsed.data.id
-      ? await prisma.rootCanal.update({
-          where: { id: parsed.data.id },
-          data,
-          select: { id: true },
-        })
+      ? await prisma.rootCanal
+          .updateMany({ where: { id: parsed.data.id, treatmentId: tx.id }, data })
+          .then((r) => (r.count === 1 ? { id: parsed.data.id! } : null))
       : await prisma.rootCanal.create({
           data: { ...data, createdByUserId: ctx.userId },
           select: { id: true },
         });
+    if (!upserted) return fail("Conducto no encontrado");
 
     await auditEndo({
       ctx,

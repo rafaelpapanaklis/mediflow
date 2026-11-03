@@ -3,6 +3,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { assertPatientFileInClinic } from "@/lib/patient-files/archivo-del-paciente";
 import { createTreatmentPlanSchema } from "@/lib/validation/orthodontics";
 import { PHASE_ORDER } from "@/lib/orthodontics/phase-machine";
 import { enqueueOrthoWhatsApp } from "@/lib/orthodontics/whatsapp-queue";
@@ -98,6 +99,15 @@ async function crearPlanDeTratamiento(input: unknown): Promise<ResultadoDelPlan>
     },
   });
   if (personaAjena) return fail(personaAjena);
+
+  // Auditoría ola 3 (BAJA, mismo patrón que endodoncia): el consentimiento de tratamiento firmado, de esta clínica
+  // y de este paciente; antes se guardaba cualquier id de PatientFile que mandara el cliente.
+  const archivoOk = await assertPatientFileInClinic({
+    id: parsed.data.signedTreatmentConsentFileId,
+    clinicId: ctx.clinicId,
+    patientId: parsed.data.patientId,
+  });
+  if (!archivoOk) return fail("Archivo no encontrado");
 
   const installedAt = parsed.data.installedAt ? new Date(parsed.data.installedAt) : null;
   // C-66: una colocación programada (futura) no pone el caso «En curso»; solo la de hoy o antes.
