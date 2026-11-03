@@ -228,14 +228,23 @@ export const createPeriImplantAssessmentSchema = z.object({
   recommendedTreatment: z.string().max(1000).optional().nullable(),
 });
 
+// Auditoría cloudflare (hermano H1 del nº1): la firma se guarda como `PatientFile.url` y GET /api/xrays
+// la FIRMA como path del bucket. Con `z.string().min(10)` cabía `db-backups/…` o un path de otra clínica
+// y salía una URL firmada de ese objeto. El SignaturePad siempre manda `canvas.toDataURL("image/png")`:
+// solo eso se acepta.
+const firmaPngDataUrl = z
+  .string()
+  .min(10)
+  .regex(/^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/, "Firma inválida");
+
 export const signSrpConsentSchema = z.object({
   patientId: z.string().min(1),
-  signatureUrl: z.string().min(10),
+  signatureUrl: firmaPngDataUrl,
 });
 
 export const signSurgeryConsentSchema = z.object({
   surgeryId: z.string().min(1),
-  signatureUrl: z.string().min(10),
+  signatureUrl: firmaPngDataUrl,
 });
 
 export const scheduleMaintenanceSchema = z.object({

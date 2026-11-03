@@ -296,7 +296,7 @@ describe("fetchClinicLogo — el PDF sale aunque el logo no", () => {
 
   // El servidor de esta prueba vive en 127.0.0.1, que la reja de SSRF rechaza a propósito (auditoría
   // nº2): estas pruebas son de FORMATO y de plazos, así que la dejan pasar. La reja se prueba aparte.
-  const servidorDePrueba = async () => true;
+  const servidorDePrueba = { esSegura: async () => true, ipPermitida: () => true };
 
   after(async () => {
     for (const s of colgados) s.destroy();

@@ -62,17 +62,18 @@ test("nº2: cada redirección se revisa antes de seguirla; un 302 hacia lo inter
   const { descargarLogoRemoto } = await import("@/lib/logo-remoto");
   // «público» = todo salvo /interno…: el primer destino pasa, el del salto no
   const reja = async (u: string) => !u.includes("/interno");
+  const ipPermitida = () => true; // el «servicio interno» de la prueba vive en 127.0.0.1
 
   pedidos.length = 0;
-  assert.ok(await descargarLogoRemoto(`${base}/r.png`, { esSegura: reja }), "http→https o a www. sigue funcionando");
+  assert.ok(await descargarLogoRemoto(`${base}/r.png`, { esSegura: reja, ipPermitida }), "http→https o a www. sigue funcionando");
   assert.deepEqual(pedidos, ["/r.png", "/x.png"]);
 
   pedidos.length = 0;
-  assert.equal(await descargarLogoRemoto(`${base}/r-interno.png`, { esSegura: reja }), null);
+  assert.equal(await descargarLogoRemoto(`${base}/r-interno.png`, { esSegura: reja, ipPermitida }), null);
   assert.deepEqual(pedidos, ["/r-interno.png"], "el destino interno ni se pidió");
 
   pedidos.length = 0;
-  assert.equal(await descargarLogoRemoto(`${base}/bucle.png`, { esSegura: reja }), null);
+  assert.equal(await descargarLogoRemoto(`${base}/bucle.png`, { esSegura: reja, ipPermitida }), null);
   assert.equal(pedidos.length, 4, "tres saltos y se corta");
 });
 
@@ -106,9 +107,52 @@ test("nº2: tope de bytes por content-length y por lo que llega", async () => {
   try {
     const { descargarLogoRemoto } = await import("@/lib/logo-remoto");
     const url = `http://127.0.0.1:${(grande.address() as AddressInfo).port}/x.png`;
-    assert.equal(await descargarLogoRemoto(url, { esSegura: async () => true }), null);
-    assert.equal(await descargarLogoRemoto(`${base}/sin-largo.png`, { esSegura: async () => true }), null, "sin content-length, cortado al leer");
+    assert.equal(await descargarLogoRemoto(url, { esSegura: async () => true, ipPermitida: () => true }), null);
+    assert.equal(await descargarLogoRemoto(`${base}/sin-largo.png`, { esSegura: async () => true, ipPermitida: () => true }), null, "sin content-length, cortado al leer");
   } finally {
     await new Promise<void>((r) => grande.close(() => r()));
+  }
+});
+
+test("m1 (rebinding): la conexión revisa la IP REAL — aunque la reja de la URL diga que sí, 127.0.0.1 no se visita", async () => {
+  const { descargarLogoRemoto } = await import("@/lib/logo-remoto");
+  // `esSegura: () => true` = el DNS de la reja contestó una IP pública; la conexión va a la interna.
+  pedidos.length = 0;
+  assert.equal(await descargarLogoRemoto(`${base}/x.png`, { esSegura: async () => true }), null, "IP literal");
+  assert.deepEqual(pedidos, [], "al servicio interno no le llegó ni una petición");
+});
+
+test("m1 (rebinding): un nombre que en la conexión resuelve a loopback se corta en el lookup; si la IP vale, baja", async () => {
+  const local = http.createServer((req, res) => {
+    pedidos.push(`local:${req.url}`);
+    res.writeHead(200, { "content-type": "image/png" });
+    res.end(PNG);
+  });
+  await new Promise<void>((r) => local.listen(0, "localhost", r));
+  try {
+    const { descargarLogoRemoto } = await import("@/lib/logo-remoto");
+    const url = `http://localhost:${(local.address() as AddressInfo).port}/x.png`;
+    pedidos.length = 0;
+    assert.equal(await descargarLogoRemoto(url, { esSegura: async () => true }), null);
+    assert.deepEqual(pedidos, [], "el lookup cortó antes de conectar");
+    // el mismo camino (nombre → lookup → conexión) con una IP aceptada sí trae el logo
+    const r = await descargarLogoRemoto(url, { esSegura: async () => true, ipPermitida: () => true });
+    assert.ok(r && r.buf.equals(PNG), "el lookup propio no rompe la descarga legítima");
+    assert.match(r!.contentType, /image\/png/);
+  } finally {
+    await new Promise<void>((r) => local.close(() => r()));
+  }
+});
+
+test("m2: esIpPublica rechaza site-local, 6to4, Teredo, multicast, descarte y los bloques de pruebas", async () => {
+  const { esIpPublica } = await import("@/lib/logo-remoto");
+  for (const ip of [
+    "fec0::1", "feff::1", "2002:7f00:1::", "2001:0:4136::1", "ff02::1", "100::", "100::1",
+    "100:0:0:0:1:2:3:4", "198.18.0.1", "198.19.255.254", "192.0.0.8",
+  ]) {
+    assert.equal(esIpPublica(ip), false, ip);
+  }
+  for (const ip of ["8.8.8.8", "2606:4700::1111", "2001:4860:4860::8888", "100:0:0:1::", "192.0.2.1", "198.20.0.1"]) {
+    assert.equal(esIpPublica(ip), true, ip);
   }
 });

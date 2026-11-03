@@ -68,14 +68,43 @@ export function extractStoragePath(
 }
 
 /**
+ * ¿Se puede FIRMAR este path, venga de quien venga? (auditoría cloudflare nº1, veto global). Es la
+ * mitad de `esPathDeLaClinica` que no depende de la clínica, y la aplican las tres puertas de firma
+ * (`createSignedFileUrl`, `signMaybeUrl`, `signMaybeUrls`), así que también cubre filas ya plantadas
+ * y entradas que todavía no comprueban el prefijo:
+ *   · `%`: el path se pega TAL CUAL en la URL que firma Supabase y `fetch` normaliza `%2e%2e` como `..`
+ *     (`cA/%2e%2e/db-backups/…` saltaba fuera de la carpeta). Ningún nombre que genera la app lleva `%`
+ *     (se sanean a `[a-zA-Z0-9._-]`; las URLs legacy llegan ya decodificadas por `extractStoragePath`);
+ *   · `\`, caracteres de control (un %00 o un salto de línea decodificados), segmentos vacíos (`//`) y
+ *     `.`/`..`;
+ *   · `db-backups/…`: los respaldos del cron viven en este bucket y NO se firman desde la app (el cron
+ *     los maneja con su propio cliente).
+ */
+export function esPathFirmable(path: string | null | undefined): boolean {
+  if (!path) return false;
+  if (path.includes("%") || path.includes("\\")) return false;
+  if (/[\u0000-\u001f\u007f]/.test(path)) return false;
+  if (path.startsWith("db-backups/")) return false;
+  return path.split("/").every((s) => s !== "" && s !== "." && s !== "..");
+}
+
+/** `path` firmable y bajo `prefijo` (p. ej. `clinical-photos/<clinicId>/`). */
+export function esPathBajo(path: string | null | undefined, prefijo: string): boolean {
+  return !!path && !!prefijo && path.startsWith(prefijo) && esPathFirmable(path);
+}
+
+/**
  * Genera una signed URL para `path` dentro de `bucket`.
- * Lanza si Supabase devuelve error.
+ * Lanza si Supabase devuelve error, o si el path no pasa el veto (`esPathFirmable`).
  */
 export async function createSignedFileUrl(
   path: string,
   ttlSeconds: number = SIGNED_URL_TTL_SECONDS,
   bucket: BucketName = BUCKETS.PATIENT_FILES,
 ): Promise<string> {
+  if (!esPathFirmable(path)) {
+    throw new Error(`No se firma ${bucket}/${JSON.stringify(path)}: path no permitido`);
+  }
   const { data, error } = await admin().storage.from(bucket).createSignedUrl(path, ttlSeconds);
   if (error || !data?.signedUrl) {
     throw new Error(`No se pudo generar signed URL para ${bucket}/${path}: ${error?.message ?? "unknown"}`);
@@ -86,7 +115,7 @@ export async function createSignedFileUrl(
 /**
  * Acepta un path interno o una URL legacy y devuelve una signed URL fresca.
  * Si el input es una URL externa (no Supabase) o no pertenece al bucket
- * indicado, la devuelve sin tocar.
+ * indicado, la devuelve sin tocar. Un path que no pasa el veto (`esPathFirmable`) devuelve "".
  */
 export async function signMaybeUrl(
   urlOrPath: string | null | undefined,
@@ -96,6 +125,7 @@ export async function signMaybeUrl(
   if (!urlOrPath) return "";
   const path = extractStoragePath(urlOrPath, bucket);
   if (!path) return urlOrPath;
+  if (!esPathFirmable(path)) return "";
   return createSignedFileUrl(path, ttlSeconds, bucket);
 }
 
@@ -105,15 +135,8 @@ export async function signMaybeUrl(
  * —otra clínica, `db-backups/…` del cron, `../`— no se firma desde una ruta que mandó el cliente.
  */
 export function esPathDeLaClinica(path: string | null | undefined, clinicId: string | null | undefined): boolean {
-  if (!path || !clinicId) return false;
-  if (!path.startsWith(`${clinicId}/`)) return false;
-  // `%`: el path se pega TAL CUAL en la URL que firma Supabase y `fetch` normaliza `%2e%2e` como `..`
-  // (`cA/%2e%2e/db-backups/…` saltaba fuera de la carpeta). Ningún nombre que genera la app lleva `%`.
-  if (path.includes("%") || path.includes("\\")) return false;
-  // nada de caracteres de control (un %00 o un salto de línea decodificados)
-  if (/[\u0000-\u001f\u007f]/.test(path)) return false;
-  // ni segmentos vacíos (`//`), ni `.`/`..`
-  return path.split("/").every((s) => s !== "" && s !== "." && s !== "..");
+  if (!clinicId) return false;
+  return esPathBajo(path, `${clinicId}/`);
 }
 
 /**
@@ -169,6 +192,7 @@ export async function signMaybeUrls(
       result[idx] = u; // URL externa o de otro bucket: passthrough
       return;
     }
+    if (!esPathFirmable(path)) return; // veto global: queda "" sin firmar
     toSign.push({ idx, path });
   });
 

@@ -3,7 +3,8 @@
  *   · la paleta de búsqueda (`GET /api/dashboard/search`) devolvía pacientes, citas y facturas a
  *     quien el dueño le había quitado «Ver pacientes», «Ver agenda» o «Ver cobros»;
  *   · la ficha (`GET /api/patients/[id]`) se servía sin `patients.view` y con las facturas y pagos
- *     aunque no hubiera `billing.view` (la ficha SSR ya las escondía).
+ *     aunque no hubiera `billing.view` (la ficha SSR ya las escondía); y las citas, sin `agenda.view`
+ *     (H6 de la revisión de ws1-t2).
  * Con los permisos de fábrica nada cambia: todos los roles tienen esas tres llaves.
  *
  * Run: npm run test:seg-archivos-permisos
@@ -17,6 +18,7 @@ import { NextRequest } from "next/server";
 
 let ctx: any = null;
 const lecturas: string[] = [];
+const argumentos: Record<string, any> = {};
 const quien = (role: string, permissionsOverride: string[] | null = null) => ({
   userId: "u1", clinicId: "cA", role, permissionsOverride, isAdmin: role === "ADMIN" || role === "SUPER_ADMIN",
   isDoctor: role === "DOCTOR", clinicCategory: "DENTAL", isPlanExpired: false,
@@ -24,7 +26,7 @@ const quien = (role: string, permissionsOverride: string[] | null = null) => ({
 
 const FICHA = {
   id: "pA", clinicId: "cA", firstName: "Ana", lastName: "Pérez",
-  appointments: [], records: [{ id: "r1" }], invoices: [{ id: "i1", total: 500, payments: [{ id: "pg1" }] }],
+  appointments: [{ id: "a1", startsAt: new Date("2026-10-28T15:00:00Z") }], records: [{ id: "r1" }], invoices: [{ id: "i1", total: 500, payments: [{ id: "pg1" }] }],
 };
 const respuestas: Record<string, unknown> = {
   "patient.findFirst": FICHA,
@@ -54,9 +56,10 @@ const dobles: Record<string, unknown> = {
   "@/lib/prisma": {
     prisma: new Proxy({}, {
       get: (_t, modelo) => new Proxy({}, {
-        get: (_m, op) => async () => {
+        get: (_m, op) => async (a: unknown) => {
           const k = `${String(modelo)}.${String(op)}`;
           lecturas.push(k);
+          argumentos[k] = a;
           return structuredClone(respuestas[k] ?? null);
         },
       }),
@@ -132,5 +135,21 @@ test("nº12: ficha — sin «Ver cobros» las facturas y sus pagos no viajan; co
     const con = await ficha();
     assert.equal(con.status, 200, rol);
     assert.equal(con.body.invoices.length, 1, rol);
+  }
+});
+
+test("H6: ficha — sin «Ver agenda» las citas ni se leen (take 0) ni viajan; con él, sí", async () => {
+  ctx = quien("DOCTOR", ["patients.view", "billing.view"]);
+  const sin = await ficha();
+  assert.equal(sin.status, 200);
+  assert.deepEqual(sin.body.appointments, []);
+  assert.equal(argumentos["patient.findFirst"].include.appointments.take, 0, "la base no devuelve citas");
+  assert.equal(sin.body.invoices.length, 1, "lo demás según su propio permiso");
+
+  for (const rol of ["READONLY", "RECEPTIONIST", "DOCTOR", "ADMIN"]) {
+    ctx = quien(rol);
+    const con = await ficha();
+    assert.equal(con.body.appointments.length, 1, rol);
+    assert.equal(argumentos["patient.findFirst"].include.appointments.take, undefined, rol);
   }
 });

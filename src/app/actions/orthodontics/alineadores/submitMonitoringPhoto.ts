@@ -6,6 +6,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { registrarMovimientoExterno } from "@/lib/movimientos-paciente/registrar";
+import { esPathBajo } from "@/lib/storage";
 import { fail, isFailure, ok, type ActionResult } from "../result";
 import { getOrthoPatientPortalContext, isMissingRelation } from "./_patient-context";
 
@@ -40,8 +41,11 @@ export async function submitMonitoringPhoto(
   // clínica terminaba pidiendo una signed URL de un archivo ajeno (fuga
   // cross-tenant vía IDOR). El prefijo debe ser EXACTO al que arma
   // generarLlaveAlmacenamiento en la ruta de subida (revisión ws1-t8).
+  // Auditoría cloudflare (H2): `!includes("..")` no bastaba — `…/ortho-monitoreo/%2e%2e/%2e%2e/…` se
+  // firmaba como `db-backups/…` o como un archivo de otra clínica. `esPathBajo` exige además el path
+  // limpio (sin `%`, `\`, control, `//`, `.` ni `..`).
   const prefijoEsperado = `${clinicId}/${patientId}/ortho-monitoreo/`;
-  if (!input.storageKey.startsWith(prefijoEsperado) || input.storageKey.includes("..")) {
+  if (!esPathBajo(input.storageKey, prefijoEsperado)) {
     return fail("Foto inválida");
   }
 

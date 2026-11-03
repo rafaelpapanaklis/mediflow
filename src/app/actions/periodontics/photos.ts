@@ -5,6 +5,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { esPathBajo, extractStoragePath } from "@/lib/storage";
 import {
   PERIO_PHOTO_DEFAULT_STAGE,
   PERIO_PHOTO_KIND,
@@ -57,6 +58,15 @@ export async function createPerioPhoto(
   const parsed = createPerioPhotoSchema.safeParse(input);
   if (!parsed.success) {
     return fail(parsed.error.issues[0]?.message ?? "Datos inválidos");
+  }
+
+  // Auditoría cloudflare (H3): `blobUrl`/`thumbnailUrl` se FIRMAN al listar (clinical-shared/photos.ts) como
+  // path del bucket, y `z.string().url()` dejaba pasar una URL que apunte a otra clínica o a `db-backups/…`.
+  // Solo se acepta un objeto bajo `clinical-photos/<clinicId>/`, donde sube `uploadClinicalPhoto`.
+  const prefijo = `clinical-photos/${ctx.clinicId}/`;
+  const urls = [parsed.data.blobUrl, parsed.data.thumbnailUrl].filter((u): u is string => !!u);
+  if (!urls.every((u) => esPathBajo(extractStoragePath(u), prefijo))) {
+    return fail("La foto no es de esta clínica");
   }
 
   const patient = await loadPatientForPerio({

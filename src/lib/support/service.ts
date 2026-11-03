@@ -91,9 +91,11 @@ export function validateAttachmentsMeta(input: unknown, clinicId: string): Suppo
     throw new SupportError(`Máximo ${SUPPORT_MAX_FILES_PER_MESSAGE} adjuntos por mensaje`);
   }
   const prefix = supportAttachmentPrefix(clinicId);
+  // `%` (auditoría cloudflare, H4): Supabase pega el path tal cual en la URL firmada y `%2e%2e` se
+  // normaliza como `..` — el mismo salto de carpeta que cierra el veto de `esPathFirmable`.
   return input.map((item) => {
     const a = item as Partial<SupportAttachment> | null;
-    if (!a || typeof a.path !== "string" || !a.path.startsWith(prefix) || a.path.includes("..")) {
+    if (!a || typeof a.path !== "string" || !a.path.startsWith(prefix) || a.path.includes("..") || a.path.includes("%")) {
       throw new SupportError("Adjunto inválido");
     }
     if (typeof a.type !== "string" || !(SUPPORT_ALLOWED_MIME as readonly string[]).includes(a.type)) {
