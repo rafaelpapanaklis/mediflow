@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
 import { transcribeAudio } from "@/lib/integrations/whisper";
 import { tokensDeAudio } from "@/lib/integrations/whisper-tarifa";
-import { aiTokenLimitError, addAiTokens } from "@/lib/ai-tokens";
+import { addAiTokens, liquidarCupoIa, reservarCupoIa, soltarCupoIa, type ErrorCupoIa, type ReservaCupoIa } from "@/lib/ai-tokens";
 import { cortarSiIaApagada } from "@/lib/ai-billing/interruptores.server";
 import { denyIfMissingAnyPermission } from "@/lib/auth/require-permission";
 import { PERMISOS_DE_DICTADO } from "@/lib/integrations/dictado-permisos";
@@ -15,7 +15,11 @@ export const maxDuration = 60;
 // Vercel corta el body en 4.5MB; 60s de opus a 64kbps pesan ~0.5MB.
 const MAX_AUDIO_BYTES = 4 * 1024 * 1024;
 
-/** Tope por grabación en el cliente (dictation-mic.tsx). Solo para acotar el cobro. */
+/**
+ * Tope por grabación en el cliente (dictation-mic.tsx). Ya NO acota el cobro
+ * (seguridad ola 2b, lead 19: quien llamaba a la API directo mandaba una hora
+ * y pagaba un minuto); es lo MÍNIMO que se reserva del cupo antes de Whisper.
+ */
 const MAX_SECONDS = 60;
 
 // Tarifa (2 000 tokens del cupo por minuto de audio): la misma para el dictado
@@ -25,17 +29,17 @@ const MAX_SECONDS = 60;
 const AUDIO_BYTES_PER_SECOND = 8 * 1024;
 
 /**
- * Segundos de audio a cobrar. Whisper responde en verbose_json y trae
- * `duration`; si faltara, se estima por tamaño al bitrate nominal del cliente.
- * Se acota a [1, MAX_SECONDS]: ni un clip mínimo sale gratis ni un dato raro
- * cobra de más.
+ * Segundos de audio a cobrar: los que Whisper dice que transcribió (y cobra a
+ * DaleControl). Responde en verbose_json y trae `duration`; si faltara, se
+ * estima por tamaño al bitrate nominal del cliente. Mínimo 1 s (ningún clip
+ * sale gratis) y SIN tope arriba: el cupo mide minutos reales de Whisper.
  */
 function billableSeconds(duration: number | undefined, bytes: number): number {
   const raw =
     typeof duration === "number" && isFinite(duration) && duration > 0
       ? duration
       : bytes / AUDIO_BYTES_PER_SECOND;
-  return Math.min(MAX_SECONDS, Math.max(1, raw));
+  return Math.max(1, raw);
 }
 
 // MIME normalizado (sin ";codecs="). "" = algunos navegadores no reportan tipo;
@@ -105,31 +109,44 @@ export async function POST(req: NextRequest) {
   const langRaw = formData.get("language");
   const language = typeof langRaw === "string" && LANGUAGES.has(langRaw) ? langRaw : "es";
 
-  // Cupo de IA del plan (mismo patrón que /api/analytics/ai-insight y
-  // /api/clinic-layout/optimize). FAIL-OPEN: si la lectura del cupo revienta se
-  // deja pasar y se loguea — un bug de contador no puede dejar sin dictado a
-  // una clínica que paga.
-  let aiErr: Awaited<ReturnType<typeof aiTokenLimitError>> = null;
+  // Cupo de IA del plan: se RESERVA antes de llamar a Whisper (seguridad ola
+  // 2b, lead 18: varias a la vez ya no pasan todas con el cupo leído antes de
+  // cobrar). Lo que se aparta: lo que dura el archivo al bitrate nominal del
+  // cliente, y nunca menos que una grabación entera (MAX_SECONDS). Un archivo
+  // grande aparta lo suyo aunque el atacante lo comprima más. FAIL-OPEN: si la reserva
+  // revienta se deja pasar y se loguea — un bug de contador no puede dejar sin
+  // dictado a una clínica que paga; entonces se cobra como antes, al final.
+  let reserva: ReservaCupoIa | null = null;
+  let aiErr: ErrorCupoIa | null = null;
   try {
-    aiErr = await aiTokenLimitError(ctx.clinicId);
+    const segundosAReservar = Math.max(MAX_SECONDS, audio.size / AUDIO_BYTES_PER_SECOND);
+    ({ reserva, error: aiErr } = await reservarCupoIa(ctx.clinicId, tokensDeAudio(segundosAReservar)));
   } catch (e) {
-    console.error("[api/ai/transcribe] no se pudo leer el cupo de IA, se deja pasar:", e);
+    console.error("[api/ai/transcribe] no se pudo reservar el cupo de IA, se deja pasar:", e);
   }
   if (aiErr) return NextResponse.json(aiErr, { status: 429 });
 
   const isMp4 = mime === "audio/mp4" || mime === "video/mp4";
-  const result = await transcribeAudio({
-    audio,
-    filename: audio.name || (isMp4 ? "voice.mp4" : "voice.webm"),
-    mime: audio.type || "audio/webm",
-    language,
-    prompt: MEDICAL_HINT,
-  });
+  let result: Awaited<ReturnType<typeof transcribeAudio>>;
+  try {
+    result = await transcribeAudio({
+      audio,
+      filename: audio.name || (isMp4 ? "voice.mp4" : "voice.webm"),
+      mime: audio.type || "audio/webm",
+      language,
+      prompt: MEDICAL_HINT,
+    });
+  } catch (e) {
+    await soltarCupoIa(reserva);
+    throw e;
+  }
 
   if (result.mock) {
+    await soltarCupoIa(reserva);
     return NextResponse.json({ error: "Transcripción no configurada" }, { status: 503 });
   }
   if (result.error) {
+    await soltarCupoIa(reserva);
     console.error("[api/ai/transcribe]", result.error);
     return NextResponse.json({ error: "No se pudo transcribir el audio" }, { status: 502 });
   }
@@ -140,15 +157,16 @@ export async function POST(req: NextRequest) {
   const seconds = billableSeconds(result.duration, audio.size);
   const tokens = tokensDeAudio(seconds);
   try {
-    await addAiTokens(ctx.clinicId, tokens, "dictation", ctx.userId);
+    if (reserva) await liquidarCupoIa(reserva, tokens, "dictation", ctx.userId);
+    else await addAiTokens(ctx.clinicId, tokens, "dictation", ctx.userId);
   } catch (e) {
     console.error("[api/ai/transcribe] no se pudo cobrar el dictado:", e);
   }
 
   // El dictado cobraba en silencio: la respuesta no decía nada del gasto. Se
   // devuelve el cupo para que el cliente muestre el aviso discreto "gastaste ~N
-  // tokens, quedan M". Relectura del contador YA incrementado (addAiTokens
-  // corrió arriba), no del valor previo. FAIL-OPEN: la transcripción ya está
+  // tokens, quedan M". Relectura del contador YA liquidado (corrió arriba),
+  // no del valor previo. FAIL-OPEN: la transcripción ya está
   // hecha y cobrada; si esta lectura revienta, los campos van en null y el
   // dictado sale igual.
   let tokensRemaining: number | null = null;

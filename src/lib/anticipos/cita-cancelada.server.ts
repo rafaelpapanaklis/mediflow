@@ -93,6 +93,13 @@ export async function decidirDineroDeCitaCancelada(args: {
   decision: DecisionCitaCancelada;
   userId: string | null;
   quien: string;
+  /**
+   * Seguridad ola 2b (lead 3): «a favor» sin una cita CANCELADA viva es cancelar
+   * una factura pagada y regalar su dinero como saldo — lo que /cancel y
+   * /refund reservan a billing.refund. Solo quien tiene ese permiso lo pasa
+   * (la ruta lo calcula de la sesión). Por defecto, cerrado.
+   */
+  puedeSinCita?: boolean;
 }): Promise<ResultadoDecision> {
   const { clinicId, invoiceId, decision } = args;
   const ahora = new Date();
@@ -111,11 +118,20 @@ export async function decidirDineroDeCitaCancelada(args: {
     if (inv.status === "CANCELLED" || !(inv.paid > 0)) {
       return { ok: true, aplicada: null, monto: 0, motivo: "La factura ya no tiene dinero pagado." } as ResultadoDecision;
     }
-    if (inv.appointmentId) {
-      const cita = await tx.appointment.findFirst({ where: { id: inv.appointmentId, clinicId }, select: { status: true } });
-      if (cita && cita.status !== "CANCELLED") {
-        return { ok: false, aplicada: null, monto: 0, motivo: "La cita de esta factura no está cancelada." } as ResultadoDecision;
-      }
+    const cita = inv.appointmentId
+      ? await tx.appointment.findFirst({ where: { id: inv.appointmentId, clinicId }, select: { status: true } })
+      : null;
+    if (cita && cita.status !== "CANCELLED") {
+      return { ok: false, aplicada: null, monto: 0, motivo: "La cita de esta factura no está cancelada." } as ResultadoDecision;
+    }
+    // Lead 3 (ola 2b): sin cita cancelada viva (factura suelta o cita borrada)
+    // no hay «dinero de una cita cancelada» que decidir: pasarlo a favor pide
+    // el permiso de reembolsar. Marcar («pendiente»/«reembolso») no mueve dinero.
+    if (!cita && decision === "a_favor" && !args.puedeSinCita) {
+      return {
+        ok: false, aplicada: null, monto: 0,
+        motivo: "Esta factura no tiene una cita cancelada: pasar su dinero al saldo a favor es un reembolso y pide el permiso de reembolsar.",
+      } as ResultadoDecision;
     }
     const monto = round2(inv.paid);
     const previa = ultimaMarca(inv.notes);

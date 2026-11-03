@@ -22,6 +22,7 @@ import { round2 } from "@/lib/invoice-totals";
 import { FUENTE_DEVUELTO, FUENTE_EXCEDENTE } from "@/lib/patient-credit-core";
 import { anticipoDeLaFactura, partesDeDevolucion } from "@/lib/patient-credit-aplicar";
 import { REEMBOLSO_A_SALDO_A_FAVOR } from "@/lib/dinero/reembolsos";
+import { algunPagoTieneCfdiVigente } from "@/lib/invoices/cfdi-pago-db";
 import { bloquearPlan, columnaNotaDelPlanExiste, tablaDeFilasExiste } from "./items-db";
 import { ajustarNotaAlCerrar, origenDelSaldoAFavor } from "./cerrar-plan";
 import type { EstadoDeFila } from "./items";
@@ -55,7 +56,7 @@ export type ResultadoCierre =
       /** Facturas de la vía de antes (presupuesto) con filas por hacer: esas se ajustan a mano. */
       sinAjustar: string[];
     }
-  | { ok: false; codigo: "sin_plan" | "nota_timbrada"; folios?: string[] };
+  | { ok: false; codigo: "sin_plan" | "nota_timbrada" | "cfdi_por_pago"; folios?: string[] };
 
 interface NotaSql {
   id: string;
@@ -142,6 +143,14 @@ export async function cerrarPlan(args: { clinicId: string; planId: string; userI
 
       const timbradas = ajustes.filter((x) => !!x.n.cfdiUuid).map((x) => x.n.invoiceNumber);
       if (timbradas.length) return { ok: false as const, codigo: "nota_timbrada" as const, folios: timbradas };
+      // Seguridad ola 2b (hermana del lead 5): un CFDI POR PAGO no llena `cfdiUuid`. Si lo pagado de
+      // más va a pasar al saldo a favor, ese CFDI quedaría vigente por un dinero que sale de la nota.
+      // Mismo candado que /cancel, /refund, anular anticipo y «a favor».
+      const conCfdiPorPago: string[] = [];
+      for (const { n, a } of ajustes) {
+        if (a!.aFavor > 0 && (await algunPagoTieneCfdiVigente(tx, { clinicId, invoiceId: n.id }))) conCfdiPorPago.push(n.invoiceNumber);
+      }
+      if (conCfdiPorPago.length) return { ok: false as const, codigo: "cfdi_por_pago" as const, folios: conCfdiPorPago };
 
       // Las filas por hacer: de una nota del plan (se ajusta) o sin nota. Las que cobra una factura de
       // la vía de antes (presupuesto) no se tocan: esa factura no es del plan y se ajusta a mano.

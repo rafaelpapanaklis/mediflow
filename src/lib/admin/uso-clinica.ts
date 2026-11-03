@@ -69,9 +69,9 @@ export async function medirUsoClinicas(clinicas: ClinicaParaUso[], ahora = new D
   if (ids.length === 0) return { porClinica: new Map(), limites, avisos };
   const en = { clinicId: { in: ids } };
 
-  // Periodo CFDI de cada clínica en SU zona (cfdi_usage se indexa así). Son una
-  // o dos claves distintas para todo el país.
-  const periodoDe = new Map(clinicas.map((c) => [c.id, cfdiPeriodFor(ahora, c.timezone)]));
+  // Periodo CFDI: uno solo, en hora de CDMX (cfdi_usage se indexa así desde la
+  // ola 2b de seguridad, lead 8).
+  const periodoDe = new Map(clinicas.map((c) => [c.id, cfdiPeriodFor(ahora)]));
   const periodos = Array.from(new Set(periodoDe.values()));
 
   // ── Tanda 1 (2): dueños (sedes) y CFDI del mes ──────────────────────────

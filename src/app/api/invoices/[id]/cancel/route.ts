@@ -10,6 +10,7 @@ import { revalidateAfter } from "@/lib/cache/revalidate";
 import { cfdiVigenteResponse } from "@/lib/invoices/cfdi-vigente";
 // ws1-t4, vuelta 2 (F-14): en Live, un CFDI de PRUEBAS ya no bloquea la factura.
 import { denyIfCfdiVigenteEnAmbiente } from "@/lib/invoices/cfdi-ambiente.server";
+import { algunPagoTieneCfdiVigente } from "@/lib/invoices/cfdi-pago-db";
 import { cerrarLinksDeFactura } from "@/lib/factura-mp/servicio.server";
 import { cerrarAnticiposDePanel } from "@/lib/anticipos/panel.server";
 import { devolverAnticipoAlCancelar } from "@/lib/patient-credit-aplicar";
@@ -171,6 +172,18 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     if (fresca.status === "CANCELLED") return { error: "La factura ya está cancelada", status: 400 };
     const cfdiDentro = await denyIfCfdiVigenteEnAmbiente(tx, { clinicId, cfdiUuid: fresca.cfdiUuid, accion: "cancelar" });
     if (cfdiDentro) return { denied: cfdiDentro };
+    // Seguridad ola 2b (lead 5): un CFDI POR PAGO (p. ej. el del saldo a favor
+    // aplicado) no llena cfdiUuid. Cancelar aquí devolvería ese dinero al saldo
+    // a favor con el CFDI vigente ante el SAT. Mismo candado y misma respuesta
+    // que /refund, anular anticipo y «a favor».
+    if (await algunPagoTieneCfdiVigente(tx, { clinicId, invoiceId: params.id })) {
+      return {
+        denied: NextResponse.json({
+          error: "Esta factura tiene uno o más pagos con su propio CFDI timbrado. Cancelarla dejaría ese CFDI vigente por un dinero que vuelve al saldo a favor, y cancelar ese CFDI ante el SAT todavía no se puede hacer desde DaleControl: escríbenos a soporte con el folio de la factura.",
+          code: "CFDI_POR_PAGO_VIGENTE",
+        }, { status: 409 }),
+      };
+    }
 
     // ¿Hay anticipo? Se mira primero en los Payment (tabla de siempre): sin
     // ninguno la respuesta es la de antes y no se consulta nada nuevo.

@@ -26,7 +26,10 @@ const dobles = new Map<string, unknown>([
     cortarSiIaApagada: async () => { cuenta.interruptor++; return null; },
   }],
   [path.join(RAIZ, "src/lib/ai-tokens.ts"), {
-    aiTokenLimitError: async () => { cuenta.cupo++; return null; },
+    // Ola 2b (lead 18): el cupo se reserva antes y se liquida después.
+    reservarCupoIa: async (clinicId: string, tokens: number) => { cuenta.cupo++; return { reserva: { clinicId, tokens }, error: null }; },
+    liquidarCupoIa: async () => { cuenta.cobros++; },
+    soltarCupoIa: async () => {},
     addAiTokens: async () => { cuenta.cobros++; },
   }],
   [path.join(RAIZ, "src/lib/integrations/whisper.ts"), {

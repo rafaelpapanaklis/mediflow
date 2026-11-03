@@ -124,7 +124,7 @@ export async function anularAnticipoRecibido(args: {
     });
     if (!pago || !(pago.amount > 0)) return falla("no_anulable", "Ese anticipo ya no tiene un pago que anular.");
 
-    const resta = pagoSumoALaFactura(pago.notes) ? pago.amount : 0;
+    const resta = pagoSumoALaFactura(pago.notes, pago.method) ? pago.amount : 0;
     if (resta > inv.paid + 0.01) {
       return falla("no_anulable", "Lo pagado de la factura no cuadra con ese anticipo: revísalo con soporte antes de anularlo.");
     }

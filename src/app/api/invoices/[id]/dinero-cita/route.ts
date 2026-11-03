@@ -11,6 +11,7 @@ import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
 import { getAuthContext } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
+import { hasPermission } from "@/lib/auth/permissions";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { revalidateAfter } from "@/lib/cache/revalidate";
 import { decidirDineroDeCitaCancelada, registrarDevolucionYCancelar } from "@/lib/anticipos/cita-cancelada.server";
@@ -51,7 +52,11 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
 
   const r = decision === "devuelto"
     ? await registrarDevolucionYCancelar({ clinicId: ctx.clinicId, invoiceId: params.id, userId: ctx.userId, quien, refundMethod })
-    : await decidirDineroDeCitaCancelada({ clinicId: ctx.clinicId, invoiceId: params.id, decision, userId: ctx.userId, quien });
+    : await decidirDineroDeCitaCancelada({
+        clinicId: ctx.clinicId, invoiceId: params.id, decision, userId: ctx.userId, quien,
+        // Lead 3 (ola 2b): sin cita cancelada, «a favor» es un reembolso a saldo y pide billing.refund.
+        puedeSinCita: hasPermission({ role: ctx.role, permissionsOverride: ctx.permissionsOverride ?? [] }, "billing.refund"),
+      });
   if (!r.ok) return NextResponse.json({ error: r.motivo ?? "No se pudo." }, { status: 409 });
   revalidateAfter("invoices");
   return NextResponse.json({ aplicada: r.aplicada, monto: r.monto });

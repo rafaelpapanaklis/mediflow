@@ -908,3 +908,33 @@ test("v15 · M1 (opción b): con cuotas, «Estado de cuenta» dice «Pagado por 
   // Nada dos veces: pagado por adelantado + cuotas por vencer = el plan entero.
   assert.equal(Math.round((pagadoPorAdelantado + cuotas) * 100) / 100, 2050.5);
 });
+
+// Seguridad ola 2b (hermana del lead 5): un CFDI POR PAGO no llena `invoices.cfdiUuid`. Cerrar el plan
+// devolvía al saldo a favor lo pagado de una nota con ese CFDI vigente ante el SAT; /cancel, /refund,
+// anular anticipo y «a favor» ya lo bloqueaban con algunPagoTieneCfdiVigente.
+test("🔴 cerrar plan con un CFDI POR PAGO vigente en la nota: 409 CFDI_POR_PAGO_VIGENTE y no se toca nada", async (t) => {
+  if (salta(t)) return;
+  await usar();
+  const cfdiPago = await import("@/lib/invoices/cfdi-pago-db");
+  try {
+    const { planId, notaId } = await planAceptado();
+    const pagoId = await pagar(notaId, 1000);
+    await base.db.exec(`CREATE TABLE IF NOT EXISTS "cfdi_records" ("id" text PRIMARY KEY, "clinicId" text NOT NULL,
+      "invoiceId" text, "paymentId" text, "status" text NOT NULL, "total" float8)`);
+    await base.db.query(`INSERT INTO "cfdi_records" VALUES ('cf-1', 'c1', $1, $2, 'valid', 1000)`, [notaId, pagoId]);
+    cfdiPago._olvidarColumnaCfdiPago();
+    const r = await cerrar(planId);
+    assert.equal(r.status, 409, JSON.stringify(r.body));
+    assert.equal(r.body.code, "CFDI_POR_PAGO_VIGENTE");
+    const [n] = await notas(planId);
+    assert.notEqual(n.status, "CANCELLED");
+    assert.equal(n.paid, 1000, "lo pagado sigue en la nota");
+    const aFavor = (await base.db.query(`SELECT count(*)::int AS c FROM "patient_credits"`)).rows[0].c;
+    assert.equal(aFavor, 0, "no nace saldo a favor");
+    const plan = (await base.db.query(`SELECT "status"::text AS "status" FROM "treatment_plans" WHERE "id" = $1`, [planId])).rows[0];
+    assert.equal(plan.status, "ACTIVE");
+  } finally {
+    // La sonda de la columna se queda en caché: que no contamine a otra prueba con una base sin la tabla.
+    cfdiPago._olvidarColumnaCfdiPago();
+  }
+});

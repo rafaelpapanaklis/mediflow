@@ -539,7 +539,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Metering del cupo CFDI: SOLO tras timbrado exitoso. El contador del mes
-    // (period en la zona horaria de la clínica) sube +1 en la MISMA transacción
+    // (period en hora de CDMX, la del cierre del cron) sube +1 en la MISMA transacción
     // que el CfdiRecord — jamás bloquea el timbrado; el excedente se cobra a fin
     // de mes (cron /api/cron/cfdi-overage).
     // ws1-t3: el CFDI viejo pasa a 'sustituido' ANTES de guardar el nuevo (el
@@ -547,7 +547,7 @@ export async function POST(req: NextRequest) {
     if (sust && sust.ok) await antesDeGuardarSustituto({ clinicId: ctx!.clinicId, viejoCfdiId: sust.viejo.id, nuevoUuid: result.uuid });
     // F-21 (ws1-t4, vuelta 2): ¿el dinero entró en otro mes? Solo se avisa.
     const avisoMes = avisoMesDeCobro({ pagos: invoice.payments, ahora: new Date(), timeZone: clinic.timezone, locale: clinic.locale });
-    const period = cfdiPeriodFor(new Date(), clinic.timezone);
+    const period = cfdiPeriodFor(new Date());
     const [cfdiRecord, , usage] = await prisma.$transaction([
       prisma.cfdiRecord.create({
         data: {

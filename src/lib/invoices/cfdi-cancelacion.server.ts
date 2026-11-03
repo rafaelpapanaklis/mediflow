@@ -497,7 +497,7 @@ export async function emitirNotaDeCredito(p: PedirNotaCredito): Promise<Respuest
   // ── 4. Guardar todo junto ───────────────────────────────────────────────
   // 🔴 Desde aquí la nota YA existe ante el SAT: nada puede tumbar la respuesta
   // sin dejar el UUID escrito.
-  const period = cfdiPeriodFor(new Date(), clinic.timezone);
+  const period = cfdiPeriodFor(new Date());
   const metodo = typeof p.metodoDevolucion === "string" && p.metodoDevolucion.trim() ? p.metodoDevolucion.trim().slice(0, 40) : null;
   let aviso: string | null = null;
   let refundPaymentId: string | null = null;

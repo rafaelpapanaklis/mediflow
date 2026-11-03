@@ -61,8 +61,15 @@ export function notaDeAnulacion(args: {
  * ¿Ese pago sumó a lo pagado de la factura? El webhook de Mercado Pago
  * registra el pago sobre una factura cancelada o ya saldada SIN sumarlo (lo
  * marca «revisar/devolver»): anular ese no debe restar nada.
+ *
+ * Seguridad ola 2b (lead 4): la marca SOLO cuenta en un pago de Mercado Pago,
+ * cuyas notas escribe entero el webhook. Un anticipo registrado a mano
+ * (efectivo, transferencia, tarjeta: `registrarAnticipoRecibido`) SIEMPRE sumó
+ * a la factura, y sus notas las teclea quien lo registró: sembrar ahí la frase
+ * dejaba el pago en 0 y la factura igual de pagada.
  */
-export function pagoSumoALaFactura(notas: string | null | undefined): boolean {
+export function pagoSumoALaFactura(notas: string | null | undefined, method: string): boolean {
+  if (method !== "mercadopago") return true;
   return !/Anticipo pagado sobre factura (cancelada|ya saldada)/.test(notas ?? "");
 }
 
