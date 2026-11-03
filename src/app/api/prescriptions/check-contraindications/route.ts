@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createHash } from "crypto";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
-import { addAiTokens } from "@/lib/ai-tokens";
+import { liquidarCupoIa, reservarCupoIa, soltarCupoIa, techoDeTokens } from "@/lib/ai-tokens";
 import { persistentRateLimit } from "@/lib/failban";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
@@ -27,6 +27,7 @@ export const dynamic = "force-dynamic";
 /* ═══════════════════════════════════════════════════════════════════════ */
 
 const MODEL = "claude-sonnet-4-6";
+const MAX_TOKENS = 1200;
 
 const SYSTEM_PROMPT = `Eres un asistente de odontofarmacología para dentistas en México. Revisas una receta dental y adviertes posibles contraindicaciones e interacciones, considerando el contexto clínico del paciente. NO eres el prescriptor: el doctor decide. Eres una herramienta de APOYO informativo.
 
@@ -319,6 +320,24 @@ export async function POST(req: NextRequest) {
   lines.push("Evalúa cada medicamento y las interacciones entre ellos según el contexto del paciente.");
   const userMessage = lines.join("\n");
 
+  // Seguridad ola 2b (v2): el cupo se RESERVA antes de llamar (el techo de esta
+  // llamada: prompt, herramienta, mensaje y salida máxima); arriba solo se leía.
+  const { reserva, error: sinCupo } = await reservarCupoIa(
+    ctx.clinicId,
+    techoDeTokens([SYSTEM_PROMPT, JSON.stringify(CHECK_TOOL), userMessage], MAX_TOKENS),
+  );
+  if (sinCupo || !reserva) {
+    const resetDate = new Date(lastReset.getFullYear(), lastReset.getMonth() + 1, 1);
+    return NextResponse.json(
+      {
+        error: `Límite mensual de IA alcanzado (${clinic.aiTokensLimit.toLocaleString()} tokens). Se renueva el ${resetDate.toLocaleDateString("es-MX", { day: "numeric", month: "long" })}.`,
+        limitReached: true,
+      },
+      { status: 429 },
+    );
+  }
+  let liquidada = false;
+
   try {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -329,7 +348,7 @@ export async function POST(req: NextRequest) {
       },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 1200,
+        max_tokens: MAX_TOKENS,
         system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
         tools: [{ ...CHECK_TOOL, cache_control: { type: "ephemeral" } }],
         tool_choice: { type: "tool", name: CHECK_TOOL.name },
@@ -349,7 +368,8 @@ export async function POST(req: NextRequest) {
     const cacheRead = data.usage?.cache_read_input_tokens ?? 0;
     const totalTokens = inputTokens + outputTokens + cacheCreation + cacheRead;
 
-    await addAiTokens(ctx.clinicId, totalTokens, "contraindications", ctx.userId);
+    await liquidarCupoIa(reserva, totalTokens, "contraindications", ctx.userId);
+    liquidada = true;
 
     // Costo real para DaleControl (Tesorería de IA). No se le cobra a la
     // clínica — su plan ya lo incluye — pero sí se mide. Best-effort. Un hit
@@ -426,6 +446,7 @@ export async function POST(req: NextRequest) {
       tokensLimit: clinic.aiTokensLimit,
     });
   } catch (err: any) {
+    if (!liquidada) await soltarCupoIa(reserva);
     console.error("AI contraindication check error:", err);
     return NextResponse.json({ error: err.message ?? "Error al revisar contraindicaciones" }, { status: 500 });
   }

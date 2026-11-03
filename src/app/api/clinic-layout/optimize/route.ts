@@ -5,7 +5,7 @@ import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
 import { persistentRateLimit } from "@/lib/failban";
 import { chat } from "@/lib/integrations/claude";
-import { aiTokenLimitError, addAiTokens } from "@/lib/ai-tokens";
+import { liquidarCupoIa, reservarCupoIa, soltarCupoIa, techoDeTokens } from "@/lib/ai-tokens";
 import { recordUsageNoCharge } from "@/lib/ai-billing/record-usage";
 import { AI_FEATURE_CLINIC_LAYOUT } from "@/lib/ai-billing/types";
 import { cortarSiIaApagada } from "@/lib/ai-billing/interruptores.server";
@@ -70,6 +70,7 @@ interface OptimizerResult {
  * Saldo de IA, se corta antes de leer la agenda y de llamar a Claude.
  */
 const OPTIMIZER_MODEL = "claude-sonnet-4-6";
+const MAX_TOKENS = 2000;
 
 export async function POST(req: NextRequest) {
   try {
@@ -198,23 +199,33 @@ Responde SOLO con un JSON válido (sin markdown, sin texto extra) con esta estru
   "reasoning": "Explicación breve en español de los cambios realizados (2-3 oraciones)"
 }`;
 
-    const aiErr = await aiTokenLimitError(dbUser.clinicId);
-    if (aiErr) return NextResponse.json(aiErr, { status: 429 });
+    // Seguridad ola 2b (v2): el cupo se RESERVA antes de llamar (el techo de
+    // esta llamada), no solo se lee: una ráfaga ya no entra entera. Mismo 429.
+    const { reserva, error: aiErr } = await reservarCupoIa(dbUser.clinicId, techoDeTokens([prompt], MAX_TOKENS));
+    if (aiErr || !reserva) return NextResponse.json(aiErr, { status: 429 });
 
-    const result = await chat({
-      model: OPTIMIZER_MODEL,
-      maxTokens: 2000,
-      messages: [{ role: "user", content: prompt }],
-    });
+    let result: Awaited<ReturnType<typeof chat>>;
+    try {
+      result = await chat({
+        model: OPTIMIZER_MODEL,
+        maxTokens: MAX_TOKENS,
+        messages: [{ role: "user", content: prompt }],
+      });
+    } catch (e) {
+      await soltarCupoIa(reserva);
+      throw e;
+    }
 
     if (result.error) {
+      await soltarCupoIa(reserva);
       return NextResponse.json(
         { error: "claude_error", detail: result.error },
         { status: 502 },
       );
     }
 
-    await addAiTokens(dbUser.clinicId, (result.inputTokens ?? 0) + (result.outputTokens ?? 0), "clinic_layout", dbUser.id);
+    // Lo real (0 en mock: entonces solo suelta lo apartado).
+    await liquidarCupoIa(reserva, (result.inputTokens ?? 0) + (result.outputTokens ?? 0), "clinic_layout", dbUser.id);
 
     // Costo real para la Tesorería (no cobra; se traga sus fallos).
     if (!result.mock) {

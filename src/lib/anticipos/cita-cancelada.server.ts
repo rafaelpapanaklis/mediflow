@@ -94,7 +94,8 @@ export async function decidirDineroDeCitaCancelada(args: {
   userId: string | null;
   quien: string;
   /**
-   * Seguridad ola 2b (lead 3): «a favor» sin una cita CANCELADA viva es cancelar
+   * Seguridad ola 2b (lead 3): «a favor» sin una cita CANCELADA viva (o con la
+   * factura hecha después de cancelarla, v2) es cancelar
    * una factura pagada y regalar su dinero como saldo — lo que /cancel y
    * /refund reservan a billing.refund. Solo quien tiene ese permiso lo pasa
    * (la ruta lo calcula de la sesión). Por defecto, cerrado.
@@ -111,7 +112,7 @@ export async function decidirDineroDeCitaCancelada(args: {
       where: { id: invoiceId, clinicId },
       select: {
         id: true, patientId: true, invoiceNumber: true, total: true, paid: true,
-        status: true, notes: true, cfdiUuid: true, appointmentId: true,
+        status: true, notes: true, cfdiUuid: true, appointmentId: true, createdAt: true,
       },
     });
     if (!inv) return { ok: false, aplicada: null, monto: 0, motivo: "Factura no encontrada." } as ResultadoDecision;
@@ -119,18 +120,24 @@ export async function decidirDineroDeCitaCancelada(args: {
       return { ok: true, aplicada: null, monto: 0, motivo: "La factura ya no tiene dinero pagado." } as ResultadoDecision;
     }
     const cita = inv.appointmentId
-      ? await tx.appointment.findFirst({ where: { id: inv.appointmentId, clinicId }, select: { status: true } })
+      ? await tx.appointment.findFirst({ where: { id: inv.appointmentId, clinicId }, select: { status: true, cancelledAt: true } })
       : null;
     if (cita && cita.status !== "CANCELLED") {
       return { ok: false, aplicada: null, monto: 0, motivo: "La cita de esta factura no está cancelada." } as ResultadoDecision;
     }
-    // Lead 3 (ola 2b): sin cita cancelada viva (factura suelta o cita borrada)
-    // no hay «dinero de una cita cancelada» que decidir: pasarlo a favor pide
-    // el permiso de reembolsar. Marcar («pendiente»/«reembolso») no mueve dinero.
-    if (!cita && decision === "a_favor" && !args.puedeSinCita) {
+    // Lead 3 (ola 2b): solo es «dinero de una cita cancelada» si la cita existe,
+    // está cancelada y la factura ya existía cuando se canceló (v2, decisión 1-b
+    // de Rafael: createdAt <= cancelledAt). Factura suelta, cita borrada,
+    // factura hecha DESPUÉS de cancelar o cancelación sin fecha (filas viejas):
+    // pasarlo a favor es un reembolso y pide billing.refund. Marcar
+    // («pendiente»/«reembolso») no mueve dinero.
+    const deCitaCancelada =
+      !!cita && cita.status === "CANCELLED" && !!cita.cancelledAt &&
+      new Date(inv.createdAt).getTime() <= new Date(cita.cancelledAt).getTime();
+    if (!deCitaCancelada && decision === "a_favor" && !args.puedeSinCita) {
       return {
         ok: false, aplicada: null, monto: 0,
-        motivo: "Esta factura no tiene una cita cancelada: pasar su dinero al saldo a favor es un reembolso y pide el permiso de reembolsar.",
+        motivo: "Este dinero no es de una cita que se canceló (la factura no tiene cita cancelada o se hizo después de cancelarla): pasarlo al saldo a favor es un reembolso y pide el permiso de reembolsar.",
       } as ResultadoDecision;
     }
     const monto = round2(inv.paid);

@@ -395,7 +395,7 @@
     "test:caja-cierre-esperado": "tsx --test --experimental-test-module-mocks src/app/api/caja/__tests__/cierre-esperado.test.ts",
     "test:gastos-bitacora": "tsx --test --experimental-test-module-mocks src/app/api/gastos/__tests__/gastos-bitacora.test.ts",
     "test:anular-factura": "tsx --test --experimental-test-module-mocks src/app/api/invoices/__tests__/anular-con-permiso.test.ts",
-    "test:seg-ola2b": "tsx --test src/lib/anticipos/__tests__/seg-dinero-cita-sin-cita.test.ts src/lib/anticipos/__tests__/seg-anular-notas.test.ts src/app/api/invoices/__tests__/seg-cancel-cfdi-por-pago.test.ts src/lib/__tests__/seg-cfdi-periodo-zona.test.ts src/app/api/analytics/ai-insight/__tests__/seg-cupo-reserva.test.ts src/app/api/ai/transcribe/__tests__/seg-duracion-real.test.ts",
+    "test:seg-ola2b": "tsx --test src/lib/anticipos/__tests__/seg-dinero-cita-sin-cita.test.ts src/lib/anticipos/__tests__/seg-anular-notas.test.ts src/app/api/invoices/__tests__/seg-cancel-cfdi-por-pago.test.ts src/lib/__tests__/seg-cfdi-periodo-zona.test.ts src/app/api/analytics/ai-insight/__tests__/seg-cupo-reserva.test.ts src/app/api/ai/transcribe/__tests__/seg-duracion-real.test.ts src/app/api/__tests__/seg-cupo-ia-hermanas.test.ts",
     "test:vencido-saldos-orto": "tsx --test --experimental-test-module-mocks src/lib/__tests__/vencido-saldos-vs-ortodoncia.test.ts",
     "test:finanzas-periodo": "tsx --test src/lib/__tests__/finanzas-periodo.test.ts",
     "test:equipo-rediseno": "tsx --test src/components/dashboard/equipo-rediseno/__tests__/equipo-rediseno.test.ts",

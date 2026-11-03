@@ -125,9 +125,12 @@ test("la cita SIGUE viva y no cancelada: se rechaza como siempre", async () => {
   assert.equal(inv().status, "PAID");
 });
 
+const FACTURADA = new Date("2026-11-02T15:00:00Z");
+const CANCELADA = new Date("2026-11-02T16:00:00Z");
+
 test("control: recepción SÍ deja a favor el dinero de una cita CANCELADA (H15 intacto)", async () => {
-  db.tablas.appointment.push({ id: "apt1", clinicId: CLINICA, status: "CANCELLED" });
-  facturaPagada({ appointmentId: "apt1" });
+  db.tablas.appointment.push({ id: "apt1", clinicId: CLINICA, status: "CANCELLED", cancelledAt: CANCELADA });
+  facturaPagada({ appointmentId: "apt1", createdAt: FACTURADA });
   const r = await llamarRuta("RECEPTIONIST");
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.equal(r.body.aplicada, "a_favor");
@@ -157,4 +160,41 @@ test("el servicio, llamado sin el permiso explícito, también se niega (falla c
   const r = await decidir({ clinicId: CLINICA, invoiceId: "inv1", decision: "a_favor", userId: "u", quien: "x" });
   assert.equal(r.ok, false);
   assert.equal(inv().status, "PAID");
+});
+
+// ── v2 (DECISIÓN 1 de Rafael, opción b): «a favor» con billing.charge solo si la factura existía
+// ANTES de que se cancelara la cita (createdAt <= cancelledAt). Una factura hecha DESPUÉS sobre una
+// cita ya cancelada no es «el dinero de una cita cancelada»: pide billing.refund.
+
+test("🔴 v2: factura creada DESPUÉS de cancelar la cita → recepción no la pasa a favor", async () => {
+  db.tablas.appointment.push({ id: "apt1", clinicId: CLINICA, status: "CANCELLED", cancelledAt: FACTURADA });
+  facturaPagada({ appointmentId: "apt1", createdAt: CANCELADA });
+  const r = await llamarRuta("RECEPTIONIST");
+  assert.equal(r.status, 409, JSON.stringify(r.body));
+  assert.match(r.body.error, /reembols/i);
+  assert.equal(inv().status, "PAID");
+  assert.equal(creditos().length, 0);
+});
+
+test("v2: la misma factura sí la pasa a favor quien tiene billing.refund", async () => {
+  db.tablas.appointment.push({ id: "apt1", clinicId: CLINICA, status: "CANCELLED", cancelledAt: FACTURADA });
+  facturaPagada({ appointmentId: "apt1", createdAt: CANCELADA });
+  const r = await llamarRuta("ADMIN");
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(inv().status, "CANCELLED");
+});
+
+test("🔴 v2: cita cancelada SIN fecha de cancelación (filas viejas) → falla cerrado: pide billing.refund", async () => {
+  db.tablas.appointment.push({ id: "apt1", clinicId: CLINICA, status: "CANCELLED", cancelledAt: null });
+  facturaPagada({ appointmentId: "apt1", createdAt: FACTURADA });
+  const r = await llamarRuta("RECEPTIONIST");
+  assert.equal(r.status, 409, JSON.stringify(r.body));
+  assert.equal(inv().status, "PAID");
+});
+
+test("v2: factura y cancelación en el mismo instante cuentan como «antes» (<=)", async () => {
+  db.tablas.appointment.push({ id: "apt1", clinicId: CLINICA, status: "CANCELLED", cancelledAt: FACTURADA });
+  facturaPagada({ appointmentId: "apt1", createdAt: FACTURADA });
+  const r = await llamarRuta("RECEPTIONIST");
+  assert.equal(r.status, 200, JSON.stringify(r.body));
 });

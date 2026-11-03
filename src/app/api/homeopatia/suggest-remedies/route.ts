@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { denyIfNotClinical } from "@/lib/auth/guardia-clinica";
-import { addAiTokens, aiTokenLimitError } from "@/lib/ai-tokens";
+import { liquidarCupoIa, reservarCupoIa, soltarCupoIa, techoDeTokens } from "@/lib/ai-tokens";
 import { persistentRateLimit } from "@/lib/failban";
 import { recordUsageNoCharge } from "@/lib/ai-billing/record-usage";
 import { AI_FEATURE_HOMEOPATHY } from "@/lib/ai-billing/types";
 import { cortarSiIaApagada } from "@/lib/ai-billing/interruptores.server";
 
 const MODEL = "claude-haiku-4-5-20251001";
+const MAX_TOKENS = 800;
 
 const SYSTEM_PROMPT = `Eres un homeópata experto basado en Boericke, Kent y el Organon de Hahnemann. Dado un conjunto de síntomas rúbricos (mentales, generales y locales), sugieres los remedios más probables con su score de coincidencia (0-100) y la potencia inicial recomendada.
 
@@ -52,13 +53,16 @@ export async function POST(req: NextRequest) {
   // Mismo gate que el resto de la IA. Antes esta ruta era la ÚNICA que leía el
   // contador crudo sin aplicar el reseteo mensual perezoso: el día 1 cobraba
   // contra el mes viejo (falso 429 con el cupo agotado de ayer, y el desglose
-  // del mes nuevo descuadrado contra aiTokensUsed). aiTokenLimitError resetea
+  // del mes nuevo descuadrado contra aiTokensUsed). reservarCupoIa (como antes aiTokenLimitError) resetea
   // si cambió el mes y devuelve además used/limit, así que el cliente puede
   // distinguir "plan sin IA" (limit 0) de "se acabó el cupo".
-  const aiErr = await aiTokenLimitError(ctx.clinicId);
-  if (aiErr) return NextResponse.json(aiErr, { status: 429 });
-
+  //
+  // Seguridad ola 2b (v2): además se RESERVA el techo de la llamada antes de
+  // llamar (antes solo se leía): una ráfaga ya no entra entera. Mismo 429.
   const userMsg = `Síntomas rúbricos:\n${symptoms.map((s: string, i: number) => `${i + 1}. ${s}`).join("\n")}${constitutional ? `\n\nConstitucional: ${constitutional}` : ""}\n\nResponde con el JSON exacto.`;
+  const { reserva, error: aiErr } = await reservarCupoIa(ctx.clinicId, techoDeTokens([SYSTEM_PROMPT, userMsg], MAX_TOKENS));
+  if (aiErr || !reserva) return NextResponse.json(aiErr, { status: 429 });
+  let liquidada = false;
 
   try {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
@@ -70,7 +74,7 @@ export async function POST(req: NextRequest) {
       },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 800,
+        max_tokens: MAX_TOKENS,
         system: SYSTEM_PROMPT,
         messages: [{ role: "user", content: userMsg }],
       }),
@@ -79,7 +83,8 @@ export async function POST(req: NextRequest) {
     if (!response.ok) throw new Error(data.error?.message ?? "Error API");
 
     const totalTokens = (data.usage?.input_tokens ?? 0) + (data.usage?.output_tokens ?? 0);
-    await addAiTokens(ctx.clinicId, totalTokens, "homeopathy", ctx.userId);
+    await liquidarCupoIa(reserva, totalTokens, "homeopathy", ctx.userId);
+    liquidada = true;
 
     // Costo real para la Tesorería (ws1-t1). No cobra nada —el cupo ya se
     // movió arriba— y se traga sus fallos: la sugerencia sale igual.
@@ -99,6 +104,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(parsed);
   } catch (err: any) {
+    if (!liquidada) await soltarCupoIa(reserva);
     return NextResponse.json({ error: err.message ?? "Error" }, { status: 500 });
   }
 }
