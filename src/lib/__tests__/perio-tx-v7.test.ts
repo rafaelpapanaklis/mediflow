@@ -23,14 +23,25 @@ const raiz = path.resolve(__dirname, "../../..");
 
 let listaDelPaciente: string[] = [];
 let transaccionAbierta = false;
+/** Qué consulta de la guarda falla como lo haría la base (P2024: pool agotado). */
+let fallaLaBase: "" | "periodontalRecord" | "patient" = "";
+const P2024 = () => Object.assign(new Error("Timed out fetching a new connection from the connection pool"), { code: "P2024" });
 const escrituras: string[] = [];
 let ctx: any = null;
 
 /** Las tablas, sin saber quién las usa. */
 const tablas: any = {
-  patient: { findUnique: async () => ({ visibleUserIds: listaDelPaciente }) },
+  patient: {
+    findUnique: async () => {
+      if (fallaLaBase === "patient") throw P2024();
+      return { visibleUserIds: listaDelPaciente };
+    },
+  },
   periodontalRecord: {
-    findFirst: async () => ({ id: "pr1", clinicId: "cA", patientId: "pA", sites: [], toothLevel: [] }),
+    findFirst: async () => {
+      if (fallaLaBase === "periodontalRecord") throw P2024();
+      return { id: "pr1", clinicId: "cA", patientId: "pA", sites: [], toothLevel: [] };
+    },
     update: async (a: any) => { escrituras.push("periodontalRecord.update"); return { id: "pr1", updatedAt: new Date(), ...a.data }; },
   },
 };
@@ -94,6 +105,7 @@ beforeEach(async () => {
   escrituras.length = 0;
   listaDelPaciente = [];
   transaccionAbierta = false;
+  fallaLaBase = "";
   ctx = { userId: "uYo", clinicId: "cA", role: "DOCTOR", permissionsOverride: null };
 });
 
@@ -125,6 +137,28 @@ test("la guarda sigue: fuera de la lista del paciente restringido, «no encontra
     const r = await llamar();
     assert.equal(r.ok, false, nombre);
     assert.equal(r.error, "Periodontograma no encontrado", nombre);
+  }
+  assert.deepEqual(escrituras, []);
+});
+
+test("m1 (t12): si la base falla en la guarda, la acción devuelve «No se pudo guardar…» (el panel avisa), no lanza", async () => {
+  const MENSAJES: Record<string, string> = {
+    upsertSiteData: "No se pudo guardar el sitio",
+    upsertToothData: "No se pudo guardar el diente",
+    bulkUpsertSiteData: "No se pudo guardar el lote de sitios",
+  };
+  const silencio = console.error;
+  console.error = () => undefined; // el `catch` registra el error; aquí no hace falta verlo
+  try {
+    for (const donde of ["periodontalRecord", "patient"] as const) {
+      fallaLaBase = donde;
+      for (const [nombre, llamar] of Object.entries(await acciones())) {
+        const r = await llamar().catch((e: Error) => ({ lanzo: e.message }));
+        assert.deepEqual(r, { ok: false, error: MENSAJES[nombre] }, `${nombre} con fallo en ${donde}`);
+      }
+    }
+  } finally {
+    console.error = silencio;
   }
   assert.deepEqual(escrituras, []);
 });
