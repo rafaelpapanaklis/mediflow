@@ -3,8 +3,9 @@
 // · rateLimit(req, 5).
 // · Buscar cuenta por resetTokenHash = sha256(token) Y resetTokenExpiry > ahora.
 //   No encontrada → 400 { error: "El enlace expiró o no es válido" }.
-// · Éxito: passwordHash nuevo, limpiar resetToken*, destroyAllSessions(accountId)
-//   (cierra sesiones viejas) → 200 { ok: true }. La UI manda a login.
+// · Éxito: passwordHash nuevo, limpiar resetToken*, emailVerified=true (el enlace
+//   llegó al buzón), destroyAllSessions(accountId) (cierra sesiones viejas)
+//   → 200 { ok: true }. La UI manda a login.
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
@@ -43,17 +44,21 @@ export async function POST(req: NextRequest) {
         resetTokenHash: sha256(token),
         resetTokenExpiry: { gt: new Date() },
       },
-      select: { id: true, passwordHash: true },
+      select: { id: true, passwordHash: true, emailVerified: true },
     });
 
     if (!account) {
       return NextResponse.json({ error: "El enlace expiró o no es válido" }, { status: 400 });
     }
 
-    // Si la cuenta venía INVITADA (sin contraseña), al fijarla el paciente probó
-    // que controla el email → la verificamos y limpiamos la marca de invitación.
-    // En un reset normal (passwordHash ya seteado) NO tocamos esos campos.
-    const wasInvited = account.passwordHash === null;
+    // Quien abre este enlace probó que controla el email (el token solo viaja al
+    // buzón) → la cuenta queda verificada y sin marca de invitación. Antes solo
+    // se hacía con la cuenta INVITADA (sin contraseña); ahora también con un
+    // registro pendiente que ya tenía contraseña. Seguridad (auditoría ola 3,
+    // «pre-secuestro»): si alguien registró antes el correo con SU contraseña, el
+    // dueño del buzón no puede verificar con la suya y esta es su salida — la
+    // contraseña del otro deja de valer y sus sesiones se cierran abajo.
+    const verificaAhora = !account.emailVerified;
 
     const passwordHash = await hashPassword(password);
     await prisma.patientAccount.update({
@@ -62,7 +67,9 @@ export async function POST(req: NextRequest) {
         passwordHash,
         resetTokenHash: null,
         resetTokenExpiry: null,
-        ...(wasInvited ? { emailVerified: true, invitedAt: null } : {}),
+        ...(verificaAhora
+          ? { emailVerified: true, invitedAt: null, verifyCodeHash: null, verifyCodeExpiry: null, verifyAttempts: 0 }
+          : {}),
       },
     });
 
