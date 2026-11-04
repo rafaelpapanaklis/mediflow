@@ -168,8 +168,18 @@ before(async () => {
     default: () => stripeDoble,
   });
   dobles.set(path.join(RAIZ, "src/lib/audit.ts"), {
+    // `audit_logs."userId"` tiene FK a `users`: el webhook no tiene usuario, y una fila con `userId = clinicId`
+    // se perdía en silencio. Aquí tampoco se guarda (mismo doble que cobro-rechazado.test.ts).
     logAudit: async (a: any) => {
+      if (!a.userId || a.userId === a.clinicId) return;
       bitacora.push(a);
+    },
+    // Actor externo (feat/seg-admin-auth, sql/audit-logs-actor-externo.sql): userId NULL con actorType patient|public|bot.
+    // Tras la unión, los descartes del diferencial firman así: estas pruebas leen su fila de aquí.
+    logAuditExterno: async (a: any) => {
+      assert.ok(["patient", "public", "bot"].includes(a.actor), `actor externo inválido: ${a.actor}`);
+      assert.equal("userId" in a, false, "un actor externo no lleva userId");
+      bitacora.push({ ...a, userId: null, actorType: a.actor });
     },
     extractAuditMeta: () => ({}),
   });
@@ -319,6 +329,10 @@ test("lead 6: el voucher del diferencial pagado DESPUÉS de comprar el año sigu
   const descarte = bitacora.find((b) => b.changes?._source?.after?.result === "not_applied");
   assert.ok(descarte, "el pago acreditado que no se aplica deja rastro para devolverlo");
   assert.equal(descarte.changes._source.after.reason, "period-changed");
+  // Unión con feat/seg-admin-auth: la fila se GUARDA (actor externo, sin userId que viole la FK) y firma Stripe.
+  assert.equal(descarte.actorType, "public");
+  assert.equal(descarte.userId, null);
+  assert.equal(descarte.origen, "Stripe (webhook)");
 });
 
 test("lead 6: igual con la fecha cotizada en la metadata (sesiones nuevas)", async () => {
