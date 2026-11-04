@@ -158,7 +158,7 @@ test("nº9 · un recordatorio solo lo contesta el número al que salió", async 
 // ── Revisión t12 (M1): números completos de 10 dígitos de otros países ──────
 // Dinamarca +45, Noruega +47, Singapur +65… miden 10 dígitos con el código de
 // país. Lo que llega de Meta (wa_id, externalId de hilos) NUNCA se rellena con
-// 52; un teléfono guardado con «+» se respeta tal cual.
+// 52. Un teléfono GUARDADO de 10 dígitos es mexicano aunque lleve «+» (v4).
 const DANES = "4521234567"; // wa_id de un móvil +45 21 23 45 67
 const NORUEGO = "4741234567"; // wa_id de un móvil +47 41 23 45 67
 
@@ -176,16 +176,16 @@ test("M1 · el wa_id danés o noruego NO es el paciente de Uruapan (452) ni el d
   assert.deepEqual((await findPatientsByWhatsAppPhone(CLINICA, numeroDeMeta("524741234567"))).map((p) => p.id), ["pacLagos"]);
 });
 
-test("M1 · un paciente extranjero guardado con «+» es su número completo, no un mexicano", async () => {
+test("M1 · el wa_id danés tampoco es la ficha guardada «+45 21 23 45 67», que se lee mexicana (v4)", async () => {
   pacientes = [
     { id: "pacDK", clinicId: CLINICA, phone: "+45 21 23 45 67", firstName: "Freja" },
     { id: "pacUruapan", clinicId: CLINICA, phone: "452 123 4567", firstName: "Lupe" },
   ];
   const { findPatientsByWhatsAppPhone } = await import("@/lib/whatsapp/inbox-log");
   const { numeroDeMeta } = await import("@/lib/whatsapp/bot/booking-parse");
-  assert.deepEqual((await findPatientsByWhatsAppPhone(CLINICA, numeroDeMeta(DANES))).map((p) => p.id), ["pacDK"]);
-  // Y el de Uruapan no se vuelve dueño de la ficha danesa.
-  assert.deepEqual((await findPatientsByWhatsAppPhone(CLINICA, numeroDeMeta("5214521234567"))).map((p) => p.id), ["pacUruapan"]);
+  assert.deepEqual(await findPatientsByWhatsAppPhone(CLINICA, numeroDeMeta(DANES)), []);
+  // Las dos fichas son el mismo número mexicano: las dos son del wa_id de Uruapan.
+  assert.deepEqual((await findPatientsByWhatsAppPhone(CLINICA, numeroDeMeta("5214521234567"))).map((p) => p.id), ["pacDK", "pacUruapan"]);
 });
 
 test("M1 · el hilo del wa_id danés no es el hilo del paciente de Uruapan (ni para buscarlo ni para los avisos)", async () => {
@@ -197,17 +197,21 @@ test("M1 · el hilo del wa_id danés no es el hilo del paciente de Uruapan (ni p
     createStatus: "READ", matchByLast10: true,
   });
   assert.notEqual(t.id, "thDanes", "el aviso no cae en el hilo del danés, cuyo bot lee ese historial");
-  // El paciente danés guardado con «+» sí encuentra su hilo.
-  assert.deepEqual((await findWhatsAppThreadsForPhone(CLINICA, "+45 21 23 45 67")).map((h) => h.id), ["thDanes"]);
+  // Ni con el «+» delante: guardado, «+45 21 23 45 67» es mexicano (v4) y su
+  // hilo es el de Uruapan que acaba de abrir el aviso, no el del danés.
+  const deUruapan = await findWhatsAppThreadsForPhone(CLINICA, "452 123 4567");
+  assert.deepEqual(await findWhatsAppThreadsForPhone(CLINICA, "+45 21 23 45 67"), deUruapan);
+  assert.ok(!deUruapan.some((h) => h.id === "thDanes"));
 });
 
-test("M1 · el bot no agenda al danés a nombre del paciente de Uruapan, y lo guarda con su código de país", async () => {
-  pacientes = [{ id: "pacUruapan", clinicId: CLINICA, phone: "4521234567", firstName: "Lupe" }];
-  const { findOrCreateWhatsAppPatient } = await import("@/lib/whatsapp/bot/booking-helpers");
-  const { numeroDeMeta } = await import("@/lib/whatsapp/bot/booking-parse");
-  const r = await findOrCreateWhatsAppPatient(CLINICA, numeroDeMeta(DANES), "Freja Jensen");
-  assert.equal(r?.id, "pacNuevo");
-  assert.equal(creados[0]?.phone, "+4521234567", "se guarda con el «+»: la próxima vez se le reconoce");
+test("M1 · el wa_id danés no tiene forma de teléfono guardado: sin número, el bot no lo agenda a nombre de nadie", async () => {
+  const { numeroDeMeta, claveWhatsApp, claveRemitente } = await import("@/lib/whatsapp/bot/booking-parse");
+  assert.equal(numeroDeMeta(DANES), "", "«+4521234567» guardado sería Uruapan");
+  assert.equal(numeroDeMeta(NORUEGO), "");
+  // Para todo lo demás, el número de Meta guardado se vuelve a leer igual.
+  for (const waId of ["5214521234567", "524521234567", "13312345678", "447911123456", "34612345678"]) {
+    assert.equal(claveWhatsApp(numeroDeMeta(waId)), claveRemitente(waId), waId);
+  }
 });
 
 test("M1 · un recordatorio de Uruapan o de Lagos no lo contesta el danés ni el noruego", async () => {
@@ -229,52 +233,113 @@ test("M1 · claveRemitente y claveWhatsApp con código de país", async () => {
   assert.equal(claveRemitente("5214521234567"), "524521234567");
   assert.equal(claveRemitente("524521234567"), "524521234567");
   assert.equal(claveRemitente("13312345678"), "13312345678");
-  assert.equal(numeroDeMeta(DANES), "+4521234567");
+  assert.equal(numeroDeMeta("5214521234567"), "+524521234567");
   assert.equal(numeroDeMeta(""), "");
-  assert.equal(claveWhatsApp("+45 21 23 45 67"), DANES);
-  assert.equal(claveWhatsApp("0045 21 23 45 67"), DANES);
+  // Guardados (v4): 10 dígitos con «+»/«00» son México.
+  assert.equal(claveWhatsApp("+45 21 23 45 67"), "524521234567");
+  assert.equal(claveWhatsApp("0045 21 23 45 67"), "524521234567");
   assert.equal(claveWhatsApp("452 123 4567"), "524521234567");
   assert.equal(claveWhatsApp("+52 1 452 123 4567"), "524521234567");
   assert.equal(claveWhatsApp("+52 452 123 4567"), "524521234567");
 });
 
-// ── Revisión t12 (dh1): el ENVÍO respeta el código de país ─────────────────
-test("dh1 · normalizeMxWhatsAppPhone: con «+»/«00» no se antepone 52 (el danés no recibe en un número mexicano)", async () => {
+// ── Revisión t12 (DM2, v4): «+» o «00» con 10 dígitos guardado es México ──
+// Rafael eligió la opción (b): en producción hay 11 teléfonos guardados como
+// «+656 123 4567» (Ciudad Juárez con el «+» por costumbre) y ninguno empieza
+// como Dinamarca, Noruega, Singapur o Cuba. Con la v3 esos pacientes recibían
+// en Singapur (+65 6123 4567) y su hilo y su wa_id dejaban de casar.
+const JUAREZ = "+656 123 4567";
+
+test("DM2 · el envío a «+656 123 4567» sale a Ciudad Juárez (52 656…), como en producción", async () => {
   const { normalizeMxWhatsAppPhone } = await import("@/lib/whatsapp");
-  assert.equal(normalizeMxWhatsAppPhone("+45 21 23 45 67"), "4521234567");
-  assert.equal(normalizeMxWhatsAppPhone("0045 21 23 45 67"), "4521234567");
-  assert.equal(normalizeMxWhatsAppPhone("+65 8123 4567"), "6581234567");
-  // México, igual que siempre.
+  assert.equal(normalizeMxWhatsAppPhone(JUAREZ), "526561234567");
+  assert.equal(normalizeMxWhatsAppPhone("+33 1234 5678"), "523312345678", "Guadalajara, no Francia");
+  assert.equal(normalizeMxWhatsAppPhone("+81 1234 5678"), "528112345678", "Monterrey, no Japón");
+  assert.equal(normalizeMxWhatsAppPhone("0045 21 23 45 67"), "524521234567");
+  // Lo de siempre.
   assert.equal(normalizeMxWhatsAppPhone("33 1234 5678"), "523312345678");
   assert.equal(normalizeMxWhatsAppPhone("+52 33 1234 5678"), "523312345678");
   assert.equal(normalizeMxWhatsAppPhone("+52 1 33 1234 5678"), "523312345678");
   assert.equal(normalizeMxWhatsAppPhone("5213312345678"), "523312345678");
   assert.equal(normalizeMxWhatsAppPhone("+1 (331) 234-5678"), "13312345678");
+  // El «00» es el prefijo internacional, no parte del número.
+  assert.equal(normalizeMxWhatsAppPhone("0052 33 1234 5678"), "523312345678");
+  assert.equal(normalizeMxWhatsAppPhone("001 331 234 5678"), "13312345678");
 });
 
-test("dh1 · whatsappThreadKey: el hilo del danés no es el del paciente de Uruapan", async () => {
+test("DM2 · la clave de hilo de «+656 123 4567» es la de Meta para Juárez (521 656…)", async () => {
   const { whatsappThreadKey } = await import("@/lib/whatsapp/send-and-log");
-  assert.equal(whatsappThreadKey("+45 21 23 45 67"), "4521234567");
-  assert.notEqual(whatsappThreadKey("+45 21 23 45 67"), whatsappThreadKey("452 123 4567"));
-  assert.equal(whatsappThreadKey("452 123 4567"), "5214521234567");
-  assert.equal(whatsappThreadKey("+52 452 123 4567"), "5214521234567");
-  assert.equal(whatsappThreadKey("+52 1 452 123 4567"), "5214521234567");
+  assert.equal(whatsappThreadKey(JUAREZ), "5216561234567");
+  assert.equal(whatsappThreadKey("656 123 4567"), "5216561234567");
+  assert.equal(whatsappThreadKey("+52 656 123 4567"), "5216561234567");
+  assert.equal(whatsappThreadKey("+52 1 656 123 4567"), "5216561234567");
   assert.equal(whatsappThreadKey("+1 331 234 5678"), "13312345678");
+  assert.equal(whatsappThreadKey("0052 33 1234 5678"), "5213312345678");
+  assert.equal(whatsappThreadKey("001 331 234 5678"), "13312345678");
 });
 
-test("dh1 · un aviso al paciente danés (guardado con «+») no cae en el hilo del paciente de Uruapan", async () => {
-  hilos.push({ id: "thUruapan", clinicId: CLINICA, channel: "WHATSAPP", externalId: "5214521234567", patientId: "pacUruapan", botActive: true, botState: null, lastMessageAt: new Date() });
-  const { upsertWhatsAppThread } = await import("@/lib/whatsapp/inbox-log");
+test("DM2 · la paciente de Juárez guardada con «+» se reconoce por su wa_id (521… y 52…)", async () => {
+  pacientes = [{ id: "pacJuarez", clinicId: CLINICA, phone: JUAREZ, firstName: "Sofía" }];
+  const { findPatientsByWhatsAppPhone } = await import("@/lib/whatsapp/inbox-log");
+  const { numeroDeMeta, claveWhatsApp } = await import("@/lib/whatsapp/bot/booking-parse");
+  assert.equal(claveWhatsApp(JUAREZ), "526561234567");
+  for (const waId of ["5216561234567", "526561234567"]) {
+    assert.deepEqual((await findPatientsByWhatsAppPhone(CLINICA, numeroDeMeta(waId))).map((p) => p.id), ["pacJuarez"], waId);
+  }
+  // Y Singapur (+65 6123 4567, wa_id de 10 dígitos) no es ella.
+  assert.deepEqual(await findPatientsByWhatsAppPhone(CLINICA, numeroDeMeta("6561234567")), []);
+});
+
+test("DM2 · su hilo de siempre se encuentra (13, 12 dígitos) y un aviso no abre otro", async () => {
+  const { findWhatsAppThreadsForPhone, upsertWhatsAppThread } = await import("@/lib/whatsapp/inbox-log");
   const { whatsappThreadKey } = await import("@/lib/whatsapp/send-and-log");
-  const t = await upsertWhatsAppThread({
-    clinicId: CLINICA, externalId: whatsappThreadKey("+45 21 23 45 67"), now: new Date(), createSubject: "WhatsApp · Freja",
-    createStatus: "READ", matchByLast10: true,
-  });
-  assert.notEqual(t.id, "thUruapan");
-  // Y el aviso al de Uruapan sí cae en su hilo.
-  const u = await upsertWhatsAppThread({
-    clinicId: CLINICA, externalId: whatsappThreadKey("452 123 4567"), now: new Date(), createSubject: "WhatsApp · Lupe",
-    createStatus: "READ", matchByLast10: true,
-  });
-  assert.equal(u.id, "thUruapan");
+  for (const externalId of ["5216561234567", "526561234567"]) {
+    hilos = [{ id: "thJuarez", clinicId: CLINICA, channel: "WHATSAPP", externalId, patientId: "pacJuarez", botActive: true, botState: null, lastMessageAt: new Date() }];
+    assert.deepEqual((await findWhatsAppThreadsForPhone(CLINICA, JUAREZ)).map((h) => h.id), ["thJuarez"], externalId);
+    const t = await upsertWhatsAppThread({
+      clinicId: CLINICA, externalId: whatsappThreadKey(JUAREZ), now: new Date(), createSubject: "WhatsApp · Sofía",
+      createStatus: "READ", matchByLast10: true,
+    });
+    assert.equal(t.id, "thJuarez", externalId);
+    assert.equal(hilos.length, 1, "no se abrió un hilo duplicado");
+  }
+});
+
+test("DM2 · las tres formas de hilo de producción (13, 12 y 11 dígitos) se siguen encontrando sin duplicar", async () => {
+  const { upsertWhatsAppThread, findWhatsAppThreadsForPhone } = await import("@/lib/whatsapp/inbox-log");
+  const { whatsappThreadKey } = await import("@/lib/whatsapp/send-and-log");
+  const casos: Array<[string, string[]]> = [
+    ["5213312345678", ["33 1234 5678", "+52 33 1234 5678", "+3312345678", "0052 33 1234 5678", "+52 52 33 1234 5678"]],
+    ["523312345678", ["33 1234 5678", "+52 1 33 1234 5678", "+3312345678", "5213312345678"]],
+    ["13312345678", ["+1 (331) 234-5678", "13312345678", "001 331 234 5678"]],
+  ];
+  for (const [externalId, telefonos] of casos) {
+    for (const tel of telefonos) {
+      hilos = [{ id: "thViejo", clinicId: CLINICA, channel: "WHATSAPP", externalId, patientId: "pac", botActive: true, botState: null, lastMessageAt: new Date() }];
+      assert.deepEqual((await findWhatsAppThreadsForPhone(CLINICA, tel)).map((h) => h.id), ["thViejo"], `${externalId} ← ${tel}`);
+      const t = await upsertWhatsAppThread({
+        clinicId: CLINICA, externalId: whatsappThreadKey(tel), now: new Date(), createSubject: "WhatsApp",
+        createStatus: "READ", matchByLast10: true,
+      });
+      assert.equal(t.id, "thViejo", `${externalId} ← ${tel}`);
+      assert.equal(hilos.length, 1, `${externalId} ← ${tel}: sin hilo duplicado`);
+    }
+  }
+});
+
+test("DM2 · su recordatorio lo contesta ella desde su wa_id (con y sin enviadoA)", async () => {
+  const { recordatoriosDeEseNumero } = await import("@/lib/whatsapp/recordatorio-destino");
+  const { claveWhatsApp } = await import("@/lib/whatsapp/bot/booking-parse");
+  const viejo = { id: "r1", payload: null, appointment: { patient: { phone: JUAREZ } } };
+  const nuevo = { id: "r2", payload: { enviadoA: claveWhatsApp(JUAREZ) }, appointment: { patient: { phone: JUAREZ } } };
+  assert.deepEqual(recordatoriosDeEseNumero([viejo, nuevo], "5216561234567").map((r) => r.id), ["r1", "r2"]);
+  assert.deepEqual(recordatoriosDeEseNumero([viejo, nuevo], "6561234567"), [], "Singapur no");
+});
+
+test("DM2 · «+52» con más de 12 dígitos sigue siendo el mexicano de los últimos 10 (como el hilo)", async () => {
+  const { claveWhatsApp } = await import("@/lib/whatsapp/bot/booking-parse");
+  const { whatsappThreadKey } = await import("@/lib/whatsapp/send-and-log");
+  assert.equal(claveWhatsApp("+52 044 33 1234 5678"), "523312345678");
+  assert.equal(claveWhatsApp("+52 01 33 1234 5678"), "523312345678");
+  assert.equal(whatsappThreadKey("+52 044 33 1234 5678"), "5213312345678");
 });

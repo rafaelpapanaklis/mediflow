@@ -456,7 +456,9 @@ async function resolvePhone(input: BotTurnInput, deps: BookingDeps): Promise<str
   if (input.patient?.phone) return input.patient.phone;
   // El externalId del hilo es el wa_id de Meta, completo: va con su «+» para que
   // la búsqueda de dueños no lo rellene con 52 (nº9) y, si el bot crea al
-  // paciente, su teléfono quede guardado con el código de país.
+  // paciente, su teléfono quede guardado con el código de país. Un wa_id
+  // extranjero de 10 dígitos no tiene forma de teléfono guardado (sería
+  // mexicano): sin número, el bot pasa la conversación al consultorio.
   const externalId = await deps.findThreadExternalId(input.threadId, input.clinicId);
   return externalId ? numeroDeMeta(externalId) || null : null;
 }

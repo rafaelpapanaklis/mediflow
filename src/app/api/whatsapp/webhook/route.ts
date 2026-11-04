@@ -431,8 +431,9 @@ async function procesarMensajeEntrante(value: any, msg: any): Promise<void> {
   // bot; lo que cambia es que la búsqueda del recordatorio ya no se queda con
   // él: si la cita era de otro hermano, antes no se encontraba nada y el
   // "CONFIRMAR" moría en silencio.
-  // nº9: `from` es el wa_id completo; va con su «+» para que un número
-  // extranjero de 10 dígitos (Dinamarca, Noruega…) no se lea como mexicano.
+  // nº9: `from` es el wa_id completo; va con su «+». Un wa_id extranjero de 10
+  // dígitos (Dinamarca, Noruega…) da "" y no es ningún paciente: leído como
+  // teléfono guardado sería el mexicano de Uruapan o de Lagos.
   const phoneOwners = await findPatientsByWhatsAppPhone(clinic.id, numeroDeMeta(from));
   const patient = phoneOwners[0] ?? null;
 

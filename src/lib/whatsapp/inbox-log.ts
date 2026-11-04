@@ -71,7 +71,8 @@ export async function findPatientsByWhatsAppPhone(
   // Antes un +1 que terminara en los mismos 10 dígitos que un paciente mexicano
   // era ese paciente: confirmaba o cancelaba sus citas y veía su saldo.
   // ⚠ `phone` se lee como teléfono GUARDADO: un número de Meta (wa_id) llega
-  // como `numeroDeMeta(from)`, con su «+», para que nadie lo rellene con 52.
+  // como `numeroDeMeta(from)`, con su «+», o vacío si es un wa_id de 10 dígitos
+  // de otro país (que leído como guardado sería mexicano).
   const clave = claveWhatsApp(phone);
   try {
     // `firstName` (ws1-t3/#17): el bot saluda al paciente por su nombre.
@@ -365,8 +366,7 @@ export async function upsertWhatsAppThread(
       // hilos guardados es un número de Meta: `claveRemitente`, sin rellenar
       // con 52 (el hilo de un wa_id danés «4521234567» no es el de «452 123 4567»).
       // El `externalId` que llega es una clave de hilo (`whatsappThreadKey`), en
-      // el mismo formato de Meta: también con `claveRemitente` (revisión t12,
-      // dh1: la de un «+45 21 23 45 67» es «4521234567» y no lleva 52).
+      // el mismo formato de Meta: también con `claveRemitente`.
       const clave = claveRemitente(externalId);
       const match = candidates.find((t) => claveRemitente(t.externalId) === clave);
       if (match) {

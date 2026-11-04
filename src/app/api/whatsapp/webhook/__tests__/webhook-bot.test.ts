@@ -673,4 +673,20 @@ describe("nº9 — la respuesta a un recordatorio cuenta solo desde el número a
     await enviar("cancelar");
     assert.equal(cancelo(), true);
   });
+
+  // Revisión t12 (DM2, v4): un teléfono mexicano guardado con «+» y sin 52
+  // («+656 123 4567», Ciudad Juárez) sigue siendo México, como en producción.
+  it("la paciente de Juárez guardada como «+656 123 4567» cancela su recordatorio viejo (sin enviadoA) desde su wa_id", async () => {
+    TEL = "5216561234567";
+    e.recordatorios = [recordatorio({ appointment: { ...recordatorio().appointment, patient: { phone: "+656 123 4567" } } })];
+    await enviar("cancelar");
+    assert.equal(cancelo(), true);
+  });
+
+  it("un wa_id de Singapur de 10 dígitos (+65 6123 4567) no cancela la cita de la paciente de Juárez", async () => {
+    TEL = "6561234568";
+    e.recordatorios = [recordatorio({ appointment: { ...recordatorio().appointment, patient: { phone: "+656 123 4568" } } })];
+    await enviar("cancelar");
+    assert.equal(cancelo(), false);
+  });
 });
