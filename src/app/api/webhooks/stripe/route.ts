@@ -1442,7 +1442,10 @@ async function activatePlatformSubscription(
   // Periodo nuevo: las sesiones del diferencial cotizadas sobre el anterior ya no valen (ola 2b, lead 6). Nunca lanza.
   // Va también en una reentrega, igual que las sedes: es idempotente (solo expira las que sigan abiertas) y completa
   // lo que una primera entrega muerta a medias no llegó a hacer.
-  await expirarDiferencialesAbiertos(getStripeSafe(), before?.stripeCustomerId, clinicId);
+  // Solo las que el webhook descartaría (revisión t8 de la unión, m1): las cotizadas sobre el periodo que la clínica
+  // tiene AHORA siguen abiertas. Ese periodo es `next` si esta entrega escribió; en una reentrega, el que ya tenía.
+  const pagadoHastaAhora = activacion.aplicada ? next : manualPaidUntil(before ?? {});
+  await expirarDiferencialesAbiertos(getStripeSafe(), before?.stripeCustomerId, clinicId, pagadoHastaAhora);
   // Lo demás NO se repite: el marcado de la factura de tarjeta decide con el estado de ANTES del pago
   // (`estabaSuspendida`), y en una reentrega `before` ya es la clínica activada, así que podría pagar fuera de
   // Stripe una factura de un mes suspendido en vez de anularla. Si la primera entrega murió justo entre escribir la

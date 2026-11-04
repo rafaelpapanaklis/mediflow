@@ -37,6 +37,8 @@ let idEvento = 0;
 let avisosAdmin: Array<{ clave: string; clinicId: string; aviso: any }>;
 let antesDeEscribirElPlan: null | (() => void);
 let registrosCorreo: Map<string, any>;
+/** stripe_activaciones_plataforma (feat/seg-admin-auth, nº13): las sesiones de checkout que ya activaron un periodo. */
+let activaciones: Set<string>;
 
 function coincide(fila: any, where: any): boolean {
   return Object.entries(where ?? {}).every(([k, v]: [string, any]) => {
@@ -51,7 +53,20 @@ function coincide(fila: any, where: any): boolean {
   });
 }
 
+const sqlDe = (q: TemplateStringsArray | string) => (typeof q === "string" ? q : q.join("?")).replace(/\s+/g, " ").trim();
 const prismaBase: any = {
+  // SOLO el SQL crudo del candado de activaciones (activacion-unica.ts); cualquier otro revienta.
+  $queryRaw: async (q: TemplateStringsArray) => {
+    if (!/to_regclass\('public\.stripe_activaciones_plataforma'\)/.test(sqlDe(q))) throw new Error(`SQL crudo no esperado: ${sqlDe(q)}`);
+    return [{ existe: true }];
+  },
+  $executeRaw: async (q: TemplateStringsArray, sessionId: string) => {
+    if (!/^INSERT INTO "stripe_activaciones_plataforma"/.test(sqlDe(q))) throw new Error(`SQL crudo no esperado: ${sqlDe(q)}`);
+    if (activaciones.has(sessionId)) return 0;
+    activaciones.add(sessionId);
+    return 1;
+  },
+  $transaction: async (f: (tx: any) => Promise<unknown>) => f(prismaDoble),
   clinic: {
     findUnique: async ({ where, select }: any) => {
       const c = clinicas.get(where.id);
@@ -270,6 +285,7 @@ beforeEach(() => {
   avisosAdmin = [];
   antesDeEscribirElPlan = null;
   registrosCorreo = new Map();
+  activaciones = new Set();
 });
 
 const clinica = () => clinicas.get(CLINIC);
@@ -459,6 +475,25 @@ test("lead 6: al activar un periodo nuevo se expiran las sesiones ABIERTAS del d
   ];
   assert.equal(await entregar("checkout.session.async_payment_succeeded", renovacionAnual()), 200);
   assert.deepEqual(sesionesExpiradas, ["cs_diff_abierta"]);
+});
+
+test("m1 (t8, unión): una REENTREGA tardía de la activación expira solo lo cotizado sobre el periodo viejo, no el cambio de plan recién abierto", async () => {
+  // 1) La activación se aplica: el periodo pasa de MANANA a un año después.
+  assert.equal(await entregar("checkout.session.async_payment_succeeded", renovacionAnual()), 200);
+  const vigente = clinica().trialEndsAt as Date;
+  assert.ok(vigente.getTime() > ahora + 300 * DIA);
+  // 2) Entre tanto, tres sesiones abiertas del diferencial: una cotizada sobre el periodo NUEVO (la que la clínica
+  //    acaba de abrir), una sobre el VIEJO y una de antes de `metadata.paidUntil`.
+  sesionesAbiertas = [
+    { id: "cs_diff_vigente", customer: CUS, status: "open", metadata: { kind: "plan-upgrade-diff", clinicId: CLINIC, paidUntil: vigente.toISOString() } },
+    { id: "cs_diff_vieja", customer: CUS, status: "open", metadata: { kind: "plan-upgrade-diff", clinicId: CLINIC, paidUntil: MANANA.toISOString() } },
+    { id: "cs_diff_sin_fecha", customer: CUS, status: "open", metadata: { kind: "plan-upgrade-diff", clinicId: CLINIC, daysRemaining: "2" } },
+  ];
+  // 3) Stripe reentrega la MISMA sesión de la activación (500 tardío o «Resend»).
+  assert.equal(await entregar("checkout.session.async_payment_succeeded", renovacionAnual()), 200);
+  assert.equal((clinica().trialEndsAt as Date).getTime(), vigente.getTime(), "la reentrega no suma otro periodo");
+  assert.deepEqual(sesionesExpiradas.sort(), ["cs_diff_sin_fecha", "cs_diff_vieja"], "la cotizada sobre el periodo vigente sigue abierta");
+  assert.equal(sesionesAbiertas.find((x) => x.id === "cs_diff_vigente").status, "open");
 });
 
 test("lead 6: si Stripe no deja expirar, la activación igual se completa (200)", async () => {

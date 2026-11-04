@@ -43,11 +43,20 @@ export function finDelPeriodoCotizado(
  * lanza: el guardia de verdad es el del webhook al aplicar el pago; esto solo
  * evita que se pague algo que se va a descartar. Un voucher OXXO ya emitido o
  * una transferencia SPEI en curso no son sesiones «open» y no se tocan aquí.
+ *
+ * `pagadoHasta` = el «pagado hasta» de la clínica YA escrita. Solo se expira lo
+ * que el webhook descartaría después (revisión t8 de la unión, m1): una sesión
+ * cotizada sobre el periodo VIGENTE (`metadata.paidUntil` ≥ pagadoHasta, la
+ * condición de `period-changed` al revés) se deja abierta. Si no, una reentrega
+ * tardía de la activación le tumbaba a la clínica el cambio de plan que acababa
+ * de abrir. Sin `metadata.paidUntil` (sesiones de antes) o sin `pagadoHasta`,
+ * se expiran como siempre.
  */
 export async function expirarDiferencialesAbiertos(
   stripe: Stripe | null,
   customerId: string | null | undefined,
   clinicId: string,
+  pagadoHasta: Date | null = null,
 ): Promise<string[]> {
   if (!stripe || !customerId || !clinicId) return [];
   const expiradas: string[] = [];
@@ -55,6 +64,7 @@ export async function expirarDiferencialesAbiertos(
     const abiertas = await stripe.checkout.sessions.list({ customer: customerId, status: "open", limit: 100 });
     for (const s of abiertas.data) {
       if (s.metadata?.kind !== PLAN_UPGRADE_DIFF_KIND || s.metadata?.clinicId !== clinicId) continue;
+      if (cotizadaSobreElPeriodoVigente(s.metadata, pagadoHasta)) continue;
       try {
         await stripe.checkout.sessions.expire(s.id);
         expiradas.push(s.id);
@@ -66,6 +76,16 @@ export async function expirarDiferencialesAbiertos(
     console.error("[billing] no se pudieron leer las sesiones abiertas del diferencial", clinicId, e);
   }
   return expiradas;
+}
+
+/** ¿La sesión se cotizó sobre el periodo que la clínica tiene HOY? Solo con la fecha exacta de la metadata. */
+function cotizadaSobreElPeriodoVigente(
+  metadata: Record<string, string | undefined> | null | undefined,
+  pagadoHasta: Date | null,
+): boolean {
+  if (!metadata?.paidUntil || !pagadoHasta || Number.isNaN(pagadoHasta.getTime())) return false;
+  const cotizadoHasta = finDelPeriodoCotizado(metadata, null);
+  return !!cotizadoHasta && cotizadoHasta.getTime() >= pagadoHasta.getTime();
 }
 
 /**

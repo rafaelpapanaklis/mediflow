@@ -456,7 +456,7 @@ test("la escritura del /admin vuelve a exigir sesión de administrador", () => {
   // Una server action es un POST que se alcanza sin pasar por ningún
   // layout: confiar en el layout dejaría la cuota escribible por cualquiera.
   const actions = crudo("src", "app", "admin", "institutos", "actions.ts");
-  assert.match(actions, /const admin = await getAdminSession\(\);/);
+  assert.match(actions, /import \{ sesionAdminDeAccion \} from "@\/lib\/admin-page-guard";[\s\S]*const admin = await sesionAdminDeAccion\(\);/);
   assert.match(actions, /if \(!admin\) return \{ ok: false, error: "No autorizado" \};/);
   // Y deja rastro: subir una cuota cambia lo que se le factura a un cliente.
   assert.match(actions, /ADMIN_AUDIT/);
