@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getResolvedPlan } from "@/lib/plans";
-import { cfdiPeriodFor, cfdiOverage, CFDI_DEFAULT_TZ, type CfdiOverage } from "@/lib/cfdi-quota";
+import { cfdiPeriodFor, cfdiOverage, type CfdiOverage } from "@/lib/cfdi-quota";
 import {
   resolveOverageBilling,
   chargeOverageOffSession,
@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
   // Periodo en curso en horario de México (el cron corre 07:00 UTC día 1 = 01:00
   // MX día 1). Se cierran TODOS los periodos ANTERIORES sin cobrar (catch-up si
   // alguna corrida se saltó). "YYYY-MM" comparado como texto = orden cronológico.
-  const currentPeriod = cfdiPeriodFor(now, CFDI_DEFAULT_TZ);
+  const currentPeriod = cfdiPeriodFor(now);
 
   let scanned = 0, noOverage = 0, invoiceItems = 0, charged = 0, chargeFailed = 0;
   let manual = 0, errors = 0;

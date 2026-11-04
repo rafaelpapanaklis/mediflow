@@ -51,6 +51,17 @@ export async function POST(req: NextRequest, props: Params) {
   if (!r.ok) {
     // `strict: false` no estrecha la unión por `ok`: se nombra el lado del fallo.
     const fallo = r as Extract<ResultadoCierre, { ok: false }>;
+    // Seguridad ola 2b: pagos con su propio CFDI (no llenan cfdiUuid); misma respuesta que /refund y /cancel.
+    if (fallo.codigo === "cfdi_por_pago") {
+      return NextResponse.json(
+        {
+          code: "CFDI_POR_PAGO_VIGENTE",
+          error: `La nota ${(fallo.folios ?? []).join(", ")} tiene pagos con su propio CFDI timbrado. Cerrar el plan pasaría ese dinero al saldo a favor con el CFDI vigente, y cancelar ese CFDI ante el SAT todavía no se puede hacer desde DaleControl: escríbenos a soporte con el folio.`,
+          folios: fallo.folios ?? [],
+        },
+        { status: 409 },
+      );
+    }
     if (fallo.codigo === "nota_timbrada") {
       return NextResponse.json(
         {

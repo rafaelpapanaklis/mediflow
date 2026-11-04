@@ -421,7 +421,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     await marcarAmbiente(prisma, { clinicId: ctx!.clinicId, uuid: result.uuid, ambiente: facturapiEnv() });
 
     // Metering del cupo CFDI: mismo contador que la factura completa.
-    const period = cfdiPeriodFor(new Date(), clinic.timezone);
+    const period = cfdiPeriodFor(new Date());
     const usage = await prisma.cfdiUsage.upsert({
       where:  { clinicId_period: { clinicId: ctx!.clinicId, period } },
       create: { clinicId: ctx!.clinicId, period, stamped: 1 },

@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { chat } from "@/lib/integrations/claude";
-import { aiTokenLimitError, addAiTokens } from "@/lib/ai-tokens";
+import { liquidarCupoIa, reservarCupoIa, soltarCupoIa, techoDeTokens } from "@/lib/ai-tokens";
 import { recordUsageNoCharge } from "@/lib/ai-billing/record-usage";
 import { AI_FEATURE_AI_INSIGHT } from "@/lib/ai-billing/types";
 import { cortarSiIaApagada } from "@/lib/ai-billing/interruptores.server";
@@ -24,11 +24,12 @@ export const dynamic = "force-dynamic";
  * + output ~200 tokens). Negligible para el caso de uso pero la clínica
  * podrá desactivar IA en BASIC plan en el futuro (no implementado aún).
  *
- * Gasto (ws1-t1): descuenta del cupo del plan (addAiTokens) como siempre y
+ * Gasto (ws1-t1): descuenta del cupo del plan (reserva antes, lo real después) y
  * además deja su AiUsageEvent con el costo real (billedCents = 0) para que la
  * Tesorería lo vea. La clínica puede apagarlo en Saldo de IA.
  */
 const MODEL = "claude-sonnet-4-6";
+const MAX_TOKENS = 400;
 
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
@@ -50,26 +51,33 @@ export async function POST(req: NextRequest) {
   const apagada = await cortarSiIaApagada(user.clinicId, "ai_insight");
   if (apagada) return apagada;
 
-  const aiErr = await aiTokenLimitError(user.clinicId);
-  if (aiErr) return NextResponse.json(aiErr, { status: 429 });
+  const contenido = `Datos de la clínica (JSON):\n\n${JSON.stringify(body.contextData, null, 2)}\n\nPregunta: ${body.question}`;
 
-  const result = await chat({
-    model: MODEL,
-    system: SYSTEM_PROMPT,
-    messages: [
-      {
-        role: "user",
-        content: `Datos de la clínica (JSON):\n\n${JSON.stringify(body.contextData, null, 2)}\n\nPregunta: ${body.question}`,
-      },
-    ],
-    maxTokens: 400,
-  });
+  // Seguridad ola 2b (lead 18): el cupo del plan se RESERVA antes de llamar
+  // (el techo de esta llamada), no solo se lee: una ráfaga a la vez ya no pasa
+  // toda, ni una llamada enorme a un token del tope.
+  const { reserva, error: sinCupo } = await reservarCupoIa(user.clinicId, techoDeTokens([SYSTEM_PROMPT, contenido], MAX_TOKENS));
+  if (sinCupo || !reserva) return NextResponse.json(sinCupo, { status: 429 });
+
+  let result: Awaited<ReturnType<typeof chat>>;
+  try {
+    result = await chat({
+      model: MODEL,
+      system: SYSTEM_PROMPT,
+      messages: [{ role: "user", content: contenido }],
+      maxTokens: MAX_TOKENS,
+    });
+  } catch (e) {
+    await soltarCupoIa(reserva);
+    throw e;
+  }
 
   if (result.error) {
+    await soltarCupoIa(reserva);
     return NextResponse.json({ error: result.error }, { status: 502 });
   }
 
-  await addAiTokens(user.clinicId, (result.inputTokens ?? 0) + (result.outputTokens ?? 0), "ai_insight", user.id);
+  await liquidarCupoIa(reserva, (result.inputTokens ?? 0) + (result.outputTokens ?? 0), "ai_insight", user.id);
 
   // Costo real para la Tesorería. No cobra nada (el cupo ya se movió arriba) y
   // se traga sus fallos: la respuesta sigue aunque no se registre.

@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { chat } from "@/lib/integrations/claude";
-import { aiTokenLimitError, addAiTokens } from "@/lib/ai-tokens";
+import { liquidarCupoIa, reservarCupoIa, soltarCupoIa, techoDeTokens, type ReservaCupoIa } from "@/lib/ai-tokens";
 import { recordUsageNoCharge } from "@/lib/ai-billing/record-usage";
 import { AI_FEATURE_NO_SHOW_PREDICTION } from "@/lib/ai-billing/types";
 import { funcionIaApagada } from "@/lib/ai-billing/interruptores.server";
@@ -31,6 +31,7 @@ export const dynamic = "force-dynamic";
  * cuando la IA fallaba.
  */
 const AI_MODEL = "claude-sonnet-4-6";
+const MAX_TOKENS_IA = 300;
 
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
@@ -174,43 +175,51 @@ export async function POST(req: NextRequest) {
   // IA refinement (opcional, si key disponible). Si Claude falla
   // mantenemos baseline. Apagada por la clínica = baseline sin llamar.
   const iaApagada = await funcionIaApagada(clinicId, "no_show_prediction");
-  if (!iaApagada) {
-    const aiErr = await aiTokenLimitError(clinicId);
-    if (aiErr) return NextResponse.json(aiErr, { status: 429 });
-  }
-
-  const aiResult: ChatResult = iaApagada ? { text: "", error: "ia_apagada" } : await chat({
-    model: AI_MODEL,
-    system: AI_SYSTEM_PROMPT,
-    messages: [
-      {
-        role: "user",
-        content: JSON.stringify({
-          patient: {
-            ageYears: appt.patient?.dob
-              ? Math.floor((Date.now() - appt.patient.dob.getTime()) / (365.25 * 86400000))
-              : null,
-            totalPastAppointments: totalPast,
-            pastNoShows,
-            pastCancelled,
-            pastCompleted,
-            daysSinceLastVisit,
-          },
-          appointment: {
-            type: appt.type,
-            dayOfWeek: dowLabel,
-            hour,
-            daysFromNow: Math.round((appt.startsAt.getTime() - Date.now()) / 86400000),
-          },
-          clinicSlotNoShowRate,
-          baselineProb,
-        }),
-      },
-    ],
-    maxTokens: 300,
+  const contenidoIa = JSON.stringify({
+    patient: {
+      ageYears: appt.patient?.dob
+        ? Math.floor((Date.now() - appt.patient.dob.getTime()) / (365.25 * 86400000))
+        : null,
+      totalPastAppointments: totalPast,
+      pastNoShows,
+      pastCancelled,
+      pastCompleted,
+      daysSinceLastVisit,
+    },
+    appointment: {
+      type: appt.type,
+      dayOfWeek: dowLabel,
+      hour,
+      daysFromNow: Math.round((appt.startsAt.getTime() - Date.now()) / 86400000),
+    },
+    clinicSlotNoShowRate,
+    baselineProb,
   });
 
-  await addAiTokens(clinicId, (aiResult.inputTokens ?? 0) + (aiResult.outputTokens ?? 0), "no_show_prediction", user.id);
+  // Seguridad ola 2b (v2): el cupo se RESERVA antes de llamar (el techo de esta
+  // llamada), no solo se lee: una ráfaga ya no entra entera. Mismo 429.
+  let reserva: ReservaCupoIa | null = null;
+  if (!iaApagada) {
+    const r = await reservarCupoIa(clinicId, techoDeTokens([AI_SYSTEM_PROMPT, contenidoIa], MAX_TOKENS_IA));
+    if (r.error || !r.reserva) return NextResponse.json(r.error, { status: 429 });
+    reserva = r.reserva;
+  }
+
+  let aiResult: ChatResult;
+  try {
+    aiResult = iaApagada ? { text: "", error: "ia_apagada" } : await chat({
+      model: AI_MODEL,
+      system: AI_SYSTEM_PROMPT,
+      messages: [{ role: "user", content: contenidoIa }],
+      maxTokens: MAX_TOKENS_IA,
+    });
+  } catch (e) {
+    await soltarCupoIa(reserva);
+    throw e;
+  }
+
+  // Lo real (0 si falló o es mock: entonces solo suelta lo apartado).
+  if (reserva) await liquidarCupoIa(reserva, (aiResult.inputTokens ?? 0) + (aiResult.outputTokens ?? 0), "no_show_prediction", user.id);
 
   // Costo real para la Tesorería (no cobra; se traga sus fallos). Sin tokens
   // —apagada, mock o error— no escribe nada.

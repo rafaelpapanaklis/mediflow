@@ -58,7 +58,7 @@ export async function GET(_req: NextRequest) {
   });
   if (!clinic) return NextResponse.json({ error: "Clínica no encontrada" }, { status: 404 });
 
-  const period = cfdiPeriodFor(new Date(), clinic.timezone);
+  const period = cfdiPeriodFor(new Date());
 
   const [usage, plan, debtRows] = await Promise.all([
     prisma.cfdiUsage.findUnique({

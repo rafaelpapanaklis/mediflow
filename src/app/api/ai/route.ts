@@ -2,13 +2,15 @@ import { tokensDeLasOtrasSedes } from "@/lib/ai-tokens-owner";
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
-import { addAiTokens } from "@/lib/ai-tokens";
+import { liquidarCupoIa, reservarCupoIa, soltarCupoIa, techoDeTokens } from "@/lib/ai-tokens";
 import { persistentRateLimit } from "@/lib/failban";
 import { AI_CHAT_MODEL } from "@/lib/ai/models";
 import { recordUsageNoCharge } from "@/lib/ai-billing/record-usage";
 import { cortarSiIaApagada } from "@/lib/ai-billing/interruptores.server";
 import { AI_FEATURE_CHAT_ASSISTANT } from "@/lib/ai-billing/types";
 import { promptAsistentePara } from "@/lib/ai/prompts-asistente";
+
+const MAX_TOKENS = 600;
 
 export async function POST(req: NextRequest) {
   const ctx = await getAuthContext();
@@ -50,8 +52,10 @@ export async function POST(req: NextRequest) {
   const monthsDiff = (now.getFullYear() - lastReset.getFullYear()) * 12 + (now.getMonth() - lastReset.getMonth());
 
   if (monthsDiff >= 1) {
-    await prisma.clinic.update({
-      where: { id: ctx.clinicId },
+    // Revisión t5 (m1): condicionado al mes leído; si otra petición ya reseteó
+    // (y quizá ya apartó su reserva), no se vuelve a poner en 0.
+    await prisma.clinic.updateMany({
+      where: { id: ctx.clinicId, aiLastResetAt: clinic.aiLastResetAt },
       data:  { aiTokensUsed: 0, aiLastResetAt: now },
     });
     currentTokensUsed = 0;
@@ -83,6 +87,20 @@ export async function POST(req: NextRequest) {
     { role: "user", content: message },
   ];
 
+  // Seguridad ola 2b (v2): el cupo se RESERVA antes de llamar (el techo de esta
+  // llamada), no solo se lee arriba: una ráfaga ya no entra entera.
+  const { reserva, error: sinCupo } = await reservarCupoIa(ctx.clinicId, techoDeTokens([systemPrompt, JSON.stringify(messages)], MAX_TOKENS));
+  if (sinCupo || !reserva) {
+    const resetDate = new Date(lastReset.getFullYear(), lastReset.getMonth() + 1, 1);
+    return NextResponse.json({
+      error:        `Límite mensual de consultas IA alcanzado. Se renueva el ${resetDate.toLocaleDateString("es-MX", { day:"numeric", month:"long" })}.`,
+      limitReached: true,
+      used:         sinCupo?.used ?? currentTokensUsed,
+      limit:        clinic.aiTokensLimit,
+    }, { status: 429 });
+  }
+  let liquidada = false;
+
   try {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method:  "POST",
@@ -93,7 +111,7 @@ export async function POST(req: NextRequest) {
       },
       body: JSON.stringify({
         model:      AI_CHAT_MODEL,   // mismo id de siempre, ahora compartido con la UI
-        max_tokens: 600,
+        max_tokens: MAX_TOKENS,
         system:     systemPrompt,
         messages,
       }),
@@ -109,7 +127,8 @@ export async function POST(req: NextRequest) {
     const outputTokens = data.usage?.output_tokens ?? 0;
     const totalTokens  = inputTokens + outputTokens;
 
-    await addAiTokens(ctx.clinicId, totalTokens, "chat", ctx.userId);
+    await liquidarCupoIa(reserva, totalTokens, "chat", ctx.userId);
+    liquidada = true;
 
     // Costo real para DaleControl (Tesorería de IA). No se le cobra a la
     // clínica — su plan ya lo incluye — pero sí se mide. Best-effort.
@@ -132,6 +151,7 @@ export async function POST(req: NextRequest) {
     });
 
   } catch (err: any) {
+    if (!liquidada) await soltarCupoIa(reserva);
     console.error("AI error:", err);
     return NextResponse.json({ error: err.message ?? "Error al consultar el asistente IA" }, { status: 500 });
   }

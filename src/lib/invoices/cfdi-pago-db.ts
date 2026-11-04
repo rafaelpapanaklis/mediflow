@@ -156,7 +156,14 @@ export async function sumaCfdiValidaDeFactura(db: Db, args: { clinicId: string; 
   }
 }
 
-/** ¿Esta factura ya tiene AL MENOS un pago con CFDI vigente? Bloquea timbrar/cancelar/reembolsar la factura completa. */
+/**
+ * ¿Esta factura ya tiene AL MENOS un pago con CFDI vigente? Bloquea timbrar/cancelar/reembolsar la factura completa.
+ *
+ * Revisión t5 (m5, ola 2b): también cuenta el CFDI por pago «apartado», el que se está timbrando con
+ * Facturapi en este momento (o cuyo timbre quedó incierto). Si no, /cancel, /refund o «Cerrar plan» que
+ * corrían en esos segundos pasaban, y después el CFDI quedaba `valid` sobre una factura ya cancelada o con
+ * el dinero ya en saldo a favor. Lado seguro, igual que el `catch`.
+ */
 export async function algunPagoTieneCfdiVigente(db: Db, args: { clinicId: string; invoiceId: string }): Promise<boolean> {
   if (!(await columnaExiste(db))) return false;
   try {
@@ -164,7 +171,7 @@ export async function algunPagoTieneCfdiVigente(db: Db, args: { clinicId: string
       SELECT EXISTS (
         SELECT 1 FROM "cfdi_records"
          WHERE "clinicId" = ${args.clinicId} AND "invoiceId" = ${args.invoiceId}
-           AND "paymentId" IS NOT NULL AND "status" = 'valid'
+           AND "paymentId" IS NOT NULL AND "status" IN ('valid', 'apartado')
       ) AS existe`;
     return filas[0]?.existe === true;
   } catch (e) {

@@ -34,10 +34,10 @@ test("la factura vuelve a como estaba", () => {
 });
 
 test("el pago de MP sobre una factura cancelada o saldada no sumó: anularlo no resta", () => {
-  assert.equal(pagoSumoALaFactura("Anticipo, pagado con Mercado Pago. ⚠️ Anticipo pagado sobre factura cancelada: revisar/devolver"), false);
-  assert.equal(pagoSumoALaFactura("⚠️ Anticipo pagado sobre factura ya saldada: revisar/devolver"), false);
-  assert.equal(pagoSumoALaFactura("Anticipo, pagado con Mercado Pago desde el panel (pago 123)."), true);
-  assert.equal(pagoSumoALaFactura(null), true);
+  assert.equal(pagoSumoALaFactura("Anticipo, pagado con Mercado Pago. ⚠️ Anticipo pagado sobre factura cancelada: revisar/devolver", "mercadopago"), false);
+  assert.equal(pagoSumoALaFactura("⚠️ Anticipo pagado sobre factura ya saldada: revisar/devolver", "mercadopago"), false);
+  assert.equal(pagoSumoALaFactura("Anticipo, pagado con Mercado Pago desde el panel (pago 123).", "mercadopago"), true);
+  assert.equal(pagoSumoALaFactura(null, "mercadopago"), true);
 });
 
 test("la nota dice cuánto era, con qué, quién, cuándo y por qué", () => {

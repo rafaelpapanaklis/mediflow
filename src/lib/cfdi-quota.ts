@@ -3,9 +3,14 @@ import { getTzParts } from "@/lib/agenda/time-utils";
 /**
  * Utilidades puras del cupo de facturas CFDI (sin dependencias de servidor).
  *
- * El "periodo" es el mes calendario "YYYY-MM" anclado a la zona horaria de la
- * clínica (fallback America/Mexico_City). Se usa como clave del contador
- * CfdiUsage y para decidir qué periodos ya cerraron en el cron de cobro.
+ * El "periodo" es el mes calendario "YYYY-MM" en la hora de CDMX, el MISMO
+ * reloj con el que el cron /api/cron/cfdi-overage cierra los meses. Se usa como
+ * clave del contador CfdiUsage y para decidir qué periodos ya cerraron.
+ *
+ * Seguridad ola 2b (lead 8): antes se anclaba a la zona de la CLÍNICA. Con una
+ * zona al oeste de CDMX (America/Tijuana, Etc/GMT+12…) el mes anterior seguía
+ * abierto horas después del cierre del cron y lo timbrado entonces sumaba a una
+ * fila ya cobrada: ese excedente nunca se cobraba. Por eso ya no recibe zona.
  */
 
 export const CFDI_DEFAULT_TZ = "America/Mexico_City";
@@ -14,10 +19,9 @@ function pad2(n: number): string {
   return n < 10 ? `0${n}` : `${n}`;
 }
 
-/** Periodo "YYYY-MM" del `date` en la zona horaria de la clínica (fallback MX). */
-export function cfdiPeriodFor(date: Date, timezone?: string | null): string {
-  const tz = timezone && timezone.length > 0 ? timezone : CFDI_DEFAULT_TZ;
-  const p = getTzParts(date, tz);
+/** Periodo "YYYY-MM" del `date` en la hora de CDMX (la del cierre del cron), para TODA clínica. */
+export function cfdiPeriodFor(date: Date): string {
+  const p = getTzParts(date, CFDI_DEFAULT_TZ);
   return `${p.year}-${pad2(p.month)}`;
 }
 
