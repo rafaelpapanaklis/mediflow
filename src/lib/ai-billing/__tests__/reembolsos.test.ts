@@ -318,14 +318,16 @@ test("el reembolso que llega ANTES que el abono se cuadra cuando llega el abono"
   assert.deepEqual(base.movimientos(CLINICA).map((m) => [m.type, m.amountCents]), [["TOPUP", 20_000], ["REFUND", -20_000]]);
 });
 
-test("un reembolso de un cobro que NO es recarga del monedero (suscripción) no toca nada ni llama a Stripe", async () => {
+test("un reembolso de un cobro que NO es recarga del monedero (suscripción) no toca el monedero", async () => {
   await recargaStripe(CLINICA, "pi_200", 20_000);
   stripeEstado.llamadasApi = 0;
   await stripe("charge.refunded", { id: "ch_sub", payment_intent: "pi_suscripcion", amount_refunded: 99_900 });
   await stripe("charge.dispute.created", { id: "dp_x", payment_intent: "pi_suscripcion" });
   await stripe("charge.refunded", { id: "ch_sin_pi", payment_intent: null });
   assert.equal(saldo(), 20_000);
-  assert.equal(stripeEstado.llamadasApi, 0);
+  // Ola 2b, lead 10: el reembolso de una SUSCRIPCIÓN sí le pregunta a Stripe (solo lecturas de cargos) de qué
+  // factura es, para anular la comisión de afiliado. Sin factura en el cargo no consulta nada más. Sin PaymentIntent, nada.
+  assert.ok(stripeEstado.llamadasApi <= 2, `solo lecturas de cargos: ${stripeEstado.llamadasApi}`);
 });
 
 test("el clinicId sale de nuestra recarga, nunca del evento", async () => {

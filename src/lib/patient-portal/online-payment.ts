@@ -7,11 +7,15 @@
 // por ahora — decisión de negocio pendiente, ver ORQUESTA.md).
 //
 // Resolución de "la cuenta de la clínica" (no existe campo clinic-level en el
-// schema y el schema está congelado): el ADMIN más antiguo de la clínica con
-// Stripe Connect; si ningún ADMIN tiene, el ÚNICO usuario activo con cuenta
-// Connect (sin ambigüedad). Con 2+ doctores con Connect y ningún ADMIN
-// conectado NO habilitamos pago en línea (evita enviar dinero al doctor
-// equivocado).
+// schema y el schema está congelado), siempre entre usuarios ACTIVOS con
+// Stripe Connect y el alta TERMINADA (stripeOnboarded):
+//   1. el dueño (SUPER_ADMIN) más antiguo;
+//   2. si no, el ADMIN más antiguo que tenga «Editar configuración»
+//      (settings.edit, el mismo permiso que pide la cuenta de Mercado Pago).
+// Nadie más: antes, sin ADMIN conectado, servía «el único usuario con Connect»
+// de cualquier rol (ola 2b, lead 1), y un ADMIN al que el dueño le quitó la
+// configuración también podía quedarse con los cobros (revisión t8, M2). Sin
+// ninguno de los dos NO hay pago en línea ("Paga en tu clínica").
 //
 // Idempotencia / anti doble cobro: réplica del patrón de
 // src/lib/ai-billing/recharge.ts — $transaction + SELECT ... FOR UPDATE sobre
@@ -21,6 +25,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { prisma } from "@/lib/prisma";
 import { getStripeSafe } from "@/lib/stripe";
+import { getEffectivePermissions } from "@/lib/auth/permissions";
 
 /** metadata.kind de las sesiones de Checkout de facturas del portal. */
 export const PATIENT_INVOICE_KIND = "patient-invoice";
@@ -42,7 +47,8 @@ function round2(x: number): number {
 
 /**
  * Devuelve, para cada clínica del array, el stripeAccountId que recibe los
- * pagos de facturas, aplicando la regla ADMIN-más-antiguo → único-usuario.
+ * pagos de facturas: el del dueño con el alta de Stripe terminada o, si no
+ * tiene, el del ADMIN más antiguo con «Editar configuración» y el alta terminada.
  * Si Stripe no está configurado a nivel plataforma devuelve un mapa vacío.
  */
 export async function getClinicConnectAccounts(
@@ -56,9 +62,11 @@ export async function getClinicConnectAccounts(
     where: {
       clinicId: { in: clinicIds },
       isActive: true,
+      role: { in: ["ADMIN", "SUPER_ADMIN"] },
+      stripeOnboarded: true,
       stripeAccountId: { not: null },
     },
-    select: { clinicId: true, role: true, createdAt: true, stripeAccountId: true },
+    select: { clinicId: true, role: true, createdAt: true, stripeAccountId: true, permissionsOverride: true },
     orderBy: { createdAt: "asc" },
   });
 
@@ -70,13 +78,16 @@ export async function getClinicConnectAccounts(
   }
 
   byClinic.forEach((list, clinicId) => {
-    // orderBy createdAt asc → el primer ADMIN es el más antiguo.
-    const admin = list.find((u) => u.role === "ADMIN" || u.role === "SUPER_ADMIN");
-    if (admin?.stripeAccountId) {
-      result.set(clinicId, admin.stripeAccountId);
-    } else if (list.length === 1 && list[0].stripeAccountId) {
-      result.set(clinicId, list[0].stripeAccountId);
-    }
+    // orderBy createdAt asc → el primero de cada tipo es el más antiguo. El
+    // filtro de rol se repite aquí a propósito: es el punto de confianza del dinero.
+    const elegido =
+      list.find((u) => u.role === "SUPER_ADMIN") ??
+      list.find(
+        (u) =>
+          u.role === "ADMIN" &&
+          getEffectivePermissions({ role: u.role, permissionsOverride: u.permissionsOverride }).includes("settings.edit"),
+      );
+    if (elegido?.stripeAccountId) result.set(clinicId, elegido.stripeAccountId);
   });
   return result;
 }

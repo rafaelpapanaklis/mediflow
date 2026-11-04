@@ -31,6 +31,7 @@ import {
   AI_SETUP_KIND,
 } from "@/lib/ai-billing/recharge";
 import { paymentIntentDeEvento, revertirRecargaStripe } from "@/lib/ai-billing/reversion";
+import { cuadrarComisionConStripe } from "@/lib/affiliates/reversion-comision";
 import { PATIENT_INVOICE_KIND, applyInvoiceOnlinePayment } from "@/lib/patient-portal/online-payment";
 import { CFDI_OVERAGE_APARTE_KIND, CFDI_OVERAGE_KIND, CFDI_OVERAGE_METHOD, reconcileOverageFromWebhook } from "@/lib/cfdi-overage";
 import { getPlanLimits } from "@/lib/plans";
@@ -39,8 +40,11 @@ import {
   PLAN_UPGRADE_DIFF_KIND,
   canSuspendForFailedInvoice,
   isPlanTierUpgrade,
+  manualPaidUntil,
   subscriptionPeriodFields,
 } from "@/lib/billing/proration";
+import { avisoDiferencialDescartado, diferencialYaAplicado, expirarDiferencialesAbiertos, finDelPeriodoCotizado, marcarDiferencialAplicado } from "@/lib/billing/diferencial-vigente";
+import { avisarAdminUnaVez } from "@/lib/billing/aviso-admin-envio.server";
 import { estadoDeSuscripcionAEscribir } from "@/lib/billing/estado-suscripcion";
 import { recordStripeInvoice } from "@/lib/billing/record-stripe-invoice";
 import { sendPlanActivatedEmail, sendPlanRenewedEmail } from "@/lib/email";
@@ -184,7 +188,7 @@ export async function POST(req: NextRequest) {
             await applyPlanUpgradeDiff(diffClinicId, session.metadata?.plan ?? null, {
               event: event.type,
               sessionId: session.id,
-            });
+            }, session);
           }
           break;
         }
@@ -259,7 +263,7 @@ export async function POST(req: NextRequest) {
             await applyPlanUpgradeDiff(diffClinicId, session.metadata?.plan ?? null, {
               event: event.type,
               sessionId: session.id,
-            });
+            }, session);
           }
           break;
         }
@@ -1091,6 +1095,13 @@ export async function POST(req: NextRequest) {
             balanceAfterCents: r.balanceAfterCents,
           });
         }
+        // Comisión de afiliado de una factura reembolsada o en contracargo (ola 2b, lead 10): anulada o
+        // retenida, así el payout masivo no la paga. Una recarga del monedero (r.clinicId) no es una factura.
+        // Lanza si Stripe no contesta → 500 y Stripe reintenta.
+        const c = r.clinicId ? null : await cuadrarComisionConStripe(stripe, piId);
+        if (c?.aplicado && c.movidas > 0) {
+          console.info("[afiliados] comisión cuadrada por reembolso/contracargo", { evento: event.type, invoiceId: c.invoiceId, estado: c.estado });
+        }
         break;
       }
 
@@ -1231,11 +1242,12 @@ async function applyPlanUpgradeDiff(
   clinicId: string,
   plan: string | null,
   source: { event: string; sessionId?: string },
+  session: Pick<Stripe.Checkout.Session, "metadata" | "created">,
 ): Promise<void> {
   // Todo descarte se REGISTRA: en los tres casos el cliente YA pagó el
   // diferencial. Un return mudo dejaba un cobro acreditado sin plan aplicado y
   // sin rastro para detectarlo ni devolverlo.
-  const drop = async (reason: string, extra: Record<string, unknown>) => {
+  const drop = async (reason: string, extra: Record<string, unknown>, avisar = true) => {
     console.error(
       `[stripe webhook] plan-upgrade-diff PAGADO pero NO aplicado (${reason}):`,
       JSON.stringify({ clinicId, incomingPlan: plan, ...extra, ...source }),
@@ -1261,6 +1273,8 @@ async function applyPlanUpgradeDiff(
         },
       },
     }).catch(() => {});
+    // Una vez por sesión (candado de billing_email_logs): Stripe reintenta y reenvía (revisión t8, m1).
+    if (avisar) await avisarAdminUnaVez(`${source.sessionId ?? clinicId}:diferencial_descartado`, clinicId, avisoDiferencialDescartado({ clinicId, sessionId: source.sessionId, motivo: reason, planCotizado: plan, detalle: extra }));
   };
 
   if (!isPlanId(plan)) {
@@ -1269,7 +1283,7 @@ async function applyPlanUpgradeDiff(
   }
   const before = await prisma.clinic.findUnique({
     where: { id: clinicId },
-    select: { plan: true },
+    select: { plan: true, trialEndsAt: true, nextBillingDate: true },
   });
   if (!before) {
     await drop("clinic-not-found", {});
@@ -1287,15 +1301,52 @@ async function applyPlanUpgradeDiff(
   // pero un SEGUNDO voucher pagado por el mismo upgrade también — ahí sí hay
   // dinero cobrado dos veces. La fila de bitácora es la que permite detectarlo.
   if (!isPlanTierUpgrade(before.plan, plan)) {
-    await drop("not-a-tier-upgrade", { currentPlan: before.plan });
+    // Ya en ESE plan: si es ESTA sesión ya aplicada (Stripe la reenvía) → sin aviso; si es OTRA sesión, es un segundo
+    // voucher del mismo upgrade, cobrado dos veces → aviso (revisión t8, m3).
+    const reenvio = before.plan === plan && (await diferencialYaAplicado(source.sessionId));
+    await drop("not-a-tier-upgrade", { currentPlan: before.plan }, !reenvio);
+    return;
+  }
+
+  // Atado a lo COTIZADO (ola 2b, lead 6). Si el periodo pagado se extendió después de cotizar (la clínica
+  // compró el periodo siguiente al plan bajo antes de pagar el voucher), este pago era por unos días que ya
+  // pasaron: aplicarlo regalaba el plan alto todo el periodo nuevo. Y si la clínica está hoy en un plan MENOR
+  // que el cotizado, pagó una diferencia que no alcanza. Quien pagó de más (ya está más arriba que lo
+  // cotizado, sin pasar el destino) sí lo recibe.
+  const cotizadoHasta = finDelPeriodoCotizado(session.metadata, session.created);
+  const pagadoHasta = manualPaidUntil(before);
+  if (cotizadoHasta && pagadoHasta && pagadoHasta.getTime() > cotizadoHasta.getTime()) {
+    await drop("period-changed", { quotedPaidUntil: cotizadoHasta.toISOString(), paidUntil: pagadoHasta.toISOString() });
+    return;
+  }
+  // Pagado cuando el periodo cotizado ya terminó (sin renovar): los días que pagó ya pasaron. Misma regla que
+  // change-plan (MANUAL_PERIOD_EXPIRED): sobre un periodo vencido no se sube de plan; contrata el periodo nuevo.
+  if (pagadoHasta && pagadoHasta.getTime() <= Date.now()) {
+    await drop("period-expired", { paidUntil: pagadoHasta.toISOString() });
+    return;
+  }
+  const fromPlan = session.metadata?.fromPlan ?? null;
+  if (isPlanId(fromPlan) && isPlanTierUpgrade(before.plan, fromPlan)) {
+    await drop("from-plan-changed", { currentPlan: before.plan, quotedFromPlan: fromPlan });
     return;
   }
 
   const limits = await getPlanLimits(plan);
-  await prisma.clinic.update({
-    where: { id: clinicId },
+  // Escritura condicionada a lo LEÍDO (revisión t8, m2): si una renovación se escribió entre la lectura y aquí,
+  // no se pone el plan alto sobre el periodo nuevo.
+  const comoSeLeyo = { id: clinicId, plan: before.plan, trialEndsAt: before.trialEndsAt, nextBillingDate: before.nextBillingDate };
+  const { count } = await prisma.clinic.updateMany({
+    where: comoSeLeyo,
     data: { plan, aiTokensLimit: limits.aiTokensDefault },
   });
+  if (count === 0) {
+    // ¿La otra escritura fue OTRA entrega de esta misma sesión, que ya aplicó el plan? Entonces no hay nada que avisar.
+    const ahora = await prisma.clinic.findUnique({ where: { id: clinicId }, select: { plan: true } });
+    if (ahora?.plan === plan && (await diferencialYaAplicado(source.sessionId))) return;
+    await drop("period-changed", { concurrentWrite: true });
+    return;
+  }
+  await marcarDiferencialAplicado(source.sessionId, clinicId);
   await sincronizarSedesIncluidas(clinicId);
 
   await logAuditExterno({
@@ -1332,6 +1383,7 @@ async function activatePlatformSubscription(
     select: {
       subscriptionStatus: true,
       stripeSubscriptionId: true,
+      stripeCustomerId: true,
       trialEndsAt: true,
       nextBillingDate: true,
     },
@@ -1387,6 +1439,10 @@ async function activatePlatformSubscription(
   // (revisión ws1-t8, m2): si la primera entrega murió después de escribir la clínica, aquí se completa. Es
   // idempotente (copia el estado actual de la madre).
   await sincronizarSedesIncluidas(clinicId);
+  // Periodo nuevo: las sesiones del diferencial cotizadas sobre el anterior ya no valen (ola 2b, lead 6). Nunca lanza.
+  // Va también en una reentrega, igual que las sedes: es idempotente (solo expira las que sigan abiertas) y completa
+  // lo que una primera entrega muerta a medias no llegó a hacer.
+  await expirarDiferencialesAbiertos(getStripeSafe(), before?.stripeCustomerId, clinicId);
   // Lo demás NO se repite: el marcado de la factura de tarjeta decide con el estado de ANTES del pago
   // (`estabaSuspendida`), y en una reentrega `before` ya es la clínica activada, así que podría pagar fuera de
   // Stripe una factura de un mes suspendido en vez de anularla. Si la primera entrega murió justo entre escribir la

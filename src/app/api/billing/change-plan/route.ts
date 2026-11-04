@@ -322,6 +322,9 @@ export async function POST(req: NextRequest) {
       process.env.NEXTAUTH_URL ??
       new URL(req.url).origin;
 
+    // `paidUntil`: el «pagado-hasta» con el que se cotizó. El webhook NO aplica el plan si al pagarse el
+    // periodo ya es otro (la clínica compró el siguiente al plan bajo antes de pagar el voucher; ola 2b, lead 6).
+    const paidUntilCotizado = quote.periodEnd ? quote.periodEnd.toISOString() : "";
     const meta = {
       kind: PLAN_UPGRADE_DIFF_KIND,
       clinicId: clinic.id,
@@ -329,6 +332,7 @@ export async function POST(req: NextRequest) {
       fromPlan: clinic.plan,
       daysRemaining: String(quote.daysRemaining),
       interval: quote.interval,
+      paidUntil: paidUntilCotizado,
     };
 
     const method = parsed.data.method ?? "card";
@@ -382,7 +386,8 @@ export async function POST(req: NextRequest) {
     // importe cambia (pasó un día) sí se crea una sesión nueva.
     // `:iva16`: las sesiones del diferencial de ANTES del IVA (sin tasa) usaron la clave sin sufijo; Stripe
     // rechaza reusar una clave con otros parámetros, así que el IVA lleva su propia clave.
-    const idemBase = `plan-upgrade-diff:${clinic.id}:${targetPlan.id}:${quote.interval}:${quote.daysRemaining}:${method}:iva16`;
+    // El periodo cotizado va en la clave: otro periodo es otra sesión (y las de antes de `paidUntil` no chocan).
+    const idemBase = `plan-upgrade-diff:${clinic.id}:${targetPlan.id}:${quote.interval}:${quote.daysRemaining}:p${paidUntilCotizado}:${method}:iva16`;
 
     let session: Stripe.Checkout.Session | null = null;
     try {
