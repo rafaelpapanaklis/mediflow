@@ -31,7 +31,15 @@ mock.module("@/lib/auth-context", {
   },
 });
 mock.module("@/lib/prisma", {
-  namedExports: { prisma: { clinic: { update: async (a: any) => { escrituras.push(a); return {}; } } } },
+  namedExports: {
+    prisma: {
+      clinic: {
+        update: async (a: any) => { escrituras.push(a); return {}; },
+        // embedded/exchange (feat/seg-mensajes-identidad, nº4): ¿el número ya es de OTRA clínica? Aquí no.
+        findFirst: async () => null,
+      },
+    },
+  },
 });
 mock.module("@/lib/crypto/envelope", { namedExports: { encryptField: (s: string) => `cifrado:${s}` } });
 mock.module("@/lib/whatsapp/provision-templates", { namedExports: { provisionClinicTemplates: async () => {} } });
@@ -39,7 +47,9 @@ mock.module("@/lib/whatsapp/provision-templates", { namedExports: { provisionCli
 const fetchReal = globalThis.fetch;
 globalThis.fetch = (async (url: string) => {
   if (String(url).startsWith("https://graph.facebook.com/")) {
-    return new Response(JSON.stringify({ display_phone_number: "+52 55 0000 0000", access_token: "tok", id: "x" }), { status: 200 });
+    // `data` = GET /{wabaId}/phone_numbers: desde feat/seg-mensajes-identidad (nº4) exchange exige que el WABA
+    // liste el número antes de guardar nada; sin él respondía 403 por la propiedad, no por el permiso.
+    return new Response(JSON.stringify({ display_phone_number: "+52 55 0000 0000", access_token: "tok", id: "x", data: [{ id: "111" }] }), { status: 200 });
   }
   return fetchReal(url as any);
 }) as typeof fetch;

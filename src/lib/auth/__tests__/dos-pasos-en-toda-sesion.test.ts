@@ -69,6 +69,11 @@ beforeEach(() => {
 });
 
 const prismaFalso = {
+  // La sonda de la clave de la sede (sede_claves): «las tablas no existen» = función apagada, la sede está
+  // libre. Desde feat/seg-admin-auth (auditoría «cloudflare» nº14) una sonda que FALLA ya no abre la puerta;
+  // sin este método el doble la hacía fallar y la sesión acababa en la pantalla de la clave. No es una lectura
+  // de users: no cuenta en `consultas`.
+  $queryRaw: async () => [{ existe: false }],
   user: {
     findMany: async ({ where }: any) =>
       filas.filter((f) => Object.entries(where ?? {}).every(([k, v]) => (f as any)[k] === v)),

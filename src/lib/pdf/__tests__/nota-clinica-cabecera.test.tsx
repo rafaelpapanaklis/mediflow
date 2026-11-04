@@ -28,6 +28,8 @@ import { describe, it, before, after, mock } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
+import * as logoRemotoReal from "../../logo-remoto";
+import type { OpcionesDeLogoRemoto } from "../../logo-remoto";
 import { isValidElement, type ReactElement, type ReactNode } from "react";
 import * as reactPdf from "@react-pdf/renderer";
 import { ownPrivateRecordsOnly } from "@/lib/clinical/record-scope";
@@ -40,6 +42,17 @@ const { Text, Image: PdfImage } = reactPdf;
 
 let selectPedido: Record<string, any> | null = null;
 let fila: any = null;
+
+// El logo se sirve desde 127.0.0.1 (el servidor de esta prueba), y la reja de SSRF de feat/seg-archivos-permisos
+// (`logo-remoto.ts`, auditoría nº2) lo rechaza, con razón. Igual que clinic-letterhead.test.ts, aquí la reja dice
+// «sí» a este servidor: lo que se prueba es que el logo llegue al PDF. La reja tiene su prueba en logo-remoto.test.ts.
+mock.module("@/lib/logo-remoto", {
+  namedExports: {
+    ...logoRemotoReal,
+    descargarLogoRemoto: (url: string | null | undefined, opciones: OpcionesDeLogoRemoto = {}) =>
+      logoRemotoReal.descargarLogoRemoto(url, { ...opciones, esSegura: async () => true, ipPermitida: () => true }),
+  },
+});
 
 mock.module("@/lib/auth", {
   namedExports: {
