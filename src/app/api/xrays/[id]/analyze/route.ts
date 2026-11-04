@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
-import { addAiTokens } from "@/lib/ai-tokens";
+import { liquidarCupoIa, reservarCupoIa, soltarCupoIa, techoDeTokens } from "@/lib/ai-tokens";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { createClient as createAdmin } from "@supabase/supabase-js";
 import { persistentRateLimit } from "@/lib/failban";
@@ -128,6 +128,15 @@ interface Analysis {
   findings: Finding[];
   recommendations: string | string[];
 }
+
+/** Salida máxima de la llamada (el mismo valor de siempre; ahora también entra en el techo que se reserva). */
+const MAX_TOKENS = 1500;
+/**
+ * Lo que se APARTA por la imagen al reservar. No es un límite: al volver se liquida a lo real. Anthropic
+ * cobra una imagen a ~ancho×alto/750 tokens y reduce las grandes (≈1,15 MP, unos 1 600 tokens). Si una
+ * imagen costara más, `liquidarCupoIa` suma la diferencia igual.
+ */
+const TECHO_TOKENS_IMAGEN = 1600;
 
 function getAdminSupabase() {
   return createAdmin(
@@ -346,8 +355,10 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
   const now        = new Date();
   const monthsDiff = (now.getFullYear() - lastReset.getFullYear()) * 12 + (now.getMonth() - lastReset.getMonth());
   if (monthsDiff >= 1) {
-    await prisma.clinic.update({
-      where: { id: ctx.clinicId },
+    // Seguridad ola 2b (m9 de t5): condicionado al mes leído; si otra petición ya reseteó
+    // (y quizá ya apartó su reserva), no se vuelve a poner en 0.
+    await prisma.clinic.updateMany({
+      where: { id: ctx.clinicId, aiLastResetAt: clinic.aiLastResetAt },
       data:  { aiTokensUsed: 0, aiLastResetAt: now },
     });
     currentTokensUsed = 0;
@@ -427,6 +438,22 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
 
   const MODEL = "claude-sonnet-4-6";
 
+  // Seguridad ola 2b (DECISIÓN 5, tras unir feat/seg-archivos-permisos): el cupo se RESERVA antes de llamar
+  // (el techo de esta llamada: prompt y herramienta del modo, mensaje, imagen y salida máxima); arriba solo
+  // se leía, y una ráfaga entraba entera. Mismo 429 de siempre.
+  const { reserva, error: sinCupo } = await reservarCupoIa(
+    ctx.clinicId,
+    techoDeTokens([modeConfig.systemPrompt, JSON.stringify(modeConfig.tool), userMessage], MAX_TOKENS) + TECHO_TOKENS_IMAGEN,
+  );
+  if (sinCupo || !reserva) {
+    const resetDate = new Date(lastReset.getFullYear(), lastReset.getMonth() + 1, 1);
+    return NextResponse.json({
+      error: `Límite mensual de IA alcanzado (${clinic.aiTokensLimit.toLocaleString()} tokens). Se renueva el ${resetDate.toLocaleDateString("es-MX", { day: "numeric", month: "long" })}.`,
+      limitReached: true,
+    }, { status: 429 });
+  }
+  let liquidada = false;
+
   try {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -437,7 +464,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
       },
       body: JSON.stringify({
         model:       MODEL,
-        max_tokens:  1500,
+        max_tokens:  MAX_TOKENS,
         // System + tools por modo. Cache_control en cada uno habilita
         // prompt caching cuando se re-analiza la misma imagen.
         system: [
@@ -486,7 +513,8 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     });
 
     // Update token usage (incluye tokens de cache creation/read que también se cobran)
-    await addAiTokens(ctx.clinicId, totalTokens, "xray_analysis", ctx.userId);
+    await liquidarCupoIa(reserva, totalTokens, "xray_analysis", ctx.userId);
+    liquidada = true;
 
     // Costo real para DaleControl (Tesorería de IA). No se le cobra a la
     // clínica — su plan ya lo incluye — pero sí se mide. Best-effort. Los
@@ -622,6 +650,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
       analyzedAt:      new Date().toISOString(),
     });
   } catch (err: any) {
+    if (!liquidada) await soltarCupoIa(reserva);
     console.error("AI X-ray analysis error:", err);
     return NextResponse.json({ error: err.message ?? "Error al analizar radiografía" }, { status: 500 });
   }

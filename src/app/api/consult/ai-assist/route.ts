@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
-import { addAiTokens } from "@/lib/ai-tokens";
+import { liquidarCupoIa, reservarCupoIa, soltarCupoIa, techoDeTokens } from "@/lib/ai-tokens";
 import { persistentRateLimit } from "@/lib/failban";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { assertPatientVisible } from "@/lib/patient-visibility";
@@ -16,6 +16,8 @@ import { AI_FEATURE_CONSULT_ANALYSIS } from "@/lib/ai-billing/types";
 export const dynamic = "force-dynamic";
 
 const MODEL = "claude-sonnet-4-6";
+/** Salida máxima de la llamada (el mismo valor de siempre; ahora también entra en el techo que se reserva). */
+const MAX_TOKENS = 1500;
 const DISCLAIMER = "Apoyo diagnóstico generado por IA. No sustituye el juicio clínico del profesional.";
 
 const SYSTEM_PROMPT = `Eres un asistente clínico de APOYO para dentistas en México. Recibes el expediente de un paciente (antecedentes, odontograma actual, consultas previas, recetas activas, tratamientos, radiografías, cuestionario de salud) y el motivo/borrador de la consulta de HOY. Produces un análisis breve, conservador y accionable para AYUDAR al doctor. NO eres el tratante y NO sustituyes su juicio.
@@ -149,7 +151,12 @@ export async function POST(req: NextRequest) {
   const now = new Date();
   const monthsDiff = (now.getFullYear() - lastReset.getFullYear()) * 12 + (now.getMonth() - lastReset.getMonth());
   if (monthsDiff >= 1) {
-    await prisma.clinic.update({ where: { id: ctx.clinicId }, data: { aiTokensUsed: 0, aiLastResetAt: now } });
+    // Seguridad ola 2b (m9 de t5): condicionado al mes leído; si otra petición ya reseteó
+    // (y quizá ya apartó su reserva), no se vuelve a poner en 0.
+    await prisma.clinic.updateMany({
+      where: { id: ctx.clinicId, aiLastResetAt: clinic.aiLastResetAt },
+      data: { aiTokensUsed: 0, aiLastResetAt: now },
+    });
     currentTokensUsed = 0;
   }
 
@@ -175,13 +182,32 @@ export async function POST(req: NextRequest) {
     contextText = "No se pudo construir el contexto completo del paciente.";
   }
 
+  // Seguridad ola 2b (DECISIÓN 5, tras unir feat/seg-archivos-permisos): el cupo se RESERVA antes de llamar
+  // (el techo de esta llamada: prompt, herramienta, contexto y salida máxima); arriba solo se leía, y una
+  // ráfaga entraba entera. Mismo 429 de siempre.
+  const { reserva, error: sinCupo } = await reservarCupoIa(
+    ctx.clinicId,
+    techoDeTokens([SYSTEM_PROMPT, JSON.stringify(REPORT_TOOL), contextText], MAX_TOKENS),
+  );
+  if (sinCupo || !reserva) {
+    const resetDate = new Date(lastReset.getFullYear(), lastReset.getMonth() + 1, 1);
+    return NextResponse.json(
+      {
+        error: `Límite mensual de IA alcanzado (${clinic.aiTokensLimit.toLocaleString()} tokens). Se renueva el ${resetDate.toLocaleDateString("es-MX", { day: "numeric", month: "long" })}.`,
+        limitReached: true,
+      },
+      { status: 429 },
+    );
+  }
+  let liquidada = false;
+
   try {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 1500,
+        max_tokens: MAX_TOKENS,
         system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
         tools: [{ ...REPORT_TOOL, cache_control: { type: "ephemeral" } }],
         tool_choice: { type: "tool", name: REPORT_TOOL.name },
@@ -202,7 +228,9 @@ export async function POST(req: NextRequest) {
       (usage.cache_creation_input_tokens ?? 0) +
       (usage.cache_read_input_tokens ?? 0);
 
-    await addAiTokens(ctx.clinicId, totalTokens, "consult_assist", ctx.userId);
+    // Lo real (incluye los tokens de caché, como antes) en lugar de lo reservado.
+    await liquidarCupoIa(reserva, totalTokens, "consult_assist", ctx.userId);
+    liquidada = true;
 
     // Costo real para DaleControl (Tesorería de IA). No se le cobra a la
     // clínica — su plan ya lo incluye — pero sí se mide. Best-effort.
@@ -247,6 +275,7 @@ export async function POST(req: NextRequest) {
       tokensLimit: clinic.aiTokensLimit,
     });
   } catch (err: any) {
+    if (!liquidada) await soltarCupoIa(reserva);
     console.error("AI consult analyze error:", err);
     return NextResponse.json({ error: err.message ?? "Error al analizar la consulta" }, { status: 500 });
   }

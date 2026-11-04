@@ -10,14 +10,14 @@
  *   2. se deja un cupo de ~3,5 llamadas y se lanzan 10 a la vez,
  *   3. no se puede gastar más que el cupo, y alguna tiene que pasar.
  *
- * Fuera (las toca feat/seg-archivos-permisos; van después de la unión):
- * consult/ai-assist y xrays/[id]/analyze.
+ * consult/ai-assist y xrays/[id]/analyze se migraron después de unir
+ * feat/seg-archivos-permisos (feat/union-seg), con las mismas dos pruebas.
  *
  * Run: npm run test:seg-ola2b
  */
 import { test, before, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import Module from "node:module";
+import Module, { createRequire } from "node:module";
 import path from "node:path";
 
 const RAIZ = process.cwd();
@@ -54,8 +54,14 @@ const prismaFalso: any = {
   },
   aiQuotaUsage: { create: async ({ data }: any) => data },
   patient: {
-    findFirst: async () => ({ dob: null, gender: "F", isChild: false, allergies: [], chronicConditions: [], currentMedications: [] }),
+    findFirst: async () => ({ id: "p1", anonymizedAt: null, dob: null, gender: "F", isChild: false, allergies: [], chronicConditions: [], currentMedications: [] }),
+    findUnique: async () => ({ firstName: "Ana", lastName: "P", dob: null, gender: "F", allergies: [], chronicConditions: [] }),
   },
+  // xrays/[id]/analyze: la radiografía de la clínica (path bajo `c1/`).
+  patientFile: {
+    findFirst: async () => ({ id: "f1", clinicId: "c1", patientId: "p1", mimeType: "image/png", url: "c1/xrays/f1.png", category: "PANORAMIC", toothNumber: null, notes: null }),
+  },
+  xrayAnalysis: { findUnique: async () => null, upsert: async () => ({}) },
   prescriptionAiCheck: { findFirst: async () => null, create: async () => ({}) },
   appointment: {
     findFirst: async () => ({ id: "apt1", type: "Limpieza", startsAt: new Date(HOY.getTime() + 86400000), patientId: "p1", patient: { firstName: "Ana", lastName: "P", dob: null } }),
@@ -91,6 +97,13 @@ const dobles = new Map<string, unknown>([
   [path.join(RAIZ, "src/lib/patient-visibility.ts"), { assertPatientVisible: async () => null }],
   [path.join(RAIZ, "src/lib/ai-billing/record-usage.ts"), { recordUsageNoCharge: async () => {} }],
   [path.join(RAIZ, "src/lib/ai-tokens-owner.ts"), { tokensDeLasOtrasSedes: async () => ({ tokens: 0, sedes: 1 }) }],
+  // consult/ai-assist: el contexto clínico que arma el servidor (grande, para que el techo importe) y su bitácora.
+  [path.join(RAIZ, "src/lib/ai/consult-context.ts"), { buildConsultContext: async () => `EXPEDIENTE ${"x".repeat(60_000)}` }],
+  [path.join(RAIZ, "src/lib/audit.ts"), { logAudit: async () => {}, extractAuditMeta: () => ({}) }],
+  // xrays/[id]/analyze: la descarga de la imagen del bucket.
+  [createRequire(path.join(RAIZ, "package.json")).resolve("@supabase/supabase-js"), {
+    createClient: () => ({ storage: { from: () => ({ download: async () => ({ data: new Blob([new Uint8Array([1, 2, 3])]), error: null }) }) } }),
+  }],
   [path.join(RAIZ, "src/lib/integrations/claude.ts"), {
     chat: (input: any) => {
       const caracteres = JSON.stringify(input.system ?? "").length + JSON.stringify(input.messages ?? []).length;
@@ -112,12 +125,18 @@ M._load = function (req, parent, isMain) {
   return cargaOriginal.call(this, req, parent, isMain);
 };
 
+/** Lo que Anthropic cobra por una imagen no depende del largo del base64 sino de los píxeles: uno fijo y realista. */
+const TOKENS_POR_IMAGEN = 1000;
+
 // Anthropic por fetch (las rutas que lo llaman directo).
 (globalThis as any).fetch = async (url: string, init: any) => {
   assert.match(String(url), /api\.anthropic\.com/);
   const body = JSON.parse(init.body);
-  const caracteres = JSON.stringify(body.system ?? "").length + JSON.stringify(body.messages ?? []).length + JSON.stringify(body.tools ?? "").length;
+  let imagenes = 0;
+  const mensajes = JSON.stringify(body.messages ?? [], (k, v) => (k === "source" && v?.type === "base64" ? (imagenes++, "") : v));
+  const caracteres = JSON.stringify(body.system ?? "").length + mensajes.length + JSON.stringify(body.tools ?? "").length;
   const t = tokensDe(caracteres, body.max_tokens ?? 1024);
+  t.entrada += imagenes * TOKENS_POR_IMAGEN;
   return esperarTurno(() => ({
     ok: true,
     json: async () => ({ usage: { input_tokens: t.entrada, output_tokens: t.salida }, content: [{ type: "text", text: "{\"remedies\":[]}" }] }),
@@ -138,20 +157,26 @@ beforeEach(() => {
 
 const GRANDE = "x".repeat(60_000);
 
-const RUTAS: Array<{ nombre: string; modulo: string; url: string; cuerpo: () => unknown }> = [
+const RUTAS: Array<{ nombre: string; modulo: string; url: string; cuerpo: () => unknown; params?: Record<string, string> }> = [
   { nombre: "/api/ai (chat)", modulo: "@/app/api/ai/route", url: "/api/ai", cuerpo: () => ({ message: GRANDE }) },
   { nombre: "check-contraindications", modulo: "@/app/api/prescriptions/check-contraindications/route", url: "/api/prescriptions/check-contraindications",
     cuerpo: () => ({ patientId: "p1", items: [{ name: `Amoxicilina ${GRANDE}`, dosage: "500 mg" }] }) },
   { nombre: "homeopatía", modulo: "@/app/api/homeopatia/suggest-remedies/route", url: "/api/homeopatia/suggest-remedies", cuerpo: () => ({ symptoms: [GRANDE] }) },
   { nombre: "no-shows/predict", modulo: "@/app/api/analytics/no-shows/predict/route", url: "/api/analytics/no-shows/predict", cuerpo: () => ({ appointmentId: "apt1" }) },
   { nombre: "clinic-layout/optimize", modulo: "@/app/api/clinic-layout/optimize/route", url: "/api/clinic-layout/optimize", cuerpo: () => ({}) },
+  // Tras la unión (feat/union-seg):
+  { nombre: "consult/ai-assist", modulo: "@/app/api/consult/ai-assist/route", url: "/api/consult/ai-assist",
+    cuerpo: () => ({ patientId: "p1", currentInput: { subjective: "Dolor en 36", objective: "" } }) },
+  { nombre: "xrays/[id]/analyze", modulo: "@/app/api/xrays/[id]/analyze/route", url: "/api/xrays/f1/analyze?refresh=true", cuerpo: () => ({}),
+    params: { id: "f1" } },
 ];
 
-async function pedir(r: (typeof RUTAS)[number]): Promise<Response> {
+async function pedir(r: (typeof RUTAS)[number] & { params?: Record<string, string> }): Promise<Response> {
   const { POST } = await import(r.modulo);
-  return POST(new NextRequestCtor(`http://localhost${r.url}`, {
+  const req = new NextRequestCtor(`http://localhost${r.url}`, {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(r.cuerpo()),
-  }));
+  });
+  return r.params ? POST(req, { params: Promise.resolve(r.params) }) : POST(req);
 }
 
 for (const r of RUTAS) {
