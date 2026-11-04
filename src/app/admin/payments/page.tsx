@@ -15,6 +15,7 @@ import { listarPendientesAdmin, type PendienteAdminDTO } from "@/lib/billing/spe
 import { inicioDelMes, inicioDelMesAnterior } from "@/lib/admin/zona-horaria";
 import { leerPagosSaldoIaRecientes, type PagoSaldoIaGlobalDTO } from "@/lib/admin/saldo-ia-clinica";
 import { sinActivacionManual } from "@/lib/billing/pagos-reales";
+import { requireAdminPage } from "@/lib/admin-page-guard";
 
 /** Tope de la pestaña "Todos los pagos". */
 const RECENT_PAYMENTS_LIMIT = 100;
@@ -41,6 +42,7 @@ async function safe<T>(promise: Promise<T>, fallback: T): Promise<T> {
 }
 
 export default async function PaymentsPage() {
+  await requireAdminPage();
   try {
     return await renderPaymentsPage();
   } catch (err: any) {

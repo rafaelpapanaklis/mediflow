@@ -1,8 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import type { NextRequest } from "next/server";
 import type { PediatricAuditAction } from "@/lib/pediatrics/audit";
-import { insertarFilaBitacora } from "@/lib/movimientos-paciente/fila";
-import { deducirPatientId, type CategoriaMovimiento } from "@/lib/movimientos-paciente/catalogo";
+import { insertarFilaBitacora, insertarFilaExterna } from "@/lib/movimientos-paciente/fila";
+import { deducirPatientId, type ActorExterno, type CategoriaMovimiento } from "@/lib/movimientos-paciente/catalogo";
 
 export type AuditAction =
   | "create" | "update" | "delete" | "view"
@@ -178,6 +178,41 @@ export async function logAudit(opts: AuditOptions) {
     });
   } catch (e) {
     // Never let audit logging crash the main operation
+    console.error("Audit log error:", e);
+  }
+}
+
+/**
+ * Una fila de bitácora de quien NO es un usuario del equipo y no cuelga de un paciente: hoy, el webhook de
+ * Stripe (seguridad admin-auth, revisión ws1-t8). Antes escribía `userId: clinicId` como «placeholder», pero
+ * `audit_logs."userId"` tiene FK a `users`: el INSERT fallaba, logAudit se lo tragaba y el rastro de cobros
+ * no se guardaba nunca. Ahora va con `userId` NULL y un actor externo declarado (sql/audit-logs-actor-externo.sql;
+ * sin él no escribe, igual que hoy, y lo avisa una vez). `origen` es el nombre que se ve en la bitácora
+ * («Stripe (webhook)»), en `changes._mov.after.actor`. NUNCA tira.
+ */
+export async function logAuditExterno(opts: {
+  clinicId:   string;
+  actor:      ActorExterno;
+  origen:     string;
+  entityType: AuditEntityType;
+  entityId:   string;
+  action:     AuditAction;
+  changes?:   Record<string, { before: any; after: any }>;
+}): Promise<void> {
+  try {
+    if (!opts.clinicId) return;
+    const mov = opts.changes?._mov as { before?: unknown; after?: Record<string, unknown> } | undefined;
+    await insertarFilaExterna({
+      clinicId:   opts.clinicId,
+      userId:     null,
+      entityType: opts.entityType,
+      entityId:   opts.entityId,
+      action:     opts.action,
+      changes:    { ...(opts.changes ?? {}), _mov: { before: mov?.before ?? null, after: { ...(mov?.after ?? {}), actor: opts.origen } } },
+      actorType:  opts.actor,
+      patientId:  null,
+    });
+  } catch (e) {
     console.error("Audit log error:", e);
   }
 }

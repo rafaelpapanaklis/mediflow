@@ -15,7 +15,7 @@
 // ═══════════════════════════════════════════════════════════════════════
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
-import { getAdminSession } from "@/lib/admin-auth";
+import { sesionAdminDeAccion } from "@/lib/admin-page-guard";
 import {
   borrarParametro,
   guardarParametro,
@@ -61,7 +61,7 @@ async function auditar(accion: string, entityId: string, datos: Record<string, u
 }
 
 export async function sembrarAccion(): Promise<AccionResultado> {
-  const admin = await getAdminSession();
+  const admin = await sesionAdminDeAccion();
   if (!admin) return { ok: false, error: "No autorizado" };
 
   const r = await sembrarParametros();
@@ -91,7 +91,7 @@ export async function guardarAccion(input: {
   effectiveFrom: string;
   metaJson: string;
 }): Promise<AccionResultado> {
-  const admin = await getAdminSession();
+  const admin = await sesionAdminDeAccion();
   if (!admin) return { ok: false, error: "No autorizado" };
 
   if (!KINDS.includes(input.kind)) return { ok: false, error: "Tipo de parámetro desconocido." };
@@ -140,7 +140,7 @@ export async function guardarAccion(input: {
 }
 
 export async function borrarAccion(id: string): Promise<AccionResultado> {
-  const admin = await getAdminSession();
+  const admin = await sesionAdminDeAccion();
   if (!admin) return { ok: false, error: "No autorizado" };
   if (!id) return { ok: false, error: "Falta el parámetro." };
 

@@ -24,10 +24,12 @@ import { cargarOrigen } from "@/lib/admin/origen-clinica";
 import { AdminClinicDetailClient, type PlatformPayments } from "./clinic-detail-client";
 import type { PlanOverridesDTO } from "./plan-overrides-card";
 import { sinActivacionManual } from "@/lib/billing/pagos-reales";
+import { requireAdminPage } from "@/lib/admin-page-guard";
 
 export const metadata: Metadata = { title: "Detalle Clínica — Admin DaleControl" };
 
 export default async function AdminClinicDetailPage(props: { params: Promise<{ id: string }> }) {
+  await requireAdminPage();
   const params = await props.params;
   const clinic = await prisma.clinic.findUnique({
     where: { id: params.id },

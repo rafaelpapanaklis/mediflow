@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { listRealtyPlanConfigsForAdmin } from "@/lib/realty/admin";
 import { RealtyPlanConfigClient } from "./plan-config-client";
+import { requireAdminPage } from "@/lib/admin-page-guard";
 
 /**
  * /admin/inmobiliarias/planes — el editor de `realty_plan_configs`.
@@ -17,6 +18,7 @@ import { RealtyPlanConfigClient } from "./plan-config-client";
  * "Inmobiliarias" siga encendido: admin-nav empareja por segmento.
  */
 export default async function AdminRealtyPlansPage() {
+  await requireAdminPage();
   const plans = await listRealtyPlanConfigsForAdmin();
   return <RealtyPlanConfigClient plans={plans} />;
 }

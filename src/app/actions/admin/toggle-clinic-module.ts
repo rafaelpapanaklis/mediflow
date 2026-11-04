@@ -32,7 +32,7 @@
  */
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { getAdminSession } from "@/lib/admin-auth";
+import { sesionAdminDeAccion } from "@/lib/admin-page-guard";
 import { logAudit } from "@/lib/audit";
 import { getStripeSafe } from "@/lib/stripe";
 import { suscripcionesConBajaProgramada } from "@/lib/admin/modulos-core";
@@ -60,7 +60,7 @@ export async function toggleClinicModule(
 ): Promise<ToggleClinicModuleResult> {
   // El core espera isAuthed síncrono; precomputamos la sesión (DB-backed) y le
   // pasamos un closure que devuelve el booleano ya resuelto.
-  const sesion = await getAdminSession();
+  const sesion = await sesionAdminDeAccion();
   const admin = sesion ? { id: sesion.user.id, email: sesion.user.email } : null;
 
   return toggleClinicModuleCore(input, {

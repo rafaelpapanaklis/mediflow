@@ -1,7 +1,8 @@
 import "server-only";
 import type Stripe from "stripe";
 import { prisma } from "@/lib/prisma";
-import { logAudit } from "@/lib/audit";
+import { logAuditExterno } from "@/lib/audit";
+import { ORIGEN_REINTENTO_CRON, ORIGEN_STRIPE_WEBHOOK } from "@/lib/billing/origen-bitacora";
 import { sincronizarSedesIncluidas } from "@/lib/billing/sedes-incluidas";
 import {
   clinicaEstabaSuspendida,
@@ -159,9 +160,11 @@ export async function reglaDeSuspensionPorCobroDeTarjeta(
   invoice: Stripe.Invoice,
   clinic: { id: string; name?: string | null; subscriptionStatus: string | null; stripeSubscriptionId: string | null; trialEndsAt: Date | null },
   pagadoEn: Date,
-  opciones: { tardia?: boolean } = {},
+  /** `origen`: quién la corre, para la bitácora (el webhook por defecto; el reintento pasa el suyo). */
+  opciones: { tardia?: boolean; origen?: string } = {},
 ): Promise<ResultadoReglaCobro> {
   const NO: ResultadoReglaCobro = { aplicada: false };
+  const origen = opciones.origen ?? ORIGEN_STRIPE_WEBHOOK;
   if (!clinic.stripeSubscriptionId || (invoice.amount_paid ?? 0) <= 0 || !invoice.id) return NO;
   if (referenciaDeFactura(invoice as unknown as Parameters<typeof referenciaDeFactura>[0]).stripeSubscriptionId !== clinic.stripeSubscriptionId) return NO;
   const motivo = invoice.billing_reason;
@@ -207,7 +210,7 @@ export async function reglaDeSuspensionPorCobroDeTarjeta(
     // Z2 en el camino normal): un fallo nuestro de anular nunca la deja suspendida.
     let errorAlReactivar: unknown = null;
     try {
-      await reactivarSiStripeYaCobro(stripe, invoice, clinic, { fin });
+      await reactivarSiStripeYaCobro(stripe, invoice, clinic, { fin }, origen);
     } catch (e) {
       errorAlReactivar = e;
       console.error("[regla-cobro-tarjeta] no se pudo reactivar (camino tardío):", (e as Error)?.message ?? e);
@@ -234,9 +237,10 @@ export async function reglaDeSuspensionPorCobroDeTarjeta(
     const coincide = cicloDeStripeYaCoincide(viva, fin);
     const aviso = coincide ? undefined : textoReglaTardia({ clinicaNombre: clinic.name ?? clinic.id, abiertas, finPeriodoStripe: viva, protegidoHasta: fin });
     if (aviso) await avisarAdminUnaVez(`${invoice.id}:regla_tardia`, clinic.id, { asunto: `Revisa en Stripe la suscripción de ${clinic.name ?? clinic.id}: la regla de la suspensión no se aplicó al momento del pago`, lineas: [aviso] });
-    await logAudit({
+    await logAuditExterno({
       clinicId: clinic.id,
-      userId: clinic.id,
+      actor: "public",
+      origen,
       entityType: "subscription",
       entityId: invoice.id,
       action: "update",
@@ -246,9 +250,10 @@ export async function reglaDeSuspensionPorCobroDeTarjeta(
   }
 
   const r = await aplicarReglaDeSuspension({ stripe, clinicId: clinic.id, sub: viva, pagadoEn, finDeLoPagado: fin, facturas: aAnular, periodoExacto: true, facturaPagada: [invoice.id] });
-  await logAudit({
+  await logAuditExterno({
     clinicId: clinic.id,
-    userId: clinic.id,
+    actor: "public",
+    origen,
     entityType: "subscription",
     entityId: invoice.id,
     action: "update",
@@ -264,7 +269,7 @@ export async function reglaDeSuspensionPorCobroDeTarjeta(
     // quien ya pagó); lo pendiente queda visible (rastro `regla_fallo`) y se avisa al admin. Después se lanza el error para que
     // Stripe reenvíe el evento.
     try {
-      await reactivarSiStripeYaCobro(stripe, invoice, clinic, { fin });
+      await reactivarSiStripeYaCobro(stripe, invoice, clinic, { fin }, origen);
     } catch (e) {
       console.error("[regla-cobro-tarjeta] no se pudo reactivar tras el fallo de la regla:", (e as Error)?.message ?? e);
     }
@@ -305,6 +310,7 @@ export async function reactivarSiStripeYaCobro(
   invoice: Stripe.Invoice,
   clinic: { id: string; subscriptionStatus: string | null; stripeSubscriptionId: string | null },
   tras?: { fin: Date },
+  origen: string = ORIGEN_STRIPE_WEBHOOK,
 ): Promise<void> {
   if (!clinic.stripeSubscriptionId) return;
   if (!tras && !isPaymentFailed(clinic.subscriptionStatus)) return;
@@ -336,9 +342,10 @@ export async function reactivarSiStripeYaCobro(
     data: { subscriptionStatus: "active", ...datosFechas },
   });
   await sincronizarSedesIncluidas(clinic.id);
-  await logAudit({
+  await logAuditExterno({
     clinicId: clinic.id,
-    userId: clinic.id,
+    actor: "public",
+    origen,
     entityType: "subscription",
     entityId: invoice.id ?? viva.id,
     action: "update",
@@ -357,6 +364,8 @@ export async function reactivarSiStripeYaCobro(
 export async function reintentarReglasPendientes(
   stripe: StripeRegla,
   clinicId?: string,
+  /** Quién reintenta, para la bitácora: el cron (por defecto) o «Reintentar» de /admin. */
+  origen: string = ORIGEN_REINTENTO_CRON,
 ): Promise<{ completadas: string[]; fallos: string[]; revisar: string[] }> {
   const completadas: string[] = [];
   const fallos: string[] = [];
@@ -378,7 +387,7 @@ export async function reintentarReglasPendientes(
       const factura = await stripe.invoices.retrieve(p.invoiceId);
       const pagadoEn = new Date((factura.status_transitions?.paid_at ?? factura.created ?? Math.floor(Date.now() / 1000)) * 1000);
       // Siempre el camino TARDÍO: un reintento nunca calcula el ciclo.
-      const r = await reglaDeSuspensionPorCobroDeTarjeta(stripe, factura, clinica, pagadoEn, { tardia: true });
+      const r = await reglaDeSuspensionPorCobroDeTarjeta(stripe, factura, clinica, pagadoEn, { tardia: true, origen });
       if (r.aplicada && r.aviso) revisar.push(r.aviso);
       // Z12: si ya no aplica (suscripción cancelada, la factura no es del plan…) se CIERRA el pendiente para que no reaparezca.
       if (!r.aplicada) await registrarReglaCompletada(p.invoiceId, p.clinicId, p.fin);

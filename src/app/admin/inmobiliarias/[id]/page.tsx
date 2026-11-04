@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { notFound } from "next/navigation";
 import { getRealtyAccountDetailForAdmin } from "@/lib/realty/admin";
 import { AdminRealtyAccountDetailClient } from "./account-detail-client";
+import { requireAdminPage } from "@/lib/admin-page-guard";
 
 /**
  * Ficha de UNA inmobiliaria. Aquí sí se lee desde el server component
@@ -14,6 +15,7 @@ export default async function AdminRealtyAccountPage(
     params: Promise<{ id: string }>;
   }
 ) {
+  await requireAdminPage();
   const params = await props.params;
   const detail = await getRealtyAccountDetailForAdmin(params.id);
   if (!detail) notFound();

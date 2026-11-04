@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { OnboardingClient } from "./onboarding-client";
+import { requireAdminPage } from "@/lib/admin-page-guard";
 
 export const metadata: Metadata = { title: "Onboarding — Admin DaleControl" };
 
@@ -16,6 +17,7 @@ const ONBOARDING_STEPS = [
 ] as const;
 
 export default async function OnboardingPage() {
+  await requireAdminPage();
   const clinics = await prisma.clinic.findMany({
     orderBy: { createdAt: "desc" },
     select: {

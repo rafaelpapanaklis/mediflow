@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getBarbershopDetailForAdmin } from "@/lib/barber/admin";
 import { AdminBarbershopDetailClient } from "./barbershop-detail-client";
+import { requireAdminPage } from "@/lib/admin-page-guard";
 
 // El guard lo pone src/app/admin/layout.tsx (sesión admin en BD). Esta página
 // sólo se renderiza cuando ese layout ya resolvió "ok"; las acciones pasan
@@ -10,6 +11,7 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Barbería — Admin DaleControl" };
 
 export default async function AdminBarbershopDetailPage(props: { params: Promise<{ id: string }> }) {
+  await requireAdminPage();
   const params = await props.params;
   const detail = await getBarbershopDetailForAdmin(params.id);
   if (!detail) notFound();

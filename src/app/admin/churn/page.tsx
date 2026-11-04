@@ -6,8 +6,10 @@ import { BadgeNew } from "@/components/ui/design-system/badge-new";
 import { formatRelativeDate } from "@/lib/format";
 import { masReciente, ultimoAccesoPorClinica } from "@/lib/admin/ultimo-acceso";
 import { daysUntil, isInTrial } from "@/lib/plan-status";
+import { requireAdminPage } from "@/lib/admin-page-guard";
 
 export default async function ChurnPage() {
+  await requireAdminPage();
   const now   = new Date();
   const prev7 = new Date(now); prev7.setDate(prev7.getDate()-7);
 

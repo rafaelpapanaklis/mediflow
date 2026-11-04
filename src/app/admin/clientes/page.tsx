@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import type { Metadata } from "next";
 import { cargarClientes } from "./datos";
 import { ClientesClient } from "./clientes-client";
+import { requireAdminPage } from "@/lib/admin-page-guard";
 
 export const metadata: Metadata = { title: "Clientes — Admin DaleControl" };
 
@@ -12,6 +13,7 @@ export const metadata: Metadata = { title: "Clientes — Admin DaleControl" };
  * ./cartera; aquí sólo se enchufan.
  */
 export default async function AdminClientesPage() {
+  await requireAdminPage();
   const { clientes, planPrices, ahoraISO, modulosMedidos } = await cargarClientes();
   return <ClientesClient clientes={clientes} planPrices={planPrices} ahoraISO={ahoraISO} modulosMedidos={modulosMedidos} />;
 }

@@ -33,6 +33,7 @@ import { crmListar } from "@/lib/admin/crm/service";
 import { crmTextosListar } from "@/lib/admin/crm/textos-service";
 import { CrmClient } from "./crm-client";
 import { CrmTabs } from "./crm-tabs";
+import { requireAdminPage } from "@/lib/admin-page-guard";
 
 export const metadata: Metadata = { title: "CRM de ventas — Admin DaleControl" };
 
@@ -45,6 +46,7 @@ export const metadata: Metadata = { title: "CRM de ventas — Admin DaleControl"
 const CLINICAS_MAX = 500;
 
 export default async function Page() {
+  await requireAdminPage();
   let listado;
   try {
     listado = await crmListar();

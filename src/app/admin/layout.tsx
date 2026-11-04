@@ -1,6 +1,6 @@
 import { AdminSidebar } from "./admin-nav";
 import { prisma } from "@/lib/prisma";
-import { getAdminSessionResult } from "@/lib/admin-auth";
+import { sesionAdminDeEstaPeticion } from "@/lib/admin-page-guard";
 import { countAdminPendingReply } from "@/lib/support/service";
 import { countAffiliateSupportPendingReply } from "@/lib/affiliate-support/service";
 import { countPagesPendingReview } from "@/lib/affiliates/page-moderation";
@@ -87,7 +87,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   // Tres estados, no dos: un fallo de BD NO puede pedir credenciales (era la
   // causa de que el panel expulsara al admin cada pocos minutos). Ojo con el
   // orden: sólo "anonymous" muestra el login.
-  const session = await getAdminSessionResult();
+  // La misma validación (cache por petición) que usa cada página con requireAdminPage().
+  const session = await sesionAdminDeEstaPeticion();
   if (session.state === "error") {
     return <AdminSessionError />;
   }

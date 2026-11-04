@@ -16,6 +16,7 @@ import {
 } from "@/lib/billing/reactivacion-tras-suspension.server";
 import { reintentarReglasPendientes, reglasPendientes, textoReglaTardia, cicloDeStripeYaCoincide } from "@/lib/billing/regla-cobro-tarjeta.server";
 import { avisarAdminUnaVez } from "@/lib/billing/aviso-admin-envio.server";
+import { ORIGEN_REINTENTO_ADMIN } from "@/lib/billing/origen-bitacora";
 import { getStripeSafe } from "@/lib/stripe";
 
 /**
@@ -278,7 +279,8 @@ export async function marcarFacturasDeLaClinica(
     let tarjeta: { completadas: string[]; fallos: string[]; revisar: string[] } | null = null;
     if (opciones.soloLasQueYaExistian && stripe) {
       const hay = await reglasPendientes(clinicId);
-      if (hay.length > 0) tarjeta = await reintentarReglasPendientes(stripe, clinicId);
+      // `soloLasQueYaExistian` solo lo pasa el «Reintentar» de /admin (activate_clinic / verificar pago).
+      if (hay.length > 0) tarjeta = await reintentarReglasPendientes(stripe, clinicId, ORIGEN_REINTENTO_ADMIN);
     }
     if (opciones.soloLasQueYaExistian && !pago) {
       if (tarjeta) {

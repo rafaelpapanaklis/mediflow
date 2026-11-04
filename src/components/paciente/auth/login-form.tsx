@@ -8,6 +8,7 @@
 import { useState, type CSSProperties, type FocusEvent, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { rutaInternaSegura } from "@/lib/url-interna";
 
 // ── Estilos (dark DaleControl, autocontenidos: sin depender de vars --ld-*) ──
 const SCREEN: CSSProperties = {
@@ -94,10 +95,11 @@ function focusIn(e: FocusEvent<HTMLInputElement>) {
 function focusOut(e: FocusEvent<HTMLInputElement>) {
   e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)";
 }
-/** Solo rutas internas: deben empezar con "/" y no con "//" (anti open-redirect). */
-function safeNext(raw: string | null): string | null {
-  if (!raw || !raw.startsWith("/") || raw.startsWith("//") || raw.startsWith("/\\")) return null;
-  return raw;
+/** Solo rutas internas (anti open-redirect): la regla común de @/lib/url-interna, que además rechaza
+ * tabuladores y saltos de línea (`/\t/evil` → el navegador los quita y queda `//evil`) y valida el
+ * origen tras parsear (auditoría «cloudflare», nº17). */
+export function safeNext(raw: string | null): string | null {
+  return rutaInternaSegura(raw, "") || null;
 }
 
 function Brand() {

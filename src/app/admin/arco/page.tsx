@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
-import { getAdminSession } from "@/lib/admin-auth";
 import { prisma } from "@/lib/prisma";
 import { ArcoAdminClient } from "./arco-admin-client";
+import { requireAdminPage } from "@/lib/admin-page-guard";
 
 export const metadata: Metadata = { title: "Solicitudes ARCO — Admin DaleControl" };
 export const dynamic = "force-dynamic";
@@ -13,10 +13,7 @@ export const dynamic = "force-dynamic";
  * `clinicId: null` fijo.
  */
 export default async function AdminArcoPage() {
-  const ctx = await getAdminSession();
-  if (!ctx) {
-    return <div style={{ padding: 24, color: "var(--text-2)", fontSize: 14 }}>No autorizado.</div>;
-  }
+  await requireAdminPage();
 
   const rows = await prisma.arcoRequest.findMany({
     where: { clinicId: null },

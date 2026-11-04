@@ -17,10 +17,12 @@ import { getCalcParamRowsConId } from "@/lib/realty/calc/params";
 import { kindsSinAnio } from "@/lib/realty/calc/catalog";
 import { seedResumen, SEED_YEAR } from "@/lib/realty/calc/seed";
 import { ParametrosClient } from "./parametros-client";
+import { requireAdminPage } from "@/lib/admin-page-guard";
 
 export const metadata: Metadata = { title: "Parámetros de calculadoras — Admin DaleControl" };
 
 export default async function Page() {
+  await requireAdminPage();
   const rows = await getCalcParamRowsConId();
   const anioActual = new Date().getFullYear();
   return (

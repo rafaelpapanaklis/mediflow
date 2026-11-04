@@ -3,11 +3,13 @@ import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { SuppliersClient } from "./suppliers-client";
 import { PROVEEDOR_SELECT } from "@/lib/b2b/vendor-fields";
+import { requireAdminPage } from "@/lib/admin-page-guard";
 
 export const metadata: Metadata = { title: "Proveedores — Admin DaleControl" };
 
 // Supplier es global (sin clinicId): el admin ve TODOS los proveedores.
 export default async function AdminSuppliersPage() {
+  await requireAdminPage();
   // Tope de seguridad: SuppliersClient lista en memoria sin paginación. Acota a
   // 100 para no traer toda la tabla global de proveedores. TODO: paginar admin.
   // B2B-12: mismo caso que /admin/labs — SuppliersClient es "use client" y sin

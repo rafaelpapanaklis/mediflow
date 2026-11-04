@@ -24,6 +24,7 @@ import {
   fechaConDiaSemanaAdmin, inicioDeHaceDias, inicioDelAnio, inicioDelDia, inicioDelMes, inicioDelMesAnterior,
 } from "@/lib/admin/zona-horaria";
 import { sinActivacionManual } from "@/lib/billing/pagos-reales";
+import { requireAdminPage } from "@/lib/admin-page-guard";
 
 export const metadata: Metadata = { title: "Super Admin — DaleControl" };
 
@@ -33,6 +34,7 @@ const MESES_SPARK = 6;
 const METODOS_AUTOMATICOS = new Set(["stripe", "mercadopago", "paypal", CFDI_OVERAGE_METHOD]);
 
 export default async function AdminPage() {
+  await requireAdminPage();
   try {
     return await renderAdminDashboard();
   } catch (err: any) {

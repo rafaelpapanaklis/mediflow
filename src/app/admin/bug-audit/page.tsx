@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 
 import type { Metadata } from "next";
 import { BugAuditClient } from "./bug-audit-client";
+import { requireAdminPage } from "@/lib/admin-page-guard";
 
 export const metadata: Metadata = { title: "Auditoría de bugs · Admin DaleControl" };
 
@@ -12,6 +13,7 @@ export const metadata: Metadata = { title: "Auditoría de bugs · Admin DaleCont
  * revocada, AdminUser activo) la hacen el layout de /admin y cada ruta de
  * /api/admin/*. No requiere getCurrentUser/Supabase aquí.
  */
-export default function BugAuditPage() {
+export default async function BugAuditPage() {
+  await requireAdminPage();
   return <BugAuditClient />;
 }

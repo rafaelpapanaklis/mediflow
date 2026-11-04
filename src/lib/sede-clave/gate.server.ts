@@ -19,7 +19,7 @@ import {
   sedeBloqueada,
   VIGENCIA_DESBLOQUEO_MS,
 } from "./core";
-import { estadoDeClave, estadosDeClaves, tablaExiste } from "./estado.server";
+import { estadoDeClave, estadosDeClaves, sondaDeTablas } from "./estado.server";
 
 const isProd = process.env.NODE_ENV === "production";
 
@@ -46,7 +46,9 @@ export type EstadoGate = "libre" | "cerrada" | "sin_comprobar";
 
 export async function estadoGateSede(u: { supabaseId: string; clinicId: string }): Promise<EstadoGate> {
   if (!u?.supabaseId || !u?.clinicId) return "sin_comprobar";
-  if (!(await tablaExiste())) return "libre";
+  // nº14: solo un «no hay tablas» de la base apaga la función. Si la sonda falló, la lista tampoco se
+  // fía (sedesConClaveActiva lanza) y se mira la fila de ESTA sede; «sin comprobar» solo si tampoco se lee.
+  if ((await sondaDeTablas()) === "no") return "libre";
   let estado;
   try {
     estado = await estadoDeClave(u.clinicId);
@@ -83,7 +85,8 @@ export async function sedesCerradasPara(supabaseId: string, clinicIds: readonly 
   const ids = Array.from(new Set((clinicIds ?? []).filter((x) => typeof x === "string" && x)));
   if (ids.length === 0) return new Set();
   if (!supabaseId) return new Set(ids);
-  if (!(await tablaExiste())) return new Set();
+  // nº14: con la sonda caída, estadosDeClaves lee la fila de cada sede; solo la que no se lea cuenta como cerrada.
+  if ((await sondaDeTablas()) === "no") return new Set();
   const estados = await estadosDeClaves(ids);
   const cerradas = new Set<string>();
   for (const clinicId of ids) {
@@ -114,7 +117,8 @@ export async function sedesCerradasPara(supabaseId: string, clinicIds: readonly 
 export async function sedesConClave(clinicIds: readonly string[]): Promise<Set<string>> {
   const ids = Array.from(new Set((clinicIds ?? []).filter((x) => typeof x === "string" && x)));
   if (ids.length === 0) return new Set();
-  if (!(await tablaExiste())) return new Set();
+  // nº14: igual que arriba; una sede cuya fila tampoco se lea cuenta como con clave.
+  if ((await sondaDeTablas()) === "no") return new Set();
   const estados = await estadosDeClaves(ids);
   return new Set(ids.filter((id) => { const e = estados.get(id); return !e || e.activa; }));
 }

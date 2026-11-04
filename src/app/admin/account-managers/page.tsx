@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { toAdminRow } from "@/lib/account-manager/admin";
 import type { AccountManagerAdminRow } from "@/lib/account-manager/types";
 import { AccountManagersClient } from "./account-managers-client";
+import { requireAdminPage } from "@/lib/admin-page-guard";
 
 export const metadata: Metadata = { title: "Managers de cuenta — Admin DaleControl" };
 
@@ -13,6 +14,7 @@ export const metadata: Metadata = { title: "Managers de cuenta — Admin DaleCon
 // DESPUÉS del deploy — mientras tanto la pantalla se muestra vacía con el aviso
 // de "falta correr el SQL" en vez de reventar con un 500.
 export default async function AdminAccountManagersPage() {
+  await requireAdminPage();
   let managers: AccountManagerAdminRow[] = [];
   let sqlPending = false;
 

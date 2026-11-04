@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { bloqueoDeSedesParaPlan, sincronizarSedesIncluidas } from "@/lib/billing/sedes-incluidas";
 import { prisma } from "@/lib/prisma";
 import { getStripeSafe, stripeUnavailableResponse } from "@/lib/stripe";
-import { logAudit } from "@/lib/audit";
+import { logAuditExterno } from "@/lib/audit";
 import type Stripe from "stripe";
 import { calcCommissionMxn } from "@/lib/affiliates";
 import { sendAffiliateConversionEmail } from "@/lib/affiliate-emails";
@@ -85,6 +85,14 @@ import { subscriptionPeriodEndSeconds } from "@/lib/billing/proration";
 import { notifyModuleActivated } from "@/lib/marketplace/module-activated-email";
 import { enviarCompraMetaDeSesion } from "@/lib/analytics/meta-capi.server";
 import { enviarCompraTiktokDeSesion } from "@/lib/analytics/tiktok-capi.server";
+import { aplicarActivacionUnaVez, type DbActivacion } from "@/lib/billing/activacion-unica";
+import { ORIGEN_STRIPE_WEBHOOK } from "@/lib/billing/origen-bitacora";
+
+/**
+ * Quién firma la bitácora de este webhook (revisión ws1-t8): no hay usuario del equipo y `audit_logs."userId"`
+ * tiene FK a `users`, así que va como actor externo ("public": llega de fuera, sin sesión) con este nombre.
+ */
+const ORIGEN_STRIPE = ORIGEN_STRIPE_WEBHOOK;
 
 // Next.js App Router: no hace body-parsing automático aquí porque leemos el
 // raw body para verificar la firma de Stripe.
@@ -298,9 +306,10 @@ export async function POST(req: NextRequest) {
         if (kind !== "platform-subscription" && kind !== PLAN_UPGRADE_DIFF_KIND && kind !== MODULE_SUBSCRIPTION_KIND) break;
         const clinicId = session.metadata?.clinicId;
         if (clinicId) {
-          await logAudit({
+          await logAuditExterno({
             clinicId,
-            userId: clinicId,
+            actor: "public",
+            origen: ORIGEN_STRIPE,
             entityType: "subscription",
             entityId: session.id,
             action: "update",
@@ -332,9 +341,10 @@ export async function POST(req: NextRequest) {
           // sedes seguirían activas sin pagar). Se queda el plan actual y se deja el motivo en la bitácora.
           const sedesBloquean = isPlanId(subPlan) ? await bloqueoDeSedesParaPlan(clinicId, subPlan) : null;
           if (sedesBloquean) {
-            await logAudit({
+            await logAuditExterno({
               clinicId,
-              userId: clinicId,
+              actor: "public",
+              origen: ORIGEN_STRIPE,
               entityType: "subscription",
               entityId: sub.id,
               action: "update",
@@ -370,9 +380,10 @@ export async function POST(req: NextRequest) {
           const planPagado = planDeMetadataAplicable(estadoEfectivoDeSuscripcion({ evento: sub.status, vivo: estadoVivo }));
           const subPlanFields = planPagado ? subPlanFieldsSiPagado : {};
           if (!planPagado && Object.keys(subPlanFieldsSiPagado).length > 0) {
-            await logAudit({
+            await logAuditExterno({
               clinicId,
-              userId: clinicId,
+              actor: "public",
+              origen: ORIGEN_STRIPE,
               entityType: "subscription",
               entityId: sub.id,
               action: "update",
@@ -433,9 +444,10 @@ export async function POST(req: NextRequest) {
           });
           await sincronizarSedesIncluidas(clinicId);
 
-          await logAudit({
+          await logAuditExterno({
             clinicId,
-            userId: clinicId,
+            actor: "public",
+            origen: ORIGEN_STRIPE,
             entityType: "subscription",
             entityId: sub.id,
             action: "update",
@@ -468,9 +480,10 @@ export async function POST(req: NextRequest) {
             data: { subscriptionStatus: "cancelled" },
           });
           await sincronizarSedesIncluidas(clinicId);
-          await logAudit({
+          await logAuditExterno({
             clinicId,
-            userId: clinicId,
+            actor: "public",
+            origen: ORIGEN_STRIPE,
             entityType: "subscription",
             entityId: sub.id,
             action: "update",
@@ -567,9 +580,10 @@ export async function POST(req: NextRequest) {
               }),
             );
           }
-          await logAudit({
+          await logAuditExterno({
             clinicId,
-            userId: clinicId,
+            actor: "public",
+            origen: ORIGEN_STRIPE,
             entityType: "subscription",
             entityId: invoice.id ?? customerId ?? clinicId,
             action: "update",
@@ -681,9 +695,10 @@ export async function POST(req: NextRequest) {
             where: { clinicId: clinic.id, reference: invoiceId, status: { in: ["failed", "pending"] } },
             data: { status: "void", notes: "Pagada fuera de Stripe (pago manual confirmado)" },
           });
-          await logAudit({
+          await logAuditExterno({
             clinicId: clinic.id,
-            userId: clinic.id,
+            actor: "public",
+            origen: ORIGEN_STRIPE,
             entityType: "subscription",
             entityId: invoiceId,
             action: "update",
@@ -1225,9 +1240,10 @@ async function applyPlanUpgradeDiff(
       `[stripe webhook] plan-upgrade-diff PAGADO pero NO aplicado (${reason}):`,
       JSON.stringify({ clinicId, incomingPlan: plan, ...extra, ...source }),
     );
-    await logAudit({
+    await logAuditExterno({
       clinicId,
-      userId: clinicId,
+      actor: "public",
+      origen: ORIGEN_STRIPE,
       entityType: "subscription",
       entityId: source.sessionId ?? clinicId,
       action: "update",
@@ -1282,9 +1298,10 @@ async function applyPlanUpgradeDiff(
   });
   await sincronizarSedesIncluidas(clinicId);
 
-  await logAudit({
+  await logAuditExterno({
     clinicId,
-    userId: clinicId, // sin user en webhook context — usamos clinicId como placeholder
+    actor: "public",
+    origen: ORIGEN_STRIPE,
     entityType: "subscription",
     entityId: source.sessionId ?? clinicId,
     action: "update",
@@ -1345,18 +1362,36 @@ async function activatePlatformSubscription(
     ? { plan: source.plan, aiTokensLimit: (await getPlanLimits(source.plan)).aiTokensDefault }
     : {};
 
-  await prisma.clinic.update({
-    where: { id: clinicId },
-    data: {
-      subscriptionStatus: "active",
-      stripeSubscriptionId: subscriptionId ?? undefined,
-      trialEndsAt: next,
-      nextBillingDate: next,
-      ...planFields,
-    },
-  });
-  // A1 (ws1-t5): las sedes incluidas siguen a la madre también al reactivar/renovar.
+  // Auditoría «cloudflare» nº13: UNA activación por sesión de checkout. Una reentrega del mismo evento
+  // (Stripe entrega «al menos una vez», reintenta tras un 500, o alguien pulsa «Resend») ya no suma otro
+  // periodo: se reclama session.id en la misma transacción que la escritura (@/lib/billing/activacion-unica).
+  const activacion = await aplicarActivacionUnaVez(
+    prisma as unknown as DbActivacion,
+    { clinicId, sessionId: source.sessionId, evento: source.event },
+    (db) =>
+      db.clinic.update({
+        where: { id: clinicId },
+        data: {
+          subscriptionStatus: "active",
+          stripeSubscriptionId: subscriptionId ?? undefined,
+          trialEndsAt: next,
+          nextBillingDate: next,
+          ...planFields,
+        },
+      }),
+  );
+  if (!activacion.aplicada) {
+    console.warn(`[stripe webhook] ${source.event} ${source.sessionId} ya activó el plan de ${clinicId}: reentrega sin sumar otro periodo (tampoco repite el marcado de la factura de tarjeta).`);
+  }
+  // A1 (ws1-t5): las sedes incluidas siguen a la madre también al reactivar/renovar. Va también en una reentrega
+  // (revisión ws1-t8, m2): si la primera entrega murió después de escribir la clínica, aquí se completa. Es
+  // idempotente (copia el estado actual de la madre).
   await sincronizarSedesIncluidas(clinicId);
+  // Lo demás NO se repite: el marcado de la factura de tarjeta decide con el estado de ANTES del pago
+  // (`estabaSuspendida`), y en una reentrega `before` ya es la clínica activada, así que podría pagar fuera de
+  // Stripe una factura de un mes suspendido en vez de anularla. Si la primera entrega murió justo entre escribir la
+  // clínica y marcar (raro: el marcado no lanza), la factura se marca a mano; la reentrega lo deja en el log.
+  if (!activacion.aplicada) return;
 
   // SPEI/OXXO de Stripe (pago único, sin suscripción nueva): es un pago manual. Si la clínica tiene una suscripción de
   // tarjeta viva con la factura del plan abierta o incobrable, esa factura queda pagada fuera de Stripe para que no la
@@ -1390,9 +1425,10 @@ async function activatePlatformSubscription(
     }
   }
 
-  await logAudit({
+  await logAuditExterno({
     clinicId,
-    userId: clinicId, // sin user en webhook context — usamos clinicId como placeholder
+    actor: "public",
+    origen: ORIGEN_STRIPE,
     entityType: "subscription",
     entityId: subscriptionId ?? source.sessionId ?? clinicId,
     action: "update",
@@ -1461,9 +1497,10 @@ async function activateModulePurchase(
         console.error("[webhook] no se pudo cancelar la suscripción duplicada:", e);
       }
     }
-    await logAudit({
+    await logAuditExterno({
       clinicId,
-      userId: clinicId,
+      actor: "public",
+      origen: ORIGEN_STRIPE,
       entityType: "subscription",
       entityId: opts.stripeSubscriptionId ?? opts.source.sessionId,
       action: "update",
@@ -1509,9 +1546,10 @@ async function activateModulePurchase(
     periodEnd,
   }).catch(() => {});
 
-  await logAudit({
+  await logAuditExterno({
     clinicId,
-    userId: clinicId, // sin user en webhook context — mismo placeholder que activatePlatformSubscription
+    actor: "public",
+    origen: ORIGEN_STRIPE,
     entityType: "subscription",
     entityId: opts.stripeSubscriptionId ?? opts.source.sessionId,
     action: "update",
@@ -1560,9 +1598,10 @@ async function syncModuleSubscription(sub: Stripe.Subscription, eventType: strin
     },
   });
 
-  await logAudit({
+  await logAuditExterno({
     clinicId,
-    userId: clinicId,
+    actor: "public",
+    origen: ORIGEN_STRIPE,
     entityType: "subscription",
     entityId: sub.id,
     action: "update",
@@ -1603,9 +1642,10 @@ async function cancelModuleSubscription(sub: Stripe.Subscription, eventType: str
     data: { status: "cancelled", cancelledAt: new Date() },
   });
 
-  await logAudit({
+  await logAuditExterno({
     clinicId,
-    userId: clinicId,
+    actor: "public",
+    origen: ORIGEN_STRIPE,
     entityType: "subscription",
     entityId: sub.id,
     action: "update",

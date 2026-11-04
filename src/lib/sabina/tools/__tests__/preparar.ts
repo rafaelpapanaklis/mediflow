@@ -40,6 +40,13 @@ mock.module("@/lib/prisma", {
       get $connect(): never {
         throw new Error("una prueba de Sabina intentó usar el prisma real en vez de ctx.db");
       },
+      // La sonda de la clave de la sede (@/lib/sede-clave/estado.server) pregunta con el prisma del módulo, no
+      // con ctx.db. Se le contesta «sin tablas» (= sin el SQL pegado, la función apagada). Desde la auditoría
+      // «cloudflare» nº14 un fallo de la sonda ya no abre las sedes: sin esta respuesta, todas saldrían cerradas.
+      $queryRaw: async (q: TemplateStringsArray) => {
+        if (q.join("?").includes("to_regclass('public.sede_claves')")) return [{ existe: false }];
+        throw new Error("una prueba de Sabina intentó usar el prisma real en vez de ctx.db");
+      },
     },
   },
 });

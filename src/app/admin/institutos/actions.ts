@@ -18,7 +18,7 @@
 // ═══════════════════════════════════════════════════════════════════════
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
-import { getAdminSession } from "@/lib/admin-auth";
+import { sesionAdminDeAccion } from "@/lib/admin-page-guard";
 import { setEduAlmacenamientoCuotaTb } from "@/lib/edu/almacenamiento";
 import { eduAlmTbLabel } from "@/lib/edu/almacenamiento-core";
 
@@ -60,7 +60,7 @@ export async function guardarCuotaAccion(input: {
   institutionId: string;
   tb: number;
 }): Promise<AccionResultado> {
-  const admin = await getAdminSession();
+  const admin = await sesionAdminDeAccion();
   if (!admin) return { ok: false, error: "No autorizado" };
 
   const r = await setEduAlmacenamientoCuotaTb(input?.institutionId, input?.tb);

@@ -3,11 +3,13 @@ import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { computeLevel, getProgramConfig, levelPct, LEVEL_LABELS } from "@/lib/affiliate-levels";
 import { AffiliatesClient } from "./affiliates-client";
+import { requireAdminPage } from "@/lib/admin-page-guard";
 
 export const metadata: Metadata = { title: "Afiliados — Admin DaleControl" };
 
 // Affiliate es global (sin clinicId): el admin ve TODOS los afiliados.
 export default async function AdminAffiliatesPage() {
+  await requireAdminPage();
   const [affiliates, config, activeGroups, clickGroups] = await Promise.all([
     prisma.affiliate.findMany({
       orderBy: { createdAt: "desc" },
