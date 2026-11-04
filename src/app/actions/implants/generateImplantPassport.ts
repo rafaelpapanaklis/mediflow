@@ -4,6 +4,7 @@
 // de createProstheticPhase, también disponible para uso manual.
 
 import { prisma } from "@/lib/prisma";
+import { assertPatientFileInClinic } from "@/lib/patient-files/archivo-del-paciente";
 import {
   generateImplantPassportSchema,
   type GenerateImplantPassportInput,
@@ -48,6 +49,14 @@ export async function generateImplantPassport(
       "El implante aún no tiene fase protésica — el carnet se genera al finalizarla",
     );
   }
+
+  // Auditoría ola 3 (BAJA): la foto del carnet, de esta clínica y del paciente del implante.
+  const fotoOk = await assertPatientFileInClinic({
+    id: parsed.data.patientPhotoFileId,
+    clinicId: ctx.clinicId,
+    patientId: before.patientId,
+  });
+  if (!fotoOk) return fail("Foto no encontrada");
 
   try {
     const existing = await prisma.implantPassport.findUnique({

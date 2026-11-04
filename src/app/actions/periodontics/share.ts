@@ -5,6 +5,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { pacienteOcultoPara } from "@/lib/clinical-shared/auth/paciente-oculto";
 import { canViewPatient } from "@/lib/patient-visibility";
 import {
   defaultShareExpiry,
@@ -126,6 +127,8 @@ export async function revokePerioShareLink(
     select: { id: true, patientId: true, revokedAt: true },
   });
   if (!link) return fail("Enlace no encontrado");
+  // Seguridad ola 2b (lead 14 / H1 de t2): el paciente del registro puede estar restringido (visibleUserIds).
+  if (await pacienteOcultoPara(ctx, link.patientId)) return fail("Enlace no encontrado");
   if (link.revokedAt) return ok({ id: link.id });
 
   try {

@@ -63,7 +63,16 @@ const RUTAS = [
   { nombre: "POST uploads/confirm",    mod: "@/app/api/patients/[id]/uploads/confirm/route",  metodo: "POST", permiso: "xrays.upload" },
   { nombre: "POST dicom-set/sign",     mod: "@/app/api/patients/[id]/dicom-set/sign/route",   metodo: "POST", permiso: "xrays.upload" },
   { nombre: "POST dicom-set/register", mod: "@/app/api/patients/[id]/dicom-set/register/route", metodo: "POST", permiso: "xrays.upload" },
+  // Auditoría cloudflare nº11: la URL firmada del CBCT lite tampoco es para un READONLY.
+  { nombre: "POST dicom-set/lite",     mod: "@/app/api/patients/[id]/dicom-set/[fileId]/lite/route", metodo: "POST", permiso: "xrays.view" },
+  // Ídem: abortar una subida BORRA el objeto del bucket, así que pide la misma llave que la subida.
+  { nombre: "POST uploads/abort",      mod: "@/app/api/patients/[id]/uploads/abort/route",    metodo: "POST", permiso: "xrays.upload" },
 ] as const;
+
+// La ruta lite comprueba que Storage esté configurado antes de la visibilidad (el centinela): valores
+// de mentira, sin red (el gate de permiso o el centinela cortan antes de usarlos).
+process.env.NEXT_PUBLIC_SUPABASE_URL ||= "https://proyecto-de-prueba.supabase.co";
+process.env.SUPABASE_SERVICE_ROLE_KEY ||= "llave-de-prueba";
 
 async function llamar(ruta: (typeof RUTAS)[number], rol: string, override: string[] = []) {
   ctxActual = { role: rol, permissionsOverride: override };

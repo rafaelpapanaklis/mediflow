@@ -1,6 +1,7 @@
 // Endodontics — helper compartido que arma ToothCenterViewData. Spec §6.
 
 import { prisma } from "@/lib/prisma";
+import { soloArchivosDelTratamiento } from "@/lib/patient-files/archivo-del-paciente";
 import { patientVisibilityAnd, type VisibilityViewer } from "@/lib/patient-visibility";
 import type {
   ToothCenterViewData,
@@ -81,6 +82,10 @@ export async function loadEndoToothData(
       orderBy: { startedAt: "desc" },
     }),
   ]);
+
+  // Auditoría ola 3 (BAJA): un id de archivo ajeno guardado antes del arreglo no lleva la fila de otra
+  // clínica (o de otro paciente) al panel.
+  for (const t of treatments) soloArchivosDelTratamiento(t);
 
   const activeTreatment = treatments.find((t) => t.outcomeStatus === "EN_CURSO") ?? null;
   const pastTreatments = treatments.filter((t) => t.outcomeStatus !== "EN_CURSO");

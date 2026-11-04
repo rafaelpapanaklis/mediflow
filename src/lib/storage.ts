@@ -1,22 +1,15 @@
 import { createClient as createAdmin } from "@supabase/supabase-js";
+import { BUCKETS, type BucketName, esPathDeLaClinica, esPathFirmable, extractStoragePath } from "./storage-paths";
 
-/**
- * Buckets de Supabase Storage usados por DaleControl.
- *
- * - PATIENT_FILES: PRIVADO. Contiene archivos clínicos (radiografías, fotos
- *   intraorales, firmas de consent, before/after). Acceso SIEMPRE vía signed
- *   URL con TTL corto (default 300s). Nunca debe ser público.
- *
- * - CLINIC_PUBLIC: PÚBLICO. Contiene assets de la landing pública de cada
- *   clínica (cover, galería). Estos son accesibles vía URL pública porque
- *   se renderizan en páginas indexables sin autenticación.
- */
-export const BUCKETS = {
-  PATIENT_FILES: "patient-files",
-  CLINIC_PUBLIC: "clinic-public",
-} as const;
-
-export type BucketName = (typeof BUCKETS)[keyof typeof BUCKETS];
+export {
+  BUCKETS,
+  type BucketName,
+  esPathBajo,
+  esPathDeLaClinica,
+  esPathFirmable,
+  extractStoragePath,
+  soloDeSuClinica,
+} from "./storage-paths";
 
 /** TTL por defecto para signed URLs de archivos clínicos (5 minutos). */
 export const SIGNED_URL_TTL_SECONDS = 300;
@@ -33,49 +26,17 @@ function admin() {
 }
 
 /**
- * Extrae el path interno del bucket a partir de una URL pública o firmada
- * legacy de Supabase Storage. Devuelve `null` si la URL no pertenece al
- * bucket dado.
- *
- * Ejemplos válidos:
- *   /storage/v1/object/public/patient-files/<clinic>/<patient>/img.jpg
- *   /storage/v1/object/sign/patient-files/<clinic>/<patient>/img.jpg?token=...
- *
- * Si el input ya es un path relativo (no http), lo devuelve tal cual.
- */
-export function extractStoragePath(
-  urlOrPath: string | null | undefined,
-  bucket: BucketName = BUCKETS.PATIENT_FILES,
-): string | null {
-  if (!urlOrPath) return null;
-  // Si no parece URL, asumimos que ya es un path
-  if (!urlOrPath.startsWith("http")) return urlOrPath;
-  try {
-    const u = new URL(urlOrPath);
-    const marker = `/storage/v1/object/`;
-    const idx = u.pathname.indexOf(marker);
-    if (idx < 0) return null;
-    // Quita /storage/v1/object/{public|sign}/{bucket}/
-    const rest = u.pathname.slice(idx + marker.length); // public/<bucket>/...
-    const parts = rest.split("/");
-    // parts[0] = "public" | "sign", parts[1] = bucket, parts[2..] = path
-    if (parts.length < 3) return null;
-    if (parts[1] !== bucket) return null;
-    return decodeURIComponent(parts.slice(2).join("/").split("?")[0]);
-  } catch {
-    return null;
-  }
-}
-
-/**
  * Genera una signed URL para `path` dentro de `bucket`.
- * Lanza si Supabase devuelve error.
+ * Lanza si Supabase devuelve error, o si el path no pasa el veto (`esPathFirmable`).
  */
 export async function createSignedFileUrl(
   path: string,
   ttlSeconds: number = SIGNED_URL_TTL_SECONDS,
   bucket: BucketName = BUCKETS.PATIENT_FILES,
 ): Promise<string> {
+  if (!esPathFirmable(path)) {
+    throw new Error(`No se firma ${bucket}/${JSON.stringify(path)}: path no permitido`);
+  }
   const { data, error } = await admin().storage.from(bucket).createSignedUrl(path, ttlSeconds);
   if (error || !data?.signedUrl) {
     throw new Error(`No se pudo generar signed URL para ${bucket}/${path}: ${error?.message ?? "unknown"}`);
@@ -86,7 +47,7 @@ export async function createSignedFileUrl(
 /**
  * Acepta un path interno o una URL legacy y devuelve una signed URL fresca.
  * Si el input es una URL externa (no Supabase) o no pertenece al bucket
- * indicado, la devuelve sin tocar.
+ * indicado, la devuelve sin tocar. Un path que no pasa el veto (`esPathFirmable`) devuelve "".
  */
 export async function signMaybeUrl(
   urlOrPath: string | null | undefined,
@@ -96,7 +57,39 @@ export async function signMaybeUrl(
   if (!urlOrPath) return "";
   const path = extractStoragePath(urlOrPath, bucket);
   if (!path) return urlOrPath;
+  if (!esPathFirmable(path)) return "";
   return createSignedFileUrl(path, ttlSeconds, bucket);
+}
+
+/**
+ * Como `signMaybeUrl`, pero SOLO firma objetos de la clínica de la sesión (`clinicId` obligatorio):
+ * un path de otra clínica o de la plataforma devuelve "" sin firmar. Para rutas que vinieron del
+ * cliente y se guardaron (fotos de antes/después). Una URL externa (no del bucket) pasa tal cual.
+ */
+export async function signMaybeUrlDeLaClinica(
+  urlOrPath: string | null | undefined,
+  clinicId: string,
+  ttlSeconds: number = SIGNED_URL_TTL_SECONDS,
+): Promise<string> {
+  if (!urlOrPath) return "";
+  const path = extractStoragePath(urlOrPath, BUCKETS.PATIENT_FILES);
+  if (!path) return urlOrPath;
+  if (!esPathDeLaClinica(path, clinicId)) return "";
+  return createSignedFileUrl(path, ttlSeconds, BUCKETS.PATIENT_FILES);
+}
+
+/** Versión batch de `signMaybeUrlDeLaClinica`: lo que no es de la clínica queda "" y no se firma. */
+export async function signMaybeUrlsDeLaClinica(
+  urls: Array<string | null | undefined>,
+  clinicId: string,
+  ttlSeconds: number = SIGNED_URL_TTL_SECONDS,
+): Promise<string[]> {
+  const propias = urls.map((u) => {
+    if (!u) return u;
+    const path = extractStoragePath(u, BUCKETS.PATIENT_FILES);
+    return !path || esPathDeLaClinica(path, clinicId) ? u : null;
+  });
+  return signMaybeUrls(propias, ttlSeconds, BUCKETS.PATIENT_FILES);
 }
 
 /**
@@ -121,6 +114,7 @@ export async function signMaybeUrls(
       result[idx] = u; // URL externa o de otro bucket: passthrough
       return;
     }
+    if (!esPathFirmable(path)) return; // veto global: queda "" sin firmar
     toSign.push({ idx, path });
   });
 

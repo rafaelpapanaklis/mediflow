@@ -4,7 +4,7 @@
 // URL de storage bajo demanda (el bucket es privado).
 
 import { prisma } from "@/lib/prisma";
-import { createSignedFileUrl } from "@/lib/storage";
+import { createSignedFileUrl, esPathDeLaClinica } from "@/lib/storage";
 import { isFailure, ok, type ActionResult } from "../result";
 import { getOrthoImagingContext, isMissingRelation } from "../imagen/_context";
 
@@ -35,7 +35,9 @@ export async function listMonitoringPhotos(treatmentPlanId: string): Promise<Act
       rows.map(async (r) => {
         let url: string | null = null;
         try {
-          url = await createSignedFileUrl(r.storageKey);
+          // Auditoría cloudflare (H2): una fila plantada antes del candado de `submitMonitoringPhoto`
+          // (p. ej. con `%2e%2e`) no se firma: solo objetos de esta clínica.
+          if (esPathDeLaClinica(r.storageKey, ctx.clinicId)) url = await createSignedFileUrl(r.storageKey);
         } catch {
           url = null;
         }

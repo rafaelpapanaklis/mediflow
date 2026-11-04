@@ -3,6 +3,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { assertPatientFileInClinic } from "@/lib/patient-files/archivo-del-paciente";
 import { createPaymentPlanSchema } from "@/lib/validation/orthodontics";
 import {
   auditOrtho,
@@ -53,6 +54,15 @@ export async function createPaymentPlan(
   const startDate = new Date(parsed.data.startDate);
   const totalPending =
     parsed.data.installmentAmount * parsed.data.installmentCount; // sin contar enganche
+
+  // Auditoría ola 3 (BAJA, mismo patrón que endodoncia): el acuerdo financiero firmado, de esta clínica
+  // y de este paciente; antes se guardaba cualquier id de PatientFile que mandara el cliente.
+  const archivoOk = await assertPatientFileInClinic({
+    id: parsed.data.signedFinancialAgreementFileId,
+    clinicId: ctx.clinicId,
+    patientId: parsed.data.patientId,
+  });
+  if (!archivoOk) return fail("Archivo no encontrado");
 
   try {
     const created = await prisma.$transaction(async (tx) => {

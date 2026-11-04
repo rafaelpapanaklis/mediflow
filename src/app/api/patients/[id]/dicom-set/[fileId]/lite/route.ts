@@ -12,6 +12,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient as createAdmin } from "@supabase/supabase-js";
 import { getAuthContext } from "@/lib/auth-context";
 import { assertPatientVisible } from "@/lib/patient-visibility";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { persistentRateLimit, acquireLock, releaseLock } from "@/lib/failban";
 import { prisma } from "@/lib/prisma";
 import { storageQuotaError } from "@/lib/storage-quota";
@@ -71,6 +72,10 @@ export async function POST(
   const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+  // Auditoría cloudflare nº11: entrega una URL FIRMADA del CBCT. `xrays.view`, como sus hermanas
+  // (models-3d, uploads, dicom-set sign/register, EQ-07): un READONLY no recibe URLs de estudios.
+  const sinVer = denyIfMissingPermission(ctx, "xrays.view");
+  if (sinVer) return sinVer;
 
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
     return NextResponse.json({ error: "Storage no configurado" }, { status: 500 });

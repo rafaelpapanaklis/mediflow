@@ -3,6 +3,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
 import { logMutation } from "@/lib/audit";
 import { assertPatientVisible } from "@/lib/patient-visibility";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { computeRiskFlags, deriveSyncArrays, mergeAdditive } from "@/lib/health-questionnaire";
 
 export const dynamic = "force-dynamic";
@@ -17,6 +18,10 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ id: stri
   const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Auditoría cloudflare nº11/12: es la ficha de salud del paciente: `patients.view` (lo tienen todos
+  // los roles de fábrica; solo cierra a quien el dueño se lo quitó a mano).
+  const sinVer = denyIfMissingPermission(ctx, "patients.view");
+  if (sinVer) return sinVer;
 
   // Visibilidad por paciente: 404 si el viewer no puede ver este paciente.
   const denied = await assertPatientVisible(params.id, { userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId });
@@ -64,6 +69,11 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
   const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Auditoría cloudflare nº11: llenar el cuestionario escribe la ficha (alergias, padecimientos,
+  // medicamentos): `patients.edit`, la llave con la que recepción —que lo llena— edita al paciente.
+  // Antes bastaba la sesión: un READONLY lo escribía.
+  const sinEditar = denyIfMissingPermission(ctx, "patients.edit");
+  if (sinEditar) return sinEditar;
 
   // Visibilidad por paciente: 404 si el viewer no puede ver este paciente.
   const denied = await assertPatientVisible(params.id, { userId: ctx.userId, role: ctx.role, clinicId: ctx.clinicId });

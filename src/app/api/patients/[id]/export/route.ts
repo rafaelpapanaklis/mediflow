@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
-import { signMaybeUrls } from "@/lib/storage";
+import { signMaybeUrls, signMaybeUrlsDeLaClinica } from "@/lib/storage";
 import { logRead, extractAuditMeta } from "@/lib/audit";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { stripPatientSecrets } from "@/lib/patient-secrets";
@@ -61,6 +61,11 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
       where: { patientId: patient.id },
       orderBy: { startsAt: "desc" },
     }),
+    // SIN `ownPrivateRecordsOnly`, A PROPÓSITO (auditoría cloudflare nº10): esto es el derecho de
+    // acceso/portabilidad del PACIENTE (ARCO, LFPDPPP art. 28) y la nota privada de un doctor también
+    // es información del titular, así que se le entrega entera. Por eso la ruta es solo de admin y
+    // queda en la bitácora. El CDA (`export-cda`), que es una exportación para el propio personal,
+    // sí respeta las notas privadas.
     prisma.medicalRecord.findMany({
       where: { patientId: patient.id },
       include: { doctor: { select: { firstName: true, lastName: true } } },
@@ -99,7 +104,8 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
   const [fileUrls, consentUrls, beforeAfterUrls] = await Promise.all([
     signMaybeUrls(files.map((f) => f.url), FILE_TTL),
     signMaybeUrls(consentForms.map((c) => c.signatureUrl), FILE_TTL),
-    signMaybeUrls(beforeAfterPhotos.map((p) => p.url), FILE_TTL),
+    // el path de una foto de antes/después lo mandó el cliente: solo se firma si es de esta clínica (nº1)
+    signMaybeUrlsDeLaClinica(beforeAfterPhotos.map((p) => p.url), ctx.clinicId, FILE_TTL),
   ]);
   const signedFiles = files.map((f, i) => ({ ...f, url: fileUrls[i] }));
   const signedConsents = consentForms.map((c, i) => ({

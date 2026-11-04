@@ -27,6 +27,10 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
   const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Auditoría cloudflare nº12 (B7): la ficha entera pide «Ver pacientes». Todos los roles de fábrica
+  // lo tienen; cierra a quien el dueño se lo quitó a mano. Antes de consultar: no revela si existe.
+  const sinVer = denyIfMissingPermission(ctx, "patients.view");
+  if (sinVer) return sinVer;
 
   // MULTI-CLÍNICA · FASE 2 — la ficha se puede LEER desde una sede vinculada.
   // Con el flag apagado, clinicIds = [ctx.clinicId] y esto es la query de hoy.
@@ -45,6 +49,16 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
   // filtro, la de la sede propia: la privada la ve sólo su autor.
   const ownPrivateOnly = ownPrivateRecordsOnly(ctx.userId);
 
+  // OJO con la sobrecarga: `hasPermission(role, key)` mira SÓLO el default del
+  // rol y se salta `permissionsOverride` (es el bug P1-7 que ya se cerró en
+  // /api/records). La forma correcta es la de objeto, la misma que usa la ficha
+  // SSR. `ctx.role` viene tipado como string del contexto de auth.
+  const quien = { role: ctx.role as Role, permissionsOverride: ctx.permissionsOverride ?? [] };
+  // Auditoría cloudflare nº12 / H6: sin «Ver agenda» las citas no se leen (`take: 0`) ni viajan; sin
+  // «Ver cobros», lo mismo con facturas y pagos. Con los permisos de fábrica todos los roles tienen las dos.
+  const verAgenda = hasPermission(quien, "agenda.view");
+  const verCobros = hasPermission(quien, "billing.view");
+
   // Use buildPatientWhere so doctors can only see their own patients
   const patient = await prisma.patient.findFirst({
     where: { ...buildPatientWhere(ctx, {}, visibility.clinicIds), id: params.id },
@@ -52,7 +66,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
       // Citas y facturas SIEMPRE de la sede activa, aunque el paciente venga
       // prestado: cada sucursal agenda y cobra por separado. Para un paciente
       // propio el filtro no cambia nada.
-      appointments: { where: { clinicId: ctx.clinicId }, orderBy: { startsAt: "desc" }, include: { doctor: doctorPublic } },
+      appointments: { where: { clinicId: ctx.clinicId }, orderBy: { startsAt: "desc" }, include: { doctor: doctorPublic }, ...(verAgenda ? {} : { take: 0 }) },
       // El expediente SÍ viaja: es el contenido clínico que se comparte. El
       // scope explícito es defensa en profundidad — hoy medicalRecord.clinicId
       // SIEMPRE coincide con el del paciente (todos los writers lo validan),
@@ -60,7 +74,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
       // que exista una escritura sobre paciente prestado esto no se vuelva una
       // fuga transitiva. Además excluye notas privadas de sedes ajenas.
       records:      { where: { AND: [sharedRecordScope(ctx.clinicId, visibility.clinicIds), ownPrivateOnly] }, orderBy: { visitDate: "desc" }, include: { doctor: doctorPublic } },
-      invoices:     { where: { clinicId: ctx.clinicId }, include: { payments: true } },
+      invoices:     { where: { clinicId: ctx.clinicId }, include: { payments: true }, ...(verCobros ? {} : { take: 0 }) },
     },
   });
   if (!patient) return NextResponse.json({ error: "Paciente no encontrado" }, { status: 404 });
@@ -70,20 +84,16 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
   // abriendo (datos de contacto, citas, facturación) pero el SOAP no viaja. Se
   // vacía en vez de responder 403 porque esta ruta sirve la ficha ENTERA:
   // negarla completa dejaría sin trabajar a quien sí puede ver al paciente.
-  // OJO con la sobrecarga: `hasPermission(role, key)` mira SÓLO el default del
-  // rol y se salta `permissionsOverride` (es el bug P1-7 que ya se cerró en
-  // /api/records). La forma correcta es la de objeto, la misma que usa la ficha
-  // SSR. `ctx.role` viene tipado como string del contexto de auth.
-  const records = hasPermission(
-    { role: ctx.role as Role, permissionsOverride: ctx.permissionsOverride ?? [] },
-    "medicalRecord.view",
-  )
-    ? patient.records
-    : [];
+  const records = hasPermission(quien, "medicalRecord.view") ? patient.records : [];
+  // Lo mismo con las facturas y sus pagos (nº12) y con las citas (H6): sin su permiso no viajan.
+  const invoices = verCobros ? patient.invoices : [];
+  const appointments = verAgenda ? patient.appointments : [];
 
   return NextResponse.json({
     ...stripPatientSecrets(patient),
     records,
+    invoices,
+    appointments,
     originClinicName:
       patient.clinicId === ctx.clinicId
         ? null

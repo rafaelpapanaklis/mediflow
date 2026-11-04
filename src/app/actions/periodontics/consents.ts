@@ -4,6 +4,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { pacienteOcultoPara } from "@/lib/clinical-shared/auth/paciente-oculto";
 import { signSrpConsentSchema, signSurgeryConsentSchema } from "@/lib/periodontics/schemas";
 import {
   PERIO_AUDIT_ACTIONS,
@@ -87,6 +88,8 @@ export async function signSurgeryConsent(
     select: { id: true, patientId: true, surgeryType: true },
   });
   if (!surgery) return fail("Cirugía no encontrada");
+  // Seguridad ola 2b (lead 14 / H1 de t2): el paciente del registro puede estar restringido (visibleUserIds).
+  if (await pacienteOcultoPara(ctx, surgery.patientId)) return fail("Cirugía no encontrada");
 
   try {
     const result = await prisma.$transaction(async (tx) => {

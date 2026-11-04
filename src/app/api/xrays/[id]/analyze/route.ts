@@ -7,7 +7,7 @@ import { addAiTokens } from "@/lib/ai-tokens";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { createClient as createAdmin } from "@supabase/supabase-js";
 import { persistentRateLimit } from "@/lib/failban";
-import { BUCKETS, extractStoragePath } from "@/lib/storage";
+import { BUCKETS, esPathDeLaClinica, extractStoragePath } from "@/lib/storage";
 import { getModeConfig, isValidMode } from "@/lib/xray/analysis-modes";
 import { recordUsageNoCharge } from "@/lib/ai-billing/record-usage";
 import { cortarSiIaApagada } from "@/lib/ai-billing/interruptores.server";
@@ -372,7 +372,10 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
   let imageBase64: string;
   let mediaType: string;
 
-  if (storagePath) {
+  // Auditoría cloudflare (v2-m1): `.download` no pasa por el veto de la firma. Solo se baja un objeto
+  // limpio bajo la carpeta de la clínica de la fila: una fila plantada con `db-backups/…` u otra clínica
+  // no se descarga ni viaja al modelo.
+  if (storagePath && esPathDeLaClinica(storagePath, file.clinicId)) {
     const { data, error } = await supabase.storage
       .from(BUCKETS.PATIENT_FILES)
       .download(storagePath);

@@ -4,6 +4,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { assertPatientFileInClinic } from "@/lib/patient-files/archivo-del-paciente";
 import { createPeriodontalSurgerySchema } from "@/lib/periodontics/schemas";
 import {
   PERIO_AUDIT_ACTIONS,
@@ -42,6 +43,14 @@ export async function createPeriodontalSurgery(
     });
     if (!plan || plan.patientId !== parsed.data.patientId) {
       return fail("Plan no corresponde al paciente");
+    }
+  }
+
+  // Auditoría ola 3 (BAJA, mismo patrón que endodoncia): el consentimiento firmado y la foto intraoperatoria, de esta clínica
+  // y de este paciente; antes se guardaba cualquier id de PatientFile que mandara el cliente.
+  for (const id of [parsed.data.consentSignedFileId, parsed.data.intraoperativeFileId]) {
+    if (!(await assertPatientFileInClinic({ id, clinicId: ctx.clinicId, patientId: parsed.data.patientId }))) {
+      return fail("Archivo no encontrado");
     }
   }
 

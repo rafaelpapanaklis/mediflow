@@ -9,6 +9,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { pacienteOcultoPara } from "@/lib/clinical-shared/auth/paciente-oculto";
 import {
   scheduleMaintenanceSchema,
   completeMaintenanceSchema,
@@ -97,6 +98,8 @@ export async function completeMaintenance(
     select: { id: true, patientId: true, recordType: true },
   });
   if (!record) return fail("Registro de mantenimiento no encontrado");
+  // Seguridad ola 2b (lead 14 / H1 de t2): el paciente del registro puede estar restringido (visibleUserIds).
+  if (await pacienteOcultoPara(ctx, record.patientId)) return fail("Registro de mantenimiento no encontrado");
   if (record.recordType !== "MANTENIMIENTO") {
     return fail("El registro no es de tipo MANTENIMIENTO");
   }

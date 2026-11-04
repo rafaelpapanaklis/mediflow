@@ -3,6 +3,8 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { pacienteOcultoPara } from "@/lib/clinical-shared/auth/paciente-oculto";
+import { assertPatientFileInClinic } from "@/lib/patient-files/archivo-del-paciente";
 import { Prisma } from "@prisma/client";
 import {
   createRetreatmentInfoSchema,
@@ -35,6 +37,8 @@ export async function createRetreatmentInfo(
     select: { id: true, clinicId: true, patientId: true, treatmentType: true },
   });
   if (!tx || tx.clinicId !== ctx.clinicId) return fail("Tratamiento no encontrado");
+  // Seguridad ola 2b (lead 14 / H1 de t2): el paciente del registro puede estar restringido (visibleUserIds).
+  if (await pacienteOcultoPara(ctx, tx.patientId)) return fail("Tratamiento no encontrado");
   if (tx.treatmentType !== "RETRATAMIENTO") {
     return fail("Solo aplica a tratamientos tipo RETRATAMIENTO");
   }
@@ -99,9 +103,18 @@ export async function createApicalSurgery(
     select: { id: true, clinicId: true, patientId: true, treatmentType: true },
   });
   if (!tx || tx.clinicId !== ctx.clinicId) return fail("Tratamiento no encontrado");
+  // Seguridad ola 2b (lead 14 / H1 de t2): el paciente del registro puede estar restringido (visibleUserIds).
+  if (await pacienteOcultoPara(ctx, tx.patientId)) return fail("Tratamiento no encontrado");
   if (tx.treatmentType !== "APICECTOMIA") {
     return fail("Solo aplica a tratamientos tipo APICECTOMIA");
   }
+  // Auditoría ola 3 (BAJA): la radiografía intraoperatoria, de esta clínica y de este paciente.
+  const archivoOk = await assertPatientFileInClinic({
+    id: parsed.data.intraoperativeFileId,
+    clinicId: ctx.clinicId,
+    patientId: tx.patientId,
+  });
+  if (!archivoOk) return fail("Archivo no encontrado");
 
   try {
     const created = await prisma.apicalSurgery.upsert({

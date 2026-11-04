@@ -1,5 +1,6 @@
 import { renderToBuffer } from "@react-pdf/renderer";
 import { createElement } from "react";
+import { descargarLogoRemoto, type OpcionesDeLogoRemoto } from "@/lib/logo-remoto";
 import QRCode from "qrcode";
 import { prisma } from "@/lib/prisma";
 import { PrescriptionDocument, type PrescriptionPdfItemProps } from "@/lib/pdf/prescription-document";
@@ -20,20 +21,12 @@ import { PrescriptionDocument, type PrescriptionPdfItemProps } from "@/lib/pdf/p
  * QR impreso actúa como bearer y no hay sesión detrás.
  */
 
-async function fetchLogoDataUrl(url: string | null): Promise<string | null> {
-  if (!url || !/^https?:\/\//i.test(url)) return null;
-  try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
-    if (!res.ok) return null;
-    const contentType = res.headers.get("content-type") ?? "";
-    if (!contentType.startsWith("image/")) return null;
-    const buf = Buffer.from(await res.arrayBuffer());
-    if (buf.byteLength > 2_000_000) return null;
-    return `data:${contentType};base64,${buf.toString("base64")}`;
-  } catch {
-    // Logo caído no debe tumbar la receta: se genera sin logo.
-    return null;
-  }
+export async function fetchLogoDataUrl(url: string | null, opciones?: OpcionesDeLogoRemoto): Promise<string | null> {
+  // Con la reja de SSRF (auditoría nº2): esta receta la dispara también la verificación pública
+  // sin sesión. Logo caído o rechazado no tumba la receta: se genera sin logo.
+  const r = await descargarLogoRemoto(url, opciones);
+  if (!r || !r.contentType.startsWith("image/")) return null;
+  return `data:${r.contentType};base64,${r.buf.toString("base64")}`;
 }
 
 function fmtAge(dob: Date | null): string | null {

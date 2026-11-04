@@ -3,6 +3,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { pacienteOcultoPara } from "@/lib/clinical-shared/auth/paciente-oculto";
 import {
   createDiagnosisSchema,
   updateDiagnosisSchema,
@@ -94,6 +95,8 @@ export async function updateDiagnosis(
   if (!existing || existing.clinicId !== ctx.clinicId) {
     return fail("Diagnóstico no encontrado");
   }
+  // Seguridad ola 2b (lead 14 / H1 de t2): el paciente del registro puede estar restringido (visibleUserIds).
+  if (await pacienteOcultoPara(ctx, existing.patientId)) return fail("Diagnóstico no encontrado");
 
   try {
     const updated = await prisma.endodonticDiagnosis.update({

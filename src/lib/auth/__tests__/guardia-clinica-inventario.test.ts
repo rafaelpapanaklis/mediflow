@@ -93,6 +93,8 @@ const API_CLINICO = [
   "consult", "formulas", "homeopatia", "patient-documents", "referrals",
   "import/odontogram", "import/clinical-notes", "import/ortho-cases", "import/treatment-notes",
   "patients/[id]/export-cda", "patients/[id]/migrated-ortho-cases", "patients/[id]/timeline",
+  // auditoría cloudflare nº11: subrutas del paciente que se saltaban el permiso de rol
+  "patients/[id]/odontogram-history", "patients/[id]/health-questionnaire",
 ];
 const ACTIONS_CLINICO = [
   "clinical-shared", "endodontics", "implants", "orthodontics", "pediatrics", "periodontics", "specialties",
@@ -107,11 +109,15 @@ const ACTIONS_CLINICO = [
  *   · /api/prescriptions — prescription.view / prescription.create.
  *   · /api/consent — consents.view / create / revoke.
  *   · /api/patients/[id]/expediente-pdf — medicalRecord.export.
+ *   · /api/patients/[id]/dicom-set (sign, register, lite) — xrays.view / xrays.upload; los fija
+ *     estudios-permisos.test.ts (auditoría cloudflare nº11 añadió la lite).
  * Excepciones dentro de las carpetas clínicas, con su porqué:
  */
 const EXCEPCIONES: Record<string, string> = {
-  "src/app/actions/clinical-shared/share-links.ts#resolvePublicShareToken":
-    "lo resuelve la página pública /share/p/[token] con un token aleatorio de 32 bytes; no hay sesión que revisar",
+  "src/app/api/patients/[id]/health-questionnaire/route.ts#GET":
+    "ficha de salud del paciente: patients.view (auditoría cloudflare nº11; la fija seg-archivos-permisos)",
+  "src/app/api/patients/[id]/health-questionnaire/route.ts#POST":
+    "lo llena RECEPCIÓN (patient-nav-items.ts): patients.edit, no medicalRecord.edit (auditoría cloudflare nº11; la fija seg-archivos-permisos)",
   "src/app/actions/orthodontics/alineadores/logElasticsComplianceFromPortal.ts#logElasticsComplianceFromPortal":
     "la usa el PACIENTE desde su portal (getOrthoPatientPortalContext); no es personal de la clínica",
   "src/app/actions/orthodontics/alineadores/submitMonitoringPhoto.ts#submitMonitoringPhoto":
@@ -326,6 +332,8 @@ const B7: Array<{ archivo: string; llave: RegExp }> = [
   { archivo: "app/api/agenda/range/route.ts", llave: /denyIfMissingPermission\(session\.user, "agenda\.view"\)/ },
   { archivo: "app/api/appointments/route.ts", llave: /denyIfMissingPermission\(session\.user, "agenda\.view"\)/ },
   { archivo: "app/api/patients/search/route.ts", llave: /denyIfMissingAnyPermission\(session\.user, \["patients\.view", "agenda\.create"\]\)/ },
+  // auditoría cloudflare nº12
+  { archivo: "app/api/patients/[id]/route.ts", llave: /denyIfMissingPermission\(ctx, "patients\.view"\)/ },
 ];
 
 for (const { archivo, llave } of B7) {

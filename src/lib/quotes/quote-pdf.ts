@@ -1,5 +1,6 @@
 import { renderToBuffer } from "@react-pdf/renderer";
 import { createElement } from "react";
+import { descargarLogoRemoto, type OpcionesDeLogoRemoto } from "@/lib/logo-remoto";
 import { prisma } from "@/lib/prisma";
 import { signMaybeUrl, BUCKETS } from "@/lib/storage";
 import { QuoteDocument, type QuotePdfItem } from "@/lib/pdf/quote-document";
@@ -36,6 +37,13 @@ async function fetchImageDataUrl(url: string | null): Promise<string | null> {
   }
 }
 
+/** El logo de la clínica, con la reja de SSRF (auditoría nº2); la firma es una URL que firmamos nosotros. */
+export async function fetchQuoteLogoDataUrl(url: string | null, opciones?: OpcionesDeLogoRemoto): Promise<string | null> {
+  const r = await descargarLogoRemoto(url, opciones);
+  if (!r || !r.contentType.startsWith("image/")) return null;
+  return `data:${r.contentType};base64,${r.buf.toString("base64")}`;
+}
+
 export async function buildQuotePdf(
   id: string,
   clinicId?: string,
@@ -59,7 +67,7 @@ export async function buildQuotePdf(
     ? await signMaybeUrl(quote.signatureUrl, 120, BUCKETS.PATIENT_FILES).catch(() => "")
     : "";
   const [logoDataUrl, signatureDataUrl] = await Promise.all([
-    fetchImageDataUrl(quote.clinic.logoUrl),
+    fetchQuoteLogoDataUrl(quote.clinic.logoUrl),
     signedSignatureUrl ? fetchImageDataUrl(signedSignatureUrl) : Promise.resolve(null),
   ]);
 

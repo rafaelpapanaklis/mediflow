@@ -22,8 +22,8 @@ beforeEach(() => {
     clinic: { id: "c1", name: "C", logoUrl: null, phone: null, specialty: "x", address: null, city: null, timezone: "America/Mexico_City" },
     appointments: [], records: [], invoices: [],
     files: [
-      { id: "f-viva", name: "ok.jpg", url: "u-viva", category: "x", mimeType: "image/jpeg", createdAt: new Date(), notes: null, takenAt: null, deletedAt: null },
-      { id: "f-borrada", name: "radiografia-de-otro.jpg", url: "u-borrada", category: "x", mimeType: "image/jpeg", createdAt: new Date(), notes: null, takenAt: null, deletedAt: new Date() },
+      { id: "f-viva", name: "ok.jpg", url: "c1/p1/u-viva.jpg", clinicId: "c1", category: "x", mimeType: "image/jpeg", createdAt: new Date(), notes: null, takenAt: null, deletedAt: null },
+      { id: "f-borrada", name: "radiografia-de-otro.jpg", url: "c1/p1/u-borrada.jpg", clinicId: "c1", category: "x", mimeType: "image/jpeg", createdAt: new Date(), notes: null, takenAt: null, deletedAt: new Date() },
     ],
     consentForms: [
       { id: "c-viva", procedure: "A", signedAt: null, expiresAt: new Date(), signatureUrl: "s-viva", content: "x", deletedAt: null },

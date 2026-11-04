@@ -5,6 +5,7 @@
 import { revalidatePath } from "next/cache";
 import { differenceInYears } from "date-fns";
 import { prisma } from "@/lib/prisma";
+import { pacienteOcultoPara } from "@/lib/clinical-shared/auth/paciente-oculto";
 import {
   classifyPatientSchema,
   overrideClassificationSchema,
@@ -54,6 +55,8 @@ export async function classifyPatient(
     },
   });
   if (!record) return fail("Periodontograma no encontrado");
+  // Seguridad ola 2b (lead 14 / H1 de t2): el paciente del registro puede estar restringido (visibleUserIds).
+  if (await pacienteOcultoPara(ctx, record.patientId)) return fail("Periodontograma no encontrado");
 
   const sites = ((record.sites as unknown) as Site[]) ?? [];
   const teeth = ((record.toothLevel as unknown) as ToothLevel[]) ?? [];
@@ -150,6 +153,8 @@ export async function overrideClassification(
     },
   });
   if (!before) return fail("Clasificación no encontrada");
+  // Seguridad ola 2b (lead 14 / H1 de t2): el paciente del registro puede estar restringido (visibleUserIds).
+  if (await pacienteOcultoPara(ctx, before.patientId)) return fail("Clasificación no encontrada");
 
   try {
     const next = await prisma.periodontalClassification.update({

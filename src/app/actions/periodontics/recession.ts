@@ -4,6 +4,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { pacienteOcultoPara } from "@/lib/clinical-shared/auth/paciente-oculto";
 import { createGingivalRecessionSchema } from "@/lib/periodontics/schemas";
 import {
   PERIO_AUDIT_ACTIONS,
@@ -83,6 +84,8 @@ export async function resolveGingivalRecession(
     select: { id: true, patientId: true, resolvedAt: true },
   });
   if (!before) return fail("Recesión no encontrada");
+  // Seguridad ola 2b (lead 14 / H1 de t2): el paciente del registro puede estar restringido (visibleUserIds).
+  if (await pacienteOcultoPara(ctx, before.patientId)) return fail("Recesión no encontrada");
 
   try {
     const next = await prisma.gingivalRecession.update({

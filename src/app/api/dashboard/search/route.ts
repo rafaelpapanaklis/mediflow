@@ -69,6 +69,13 @@ export async function GET(req: NextRequest) {
   // nombre completo no encontraba a nadie. Ver terminos-busqueda.ts.
   const terminos = terminosBusqueda(q);
 
+  // Auditoría cloudflare nº12 (B7 en la paleta): cada sección, solo con SU permiso. Con los defaults
+  // todos los roles los tienen; esto cierra a quien el dueño se los quitó a mano. Lo que no se puede
+  // ver ni se consulta.
+  const vePacientes = hasPermission(quien, "patients.view");
+  const veAgenda = hasPermission(quien, "agenda.view");
+  const veCobros = hasPermission(quien, "billing.view");
+
   const clinicTz = await prisma.clinic.findUnique({
     where: { id: ctx.clinicId },
     select: { timezone: true },
@@ -101,7 +108,7 @@ export async function GET(req: NextRequest) {
 
   // Mismo clinicId y mismo relatedVis que la query de facturas de abajo: esto
   // solo reordena/complementa, no abre ninguna puerta de visibilidad.
-  const folioPromise = numericQ
+  const folioPromise = numericQ && veCobros
     ? prisma.invoice.findMany({
         where: {
           clinicId: ctx.clinicId,
@@ -121,14 +128,16 @@ export async function GET(req: NextRequest) {
   // visibilidad. Si la consulta normalizada falla (`null`), se cae a los
   // cinco campos de siempre. Los campos no cambian: nombre, apellido, folio,
   // teléfono y correo.
-  const idsPacientes = await findPatientIdsBySearch({
-    clinicIds: [ctx.clinicId],
-    tokens: patientSearchTokens(q),
-    limit: 200,
-  });
+  const idsPacientes = vePacientes
+    ? await findPatientIdsBySearch({
+        clinicIds: [ctx.clinicId],
+        tokens: patientSearchTokens(q),
+        limit: 200,
+      })
+    : [];
 
   const [patients, appointments, invoices, folioHits] = await Promise.all([
-    prisma.patient.findMany({
+    !vePacientes ? Promise.resolve([]) : prisma.patient.findMany({
       where: {
         clinicId: ctx.clinicId,
         // ARCO: un paciente cancelado (deletedAt ≠ null) no sale en el
@@ -145,7 +154,7 @@ export async function GET(req: NextRequest) {
       take: 5,
       orderBy: { createdAt: "desc" },
     }),
-    prisma.appointment.findMany({
+    !veAgenda ? Promise.resolve([]) : prisma.appointment.findMany({
       where: {
         clinicId: ctx.clinicId,
         AND: [...condicionesCitas(terminos), ...relatedVis],
@@ -158,7 +167,7 @@ export async function GET(req: NextRequest) {
       take: 5,
       orderBy: { startsAt: "desc" },
     }),
-    prisma.invoice.findMany({
+    !veCobros ? Promise.resolve([]) : prisma.invoice.findMany({
       where: {
         clinicId: ctx.clinicId,
         AND: [...condicionesFacturas(terminos), ...relatedVis],

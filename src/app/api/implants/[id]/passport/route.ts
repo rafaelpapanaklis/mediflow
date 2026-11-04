@@ -10,6 +10,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { denyIfNotClinical } from "@/lib/auth/guardia-clinica";
 import { prisma } from "@/lib/prisma";
 import { assertPatientVisible } from "@/lib/patient-visibility";
+import { createSignedFileUrl, esPathDeLaClinica, extractStoragePath } from "@/lib/storage";
 import { canAccessModule } from "@/lib/marketplace/access-control";
 import { IMPLANTS_MODULE_KEY } from "@/lib/implants/permissions";
 import {
@@ -75,14 +76,21 @@ export async function GET(_req: NextRequest, ctx: Params) {
     }
   }
 
-  // Foto del paciente (PatientFile)
+  // Foto del paciente (PatientFile). Auditoría cloudflare: `findUnique` por id, sin clínica, leía el
+  // archivo de CUALQUIER clínica. Ahora: de esta clínica y del paciente del implante. Y como @react-pdf
+  // BAJA el `src` de la imagen desde el servidor, solo se le da una URL firmada de un objeto de la
+  // clínica: nunca la `url` cruda de la fila (un path no se puede bajar y una URL http plantada sería
+  // un SSRF).
   let patientPhotoUrl: string | null = null;
   if (implant.passport?.patientPhotoFileId) {
-    const photo = await prisma.patientFile.findUnique({
-      where: { id: implant.passport.patientPhotoFileId },
+    const photo = await prisma.patientFile.findFirst({
+      where: { id: implant.passport.patientPhotoFileId, clinicId: user.clinicId, patientId: implant.patientId },
       select: { url: true },
     });
-    patientPhotoUrl = photo?.url ?? null;
+    const path = extractStoragePath(photo?.url);
+    if (path && esPathDeLaClinica(path, user.clinicId)) {
+      patientPhotoUrl = await createSignedFileUrl(path).catch(() => null);
+    }
   }
 
   const data: ImplantPassportData = {

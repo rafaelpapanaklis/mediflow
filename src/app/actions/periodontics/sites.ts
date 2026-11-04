@@ -3,6 +3,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
+import { pacienteOcultoPara } from "@/lib/clinical-shared/auth/paciente-oculto";
 import {
   upsertSiteDataSchema,
   upsertToothDataSchema,
@@ -42,6 +43,16 @@ export async function upsertSiteData(
   if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? "Datos inválidos");
 
   try {
+    // Seguridad ola 2b (lead 14 / H1 de t2): el paciente del registro puede estar restringido (visibleUserIds).
+    // Va ANTES de abrir la transacción: dentro, una consulta con el cliente global pide otra conexión y, con
+    // connection_limit=1 (Vercel), espera a la que tiene la propia transacción y el guardado se cuelga. Y va
+    // dentro del `try`: un error de la base aquí cae en el `catch` («No se pudo guardar…») y el panel avisa.
+    const dueno = await prisma.periodontalRecord.findFirst({
+      where: { id: parsed.data.recordId, clinicId: ctx.clinicId, deletedAt: null },
+      select: { patientId: true },
+    });
+    if (!dueno || (await pacienteOcultoPara(ctx, dueno.patientId))) return fail("Periodontograma no encontrado");
+
     const result = await prisma.$transaction(async (tx) => {
       const record = await tx.periodontalRecord.findFirst({
         where: { id: parsed.data.recordId, clinicId: ctx.clinicId, deletedAt: null },
@@ -120,6 +131,16 @@ export async function upsertToothData(
   if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? "Datos inválidos");
 
   try {
+    // Seguridad ola 2b (lead 14 / H1 de t2): el paciente del registro puede estar restringido (visibleUserIds).
+    // Va ANTES de abrir la transacción: dentro, una consulta con el cliente global pide otra conexión y, con
+    // connection_limit=1 (Vercel), espera a la que tiene la propia transacción y el guardado se cuelga. Y va
+    // dentro del `try`: un error de la base aquí cae en el `catch` («No se pudo guardar…») y el panel avisa.
+    const dueno = await prisma.periodontalRecord.findFirst({
+      where: { id: parsed.data.recordId, clinicId: ctx.clinicId, deletedAt: null },
+      select: { patientId: true },
+    });
+    if (!dueno || (await pacienteOcultoPara(ctx, dueno.patientId))) return fail("Periodontograma no encontrado");
+
     const result = await prisma.$transaction(async (tx) => {
       const record = await tx.periodontalRecord.findFirst({
         where: { id: parsed.data.recordId, clinicId: ctx.clinicId, deletedAt: null },
@@ -198,6 +219,16 @@ export async function bulkUpsertSiteData(
   if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? "Datos inválidos");
 
   try {
+    // Seguridad ola 2b (lead 14 / H1 de t2): el paciente del registro puede estar restringido (visibleUserIds).
+    // Va ANTES de abrir la transacción: dentro, una consulta con el cliente global pide otra conexión y, con
+    // connection_limit=1 (Vercel), espera a la que tiene la propia transacción y el guardado se cuelga. Y va
+    // dentro del `try`: un error de la base aquí cae en el `catch` («No se pudo guardar…») y el panel avisa.
+    const dueno = await prisma.periodontalRecord.findFirst({
+      where: { id: parsed.data.recordId, clinicId: ctx.clinicId, deletedAt: null },
+      select: { patientId: true },
+    });
+    if (!dueno || (await pacienteOcultoPara(ctx, dueno.patientId))) return fail("Periodontograma no encontrado");
+
     const result = await prisma.$transaction(async (tx) => {
       const record = await tx.periodontalRecord.findFirst({
         where: { id: parsed.data.recordId, clinicId: ctx.clinicId, deletedAt: null },

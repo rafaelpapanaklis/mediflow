@@ -5,7 +5,7 @@ import { assertPatientVisible } from "@/lib/patient-visibility";
 import { prisma } from "@/lib/prisma";
 import { getVisiblePatientClinicIds, clinicScopeFilter } from "@/lib/branches";
 import { createClient as createAdmin } from "@supabase/supabase-js";
-import { BUCKETS, signMaybeUrl, signMaybeUrls } from "@/lib/storage";
+import { BUCKETS, signMaybeUrl, signMaybeUrls, soloDeSuClinica } from "@/lib/storage";
 import { storageQuotaError } from "@/lib/storage-quota";
 import {
   PERFILES,
@@ -88,7 +88,10 @@ export async function GET(req: NextRequest) {
   // Firma cada URL on-demand (TTL 5 min). Acepta tanto paths nuevos como
   // URLs legacy guardadas antes de la migración a bucket privado.
   // Firma todas las URLs en UN round-trip (createSignedUrls) en vez de N×.
-  const urls = await signMaybeUrls(files.map((f) => f.url));
+  // Auditoría cloudflare (H1): solo se firma lo que vive bajo la carpeta de la clínica DUEÑA de la fila
+  // (con sedes vinculadas no es siempre la de la sesión). Un `url` plantado con `db-backups/…`, otra
+  // clínica o `signatures/<otra>/…` queda "" en vez de salir firmado. URLs externas: passthrough.
+  const urls = await signMaybeUrls(files.map((f) => soloDeSuClinica(f.url, f.clinicId)));
   const signed = files.map((f, i) => ({ ...f, url: urls[i] }));
 
   return NextResponse.json(signed);

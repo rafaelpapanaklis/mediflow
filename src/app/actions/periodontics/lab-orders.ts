@@ -5,6 +5,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { pacienteOcultoPara } from "@/lib/clinical-shared/auth/paciente-oculto";
 import {
   PERIO_LAB_ORDER_KIND,
   PERIO_LAB_ORDER_TYPE_TO_SCHEMA,
@@ -141,6 +142,8 @@ export async function updatePerioLabOrderStatus(
     select: { id: true, patientId: true, status: true },
   });
   if (!existing) return fail("Orden no encontrada");
+  // Seguridad ola 2b (lead 14 / H1 de t2): el paciente del registro puede estar restringido (visibleUserIds).
+  if (await pacienteOcultoPara(ctx, existing.patientId)) return fail("Orden no encontrada");
 
   const now = new Date();
   try {

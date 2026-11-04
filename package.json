@@ -476,6 +476,7 @@
     "test:timeline-expediente": "tsx --test --experimental-test-module-mocks src/lib/__tests__/expediente-timeline-gate.test.ts",
     "test:portal-token": "tsx --test --experimental-test-module-mocks src/lib/__tests__/portal-token-arco.test.ts",
     "test:estudios-permisos": "tsx --test --experimental-test-module-mocks src/lib/__tests__/estudios-permisos.test.ts",
+    "test:seg-archivos-permisos": "tsx --test src/app/api/before-after/__tests__/ruta-de-la-clinica.test.ts src/lib/__tests__/logo-remoto.test.ts src/app/api/patients/__tests__/subrutas-permisos.test.ts src/app/api/patients/__tests__/paleta-y-ficha-permisos.test.ts src/app/api/patients/__tests__/export-cda-y-ai-assist.test.ts src/lib/__tests__/firma-veto-y-hermanos.test.ts src/lib/__tests__/filas-plantadas-v3.test.ts src/lib/__tests__/endo-archivos-v4.test.ts src/lib/__tests__/share-publico-v5.test.ts src/lib/__tests__/endo-perio-visibilidad-v6.test.ts src/lib/__tests__/perio-tx-v7.test.ts",
     "//test:genero-enum": "Necesita --experimental-test-module-mocks: ejecuta DE VERDAD el PATCH de /api/patients/[id] y la server action del informe de implantes, sustituyendo Prisma, la auth, el audit y @/lib/branches (que importa 'server-only', inexistente fuera del bundle de Next).",
     "test:genero-enum": "tsx --test --experimental-test-module-mocks src/lib/patients/__tests__/genero-enum-escrituras.test.ts",
     "test:gate-antes-despues": "tsx --test src/lib/auth/__tests__/gate-antes-despues.test.ts",

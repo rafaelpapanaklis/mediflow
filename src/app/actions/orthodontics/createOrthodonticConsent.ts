@@ -7,6 +7,7 @@ import { createOrthodonticConsentSchema } from "@/lib/validation/orthodontics";
 import { auditOrtho, getOrthoActionContext } from "./_helpers";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
 import { fail, isFailure, ok, type ActionResult } from "./result";
+import { assertPatientFileInClinic } from "@/lib/patient-files/archivo-del-paciente";
 
 export async function createOrthodonticConsent(
   input: unknown,
@@ -28,6 +29,15 @@ export async function createOrthodonticConsent(
     select: { id: true },
   });
   if (!plan) return fail("Plan no encontrado");
+
+  // Auditoría ola 3 (BAJA, mismo patrón que endodoncia): el consentimiento firmado (que además se copia al plan), de esta clínica
+  // y de este paciente; antes se guardaba cualquier id de PatientFile que mandara el cliente.
+  const archivoOk = await assertPatientFileInClinic({
+    id: parsed.data.signedFileId,
+    clinicId: ctx.clinicId,
+    patientId: parsed.data.patientId,
+  });
+  if (!archivoOk) return fail("Archivo no encontrado");
 
   try {
     const created = await prisma.orthodonticConsent.create({

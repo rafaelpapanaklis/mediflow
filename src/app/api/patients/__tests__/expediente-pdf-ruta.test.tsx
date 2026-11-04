@@ -150,6 +150,8 @@ let consultas: Array<{ modelo: string; metodo: string; where: any }> = [];
 let bitacora: any[] = [];
 /** URLs que se mandaron a firmar (si esto se llena con las casillas apagadas, mal). */
 let firmadas: string[] = [];
+/** Lo que devuelve `patientFile.findMany` (una prueba le añade una fila plantada). */
+let archivosDelPaciente: any[] = [];
 
 const PACIENTE_FILA = {
   id: PACIENTE,
@@ -215,7 +217,9 @@ const NOTA_PUBLICA = {
 
 const ARCHIVO = {
   name: "panoramica-2026.png",
-  url: "patients/pat_1/panoramica-2026.png",
+  // La forma que de verdad guarda la app: `<clinicId>/<patientId>/…` (generarLlaveAlmacenamiento).
+  url: `${CLINICA}/${PACIENTE}/panoramica-2026.png`,
+  clinicId: CLINICA,
   category: "XRAY_PANORAMIC",
   mimeType: "image/png",
   size: 1_200_000,
@@ -292,7 +296,7 @@ const prismaFalso: any = {
   treatmentPlan: { findMany: (a: any) => anotar("treatmentPlan", "findMany", a, []) },
   prescription: { findMany: (a: any) => anotar("prescription", "findMany", a, []) },
   consentForm: { findMany: (a: any) => anotar("consentForm", "findMany", a, []) },
-  patientFile: { findMany: (a: any) => anotar("patientFile", "findMany", a, [ARCHIVO]) },
+  patientFile: { findMany: (a: any) => anotar("patientFile", "findMany", a, archivosDelPaciente) },
   appointment: { findMany: (a: any) => anotar("appointment", "findMany", a, []) },
   invoice: { findMany: (a: any) => anotar("invoice", "findMany", a, [FACTURA]) },
   quote: { findMany: (a: any) => anotar("quote", "findMany", a, [PRESUPUESTO]) },
@@ -373,6 +377,7 @@ beforeEach(() => {
   consultas = [];
   bitacora = [];
   firmadas = [];
+  archivosDelPaciente = [ARCHIVO];
 });
 
 const tocados = () => Array.from(new Set(consultas.map((c) => c.modelo)));
@@ -674,5 +679,23 @@ describe("?estimar=1", () => {
   test("exige el mismo permiso que la descarga", async () => {
     sesion = "recepcion";
     assert.equal((await llamar("?estimar=1")).status, 403);
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════
+// Auditoría cloudflare (v2-m1): una fila plantada no se firma ni se baja
+// ═════════════════════════════════════════════════════════════════════
+
+describe("filas plantadas antes del arreglo de H1", () => {
+  test("una imagen con un path de OTRA clínica o una URL externa no se firma ni se baja al PDF", async () => {
+    archivosDelPaciente = [
+      ARCHIVO,
+      { ...ARCHIVO, name: "plantada.png", url: `${OTRA_CLINICA}/pat_9/placa.png` },
+      { ...ARCHIVO, name: "firma-ajena.png", url: `signatures/${OTRA_CLINICA}/c1.png` },
+      // una URL externa plantada: el servidor la bajaría con `fetch` (SSRF ciego)
+      { ...ARCHIVO, name: "externa.png", url: "http://169.254.169.254/latest/meta-data/x.png" },
+    ];
+    await llamar("?imagenes=1");
+    assert.deepEqual(firmadas, [ARCHIVO.url], "solo la imagen de la carpeta de la clínica");
   });
 });

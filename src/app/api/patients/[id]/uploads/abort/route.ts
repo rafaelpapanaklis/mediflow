@@ -8,7 +8,9 @@
 // clínica paga y que ni el sistema ni ella pueden ver.
 //
 // SEGURIDAD — esta ruta borra bytes, así que se defiende en tres frentes:
-//   1. sesión + visibilidad del paciente + paciente de ESTA clínica
+//   1. sesión + "xrays.upload" (la misma llave que la subida que aborta: un
+//      READONLY no borra subidas a medias) + visibilidad del paciente +
+//      paciente de ESTA clínica
 //   2. el path debe caer exactamente en la carpeta de esta clínica y paciente
 //   3. NO debe existir NINGÚN PatientFile apuntando a ese path (ni siquiera uno
 //      borrado lógicamente). Sólo se borran objetos huérfanos: si el archivo ya
@@ -21,6 +23,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { removeFileFromStorage } from "@/lib/storage";
@@ -35,6 +38,11 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
   const params = await props.params;
   const ctx = await getAuthContext();
   if (!ctx) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+
+  // Auditoría cloudflare nº11: borrar el objeto es escribir contra el bucket →
+  // la misma llave que uploads/sign y uploads/confirm.
+  const deniedPerm = denyIfMissingPermission(ctx, "xrays.upload");
+  if (deniedPerm) return deniedPerm;
 
   const denied = await assertPatientVisible(params.id, {
     userId: ctx.userId,
