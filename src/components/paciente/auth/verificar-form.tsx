@@ -1,6 +1,8 @@
 "use client";
 
-// Verificación de email por código (A2). POST /api/paciente/verify {email, code}.
+// Verificación de email por código (A2). POST /api/paciente/verify {email, code, password}.
+// · La contraseña es la del registro (pre-secuestro, auditoría ola 3): el código
+//   prueba el buzón y la contraseña que quien verifica es quien se registró.
 // · 200 → la API ya dejó la cookie patient_session: window.location.assign(next
 //   válido || "/paciente") para que el server la vea fresca.
 // · "Reenviar código" → POST /api/paciente/verify/resend {email}, cooldown 30s.
@@ -141,6 +143,7 @@ export function PacienteVerificarForm() {
 
   const [email, setEmail] = useState(emailParam);
   const [code, setCode] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
   const [cooldown, setCooldown] = useState(0);
@@ -155,7 +158,7 @@ export function PacienteVerificarForm() {
   }, [cooldown]);
 
   const validEmail = email.trim().includes("@");
-  const canVerify = !loading && code.length === 6 && validEmail;
+  const canVerify = !loading && code.length === 6 && validEmail && password.length > 0;
   const resendDisabled = resending || cooldown > 0 || !validEmail;
 
   async function handleSubmit(e: FormEvent) {
@@ -168,7 +171,7 @@ export function PacienteVerificarForm() {
       const res = await fetch("/api/paciente/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim(), code }),
+        body: JSON.stringify({ email: email.trim(), code, password }),
       });
       const data: any = await res.json().catch(() => ({}));
       if (res.ok) {
@@ -297,6 +300,27 @@ export function PacienteVerificarForm() {
               required
               style={{ ...INPUT, height: 52, textAlign: "center", fontSize: 22, letterSpacing: 8, fontWeight: 600 }}
             />
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <label htmlFor="pp-verify-password" style={LABEL}>
+              Tu contraseña
+            </label>
+            <input
+              id="pp-verify-password"
+              type="password"
+              autoComplete="current-password"
+              placeholder="La que pusiste al registrarte"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              onFocus={focusIn}
+              onBlur={focusOut}
+              required
+              style={INPUT}
+            />
+            <Link href="/paciente/recuperar" style={{ ...LINK, fontSize: 12 }}>
+              Olvidé mi contraseña
+            </Link>
           </div>
 
           <button type="submit" disabled={!canVerify} style={primaryBtn(!canVerify)}>

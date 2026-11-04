@@ -48,7 +48,10 @@ export async function GET() {
   const [links, records, plans, odontoEntries] = await Promise.all([
     // clinics: link → patient → clinic (excluye expedientes con soft-delete).
     prisma.patientAccountLink.findMany({
-      where: { accountId: ctx.account.id, patient: { deletedAt: null } },
+      // Seguridad (auditoría «cloudflare», nº7): solo los expedientes que el guard dejó
+      // pasar (ctx.links: siguen con el email de esta cuenta). Mismo criterio que el
+      // guard, sin repetirlo en SQL (revisión t12, m3).
+      where: { accountId: ctx.account.id, patientId: { in: ctx.links.map((l) => l.patientId) }, patient: { deletedAt: null } },
       select: {
         clinicId: true,
         patient: {

@@ -6,9 +6,17 @@ import { componentesDeRespuestaRapida, payloadsDeBotonesDePlantilla } from "@/li
 /**
  * Normaliza a 52 + 10 dígitos (México). Exportada para poder probarla y para
  * que el resto del código no vuelva a escribir estas reglas a mano.
+ *
+ * Es la regla de siempre: 10 dígitos —con o sin «+» delante— son México
+ * («+656 123 4567» es Ciudad Juárez). Lo único nuevo (revisión t12, v4): el
+ * prefijo internacional «00» se quita, así «0052 33 1234 5678» sale al
+ * 52 33 1234 5678 y «001 331 234 5678» al +1, en vez de mandarse a Meta con
+ * los ceros delante. Un número de otro país que mide 10 dígitos con su código
+ * (Dinamarca, Noruega…) se sigue tomando por mexicano, como en producción.
  */
 export function normalizeMxWhatsAppPhone(to: string): string {
   let phone = to.replace(/[\s\-\(\)\+]/g, "");
+  if (phone.startsWith("00")) phone = phone.slice(2);
   // Strip country code if present to get raw 10 digits
   if (phone.startsWith("521") && phone.length === 13) phone = phone.slice(3); // 521XXXXXXXXXX → 10 digits (old MX mobile format)
   else if (phone.startsWith("52") && phone.length === 12) phone = phone.slice(2); // 52XXXXXXXXXX → 10 digits

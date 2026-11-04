@@ -89,25 +89,39 @@ export async function resolveBookingPatient(
   const { accountId, accountEmail, clinicId, firstName, lastName, phone, primaryDoctorId } = args;
 
   // 1. Link existente de la cuenta en esa clínica (validando que el Patient siga vivo).
-  const existingLink = await prisma.patientAccountLink.findFirst({
+  //    nº7 (auditoría «cloudflare»): un enlace cuyo expediente ya no tiene el
+  //    email de la cuenta no cuenta (la clínica le cambió el email al paciente).
+  //    El email se compara con `mismoEmailDePortal` (sin mayúsculas NI espacios),
+  //    el mismo criterio que el guard (revisión t12, dm2): con un `equals` en SQL,
+  //    un paciente importado con «ana@x.com » no encontraba su enlace y la reserva
+  //    le creaba un expediente duplicado.
+  const enlaces = await prisma.patientAccountLink.findMany({
     where: { accountId, clinicId },
     orderBy: { createdAt: "asc" },
-    select: { patientId: true, patient: { select: { deletedAt: true } } },
+    select: { patientId: true, patient: { select: { deletedAt: true, email: true } } },
   });
-  if (existingLink && existingLink.patient && !existingLink.patient.deletedAt) {
+  const existingLink = enlaces.find(
+    (l) => l.patient && !l.patient.deletedAt && mismoEmailDePortal(l.patient.email, accountEmail),
+  );
+  if (existingLink) {
     return { patientId: existingLink.patientId, created: false };
   }
 
   // 2. Patient existente en la clínica con el email VERIFICADO de la cuenta.
   //    (NUNCA buscar por teléfono: permitiría adoptar el expediente de otro.)
-  const byEmail = await prisma.patient.findFirst({
+  //    El `contains` solo pre-filtra (el email guardado puede traer espacios);
+  //    decide `mismoEmailDePortal`, igual que en el paso 1.
+  const candidatos = await prisma.patient.findMany({
     where: {
       clinicId,
-      email: { equals: accountEmail, mode: "insensitive" },
+      email: { contains: accountEmail.trim(), mode: "insensitive" },
       deletedAt: null,
     },
-    select: { id: true },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, email: true },
+    take: 20,
   });
+  const byEmail = candidatos.find((p) => mismoEmailDePortal(p.email, accountEmail));
   if (byEmail) {
     await createLinkIgnoringDuplicate(accountId, byEmail.id, clinicId);
     return { patientId: byEmail.id, created: false };
@@ -135,4 +149,36 @@ export async function resolveBookingPatient(
 
   await createLinkIgnoringDuplicate(accountId, patient.id, clinicId);
   return { patientId: patient.id, created: true };
+}
+
+/** Mismo criterio de igualdad que el auto-link: sin mayúsculas ni espacios. */
+export function mismoEmailDePortal(a: string | null | undefined, b: string | null | undefined): boolean {
+  const x = (a ?? "").trim().toLowerCase();
+  return x !== "" && x === (b ?? "").trim().toLowerCase();
+}
+
+/**
+ * Seguridad (auditoría «cloudflare», nº7): un enlace cuenta↔expediente solo se
+ * justifica porque el email de la cuenta ERA el del paciente. Cuando la clínica
+ * cambia o corrige el email del paciente (editar la ficha, rectificación ARCO),
+ * se borran los enlaces de las cuentas cuyo email ya no es el del paciente.
+ * Antes no se revocaban nunca: quien tuvo acceso con un email equivocado seguía
+ * viendo recetas, documentos e historial después de la corrección.
+ *
+ * `db` puede ser la transacción del update (así se borra en el mismo paso).
+ * Devuelve cuántos enlaces borró.
+ */
+export async function revocarEnlacesDeOtroEmail(args: { patientId: string; clinicId: string }, db: any = prisma): Promise<number> {
+  const { patientId, clinicId } = args;
+  if (!clinicId) throw new Error("sesion_invalida: falta clinicId");
+  const paciente = await db.patient.findFirst({ where: { id: patientId, clinicId }, select: { email: true } });
+  if (!paciente) return 0;
+  const enlaces: Array<{ id: string; account: { email: string } | null }> = await db.patientAccountLink.findMany({
+    where: { patientId, clinicId },
+    select: { id: true, account: { select: { email: true } } },
+  });
+  const sobran = enlaces.filter((l) => !mismoEmailDePortal(l.account?.email, paciente.email)).map((l) => l.id);
+  if (sobran.length === 0) return 0;
+  const r = await db.patientAccountLink.deleteMany({ where: { id: { in: sobran }, patientId, clinicId } });
+  return r.count;
 }

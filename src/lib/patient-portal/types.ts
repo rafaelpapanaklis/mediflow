@@ -109,6 +109,8 @@ export interface RegisterBody {
 export interface VerifyBody {
   email: string;
   code: string; // 6 dígitos
+  /** La contraseña con la que se registró (pre-secuestro, auditoría ola 3). */
+  password: string;
 }
 
 export interface LoginBody {

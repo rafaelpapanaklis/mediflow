@@ -1,3 +1,4 @@
+import { revocarEnlacesDeOtroEmail } from "@/lib/patient-portal/link";
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma, PatientStatus, type Role } from "@prisma/client";
 import { getAuthContext, buildPatientWhere } from "@/lib/auth-context";
@@ -160,6 +161,14 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
         ...(visibleUserIds !== undefined && { visibleUserIds }),
       },
     });
+    // Seguridad (auditoría «cloudflare», nº7): si cambió el email, fuera los
+    // enlaces del portal de cuentas con otro email. Si esto falla, el guard del
+    // portal ya filtra esos enlaces; no se convierte la edición en un error.
+    if ("email" in (updateData as Record<string, unknown>)) {
+      await revocarEnlacesDeOtroEmail({ patientId: params.id, clinicId: ctx.clinicId }).catch((e) => {
+        console.error("[api/patients][PUT] revocar enlaces del portal falló (el guard los filtra):", e);
+      });
+    }
     const updated = await prisma.patient.findUnique({ where: { id: params.id } });
 
     await logMutation({
@@ -354,6 +363,8 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
   // admin) y después la auto-inclusión, para que lea la lista ya actualizada.
   const updated = await prisma.$transaction(async (tx) => {
     const row = await tx.patient.update({ where: { id: params.id }, data });
+    // Seguridad (auditoría «cloudflare», nº7): mismo paso que el update.
+    if (has("email")) await revocarEnlacesDeOtroEmail({ patientId: params.id, clinicId: ctx.clinicId }, tx);
     const newDoctorId = typeof data.primaryDoctorId === "string" ? data.primaryDoctorId : null;
     const autoIncluded = newDoctorId
       ? await ensureUserCanSeePatient(tx, params.id, newDoctorId, ctx.clinicId)

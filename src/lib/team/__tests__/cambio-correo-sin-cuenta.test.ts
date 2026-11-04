@@ -78,6 +78,9 @@ function coincide(f: Fila, where: any): boolean {
   if (where.id?.in && !where.id.in.includes(f.id)) return false;
   if (where.clinicId !== undefined && typeof where.clinicId === "string" && f.clinicId !== where.clinicId) return false;
   if (where.clinicId?.in && !where.clinicId.in.includes(f.clinicId)) return false;
+  // nº5 (cuenta compartida): «filas de la misma cuenta fuera de estas clínicas».
+  if (where.clinicId?.notIn && where.clinicId.notIn.includes(f.clinicId)) return false;
+  if (typeof where.role === "string" && f.role !== where.role) return false;
   if (typeof where.supabaseId === "string" && f.supabaseId !== where.supabaseId) return false;
   if (where.supabaseId?.not !== undefined && f.supabaseId === where.supabaseId.not) return false;
   if (where.email?.equals && f.email.toLowerCase() !== String(where.email.equals).toLowerCase()) return false;
@@ -121,6 +124,9 @@ const prismaDoble: any = {
     },
   },
   clinic: { findUnique: async () => ({}) },
+  // nº5 (cuenta compartida): estas cuentas no están en el Instituto ni son afiliados.
+  eduUser: { findFirst: async () => null },
+  affiliateUser: { findFirst: async () => null },
   $transaction: async (fn: any) => fn(prismaDoble),
 };
 

@@ -104,6 +104,34 @@ export async function PATCH(req: NextRequest) {
     }
   }
 
+  // Seguridad (auditoría «cloudflare», nº3): la dirección de entrada de
+  // Postmark ELIGE la clínica en el webhook de correo entrante. Era texto libre
+  // sin unicidad: una clínica podía escribir la dirección de OTRA y recibir los
+  // correos de sus pacientes. Ahora no se puede guardar una dirección que ya
+  // tiene otra clínica: 409. Se compara sin mayúsculas, igual que el webhook.
+  // (Twilio no se toca: la plataforma no lo usa — decisión de Rafael.)
+  if ("postmarkInboundEmail" in data && data.postmarkInboundEmail !== null && data.postmarkInboundEmail !== undefined) {
+    const v = data.postmarkInboundEmail;
+    if (typeof v !== "string") {
+      return NextResponse.json({ error: "valor_invalido", campo: "postmarkInboundEmail" }, { status: 400 });
+    }
+    const limpio = v.trim();
+    data.postmarkInboundEmail = limpio === "" ? null : limpio;
+    if (limpio) {
+      const ocupado = await prisma.clinic.findFirst({
+        where: { id: { not: ctx.clinicId }, postmarkInboundEmail: { equals: limpio, mode: "insensitive" } },
+        select: { id: true },
+      });
+      if (ocupado) {
+        return NextResponse.json({
+          error: "direccion_en_uso",
+          campo: "postmarkInboundEmail",
+          detail: "Esa dirección de correo de entrada ya la usa otra clínica.",
+        }, { status: 409 });
+      }
+    }
+  }
+
   // reminderSettings = config de recordatorios de cita (offsets/canal/plantilla)
   // + reminderSettings.recall = config del recall genérico (WS1-T8). Comparten
   // el MISMO Json, así que al guardar una mitad LEEMOS la actual y mezclamos

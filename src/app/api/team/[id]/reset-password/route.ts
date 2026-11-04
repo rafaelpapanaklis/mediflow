@@ -75,6 +75,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     contrasena: tempPassword,
     nombreBoton: "Restablecer contraseña",
     origen: "/api/team/[id]/reset-password",
+    sesion: { clinicId: ctx.clinicId, userId: ctx.userId },
   });
   if (aplicada.ok === false) {
     return NextResponse.json(

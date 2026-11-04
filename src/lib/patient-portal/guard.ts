@@ -8,6 +8,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { PATIENT_SESSION_COOKIE, type PatientPortalContext } from "./types";
 import { sha256 } from "./crypto";
+import { mismoEmailDePortal } from "./link";
 
 /**
  * Devuelve el contexto de la sesión del paciente o null si no hay sesión
@@ -30,7 +31,7 @@ export async function getPatientPortalContext(): Promise<PatientPortalContext | 
             name: true,
             email: true,
             phone: true,
-            links: { select: { patientId: true, clinicId: true } },
+            links: { select: { patientId: true, clinicId: true, patient: { select: { email: true } } } },
           },
         },
       },
@@ -48,7 +49,14 @@ export async function getPatientPortalContext(): Promise<PatientPortalContext | 
       return null;
     }
 
-    const { links, ...account } = session.account;
+    // Seguridad (auditoría «cloudflare», nº7): solo cuentan los enlaces cuyo
+    // expediente sigue teniendo EL EMAIL DE ESTA CUENTA. Si la clínica cambió
+    // el email del paciente, el enlace viejo ya no da acceso aunque la fila
+    // siga ahí (la edición la borra, esto es la segunda barrera).
+    const { links: crudos, ...account } = session.account;
+    const links = crudos
+      .filter((l) => mismoEmailDePortal(l.patient?.email, account.email))
+      .map(({ patientId, clinicId }) => ({ patientId, clinicId }));
     return { account, links };
   } catch (err) {
     console.error("[paciente/guard] getPatientPortalContext error:", err);

@@ -308,7 +308,9 @@ function recordatorio(over: Partial<any> = {}) {
     status: "SENT",
     sentAt: new Date(Date.now() - 3_600_000),
     appointmentId: "cita1",
-    appointment: { id: "cita1", status: "SCHEDULED", patientId: "pac1", startsAt: new Date("2026-10-08T16:00:00Z") },
+    // `patient.phone`: el webhook lo carga para saber a qué número salió el
+    // recordatorio (seguridad nº9); aquí salió al número que escribe.
+    appointment: { id: "cita1", status: "SCHEDULED", patientId: "pac1", startsAt: new Date("2026-10-08T16:00:00Z"), patient: { phone: TEL } },
     ...over,
   };
 }

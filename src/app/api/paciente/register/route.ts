@@ -5,7 +5,10 @@
 //   registros de laboratorios/proveedores.
 // · Si existe cuenta con emailVerified=true → MISMA respuesta 200 que un alta nueva
 //   (B3: sin 409) + aviso «ya tienes una cuenta» al buzón de la cuenta.
-// · Si existe SIN verificar → actualizar name/phone/passwordHash + código nuevo.
+// · Si existe SIN verificar y SIN contraseña (invitada por la clínica) →
+//   fijar name/phone/passwordHash + código nuevo (así se reclama por OTP).
+// · Si existe SIN verificar y CON contraseña (registro pendiente) → NO se toca la
+//   credencial: misma respuesta y solo un código nuevo (ver «pre-secuestro» abajo).
 // · Si no existe → crear PatientAccount (emailVerified false).
 // · Generar código 6 dígitos (crypto.ts), guardar sha256 + expiry 15 min +
 //   verifyAttempts=0, enviar con sendEmail(buildVerifyCodeEmail(...)).
@@ -78,13 +81,42 @@ export async function POST(req: NextRequest) {
       }
       return NextResponse.json({ ok: true, email });
     }
-    // Cuenta INVITADA por la clínica (emailVerified=false, passwordHash=null) o
-    // un registro previo sin verificar: NO se responde 409 — cae al update de
-    // abajo, que fija la contraseña + código nuevo. Así el paciente reclama la
-    // cuenta invitada por OTP sin chocar con "correo ya registrado".
+    // Cuenta INVITADA por la clínica (emailVerified=false, passwordHash=null): NO
+    // se responde 409 — cae al update de abajo, que fija la contraseña + código
+    // nuevo. Así el paciente reclama la cuenta invitada por OTP sin chocar con
+    // "correo ya registrado". Quien fija la contraseña tiene que probar después
+    // el buzón (el código) Y esa contraseña en /verify.
 
     const code = generateVerifyCode();
     const passwordHash = await hashPassword(password);
+
+    // Seguridad (auditoría ola 3, ALTA «pre-secuestro»): un registro SIN
+    // verificar que ya tiene contraseña es de quien lo empezó. Antes cualquiera
+    // que supiera el correo volvía a registrarlo, cambiaba la contraseña por la
+    // suya y esperaba a que la víctima tecleara el código: la cuenta quedaba
+    // verificada, ligada a todos sus expedientes y con la contraseña del
+    // atacante. Ahora la credencial pendiente no se toca: misma respuesta (y el
+    // mismo bcrypt de arriba) y solo sale un código nuevo al buzón. Si quien
+    // registró no recuerda su contraseña, «Olvidé mi contraseña» (el enlace del
+    // correo) la cambia y verifica la cuenta.
+    const pendiente = async (cuenta: { id: string; name: string; email: string }) => {
+      await prisma.patientAccount.update({
+        where: { id: cuenta.id },
+        data: {
+          verifyCodeHash: sha256(code),
+          verifyCodeExpiry: new Date(Date.now() + VERIFY_CODE_TTL_MIN * 60_000),
+          verifyAttempts: 0,
+        },
+      });
+      try {
+        const mail = buildVerifyCodeEmail({ name: cuenta.name, code });
+        await sendEmail({ to: cuenta.email, subject: mail.subject, html: mail.html, text: mail.text });
+      } catch (err) {
+        console.error("[paciente/register] sendEmail (registro pendiente) failed:", err);
+      }
+      return NextResponse.json({ ok: true, email });
+    };
+    if (existing && existing.passwordHash !== null) return pendiente(existing);
     const accountData = {
       name,
       phone: cleanPhone,
@@ -110,6 +142,8 @@ export async function POST(req: NextRequest) {
             // Carrera con otra alta que ya verificó: misma respuesta uniforme (sin 409).
             return NextResponse.json({ ok: true, email });
           }
+          // La otra alta ya fijó su contraseña: tampoco se pisa (pre-secuestro).
+          if (raced.passwordHash !== null) return pendiente(raced);
           await prisma.patientAccount.update({ where: { id: raced.id }, data: accountData });
         } else {
           throw err;

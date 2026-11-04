@@ -23,7 +23,7 @@ import {
 } from "@/lib/whatsapp/interactivo";
 import { isBookingInProgress } from "@/lib/whatsapp/bot/booking-core";
 import { esRespuestaDeEncuesta } from "@/lib/whatsapp/reminder-reply";
-import { detectaIntencionDeAgenda } from "@/lib/whatsapp/bot/booking-parse";
+import { detectaIntencionDeAgenda, numeroDeMeta } from "@/lib/whatsapp/bot/booking-parse";
 import { extraerEventosDelWebhook, phoneNumberIdDe } from "@/lib/whatsapp/webhook-eventos";
 import { conTurnoDelHilo } from "@/lib/whatsapp/bot-turno";
 import { persistentRateLimitKey } from "@/lib/failban";
@@ -33,6 +33,7 @@ import {
   findPatientsByWhatsAppPhone,
   upsertWhatsAppThread,
 } from "@/lib/whatsapp/inbox-log";
+import { recordatoriosDeEseNumero } from "@/lib/whatsapp/recordatorio-destino";
 import {
   BOT_REPLY_EXTERNAL_ID_PREFIX,
   SYSTEM_EXTERNAL_ID_PREFIX,
@@ -430,7 +431,10 @@ async function procesarMensajeEntrante(value: any, msg: any): Promise<void> {
   // bot; lo que cambia es que la búsqueda del recordatorio ya no se queda con
   // él: si la cita era de otro hermano, antes no se encontraba nada y el
   // "CONFIRMAR" moría en silencio.
-  const phoneOwners = await findPatientsByWhatsAppPhone(clinic.id, from);
+  // nº9: `from` es el wa_id completo; va con su «+». Un wa_id extranjero de 10
+  // dígitos (Dinamarca, Noruega…) da "" y no es ningún paciente: leído como
+  // teléfono guardado sería el mexicano de Uruapan o de Lagos.
+  const phoneOwners = await findPatientsByWhatsAppPhone(clinic.id, numeroDeMeta(from));
   const patient = phoneOwners[0] ?? null;
 
   // ── Ingest al Inbox unificado (generalizado para Meta, igual que Twilio) ──
@@ -544,7 +548,7 @@ async function procesarMensajeEntrante(value: any, msg: any): Promise<void> {
   // que de verdad pide confirmar/cancelar por encima de uno más nuevo que no
   // lo pide — p. ej. una encuesta post-cita encolada después del recordatorio
   // de una cita futura.
-  const pendingReminders = phoneOwners.length > 0
+  const pendientesDeLosDuenos = phoneOwners.length > 0
     ? await prisma.whatsAppReminder.findMany({
         where: {
           clinicId:    clinic.id,
@@ -553,7 +557,9 @@ async function procesarMensajeEntrante(value: any, msg: any): Promise<void> {
           status:      WA_REMINDER_STATUS.SENT,
           repliedAt:   null,
         },
-        include: { appointment: true },
+        // El teléfono del paciente de la cita: destino de los recordatorios
+        // enviados antes de que se guardara `payload.enviadoA` (nº9).
+        include: { appointment: { include: { patient: { select: { phone: true } } } } },
         orderBy: { sentAt: "desc" },
         // Tope de seguridad: con más de 20 recordatorios sin contestar el
         // accionable podría quedar fuera (peor caso: la confirmación no se
@@ -562,6 +568,10 @@ async function procesarMensajeEntrante(value: any, msg: any): Promise<void> {
         take: 20,
       })
     : [];
+  // Seguridad (auditoría «cloudflare», nº9): solo cuenta el recordatorio que
+  // de verdad salió a ESTE número. Un «CANCELAR» de otro número no toca una
+  // cita aunque el remitente se pareciera al paciente.
+  const pendingReminders = recordatoriosDeEseNumero(pendientesDeLosDuenos, from);
 
   // Selección + clasificación, ambas puras y testeadas sin BD
   // (lib/whatsapp/reminder-pick.ts y reminder-reply.ts; npm run
@@ -1345,7 +1355,7 @@ async function ingestBusinessAppEchoes(value: any) {
 
     // Empareja al paciente por los últimos 10 dígitos normalizados (igual que el
     // flujo entrante). El `contains` solo pre-filtra en la BD; el match es exacto.
-    const patient = await findPatientByWhatsAppPhone(clinic.id, to);
+    const patient = await findPatientByWhatsAppPhone(clinic.id, numeroDeMeta(to));
 
     const now = new Date();
     const thread = await upsertWhatsAppThread({

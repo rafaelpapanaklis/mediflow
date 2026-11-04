@@ -1,3 +1,4 @@
+import { cuentaCompartidaFueraDeLaClinica, MENSAJE_CUENTA_COMPARTIDA } from "@/lib/team/cuenta-compartida";
 import { getCupoUsuarios } from "@/lib/team/cupo-usuarios";
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext, requireAdmin } from "@/lib/auth-context";
@@ -189,6 +190,34 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
         { error: "Solo un SUPER_ADMIN puede cambiar el correo de un SUPER_ADMIN" },
         { status: 403 },
       );
+    }
+
+    // Seguridad (auditoría «cloudflare», nº5): el correo es el LOGIN global
+    // (con él se pide «olvidé mi contraseña» y se entra), así que cambiar el de
+    // OTRO miembro es tan fuerte como fijarle la contraseña, que ya era solo
+    // del SUPER_ADMIN. Antes bastaba `team.edit` (cualquier ADMIN). El propio
+    // correo se sigue pudiendo cambiar como antes.
+    const esSuPropioCorreo = member.id === ctx!.userId;
+    if (!esSuPropioCorreo && !ctx!.isSuperAdmin) {
+      return NextResponse.json(
+        { error: "Solo el dueño de la clínica (SUPER_ADMIN) puede cambiar el correo de acceso de otro miembro." },
+        { status: 403 },
+      );
+    }
+    // Y si esa cuenta la usa también otro lugar (otra clínica, el Instituto,
+    // su cuenta de afiliado), no se le cambia el login desde aquí.
+    if (!esSuPropioCorreo) {
+      const compartida = await cuentaCompartidaFueraDeLaClinica({
+        supabaseId: member.supabaseId,
+        clinicId: ctx!.clinicId,
+        actorUserId: ctx!.userId,
+      });
+      if (compartida.compartida) {
+        return NextResponse.json(
+          { error: MENSAJE_CUENTA_COMPARTIDA, code: "CUENTA_COMPARTIDA", donde: compartida.donde },
+          { status: 409 },
+        );
+      }
     }
 
     const siblings = await prisma.user.findMany({

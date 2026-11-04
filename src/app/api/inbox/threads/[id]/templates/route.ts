@@ -48,6 +48,7 @@ import {
   type TemplatePatient,
 } from "@/lib/inbox/template-offer";
 import { findPatientByWhatsAppPhone } from "@/lib/whatsapp/inbox-log";
+import { numeroDeMeta } from "@/lib/whatsapp/bot/booking-parse";
 import { sendWhatsAppLogged } from "@/lib/whatsapp/send-and-log";
 import { WhatsAppApiError, WhatsAppBlockedError, waErrorCode } from "@/lib/whatsapp/errors";
 import { apartarAvisoDeCobro, esAvisoDeCobro } from "@/lib/whatsapp/aviso-cobro-tope";
@@ -93,7 +94,8 @@ async function resolveThreadPatient(
 
   const phone = (thread.externalId ?? "").trim();
   if (!phone) return null;
-  const match = await findPatientByWhatsAppPhone(viewer.clinicId, phone);
+  // El externalId es un número de Meta, completo: con su «+» (nº9).
+  const match = await findPatientByWhatsAppPhone(viewer.clinicId, numeroDeMeta(phone));
   if (!match) return null;
 
   // Un hilo SIN patientId no pasa por el gate de visibilidad del handler (no hay

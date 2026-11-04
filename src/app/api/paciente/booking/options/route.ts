@@ -55,7 +55,10 @@ export async function GET() {
     // Los pacientes salen de los vínculos de la CUENTA de la sesión, nunca de
     // una búsqueda por nombre o teléfono.
     prisma.patientAccountLink.findMany({
-      where: { accountId: ctx.account.id, patient: { deletedAt: null } },
+      // Seguridad (auditoría «cloudflare», nº7): solo los expedientes que el guard dejó
+      // pasar (ctx.links: siguen con el email de esta cuenta). Mismo criterio que el
+      // guard, sin repetirlo en SQL (revisión t12, m3).
+      where: { accountId: ctx.account.id, patientId: { in: ctx.links.map((l) => l.patientId) }, patient: { deletedAt: null } },
       orderBy: { createdAt: "asc" },
       select: {
         clinicId: true,

@@ -89,8 +89,90 @@ const NOMBRES_DE_MES = [
   "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
 ];
 
+/**
+ * Los últimos 10 dígitos. Ya NO identifica a nadie (auditoría «cloudflare»,
+ * nº9): un número extranjero puede terminar en los mismos 10 dígitos que el de
+ * un paciente mexicano (+1 331… y 33 1…). Solo sirve de PRE-FILTRO en la base;
+ * la comparación que decide es `claveWhatsApp`.
+ */
 export function normalizeLast10(phone: string): string {
   return phone.replace(/\D/g, "").slice(-10);
+}
+
+/**
+ * La IDENTIDAD de un número de WhatsApp GUARDADO (el teléfono de la ficha, el de
+ * la clínica, el que se teclea al escribir): los dígitos en formato
+ * internacional completo (E.164 sin «+»), con el código de país. Seguridad
+ * (auditoría «cloudflare», nº9): antes el remitente se identificaba por los
+ * últimos 10 dígitos y el código de país se tiraba.
+ *
+ * Se pliegan las variantes de MÉXICO, que son la misma línea:
+ *   · 10 dígitos, con o sin «+»/«00» delante (como la recepción teclea el
+ *     teléfono; «+656 123 4567» es Ciudad Juárez) → «52» + 10;
+ *   · «521» + 10 (formato viejo de celular, el wa_id que aún manda Meta) → «52» + 10;
+ *   · «044»/«045» + 10 (marcación nacional vieja) → «52» + 10;
+ *   · «52» con más de 12 dígitos («+52 044 33…») → «52» + los últimos 10.
+ * Un «00» delante es el prefijo internacional y se quita. Cualquier otro número
+ * se queda con su código de país: «+1 331 234 5678» es «13312345678»,
+ * distinto de «52 33 1234 5678».
+ *
+ * v4 (decisión de Rafael, revisión t12 DM2): «+»/«00» seguido de exactamente 10
+ * dígitos se lee como México, igual que en producción. Un número de otro país
+ * que mide 10 dígitos con su código (Dinamarca, Noruega, Singapur…) no se
+ * puede guardar: se tomaría por mexicano.
+ *
+ * ⚠ Un número que llega de META (el `from` del webhook, el `externalId` de un
+ * hilo) NO se pasa por aquí tal cual: ver `claveRemitente` y `numeroDeMeta`.
+ */
+export function claveWhatsApp(phone: string | null | undefined): string {
+  let d = String(phone ?? "").replace(/\D/g, "");
+  if (d.startsWith("00")) d = d.slice(2);
+  if (d.length === 10) return `52${d}`;
+  if (d.length > 12 && d.startsWith("52")) return `52${d.slice(-10)}`;
+  return plegarMexico(d);
+}
+
+/**
+ * La IDENTIDAD de un número que llega de META: el `from` (wa_id) del webhook o
+ * el `externalId` de un hilo de WhatsApp. Meta siempre lo manda completo, con
+ * su código de país, así que NUNCA se rellena con «52».
+ *
+ * Seguridad (revisión de nº9): hay países cuyo número completo mide 10 dígitos
+ * (Dinamarca +45, Noruega +47, Singapur +65…). Rellenar el wa_id danés
+ * «4521234567» con 52 lo hacía el paciente de Uruapan «452 123 4567».
+ *
+ * Solo pliega lo que no puede ser otro país: «521» + 10 → «52» + 10, y
+ * «044»/«045» + 10 (ningún código de país empieza por 0; aparecen en hilos
+ * viejos creados desde un teléfono guardado así).
+ */
+export function claveRemitente(waId: string | null | undefined): string {
+  let d = String(waId ?? "").replace(/\D/g, "");
+  if (d.startsWith("00")) d = d.slice(2);
+  return plegarMexico(d);
+}
+
+/**
+ * Un número de Meta listo para los helpers que reciben «un teléfono» (que lo
+ * leen con `claveWhatsApp`): con su «+» delante. El paciente que crea el bot se
+ * guarda también así, y la siguiente vez que escribe se le reconoce por su
+ * número completo.
+ *
+ * Devuelve "" cuando el número no se puede escribir como teléfono guardado sin
+ * cambiar de dueño: un wa_id de 10 dígitos es de otro país (Dinamarca +45 21 23
+ * 45 67), y `claveWhatsApp` lo leería como mexicano (Uruapan 452 123 4567). Ese
+ * remitente no es ningún paciente, y el bot no lo da de alta (M1).
+ */
+export function numeroDeMeta(waId: string | null | undefined): string {
+  const clave = claveRemitente(waId);
+  if (!clave) return "";
+  const numero = `+${clave}`;
+  return claveWhatsApp(numero) === clave ? numero : "";
+}
+
+function plegarMexico(d: string): string {
+  if (d.length === 13 && (d.startsWith("044") || d.startsWith("045"))) return `52${d.slice(3)}`;
+  if (d.length === 13 && d.startsWith("521")) return `52${d.slice(3)}`;
+  return d;
 }
 
 export function addDaysISO(iso: string, days: number): string {

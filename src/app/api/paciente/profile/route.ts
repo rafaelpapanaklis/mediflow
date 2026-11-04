@@ -5,14 +5,16 @@
 //   · getPatientPortalContext() | 401. rateLimit(req, 10).
 //   · name: trim, 2-120 chars. phone: trim, dígitos/espacios/+-(), 10-20 chars.
 //   · Cambio de contraseña: SOLO si vienen ambos (currentPassword + newPassword
-//     ≥8). verifyPassword(currentPassword) o 400. Tras cambiarla, conservar la
-//     sesión actual (no destruir).
+//     ≥8). verifyPassword(currentPassword) o 400. Tras cambiarla se cierran
+//     TODAS las sesiones y esta pestaña sigue dentro con una nueva (Set-Cookie).
 //   · El email NO se puede cambiar (es la identidad de vinculación).
 //   → 200 { ok: true }.
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
 import { getPatientPortalContext, pacienteUnauthorized } from "@/lib/patient-portal/guard";
+import { createPatientSession, destroyAllSessions, sessionCookieOptions } from "@/lib/patient-portal/session";
+import { PATIENT_SESSION_COOKIE } from "@/lib/patient-portal/types";
 import { hashPassword, verifyPassword } from "@/lib/patient-portal/crypto";
 import type { PacienteClinica, PacientePerfil, UpdateProfileBody } from "@/lib/patient-portal/types";
 import { registrarMovimientoExterno } from "@/lib/movimientos-paciente/registrar";
@@ -31,7 +33,10 @@ export async function GET() {
     if (!account) return pacienteUnauthorized();
 
     const links = await prisma.patientAccountLink.findMany({
-      where: { accountId: account.id, patient: { deletedAt: null } },
+      // Seguridad (auditoría «cloudflare», nº7): solo los expedientes que el guard dejó
+      // pasar (ctx.links: siguen con el email de esta cuenta). Mismo criterio que el
+      // guard, sin repetirlo en SQL (revisión t12, m3).
+      where: { accountId: account.id, patientId: { in: ctx.links.map((l) => l.patientId) }, patient: { deletedAt: null } },
       orderBy: { createdAt: "asc" },
       select: {
         clinicId: true,
@@ -124,7 +129,8 @@ export async function PATCH(req: NextRequest) {
       data.phone = digits;
     }
 
-    // Cambio de contraseña: SOLO si vienen ambos campos. La sesión se conserva.
+    // Cambio de contraseña: SOLO si vienen ambos campos. Cierra TODAS las demás
+    // sesiones de la cuenta y deja abierta solo esta (con una sesión nueva).
     const wantsPasswordChange =
       body.currentPassword !== undefined || body.newPassword !== undefined;
     if (wantsPasswordChange) {
@@ -191,6 +197,18 @@ export async function PATCH(req: NextRequest) {
           req,
         });
       }
+    }
+
+    // Seguridad (auditoría ola 3, «pre-secuestro»): cambiar la contraseña cierra
+    // TODAS las sesiones de la cuenta. Antes las demás seguían vivas 30 días, así
+    // que quien hubiera entrado con la contraseña vieja no salía. Esta pestaña
+    // sigue dentro con una sesión nueva.
+    if (data.passwordHash !== undefined) {
+      await destroyAllSessions(ctx.account.id);
+      const { token, expiresAt } = await createPatientSession(ctx.account.id);
+      const res = NextResponse.json({ ok: true });
+      res.cookies.set(PATIENT_SESSION_COOKIE, token, sessionCookieOptions(expiresAt));
+      return res;
     }
 
     return NextResponse.json({ ok: true });

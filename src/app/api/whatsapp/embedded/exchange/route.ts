@@ -56,6 +56,36 @@ export async function POST(req: NextRequest) {
     const token: string = tokenJson.access_token;
     const auth = { Authorization: `Bearer ${token}` };
 
+    // 1b) Seguridad (auditoría «cloudflare», nº4): el número tiene que ser de
+    //     ESE WABA, leído con el token del intercambio. Antes solo se pedían a
+    //     Meta llamadas «best-effort» cuyo resultado no se miraba, así que una
+    //     clínica podía guardar el phone_number_id de otro negocio y quedarse
+    //     con sus mensajes entrantes. Sin la prueba no se suscribe, no se
+    //     registra y no se guarda nada.
+    if (!(await wabaTieneElNumero(wabaId, phoneNumberId, auth))) {
+      return NextResponse.json(
+        { success: false, error: "Ese número no pertenece a la cuenta de WhatsApp Business que conectaste." },
+        { status: 403 },
+      );
+    }
+
+    // 1c) Seguridad (auditoría «cloudflare», nº4): el número entra del cuerpo de
+    //     la petición y el webhook enruta por él. Si ya es de OTRA clínica
+    //     dental, no se toca (409) — antes de cambiar nada en Meta. Va DESPUÉS
+    //     de la prueba de propiedad (revisión t12, m2): si fuera antes,
+    //     cualquier ADMIN, sin un code válido, podría preguntar si un
+    //     phone_number_id ajeno ya está conectado a otra clínica.
+    const otraClinica = await prisma.clinic.findFirst({
+      where: { waPhoneNumberId: phoneNumberId, id: { not: clinicId } },
+      select: { id: true },
+    });
+    if (otraClinica) {
+      return NextResponse.json(
+        { success: false, error: "Ese número de WhatsApp ya está conectado a otra clínica." },
+        { status: 409 },
+      );
+    }
+
     // 2) Suscribir la app al WABA — REQUISITO para recibir mensajes en el webhook.
     let subscribed = false;
     try {
@@ -117,4 +147,27 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ success: false, error: "Error al conectar con Meta" }, { status: 500 });
   }
+}
+
+/**
+ * ¿`GET /{wabaId}/phone_numbers`, con el token del intercambio, lista el
+ * número? Sigue la paginación de Graph (pocas páginas: un WABA tiene pocos
+ * números). Cualquier respuesta que no sea ok cuenta como «no».
+ */
+async function wabaTieneElNumero(
+  wabaId: string,
+  phoneNumberId: string,
+  auth: Record<string, string>,
+): Promise<boolean> {
+  let url: string | null = `${GRAPH}/${encodeURIComponent(wabaId)}/phone_numbers?fields=id&limit=100`;
+  for (let pagina = 0; url && pagina < 5; pagina++) {
+    const res: Response = await fetch(url, { headers: auth });
+    if (!res.ok) return false;
+    const json: any = await res.json().catch(() => null);
+    const ids: string[] = Array.isArray(json?.data) ? json.data.map((n: any) => String(n?.id ?? "")) : [];
+    if (ids.includes(phoneNumberId)) return true;
+    const siguiente = json?.paging?.next;
+    url = typeof siguiente === "string" && siguiente.startsWith(`${GRAPH}/`) ? siguiente : null;
+  }
+  return false;
 }

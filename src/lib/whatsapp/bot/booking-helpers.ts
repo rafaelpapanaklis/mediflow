@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { anotarPacienteCreadoPorBot } from "./movimientos-bot";
 import { nextPatientNumber, withPatientNumberRetry } from "@/lib/patients/next-patient-number";
-import { normalizeLast10 } from "./booking-parse";
+import { claveWhatsApp, normalizeLast10 } from "./booking-parse";
 
 // Re-exporta los parsers/formateadores puros (parseDateInput, isCancelWord,
 // isAffirmative, etc.) para los call sites previos que los importaban de aquí
@@ -25,11 +25,17 @@ export async function findOrCreateWhatsAppPatient(
   // ws1-t1 (#12) — «otra persona» en un número compartido: buscar por el número
   // devolvería a quien ya lo tiene (la mamá) y la cita del hijo quedaría a su nombre.
   if (last10.length >= 10 && !opciones?.crearNuevo) {
-    const existing = await prisma.patient.findFirst({
+    // nº9 (auditoría «cloudflare»): el `contains` de los 10 dígitos solo
+    // pre-filtra; la cita es del paciente con ESE número completo, no de uno
+    // cuyo teléfono mexicano acabe igual que el extranjero que escribe.
+    const candidatos = await prisma.patient.findMany({
       where: { clinicId, phone: { contains: last10 } },
-      select: { id: true },
+      select: { id: true, phone: true },
+      take: 25,
     });
-    if (existing) return existing;
+    const clave = claveWhatsApp(phoneRaw);
+    const existing = candidatos.find((p) => claveWhatsApp(p.phone) === clave);
+    if (existing) return { id: existing.id };
   }
 
   const parts = fullName.trim().split(/\s+/);

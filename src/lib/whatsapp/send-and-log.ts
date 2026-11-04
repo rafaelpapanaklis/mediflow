@@ -420,10 +420,13 @@ async function logOutboundToInbox(args: LogArgs): Promise<void> {
  * Clave del hilo (externalId) para un teléfono destino. Meta entrega los wa_id
  * mexicanos como 521 + 10 dígitos (ver fixtures del bot), así que un hilo nuevo
  * se crea con ese formato para que la respuesta del paciente caiga en el MISMO
- * hilo. Números no mexicanos se guardan tal cual (solo dígitos).
+ * hilo. Números no mexicanos se guardan tal cual (solo dígitos). Un «00»
+ * delante es el prefijo internacional y se quita (revisión t12, v4), como en
+ * normalizeMxWhatsAppPhone: «0052 33 1234 5678» es el hilo 5213312345678.
  */
 export function whatsappThreadKey(phone: string): string {
-  const digits = (phone ?? "").replace(/\D/g, "");
+  let digits = (phone ?? "").replace(/\D/g, "");
+  if (digits.startsWith("00")) digits = digits.slice(2);
   const last10 = digits.slice(-10);
   if (last10.length < 10) return digits;
   if (digits.length <= 10 || digits.startsWith("52")) return `521${last10}`;
