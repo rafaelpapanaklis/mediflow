@@ -1,6 +1,7 @@
 // Pediatrics — helpers internos para server actions (auth + audit). Spec: §4.A.9, §4.B.4
 
 import { prisma } from "@/lib/prisma";
+import type { ClienteDb } from "@/lib/db/punto-de-guardado";
 import { anotarFilaDeModulo } from "@/lib/movimientos-paciente/modulos";
 import type { AuthContext } from "@/lib/auth-context";
 import { canSeePatient } from "@/lib/patient-visibility";
@@ -98,17 +99,22 @@ export async function loadPatientForPediatrics(args: {
  * Devuelve el PediatricRecord del paciente; si no existe, lo crea.
  * Garantiza un único registro por paciente (unique en patientId).
  */
-export async function ensurePediatricRecord(args: {
-  ctx: AuthContext;
-  patientId: string;
-}): Promise<{ id: string; clinicId: string }> {
-  const existing = await prisma.pediatricRecord.findUnique({
+export async function ensurePediatricRecord(
+  args: {
+    ctx: AuthContext;
+    patientId: string;
+  },
+  // ws1-t11 v4: el `tx` de quien llama, si ya está dentro de una transacción
+  // (setPrimaryGuardian). Sin él, el cliente global, como siempre.
+  db: ClienteDb = prisma,
+): Promise<{ id: string; clinicId: string }> {
+  const existing = await db.pediatricRecord.findUnique({
     where: { patientId: args.patientId },
     select: { id: true, clinicId: true },
   });
   if (existing) return existing;
 
-  const created = await prisma.pediatricRecord.create({
+  const created = await db.pediatricRecord.create({
     data: {
       clinicId: args.ctx.clinicId,
       patientId: args.patientId,

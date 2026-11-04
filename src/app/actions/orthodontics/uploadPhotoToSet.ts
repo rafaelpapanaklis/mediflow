@@ -3,6 +3,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { pacienteOcultoPara } from "@/lib/clinical-shared/auth/paciente-oculto";
 import { uploadPhotoToSetSchema } from "@/lib/validation/orthodontics";
 import { VIEW_TO_ID_COLUMN, motivoArchivoAjenoAlJuego } from "@/lib/orthodontics/photo-set-helpers";
 import { conMovimientosSoloDeBitacora, conUnSoloMovimiento, esPasoDeOtraAccion } from "@/lib/movimientos-paciente/una-accion";
@@ -33,6 +34,8 @@ async function ligarFotoAlJuego(input: unknown): Promise<ActionResult<{ setId: s
     where: { id: parsed.data.setId, clinicId: ctx.clinicId },
   });
   if (!set) return fail("Set fotográfico no encontrado");
+  // ws1-t11 · lead 14: el paciente del registro puede estar restringido (visibleUserIds).
+  if (await pacienteOcultoPara(ctx, set.patientId)) return fail("Set fotográfico no encontrado");
 
   // X6: el archivo tiene que ser del MISMO paciente que el juego (antes solo
   // se miraba la clínica y se podía colgar la foto de otro paciente).

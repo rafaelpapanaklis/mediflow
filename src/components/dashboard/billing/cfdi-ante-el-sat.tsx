@@ -85,12 +85,14 @@ export function CfdiAnteElSat({
     if (data?.facturaLiberada || data?.cfdi?.status === "cancelled") await onMutated?.();
   }
 
-  const ctx = { listo: datos.listo, admin: datos.puedeCancelar, invoiceCfdiUuid: datos.invoiceCfdiUuid };
+  // ws1-t11 v5: cada botón con lo que pide SU ruta (ver GET /api/cfdi/factura/[invoiceId]).
+  const puedeTimbrar = datos.puedeTimbrar ?? datos.puedeCancelar;
+  const ctx = { listo: datos.listo, admin: puedeTimbrar, cancelar: datos.puedeCancelar, invoiceCfdiUuid: datos.invoiceCfdiUuid };
 
   return (
     <section className={cx("space-y-2 rounded-lg border border-border p-3", c.campo)} data-cfdi-ante-el-sat>
       <p className="text-xs font-semibold">{tx.titulo}</p>
-      {!datos.listo && datos.sqlPendiente && datos.puedeCancelar && (
+      {!datos.listo && datos.sqlPendiente && (puedeTimbrar || datos.puedeCancelar) && (
         <p className={cx("text-[11px] text-muted-foreground", c.texto)} data-sql-pendiente>{tx.sqlPendiente(datos.sqlPendiente)}</p>
       )}
       <ul className="space-y-2">
@@ -165,6 +167,7 @@ export function CfdiAnteElSat({
           cfdi={nota}
           disponible={disponibleParaNota(nota.total, notasDe(datos.cfdis, nota).map((n) => n.total))}
           saldo={datos.saldo}
+          puedeDevolver={datos.puedeDevolver ?? true}
           rediseno={rediseno}
           onClose={() => setNota(null)}
           onHecho={async () => { setNota(null); await cargar(); await onMutated?.(); }}
@@ -254,8 +257,10 @@ function DialogoCancelar({ cfdi, motivo: motivoInicial, sustituto, en, rediseno,
   );
 }
 
-function DialogoNota({ cfdi, disponible, rediseno, onClose, onHecho, saldo }: {
+function DialogoNota({ cfdi, disponible, rediseno, onClose, onHecho, saldo, puedeDevolver = true }: {
   cfdi: CfdiVista; disponible: number; rediseno: boolean;
+  /** ws1-t11 v5: sin «Reembolsar / cancelar» la ruta rechaza devolver dinero: solo bonificación. */
+  puedeDevolver?: boolean;
   /** N-26: lo que la nota todavía debe (una bonificación sin devolución no puede pasar de ahí). */
   saldo?: number;
   onClose: () => void; onHecho: () => void | Promise<void>;
@@ -265,7 +270,7 @@ function DialogoNota({ cfdi, disponible, rediseno, onClose, onHecho, saldo }: {
   const cx = (vieja: string, nueva: string) => (rediseno ? nueva : vieja);
   const [monto, setMonto] = useState("");
   const [razon, setRazon] = useState("");
-  const [devolver, setDevolver] = useState(true);
+  const [devolver, setDevolver] = useState(puedeDevolver);
   const [forma, setForma] = useState("");
   const [enviando, setEnviando] = useState(false);
   const montoNum = Number(monto);
@@ -278,7 +283,10 @@ function DialogoNota({ cfdi, disponible, rediseno, onClose, onHecho, saldo }: {
   const porQue = enviando ? null
     : !(isFinite(montoNum) && montoNum > 0) ? (en ? "Enter the amount." : "Escribe el monto.")
     : montoNum > disponible + 0.001 ? (en ? `It can't exceed ${f$(disponible)} available on this CFDI.` : `No puede pasar de ${f$(disponible)} disponibles en este CFDI.`)
-    : montoNum > tope + 0.001 ? (en ? `Without returning money it only lowers what is owed (${f$(tope)}). If you return money, tick «the money is returned».` : `Sin devolver dinero solo baja lo que se debe (${f$(tope)}). Si devuelves dinero, marca «se le devuelve el dinero».`)
+    : montoNum > tope + 0.001 ? (!puedeDevolver
+        // ws1-t11 v7 (m1 de t2): sin el permiso no hay casilla que marcar: el mismo aviso que sale en su lugar.
+        ? tx.nSinDevolver
+        : en ? `Without returning money it only lowers what is owed (${f$(tope)}). If you return money, tick «the money is returned».` : `Sin devolver dinero solo baja lo que se debe (${f$(tope)}). Si devuelves dinero, marca «se le devuelve el dinero».`)
     : razon.trim().length < 5 ? (en ? "Write the reason (at least 5 letters)." : "Escribe el motivo (al menos 5 letras).")
     : !forma ? (en ? "Choose the payment form." : "Elige la forma de pago.")
     : null;
@@ -314,10 +322,15 @@ function DialogoNota({ cfdi, disponible, rediseno, onClose, onHecho, saldo }: {
             <Label htmlFor="cfdi-nota-razon">{tx.nRazon}</Label>
             <Input id="cfdi-nota-razon" value={razon} onChange={(e) => setRazon(e.target.value)} placeholder={tx.nRazonPh} maxLength={300} disabled={enviando} />
           </div>
-          <label className="flex items-start gap-2 text-xs">
-            <input type="checkbox" checked={devolver} onChange={(e) => setDevolver(e.target.checked)} disabled={enviando} />
-            <span>{tx.nDevolver}</span>
-          </label>
+          {puedeDevolver ? (
+            <label className="flex items-start gap-2 text-xs">
+              <input type="checkbox" checked={devolver} onChange={(e) => setDevolver(e.target.checked)} disabled={enviando} />
+              <span>{tx.nDevolver}</span>
+            </label>
+          ) : (
+            // ws1-t11 v7 (m1 de t2): en lugar de la casilla, por qué esta nota solo baja lo que se debe.
+            <p className={cx("text-xs text-muted-foreground", c.texto)} data-nota-sin-devolver>{tx.nSinDevolver}</p>
+          )}
           <div className={cx("space-y-1.5", c.campo)}>
             <Label htmlFor="cfdi-nota-forma">{devolver ? tx.nForma : tx.nFormaBonif}</Label>
             <select id="cfdi-nota-forma" className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"

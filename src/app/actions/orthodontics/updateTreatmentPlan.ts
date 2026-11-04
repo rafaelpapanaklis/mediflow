@@ -3,6 +3,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { pacienteOcultoPara } from "@/lib/clinical-shared/auth/paciente-oculto";
 import { updateTreatmentPlanSchema } from "@/lib/validation/orthodontics";
 import { aplicarEfectosDeEstado } from "@/lib/orthodontics/efectos-estado-caso";
 import { avisarCambioDeCaso } from "@/lib/cobro-automatico/gancho";
@@ -41,6 +42,8 @@ export async function updateTreatmentPlan(
     where: { id: parsed.data.treatmentPlanId, clinicId: ctx.clinicId, deletedAt: null },
   });
   if (!before) return fail("Plan no encontrado");
+  // ws1-t11 · lead 14: el paciente del registro puede estar restringido (visibleUserIds).
+  if (await pacienteOcultoPara(ctx, before.patientId)) return fail("Plan no encontrado");
 
   // X1: un doctor tratante o responsable de pago NUEVO tiene que ser de esta
   // clínica; repetir el que ya tenía no se vuelve a comprobar.

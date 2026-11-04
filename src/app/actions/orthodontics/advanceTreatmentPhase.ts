@@ -3,6 +3,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { pacienteOcultoPara } from "@/lib/clinical-shared/auth/paciente-oculto";
 import { advanceTreatmentPhaseSchema } from "@/lib/validation/orthodontics";
 import { canAdvance, requiresInitialPhotosBefore } from "@/lib/orthodontics/phase-machine";
 import { isCompleteSet } from "@/lib/orthodontics/photo-set-helpers";
@@ -26,6 +27,8 @@ export async function advanceTreatmentPhase(
     include: { phases: { orderBy: { orderIndex: "asc" } } },
   });
   if (!plan) return fail("Plan no encontrado");
+  // ws1-t11 · lead 14: el paciente del registro puede estar restringido (visibleUserIds).
+  if (await pacienteOcultoPara(ctx, plan.patientId)) return fail("Plan no encontrado");
 
   const currentPhase = plan.phases.find((p) => p.status === "IN_PROGRESS");
   if (!currentPhase) {

@@ -131,6 +131,8 @@ interface Props {
    *  se puede tocar, en vez de dejar los controles activos para que el PATCH
    *  responda 403 sin explicación. */
   puedeEditarClinica?: boolean;
+  /** ws1-t11 v5: ¿puede cambiar «Exigir 2FA a todo el equipo»? Mismo criterio que su ruta (adminConPermiso). */
+  puedeExigir2fa?: boolean;
   /** REDISEÑO (ws1-t2): el MISMO interruptor `menu-dos-niveles` de la clínica,
    *  resuelto en el servidor. false = la pantalla de siempre, tal cual. */
   rediseno?: boolean;
@@ -159,7 +161,7 @@ interface GcalClinica {
 
 const GCAL_SIN_DATOS: GcalClinica = { estado: "no_conectado", email: null, caidoDesde: null, motivo: null, invitarPaciente: true, tablaDisponible: false };
 
-export function SettingsClient({ user: initUser, clinic: initClinic, initialTab, gcalStatus, gcalMotivo, teamMembers: initTeam = [], cfdiLive = false, puedeEditarClinica = true, rediseno = false, metodosPago, sedeIncluida = null, gcalClinica, reservaWeb }: Props) {
+export function SettingsClient({ user: initUser, clinic: initClinic, initialTab, gcalStatus, gcalMotivo, teamMembers: initTeam = [], cfdiLive = false, puedeEditarClinica = true, puedeExigir2fa = false, rediseno = false, metodosPago, sedeIncluida = null, gcalClinica, reservaWeb }: Props) {
   const t = useT();
   const txPerfil = textosMiPerfil(useLocale());
   // El DOCTOR entra RECORTADO (ver `verComun`), salvo el que ya tenía
@@ -1581,7 +1583,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
                 <TwoFactorCard
                   initialEnabled={!!(user as any).totpEnabled}
                   initialRequire2fa={!!(clinic as any)?.require2fa}
-                  isAdmin={user.role === "ADMIN" || user.role === "SUPER_ADMIN"}
+                  isAdmin={puedeExigir2fa}
                 />
                 {/* ws1-t4: se pinta sola solo para el dueño o el admin con «sede.clave», y solo si la cuenta tiene 2+ sedes. */}
                 <SedeClaveCard />
@@ -2600,7 +2602,7 @@ export function SettingsClient({ user: initUser, clinic: initClinic, initialTab,
           <TwoFactorCard
             initialEnabled={!!(user as any).totpEnabled}
             initialRequire2fa={!!(clinic as any)?.require2fa}
-            isAdmin={user.role === "ADMIN" || user.role === "SUPER_ADMIN"}
+            isAdmin={puedeExigir2fa}
           />
           {/* ws1-t4: se pinta sola solo para el dueño o el admin con «sede.clave», y solo si la cuenta tiene 2+ sedes. */}
           <SedeClaveCard />

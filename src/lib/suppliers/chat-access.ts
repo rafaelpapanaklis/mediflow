@@ -24,7 +24,13 @@ export type ChatCaller =
  */
 export async function resolveChatCaller(): Promise<ChatCaller | null> {
   const supplier = await getSupplierContext();
-  if (supplier) {
+  // ws1-t11 · lead 16: solo un proveedor APROBADO usa el chat. El alta es de
+  // autoservicio (queda PENDING) y el panel y el resto de su API ya exigían
+  // APPROVED; sin esto, una cuenta recién registrada, suspendida o rechazada
+  // abría un hilo con cualquier clínica y le escribía. Una sesión de proveedor
+  // no aprobado cuenta como «sin sesión de proveedor» (si esa persona además es
+  // staff de una clínica, sigue entrando como clínica, como siempre).
+  if (supplier && supplier.status === "APPROVED") {
     return { side: "SUPPLIER", supplierId: supplier.supplierId, senderId: supplier.supplierUserId };
   }
   const clinic = await getAuthContext();

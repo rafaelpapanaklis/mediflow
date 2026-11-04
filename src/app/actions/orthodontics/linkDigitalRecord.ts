@@ -4,7 +4,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { linkDigitalRecordSchema } from "@/lib/validation/orthodontics";
-import { auditOrtho, getOrthoActionContext } from "./_helpers";
+import { auditOrtho, getOrthoActionContext, cargarPlanVisible } from "./_helpers";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
 import { fail, isFailure, ok, type ActionResult } from "./result";
 
@@ -44,6 +44,9 @@ export async function linkDigitalRecord(
     select: { id: true },
   });
   if (!plan) return fail("Plan no encontrado");
+  // ws1-t11 v2: el paciente del caso puede estar restringido (visibleUserIds).
+  const visible = await cargarPlanVisible(ctx, parsed.data.treatmentPlanId);
+  if (isFailure(visible)) return visible;
 
   try {
     const created = await prisma.orthodonticDigitalRecord.create({

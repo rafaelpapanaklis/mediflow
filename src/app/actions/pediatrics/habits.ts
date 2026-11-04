@@ -4,6 +4,7 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { pacienteOcultoPara } from "@/lib/clinical-shared/auth/paciente-oculto";
 import { getAuthContext } from "@/lib/auth-context";
 import { PEDIATRIC_AUDIT_ACTIONS } from "@/lib/pediatrics/audit";
 import { auditPediatric, ensurePediatricRecord, fail, isFailure, loadPatientForPediatrics, ok, type ActionResult, requirePediatricsPermission } from "./_helpers";
@@ -89,6 +90,8 @@ export async function updateHabit(
     select: { id: true, clinicId: true, patientId: true },
   });
   if (!habit || habit.clinicId !== ctx.clinicId) return fail("Hábito no encontrado");
+  // ws1-t11 · lead 14: el paciente del registro puede estar restringido (visibleUserIds).
+  if (await pacienteOcultoPara(ctx, habit.patientId)) return fail("Hábito no encontrado");
 
   await prisma.oralHabit.update({
     where: { id: habit.id },
@@ -131,6 +134,8 @@ export async function resolveHabit(args: {
     select: { id: true, clinicId: true, patientId: true, endedAt: true },
   });
   if (!habit || habit.clinicId !== ctx.clinicId) return fail("Hábito no encontrado");
+  // ws1-t11 · lead 14: el paciente del registro puede estar restringido (visibleUserIds).
+  if (await pacienteOcultoPara(ctx, habit.patientId)) return fail("Hábito no encontrado");
   if (habit.endedAt) return fail("Este hábito ya fue resuelto");
 
   await prisma.oralHabit.update({
@@ -177,6 +182,8 @@ export async function deleteHabit(args: { id: string }): Promise<ActionResult<{ 
     select: { id: true, clinicId: true, patientId: true },
   });
   if (!habit || habit.clinicId !== ctx.clinicId) return fail("Hábito no encontrado");
+  // ws1-t11 · lead 14: el paciente del registro puede estar restringido (visibleUserIds).
+  if (await pacienteOcultoPara(ctx, habit.patientId)) return fail("Hábito no encontrado");
 
   await prisma.oralHabit.update({
     where: { id: habit.id },

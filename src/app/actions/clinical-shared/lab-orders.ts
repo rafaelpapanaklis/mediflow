@@ -10,6 +10,7 @@ import {
   LabOrderType,
 } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { pacienteOcultoPara } from "@/lib/clinical-shared/auth/paciente-oculto";
 import { getAuthContext } from "@/lib/auth-context";
 import { auditClinicalShared, guardPatient, sinPermisoClinico } from "@/lib/clinical-shared/auth/guard";
 import { fail, isFailure, ok, type ActionResult } from "@/lib/clinical-shared/result";
@@ -258,10 +259,12 @@ export async function setLabOrderStatus(
 
   const o = await prisma.labOrder.findUnique({
     where: { id: parsed.data.id },
-    select: { id: true, clinicId: true, deletedAt: true },
+    select: { id: true, clinicId: true, patientId: true, deletedAt: true },
   });
   if (!o || o.deletedAt) return fail("Orden no encontrada");
   if (o.clinicId !== ctx.clinicId) return fail("Sin acceso");
+  // ws1-t11 · lead 14: el paciente del registro puede estar restringido (visibleUserIds).
+  if (await pacienteOcultoPara(ctx, o.patientId)) return fail("Orden no encontrada");
 
   const updates: { status: LabOrderStatus; sentAt?: Date; receivedAt?: Date } = {
     status: parsed.data.status,

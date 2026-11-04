@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { idDeLaBase } from "@/lib/validation/id";
 import { prisma } from "@/lib/prisma";
-import { auditOrtho, getOrthoActionContext } from "./_helpers";
+import { auditOrtho, getOrthoActionContext, cargarPlanVisible } from "./_helpers";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
 import { fail, isFailure, ok, type ActionResult } from "./result";
 import { MATERIALES_DE_ARCO, MATERIALES_NUEVOS, materialParaGuardar } from "@/lib/orthodontics/material-de-arco";
@@ -81,6 +81,9 @@ export async function addWireStep(
     select: { id: true, clinicId: true, patientId: true },
   });
   if (!plan) return fail("Plan no encontrado");
+  // ws1-t11 v2: el paciente del caso puede estar restringido (visibleUserIds).
+  const visible = await cargarPlanVisible(ctx, data.treatmentPlanId);
+  if (isFailure(visible)) return visible;
 
   // ws1-t12 (punto 4d): se guarda el material que eligió el doctor, no su «familia» (antes Cr-Co y Multi-stranded
   // quedaban como acero). Solo se pregunta a la base si eligió uno de los valores nuevos.

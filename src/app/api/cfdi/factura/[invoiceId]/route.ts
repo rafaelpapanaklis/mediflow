@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
+import { adminConPermiso } from "@/lib/auth/admin-con-permiso";
+import { hasPermission } from "@/lib/auth/permissions";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { prisma } from "@/lib/prisma";
 import { cfdisDeLaFactura } from "@/lib/invoices/cfdi-cancelacion.server";
@@ -33,5 +35,17 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ invoiceI
   const clinic = await prisma.clinic.findUnique({ where: { id: ctx.clinicId }, select: { timezone: true } });
   const r = await cfdisDeLaFactura({ clinicId: ctx.clinicId, invoiceId: params.invoiceId, timeZone: clinic?.timezone });
   // C-42: con lo cobrado, el diálogo de cancelar no ofrece el motivo 03.
-  return NextResponse.json({ ...r, invoiceCfdiUuid: inv.cfdiUuid, puedeCancelar: ctx.isAdmin, cobrado: inv.paid ?? 0, saldo: inv.balance ?? 0 });
+  // ws1-t11 v5: lo que la pantalla ofrece sale del MISMO criterio que cada ruta de cambio, no solo del rol:
+  //   · cancelar (POST /api/cfdi/[id]/cancelar): administrador + «Reembolsar / cancelar»; el dueño siempre;
+  //   · timbrar / sustituir y nota de crédito como bonificación (POST /api/cfdi, …/nota-credito): administrador;
+  //   · nota de crédito DEVOLVIENDO dinero (…/nota-credito): administrador + «Reembolsar / cancelar».
+  return NextResponse.json({
+    ...r,
+    invoiceCfdiUuid: inv.cfdiUuid,
+    puedeCancelar: adminConPermiso(ctx, "billing.refund"),
+    puedeTimbrar: ctx.isAdmin,
+    puedeDevolver: ctx.isAdmin && hasPermission(ctx, "billing.refund"),
+    cobrado: inv.paid ?? 0,
+    saldo: inv.balance ?? 0,
+  });
 }

@@ -4,6 +4,7 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { pacienteOcultoPara } from "@/lib/clinical-shared/auth/paciente-oculto";
 import { getAuthContext } from "@/lib/auth-context";
 import { PEDIATRIC_AUDIT_ACTIONS } from "@/lib/pediatrics/audit";
 import { auditPediatric, ensurePediatricRecord, fail, isFailure, loadPatientForPediatrics, ok, type ActionResult, requirePediatricsPermission } from "./_helpers";
@@ -101,6 +102,8 @@ export async function signConsentByGuardian(input: z.infer<typeof signGuardianSc
     select: { id: true, clinicId: true, patientId: true, revokedAt: true },
   });
   if (!consent || consent.clinicId !== ctx.clinicId) return fail("Consentimiento no encontrado");
+  // ws1-t11 · lead 14: el paciente del registro puede estar restringido (visibleUserIds).
+  if (await pacienteOcultoPara(ctx, consent.patientId)) return fail("Consentimiento no encontrado");
   if (consent.revokedAt) return fail("Consentimiento revocado, no se puede firmar");
 
   await prisma.pediatricConsent.update({
@@ -137,6 +140,8 @@ export async function signConsentByMinor(input: z.infer<typeof signMinorSchema>)
     select: { id: true, clinicId: true, patientId: true, revokedAt: true, minorAssentRequired: true },
   });
   if (!consent || consent.clinicId !== ctx.clinicId) return fail("Consentimiento no encontrado");
+  // ws1-t11 · lead 14: el paciente del registro puede estar restringido (visibleUserIds).
+  if (await pacienteOcultoPara(ctx, consent.patientId)) return fail("Consentimiento no encontrado");
   if (consent.revokedAt) return fail("Consentimiento revocado");
   if (!consent.minorAssentRequired) return fail("Este procedimiento no requiere asentimiento del menor");
 
@@ -174,6 +179,8 @@ export async function voidConsent(input: z.infer<typeof voidSchema>): Promise<Ac
     select: { id: true, clinicId: true, patientId: true, revokedAt: true },
   });
   if (!consent || consent.clinicId !== ctx.clinicId) return fail("Consentimiento no encontrado");
+  // ws1-t11 · lead 14: el paciente del registro puede estar restringido (visibleUserIds).
+  if (await pacienteOcultoPara(ctx, consent.patientId)) return fail("Consentimiento no encontrado");
   if (consent.revokedAt) return fail("Ya estaba revocado");
 
   await prisma.pediatricConsent.update({

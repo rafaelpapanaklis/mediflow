@@ -431,7 +431,6 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
   const pasoConDetalle = recorrido.actual >= 0 ? recorrido.actual : recorrido.hechos - 1;
 
   const hrefExpediente = cita.pacienteId ? `/dashboard/patients/${cita.pacienteId}` : null;
-  const esAdmin = userRole === "ADMIN" || userRole === "SUPER_ADMIN";
 
   return (
     <>
@@ -491,11 +490,13 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
               clic o a mandar el teléfono de todos los pacientes del día al
               navegador. Se queda fuera y va anotado en el reporte. */}
           <div className={s.panelAcciones3}>
-            {/* `POST /api/whatsapp/send` es admin-only. Sin este filtro, a
-                recepción y a los doctores les salía el botón y el servidor les
-                devolvía «Solo administradores»: un botón que nunca funciona es
-                peor que no tenerlo. */}
-            {esAdmin && (
+            {/* `POST /api/whatsapp/send` pide administrador Y «Enviar WhatsApp»
+                con el override de la persona (ws1-t11 v3). El servidor de la
+                agenda lo resuelve con `canSendManualReminder`, el espejo de esa
+                regla (agenda/page.tsx). Antes aquí se miraba solo el rol: a un
+                ADMIN al que el dueño le apagó el permiso le salía un botón que
+                el servidor rechazaba con 403 (m1 de t2, ws1-t11 v5). */}
+            {permissions.canSendReminder === true && (
               <button
                 type="button"
                 className={s.panelAccion3}

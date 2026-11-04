@@ -30,7 +30,12 @@ export interface RespuestaCfdisFactura {
   sqlPendiente: string | null;
   cfdis: CfdiVista[];
   invoiceCfdiUuid: string | null;
+  /** ws1-t11 v5: cancelar un CFDI (administrador + «Reembolsar / cancelar»; el dueño siempre). */
   puedeCancelar: boolean;
+  /** ws1-t11 v5: timbrar / sustituir y nota de crédito como bonificación (administrador). Sin él, vale `puedeCancelar`. */
+  puedeTimbrar?: boolean;
+  /** ws1-t11 v5: nota de crédito devolviendo dinero (administrador + «Reembolsar / cancelar»). */
+  puedeDevolver?: boolean;
   /** C-42: lo cobrado neto de la factura (sin él, no se ofrece el motivo 03). */
   cobrado?: number;
   /** N-26: lo que la factura todavía debe (tope de una nota de crédito sin devolución). */
@@ -74,23 +79,27 @@ export interface Acciones {
 
 /**
  * Qué botones salen para un CFDI. `listo` = el SQL está pegado; `admin` = dueño
- * o administrador (por rol, como timbrar).
+ * o administrador (por rol, como timbrar); `cancelar` (ws1-t11 v5) = además
+ * «Reembolsar / cancelar» con el override, lo que pide su ruta; sin él, vale `admin`.
  */
-export function accionesDe(c: CfdiVista, todos: CfdiVista[], ctx: { listo: boolean; admin: boolean; invoiceCfdiUuid: string | null }): Acciones {
+export function accionesDe(c: CfdiVista, todos: CfdiVista[], ctx: { listo: boolean; admin: boolean; cancelar?: boolean; invoiceCfdiUuid: string | null }): Acciones {
   const estado = estadoPintado(c);
   const vigente = c.status === "valid" || c.status === "sustituido";
   const enCurso = c.cancellationStatus === "pending" || c.cancellationStatus === "verifying"
     || c.cancellationStatus === "enviando" || c.cancellationStatus === "incierto";
   const vigenteLibre = vigente && !enCurso && estado !== "cancelado";
   const puede = ctx.listo && ctx.admin && vigenteLibre;
+  const puedeCancelar = ctx.listo && (ctx.cancelar ?? ctx.admin) && vigenteLibre;
   const sust = sustitutoDe(todos, c);
   const esLaDeLaFactura = c.tipoComprobante === "I" && !c.paymentId && ctx.invoiceCfdiUuid === c.uuid;
   const tieneNotas = c.tipoComprobante === "I" && notasDe(todos, c).length > 0;
   return {
     consultar: vigente,
-    cancelar: puede && !tieneNotas && c.status === "valid",
-    cancelarSustituido: puede && !!sust,
-    sustituir: puede && esLaDeLaFactura && !tieneNotas && c.status === "valid",
+    cancelar: puedeCancelar && !tieneNotas && c.status === "valid",
+    cancelarSustituido: puedeCancelar && !!sust,
+    // ws1-t11 v7 (m2 de t2): sustituir es timbrar el nuevo Y luego cancelar el original con motivo 01; a quien
+    // no puede cancelar no se le ofrece (el timbrado ante el SAT no se deshace con un clic).
+    sustituir: puede && puedeCancelar && esLaDeLaFactura && !tieneNotas && c.status === "valid",
     notaCredito: puede && c.tipoComprobante === "I" && c.status === "valid",
   };
 }
@@ -168,6 +177,8 @@ const ES = {
   nRazon: "Concepto / motivo (sale en el CFDI)",
   nRazonPh: "Ej. devolución por tratamiento no realizado",
   nDevolver: "Se le devuelve el dinero al paciente (registra el reembolso en la factura)",
+  // ws1-t11 v7 (m1 de t2): sin «Reembolsar / cancelar» la ruta no deja devolver dinero.
+  nSinDevolver: "Sin el permiso «Reembolsar / cancelar» esta nota solo baja lo que se debe; para devolver dinero, pídeselo a quien lo tenga.",
   nForma: "Forma de pago de la devolución",
   nFormaBonif: "Forma de pago del CFDI original",
   nBoton: "Timbrar nota de crédito",
@@ -234,6 +245,7 @@ const EN: typeof ES = {
   nRazon: "Concept / reason (printed on the CFDI)",
   nRazonPh: "E.g. refund for treatment not performed",
   nDevolver: "Money is returned to the patient (records the refund on the invoice)",
+  nSinDevolver: "Without the «Refund / cancel» permission this note only lowers what is owed; to return money, ask someone who has it.",
   nForma: "Payment form of the refund",
   nFormaBonif: "Payment form of the original CFDI",
   nBoton: "Stamp credit note",

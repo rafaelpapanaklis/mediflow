@@ -11,6 +11,7 @@
 
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { conPuntoDeGuardado, type ClienteDb } from "@/lib/db/punto-de-guardado";
 
 export interface ExtraDelCaso {
   invoiceId: string;
@@ -24,15 +25,16 @@ export interface ExtraDelCaso {
 let columna: { existe: boolean; at: number } | null = null;
 const TTL_MS = 60_000;
 
-async function columnaExiste(): Promise<boolean> {
+async function columnaExiste(db: ClienteDb = prisma): Promise<boolean> {
   const t = Date.now();
   if (columna && (columna.existe || t - columna.at < TTL_MS)) return columna.existe;
   try {
-    const filas = await prisma.$queryRaw<{ existe: boolean }[]>`
+    // En una transacción, en su punto de guardado: si falla, no la deja abortada.
+    const filas = await conPuntoDeGuardado(db, () => db.$queryRaw<{ existe: boolean }[]>`
       SELECT EXISTS (
         SELECT 1 FROM information_schema.columns
          WHERE table_name = 'invoices' AND column_name = 'orthodonticTreatmentPlanId'
-      ) AS existe`;
+      ) AS existe`);
     columna = { existe: filas[0]?.existe === true, at: t };
     return columna.existe;
   } catch (e) {
@@ -52,20 +54,24 @@ export function _olvidarColumnaExtras(): void {
 }
 
 /** Liga una factura ya creada (POST /api/invoices) de vuelta al caso. */
-export async function vincularExtraAlCaso(args: {
-  invoiceId: string;
-  treatmentPlanId: string;
-  clinicId: string;
-}): Promise<{ ok: boolean; sinColumna: boolean }> {
+export async function vincularExtraAlCaso(
+  args: {
+    invoiceId: string;
+    treatmentPlanId: string;
+    clinicId: string;
+  },
+  // ws1-t11 v4: el `tx` de quien llama si está en una transacción (cobrar un procedimiento de la hoja).
+  db: ClienteDb = prisma,
+): Promise<{ ok: boolean; sinColumna: boolean }> {
   const { invoiceId, treatmentPlanId, clinicId } = args;
   if (!invoiceId || !treatmentPlanId || !clinicId) return { ok: false, sinColumna: false };
-  if (!(await columnaExiste())) return { ok: false, sinColumna: true };
+  if (!(await columnaExiste(db))) return { ok: false, sinColumna: true };
   try {
-    const filas = await prisma.$queryRaw<{ id: string }[]>`
+    const filas = await conPuntoDeGuardado(db, () => db.$queryRaw<{ id: string }[]>`
       UPDATE "invoices"
          SET "orthodonticTreatmentPlanId" = ${treatmentPlanId}
        WHERE "id" = ${invoiceId} AND "clinicId" = ${clinicId}
-       RETURNING "id"`;
+       RETURNING "id"`);
     return { ok: filas.length > 0, sinColumna: false };
   } catch (e) {
     console.warn("[ortodoncia:extras] no se pudo vincular:", e);

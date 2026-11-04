@@ -24,9 +24,20 @@ test("solo ve el botón quien el servidor va a aceptar", () => {
   }
 });
 
+test("ws1-t11 v3 · el ADMIN al que el dueño le apagó «Enviar WhatsApp» no ve el botón; el dueño sí", () => {
+  const recortado = ["today.view", "agenda.view", "patients.view"];
+  assert.equal(canSendManualReminder("ADMIN", recortado), false);
+  assert.equal(canSendManualReminder("ADMIN", [...recortado, "whatsapp.send"]), true);
+  assert.equal(canSendManualReminder("ADMIN", []), true, "sin override, el default del ADMIN lo trae");
+  assert.equal(canSendManualReminder("SUPER_ADMIN", recortado), true);
+  assert.equal(canSendManualReminder("RECEPTIONIST", ["whatsapp.send"]), false, "la ruta sigue siendo de administradores");
+});
+
 test("el espejo y el servidor dicen LO MISMO (si la ruta cambia, esto avisa)", () => {
   const ruta = leer("src/app/api/whatsapp/send/route.ts");
   assert.match(ruta, /requireAdmin\(ctx\)/, "la ruta ya no es admin-only: actualiza manual-reminder-access.ts con ella");
+  // ws1-t11 v3: además del rol, «Enviar WhatsApp» con el override del dueño (el SUPER_ADMIN no se bloquea).
+  assert.match(ruta, /denyIfMissingPermission\(ctx!, "whatsapp\.send"\)/, "la ruta ya no pide whatsapp.send: actualiza manual-reminder-access.ts con ella");
   const auth = leer("src/lib/auth-context.ts");
   assert.match(auth, /isSuperAdmin\s*=\s*finalUser\.role === "SUPER_ADMIN"/);
   assert.match(auth, /isAdmin\s*=\s*finalUser\.role === "ADMIN" \|\| isSuperAdmin/);
@@ -37,7 +48,8 @@ test("nadie llama a /api/whatsapp/send sin gatear su botón", () => {
   const pantallas: Array<[string, RegExp, number]> = [
     ["src/components/dashboard/agenda/agenda-detail-panel.tsx", /permissions\.canSendReminder !== false && \(\s*<button[^>]*?onClick=\{sendWhatsapp\}/s, 1],
     ["src/app/dashboard/appointments/appointments-client.tsx", /waConnected && canSendReminder && \(\s*<(button|Button)[^\n]*?onClick=\{\(\) => sendWA\(/g, 2],
-    ["src/components/dashboard/agenda-nueva/panel-cita.tsx", /esAdmin && \(\s*<button[^>]*?onClick=\{enviarWhatsapp\}/s, 1],
+    // ws1-t11 v5 (m1 de t2): con el permiso que calcula la agenda (canSendManualReminder), no con el rol.
+    ["src/components/dashboard/agenda-nueva/panel-cita.tsx", /permissions\.canSendReminder === true && \(\s*<button[^>]*?onClick=\{enviarWhatsapp\}/s, 1],
   ];
   for (const [rel, guarda, veces] of pantallas) {
     const src = leer(rel);
@@ -62,8 +74,15 @@ test("nadie llama a /api/whatsapp/send sin gatear su botón", () => {
   assert.deepEqual(huerfanas, [], "pantalla nueva que llama a la ruta: añádela arriba con su guarda");
 });
 
+test("ws1-t11 v5 · el panel de la agenda nueva no decide el botón de WhatsApp por el rol", () => {
+  const src = leer("src/components/dashboard/agenda-nueva/panel-cita.tsx");
+  assert.doesNotMatch(src, /esAdmin/, "volvió el atajo por rol: ignora el interruptor «Enviar WhatsApp» del dueño");
+  assert.doesNotMatch(src, /userRole === "(ADMIN|SUPER_ADMIN)"/);
+});
+
 test("las dos páginas de servidor calculan el permiso con el espejo, no a mano", () => {
   for (const rel of ["src/app/dashboard/agenda/page.tsx", "src/app/dashboard/appointments/page.tsx"]) {
-    assert.match(leer(rel), /canSendReminder[:=]\s*\{?canSendManualReminder\(user\.role\)/, rel);
+    // ws1-t11 v3: con el override de la persona, como la ruta.
+    assert.match(leer(rel), /canSendReminder[:=]\s*\{?canSendManualReminder\(user\.role, user\.permissionsOverride\)/, rel);
   }
 });

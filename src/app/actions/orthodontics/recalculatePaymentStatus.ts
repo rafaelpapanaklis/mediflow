@@ -12,7 +12,7 @@ import { recalculatePaymentStatusSchema } from "@/lib/validation/orthodontics";
 import { computePaymentStatus } from "@/lib/orthodontics/payment-status";
 import { enqueueOrthoWhatsApp } from "@/lib/orthodontics/whatsapp-queue";
 import type { OrthoWhatsAppTemplateKey } from "@/lib/orthodontics/whatsapp-templates";
-import { auditOrtho, getOrthoBillingActionContext } from "./_helpers";
+import { auditOrtho, getOrthoBillingActionContext, cargarPlanVisible } from "./_helpers";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
 import { fail, isFailure, ok, type ActionResult } from "./result";
 
@@ -45,6 +45,8 @@ export async function recalculatePaymentStatus(
     },
   });
   if (!plan) return fail("Plan de pagos no encontrado");
+  // ws1-t11 v2: el paciente del caso puede estar restringido (visibleUserIds).
+  if (isFailure(await cargarPlanVisible(ctx, plan.treatmentPlanId))) return fail("Plan de pagos no encontrado");
 
   const totalPaidFromInstallments = plan.installments.reduce((sum, i) => {
     if (i.status === "PAID" && i.amountPaid) return sum + Number(i.amountPaid);

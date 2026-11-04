@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { idDeLaBase } from "@/lib/validation/id";
 import { prisma } from "@/lib/prisma";
+import { pacienteOcultoPara } from "@/lib/clinical-shared/auth/paciente-oculto";
 import { auditOrtho, getOrthoActionContext } from "./_helpers";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
 import { fail, isFailure, ok, type ActionResult } from "./result";
@@ -32,6 +33,8 @@ export async function recordNpsResponse(
     select: { id: true, patientId: true, status: true, googleReviewTriggered: true },
   });
   if (!schedule) return fail("Programación NPS no encontrada");
+  // ws1-t11 v2: el paciente del caso puede estar restringido (visibleUserIds).
+  if (await pacienteOcultoPara(ctx, schedule.patientId)) return fail("Programación NPS no encontrada");
   if (schedule.status === "RESPONDED") return fail("Esta encuesta ya fue respondida");
 
   const triggerGoogleReview = parsed.data.npsScore >= 9;

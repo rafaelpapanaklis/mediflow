@@ -12,6 +12,7 @@
 // con tsx/node:test (mismo criterio que anticipos/servicio.server.ts).
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { conPuntoDeGuardado, type ClienteDb } from "@/lib/db/punto-de-guardado";
 import { sumInvoiceItems, computeInvoiceTotal, itemLineTotal, clinicInvoiceTaxDefaults, round2 } from "@/lib/invoice-totals";
 import { InvoiceNumberExhaustedError, nextInvoiceNumber, withInvoiceNumberRetry } from "@/lib/invoices/next-invoice-number";
 import { aplicarSaldoAFavor } from "@/lib/patient-credit-aplicar";
@@ -99,11 +100,15 @@ function falloFactura(error: ErrorCrearFactura, extra?: Partial<ResultadoCrearFa
 
 export async function crearFacturaDesdeCita(
   args: CrearFacturaDesdeCitaArgs,
+  // ws1-t11 v4: el `tx` de quien llama si ya está dentro de una transacción
+  // (cobrar un procedimiento de la hoja de ortodoncia): la factura nace DENTRO de
+  // esa transacción y sin pedir otra conexión. Sin él, el cliente global, como siempre.
+  db: ClienteDb = prisma,
 ): Promise<ResultadoCrearFacturaDesdeCita> {
   const { clinicId, appointmentId, patientId } = args;
 
   const existing = appointmentId
-    ? await prisma.invoice.findUnique({
+    ? await db.invoice.findUnique({
         where: { appointmentId },
         select: { id: true, invoiceNumber: true, total: true, balance: true, status: true },
       })
@@ -111,7 +116,7 @@ export async function crearFacturaDesdeCita(
   // H1 (revisión final, ws1-t4): una factura CANCELADA no ocupa la cita. Se le
   // quita el vínculo (con nota y bitácora) para que quepa la nueva.
   if (existing && facturaOcupaLaCita(existing)) return falloFactura("invoice_already_exists", { existente: existing });
-  if (existing && appointmentId) await soltarFacturaCanceladaDeCita({ clinicId, appointmentId, userId: args.userId ?? null });
+  if (existing && appointmentId) await soltarFacturaCanceladaDeCita({ clinicId, appointmentId, userId: args.userId ?? null }, db);
 
   const items = args.lineItems.map((li) => {
     const quantity = li.quantity;
@@ -131,21 +136,23 @@ export async function crearFacturaDesdeCita(
   const discount = round2(Math.max(0, args.discount ?? 0));
   if (discount > subtotal) return falloFactura("discount_exceeds_subtotal");
 
-  const clinicTax = await prisma.clinic.findUnique({ where: { id: clinicId }, select: { cfdiTaxMode: true } });
+  const clinicTax = await db.clinic.findUnique({ where: { id: clinicId }, select: { cfdiTaxMode: true } });
   const { taxRate, taxIncluded } = clinicInvoiceTaxDefaults(clinicTax?.cfdiTaxMode);
   const { total } = computeInvoiceTotal(subtotal, discount, taxRate, taxIncluded);
   const { doctorId } = await doctorDeFacturaNueva({
     clinicId, patientId, appointmentId, pedido: args.doctorId, timezone: args.timezone ?? null,
-  });
+  }, db);
 
   try {
-    const invoice = await withInvoiceNumberRetry(async () =>
-      prisma.invoice.create({
+    // En una transacción, cada intento va en su punto de guardado: un P2002 del folio no la aborta y el
+    // reintento sigue funcionando como fuera de ella.
+    const invoice = await withInvoiceNumberRetry(async () => conPuntoDeGuardado(db, async () =>
+      db.invoice.create({
         data: {
           clinicId,
           patientId,
           appointmentId,
-          invoiceNumber: await nextInvoiceNumber(clinicId),
+          invoiceNumber: await nextInvoiceNumber(clinicId, db),
           items: items as unknown as Prisma.InputJsonValue,
           subtotal,
           discount,
@@ -162,10 +169,10 @@ export async function crearFacturaDesdeCita(
           status: true, appointmentId: true, items: true, createdAt: true,
         },
       }),
-    );
+    ));
     // Saldo a favor del paciente (anticipo del bot): la factura nace con él ya
     // descontado, como en POST /api/invoices/from-appointment.
-    const saldo = await aplicarSaldoAFavor({ clinicId, invoiceId: invoice.id, userId: args.userId ?? null, origen: "creada" });
+    const saldo = await aplicarSaldoAFavor({ clinicId, invoiceId: invoice.id, userId: args.userId ?? null, origen: "creada" }, db);
     return {
       ok: true,
       error: null,
@@ -180,7 +187,7 @@ export async function crearFacturaDesdeCita(
     if (err instanceof InvoiceNumberExhaustedError) return falloFactura("invoice_number_conflict");
     const code = (err as { code?: string }).code;
     if (code === "P2002" && appointmentId) {
-      const ya = await prisma.invoice.findUnique({
+      const ya = await db.invoice.findUnique({
         where: { appointmentId },
         select: { id: true, invoiceNumber: true, total: true, balance: true, status: true },
       });

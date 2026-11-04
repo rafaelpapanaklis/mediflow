@@ -9,6 +9,8 @@ import { TwoFactorSetup } from "./two-factor-setup";
 interface Props {
   initialEnabled: boolean;
   initialRequire2fa: boolean;
+  /** ¿Puede cambiar la política de la clínica? NO es solo el rol: es el criterio de su ruta
+   *  (adminConPermiso «settings.edit», ws1-t11 v5). Quien llama lo resuelve en el servidor. */
   isAdmin: boolean;
 }
 

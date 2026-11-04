@@ -5,6 +5,7 @@ import { headers } from "next/headers";
 import { readActiveClinicCookie, logClinicFallback, resembrarActiveClinicCookie } from "@/lib/active-clinic";
 import { resolverSesion } from "@/lib/auth/sesion-en-cache";
 import { isPlanExpired, isApiPathBlockedForExpiredPlan } from "@/lib/plan-status";
+import { esPeticionDeServerAction } from "@/lib/auth/peticion-server-action";
 import { redirect } from "next/navigation";
 import { decidirDosPasos } from "@/lib/auth/two-factor-decision";
 import { bloqueaDosPasos } from "@/lib/auth/two-factor-gate";
@@ -231,12 +232,18 @@ async function resolverAuthContext(opciones: { paraClaveDeSede?: boolean } = {})
     // /dashboard ya redirige esas navegaciones a /dashboard/suspended. El
     // gate aplica a TODOS los roles (un SUPER_ADMIN destraba desde /admin,
     // ruta con su propia auth, no cubierta por este check).
+    // ws1-t11 · lead 11: también corta las SERVER ACTIONS que no salen de la
+    // pantalla de pago o de soporte (una action es un POST a /dashboard/... y
+    // el redirect del layout no impide que corra). Ver isApiPathBlockedForExpiredPlan.
     const planExpired = isPlanExpired(finalUser.clinic);
     if (planExpired && !opciones.paraClaveDeSede) {
-      const pathname = await (async () => {
-        try { return (await headers()).get("x-pathname"); } catch { return null; }
+      const peticion = await (async () => {
+        try {
+          const h = await headers();
+          return { pathname: h.get("x-pathname"), esAction: esPeticionDeServerAction(h) };
+        } catch { return { pathname: null, esAction: false as const }; }
       })();
-      if (isApiPathBlockedForExpiredPlan(pathname)) return null;
+      if (isApiPathBlockedForExpiredPlan(peticion.pathname, peticion.esAction)) return null;
     }
 
     return {

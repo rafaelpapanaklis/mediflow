@@ -8,6 +8,7 @@ import { redirect } from "next/navigation";
 import { readActiveClinicCookie, logClinicFallback, resembrarActiveClinicCookie } from "@/lib/active-clinic";
 import { resolverSesion } from "@/lib/auth/sesion-en-cache";
 import { isPlanExpired, isApiPathBlockedForExpiredPlan } from "@/lib/plan-status";
+import { esPeticionDeServerAction } from "@/lib/auth/peticion-server-action";
 import { decidirDosPasos } from "@/lib/auth/two-factor-decision";
 import { bloqueaDosPasos } from "@/lib/auth/two-factor-gate";
 import {
@@ -107,19 +108,23 @@ async function enforceTwoFactorGate(user: {
   redirect(`${TWO_FA_CHALLENGE_PATH}${volver}`);
 }
 
-// Gate de plan vencido para los route handlers que autentican vía
-// getCurrentUser (segundo camino además de getAuthContext). Si el plan venció
-// y la request va a una ruta /api NO exenta (allowlist de pago/auth), cortamos
-// con redirect a /dashboard/suspended — getCurrentUser no puede devolver null,
-// pero el redirect impide que el handler corra y el dato salga. Sólo dispara
-// en /api: las páginas server (pathname /dashboard/*) las cubre el layout, y
-// para callers sin x-pathname es no-op. Mismo criterio que getAuthContext.
+// Gate de plan vencido para los route handlers y server actions que autentican
+// vía getCurrentUser (segundo camino además de getAuthContext). Si el plan
+// venció y la request va a una ruta /api NO exenta (allowlist de pago/auth), o
+// es una SERVER ACTION que no sale de la pantalla de pago o de soporte
+// (ws1-t11 · lead 11), cortamos con redirect a /dashboard/suspended —
+// getCurrentUser no puede devolver null, pero el redirect impide que el
+// handler o la action corran. Las páginas server (GET a /dashboard/*) las
+// cubre el layout. Mismo criterio que getAuthContext.
 async function enforceApiPlanGate(clinic: unknown): Promise<void> {
   if (!isPlanExpired(clinic as { trialEndsAt?: Date | string | null; subscriptionStatus?: string | null } | null)) return;
-  const pathname = await (async () => {
-    try { return (await headers()).get("x-pathname"); } catch { return null; }
+  const peticion = await (async () => {
+    try {
+      const h = await headers();
+      return { pathname: h.get("x-pathname"), esAction: esPeticionDeServerAction(h) };
+    } catch { return { pathname: null, esAction: false as const }; }
   })();
-  if (isApiPathBlockedForExpiredPlan(pathname)) redirect("/dashboard/suspended");
+  if (isApiPathBlockedForExpiredPlan(peticion.pathname, peticion.esAction)) redirect("/dashboard/suspended");
 }
 
 // Gate de la CLAVE DE LA SEDE de getCurrentUser (ws1-t4). Mismo criterio que

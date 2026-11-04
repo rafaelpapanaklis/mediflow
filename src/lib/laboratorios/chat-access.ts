@@ -24,7 +24,13 @@ export type LabChatCaller =
  */
 export async function resolveLabChatCaller(): Promise<LabChatCaller | null> {
   const lab = await getDentalLabContext();
-  if (lab) {
+  // ws1-t11 · lead 16: solo un laboratorio APROBADO usa el chat. El alta es de
+  // autoservicio (queda PENDING) y el panel y el resto de su API ya exigían
+  // APPROVED; sin esto, una cuenta recién registrada, suspendida o rechazada
+  // abría un hilo con cualquier clínica y le escribía. Una sesión de laboratorio
+  // no aprobado cuenta como «sin sesión de laboratorio» (si esa persona además es
+  // staff de una clínica, sigue entrando como clínica, como siempre).
+  if (lab && lab.status === "APPROVED") {
     return { side: "LAB", labId: lab.labId, senderId: lab.labUserId };
   }
   const clinic = await getAuthContext();

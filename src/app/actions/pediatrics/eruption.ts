@@ -4,6 +4,7 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { pacienteOcultoPara } from "@/lib/clinical-shared/auth/paciente-oculto";
 import { getAuthContext } from "@/lib/auth-context";
 import { calculateAge } from "@/lib/pediatrics/age";
 import { evaluateDeviation, getRangeForFdi } from "@/lib/pediatrics/eruption-data";
@@ -94,6 +95,8 @@ export async function deleteEruption(args: { id: string }): Promise<ActionResult
     select: { id: true, clinicId: true, patientId: true },
   });
   if (!row || row.clinicId !== ctx.clinicId) return fail("Registro no encontrado");
+  // ws1-t11 · lead 14: el paciente del registro puede estar restringido (visibleUserIds).
+  if (await pacienteOcultoPara(ctx, row.patientId)) return fail("Registro no encontrado");
 
   await prisma.eruptionRecord.update({
     where: { id: row.id },

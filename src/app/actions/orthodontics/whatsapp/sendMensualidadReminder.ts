@@ -8,9 +8,10 @@
 // "Copiar texto". Sin plantilla aprobada por Meta: "opcional, apagado por
 // default, igual que anticipos" (decisión de Rafael para este bloque).
 //
-// clinicId SIEMPRE de la sesión. No usa _helpers.ts (Acceso y permisos,
-// exclusivo de esa parte): getAuthContext + denyIfMissingPermission directo,
-// mismo patrón que la ruta de anticipo.
+// clinicId SIEMPRE de la sesión. No usa el contexto de _helpers.ts (Acceso y
+// permisos, exclusivo de esa parte): getAuthContext + denyIfMissingPermission
+// directo, mismo patrón que la ruta de anticipo. De _helpers.ts solo toma
+// cargarPlanVisible (ws1-t11 v2), para atar el caso al paciente visible.
 //
 // Revisión cruzada (REPORTE-ws1-t1.md, «## Revisión cruzada»):
 //   · [bloquea] usaba `canAccessModule` (abre TODOS los módulos de cualquier
@@ -42,6 +43,7 @@ import { lastInboundAtForPhone } from "@/lib/whatsapp/inbox-log";
 import { isWithin24hWindow } from "@/lib/inbox/send-core";
 import { registrarMovimientoDelPaciente } from "@/lib/movimientos-paciente/registrar";
 import { fail, ok, type ActionResult } from "@/app/actions/orthodontics/result";
+import { cargarPlanVisible } from "@/app/actions/orthodontics/_helpers";
 
 export interface SendMensualidadReminderInput {
   patientId: string;
@@ -72,6 +74,10 @@ export async function sendMensualidadReminder(
     clinicId: ctx.clinicId,
   });
   if (visibilidad) return fail("Paciente no encontrado");
+  // ws1-t11 v2: el caso también tiene que ser visible Y de ESTE paciente. Antes se leía el teléfono del
+  // responsable de cualquier caso de la clínica cuyo id llegara, aunque fuera de otro paciente (restringido).
+  const caso = await cargarPlanVisible(ctx, input.treatmentPlanId);
+  if (!caso.ok || caso.data.patientId !== input.patientId) return fail("Paciente no encontrado");
 
   const [patient, clinic, responsable] = await Promise.all([
     prisma.patient.findFirst({

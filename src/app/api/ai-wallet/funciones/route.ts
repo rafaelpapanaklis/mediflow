@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext, requireAdmin } from "@/lib/auth-context";
+import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { prisma } from "@/lib/prisma";
 import { extractAuditMeta, logAudit } from "@/lib/audit";
 import { conFuncionIa, esFuncionIa, sanitizeAiSettings } from "@/lib/ai-billing/interruptores";
+import { adminConPermiso } from "@/lib/auth/admin-con-permiso";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +31,10 @@ export async function GET() {
     return NextResponse.json({
       apagadas: sanitizeAiSettings(clinic?.aiSettings).apagadas,
       isAdmin: ctx.isAdmin,
+      // ws1-t11 v5: ¿puede cambiarlas? El MISMO criterio que el PATCH de abajo
+      // (administrador + «Editar configuración» con el override; el dueño
+      // siempre). La pantalla deja los interruptores quietos si no.
+      puedeCambiar: adminConPermiso(ctx, "settings.edit"),
       // Categoría de la clínica, de la SESIÓN: la pantalla la usa para no
       // pintar funciones que no son de su giro (Homeopatía en una dental).
       categoria: ctx.clinicCategory,
@@ -44,6 +50,13 @@ export async function PATCH(req: NextRequest) {
     if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const err = requireAdmin(ctx);
     if (err) return err;
+    // ws1-t11 v3 (H3 de la revisión de t2): además del rol, «Editar configuración» (settings.edit) con el
+    // override por persona: un ADMIN al que el dueño se lo apagó ya no pasa. El
+    // SUPER_ADMIN (el dueño) no se bloquea. Misma decisión que WhatsApp Cloud (lead 15).
+    if (!ctx!.isSuperAdmin) {
+      const sinPermiso = denyIfMissingPermission(ctx!, "settings.edit");
+      if (sinPermiso) return sinPermiso;
+    }
 
     const body = await req.json().catch(() => null);
     const funcion = body?.funcion;

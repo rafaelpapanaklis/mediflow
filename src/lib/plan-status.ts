@@ -172,13 +172,31 @@ export function isPlanGateAllowlistedPath(pathname: string): boolean {
   );
 }
 
-// True si el pathname es una ruta /api NO exenta y por tanto debe bloquearse
-// cuando el plan está vencido. Sólo aplica a /api: para páginas server
-// (pathname /dashboard/*) o callers sin x-pathname devuelve false — esas
-// navegaciones ya las redirige el layout de /dashboard a /dashboard/suspended.
-export function isApiPathBlockedForExpiredPlan(pathname: string | null | undefined): boolean {
-  if (!pathname || !pathname.startsWith("/api")) return false;
-  return !isPlanGateAllowlistedPath(pathname);
+// True si la petición debe bloquearse cuando el plan está vencido.
+//   • SERVER ACTION con su cabecera `next-action` (ver
+//     @/lib/auth/peticion-server-action): SIEMPRE, sin mirar la ruta. Una
+//     action es un POST a la URL de la página: el redirect del layout es de
+//     RENDER y no impide que el cuerpo corra, así que una clínica vencida
+//     seguía escribiendo por ahí (ws1-t11 · lead 11, auditoría run-2). No se
+//     mira x-pathname porque fuera del matcher del middleware (p. ej.
+//     /share/p/[token], que trae las actions de share-links) la pone el
+//     cliente. Pagar, soporte, 2FA, contraseña y clave de sede van por /api o
+//     por helpers sin este gate: ninguna pantalla de una clínica suspendida
+//     necesita una action (la única que corre allí es plegar el menú).
+//   • /api: toda ruta NO exenta (allowlist de pago/auth/soporte de arriba).
+//   • POST de FORMULARIO sin cabecera fuera de /api: es una action sin
+//     JavaScript → se corta igual.
+//   • Páginas server (GET a /dashboard/*): false — esas navegaciones ya las
+//     redirige el layout de /dashboard a /dashboard/suspended.
+// El segundo parámetro es opcional para que los callers y dobles de prueba
+// que solo pasan la ruta sigan valiendo igual que antes.
+export function isApiPathBlockedForExpiredPlan(
+  pathname: string | null | undefined,
+  accion: false | "cabecera" | "formulario" = false,
+): boolean {
+  if (accion === "cabecera") return true;
+  if (pathname && pathname.startsWith("/api")) return !isPlanGateAllowlistedPath(pathname);
+  return accion === "formulario";
 }
 
 // ── Páginas de /dashboard que una clínica suspendida SÍ puede visitar ──

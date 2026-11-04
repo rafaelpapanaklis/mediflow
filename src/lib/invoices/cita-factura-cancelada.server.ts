@@ -7,22 +7,27 @@
 // bitácora. Nunca toca importes, pagos ni el estado.
 
 import { prisma } from "@/lib/prisma";
+import type { ClienteDb } from "@/lib/db/punto-de-guardado";
 import { logAudit } from "@/lib/audit";
 import { notaDeCitaSoltada } from "./cita-factura-cancelada";
 
-export async function soltarFacturaCanceladaDeCita(args: {
-  clinicId: string;
-  appointmentId: string;
-  userId?: string | null;
-}): Promise<{ soltada: string | null }> {
+export async function soltarFacturaCanceladaDeCita(
+  args: {
+    clinicId: string;
+    appointmentId: string;
+    userId?: string | null;
+  },
+  // ws1-t11 v4: el `tx` de quien llama, si está en una transacción.
+  db: ClienteDb = prisma,
+): Promise<{ soltada: string | null }> {
   if (!args.clinicId || !args.appointmentId) return { soltada: null };
-  const factura = await prisma.invoice.findFirst({
+  const factura = await db.invoice.findFirst({
     where: { appointmentId: args.appointmentId, clinicId: args.clinicId },
     select: { id: true, status: true, notes: true },
   });
   if (!factura || factura.status !== "CANCELLED") return { soltada: null };
 
-  const { count } = await prisma.invoice.updateMany({
+  const { count } = await db.invoice.updateMany({
     where: { id: factura.id, clinicId: args.clinicId, status: "CANCELLED", appointmentId: args.appointmentId },
     data: { appointmentId: null, notes: notaDeCitaSoltada(factura.notes, args.appointmentId, new Date()) },
   });

@@ -58,7 +58,7 @@ export default async function AgendaPage(props: PageProps) {
     canCreate: hasPermission(user, "agenda.create"),
     canEdit: hasPermission(user, "agenda.edit"),
     canCancel: hasPermission(user, "agenda.delete"),
-    canSendReminder: canSendManualReminder(user.role),
+    canSendReminder: canSendManualReminder(user.role, user.permissionsOverride),
     // ws1-t3 fase 2 (QA t2): el botón «Pedir anticipo» del panel de la cita
     // se decide por el PERMISO, no por el rol — un READONLY o un permiso a
     // medida sin billing.deposit ya no lo ve, aunque no sea exactamente

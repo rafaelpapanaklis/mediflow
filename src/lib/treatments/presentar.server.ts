@@ -212,7 +212,7 @@ export async function presupuestoDesdeElPlan(args: {
       validUntil: parseValidUntil(null),
       notes: null,
       treatmentPlanId: plan.id,
-    });
+    }, tx); // ws1-t11 v4: dentro de la transacción, con su `tx` (antes, el cliente global).
   }, { maxWait: 10_000, timeout: 15_000 });
   if (!quote) {
     if (args._reintento) throw new Error("plan:presentar: el presupuesto del plan apareció y desapareció en medio");

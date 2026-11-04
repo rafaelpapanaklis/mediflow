@@ -4,6 +4,7 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { pacienteOcultoPara } from "@/lib/clinical-shared/auth/paciente-oculto";
 import { getAuthContext } from "@/lib/auth-context";
 import { PEDIATRIC_AUDIT_ACTIONS } from "@/lib/pediatrics/audit";
 import { auditPediatric, ensurePediatricRecord, fail, isFailure, loadPatientForPediatrics, ok, type ActionResult, requirePediatricsPermission } from "./_helpers";
@@ -85,6 +86,8 @@ export async function updateMaintainerStatus(input: z.infer<typeof updateStatusS
     select: { id: true, clinicId: true, patientId: true },
   });
   if (!m || m.clinicId !== ctx.clinicId) return fail("Mantenedor no encontrado");
+  // ws1-t11 · lead 14: el paciente del registro puede estar restringido (visibleUserIds).
+  if (await pacienteOcultoPara(ctx, m.patientId)) return fail("Mantenedor no encontrado");
 
   await prisma.spaceMaintainer.update({
     where: { id: m.id },
@@ -121,6 +124,8 @@ export async function retireMaintainer(input: z.infer<typeof retireSchema>): Pro
     select: { id: true, clinicId: true, patientId: true },
   });
   if (!m || m.clinicId !== ctx.clinicId) return fail("Mantenedor no encontrado");
+  // ws1-t11 · lead 14: el paciente del registro puede estar restringido (visibleUserIds).
+  if (await pacienteOcultoPara(ctx, m.patientId)) return fail("Mantenedor no encontrado");
 
   await prisma.spaceMaintainer.update({
     where: { id: m.id },
