@@ -46,7 +46,7 @@ import { installmentPlansHandler } from "./cuotas-plan/handler";
 import { procedureCatalogHandler } from "./aranceles/handler";
 // Citas de Dentalink (ws1-t10): estado, tipo de cita de un caso de ortodoncia, sillón, notas legibles, enlace por
 // «# Tratamiento» con lo ya importado de 06, y los choques de consultorio. Aquí solo los enganches.
-import { elegirRecurso, esSobreagendamiento, grupoDeEstado, notasDeCita, tipoParaCaso, type EnlaceDeCita } from "./dentalink/citas";
+import { elegirRecurso, esSobreagendamiento, grupoDeEstado, lineaSillonOcupado, notasDeCita, tipoParaCaso, type EnlaceDeCita } from "./dentalink/citas";
 import { cargarOcupadas, cargarRecursos, leerDuracionDeCita, soltarConsultoriosQueChocan } from "./dentalink/citas-agenda";
 import { cargarEnlaces, enlaceDe, enlacesVacios, type Enlaces } from "./dentalink/enlace-tratamientos";
 import {
@@ -1693,6 +1693,7 @@ export const appointmentsHandler: EntityHandler = {
       const notes = mapped.observations || mapped.bookedBy || mapped.createdOn || mapped.treatmentRef || mapped.chair || mapped.apptRef || tipoInfo?.cambio
         // Dentalink: cada dato del archivo con su etiqueta (comentario, observaciones, quién y cuándo la agendó, sillón, tratamiento).
         ? notasDeCita({
+            origen: ctx.originName,
             comentario: mapped.notes,
             observaciones: mapped.observations,
             motivoOriginal: tipoInfo?.cambio ? motivo : null,
@@ -1772,7 +1773,7 @@ export const appointmentsHandler: EntityHandler = {
       soltarConsultoriosQueChocan(conConsultorio, ocupadas, tz);
       for (const r of conConsultorio) {
         if (r.data.consultorioSoltado && r.data.chairTexto) {
-          r.data.notes = [r.data.notes, `Sillón en Dentalink: ${r.data.chairTexto} (no se asignó consultorio: estaba ocupado)`].filter(Boolean).join("\n");
+          r.data.notes = [r.data.notes, lineaSillonOcupado(r.data.chairTexto, ctx.originName)].filter(Boolean).join("\n");
         }
       }
     }

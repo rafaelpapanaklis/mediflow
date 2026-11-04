@@ -87,13 +87,13 @@ const tabla = (m: string) => base.tablas[m] ?? [];
 const fila = (res: any, n: number) => res.preview.find((r: any) => r.row === n);
 
 type Manejador = "appointments" | "appointmentHistory" | "balances";
-async function correr(cual: Manejador, file: File, opts: { dryRun?: boolean; valueMapping?: any } = { dryRun: true }): Promise<any> {
+async function correr(cual: Manejador, file: File, opts: { dryRun?: boolean; valueMapping?: any; origin?: string | null; columnMapping?: Record<string, string> } = { dryRun: true }): Promise<any> {
   const { runImport } = await engine();
   const handler = cual === "appointmentHistory" ? (await historial()).appointmentHistoryHandler : (await entidades()).HANDLERS[cual];
   return runImport(handler, {
     file, clinicId: CLINICA, userId: IMPORTA, role: "SUPER_ADMIN",
     dryRun: opts.dryRun ?? true, skipDuplicates: true,
-    columnMapping: null, origin: FUENTE, valueMapping: opts.valueMapping ?? null, sheet: null,
+    columnMapping: opts.columnMapping ?? null, origin: opts.origin === undefined ? FUENTE : opts.origin, valueMapping: opts.valueMapping ?? null, sheet: null,
   });
 }
 
@@ -188,6 +188,7 @@ test("elegirRecurso: por nombre; «Sobre Agendamiento» no es un sillón; el ún
 test("notasDeCita: una línea por dato, con etiqueta", async () => {
   const { notasDeCita } = await citas();
   const n = notasDeCita({
+    origen: "Dentalink",
     resultado: "Atendida", comentario: "Trae radiografía", observaciones: "Llegó tarde", motivoOriginal: "control mensual de ortodoncia",
     estadoOrigen: "Atendido", agendadoPor: "Administrador", creadaEl: "06/12/2025 12:50", sobreagendada: true,
     enlace: { tipo: "caso", ref: "16" },
@@ -202,7 +203,99 @@ test("notasDeCita: una línea por dato, con etiqueta", async () => {
     "Sobreagendada: en Dentalink entró como «Sobre Agendamiento», encima de otra cita",
     "Del tratamiento #16 de Dentalink (caso de ortodoncia migrado)",
   ]);
-  assert.equal(notasDeCita({}), null);
+  assert.equal(notasDeCita({ origen: "Dentalink" }), null);
+});
+
+// ws1-t9 (1-nov-2026): la nota nombra el origen REAL. Con Dentalink, idéntica a la de siempre (arriba); con otro
+// perfil, su nombre; con «Mi Excel» / «Otro» (originName null) «el sistema anterior».
+const DATOS_COMPLETOS = {
+  resultado: "Atendida", motivoOriginal: "control mensual de ortodoncia", estadoOrigen: "Atendida",
+  agendadoPor: "Recepción", citaRef: "77.0", enlace: { tipo: "tratamiento" as const, ref: "291" },
+};
+
+test("notasDeCita con Mi Excel / Otro (sin perfil): «sistema anterior», ni una mención a Dentalink", async () => {
+  const { notasDeCita } = await citas();
+  for (const origen of [null, "", "   "]) {
+    const n = notasDeCita({ origen, ...DATOS_COMPLETOS })!;
+    assert.deepEqual(n.split("\n"), [
+      "Resultado: Atendida",
+      "Motivo en el sistema anterior: control mensual de ortodoncia",
+      "Estado en el sistema anterior: Atendida",
+      "Agendada por Recepción",
+      "Cita #77 del sistema anterior",
+      "Del tratamiento #291 del sistema anterior (ya migrado)",
+    ], JSON.stringify(origen));
+  }
+  const sobre = notasDeCita({ origen: null, sobreagendada: true, enlace: { tipo: "caso", ref: "16" } })!;
+  assert.deepEqual(sobre.split("\n"), [
+    "Sobreagendada: en el sistema anterior entró como sobreagendada, encima de otra cita",
+    "Del tratamiento #16 del sistema anterior (caso de ortodoncia migrado)",
+  ]);
+  assert.equal(notasDeCita({ origen: null, sillonSinEquivalente: "Box 3", enlace: { tipo: "suelta", ref: "9" } }),
+    "Sillón en el sistema anterior: Box 3\nTratamiento #9 del sistema anterior (no está entre los tratamientos migrados)");
+  assert.doesNotMatch(n0(notasDeCita({ origen: null, ...DATOS_COMPLETOS, sobreagendada: true })), /Dentalink/);
+});
+const n0 = (v: string | null) => v ?? "";
+
+test("notasDeCita con otro perfil (Medilink): su nombre; Dentalink, byte a byte como antes", async () => {
+  const { notasDeCita, lineaSillonOcupado } = await citas();
+  const m = notasDeCita({ origen: "Medilink", ...DATOS_COMPLETOS, sobreagendada: true })!;
+  assert.deepEqual(m.split("\n"), [
+    "Resultado: Atendida",
+    "Motivo en Medilink: control mensual de ortodoncia",
+    "Estado en Medilink: Atendida",
+    "Agendada por Recepción",
+    "Cita #77 de Medilink",
+    "Sobreagendada: en Medilink entró como sobreagendada, encima de otra cita",
+    "Del tratamiento #291 de Medilink (ya migrado)",
+  ]);
+  const d = notasDeCita({ origen: "Dentalink", ...DATOS_COMPLETOS, sobreagendada: true })!;
+  assert.deepEqual(d.split("\n"), [
+    "Resultado: Atendida",
+    "Motivo en Dentalink: control mensual de ortodoncia",
+    "Estado en Dentalink: Atendida",
+    "Agendada por Recepción",
+    "Cita #77 de Dentalink",
+    "Sobreagendada: en Dentalink entró como «Sobre Agendamiento», encima de otra cita",
+    "Del tratamiento #291 de Dentalink (ya migrado)",
+  ]);
+  assert.equal(notasDeCita({ origen: "Dentalink", sillonSinEquivalente: "Box 3" }), "Sillón en Dentalink: Box 3");
+  assert.equal(lineaSillonOcupado("Sillon 1", "Dentalink"), "Sillón en Dentalink: Sillon 1 (no se asignó consultorio: estaba ocupado)");
+  assert.equal(lineaSillonOcupado("Sillon 1", null), "Sillón en el sistema anterior: Sillon 1 (no se asignó consultorio: estaba ocupado)");
+  assert.equal(lineaSillonOcupado("Sillon 1", "Medilink"), "Sillón en Medilink: Sillon 1 (no se asignó consultorio: estaba ocupado)");
+});
+
+test("la ficha lee igual las notas VIEJAS (con «Dentalink») y las nuevas («sistema anterior»)", async () => {
+  const { etiquetaDeVisita, notaSinResultado, notasDeCita } = await citas();
+  const vieja = "Resultado: No asistió\nEstado en Dentalink: No asiste\nCita #12 de Dentalink\nSobreagendada: en Dentalink entró como «Sobre Agendamiento», encima de otra cita";
+  const nueva = notasDeCita({ origen: null, resultado: "No asistió", estadoOrigen: "No asiste", citaRef: "12", sobreagendada: true })!;
+  for (const nota of [vieja, nueva]) {
+    assert.equal(etiquetaDeVisita("NO_SHOW", nota), "No asistió");
+    assert.doesNotMatch(notaSinResultado(nota), /^Resultado: /m);
+    assert.match(notaSinResultado(nota), /^Estado en (Dentalink|el sistema anterior): No asiste$/m);
+  }
+  assert.equal(notaSinResultado(vieja), "Estado en Dentalink: No asiste\nCita #12 de Dentalink\nSobreagendada: en Dentalink entró como «Sobre Agendamiento», encima de otra cita");
+});
+
+
+test("cita futura importada con «Mi Excel» (sin perfil): la nota dice «sistema anterior», nunca «Dentalink» (ws1-t9)", async () => {
+  reiniciar();
+  // El mismo archivo, pero emparejado a mano en el paso 5 como haría quien sube su propio Excel.
+  const columnMapping: Record<string, string> = {
+    "# Cita": "apptRef", "Estado Cita": "status", "Fecha Cita": "date", "Hora Inicio Cita": "time", "Hora Fin Cita": "endTime",
+    "Comentario Cita": "notes", "Sillón (Recurso)": "chair", "# Tratamiento": "treatmentRef",
+    "Nombre Profesional Cita": "doctor", "Apellidos Profesional Cita": "doctorLastName",
+    "Nombre Paciente": "name", "Apellidos Paciente": "lastName", "Agendado por": "bookedBy",
+    "Fecha de creación de cita": "createdOn", "Observaciones": "observations", "Motivo de Atención": "type",
+  };
+  const f = archivo({ estado: "No confirmado", fecha: "2030-05-06", ini: "10:00:00", fin: "10:30:00", trat: "999", pac: "202", sillon: "Sobre Agendamiento", por: "Recepción", doc: ["Carlos", "Nuñez"] });
+  const prev = await correr("appointments", f, { dryRun: true, origin: "excel", columnMapping });
+  const r = fila(prev, 2);
+  assert.ok(r && r.data.notes, JSON.stringify(prev.mappingError ?? r));
+  assert.doesNotMatch(r.data.notes, /Dentalink/, r.data.notes);
+  for (const l of ["Estado en el sistema anterior: No confirmado", "Cita #1 del sistema anterior", "Sobreagendada: en el sistema anterior entró como sobreagendada, encima de otra cita", "Tratamiento #999 del sistema anterior (no está entre los tratamientos migrados)"]) {
+    assert.ok(r.data.notes.split("\n").includes(l), `${l}\n---\n${r.data.notes}`);
+  }
 });
 
 // ─────────────────────────── citas vivas (futuras) ───────────────────────────

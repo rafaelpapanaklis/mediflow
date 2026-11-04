@@ -176,7 +176,38 @@ function una(v: unknown, max = 500): string {
   return String(v ?? "").replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, max).trim();
 }
 
+/**
+ * Cómo nombran las notas al sistema de donde vino la cita (ws1-t9, 1-nov-2026). Con un perfil elegido en el paso 1 del
+ * asistente es su nombre («Dentalink», «Medilink»…: `ImportContext.originName`); sin perfil («Mi Excel», «Otro»,
+ * `originName` null) es «el sistema anterior». Antes TODAS las notas decían «Dentalink» aunque el origen fuera otro.
+ * Nadie parsea esas líneas de vuelta (la ficha solo lee «Resultado: »), así que las notas viejas siguen leyéndose igual.
+ */
+export interface SistemaDeLaNota {
+  /** «en Dentalink» · «en el sistema anterior» */
+  en: string;
+  /** «de Dentalink» · «del sistema anterior» */
+  de: string;
+  /** Solo Dentalink llama «Sobre Agendamiento» al sillón de las sobreagendadas: el texto lo cita tal cual. */
+  esDentalink: boolean;
+}
+
+export function sistemaDeLaNota(originName: string | null | undefined): SistemaDeLaNota {
+  const nombre = una(originName, 80);
+  if (!nombre) return { en: "en el sistema anterior", de: "del sistema anterior", esDentalink: false };
+  return { en: `en ${nombre}`, de: `de ${nombre}`, esDentalink: comparable(nombre) === "dentalink" };
+}
+
+/** La línea que se agrega cuando el consultorio del archivo estaba ocupado y la cita entró sin él. */
+export function lineaSillonOcupado(sillon: string, originName: string | null | undefined): string {
+  return `Sillón ${sistemaDeLaNota(originName).en}: ${sillon} (no se asignó consultorio: estaba ocupado)`;
+}
+
 export interface DatosDeNota {
+  /**
+   * `ImportContext.originName` tal cual: el nombre del perfil elegido («Dentalink»), o null con «Mi Excel» / «Otro».
+   * Obligatorio a propósito: que ninguna llamada nueva vuelva a escribir «Dentalink» por omisión.
+   */
+  origen: string | null;
   /** Solo en el historial: «Atendida», «Sin registro de asistencia»… (primera línea, la lee la ficha). */
   resultado?: string;
   comentario?: unknown;
@@ -198,26 +229,30 @@ export interface DatosDeNota {
 
 /** La nota de la cita: una línea por dato, con etiqueta, en el orden en que se lee mejor. `null` si no hay nada. */
 export function notasDeCita(d: DatosDeNota): string | null {
+  const s = sistemaDeLaNota(d.origen);
   const lineas: string[] = [];
   if (d.resultado) lineas.push(`${PREFIJO_RESULTADO}${d.resultado}`);
   const comentario = una(d.comentario);
   if (comentario) lineas.push(`Comentario: ${comentario}`);
   const obs = una(d.observaciones);
   if (obs) lineas.push(`Observaciones: ${obs}`);
-  if (d.motivoOriginal && una(d.motivoOriginal)) lineas.push(`Motivo en Dentalink: ${una(d.motivoOriginal, 200)}`);
+  if (d.motivoOriginal && una(d.motivoOriginal)) lineas.push(`Motivo ${s.en}: ${una(d.motivoOriginal, 200)}`);
   const estado = una(d.estadoOrigen, 120);
-  if (estado) lineas.push(`Estado en Dentalink: ${estado}`);
+  if (estado) lineas.push(`Estado ${s.en}: ${estado}`);
   const quien = una(d.agendadoPor, 120);
   const cuando = una(d.creadaEl, 40);
   if (quien || cuando) lineas.push(`Agendada${quien ? ` por ${quien}` : ""}${cuando ? ` el ${cuando}` : ""}`);
   const ref = una(d.citaRef, 40);
-  if (ref) lineas.push(`Cita #${ref.replace(/\.0+$/, "")} de Dentalink`);
-  if (d.sobreagendada) lineas.push("Sobreagendada: en Dentalink entró como «Sobre Agendamiento», encima de otra cita");
-  else if (d.sillonSinEquivalente) lineas.push(`Sillón en Dentalink: ${una(d.sillonSinEquivalente, 80)}`);
+  if (ref) lineas.push(`Cita #${ref.replace(/\.0+$/, "")} ${s.de}`);
+  if (d.sobreagendada) {
+    lineas.push(s.esDentalink
+      ? `Sobreagendada: ${s.en} entró como «Sobre Agendamiento», encima de otra cita`
+      : `Sobreagendada: ${s.en} entró como sobreagendada, encima de otra cita`);
+  } else if (d.sillonSinEquivalente) lineas.push(`Sillón ${s.en}: ${una(d.sillonSinEquivalente, 80)}`);
   if (d.enlace) {
-    if (d.enlace.tipo === "caso") lineas.push(`Del tratamiento #${d.enlace.ref} de Dentalink (caso de ortodoncia migrado)`);
-    else if (d.enlace.tipo === "tratamiento") lineas.push(`Del tratamiento #${d.enlace.ref} de Dentalink (ya migrado)`);
-    else lineas.push(`Tratamiento #${d.enlace.ref} de Dentalink (no está entre los tratamientos migrados)`);
+    if (d.enlace.tipo === "caso") lineas.push(`Del tratamiento #${d.enlace.ref} ${s.de} (caso de ortodoncia migrado)`);
+    else if (d.enlace.tipo === "tratamiento") lineas.push(`Del tratamiento #${d.enlace.ref} ${s.de} (ya migrado)`);
+    else lineas.push(`Tratamiento #${d.enlace.ref} ${s.de} (no está entre los tratamientos migrados)`);
   }
   for (const e of d.extra ?? []) if (e) lineas.push(e);
   return lineas.length ? lineas.join("\n") : null;
