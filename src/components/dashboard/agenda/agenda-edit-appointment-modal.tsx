@@ -9,6 +9,7 @@ import { rescheduleAppointment, type ApiError } from "@/lib/agenda/mutations";
 import { describeOverlapConflict, describeResourceUnavailable } from "@/lib/agenda/conflict-copy";
 import { OPCION_SIN_DOCTOR, doctorIdParaEnviar, doctorRealDe } from "@/components/dashboard/new-appointment/doctor-inicial";
 import { useQuienMira } from "./quien-mira";
+import { opcionesDeDoctorAlEditar } from "./doctores-elegibles";
 import { claveDelHueco, conflictoVigente, type ConflictoDelServidor } from "@/lib/agenda/conflicto-editar-cita";
 import { getTzParts } from "@/lib/agenda/time-utils";
 import { DateField } from "@/components/ui/date-field";
@@ -75,6 +76,8 @@ export interface EditarCitaPrestado {
   onGuardada: (appointment: AgendaAppointmentDTO) => void;
   /** ws1-t11 (M2) — el rol de quien edita: un DOCTOR no pasa su cita a «Sin doctor». Dentro de la agenda sale de `useQuienMira`. */
   userRole?: string;
+  /** ws1-t11 (v3, m2) — quien edita: un DOCTOR con una «Sin doctor» solo puede tomarla (asignársela a sí mismo). */
+  userId?: string;
 }
 
 interface Props {
@@ -148,12 +151,22 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose, ropa, presta
   // ws1-t11 — «Sin doctor» se ofrece si la clínica puede agendar así (o si la cita ya lo es), nunca en una
   // teleconsulta ni en una cita en consulta (el servidor las rechazaría). v2 (M2): tampoco a un DOCTOR sobre su
   // propia cita: pasarla a «Sin doctor» es de recepción (P1 v2, 403 `not_your_appointment`).
-  const ofreceSinDoctor =
+  const ofreceSinDoctorBase =
     !!appt &&
     appt.isTeleconsult !== true &&
     String(appt.status) !== "IN_PROGRESS" &&
     !(rol === "DOCTOR" && !!appt.doctor?.id) &&
     ((state as { sinDoctorDisponible?: boolean }).sinDoctorDisponible === true || !appt.doctor?.id);
+  // v3 (m2): un DOCTOR con una «Sin doctor» (p. ej. desde la ventana del expediente) solo puede tomarla: el
+  // selector trae solo a él, abre consigo mismo y no ofrece «Sin doctor» (si no, guardar daba 403).
+  const opcionesDoctor = opcionesDeDoctorAlEditar({
+    rol,
+    userId: prestado?.userId ?? quienMira.userId,
+    citaDoctorId: appt?.doctor?.id ?? null,
+    doctores: state.doctors.filter((d) => d.activeInAgenda),
+    ofreceSinDoctor: ofreceSinDoctorBase,
+  });
+  const ofreceSinDoctor = opcionesDoctor.sinDoctor;
   const [form, setForm] = useState<FormState | null>(null);
   const [submitting, setSubmitting] = useState(false);
   /**
@@ -211,7 +224,7 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose, ropa, presta
       durationMin,
       // ws1-t11 — una «Sin doctor» abre en «Sin doctor» (antes en «Selecciona…», y no se podía guardar
       // ni un cambio de hora sin ponerle doctor).
-      doctorId: appt.doctor?.id ?? (ofreceSinDoctor ? OPCION_SIN_DOCTOR : ""),
+      doctorId: appt.doctor?.id ?? opcionesDoctor.inicial ?? (ofreceSinDoctor ? OPCION_SIN_DOCTOR : ""),
       resourceId: appt.resourceId ?? "",
       reason: appt.reason ?? "",
       overrideReason: "",
@@ -376,7 +389,7 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose, ropa, presta
     }
   }
 
-  const activeDoctors = state.doctors.filter((d) => d.activeInAgenda);
+  const activeDoctors = opcionesDoctor.doctores;
 
   // Con ropa, cada nodo lleva su clase y NINGÚN `style`; sin ella, los
   // `style` de siempre y ninguna clase. Nunca los dos.

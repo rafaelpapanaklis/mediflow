@@ -606,3 +606,19 @@ test("m5: «Asignar doctor» con la doctora ocupada pregunta «¿Seguro?» y ree
   ]);
   assert.deepEqual(a.errores, []);
 });
+
+// ── v3 ───────────────────────────────────────────────────────────────────────────────────────────
+
+test("m7: Editar la cita de un doctor inactivo cuyo nombre llega vacío dice «Doctor de la cita» (no una opción en blanco)", async (t) => {
+  const datos = payload();
+  const INACTIVO = "cmdoctorinactivo00000001";
+  datos.appointments.push(cita("cmcitainactivo0000000001", "Pepe Luna", hora(9), hora(9, 30), { doctor: { id: INACTIVO, shortName: "" }, resourceId: "r1" }));
+  const a = await abrir(t, { datos });
+  if (!a) return;
+  await a.page.locator('[data-cita="cmcitainactivo0000000001"]').click();
+  await a.page.locator("aside").getByRole("button", { name: "Editar", exact: true }).click({ timeout: 10_000 });
+  const opcion = a.page.locator(`option[value="${INACTIVO}"]`);
+  await opcion.waitFor({ state: "attached", timeout: 10_000 });
+  assert.equal((await opcion.textContent())?.trim(), "Doctor de la cita");
+  assert.deepEqual(a.errores, []);
+});

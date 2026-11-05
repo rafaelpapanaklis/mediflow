@@ -1611,9 +1611,10 @@ export function PatientDetailClient({
             onGuardada: () => router.refresh(),
             // ws1-t11 (M2): un DOCTOR no pasa su propia cita a «Sin doctor».
             userRole: currentUser.role,
+            userId: currentUser.id,
           }
         : null,
-    [agendaCitas, router, currentUser.role],
+    [agendaCitas, router, currentUser.role, currentUser.id],
   );
   const citaParaMover = useMemo(
     () =>
@@ -3466,6 +3467,7 @@ export function PatientDetailClient({
               pacienteNombre={`${patient.firstName} ${patient.lastName}`.trim()}
               agenda={agendaCitas}
               userRole={currentUser.role}
+              userId={currentUser.id}
               estado={(st) => {
                 const full = APPT_STATUS_FULL[st] ?? APPT_STATUS_FULL.PENDING;
                 return { texto: t(full.labelKey), tono: full.tono };
