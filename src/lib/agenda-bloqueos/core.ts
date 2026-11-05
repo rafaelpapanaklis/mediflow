@@ -504,7 +504,8 @@ export interface CitaEnChoque {
   hora: string;
   pacienteNombre: string;
   doctorNombre: string;
-  doctorId: string;
+  /** `null` = cita «Sin doctor» (ws1-t11). */
+  doctorId: string | null;
 }
 
 /** El cuerpo del 409 y la respuesta de `/revision`. */

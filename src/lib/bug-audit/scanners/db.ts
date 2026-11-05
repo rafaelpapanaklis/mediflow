@@ -99,8 +99,10 @@ export async function scanOrphanFKs(): Promise<BugItem[]> {
       severity: "high",
     },
     {
-      name: "appointments sin doctor (User)",
-      sql: `SELECT COUNT(*)::int AS n FROM "appointments" a LEFT JOIN "User" u ON u.id = a."doctorId" WHERE u.id IS NULL`,
+      // ws1-t11 — «Sin doctor» (doctorId NULL) es una cita válida: solo cuenta un doctorId que apunta a nadie.
+      // La tabla es "users" (@@map): con "User" la consulta fallaba y el escáner la saltaba.
+      name: "appointments con doctor inexistente",
+      sql: `SELECT COUNT(*)::int AS n FROM "appointments" a LEFT JOIN "users" u ON u.id = a."doctorId" WHERE a."doctorId" IS NOT NULL AND u.id IS NULL`,
       severity: "high",
     },
     {

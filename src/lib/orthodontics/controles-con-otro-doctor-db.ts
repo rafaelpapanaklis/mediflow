@@ -16,7 +16,8 @@ export async function controlesConOtroDoctor(args: {
     where: {
       clinicId,
       patientId,
-      doctorId: { not: treatingDoctorId },
+      // ws1-t11 — `{not: X}` deja fuera los NULL: un control «Sin doctor» tampoco está con su tratante.
+      OR: [{ doctorId: { not: treatingDoctorId } }, { doctorId: null }],
       status: { in: [...ESTADOS_DE_CITA_POR_VENIR] },
       startsAt: { gt: args.ahora ?? new Date() },
     },

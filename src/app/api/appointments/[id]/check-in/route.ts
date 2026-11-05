@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { loadClinicSession, requireRole } from "@/lib/agenda/api-helpers";
 import { revalidateAfter, revalidatePatientProfile } from "@/lib/cache/revalidate";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
-import { assertPatientVisible } from "@/lib/patient-visibility";
+import { assertPatientVisible, ensureUserCanSeePatient } from "@/lib/patient-visibility";
 import { registrarMovimientoDelPaciente } from "@/lib/movimientos-paciente/registrar";
 import { textoCita } from "@/lib/movimientos-paciente/textos";
 import { zonaDeClinica } from "@/lib/movimientos-paciente/zona";
@@ -15,6 +15,9 @@ import {
 import { isAppointmentOverlapError } from "@/lib/agenda/transitions";
 import { cancelPendingRemindersForAppointment } from "@/lib/reminders/reschedule.server";
 import { sincronizarCitaEnSegundoPlano } from "@/lib/agenda/google-sync";
+import { doctorAlCambiarEstado } from "@/lib/agenda/sin-doctor";
+import { RECIBE_CITAS_WHERE } from "@/lib/agenda/roles-que-atienden";
+import { cuerpoDoctorNoRecibeCitasDe } from "@/lib/agenda/roles-que-atienden-db";
 
 export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -69,13 +72,40 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     );
   }
 
+  // ws1-t11 — «¿Quién lo atiende?» (opcional) de una cita «Sin doctor». Sin cuerpo, como siempre.
+  let pedido: unknown = undefined;
+  try {
+    const b = (await req.json()) as { doctorId?: unknown } | null;
+    pedido = b?.doctorId;
+  } catch {
+    /* sin cuerpo: la llegada de siempre */
+  }
+  const decisionDoctor = doctorAlCambiarEstado({
+    role: session.user.role,
+    userId: session.user.id,
+    citaDoctorId: existing.doctorId,
+    destino: "CHECKED_IN",
+    pedido,
+  });
+  if (decisionDoctor.rechazo) {
+    return NextResponse.json({ error: decisionDoctor.rechazo.error }, { status: decisionDoctor.rechazo.status });
+  }
+  const doctorAsignado = decisionDoctor.asignar;
+  if (doctorAsignado) {
+    const d = await prisma.user.findFirst({
+      where: { id: doctorAsignado, clinicId: session.clinic.id, ...RECIBE_CITAS_WHERE },
+      select: { id: true },
+    });
+    if (!d) return NextResponse.json(await cuerpoDoctorNoRecibeCitasDe(session.clinic.id, doctorAsignado), { status: 404 });
+  }
+
   const now = new Date();
   // ws1-t8 (decisión 6 de Rafael): llegó hoy el paciente de una cita de un día futuro → la cita se trae a
   // hoy (empieza ahora, misma duración y doctor), sin avisarle de reprogramación. Ver adelantar-cita-a-hoy.ts.
   const zona = await zonaDeClinica(session.clinic.id);
   const adelanto = await prepararAdelantoAHoy({
     clinicId: session.clinic.id,
-    cita: existing,
+    cita: { ...existing, doctorId: doctorAsignado ?? existing.doctorId },
     destino: "CHECKED_IN",
     ahora: now,
     zona: zona ?? session.clinic.timezone ?? "America/Mexico_City",
@@ -92,9 +122,13 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
           status: "CHECKED_IN",
           checkedInAt: now,
           ...(adelanto?.datos ?? {}),
+          ...(doctorAsignado ? { doctorId: doctorAsignado } : {}),
         },
       });
       if (r.count !== 1) return false;
+      if (doctorAsignado && existing.patientId) {
+        await ensureUserCanSeePatient(tx, existing.patientId, doctorAsignado, session.clinic.id);
+      }
       if (adelanto) {
         await cancelPendingRemindersForAppointment(tx, {
           appointmentId: params.id,
@@ -105,6 +139,12 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
       return true;
     });
   } catch (err) {
+    if (doctorAsignado && isAppointmentOverlapError(err)) {
+      return NextResponse.json(
+        { error: "appointment_overlap", reason: "Ese doctor ya tiene otra cita a esta hora. Elige a otro doctor o mueve la otra cita." },
+        { status: 409 },
+      );
+    }
     if (adelanto && isAppointmentOverlapError(err)) {
       return NextResponse.json(
         { error: "invalid_transition", reason: "Otra cita acaba de ocupar esta hora con el mismo doctor o sillón. Intenta de nuevo." },
@@ -119,6 +159,9 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
       { status: 409 },
     );
   }
+
+  // ws1-t11: con doctor nuevo, la descripción del evento de Google cambia (el adelanto ya sincroniza abajo).
+  if (doctorAsignado && !adelanto) await sincronizarCitaEnSegundoPlano(session.clinic.id, params.id);
 
   if (adelanto) {
     await registrarMovimientoDelPaciente({
@@ -151,8 +194,11 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     action: "update",
     // Con adelanto, la cita ya es de hoy: nombrarla por su fecha vieja se leía como si siguiera allí.
     texto: textoCita.estado(adelanto ? adelanto.despues.startsAt : existing.startsAt, existing.status, "CHECKED_IN", zona),
-    campos: ["status"],
-    cambios: { status: { before: existing.status, after: "CHECKED_IN" } },
+    campos: doctorAsignado ? ["status", "doctorId"] : ["status"],
+    cambios: {
+      status: { before: existing.status, after: "CHECKED_IN" },
+      ...(doctorAsignado ? { doctorId: { before: existing.doctorId, after: doctorAsignado } } : {}),
+    },
     req,
   });
 
@@ -163,6 +209,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     status: "CHECKED_IN",
     checkedInAt: now.toISOString(),
     minutesWaiting: 0,
+    doctorId: doctorAsignado ?? existing.doctorId,
     adelantada: adelanto ? adelantoParaRespuesta(adelanto) : null,
   });
 }

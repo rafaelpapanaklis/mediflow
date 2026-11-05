@@ -70,7 +70,9 @@ export function resolveNoteAppointmentId(
   const id = sanitizeAppointmentId(requested);
   if (!id) return null;
   const appt = todaysAppointments.find((a) => a.id === id);
-  if (!appt || !ctx.doctorId || appt.doctorId !== ctx.doctorId) return null;
+  // ws1-t11 — una cita «Sin doctor» es de quien la atienda: la nota de quien escribe se puede ligar a ella
+  // (al cerrarla, la cita pasa a ser del autor de la nota; ver /api/appointments/[id]/complete).
+  if (!appt || !ctx.doctorId || (appt.doctorId !== null && appt.doctorId !== ctx.doctorId)) return null;
   // ws1-t8 (revisión de ws1-t9, fallo 1): la cita que el doctor tiene «En consulta» no es adivinar aunque el
   // paciente tenga otra ese día: es la consulta abierta en la ficha («Iniciar consulta» ya creó su borrador).
   if (String(appt.status ?? "") === "IN_PROGRESS") return id;

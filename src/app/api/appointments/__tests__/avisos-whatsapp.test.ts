@@ -95,7 +95,8 @@ const prismaStub: any = {
   appointment: {
     findFirst: async ({ where, select, include }: any = {}) => {
       // ws1-t1 (C-87): la búsqueda de «el paciente ya tiene otra cita a esa hora».
-      if (where?.doctorId?.not !== undefined && where?.patientId) {
+      // ws1-t11: «de otro doctor» va con OR (`{not: X}` en SQL deja fuera las «Sin doctor»).
+      if (where?.patientId && Array.isArray(where?.OR) && where.OR.some((o: any) => o?.doctorId?.not !== undefined)) {
         consultaEmpalme = where;
         return empalmePaciente;
       }
@@ -526,7 +527,8 @@ test("🔴→🟢 agendar al paciente encima de otra cita suya con otro doctor: 
   // Filtra por tenant, por el paciente, otro doctor, sin canceladas y por el hueco.
   assert.equal(consultaEmpalme.clinicId, "c1");
   assert.equal(consultaEmpalme.patientId, "p1");
-  assert.deepEqual(consultaEmpalme.doctorId, { not: "d1" });
+  // ws1-t11: otro doctor… o «Sin doctor» (la constraint no frena ninguna de las dos).
+  assert.deepEqual(consultaEmpalme.OR, [{ doctorId: { not: "d1" } }, { doctorId: null }]);
   assert.deepEqual(consultaEmpalme.status, { notIn: ["CANCELLED", "NO_SHOW"] });
 });
 

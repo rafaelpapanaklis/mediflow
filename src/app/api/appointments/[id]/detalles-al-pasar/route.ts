@@ -9,6 +9,7 @@
 // de otro doctor le contesta 404, como si no existiera (v2, revisión t11 M1). Solo lectura.
 
 import { NextResponse } from "next/server";
+import { doctorPuedeVer } from "@/lib/agenda/sin-doctor";
 import { prisma } from "@/lib/prisma";
 import { loadClinicSession } from "@/lib/agenda/api-helpers";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
@@ -33,7 +34,8 @@ export async function GET(_req: Request, props: { params: Promise<{ id: string }
     select: { id: true, patientId: true, doctorId: true },
   });
   if (!cita) return NextResponse.json({ error: "Cita no encontrada" }, { status: 404 });
-  if (session.user.role === "DOCTOR" && cita.doctorId !== session.user.id) {
+  // ws1-t11 (D3): las suyas y las «Sin doctor» (la agenda se las pinta para que las tome).
+  if (!doctorPuedeVer(session.user.role, session.user.id, cita.doctorId)) {
     return NextResponse.json({ error: "Cita no encontrada" }, { status: 404 });
   }
   if (cita.patientId) {

@@ -150,7 +150,7 @@ export function confirmacionValida(args: {
 
 /** El tipo de choque que se le explica a la persona: primero la cita, luego la comida. */
 export function tipoDeChoque(args: {
-  conflicto?: { doctorId: string; resourceId: string | null } | null;
+  conflicto?: { doctorId: string | null; resourceId: string | null } | null;
   intento: { doctorId?: string | null; resourceId?: string | null };
   pisaComida?: boolean;
 }): TipoChoque {
@@ -158,6 +158,8 @@ export function tipoDeChoque(args: {
   if (c) {
     const mismoDoctor = !!args.intento.doctorId && args.intento.doctorId === c.doctorId;
     if (!mismoDoctor && !!args.intento.resourceId && args.intento.resourceId === c.resourceId) return "sillon";
+    // ws1-t11 — una cita «Sin doctor» solo choca por su sillón: nunca es «otra cita del doctor».
+    if (!args.intento.doctorId) return "sillon";
     return "doctor";
   }
   return args.pisaComida ? "comida" : "doctor";

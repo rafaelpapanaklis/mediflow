@@ -76,6 +76,17 @@ import { buscarPacienteEmpalmado, juntarAvisos } from "@/lib/agenda/paciente-emp
 import { MARCA_SOBREAGENDADA, confirmacionValida, decidirSobreagenda } from "@/lib/agenda/agenda-flexible";
 import { leerAgendaFlexible } from "@/lib/agenda/agenda-flexible.server";
 import { buscarChoqueDeCita } from "@/lib/agenda/sobreagendar.server";
+import {
+  ERROR_SIN_DOCTOR_NO_DISPONIBLE,
+  ERROR_TELECONSULTA_SIN_DOCTOR,
+  TEXTO_SIN_DOCTOR_NO_DISPONIBLE,
+  TEXTO_TELECONSULTA_SIN_DOCTOR,
+  doctorDelAlta,
+  doctorIdsDe,
+  ramaDelDoctor,
+  teleconsultaSinDoctor,
+} from "@/lib/agenda/sin-doctor";
+import { sinDoctorDisponible, sinDoctorDisponibleAlGuardar } from "@/lib/agenda/sin-doctor.server";
 import { ESTADO_HTTP_DE_CODIGO, leerPlanItemIds, problemaAlLigar, type CodigoDeCitaDelPlan } from "@/lib/treatments/citas-del-plan";
 import { citasDelPlanDisponible, leerFilasParaLigar, ligarFilasACita } from "@/lib/treatments/citas-del-plan-db";
 
@@ -194,6 +205,8 @@ export async function GET(req: NextRequest) {
   const horariosDoctores = horariosComoObjeto(
     await leerHorariosDeDoctores(session.clinic.id),
   );
+  // ws1-t11 — ¿«Nueva cita» puede ofrecer «Sin doctor»? (en memoria 10 min: casi nunca consulta).
+  const sinDoctor = await sinDoctorDisponible();
 
   const response: AgendaDayResponse = {
     range: {
@@ -215,6 +228,7 @@ export async function GET(req: NextRequest) {
     horariosDoctores,
     // ws1-t1 (N-38): el horario de la clínica de ESTE día, para avisar antes de guardar.
     horarioDelDia: horarioDelDiaDeAjustes(dateISO, session.clinic.schedules, session.clinic.timezone),
+    sinDoctorDisponible: sinDoctor,
   };
 
   return NextResponse.json(response, {
@@ -268,6 +282,16 @@ export async function POST(req: NextRequest) {
   if (validation) {
     return NextResponse.json({ error: validation }, { status: 400 });
   }
+  // ws1-t11 — `doctorId: null` = «Sin doctor». Desde aquí el handler usa SOLO `doctorId`.
+  const doctorId: string | null = body.doctorId ?? null;
+  const modo = modoDeLaCita(session.clinic.category, body.isTeleconsult);
+  if (teleconsultaSinDoctor(modo, doctorId)) {
+    return NextResponse.json({ error: ERROR_TELECONSULTA_SIN_DOCTOR, reason: TEXTO_TELECONSULTA_SIN_DOCTOR }, { status: 400 });
+  }
+  // Sin `sql/cita-sin-doctor.sql` la columna sigue NOT NULL: se dice antes de tocar nada.
+  if (doctorId === null && !(await sinDoctorDisponibleAlGuardar())) {
+    return NextResponse.json({ error: ERROR_SIN_DOCTOR_NO_DISPONIBLE, reason: TEXTO_SIN_DOCTOR_NO_DISPONIBLE }, { status: 409 });
+  }
 
   // ws1-t1 (plan fase 2 · P8) — «Agendar lo pendiente»: la cita es la de siempre, con TODAS sus
   // reglas, y además liga las filas del plan que se eligieron. Sin `planItemIds` nada cambia.
@@ -303,7 +327,7 @@ export async function POST(req: NextRequest) {
         body.googleBloqueoId,
         { userId: session.user.id, role: session.user.role },
         // La hora y el doctor los manda el BLOQUEO: si no coinciden, 409.
-        { startsAt, endsAt, doctorId: body.doctorId },
+        { startsAt, endsAt, doctorId },
       )
     : null;
   if (conversionGoogle && !conversionGoogle.ok) {
@@ -345,21 +369,22 @@ export async function POST(req: NextRequest) {
       session.clinic.id,
       startsAt,
       endsAt,
-      { doctorIds: [body.doctorId] },
+      // Sin doctor: solo los bloqueos de toda la clínica (`in: [null]` reventaba).
+      { doctorIds: doctorIdsDe(doctorId) },
     ),
-    leerHorariosDeDoctores(session.clinic.id, { doctorIds: [body.doctorId] }),
+    leerHorariosDeDoctores(session.clinic.id, { doctorIds: doctorIdsDe(doctorId) }),
   ]);
   const bloqueoEncima = bloqueaEsteHueco(
     conversionGoogle ? bloqueosDelHueco.filter((b) => b.id !== conversionGoogle.bloqueoId) : bloqueosDelHueco,
     startsAt,
     endsAt,
-    body.doctorId,
+    doctorId,
   );
   const fueraDelDoctor = doctorNoAtiende(
     horariosDelHueco,
     startsAt,
     endsAt,
-    body.doctorId,
+    doctorId,
     session.clinic.timezone,
   );
   const avisoHorario = bloqueoEncima
@@ -431,14 +456,17 @@ export async function POST(req: NextRequest) {
     // Quien puede recibir citas: rol que atiende + activo + «Aparece en la
     // agenda» (roles-que-atienden.ts). Antes `role: "DOCTOR"` a secas y el
     // dueño tratante de ortodoncia daba doctor_not_found (ws1-t10).
-    prisma.user.findFirst({
-      where: {
-        id: body.doctorId,
-        clinicId: session.clinic.id,
-        ...RECIBE_CITAS_WHERE,
-      },
-      select: { id: true },
-    }),
+    // Sin doctor no hay a quién buscar (`id: null` es un error de Prisma).
+    doctorId
+      ? prisma.user.findFirst({
+          where: {
+            id: doctorId,
+            clinicId: session.clinic.id,
+            ...RECIBE_CITAS_WHERE,
+          },
+          select: { id: true },
+        })
+      : Promise.resolve(null),
     body.resourceId
       ? prisma.resource.findFirst({
           where: {
@@ -465,8 +493,8 @@ export async function POST(req: NextRequest) {
     clinicId: session.clinic.id,
   });
   if (visDenied) return visDenied;
-  if (!doctor) {
-    return NextResponse.json(await cuerpoDoctorNoRecibeCitasDe(session.clinic.id, body.doctorId), { status: 404 });
+  if (doctorId && !doctor) {
+    return NextResponse.json(await cuerpoDoctorNoRecibeCitasDe(session.clinic.id, doctorId), { status: 404 });
   }
 
   // Motivo, pasado y paciente archivado (WS1-T3, N13): antes solo los frenaba el
@@ -532,7 +560,7 @@ export async function POST(req: NextRequest) {
   const choque = flexible?.encendida
     ? await buscarChoqueDeCita({
         clinicId: session.clinic.id,
-        doctorId: body.doctorId,
+        doctorId,
         resourceId: body.resourceId ?? null,
         startsAt,
         endsAt,
@@ -542,7 +570,7 @@ export async function POST(req: NextRequest) {
   // La comida, AUNQUE la cita además se salga del horario (revisión t8, A2):
   // «13:00–18:30» cruza la comida y pide el «¿Seguro?» igual.
   const comidaPisada = flexible?.encendida
-    ? comidaQuePisa(horariosDelHueco, startsAt, endsAt, body.doctorId, session.clinic.timezone)
+    ? comidaQuePisa(horariosDelHueco, startsAt, endsAt, doctorId, session.clinic.timezone)
     : null;
   const pisaComida = !!comidaPisada;
   const sobreagenda = decidirSobreagenda({
@@ -564,7 +592,7 @@ export async function POST(req: NextRequest) {
   const huerfana = flexible && !flexible.encendida
     ? await buscarChoqueDeCita({
         clinicId: session.clinic.id,
-        doctorId: body.doctorId,
+        doctorId,
         resourceId: body.resourceId ?? null,
         startsAt,
         endsAt,
@@ -621,7 +649,7 @@ export async function POST(req: NextRequest) {
         data: {
           clinicId: session.clinic.id,
           patientId: body.patientId,
-          doctorId: body.doctorId,
+          doctorId,
           resourceId: body.resourceId ?? null,
           startsAt,
           endsAt,
@@ -634,7 +662,7 @@ export async function POST(req: NextRequest) {
           notes: body.notes ?? null,
           // En una clínica sin teleconsulta (hoy, las dentales) la cita es
           // presencial diga lo que diga la petición (ws1-t4 ronda 6).
-          mode: modoDeLaCita(session.clinic.category, body.isTeleconsult),
+          mode: modo,
           source: "STAFF",
           requiresValidation: false,
           // ⛔ SIN TOCAR (WS1-T3). Esta columna apaga el no-solape; el rastro
@@ -666,7 +694,8 @@ export async function POST(req: NextRequest) {
         });
         if (n !== planItemIds.length) throw new CitaDelPlanError("plan_fila_no_pendiente");
       }
-      await ensureUserCanSeePatient(tx, body.patientId, body.doctorId, session.clinic.id);
+      // Sin doctor no hay a quién darle visibilidad: se hace al asignarlo (PATCH / llegada / iniciar).
+      if (doctorId) await ensureUserCanSeePatient(tx, body.patientId, doctorId, session.clinic.id);
       return appt;
     });
 
@@ -786,7 +815,7 @@ export async function POST(req: NextRequest) {
     if (isAppointmentOverlapError(err)) {
       const conflict = await findConflictingAppointment(
         session.clinic.id,
-        body.doctorId,
+        doctorId,
         body.resourceId ?? null,
         startsAt,
         endsAt,
@@ -802,7 +831,7 @@ export async function POST(req: NextRequest) {
           patientName: "—",
           startsAt: body.startsAt,
           endsAt: body.endsAt,
-          doctorId: body.doctorId,
+          doctorId,
           resourceId: body.resourceId ?? null,
           status: "SCHEDULED",
         },
@@ -865,7 +894,8 @@ function normalizeLegacyTimes(body: CreateApptBody, timezone: string): void {
 
 function validateCreate(body: Partial<CreateAppointmentInput>): string | null {
   if (!body.patientId || typeof body.patientId !== "string") return "missing_patientId";
-  if (!body.doctorId || typeof body.doctorId !== "string") return "missing_doctorId";
+  // ws1-t11: `null` explícito = «Sin doctor»; ausente o vacío, el 400 de siempre.
+  if (!doctorDelAlta(body.doctorId).ok) return "missing_doctorId";
   if (!body.startsAt || typeof body.startsAt !== "string") return "missing_startsAt";
   if (!body.endsAt || typeof body.endsAt !== "string") return "missing_endsAt";
   if (Number.isNaN(new Date(body.startsAt).getTime())) return "invalid_startsAt";
@@ -875,7 +905,7 @@ function validateCreate(body: Partial<CreateAppointmentInput>): string | null {
 
 async function findConflictingAppointment(
   clinicId: string,
-  doctorId: string,
+  doctorId: string | null,
   resourceId: string | null,
   startsAt: Date,
   endsAt: Date,
@@ -884,7 +914,8 @@ async function findConflictingAppointment(
   const candidates = await prisma.appointment.findMany({
     where: {
       clinicId,
-      OR: [{ doctorId }, ...(resourceId ? [{ resourceId }] : [])],
+      // Sin doctor, solo el sillón (`{doctorId: null}` empataría con todas las «Sin doctor»).
+      OR: [...ramaDelDoctor(doctorId), ...(resourceId ? [{ resourceId }] : [])],
       status: { notIn: ["CANCELLED", "NO_SHOW"] },
       overrideReason: null,
       startsAt: { lt: endsAt },

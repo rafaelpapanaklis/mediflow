@@ -61,6 +61,21 @@ import { cerrarFilaDeLaCita } from "@/lib/walk-in/cerrar-fila-de-la-cita";
 import { MARCA_SOBREAGENDADA, confirmacionValida, decidirSobreagenda, esSobreagendada } from "@/lib/agenda/agenda-flexible";
 import { leerAgendaFlexible } from "@/lib/agenda/agenda-flexible.server";
 import { buscarChoqueDeCita } from "@/lib/agenda/sobreagendar.server";
+import {
+  ERROR_SIN_DOCTOR_NO_DISPONIBLE,
+  ERROR_TELECONSULTA_SIN_DOCTOR,
+  TEXTO_SIN_DOCTOR_NO_DISPONIBLE,
+  TEXTO_TELECONSULTA_SIN_DOCTOR,
+  doctorDelCambio,
+  doctorIdsDe,
+  doctorPuedeEditar,
+  ERROR_DOCTOR_PARA_INICIAR,
+  TEXTO_DOCTOR_EN_CONSULTA,
+  esEstadoQueExigeDoctor,
+  ramaDelDoctor,
+  teleconsultaSinDoctor,
+} from "@/lib/agenda/sin-doctor";
+import { sinDoctorDisponibleAlGuardar } from "@/lib/agenda/sin-doctor.server";
 
 const APPT_INCLUDE = {
   // visibleUserIds viaja en el include para que appointmentToDTO pueda enmascarar
@@ -121,18 +136,33 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
     clinicId: session.clinic.id,
   });
   if (visDenied) return visDenied;
-  // Un DOCTOR solo edita SUS citas (rol "solo sus datos"): sin esto podría tomar
-  // la cita de otro doctor y reasignársela. Va DESPUÉS del assert de visibilidad
-  // para que un paciente restringido siga devolviendo 404, no 403.
-  if (session.user.role === "DOCTOR" && existing.doctorId !== session.user.id) {
-    return NextResponse.json({ error: "not_your_appointment" }, { status: 403 });
-  }
 
   let body: UpdateApptBody;
   try {
     body = (await req.json()) as UpdateApptBody;
   } catch {
     return NextResponse.json({ error: "invalid_json" }, { status: 400 });
+  }
+
+  // ws1-t11 — el doctor que pide el cuerpo: ausente = no cambia; `null` = «Sin doctor».
+  const cambioDoctor = doctorDelCambio(body.doctorId);
+  const doctorFinal: string | null = cambioDoctor.cambia ? cambioDoctor.doctorId : existing.doctorId;
+  const cambiaElDoctor = doctorFinal !== existing.doctorId;
+
+  // Un DOCTOR solo edita SUS citas (rol "solo sus datos"): sin esto podría tomar
+  // la cita de otro doctor y reasignársela. Va DESPUÉS del assert de visibilidad
+  // para que un paciente restringido siga devolviendo 404, no 403.
+  // ws1-t11 (D3) — una «Sin doctor» la puede TOMAR: solo si en este mismo cambio se la asigna a sí mismo.
+  if (!doctorPuedeEditar(session.user.role, session.user.id, existing.doctorId, cambioDoctor)) {
+    return NextResponse.json({ error: "not_your_appointment" }, { status: 403 });
+  }
+  // Una cita EN CONSULTA no se queda sin doctor (D9: iniciar exige saber quién atiende).
+  if (cambiaElDoctor && doctorFinal === null && esEstadoQueExigeDoctor(existing.status)) {
+    return NextResponse.json({ error: ERROR_DOCTOR_PARA_INICIAR, reason: TEXTO_DOCTOR_EN_CONSULTA }, { status: 409 });
+  }
+  // Una teleconsulta nunca se queda sin doctor (la sala, el pago y el cierre son suyos).
+  if (teleconsultaSinDoctor(existing.mode, doctorFinal)) {
+    return NextResponse.json({ error: ERROR_TELECONSULTA_SIN_DOCTOR, reason: TEXTO_TELECONSULTA_SIN_DOCTOR }, { status: 400 });
   }
 
   // WS1-T5 (revisión t8, A12) — un `overrideReason` vacío o de espacios es
@@ -176,20 +206,26 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
   // Solo se valida si CAMBIA el doctor: reenviar el mismo (el formulario manda
   // todo) no debe impedir mover la hora de una cita vieja de alguien a quien ya
   // se sacó de la agenda.
-  if (body.doctorId && body.doctorId !== existing.doctorId) {
+  if (cambiaElDoctor && doctorFinal) {
     // La misma regla que el alta: rol que atiende + activo + «Aparece en la
     // agenda» (roles-que-atienden.ts, ws1-t10). Mover o reagendar a la columna
     // del dueño que atiende ya no da doctor_not_found.
     const d = await prisma.user.findFirst({
       where: {
-        id: body.doctorId,
+        id: doctorFinal,
         clinicId: session.clinic.id,
         ...RECIBE_CITAS_WHERE,
       },
       select: { id: true },
     });
-    if (!d) return NextResponse.json(await cuerpoDoctorNoRecibeCitasDe(session.clinic.id, body.doctorId), { status: 404 });
-    data.doctor = { connect: { id: body.doctorId } };
+    if (!d) return NextResponse.json(await cuerpoDoctorNoRecibeCitasDe(session.clinic.id, doctorFinal), { status: 404 });
+    data.doctor = { connect: { id: doctorFinal } };
+  } else if (cambiaElDoctor) {
+    // ws1-t11 — vuelve a «Sin doctor». Sin `sql/cita-sin-doctor.sql` la columna sigue NOT NULL.
+    if (!(await sinDoctorDisponibleAlGuardar())) {
+      return NextResponse.json({ error: ERROR_SIN_DOCTOR_NO_DISPONIBLE, reason: TEXTO_SIN_DOCTOR_NO_DISPONIBLE }, { status: 409 });
+    }
+    data.doctor = { disconnect: true };
   }
 
   if (body.resourceId !== undefined) {
@@ -241,7 +277,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
     },
     next: {
       startsAt: newStarts,
-      doctorId: body.doctorId || existing.doctorId,
+      doctorId: doctorFinal,
     },
     reason: body.reason,
     patientStatus: existing.patient?.status,
@@ -275,15 +311,16 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
   //
   // WS1-T2 · horario — y el horario propio del doctor efectivo, igual: aviso,
   // mismo orden que en el POST (bloqueo → clínica → doctor).
-  const doctorEfectivo = body.doctorId || existing.doctorId;
+  const doctorEfectivo = doctorFinal;
   const [bloqueosDelHueco, horariosDelHueco] = await Promise.all([
     leerBloqueosDelRango(
       session.clinic.id,
       newStarts,
       newEnds,
-      { doctorIds: [doctorEfectivo] },
+      // Sin doctor: solo los bloqueos de toda la clínica (`in: [null]` reventaba cualquier PATCH).
+      { doctorIds: doctorIdsDe(doctorEfectivo) },
     ),
-    leerHorariosDeDoctores(session.clinic.id, { doctorIds: [doctorEfectivo] }),
+    leerHorariosDeDoctores(session.clinic.id, { doctorIds: doctorIdsDe(doctorEfectivo) }),
   ]);
   const bloqueoEncima = bloqueaEsteHueco(bloqueosDelHueco, newStarts, newEnds, doctorEfectivo);
   const fueraDelDoctor = doctorNoAtiende(
@@ -513,8 +550,9 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
         data,
         include: APPT_INCLUDE,
       });
-      if (body.doctorId) {
-        await ensureUserCanSeePatient(tx, row.patientId, body.doctorId, session.clinic.id);
+      // Como siempre: también al reenviar el mismo doctor (si el paciente se restringió, vuelve a entrar).
+      if (cambioDoctor.cambia && doctorFinal) {
+        await ensureUserCanSeePatient(tx, row.patientId, doctorFinal, session.clinic.id);
       }
 
       // Reagendado (M-22): el recordatorio en cola lleva la fecha y la hora
@@ -525,6 +563,8 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
       //
       // Va DENTRO de la transacción: una cita movida con recordatorios viejos
       // es exactamente el estado que este arreglo no puede permitir.
+      // (ws1-t11: al cambiar SOLO el doctor no se re-encola: cancelaría un aviso ya vencido sin mandar. Poner
+      // al día el texto del pendiente es de P3.)
       if (row.startsAt.getTime() !== existing.startsAt.getTime()) {
         await applyReminderReschedule(tx, {
           appointmentId: params.id,
@@ -620,7 +660,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
       const conflict = await findConflictingAppointment(
         session.clinic.id,
         params.id,
-        body.doctorId ?? existing.doctorId,
+        doctorFinal,
         body.resourceId === undefined
           ? existing.resourceId
           : body.resourceId,
@@ -636,7 +676,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
           patientName: "—",
           startsAt: newStarts.toISOString(),
           endsAt: newEnds.toISOString(),
-          doctorId: body.doctorId ?? existing.doctorId,
+          doctorId: doctorFinal,
           resourceId: body.resourceId === undefined
             ? existing.resourceId
             : body.resourceId,
@@ -822,7 +862,7 @@ async function readCancelBody(
 async function findConflictingAppointment(
   clinicId: string,
   excludeId: string,
-  doctorId: string,
+  doctorId: string | null,
   resourceId: string | null,
   startsAt: Date,
   endsAt: Date,
@@ -832,7 +872,8 @@ async function findConflictingAppointment(
     where: {
       clinicId,
       id: { not: excludeId },
-      OR: [{ doctorId }, ...(resourceId ? [{ resourceId }] : [])],
+      // Sin doctor, solo el sillón (`{doctorId: null}` empataría con todas las «Sin doctor»).
+      OR: [...ramaDelDoctor(doctorId), ...(resourceId ? [{ resourceId }] : [])],
       status: { notIn: ["CANCELLED", "NO_SHOW"] },
       overrideReason: null,
       startsAt: { lt: endsAt },

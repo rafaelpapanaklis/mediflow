@@ -64,7 +64,8 @@ export async function prepararAdelantoAHoy(args: {
     id: string;
     startsAt: Date;
     endsAt: Date;
-    doctorId: string;
+    /** `null` = «Sin doctor» (ws1-t11): solo choca por su sillón. */
+    doctorId: string | null;
     resourceId: string | null;
     overrideReason: string | null;
   };
@@ -85,7 +86,8 @@ export async function prepararAdelantoAHoy(args: {
     endsAt: { gt: rango.startsAt },
   } satisfies Prisma.AppointmentWhereInput;
   const [choqueDoctor, choqueSillon] = await Promise.all([
-    choque({ ...hueco, doctorId: cita.doctorId }),
+    // Sin doctor no hay «otra cita del doctor» (`doctorId: null` empataría con todas las «Sin doctor»).
+    cita.doctorId ? choque({ ...hueco, doctorId: cita.doctorId }) : Promise.resolve(null),
     cita.resourceId ? choque({ ...hueco, resourceId: cita.resourceId }) : Promise.resolve(null),
   ]);
   return planDeAdelanto({ cita, ahora, zona, userId: args.userId, choqueDoctor, choqueSillon });

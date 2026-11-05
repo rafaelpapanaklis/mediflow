@@ -14,6 +14,7 @@
 // hoja que ya está ligada a otra cita.
 import { Prisma, type AppointmentStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { asignarSiSinDoctor } from "@/lib/agenda/sin-doctor.server";
 import { isClinicalNoteEmpty } from "@/lib/clinical/note-validation";
 import { sendReviewInvitation } from "@/lib/reviews/invite";
 import { tarjetaDeControlDeHoy } from "@/lib/orthodontics/redesign/control-del-dia";
@@ -104,6 +105,9 @@ export async function ligarHojaFirmadaDeHoyALaCita(a: LigarHojaFirmada): Promise
     data: cierre,
   });
   if (cerradas.count === 0) return { cardId: hoja.id, citaCerrada: null };
+  // ws1-t11 (D9): una «Sin doctor» queda a nombre de quien firmó la hoja (la atendió).
+  const firma = await prisma.orthoTreatmentCard.findFirst({ where: { id: hoja.id, clinicId: a.clinicId }, select: { signedById: true } });
+  await asignarSiSinDoctor(prisma, { clinicId: a.clinicId, appointmentId: a.cita.id, doctorId: firma?.signedById ?? null });
   // Igual que al firmar con la cita (signTreatmentCard): idempotente y nunca lanza.
   await sendReviewInvitation(a.cita.id);
   return { cardId: hoja.id, citaCerrada: a.cita.id };

@@ -31,6 +31,20 @@ export async function GET(req: NextRequest) {
   });
 
   for (const clinic of clinics) {
+    // ws1-t11 (D7) — la tarea de una cita «Sin doctor» va al dueño de la clínica. Se busca una vez por clínica
+    // y solo si hace falta.
+    let dueno: string | null | undefined;
+    const duenoDeLaClinica = async (): Promise<string | null> => {
+      if (dueno === undefined) {
+        const u = await prisma.user.findFirst({
+          where: { clinicId: clinic.id, role: "SUPER_ADMIN", isActive: true },
+          orderBy: { createdAt: "asc" },
+          select: { id: true },
+        });
+        dueno = u?.id ?? null;
+      }
+      return dueno;
+    };
     const predictions = await prisma.noShowPrediction.findMany({
       where: {
         probability: { gte: 0.6 },
@@ -67,14 +81,18 @@ export async function GET(req: NextRequest) {
       });
       if (dupe) { skipped++; continue; }
 
+      // Asignada al doctor de la cita; si no tiene, al dueño (sin dueño activo, no se crea: el cron sigue).
+      const responsable = appt.doctorId ?? (await duenoDeLaClinica());
+      if (!responsable) { skipped++; continue; }
+
       const name = `${appt.patient.firstName} ${appt.patient.lastName}`.trim();
       const pct = Math.round(pred.probability * 100);
       // Asignada al doctor de la cita (staff responsable); createdBy = mismo.
       await prisma.reminder.create({
         data: {
           clinicId: clinic.id,
-          createdById: appt.doctorId,
-          assignedToId: appt.doctorId,
+          createdById: responsable,
+          assignedToId: responsable,
           patientId: appt.patient.id,
           title: `Confirmar cita de alto riesgo: ${name}`,
           body: `Riesgo de inasistencia ${pct}%. Confirma la cita con el paciente. ${marker}`,

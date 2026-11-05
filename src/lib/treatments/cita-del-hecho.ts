@@ -61,7 +61,8 @@ export type MomentoDeLaCita = "pasado" | "hoy" | "futuro";
  */
 export function notaLigable(cita: { status: string; doctorId: string | null; momento: MomentoDeLaCita }, quienEscribe: string): boolean {
   if (CITA_SIN_CONSULTA.includes(cita.status) || cita.momento === "futuro") return false;
-  if (cita.doctorId === quienEscribe) return true;
+  // ws1-t11 — una «Sin doctor» no es «de otro doctor»: la puede escribir quien la atiende.
+  if (cita.doctorId === quienEscribe || cita.doctorId === null) return true;
   return CITA_TERMINADA.includes(cita.status) || cita.momento === "pasado";
 }
 

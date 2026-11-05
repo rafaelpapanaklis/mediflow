@@ -2103,7 +2103,8 @@ model Appointment {
   id        String   @id @default(cuid())
   clinicId  String
   patientId String
-  doctorId  String
+  // null = «Sin doctor» (ws1-t11): se asigna al llegar o al iniciar la consulta. sql/cita-sin-doctor.sql
+  doctorId  String?
   type      String
   startsAt  DateTime @db.Timestamptz(6)
   endsAt    DateTime @db.Timestamptz(6)
@@ -2163,7 +2164,7 @@ model Appointment {
 
   clinic               Clinic                         @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   patient              Patient                        @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  doctor               User                           @relation(fields: [doctorId], references: [id])
+  doctor               User?                          @relation(fields: [doctorId], references: [id], onDelete: Restrict)
   resource             Resource?                      @relation(fields: [resourceId], references: [id], onDelete: SetNull)
   overriddenByUser     User?                          @relation("ApptOverriddenBy", fields: [overriddenBy], references: [id], onDelete: SetNull)
   invoice              Invoice?

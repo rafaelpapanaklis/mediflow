@@ -31,7 +31,9 @@ test("en dental la cita nueva es presencial aunque la petición pida teleconsult
 
 test("el servidor decide el modo con la categoría de la SESIÓN, y la sala nueva se niega en dental", () => {
   const citas = leer("src/app/api/appointments/route.ts");
-  assert.match(citas, /mode: modoDeLaCita\(session\.clinic\.category, body\.isTeleconsult\)/);
+  // ws1-t11: el modo se decide una vez (también para rechazar una teleconsulta «Sin doctor») y se guarda tal cual.
+  assert.match(citas, /const modo = modoDeLaCita\(session\.clinic\.category, body\.isTeleconsult\);/);
+  assert.match(citas, /mode: modo,/);
   const sala = leer("src/app/api/teleconsulta/room/route.ts");
   assert.match(sala, /negarApiPorCategoria\("\/dashboard\/teleconsulta", ctx\.clinicCategory\)/);
 });

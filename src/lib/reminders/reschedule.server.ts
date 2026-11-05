@@ -168,7 +168,9 @@ export async function applyReminderReschedule(
   // esto. El mensaje viaja congelado en la fila, así que rendearlo aquí es lo
   // que hace que el paciente reciba la hora correcta.
   const { fecha, hora } = formatApptDateParts(args.newStartsAt, clinic.timezone);
-  const doctorName = `Dr/a. ${appt.doctor.firstName} ${appt.doctor.lastName}`.trim();
+  // ws1-t11 · P1: una cita «Sin doctor» no puede tumbar la transacción que la mueve. El texto sin doctor
+  // (quitar la línea de {doctor}) es de P3; con "" la plantilla de hoy deja la línea vacía.
+  const doctorName = appt.doctor ? `Dr/a. ${appt.doctor.firstName} ${appt.doctor.lastName}`.trim() : "";
   const confirmUrl = getConfirmUrl(token);
   const message = renderReminderTemplate(settings.template, {
     paciente: appt.patient.firstName,

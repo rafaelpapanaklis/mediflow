@@ -13,13 +13,14 @@ import { sinApartadoVencido } from "./apartado";
 import { MARCA_SOBREAGENDADA } from "./agenda-flexible";
 import { canSeePatient, type VisibilityViewer } from "@/lib/patient-visibility";
 import type { AppointmentStatus } from "./types";
+import { ramaDelDoctor } from "./sin-doctor";
 
 export interface ChoqueDeCita {
   id: string;
   patientName: string;
   startsAt: string;
   endsAt: string;
-  doctorId: string;
+  doctorId: string | null;
   resourceId: string | null;
   status: AppointmentStatus;
   /** Cuántas citas MÁS pisan el hueco además de ésta (el aviso lo dice). */
@@ -34,7 +35,8 @@ export interface ChoqueDeCita {
  */
 export async function buscarChoqueDeCita(args: {
   clinicId: string;
-  doctorId: string;
+  /** `null` = cita «Sin doctor» (ws1-t11): no ocupa a ningún doctor, choca solo por su sillón. */
+  doctorId: string | null;
   resourceId: string | null;
   startsAt: Date;
   endsAt: Date;
@@ -55,13 +57,17 @@ export async function buscarChoqueDeCita(args: {
 }): Promise<ChoqueDeCita | null> {
   // Corta ANTES de consultar: un clinicId vacío no filtra nada en Prisma.
   if (!args.clinicId) return null;
+  // ws1-t11 — sin doctor no hay rama «mismo doctor» (`{doctorId: null}` es IS NULL y empataría a todas
+  // las «Sin doctor» entre sí). Sin ninguna rama no hay con qué chocar: `OR: []` no da filas, pero ni se pregunta.
+  const ramas = [
+    ...(args.porDoctor === false ? [] : ramaDelDoctor(args.doctorId)),
+    ...(args.resourceId ? [{ resourceId: args.resourceId }] : []),
+  ];
+  if (ramas.length === 0) return null;
   const candidatas = await prisma.appointment.findMany({
     where: {
       clinicId: args.clinicId,
-      OR: [
-        ...(args.porDoctor === false ? [] : [{ doctorId: args.doctorId }]),
-        ...(args.resourceId ? [{ resourceId: args.resourceId }] : []),
-      ],
+      OR: ramas,
       status: { notIn: ["CANCELLED", "NO_SHOW"] },
       startsAt: { lt: args.endsAt },
       endsAt: { gt: args.startsAt },

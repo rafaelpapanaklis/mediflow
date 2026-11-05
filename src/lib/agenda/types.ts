@@ -254,11 +254,17 @@ export interface AgendaDayResponse {
    * hay ninguna, apagada.
    */
   agendaFlexible?: AgendaFlexibleDTO;
+  /**
+   * ws1-t11 — ¿se pueden guardar citas «Sin doctor»? (`sql/cita-sin-doctor.sql`
+   * pegado). `false` = «Nueva cita» no ofrece la opción. Ausente = no se sabe (no ofrecerla).
+   */
+  sinDoctorDisponible?: boolean;
 }
 
 export interface CreateAppointmentInput {
   patientId: string;
-  doctorId: string;
+  /** `null` = «Sin doctor» (ws1-t11): se asigna al llegar o al iniciar la consulta. Ausente = 400. */
+  doctorId: string | null;
   resourceId?: string | null;
   startsAt: string;
   endsAt: string;
@@ -295,7 +301,8 @@ export interface CreateAppointmentInput {
 }
 
 export interface UpdateAppointmentInput {
-  doctorId?: string;
+  /** Ausente = no cambia; `null` = quitarle el doctor («Sin doctor», ws1-t11). */
+  doctorId?: string | null;
   resourceId?: string | null;
   startsAt?: string;
   endsAt?: string;
@@ -322,7 +329,7 @@ export interface AppointmentConflictError {
     patientName: string;
     startsAt: string;
     endsAt: string;
-    doctorId: string;
+    doctorId: string | null;
     resourceId: string | null;
     status: AppointmentStatus;
   };
@@ -343,6 +350,13 @@ export interface BatchValidateResult {
 export interface StatusChangeInput {
   status: AppointmentStatus;
   reason?: string;
+  /**
+   * ws1-t11 — «¿Quién lo atiende?» de una cita «Sin doctor» al marcar la
+   * llegada (opcional) o al iniciar la consulta (obligatorio si quien la
+   * inicia no es DOCTOR). Con la cita ya asignada se ignora: reasignar es
+   * «Editar cita». Ver `doctorAlCambiarEstado` (src/lib/agenda/sin-doctor.ts).
+   */
+  doctorId?: string | null;
   /**
    * H15 (ws1-t4): al CANCELLED de una cita cuya factura tiene dinero pagado,
    * qué hacer con él. Solo cuenta con permiso de cobro; sin él (o sin este

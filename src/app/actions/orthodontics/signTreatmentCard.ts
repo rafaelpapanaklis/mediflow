@@ -23,6 +23,7 @@ import { canSignSoap } from "./_predicates";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
 import { fail, isFailure, ok, type ActionResult } from "./result";
 import { citaAlFirmar, datosDeCierreDeCita, planDeCierreDeCita } from "@/lib/orthodontics/cerrar-cita-al-firmar";
+import { asignarSiSinDoctor } from "@/lib/agenda/sin-doctor.server";
 import { TIPO_CITA_CONTROL_ORTO } from "@/lib/orthodontics/agenda-constants";
 import { cargarModoDeCobro } from "@/lib/orthodontics/billing-mode-db";
 import { normalizarOrthoBillingMode } from "@/lib/orthodontics/billing-mode";
@@ -540,6 +541,8 @@ export async function signTreatmentCard(
         const cierre = datosDeCierreDeCita(plan, now);
         if (cierre) {
           await prisma.appointment.update({ where: { id: citaDeControl.id }, data: cierre });
+          // ws1-t11 (D9): una «Sin doctor» queda a nombre de quien firmó la hoja (la atendió).
+          await asignarSiSinDoctor(prisma, { clinicId: ctx.clinicId, appointmentId: citaDeControl.id, doctorId: ctx.userId });
           // Cerrar la cita al firmar pide la reseña igual que «Terminar consulta»
           // (ws1-t4, 11.2). Idempotente y nunca lanza.
           await sendReviewInvitation(citaDeControl.id);

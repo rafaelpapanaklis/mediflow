@@ -71,7 +71,8 @@ export async function cargarRecursos(clinicId: string): Promise<RecursoDeClinica
 }
 
 export interface Ocupada {
-  doctorId: string;
+  /** `null` = cita «Sin doctor» (ws1-t11): solo ocupa su sillón. */
+  doctorId: string | null;
   resourceId: string | null;
   patientId: string;
   startsAt: Date;
@@ -95,7 +96,7 @@ export async function cargarOcupadas(
   if (typeof clinicId !== "string" || !clinicId) throw new Error("cargarOcupadas: falta clinicId");
   if (doctorIds.length === 0 && resourceIds.length === 0) return [];
   const filas: Array<{
-    doctorId: string; resourceId: string | null; patientId: string; startsAt: Date; endsAt: Date; status: string; holdExpiresAt: Date | null;
+    doctorId: string | null; resourceId: string | null; patientId: string; startsAt: Date; endsAt: Date; status: string; holdExpiresAt: Date | null;
   }> = await prisma.appointment.findMany({
     where: { clinicId, startsAt: { lt: hasta }, endsAt: { gt: desde } },
     select: { doctorId: true, resourceId: true, patientId: true, startsAt: true, endsAt: true, status: true, holdExpiresAt: true },
@@ -105,7 +106,7 @@ export async function cargarOcupadas(
   const recursos = new Set(resourceIds);
   return filas
     .filter((a) => a.status !== "CANCELLED" && a.status !== "NO_SHOW" && !(a.status === "SCHEDULED" && a.holdExpiresAt && a.holdExpiresAt < ahora))
-    .filter((a) => doctores.has(a.doctorId) || (a.resourceId !== null && recursos.has(a.resourceId)))
+    .filter((a) => (a.doctorId !== null && doctores.has(a.doctorId)) || (a.resourceId !== null && recursos.has(a.resourceId)))
     .map((a) => ({ doctorId: a.doctorId, resourceId: a.resourceId, patientId: a.patientId, startsAt: a.startsAt, endsAt: a.endsAt }));
 }
 

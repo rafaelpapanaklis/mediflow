@@ -1870,7 +1870,8 @@ async function marcarSolapes(
     if ((r.data.startsAt as Date) < desde) desde = r.data.startsAt;
     if ((r.data.endsAt as Date) > hasta) hasta = r.data.endsAt;
   }
-  const enAgenda: Array<{ doctorId: string; patientId: string; startsAt: Date; endsAt: Date; status: string; holdExpiresAt: Date | null }> =
+  // ws1-t11: el tipo admite «Sin doctor»; aquí no llegan (se piden por `doctorId in`).
+  const enAgenda: Array<{ doctorId: string | null; patientId: string; startsAt: Date; endsAt: Date; status: string; holdExpiresAt: Date | null }> =
     await prisma.appointment.findMany({
       where: { clinicId, doctorId: { in: doctores }, startsAt: { lt: hasta }, endsAt: { gt: desde } },
       select: { doctorId: true, patientId: true, startsAt: true, endsAt: true, status: true, holdExpiresAt: true },

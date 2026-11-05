@@ -20,6 +20,8 @@
  *    poder agendar en cualquier clínica con sillones.
  */
 
+import { cambiaDeDoctor } from "./sin-doctor";
+
 /**
  * Cuánto antes de ahora puede empezar una cita sin contar como «en el pasado»:
  * un hueco de la clínica más 15 minutos.
@@ -150,8 +152,8 @@ export function newAppointmentRuleViolation(input: {
  * debe quedar sin poder corregir sus notas.
  */
 export function rescheduleRuleViolation(input: {
-  current: { status: string; startsAt: Date; doctorId: string; reason: string | null };
-  next: { startsAt: Date; doctorId: string };
+  current: { status: string; startsAt: Date; doctorId: string | null; reason: string | null };
+  next: { startsAt: Date; doctorId: string | null };
   reason: unknown;
   patientStatus: string | null | undefined;
   /** `defaultSlotMinutes` de la clínica: fija la tolerancia de «en el pasado». */
@@ -160,7 +162,8 @@ export function rescheduleRuleViolation(input: {
 }): BookingRuleViolation | null {
   const { current, next } = input;
   const startMoved = !sameMinute(current.startsAt, next.startsAt);
-  const moved = startMoved || current.doctorId !== next.doctorId;
+  // ws1-t11 — ponerle doctor a una «Sin doctor» (también ya atendida) no es moverla; cambiárselo o quitárselo, sí.
+  const moved = startMoved || cambiaDeDoctor(current.doctorId, next.doctorId);
 
   const status = current.status as (typeof NOT_MOVABLE_STATUSES)[number];
   if (moved && NOT_MOVABLE_STATUSES.includes(status)) {

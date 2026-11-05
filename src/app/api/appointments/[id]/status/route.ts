@@ -8,7 +8,7 @@ import {
   timelineFieldFor,
 } from "@/lib/agenda/transitions";
 import { revalidateAfter, revalidatePatientProfile } from "@/lib/cache/revalidate";
-import { assertPatientVisible } from "@/lib/patient-visibility";
+import { assertPatientVisible, ensureUserCanSeePatient } from "@/lib/patient-visibility";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { hasPermission } from "@/lib/auth/permissions";
 import { cancelPendingRemindersForAppointment } from "@/lib/reminders/reschedule.server";
@@ -32,6 +32,9 @@ import { cerrarFilaDeLaCita } from "@/lib/walk-in/cerrar-fila-de-la-cita";
 import { MARCA_SOBREAGENDADA, confirmacionValida, esSobreagendada } from "@/lib/agenda/agenda-flexible";
 import { leerAgendaFlexibleConFallo } from "@/lib/agenda/agenda-flexible.server";
 import { buscarChoqueDeCita, type ChoqueDeCita } from "@/lib/agenda/sobreagendar.server";
+import { doctorAlCambiarEstado } from "@/lib/agenda/sin-doctor";
+import { RECIBE_CITAS_WHERE } from "@/lib/agenda/roles-que-atienden";
+import { cuerpoDoctorNoRecibeCitasDe } from "@/lib/agenda/roles-que-atienden-db";
 
 /** WS1-T5 — ¿se está REABRIENDO la cita (de cancelada/no asistió a viva)? */
 function esReapertura(antes: string, despues: string): boolean {
@@ -76,11 +79,29 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
     if (denied) return denied;
   }
 
-  if (
-    session.user.role === "DOCTOR" &&
-    existing.doctorId !== session.user.id
-  ) {
-    return NextResponse.json({ error: "not_your_appointment" }, { status: 403 });
+  // Un DOCTOR solo cambia SUS citas. ws1-t11 (D3/D9) — una «Sin doctor» la puede tomar (llegada, sillón,
+  // iniciar, terminar; al iniciar o terminar se la queda), y nadie la inicia sin decir quién atiende.
+  const decisionDoctor = doctorAlCambiarEstado({
+    role: session.user.role,
+    userId: session.user.id,
+    citaDoctorId: existing.doctorId,
+    destino: body.status,
+    pedido: body.doctorId,
+  });
+  // El 403 (no es suya) va aquí, donde iba el de siempre; el 409 «elige quién atiende», tras la matriz de
+  // estados (a quien su rol no deja iniciar no se le pide elegir doctor).
+  if (decisionDoctor.rechazo?.status === 403) {
+    return NextResponse.json({ error: decisionDoctor.rechazo.error }, { status: 403 });
+  }
+  const doctorAsignado = decisionDoctor.asignar;
+  // El elegido tiene que poder recibir citas (como en «Editar cita»). El DOCTOR que se la queda es quien está en
+  // sesión: aunque no «aparezca en la agenda», está atendiendo a este paciente.
+  if (doctorAsignado && !(session.user.role === "DOCTOR" && doctorAsignado === session.user.id)) {
+    const d = await prisma.user.findFirst({
+      where: { id: doctorAsignado, clinicId: session.clinic.id, ...RECIBE_CITAS_WHERE },
+      select: { id: true },
+    });
+    if (!d) return NextResponse.json(await cuerpoDoctorNoRecibeCitasDe(session.clinic.id, doctorAsignado), { status: 404 });
   }
 
   // Permiso granular ADEMÁS de la matriz de canTransition (P1-3): cancelar
@@ -122,6 +143,10 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
       { error: "invalid_transition", reason: check.error },
       { status: 409 },
     );
+  }
+  if (decisionDoctor.rechazo) {
+    const { status, error, reason } = decisionDoctor.rechazo;
+    return NextResponse.json(reason ? { error, reason } : { error }, { status });
   }
 
   // WS1-T3 (revisión t8 de la v4, N1) — reactivar una cita CANCELADA cuyo
@@ -233,7 +258,8 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
   const zonaClinica = session.clinic.timezone || "America/Mexico_City";
   const adelanto = await prepararAdelantoAHoy({
     clinicId: session.clinic.id,
-    cita: existing,
+    // Con el doctor que va a tener: el que se le asigna ahora mira SU agenda.
+    cita: { ...existing, doctorId: doctorAsignado ?? existing.doctorId },
     destino: body.status,
     ahora: now,
     zona: zonaClinica,
@@ -275,6 +301,8 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
         ...sideEffects,
         ...cancelFields,
         ...(adelanto?.datos ?? {}),
+        // ws1-t11 — la «Sin doctor» queda asignada en el mismo cambio (reclamada con su estado de arriba).
+        ...(doctorAsignado ? { doctorId: doctorAsignado } : {}),
         // WS1-T5 (revisión t8, A3 y N-A1) — ver arriba: al reabrir, la marca
         // se quita (hueco libre) o se pone (confirmado encima de otra).
         ...(marcaAlReabrir === "quitar" ? { overrideReason: null, overriddenBy: null, overriddenAt: null } : {}),
@@ -288,6 +316,10 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
       },
     });
     if (reclamo.count !== 1) return null;
+    // Igual que al agendar: si el paciente está restringido, el doctor que lo atiende entra a la lista.
+    if (doctorAsignado && existing.patientId) {
+      await ensureUserCanSeePatient(tx, existing.patientId, doctorAsignado, session.clinic.id);
+    }
     if (reactivaConGoogle) {
       const g = await import("@/lib/google/convertir.server");
       if (await g.otraCitaConElEvento(tx, eventoDeCita, { candado: true })) throw new g.EventoYaEsOtraCita();
@@ -336,6 +368,13 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
         { status: 409 },
       );
     }
+    // ws1-t11 — el doctor elegido ya tiene otra cita a esa hora (la constraint de siempre).
+    if (doctorAsignado && isAppointmentOverlapError(err)) {
+      return NextResponse.json(
+        { error: "appointment_overlap", reason: "Ese doctor ya tiene otra cita a esta hora. Elige a otro doctor o mueve la otra cita." },
+        { status: 409 },
+      );
+    }
     if (adelanto && isAppointmentOverlapError(err)) {
       return NextResponse.json(
         { error: "invalid_transition", reason: "Otra cita acaba de ocupar esta hora con el mismo doctor o sillón. Intenta de nuevo." },
@@ -366,7 +405,8 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
   // (borra el evento y limpia su id) y reactivarla la vuelve a poner. Los demás
   // cambios de estado no mueven nada allí. No lanza y no alarga la respuesta.
   // El adelanto a hoy mueve el evento.
-  if (adelanto || closesAppointment !== (existing.status === "CANCELLED" || existing.status === "NO_SHOW")) {
+  // ws1-t11: asignarle doctor cambia la descripción del evento («Doctor/a: …»).
+  if (adelanto || doctorAsignado || closesAppointment !== (existing.status === "CANCELLED" || existing.status === "NO_SHOW")) {
     await sincronizarCitaEnSegundoPlano(session.clinic.id, params.id);
   }
 
@@ -405,9 +445,11 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
         body.status === "CANCELLED"
           ? textoCita.cancelada(existing.startsAt, zona)
           : textoCita.estado(adelanto ? adelanto.despues.startsAt : existing.startsAt, existing.status, body.status, zona),
-      campos: ["status"],
+      campos: doctorAsignado ? ["status", "doctorId"] : ["status"],
       cambios: {
         status: { before: existing.status, after: body.status },
+        // ws1-t11 — quién la atiende, si se decidió en este cambio.
+        ...(doctorAsignado ? { doctorId: { before: existing.doctorId, after: doctorAsignado } } : {}),
         // WS1-T5 — EL RASTRO de reabrirla sobreagendada: encima de qué cita
         // (quién, lo dice la fila). Si ya llevaba la marca, quién la puso antes.
         ...(marcaAlReabrir === "poner" && choqueAlReabrir

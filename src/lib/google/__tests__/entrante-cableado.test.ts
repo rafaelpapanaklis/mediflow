@@ -143,7 +143,8 @@ test("la ruta de alta: el bloqueo convertido no cuenta, la cita nace con el even
   const r = leer("src/app/api/appointments/route.ts");
   assert.match(r, /prepararConversionGoogle\(\s*session\.clinic\.id,\s*body\.googleBloqueoId,/);
   // G5: la hora y el doctor los decide el bloqueo en el servidor.
-  assert.match(r, /\{ startsAt, endsAt, doctorId: body\.doctorId \}/);
+  // ws1-t11: el doctor del alta ya es `doctorId` (null = «Sin doctor»), el del cuerpo validado.
+  assert.match(r, /\{ startsAt, endsAt, doctorId \}/);
   assert.match(r, /google_block_changed/);
   assert.match(r, /bloqueosDelHueco\.filter\(\(b\) => b\.id !== conversionGoogle\.bloqueoId\)/);
   const tx = r.slice(r.indexOf("prisma.$transaction(async (tx)"), r.indexOf("ensureUserCanSeePatient(tx"));
@@ -413,6 +414,7 @@ test("una pasada que pierde la carrera con «Convertir en cita» no reactiva el 
 test("DOCTOR: no convierte el bloqueo de otro doctor ni toca el aviso de una cita ajena", () => {
   assert.match(leer("src/lib/google/convertir.server.ts"), /quien\?\.role === "DOCTOR" && bloque\.doctorId !== null && bloque\.doctorId !== quien\.userId/);
   const r = leer("src/app/api/google/agenda/cita/[id]/route.ts");
-  assert.match(r, /session\.user\.role === "DOCTOR" && cita\.doctorId !== session\.user\.id/);
+  // ws1-t11 (D3): las suyas y las «Sin doctor»; las de otro doctor, no.
+  assert.match(r, /!doctorPuedeVer\(session\.user\.role, session\.user\.id, cita\.doctorId\)/);
   assert.match(r, /assertPatientVisible\(cita\.patientId/);
 });

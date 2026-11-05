@@ -13,6 +13,7 @@ import { TWO_FA_CHALLENGE_PATH, TWO_FA_SETUP_PATH } from "@/lib/auth/two-factor-
 import { estadoSuplantacionDe } from "@/lib/admin/suplantacion";
 import { sedeCerradaPara } from "@/lib/sede-clave/gate.server";
 import { RUTA_SEDE_CON_CLAVE } from "@/lib/sede-clave/core";
+import { dondeCitasDelDoctor } from "@/lib/agenda/citas-del-doctor";
 
 export interface AuthContext {
   userId:       string;
@@ -333,6 +334,20 @@ export function buildPatientWhere(
           OR: [
             { primaryDoctorId: ctx.userId },
             { appointments: { some: { doctorId: ctx.userId } } },
+            // ws1-t11 (D3): y el paciente con una cita «Sin doctor» de ESTA clínica que este doctor puede
+            // tomar: en la clínica ahora, o por venir. Una vieja que nadie cerró, o una ya atendida, no abre nada.
+            {
+              appointments: {
+                some: {
+                  clinicId: ctx.clinicId,
+                  doctorId: null,
+                  OR: [
+                    { status: { in: ["CHECKED_IN", "IN_CHAIR"] } },
+                    { status: { in: ["SCHEDULED", "CONFIRMED"] }, endsAt: { gte: new Date() } },
+                  ],
+                },
+              },
+            },
             { records: { some: { doctorId: ctx.userId } } },
           ],
         }
@@ -369,10 +384,15 @@ export function buildPatientWhere(
  * Build appointment WHERE clause based on role.
  */
 export function buildAppointmentWhere(ctx: AuthContext, extra: Record<string, any> = {}) {
+  if (!ctx.isDoctor) return { clinicId: ctx.clinicId, ...extra };
+  // ws1-t11 (D3) — un DOCTOR: las suyas y las «Sin doctor» de pacientes que puede ver
+  // (`dondeCitasDelDoctor`, la misma regla que la agenda). En `AND`, junto al `AND` del que llama.
+  const { AND: extraAnd, ...resto } = extra;
+  const lista: any[] = extraAnd ? (Array.isArray(extraAnd) ? extraAnd : [extraAnd]) : [];
   return {
     clinicId: ctx.clinicId,
-    ...(ctx.isDoctor && { doctorId: ctx.userId }),
-    ...extra,
+    ...resto,
+    AND: [dondeCitasDelDoctor({ userId: ctx.userId, clinicId: ctx.clinicId }), ...lista],
   };
 }
 

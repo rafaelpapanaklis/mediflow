@@ -9,5 +9,8 @@ export function esCitaQuePuedeMover(
   cita: { doctorId?: string | null },
   usuario: { id: string; role?: string | null },
 ): boolean {
-  return usuario.role !== "DOCTOR" || (!!cita.doctorId && cita.doctorId === usuario.id);
+  // ws1-t11 (D3) — una cita «Sin doctor» (`null` explícito; `undefined` = no se leyó, y no abre nada) la puede
+  // tomar un DOCTOR: iniciar la consulta se la asigna.
+  if (usuario.role !== "DOCTOR") return true;
+  return cita.doctorId === null || (!!cita.doctorId && cita.doctorId === usuario.id);
 }

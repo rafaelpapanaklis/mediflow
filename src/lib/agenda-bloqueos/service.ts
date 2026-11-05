@@ -249,7 +249,8 @@ export async function citasEnElRango(
       fecha: `${p.year}-${dosDig(p.month)}-${dosDig(p.day)}`,
       hora: `${dosDig(p.hour)}:${dosDig(p.minute)}`,
       pacienteNombre: `${a.patient?.firstName ?? ""} ${a.patient?.lastName ?? ""}`.trim() || "Paciente",
-      doctorNombre: `${a.doctor?.firstName ?? ""} ${a.doctor?.lastName ?? ""}`.trim() || "Sin responsable",
+      // ws1-t11: una cita «Sin doctor» se nombra así (antes solo podía faltar por un doctor borrado).
+      doctorNombre: `${a.doctor?.firstName ?? ""} ${a.doctor?.lastName ?? ""}`.trim() || (a.doctorId ? "Sin responsable" : "Sin doctor"),
       doctorId: a.doctorId,
     };
   });

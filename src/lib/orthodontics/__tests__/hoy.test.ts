@@ -136,7 +136,8 @@ test("la lectura decide con la sesión: clínica, módulo real, permisos y visib
   assert.match(accion, /hasPermission\(quien, "specialties\.orthodontics"\)/);
   assert.match(accion, /hasPermission\(quien, "billing\.view"\)/);
   assert.match(accion, /relatedPatientVisibilityAnd\(viewer\)/);
-  assert.match(accion, /ctx\.canViewAllData \? \{\} : \{ doctorId: ctx\.userId \}/, "el doctor vería los controles de todos");
+  // ws1-t11 (D3): los suyos y los «Sin doctor» (la visibilidad del paciente va en el AND).
+  assert.match(accion, /ctx\.canViewAllData \? \{\} : \{ OR: \[\{ doctorId: ctx\.userId \}, \{ doctorId: null \}\] \}/, "el doctor vería los controles de todos");
   assert.match(accion, /if \(!ctx\.clinicId\) return ok\(VACIO\)/);
   // Toda consulta va acotada a la clínica de la sesión.
   const consultas = accion.match(/prisma\.\w+\.find\w+\(\{[\s\S]*?\n {4,8}\}\);?/g) ?? [];

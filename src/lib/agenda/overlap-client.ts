@@ -15,7 +15,8 @@ function overlapRange(
 
 export interface OverlapCandidate {
   excludeId?: string;
-  doctorId: string;
+  /** `null` = cita «Sin doctor» (ws1-t11): solo choca por sillón. */
+  doctorId: string | null;
   resourceId: string | null;
   startsAt: string;
   endsAt: string;
@@ -43,7 +44,8 @@ export function findOverlap(
     const aEnd = a.endsAt ? new Date(a.endsAt).getTime() : aStart;
     if (!overlapRange(candStart, candEnd, aStart, aEnd)) continue;
 
-    if (a.doctor?.id === candidate.doctorId) {
+    // ws1-t11 — sin doctor no hay «mismo doctor» (`undefined === undefined` empataba con toda «Sin doctor»).
+    if (!!candidate.doctorId && a.doctor?.id === candidate.doctorId) {
       return { conflictWith: a, reason: "doctor" };
     }
     if (
@@ -74,7 +76,8 @@ export function findAllOverlaps(
     const aEnd = a.endsAt ? new Date(a.endsAt).getTime() : aStart;
     if (!overlapRange(candStart, candEnd, aStart, aEnd)) continue;
 
-    if (a.doctor?.id === candidate.doctorId) {
+    // ws1-t11 — sin doctor no hay «mismo doctor» (`undefined === undefined` empataba con toda «Sin doctor»).
+    if (!!candidate.doctorId && a.doctor?.id === candidate.doctorId) {
       out.push({ conflictWith: a, reason: "doctor" });
       continue;
     }

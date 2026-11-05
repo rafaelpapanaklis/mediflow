@@ -27,6 +27,7 @@ import { MOTIVO_APARTADO_LIBERADO, apartadoVencido } from "./apartado";
 import { ROLES_QUE_ATIENDEN } from "./roles-que-atienden";
 import { etiquetaCortaProfesional, etiquetasDeProfesionales } from "./etiqueta-profesional";
 import { ingresoNetoDelPeriodo } from "@/lib/dinero/ingresos.server";
+import { dondeCitasDelDoctor, dondeDoctoresElegidos } from "@/lib/agenda/citas-del-doctor";
 
 const APPT_INCLUDE = {
   // visibleUserIds viaja en el MISMO include para poder enmascarar en una sola
@@ -299,10 +300,12 @@ export async function fetchAppointmentsForDay(
 
   // doctorIdScope (rol DOCTOR) tiene prioridad. Si no, aceptamos
   // doctorIds (multi-select) o doctorId (single, legacy).
+  // ws1-t11 (D3) — el DOCTOR ve las suyas y las «Sin doctor» de pacientes que puede ver; el filtro de
+  // doctores acepta `FILTRO_SIN_DOCTOR`. En `AND`: no pisa ningún otro `OR`.
   if (filter.doctorIdScope) {
-    where.doctorId = filter.doctorIdScope;
+    where.AND = [dondeCitasDelDoctor({ userId: filter.doctorIdScope, clinicId: filter.clinicId })];
   } else if (filter.doctorIds?.length) {
-    where.doctorId = { in: filter.doctorIds };
+    where.AND = [dondeDoctoresElegidos(filter.doctorIds)];
   } else if (filter.doctorId) {
     where.doctorId = filter.doctorId;
   }
@@ -338,10 +341,12 @@ export async function fetchAppointmentsForRange(
     startsAt: { gte: fromUtc, lt: toUtc },
   };
 
+  // ws1-t11 (D3) — el DOCTOR ve las suyas y las «Sin doctor» de pacientes que puede ver; el filtro de
+  // doctores acepta `FILTRO_SIN_DOCTOR`. En `AND`: no pisa ningún otro `OR`.
   if (filter.doctorIdScope) {
-    where.doctorId = filter.doctorIdScope;
+    where.AND = [dondeCitasDelDoctor({ userId: filter.doctorIdScope, clinicId: filter.clinicId })];
   } else if (filter.doctorIds?.length) {
-    where.doctorId = { in: filter.doctorIds };
+    where.AND = [dondeDoctoresElegidos(filter.doctorIds)];
   } else if (filter.doctorId) {
     where.doctorId = filter.doctorId;
   }

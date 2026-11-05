@@ -74,8 +74,9 @@ export async function resumenOrtodonciaDeHoy(): Promise<ActionResult<ResumenOrto
         clinicId: ctx.clinicId,
         type: TIPO_CITA_CONTROL_ORTO,
         startsAt: { gte: startUtc, lt: endUtc },
-        // El doctor ve SUS controles, como el resto de su Hoy.
-        ...(ctx.canViewAllData ? {} : { doctorId: ctx.userId }),
+        // El doctor ve SUS controles, como el resto de su Hoy. ws1-t11 (D3): y los «Sin doctor», que puede tomar
+        // (la visibilidad del paciente va en el AND de abajo).
+        ...(ctx.canViewAllData ? {} : { OR: [{ doctorId: ctx.userId }, { doctorId: null }] }),
         AND: relatedPatientVisibilityAnd(viewer),
       },
       select: {

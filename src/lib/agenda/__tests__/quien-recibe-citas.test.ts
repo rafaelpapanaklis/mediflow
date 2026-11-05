@@ -177,7 +177,7 @@ test("POST y PATCH de citas, y POST/PATCH de lista de espera, validan con RECIBE
 });
 
 test("PATCH: reenviar el MISMO doctor no se revalida (mover la hora de una cita vieja sigue funcionando)", () => {
-  assert.match(handler("src/app/api/appointments/[id]/route.ts", "PATCH"), /if \(body\.doctorId && body\.doctorId !== existing\.doctorId\)/);
+  assert.match(handler("src/app/api/appointments/[id]/route.ts", "PATCH"), /if \(cambiaElDoctor && doctorFinal\)/);
   assert.match(
     handler("src/app/api/waitlist/[id]/route.ts", "PATCH"),
     /parsed\.data\.preferredDoctorId && parsed\.data\.preferredDoctorId !== existing\.preferredDoctorId/,

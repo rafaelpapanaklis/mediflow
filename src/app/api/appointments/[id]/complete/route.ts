@@ -16,9 +16,10 @@ import {
 import { sendReviewInvitation } from "@/lib/reviews/invite";
 import { logMutation } from "@/lib/audit";
 import { EMPTY_NOTE_ERROR, isClinicalNoteEmpty } from "@/lib/clinical/note-validation";
-import { assertPatientVisible } from "@/lib/patient-visibility";
+import { assertPatientVisible, ensureUserCanSeePatient } from "@/lib/patient-visibility";
+import { doctorAlCambiarEstado } from "@/lib/agenda/sin-doctor";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
-import { canTransition } from "@/lib/agenda/transitions";
+import { canTransition, isAppointmentOverlapError } from "@/lib/agenda/transitions";
 import { inicioParaCompletar } from "@/lib/clinical/inicio-para-completar";
 import { textoCita } from "@/lib/movimientos-paciente/textos";
 import { zonaDeClinica } from "@/lib/movimientos-paciente/zona";
@@ -77,11 +78,16 @@ export async function PATCH(req: NextRequest, props: Params) {
     const denied = await assertPatientVisible(existing.patientId, { userId: session.user.id, role: session.user.role, clinicId: session.clinic.id });
     if (denied) return denied;
   }
-  if (
-    session.user.role === "DOCTOR" &&
-    existing.doctorId !== session.user.id
-  ) {
-    return NextResponse.json({ error: "not_your_appointment" }, { status: 403 });
+  // Un DOCTOR solo cierra SUS citas. ws1-t11 (D3) — una «Sin doctor» que cierra un DOCTOR pasa a ser suya.
+  const decisionDoctor = doctorAlCambiarEstado({
+    role: session.user.role,
+    userId: session.user.id,
+    citaDoctorId: existing.doctorId,
+    destino: "COMPLETED",
+    pedido: undefined,
+  });
+  if (decisionDoctor.rechazo) {
+    return NextResponse.json({ error: decisionDoctor.rechazo.error }, { status: decisionDoctor.rechazo.status });
   }
 
   // Permiso granular ADEMÁS del rol (P1-3). Tras el assert de visibilidad
@@ -139,7 +145,7 @@ export async function PATCH(req: NextRequest, props: Params) {
           clinicId: session.clinic.id,
           patientId: existing.patientId,
         },
-        select: { id: true, specialtyData: true, subjective: true, objective: true, assessment: true, plan: true },
+        select: { id: true, doctorId: true, specialtyData: true, subjective: true, objective: true, assessment: true, plan: true },
       })
     : await prisma.medicalRecord.findFirst({
         where: {
@@ -150,7 +156,7 @@ export async function PATCH(req: NextRequest, props: Params) {
             equals: params.id,
           },
         },
-        select: { id: true, specialtyData: true, subjective: true, objective: true, assessment: true, plan: true },
+        select: { id: true, doctorId: true, specialtyData: true, subjective: true, objective: true, assessment: true, plan: true },
         orderBy: { createdAt: "desc" },
       });
 
@@ -164,18 +170,29 @@ export async function PATCH(req: NextRequest, props: Params) {
     return NextResponse.json({ error: EMPTY_NOTE_ERROR }, { status: 422 });
   }
 
+  // ws1-t11 — una «Sin doctor» que se cierra con su nota de consulta es de quien escribió la nota (si no la
+  // cierra un DOCTOR, que ya se la quedó). Sin nota, se cierra «Sin doctor» (D9 del plan).
+  const doctorAsignado: string | null =
+    existing.doctorId === null ? decisionDoctor.asignar ?? note?.doctorId ?? null : null;
+
   const completedAt = new Date();
   const signedAtIso = new Date().toISOString();
   const prevSpec = (note?.specialtyData ?? {}) as Record<string, unknown>;
 
-  const updated = await prisma.$transaction(async (tx) => {
+  let updated;
+  try {
+  updated = await prisma.$transaction(async (tx) => {
     // WS1-T3 v7 (revisión t8 de la v6) — con el estado que se leyó arriba: si
     // la cita se canceló (o cambió) en este instante, no se cierra ni se firma.
     const r = await tx.appointment.updateMany({
       where: { id: params.id, clinicId: session.clinic.id, status: existing.status },
-      data: { status: "COMPLETED", completedAt },
+      data: { status: "COMPLETED", completedAt, ...(doctorAsignado ? { doctorId: doctorAsignado } : {}) },
     });
     if (r.count !== 1) return null;
+    // ws1-t11 — quien queda como doctor de la cita tiene que poder ver al paciente (como al agendar).
+    if (doctorAsignado && existing.patientId) {
+      await ensureUserCanSeePatient(tx, existing.patientId, doctorAsignado, session.clinic.id);
+    }
     const appt = await tx.appointment.findFirst({
       where: { id: params.id, clinicId: session.clinic.id },
       include: {
@@ -199,6 +216,16 @@ export async function PATCH(req: NextRequest, props: Params) {
     }
     return appt;
   });
+  } catch (err) {
+    // ws1-t11 — quien la atendió ya tiene otra cita viva a esa hora (la constraint de siempre).
+    if (doctorAsignado && isAppointmentOverlapError(err)) {
+      return NextResponse.json(
+        { error: "appointment_overlap", reason: "Quien atendió esta cita ya tiene otra a la misma hora. Asígnale el doctor desde «Editar cita» y vuelve a cerrarla." },
+        { status: 409 },
+      );
+    }
+    throw err;
+  }
   if (!updated) {
     return NextResponse.json(
       { error: "invalid_transition", reason: "La cita cambió de estado mientras tanto. Recarga e intenta de nuevo." },
@@ -221,8 +248,8 @@ export async function PATCH(req: NextRequest, props: Params) {
     action: "update",
     patientId: existing.patientId,
     texto: textoCita.completada(existing.startsAt, await zonaDeClinica(session.clinic.id)),
-    before: { status: existing.status },
-    after: { status: "COMPLETED", completedAt: completedAt.toISOString() },
+    before: { status: existing.status, ...(doctorAsignado ? { doctorId: null } : {}) },
+    after: { status: "COMPLETED", completedAt: completedAt.toISOString(), ...(doctorAsignado ? { doctorId: doctorAsignado } : {}) },
   });
   if (willSign && note) {
     await logMutation({

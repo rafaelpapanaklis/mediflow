@@ -513,8 +513,9 @@ export async function POST(req: NextRequest) {
       doctorIds.forEach((d) => doctorBusy.set(d, new Set()));
       resources.forEach((r) => resourceBusy.set(r.id, new Set()));
 
-      const markBusy = (doctorId: string, resourceId: string | null, startMs: number, endMs: number): void => {
-        const dBusy = doctorBusy.get(doctorId);
+      const markBusy = (doctorId: string | null, resourceId: string | null, startMs: number, endMs: number): void => {
+        // ws1-t11: una cita «Sin doctor» solo ocupa su sillón.
+        const dBusy = doctorId ? doctorBusy.get(doctorId) : null;
         const rBusy = resourceId ? resourceBusy.get(resourceId) : null;
         for (let t = startMs; t < endMs; t += STEP) {
           if (dBusy) dBusy.add(t);
@@ -645,7 +646,10 @@ export async function POST(req: NextRequest) {
     select: { id: true, patientId: true, doctorId: true, type: true, status: true, startsAt: true, endsAt: true, price: true },
     orderBy: { startsAt: "desc" },
   });
-  const completedAppts = demoAppts.filter((a) => a.status === "COMPLETED" || a.status === "CHECKED_OUT");
+  // Solo las que tienen doctor: la nota clínica lo exige (ws1-t11: puede haber «Sin doctor»).
+  const completedAppts = demoAppts.filter(
+    (a): a is typeof a & { doctorId: string } => (a.status === "COMPLETED" || a.status === "CHECKED_OUT") && !!a.doctorId,
+  );
 
   // ════════════════════════════════════════════════════════════════════
   // STAGE 3: SOAP notes (idempotente)

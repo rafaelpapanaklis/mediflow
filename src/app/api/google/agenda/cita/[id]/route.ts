@@ -7,6 +7,7 @@ import { sincronizarCitaEnSegundoPlano } from "@/lib/agenda/google-sync";
 import { logAudit } from "@/lib/audit";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import type { ClinicSession } from "@/lib/agenda/api-helpers";
+import { doctorPuedeVer } from "@/lib/agenda/sin-doctor";
 
 /**
  * La cita, si quien pide puede tocarla: de su clínica, con el paciente visible
@@ -24,7 +25,8 @@ async function citaAccesible(session: ClinicSession, id: string): Promise<{ id: 
     clinicId: session.clinic.id,
   });
   if (vis) return vis;
-  if (session.user.role === "DOCTOR" && cita.doctorId !== session.user.id) {
+  // ws1-t11 (D3): un DOCTOR, las suyas y las «Sin doctor» (como en la agenda).
+  if (!doctorPuedeVer(session.user.role, session.user.id, cita.doctorId)) {
     return NextResponse.json({ error: "not_your_appointment" }, { status: 403 });
   }
   return { id: cita.id, patientId: cita.patientId };

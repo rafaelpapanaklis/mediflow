@@ -12,6 +12,7 @@
 import { prisma } from "@/lib/prisma";
 import type { ScheduleViolation } from "@/lib/agenda/clinic-hours";
 import { formatTimeInTz } from "@/lib/agenda/date-ranges";
+import { deOtroDoctorOSinDoctor } from "@/lib/agenda/sin-doctor";
 
 export interface CitaQueEmpalma {
   startsAt: Date;
@@ -50,7 +51,8 @@ export function juntarAvisos(
 export async function buscarPacienteEmpalmado(args: {
   clinicId: string;
   patientId: string | null | undefined;
-  doctorId: string;
+  /** `null` = la cita es «Sin doctor» (ws1-t11): la constraint no la frena con nadie, se mira cualquier otra. */
+  doctorId: string | null;
   startsAt: Date;
   endsAt: Date;
   /** La propia cita, al moverla. */
@@ -64,7 +66,8 @@ export async function buscarPacienteEmpalmado(args: {
       where: {
         clinicId: args.clinicId,
         patientId: args.patientId,
-        doctorId: { not: args.doctorId },
+        // `{not: X}` en SQL deja fuera las «Sin doctor» (NULL <> X no es verdad): se piden con OR.
+        ...(deOtroDoctorOSinDoctor(args.doctorId) ?? {}),
         ...(args.excluirId ? { id: { not: args.excluirId } } : {}),
         status: { notIn: ["CANCELLED", "NO_SHOW"] },
         startsAt: { lt: args.endsAt },
