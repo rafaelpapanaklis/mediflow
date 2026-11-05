@@ -48,7 +48,8 @@ import {
   planReschedule,
 } from "@/lib/agenda/reschedule-flow";
 import { bloqueoQueTapa } from "@/lib/agenda-bloqueos/core";
-import { FILTRO_SIN_DOCTOR, TEXTO_DOCTOR_EN_CONSULTA, esEstadoQueExigeDoctor } from "@/lib/agenda/sin-doctor";
+import { FILTRO_SIN_DOCTOR } from "@/lib/agenda/sin-doctor";
+import { avisoAlQuitarDoctor } from "@/components/dashboard/agenda/aviso-quitar-doctor";
 import {
   columnasPorDoctor,
   occupancyOf,
@@ -484,10 +485,12 @@ function AgendaShell({
         return;
       }
 
-      // ws1-t11 — una cita en consulta no se queda «Sin doctor» (el servidor lo rechaza igual).
+      // ws1-t11 — soltar en «Sin doctor» una cita que no puede quedarse sin doctor: se dice aquí, sin mover
+      // nada. En consulta, teleconsulta (v2, m4) o la propia cita de un DOCTOR (v2, M2: eso es de recepción).
       const doctorAntes = original.doctor?.id ?? null;
-      if (planned.newDoctorId === null && doctorAntes !== null && esEstadoQueExigeDoctor(original.status)) {
-        toast.error(TEXTO_DOCTOR_EN_CONSULTA);
+      const avisoSinDoctor = avisoAlQuitarDoctor(original, planned.newDoctorId, userRole);
+      if (avisoSinDoctor) {
+        toast.error(t(avisoSinDoctor));
         return;
       }
 
@@ -531,6 +534,7 @@ function AgendaShell({
       permissions.canEdit,
       openNewAppointment,
       router,
+      userRole,
       t,
     ],
   );

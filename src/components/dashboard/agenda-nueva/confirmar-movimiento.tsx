@@ -32,7 +32,6 @@ import { diaEnTz } from "@/lib/agenda-nueva/geometria";
 import { rangoDePlan } from "@/lib/agenda-nueva/interacciones";
 import { CLASES_PORTAL_AGENDA } from "./ropa";
 import { textoDelAviso, type AvisoSobreagenda } from "@/lib/agenda/agenda-flexible";
-import { NOMBRE_SIN_DOCTOR } from "@/lib/agenda-nueva/vista-modelo";
 import s from "./agenda-nueva.module.css";
 
 /** Lo mínimo del bloqueo para avisar. Subconjunto del `BloqueoDTO`. */
@@ -104,7 +103,7 @@ export function ConfirmarMovimiento({
 
   const nombreDoctor = (id: string | null | undefined): string | null => {
     // ws1-t11 — «Sin doctor → Dra. X» / «Dra. X → Sin doctor» (antes «Doctor: Doctor» o nada).
-    if (!id) return NOMBRE_SIN_DOCTOR;
+    if (!id) return t("agenda.sinDoctor.nombre");
     const d = state.doctors.find((x) => x.id === id);
     return d?.displayName ?? d?.shortName ?? (original.doctor?.id === id ? original.doctor.shortName : null);
   };

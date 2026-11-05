@@ -3,11 +3,12 @@
  *
  * Run: node_modules/.bin/tsx --test src/lib/invoices/__tests__/doctor-de-factura-sin-doctor.test.ts
  *
- * Con cita ligada, `doctorDeFacturaNueva` solo miraba `cita.doctorId`: con una cita «Sin doctor»
- * la factura nacía sin doctor aunque la nota, las citas de hoy, el plan o el doctor de cabecera
- * dijeran quién atiende. Ahora sigue con esas pistas, en el mismo orden de
- * `elegirDoctorDeFactura`, y nunca cae a quien pulsa Guardar. Con el código de f4d8fe31d fallan
- * «toma la nota», «toma el plan», «toma la cabecera» y «toma la cita de hoy» (daba `ninguno`).
+ * Regla (v2, decisión M1-a de la revisión de t12): con una cita ligada «Sin doctor» —por atender o ya
+ * atendida sin consulta— la factura NO adivina con el plan, la cabecera ni las citas del día: nace sin
+ * doctor y el dinero sigue al doctor que se le ponga a la cita. Solo la nota de esa cita dice quién
+ * atendió, y su autor pasa por la validación `ATIENDE_WHERE` (m3). Con doctor en la cita, nada cambia.
+ * Nunca cae a quien pulsa Guardar. Con f4d8fe31d falla «toma la nota»; con f63681a44 (v1) fallan las
+ * de «ya atendida» (adivinaba el plan o la cabecera) y la de la nota de quien no atiende.
  *
  * El db es un doble que se inyecta (segundo argumento); `@/lib/prisma` se dobla con Module._load
  * para que nada abra una conexión real. Ids cuid, de siembra y una cita importada de Dentalink.
@@ -108,32 +109,28 @@ async function doctorDe(extra: Record<string, unknown> = {}) {
   return doctorDeFacturaNueva({ clinicId: CLINICA, patientId: PACIENTE, appointmentId: CITA_DENTALINK, timezone: TZ, now: AHORA, ...extra }, db);
 }
 
-test("cita «Sin doctor» + nota firmada → el doctor de la nota", async () => {
+test("cita «Sin doctor» + nota de esa cita → el doctor de la nota", async () => {
   assert.deepEqual(await doctorDe({ autorDeNota: DRA }), { doctorId: DRA, origen: "nota" });
 });
 
-test("cita «Sin doctor», sin nota ni otras citas hoy → el doctor del plan activo", async () => {
-  planes.push({ clinicId: CLINICA, patientId: PACIENTE, doctorId: DR_SIEMBRA, status: "ACTIVE" });
-  assert.deepEqual(await doctorDe(), { doctorId: DR_SIEMBRA, origen: "plan" });
-  // La propia cita «Sin doctor» de hoy no cuenta como «dos doctores distintos» ni corta el plan.
-  assert.ok(lecturas.includes("citasDeHoy") && lecturas.includes("planes"));
-});
-
-test("cita «Sin doctor» y otra cita de hoy con doctor → ese doctor (cita de hoy)", async () => {
-  citas.push({ id: "cmcita0000000000000000002", clinicId: CLINICA, patientId: PACIENTE, doctorId: DRA, startsAt: HOY, status: "CONFIRMED" });
-  assert.deepEqual(await doctorDe(), { doctorId: DRA, origen: "cita_de_hoy" });
-});
-
-test("cita «Sin doctor», sin plan → el doctor de cabecera", async () => {
-  cabecera = DRA;
-  assert.deepEqual(await doctorDe(), { doctorId: DRA, origen: "cabecera" });
-});
-
-test("cita «Sin doctor» sin ninguna pista → nace sin doctor (nunca quien pulsa Guardar)", async () => {
-  const r = await doctorDe();
+test("m3: la nota de quien NO atiende (recepción) no le pone la factura: pasa por ATIENDE_WHERE y nace sin doctor", async () => {
+  citas[0]!.status = "SCHEDULED"; // la «Sin doctor» por atender: en v1 esta rama devolvía la nota sin validarla
+  const r = await doctorDe({ autorDeNota: RECEPCION });
   assert.deepEqual(r, { doctorId: null, origen: "ninguno" });
-  assert.notEqual(r.doctorId, RECEPCION);
 });
+
+for (const estado of ["SCHEDULED", "CHECKED_IN", "COMPLETED", "CHECKED_OUT"]) {
+  test(`M1-a: cita «Sin doctor» ${estado} sin nota → nace sin doctor aunque haya plan, cabecera o cita de hoy`, async () => {
+    citas[0]!.status = estado;
+    planes.push({ clinicId: CLINICA, patientId: PACIENTE, doctorId: DR_SIEMBRA, status: "ACTIVE" });
+    cabecera = DRA;
+    citas.push({ id: "cmcita0000000000000000002", clinicId: CLINICA, patientId: PACIENTE, doctorId: DRA, startsAt: HOY, status: "CONFIRMED" });
+    const r = await doctorDe();
+    assert.deepEqual(r, { doctorId: null, origen: "ninguno" });
+    assert.notEqual(r.doctorId, RECEPCION);
+    assert.deepEqual(lecturas, ["cita"], "no se leen pistas: el dinero sigue al doctor que se le ponga a la cita");
+  });
+}
 
 test("con doctor en la cita, manda la cita (no se leen las demás pistas); una cita de otro paciente no deja seguir", async () => {
   citas[0]!.doctorId = DRA;
@@ -145,29 +142,13 @@ test("con doctor en la cita, manda la cita (no se leen las demás pistas); una c
   assert.deepEqual(await doctorDe(), { doctorId: null, origen: "ninguno" });
 });
 
+test("sin cita ligada, las pistas de siempre (plan); una «Sin doctor» de hoy no cuenta como doctor", async () => {
+  planes.push({ clinicId: CLINICA, patientId: PACIENTE, doctorId: DR_SIEMBRA, status: "ACTIVE" });
+  assert.deepEqual(await doctorDe({ appointmentId: null }), { doctorId: DR_SIEMBRA, origen: "plan" });
+});
+
 test("el doctor elegido a mano o «Sin asignar» a propósito siguen mandando", async () => {
   planes.push({ clinicId: CLINICA, patientId: PACIENTE, doctorId: DR_SIEMBRA, status: "ACTIVE" });
   assert.deepEqual(await doctorDe({ pedido: null }), { doctorId: null, origen: "sin_asignar" });
   assert.deepEqual(await doctorDe({ pedido: DRA }), { doctorId: DRA, origen: "elegido" });
-});
-
-// ── revisión de P2: una «Sin doctor» que todavía no se atiende no adivina doctor ───────────────────
-
-test("cita «Sin doctor» todavía por atender (anticipo, cobro previo) → nace sin doctor aunque haya plan o cabecera", async () => {
-  citas[0]!.status = "SCHEDULED";
-  planes.push({ clinicId: CLINICA, patientId: PACIENTE, doctorId: DR_SIEMBRA, status: "ACTIVE" });
-  cabecera = DRA;
-  assert.deepEqual(await doctorDe(), { doctorId: null, origen: "ninguno" });
-  assert.deepEqual(lecturas, ["cita"], "no se leen pistas: el doctor llega cuando se asigne en la cita");
-  // con nota (quien escribió la consulta), la nota sí manda
-  assert.deepEqual(await doctorDe({ autorDeNota: DRA }), { doctorId: DRA, origen: "nota" });
-});
-
-test("cita «Sin doctor» ya atendida AYER y cobrada hoy → las citas de SU día, no las de hoy", async () => {
-  const AYER = new Date("2026-11-03T16:00:00Z");
-  citas[0]!.startsAt = AYER;
-  // Hoy el paciente vino con la Dra.: esa visita no dice quién atendió la de ayer.
-  citas.push({ id: "cmcita0000000000000000003", clinicId: CLINICA, patientId: PACIENTE, doctorId: DRA, startsAt: HOY, status: "CONFIRMED" });
-  planes.push({ clinicId: CLINICA, patientId: PACIENTE, doctorId: DR_SIEMBRA, status: "ACTIVE" });
-  assert.deepEqual(await doctorDe(), { doctorId: DR_SIEMBRA, origen: "plan" });
 });

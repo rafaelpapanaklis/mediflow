@@ -159,6 +159,7 @@ export function VistaDia() {
       unidades: state.resources,
       ahora,
       colores,
+      nombreSinDoctor: t("agenda.sinDoctor.nombre"),
     };
 
     return responsablesVisibles.map((r) => {
@@ -272,6 +273,7 @@ export function VistaDia() {
     permissions.canCreate,
     permissions.canEdit,
     quienMira.userRole,
+    t,
     ahora,
     bandasPorResponsable,
     comidaPorResponsable,

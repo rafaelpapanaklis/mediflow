@@ -48,6 +48,7 @@ const DR2 = "seed-doctor-2";
 const CITA_DOCTOR = "cmabc123xyz0000def456ghi";
 const CITA_SD = "seed-appt-sd-1";
 const CITA_DENTALINK = "dentalink-appt-88231";
+const CITA_TELE = "seed-appt-tele-1";
 
 const PREFIJOS: Record<string, string> = {
   "elegir-doctor-cita.module.css": "edc-",
@@ -169,6 +170,8 @@ function payload(o: { sinDoctorDisponible?: boolean; dosDoctores?: boolean; conS
   const citas: CitaFalsa[] = [
     cita(CITA_DOCTOR, "Luis Pérez", hora(15), hora(15, 30), { doctor: { id: DRA, shortName: "Dra. Ruiz" }, resourceId: "r2", reason: "Resina" }),
   ];
+  // Una teleconsulta de la doctora (v2, m4): nunca puede quedarse «Sin doctor».
+  citas.push(cita(CITA_TELE, "Rosa León", hora(13), hora(13, 30), { doctor: { id: DRA, shortName: "Dra. Ruiz" }, resourceId: null, isTeleconsult: true } as any));
   if (o.conSinDoctor !== false) {
     citas.push(cita(CITA_SD, "Sofía Torres", hora(16), hora(16, 45), { reason: "Limpieza", resourceId: "r1" }));
     citas.push(cita(CITA_DENTALINK, "Marta Ríos", hora(16), hora(16, 30), { resourceId: "r2", status: "CONFIRMED" }));
@@ -214,7 +217,7 @@ interface Abierta {
 
 async function abrir(
   t: { skip(m: string): void },
-  o: { ancho?: number; rol?: string; usuario?: string; datos?: ReturnType<typeof payload>; chocaAlLlegar?: boolean } = {},
+  o: { ancho?: number; rol?: string; usuario?: string; datos?: ReturnType<typeof payload>; chocaAlLlegar?: boolean; chocaAlAsignar?: boolean } = {},
 ): Promise<Abierta | null> {
   const chromium = await cargarChromium();
   if (!chromium) {
@@ -262,6 +265,19 @@ async function abrir(
             conflictingAppointment: { id: CITA_DOCTOR, patientName: "Luis Pérez", startsAt: hora(16), endsAt: hora(16, 30), doctorId: body.doctorId, resourceId: null, status: "SCHEDULED", otras: 0 },
             comida: null,
             reason: "Dra. Laura Ruiz ya tiene otra cita a esa hora (Luis Pérez). Si de todos modos lo atiende, confírmalo y la cita queda como sobreturno.",
+          },
+          409,
+        );
+      }
+      // v2 (m5): asignar un doctor que ya tiene otra cita a esa hora, con agenda flexible = 409 confirmable.
+      if (o.chocaAlAsignar && !mCita[2] && body.doctorId && !body.sobreagendar) {
+        return json(
+          {
+            error: "appointment_overlap",
+            sobreagendable: true,
+            conflictingAppointment: { id: CITA_DOCTOR, patientName: "Luis Pérez", startsAt: hora(16), endsAt: hora(16, 30), doctorId: body.doctorId, resourceId: null, status: "SCHEDULED", otras: 0 },
+            comida: null,
+            reason: "La doctora ya tiene otra cita a esa hora.",
           },
           409,
         );
@@ -531,5 +547,62 @@ test("llegada con un doctor que ya tiene otra cita: el «¿Seguro?» (409 de §P
   assert.equal(a.patches.length, 2);
   assert.deepEqual(a.patches[0].body, { status: "CHECKED_IN", doctorId: DRA });
   assert.deepEqual(a.patches[1].body, { status: "CHECKED_IN", doctorId: DRA, sobreagendar: true, sobreagendarCita: CITA_DOCTOR, sobreagendarOtras: 0 });
+  assert.deepEqual(a.errores, []);
+});
+
+// ── v2 (revisión de t12) ─────────────────────────────────────────────────────────────────────────
+
+test("M2: un DOCTOR no deja SU cita «Sin doctor»: soltarla en esa columna avisa y no manda nada; Editar no lo ofrece", async (t) => {
+  const a = await abrir(t, { rol: "DOCTOR", usuario: DRA });
+  if (!a) return;
+  await arrastrar(a.page, CITA_DOCTOR, SIN_DOCTOR);
+  await a.page.getByText("Una cita tuya no se puede dejar «Sin doctor»", { exact: false }).waitFor({ timeout: 10_000 });
+  assert.equal(await a.page.getByRole("dialog").filter({ hasText: "Mover cita" }).count(), 0, "sin «Mover cita»");
+  assert.equal(await columnaDe(a.page, CITA_DOCTOR), DRA, "la tarjeta no se movió");
+  assert.deepEqual(a.patches, []);
+  // Editar su propia cita: sin la opción «Sin doctor».
+  await a.page.locator(`[data-cita="${CITA_DOCTOR}"]`).click();
+  await a.page.locator("aside").getByRole("button", { name: "Editar", exact: true }).click({ timeout: 10_000 });
+  const select = a.page.locator(`select:has(option[value="${DRA}"])`).last();
+  await select.waitFor({ timeout: 10_000 });
+  assert.equal(await select.locator(`option[value="${SIN_DOCTOR}"]`).count(), 0, "un DOCTOR no ve «Sin doctor» en su cita");
+  assert.deepEqual(a.errores, []);
+});
+
+test("M2 (contraprueba): recepción sí ve «Sin doctor» al editar una cita con doctor", async (t) => {
+  const a = await abrir(t, { rol: "RECEPTIONIST", usuario: "cmrecep00000000000000001" });
+  if (!a) return;
+  await a.page.locator(`[data-cita="${CITA_DOCTOR}"]`).click();
+  await a.page.locator("aside").getByRole("button", { name: "Editar", exact: true }).click({ timeout: 10_000 });
+  const select = a.page.locator(`select:has(option[value="${DRA}"])`).last();
+  await select.waitFor({ timeout: 10_000 });
+  assert.equal(await select.locator(`option[value="${SIN_DOCTOR}"]`).count(), 1);
+  assert.deepEqual(a.errores, []);
+});
+
+test("m4: una teleconsulta soltada en «Sin doctor» avisa con su texto y no se mueve", async (t) => {
+  const a = await abrir(t);
+  if (!a) return;
+  await arrastrar(a.page, CITA_TELE, SIN_DOCTOR);
+  await a.page.getByText("Una teleconsulta necesita doctor", { exact: false }).waitFor({ timeout: 10_000 });
+  assert.equal(await columnaDe(a.page, CITA_TELE), DRA);
+  assert.deepEqual(a.patches, []);
+  assert.deepEqual(a.errores, []);
+});
+
+test("m5: «Asignar doctor» con la doctora ocupada pregunta «¿Seguro?» y reenvía confirmado", async (t) => {
+  const a = await abrir(t, { chocaAlAsignar: true });
+  if (!a) return;
+  await a.page.locator(`[data-cita="${CITA_DENTALINK}"]`).click();
+  await a.page.locator("[data-asignar-doctor]").click({ timeout: 10_000 });
+  await a.page.locator("[data-elegir-doctor=asignar] [data-confirmar-doctor]").click();
+  const seguro = a.page.getByRole("dialog").filter({ hasText: "Luis Pérez" });
+  await seguro.waitFor({ timeout: 10_000 });
+  await seguro.getByRole("button", { name: "Sí, sobreagendar" }).click();
+  await a.page.waitForFunction(`document.querySelector('[data-cita="${CITA_DENTALINK}"]')?.closest('[data-columna]')?.getAttribute('data-columna') === ${JSON.stringify(DRA)}`, null, { timeout: 10_000 });
+  assert.deepEqual(a.patches.map((p) => p.body), [
+    { doctorId: DRA },
+    { doctorId: DRA, sobreagendar: true, sobreagendarCita: CITA_DOCTOR, sobreagendarOtras: 0 },
+  ]);
   assert.deepEqual(a.errores, []);
 });

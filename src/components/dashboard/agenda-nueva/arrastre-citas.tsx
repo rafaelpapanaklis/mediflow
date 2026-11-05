@@ -63,7 +63,9 @@ import { altoDeHueco, mensajeDeRechazo, rechazoIncierto } from "@/lib/agenda-nue
 import { ConfirmarMovimiento } from "./confirmar-movimiento";
 import { useHorariosFlexibles } from "./usar-agenda-flexible";
 import { comidaQuePisa } from "@/lib/horario-doctor/core";
-import { TEXTO_DOCTOR_EN_CONSULTA, esEstadoQueExigeDoctor } from "@/lib/agenda/sin-doctor";
+import { avisoAlQuitarDoctor } from "@/components/dashboard/agenda/aviso-quitar-doctor";
+import { useQuienMira } from "@/components/dashboard/agenda/quien-mira";
+import { useT } from "@/i18n/i18n-provider";
 import {
   avisoDesdeAgenda,
   avisoDesdeRechazo,
@@ -133,6 +135,9 @@ function mismoDestino(a: DestinoArrastre | null, b: DestinoArrastre | null): boo
 
 export function ArrastreCitas({ children }: { children: ReactNode }) {
   const { state, dispatch, permissions, invalidateRangeCache, refetchView } = useAgenda();
+  const t = useT();
+  // ws1-t11 (M2) — quién arrastra: un DOCTOR no deja su propia cita «Sin doctor».
+  const quienMira = useQuienMira();
 
   const sensores = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: DRAG_ACTIVATION_DISTANCE_PX } }),
@@ -291,9 +296,12 @@ export function ArrastreCitas({ children }: { children: ReactNode }) {
         return;
       }
       if (d.plan.unchanged) return;
-      // ws1-t11 — una cita en consulta no se queda sin doctor (el servidor la rechazaría): se dice aquí.
-      if (d.plan.newDoctorId === null && d.plan.original.doctor?.id && esEstadoQueExigeDoctor(String(d.plan.original.status))) {
-        toast.error(TEXTO_DOCTOR_EN_CONSULTA);
+      // ws1-t11 — soltar en «Sin doctor» una cita que no puede quedarse sin doctor: se dice aquí, sin mover nada
+      // (el servidor la rechazaría y la tarjeta iría y volvería). v2: teleconsulta (m4) y la propia cita de un
+      // DOCTOR (M2: dejarla «Sin doctor» es de recepción).
+      const aviso = avisoAlQuitarDoctor(d.plan.original, d.plan.newDoctorId, quienMira.userRole);
+      if (aviso) {
+        toast.error(t(aviso));
         return;
       }
       // WS1-T5 — con la bandera, el choque se pregunta en la ventana de mover.
@@ -304,7 +312,7 @@ export function ArrastreCitas({ children }: { children: ReactNode }) {
       setAvisoServidor(null);
       setPendiente(d.plan);
     },
-    [planear, limpiar, permissions.canEdit, flexEncendida],
+    [planear, limpiar, permissions.canEdit, flexEncendida, quienMira.userRole, t],
   );
 
   // Mientras se arrastra, el cursor dice «agarrado» en toda la pantalla.

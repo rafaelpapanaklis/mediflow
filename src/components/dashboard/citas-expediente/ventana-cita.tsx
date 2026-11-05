@@ -26,6 +26,7 @@ import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { XCircle } from "lucide-react";
 import type { Role } from "@prisma/client";
+import { preguntaAntesDelEstado, usePedirDoctor } from "@/components/dashboard/agenda/elegir-doctor-cita";
 import { AgendaEditAppointmentModal } from "@/components/dashboard/agenda/agenda-edit-appointment-modal";
 import { ROPA_EDITAR_CITA } from "@/components/dashboard/agenda-nueva/ropa";
 import { cancelarCitaEnServidor, useCancelarCita } from "@/components/dashboard/agenda/cancelar-cita";
@@ -89,6 +90,8 @@ export function VentanaCita({
   // Mientras se confirma la cancelación, el Escape es de la confirmación: la
   // ventana también lo escucha (en `window`) y sin esto se cerrarían las dos.
   const confirmando = useRef(false);
+  // ws1-t11 · P2 v2 (m2) — «¿Quién lo atiende?» / el doctor obligatorio al iniciar, como en la agenda y la ficha.
+  const pedirDoctor = usePedirDoctor();
 
   // Solo lo que la ventana LEE para hidratar su formulario. El estado queda
   // fuera a propósito: al cambiarlo, la página se refresca y, si el DTO
@@ -126,8 +129,10 @@ export function VentanaCita({
       // La tabla sale de la página (servidor): se vuelve a pedir, igual que
       // hace «Cancelar» en esta misma pestaña.
       onGuardada: () => router.refresh(),
+      // ws1-t11 (M2): un DOCTOR no pasa su propia cita a «Sin doctor».
+      userRole,
     }),
-    [agenda.timezone, agenda.doctors, agenda.resources, router],
+    [agenda.timezone, agenda.doctors, agenda.resources, router, userRole],
   );
 
   const estadoActual: string = cita?.status ?? "";
@@ -154,9 +159,32 @@ export function VentanaCita({
 
   async function cambiarEstado(destino: AppointmentStatus) {
     if (!cita || enVuelo) return;
+    // ws1-t11 · P2 v2 (m2, D9) — una «Sin doctor»: al llegar se pregunta quién lo atiende (opcional) y al iniciar la
+    // consulta es obligatorio (a un DOCTOR no: el servidor se la asigna). Antes, «En consulta» acababa en un 409
+    // sin salida. Cancelar = no se cambia nada.
+    let elegido: { doctorId?: string | null } | undefined;
+    const pregunta = preguntaAntesDelEstado({ destino, citaDoctorId: doctorId, role: userRole });
+    if (pregunta) {
+      confirmando.current = true;
+      const r = await pedirDoctor
+        .pedir({
+          modo: pregunta,
+          paciente: pacienteNombre ?? null,
+          doctores: agenda.doctors
+            .filter((d) => d.activeInAgenda !== false)
+            .map((d) => ({ id: d.id, nombre: d.displayName })),
+        })
+        .finally(() => {
+          setTimeout(() => {
+            confirmando.current = false;
+          }, 0);
+        });
+      if (!r) return;
+      if (r.doctorId) elegido = { doctorId: r.doctorId };
+    }
     setEnVuelo(true);
     try {
-      await patchAppointmentStatus(cita.id, destino);
+      await patchAppointmentStatus(cita.id, destino, undefined, elegido);
       toast.success(`Estado: ${estado(destino).texto}`);
       onEstadoCambiado?.(cita.id, destino);
       // Empezar la consulta lleva a la ficha con la consulta en curso, igual
@@ -249,6 +277,7 @@ export function VentanaCita({
       pieExtra={
         <>
           {cancelarCita.elemento}
+          {pedirDoctor.dialogo}
           {puedeCancelar ? (
             <button type="button" className={s.eliminar} onClick={cancelar} disabled={enVuelo}>
               <XCircle size={16} strokeWidth={1.75} aria-hidden />

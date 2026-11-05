@@ -331,6 +331,7 @@ function horas(minutos: number): string {
 function useCitasDelMes(ahora: Date): CitaVista[] {
   const { state } = useAgenda();
   const { citaVisible } = useAgendaNueva();
+  const nombreSinDoctor = useT()("agenda.sinDoctor.nombre");
 
   return useMemo(
     () => {
@@ -339,13 +340,14 @@ function useCitasDelMes(ahora: Date): CitaVista[] {
         doctores: state.doctors,
         unidades: state.resources,
         ahora,
+        nombreSinDoctor,
       };
       return state.appointments
         .filter((a) => citaVisible(a.doctor?.id ?? null, a.resourceId))
         .map((a) => aCitaVista(a, ctx));
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [state.appointments, state.doctors, state.resources, state.timezone, citaVisible],
+    [state.appointments, state.doctors, state.resources, state.timezone, citaVisible, nombreSinDoctor],
   );
 }
 

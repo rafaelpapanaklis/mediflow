@@ -25,7 +25,8 @@ import {
   esColumnaSinDoctor,
   type EntradaColumnasPorDoctor,
 } from "@/components/dashboard/agenda/columnas-dia";
-import { esDoctorConCitaSinDoctor, estadoPermitidoConSinDoctor } from "@/components/dashboard/agenda/quien-mira";
+import { esDoctorConCitaSinDoctor, estadoPermitidoConSinDoctor, pasoPermitido } from "@/components/dashboard/agenda/quien-mira";
+import { avisoAlQuitarDoctor } from "@/components/dashboard/agenda/aviso-quitar-doctor";
 import { FILTRO_SIN_DOCTOR } from "@/lib/agenda/sin-doctor";
 import { resolveDropTarget } from "@/lib/agenda/reschedule-flow";
 import type { AgendaAppointmentDTO, DoctorColumnDTO } from "@/lib/agenda/types";
@@ -142,11 +143,18 @@ test("soltar en la columna «Sin doctor» le quita el doctor; en la de un doctor
   assert.equal(pone.newDoctorId, DR_SIEMBRA);
 });
 
-test("un DOCTOR con una «Sin doctor»: llega, pasa al sillón e inicia; no confirma, cancela ni la marca no-asistió", () => {
+test("un DOCTOR con una «Sin doctor»: pasa al sillón e inicia; no confirma, cancela ni la marca no-asistió", () => {
   const base = { role: "DOCTOR", userId: DRA, citaDoctorId: null };
-  for (const destino of ["CHECKED_IN", "IN_CHAIR", "IN_PROGRESS"]) {
+  for (const destino of ["IN_CHAIR", "IN_PROGRESS"]) {
     assert.equal(estadoPermitidoConSinDoctor({ ...base, destino }), true, destino);
+    assert.equal(pasoPermitido({ ...base, desde: "SCHEDULED", destino: destino as any }), true, destino);
   }
+  // v2 (m1): «Llegó» es de recepción por la tabla de roles (transitions.ts): a un DOCTOR no se le ofrece, ni en
+  // una «Sin doctor» ni en las suyas (el servidor le daría 403). Recepción sí la ve.
+  assert.equal(pasoPermitido({ ...base, desde: "SCHEDULED", destino: "CHECKED_IN" }), false);
+  assert.equal(pasoPermitido({ ...base, citaDoctorId: DRA, desde: "CONFIRMED", destino: "CHECKED_IN" }), false);
+  assert.equal(pasoPermitido({ role: "RECEPTIONIST", userId: "u", citaDoctorId: null, desde: "SCHEDULED", destino: "CHECKED_IN" }), true);
+  assert.equal(pasoPermitido({ role: undefined, userId: undefined, citaDoctorId: null, desde: "SCHEDULED", destino: "CHECKED_IN" }), true, "sin rol: lo de siempre");
   for (const destino of ["CONFIRMED", "CANCELLED", "NO_SHOW", "SCHEDULED"]) {
     assert.equal(estadoPermitidoConSinDoctor({ ...base, destino }), false, destino);
   }
@@ -159,4 +167,15 @@ test("un DOCTOR con una «Sin doctor»: llega, pasa al sillón e inicia; no conf
   assert.equal(esDoctorConCitaSinDoctor("DOCTOR", { doctor: null }), true);
   assert.equal(esDoctorConCitaSinDoctor("DOCTOR", { doctor: { id: DRA } }), false);
   assert.equal(esDoctorConCitaSinDoctor("ADMIN", { doctor: null }), false);
+});
+
+test("v2 (M2, m4): soltar en «Sin doctor» una cita que no puede quedarse sin doctor da su aviso y no se mueve", () => {
+  const conDoctor = (extra: Record<string, unknown> = {}) => ({ doctor: { id: DRA }, status: "SCHEDULED", isTeleconsult: false, ...extra });
+  assert.equal(avisoAlQuitarDoctor(conDoctor(), null, "DOCTOR"), "agenda.sinDoctor.avisos.doctorPropia");
+  assert.equal(avisoAlQuitarDoctor(conDoctor({ isTeleconsult: true }), null, "ADMIN"), "agenda.sinDoctor.avisos.teleconsulta");
+  assert.equal(avisoAlQuitarDoctor(conDoctor({ status: "IN_PROGRESS" }), null, "RECEPTIONIST"), "agenda.sinDoctor.avisos.enConsulta");
+  // Recepción sí la deja «Sin doctor»; cambiar de doctor o mover una «Sin doctor» no avisa.
+  assert.equal(avisoAlQuitarDoctor(conDoctor(), null, "RECEPTIONIST"), null);
+  assert.equal(avisoAlQuitarDoctor(conDoctor(), DR_SIEMBRA, "DOCTOR"), null);
+  assert.equal(avisoAlQuitarDoctor({ doctor: null, status: "SCHEDULED" }, null, "DOCTOR"), null);
 });

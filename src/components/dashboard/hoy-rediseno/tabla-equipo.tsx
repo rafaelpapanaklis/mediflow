@@ -82,8 +82,8 @@ export function TablaEquipo({ filas }: { filas: HomeAdminTeamRow[] }) {
           {ordenadas.map((r) => (
             <tr key={r.userId}>
               <td>
-                {/* ws1-t2 (C-09): la fila «Sin doctor» no es una persona ni tiene citas;
-                    está para que la columna de ingresos sume lo mismo que la tarjeta. */}
+                {/* ws1-t2 (C-09): la fila «Sin doctor» no es una persona; está para que las columnas
+                    sumen lo mismo que la tarjeta. Desde ws1-t11 también trae las citas «Sin doctor». */}
                 <div className={s.celdaDoctor} title={r.sinDoctor ? t("home.teamPerf.sinDoctorHint") : undefined}>
                   {!r.sinDoctor && <Iniciales nombre={r.doctorName} peq />}
                   <span>{r.sinDoctor ? t("home.teamPerf.sinDoctor") : r.doctorName}</span>

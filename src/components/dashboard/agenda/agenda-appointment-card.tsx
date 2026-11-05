@@ -9,7 +9,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { useAgenda } from "./agenda-provider";
 import { AgendaStatusPopover } from "./agenda-status-popover";
 import { useEstadoConAviso } from "./use-estado-con-aviso";
-import { esDoctorConCitaSinDoctor, estadoPermitidoConSinDoctor, useQuienMira } from "./quien-mira";
+import { esDoctorConCitaSinDoctor, pasoPermitido, useQuienMira } from "./quien-mira";
 import { COLOR_SIN_DOCTOR, INICIALES_SIN_DOCTOR } from "@/lib/agenda/doctor-legend";
 import { timeToSlotIndex } from "@/lib/agenda/time-utils";
 import { formatTimeInTz } from "@/lib/agenda/date-ranges";
@@ -188,13 +188,15 @@ export function AgendaAppointmentCard({
   const pasoLogico = needsValidation
     ? { status: "CONFIRMED" as AppointmentStatus, label: t("agenda.apptCard.approve") }
     : nextLogicalStatus(appointment.status);
-  // ws1-t11 — a un DOCTOR no se le ofrece el paso que el servidor le rechazaría en una «Sin doctor» (p. ej. confirmar).
+  // ws1-t11 — no se ofrece el paso que el servidor rechazaría: por ROL (v2, m1: «Llegó» o «Confirmar» no son
+  // del DOCTOR, como en la agenda nueva) ni, a un DOCTOR, en una «Sin doctor» que no ha tomado.
   const nextStep =
     pasoLogico &&
-    estadoPermitidoConSinDoctor({
+    pasoPermitido({
       role: userRole,
       userId,
       citaDoctorId: appointment.doctor?.id ?? null,
+      desde: appointment.status,
       destino: pasoLogico.status,
     })
       ? pasoLogico

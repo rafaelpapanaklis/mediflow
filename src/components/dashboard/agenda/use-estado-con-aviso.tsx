@@ -49,6 +49,11 @@ export function useEstadoConAviso(): {
   ) => Promise<AgendaAppointmentDTO | null>;
   /** `null` = la persona canceló: no se cambia nada. */
   elegirDoctor: (cita: AgendaAppointmentDTO, destino: AppointmentStatus) => Promise<EleccionDeDoctor | null>;
+  /**
+   * ws1-t11 · P2 v2 (m5) — el mismo «¿Seguro?» de sobreagendar, para otro PATCH (asignar el doctor a una «Sin
+   * doctor»): resuelve `true` con «Sí, sobreagendar». Se pinta en `dialogo`.
+   */
+  preguntarSobreagenda: (aviso: AvisoSobreagenda) => Promise<boolean>;
   dialogo: ReactNode;
 } {
   const { state } = useAgenda();
@@ -158,5 +163,10 @@ export function useEstadoConAviso(): {
       </>
     ) : null;
 
-  return { cambiar, elegirDoctor, dialogo };
+  const preguntarSobreagenda = useCallback(
+    (aviso: AvisoSobreagenda) => new Promise<boolean>((responder) => setPregunta({ aviso, responder })),
+    [],
+  );
+
+  return { cambiar, elegirDoctor, preguntarSobreagenda, dialogo };
 }

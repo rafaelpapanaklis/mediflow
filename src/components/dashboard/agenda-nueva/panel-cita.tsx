@@ -252,9 +252,10 @@ export function PanelCita({ clinicTaxMode, userRole, userId }: PanelCitaProps) {
             doctores: state.doctors,
             unidades: state.resources,
             ahora,
+            nombreSinDoctor: t("agenda.sinDoctor.nombre"),
           })
         : null,
-    [dto, state.timezone, state.doctors, state.resources, ahora],
+    [dto, state.timezone, state.doctors, state.resources, ahora, t],
   );
 
   /** La siguiente cita del mismo responsable ese día — la tarjeta gris del pie. */
@@ -393,7 +394,16 @@ export function PanelCita({ clinicTaxMode, userRole, userId }: PanelCitaProps) {
     if (!doctorId) return;
     setAsignando(true);
     try {
-      const { appointment } = await rescheduleAppointment(dto.id, { doctorId });
+      // v2 (m5): si ese doctor ya tiene otra cita a esa hora y la clínica puede sobreagendar, el servidor contesta
+      // 409 `sobreagendable`: se pregunta «¿Seguro?» (como al cambiar de estado) y se reenvía confirmado.
+      const r = await enviarConAvisoDeSobreagenda({
+        enviar: (confirmacion) => rescheduleAppointment(dto.id, { doctorId, ...(confirmacion ?? {}) }),
+        preguntar: (aviso) => new Promise<boolean>((responder) => setAvisoReabrir({ aviso, responder })),
+        intento: { doctorId, resourceId: dto.resourceId },
+        timeZone: state.timezone,
+      });
+      if (!r) return; // dijo «Cancelar» en el «¿Seguro?»: nada cambió.
+      const { appointment } = r;
       startTransition(() => {
         dispatch({ type: "REPLACE_APPOINTMENT", appointment });
       });
@@ -406,7 +416,7 @@ export function PanelCita({ clinicTaxMode, userRole, userId }: PanelCitaProps) {
       setAsignando(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dto, userRole, userId, pedirDoctor.pedir, doctoresElegibles, dispatch, invalidateRangeCache, t]);
+  }, [dto, userRole, userId, pedirDoctor.pedir, doctoresElegibles, dispatch, invalidateRangeCache, t, state.timezone]);
 
   const enviarWhatsapp = useCallback(async () => {
     if (!dto) return;

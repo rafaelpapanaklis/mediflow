@@ -120,6 +120,8 @@ export interface ContextoVista {
    * siempre: con el color del doctor.
    */
   colores?: { modo: ModoColorCitas; indice: IndiceProcedimientos | null } | null;
+  /** ws1-t11 · v2 (m6) — «Sin doctor» en el idioma de quien mira (`agenda.sinDoctor.nombre`). Sin él, en español. */
+  nombreSinDoctor?: string;
 }
 
 /** Los responsables visibles, en el orden en que los da el servidor. */
@@ -331,7 +333,7 @@ export function aCitaVista(dto: AgendaAppointmentDTO, ctx: ContextoVista): CitaV
     chip: chipDe(estado, pinta, minutosEsperando),
     responsableId,
     // ws1-t11 — una cita sin doctor dice «Sin doctor» (antes «Sin responsable», con iniciales «SR»).
-    responsableNombre: responsable?.displayName ?? dto.doctor?.shortName ?? NOMBRE_SIN_DOCTOR,
+    responsableNombre: responsable?.displayName ?? dto.doctor?.shortName ?? ctx.nombreSinDoctor ?? NOMBRE_SIN_DOCTOR,
     colorResponsable,
     colorCita,
     procedimiento,

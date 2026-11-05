@@ -8,6 +8,7 @@ import { useAgendaOpcional } from "./agenda-provider";
 import { rescheduleAppointment, type ApiError } from "@/lib/agenda/mutations";
 import { describeOverlapConflict, describeResourceUnavailable } from "@/lib/agenda/conflict-copy";
 import { OPCION_SIN_DOCTOR, doctorIdParaEnviar, doctorRealDe } from "@/components/dashboard/new-appointment/doctor-inicial";
+import { useQuienMira } from "./quien-mira";
 import { claveDelHueco, conflictoVigente, type ConflictoDelServidor } from "@/lib/agenda/conflicto-editar-cita";
 import { getTzParts } from "@/lib/agenda/time-utils";
 import { DateField } from "@/components/ui/date-field";
@@ -72,6 +73,8 @@ export interface EditarCitaPrestado {
   resources: ResourceDTO[];
   /** Sustituye al `REPLACE_APPOINTMENT` del store de la agenda. */
   onGuardada: (appointment: AgendaAppointmentDTO) => void;
+  /** ws1-t11 (M2) — el rol de quien edita: un DOCTOR no pasa su cita a «Sin doctor». Dentro de la agenda sale de `useQuienMira`. */
+  userRole?: string;
 }
 
 interface Props {
@@ -140,12 +143,16 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose, ropa, presta
   const agenda = useAgendaOpcional();
   if (!agenda && !prestado) throw new Error("useAgenda must be used inside <AgendaProvider>");
   const state = prestado ?? agenda!.state;
+  const quienMira = useQuienMira();
+  const rol = prestado?.userRole ?? quienMira.userRole;
   // ws1-t11 — «Sin doctor» se ofrece si la clínica puede agendar así (o si la cita ya lo es), nunca en una
-  // teleconsulta ni en una cita en consulta (el servidor las rechazaría).
+  // teleconsulta ni en una cita en consulta (el servidor las rechazaría). v2 (M2): tampoco a un DOCTOR sobre su
+  // propia cita: pasarla a «Sin doctor» es de recepción (P1 v2, 403 `not_your_appointment`).
   const ofreceSinDoctor =
     !!appt &&
     appt.isTeleconsult !== true &&
     String(appt.status) !== "IN_PROGRESS" &&
+    !(rol === "DOCTOR" && !!appt.doctor?.id) &&
     ((state as { sinDoctorDisponible?: boolean }).sinDoctorDisponible === true || !appt.doctor?.id);
   const [form, setForm] = useState<FormState | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -498,7 +505,10 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose, ropa, presta
                   selector enseñaba la primera («Sin doctor») sin que la cita la tuviera. */}
               {appt.doctor?.id && !activeDoctors.some((d) => d.id === appt.doctor?.id) && (
                 <option value={appt.doctor.id}>
-                  {state.doctors.find((d) => d.id === appt.doctor?.id)?.displayName ?? appt.doctor.shortName}
+                  {/* v2 (m7): desde la ficha el nombre puede llegar vacío (`shortName: ""`): un texto genérico. */}
+                  {state.doctors.find((d) => d.id === appt.doctor?.id)?.displayName ||
+                    appt.doctor.shortName ||
+                    t("agenda.sinDoctor.doctorDeLaCita")}
                 </option>
               )}
             </select>

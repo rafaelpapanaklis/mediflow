@@ -34,6 +34,7 @@ import { esDoctorConCitaSinDoctor, estadoPermitidoConSinDoctor, useQuienMira } f
 import { usePedirDoctor, type DoctorElegible } from "./elegir-doctor-cita";
 import { COLOR_SIN_DOCTOR, INICIALES_SIN_DOCTOR } from "@/lib/agenda/doctor-legend";
 import { rescheduleAppointment } from "@/lib/agenda/mutations";
+import { enviarConAvisoDeSobreagenda } from "@/lib/agenda/agenda-flexible";
 import {
   STATUS_PIPELINE,
   STATUS_LABELS,
@@ -188,7 +189,16 @@ export function AgendaDetailPanel({ clinicTaxMode }: AgendaDetailPanelProps) {
     if (!doctorId) return;
     setAsignando(true);
     try {
-      const { appointment } = await rescheduleAppointment(appt.id, { doctorId });
+      // v2 (m5): si ese doctor ya tiene otra cita a esa hora y la clínica puede sobreagendar, el servidor contesta
+      // 409 `sobreagendable`: se pregunta «¿Seguro?» (el de los cambios de estado) y se reenvía confirmado.
+      const r = await enviarConAvisoDeSobreagenda({
+        enviar: (confirmacion) => rescheduleAppointment(appt.id, { doctorId, ...(confirmacion ?? {}) }),
+        preguntar: estado.preguntarSobreagenda,
+        intento: { doctorId, resourceId: appt.resourceId },
+        timeZone: state.timezone,
+      });
+      if (!r) return; // dijo «Cancelar» en el «¿Seguro?»: nada cambió.
+      const { appointment } = r;
       startTransition(() => {
         dispatch({ type: "REPLACE_APPOINTMENT", appointment });
       });
@@ -200,7 +210,7 @@ export function AgendaDetailPanel({ clinicTaxMode }: AgendaDetailPanelProps) {
     } finally {
       setAsignando(false);
     }
-  }, [appt, asignando, userRole, userId, pedir, doctoresElegibles, dispatch, invalidateRangeCache, t]);
+  }, [appt, asignando, userRole, userId, pedir, doctoresElegibles, dispatch, invalidateRangeCache, t, estado.preguntarSobreagenda, state.timezone]);
 
   if (!appt) {
     return (
@@ -374,7 +384,9 @@ export function AgendaDetailPanel({ clinicTaxMode }: AgendaDetailPanelProps) {
   // por estado + permisos y la API vuelve a validar rol con 403.
   // ws1-t11 (D3) — sin lo que el servidor le rechazaría a un DOCTOR en una «Sin doctor» (confirmar,
   // cancelar, no-asistió, reabrir). Afecta a los botones, al riel y al menú «Más».
+  // v2 (m1): ahora el rol SÍ baja (`useQuienMira`): se filtra también por la tabla de roles, como la agenda nueva.
   const validTargets = possibleTransitions(appt.status, {
+    ...(userRole ? { role: userRole } : {}),
     now: new Date(),
     appointmentStart: new Date(appt.startsAt),
   }).filter((destino) =>

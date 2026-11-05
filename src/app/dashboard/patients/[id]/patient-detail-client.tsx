@@ -1609,9 +1609,11 @@ export function PatientDetailClient({
             doctors: agendaCitas.doctors,
             resources: agendaCitas.resources,
             onGuardada: () => router.refresh(),
+            // ws1-t11 (M2): un DOCTOR no pasa su propia cita a «Sin doctor».
+            userRole: currentUser.role,
           }
         : null,
-    [agendaCitas, router],
+    [agendaCitas, router, currentUser.role],
   );
   const citaParaMover = useMemo(
     () =>

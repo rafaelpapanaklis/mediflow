@@ -312,7 +312,7 @@
       "colCompletedPct": "% Completadas",
       "colRevenue": "Ingresos",
       "sinDoctor": "Sin doctor",
-      "sinDoctorHint": "Cobros cuya factura y cita no tienen doctor. Están aquí para que la columna sume los ingresos del periodo."
+      "sinDoctorHint": "Citas sin doctor asignado y cobros cuya factura y cita no tienen doctor. Están aquí para que las columnas sumen lo del periodo."
     },
     "apptRow": {
       "statusScheduled": "Programada",
@@ -1715,6 +1715,12 @@
         "guardando": "Guardando…",
         "listo": "Doctor asignado.",
         "error": "No se pudo asignar el doctor."
+      },
+      "doctorDeLaCita": "Doctor de la cita",
+      "avisos": {
+        "enConsulta": "Una cita en consulta no puede quedarse sin doctor: cámbiale el doctor por otro.",
+        "teleconsulta": "Una teleconsulta necesita doctor: no puede quedarse «Sin doctor».",
+        "doctorPropia": "Una cita tuya no se puede dejar «Sin doctor»: eso lo hace recepción. Puedes moverla de hora o dársela a otro doctor."
       }
     },
     "google": {
@@ -5509,7 +5515,7 @@
         "one": "{count} min",
         "other": "{count} min"
       },
-      "footerNote": "Nota: Ingresos = lo COBRADO en el periodo (por fecha de cobro, menos reembolsos) al doctor de cada factura; si la factura no tiene doctor, al de su cita, y en casos de ortodoncia sin cita, a quien llevaba el caso ese día. Es la base de comisiones y la misma cifra que «Por doctor» de Finanzas; sin lo migrado de otro sistema. También sale quien ya no está activo si cobró en el periodo, y la fila «Sin doctor» (cobros sin doctor en la factura ni en la cita): la columna suma lo mismo que Ingresos. Satisfacción = promedio de las encuestas (1 a 5). Tiempo promedio = duración de la consulta registrada en la cita. «Nómina» descarga un PDF con estos mismos datos.",
+      "footerNote": "Nota: Ingresos = lo COBRADO en el periodo (por fecha de cobro, menos reembolsos) al doctor de cada factura; si la factura no tiene doctor, al de su cita, y en casos de ortodoncia sin cita (o con un control «Sin doctor»), a quien llevaba el caso ese día. Es la base de comisiones y la misma cifra que «Por doctor» de Finanzas; sin lo migrado de otro sistema. También sale quien ya no está activo si cobró en el periodo, y la fila «Sin doctor» (citas sin doctor asignado y cobros sin doctor en la factura ni en la cita): la columna suma lo mismo que Ingresos. Satisfacción = promedio de las encuestas (1 a 5). Tiempo promedio = duración de la consulta registrada en la cita. «Nómina» descarga un PDF con estos mismos datos.",
       "includesOrtho": "incluye {amount} de ortodoncia",
       "roleOwner": "Dueño/a",
       "roleAdmin": "Administrador/a",
@@ -5517,7 +5523,7 @@
       "roleReceptionist": "Recepción",
       "roleReadonly": "Solo lectura",
       "sinDoctor": "Sin doctor",
-      "sinDoctorHint": "cobros sin doctor en la factura ni en la cita"
+      "sinDoctorHint": "citas sin doctor asignado y cobros sin doctor en la factura ni en la cita"
     },
     "doctorsPage": {
       "adminOnly": "Esta pantalla es solo para el dueño/a y los administradores de la clínica. Si la necesitas, pídele acceso al dueño/a."

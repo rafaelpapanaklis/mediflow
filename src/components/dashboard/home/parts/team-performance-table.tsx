@@ -88,8 +88,8 @@ export function TeamPerformanceTable({ rows }: { rows: HomeAdminTeamRow[] }) {
           {sorted.map((r) => (
             <tr key={r.userId}>
               <td>
-                {/* ws1-t2 (C-09): la fila «Sin doctor» no es una persona ni tiene citas;
-                    está para que la columna de ingresos sume lo mismo que la tarjeta. */}
+                {/* ws1-t2 (C-09): la fila «Sin doctor» no es una persona; está para que las columnas
+                    sumen lo mismo que la tarjeta. Desde ws1-t11 también trae las citas «Sin doctor». */}
                 <div
                   style={{ display: "flex", alignItems: "center", gap: 10 }}
                   title={r.sinDoctor ? t("home.teamPerf.sinDoctorHint") : undefined}

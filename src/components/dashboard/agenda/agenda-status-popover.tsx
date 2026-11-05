@@ -6,7 +6,7 @@ import toast from "react-hot-toast";
 import { MoreHorizontal } from "lucide-react";
 import { useAgenda } from "./agenda-provider";
 import { useEstadoConAviso } from "./use-estado-con-aviso";
-import { estadoPermitidoConSinDoctor, useQuienMira } from "./quien-mira";
+import { pasoPermitido, useQuienMira } from "./quien-mira";
 import { offRailsStatuses, STATUS_LABELS } from "@/lib/agenda/status-pipeline";
 import type { AgendaAppointmentDTO, AppointmentStatus } from "@/lib/agenda/types";
 import { useT } from "@/i18n/i18n-provider";
@@ -43,8 +43,9 @@ export function AgendaStatusPopover({ appointment }: Props) {
   const citaDoctorId = appointment.doctor?.id ?? null;
   const offRails = useMemo(
     () =>
+      // v2 (m1): también por la tabla de roles (lo que el servidor rechazaría con 403).
       offRailsStatuses(appointment.status).filter((destino) =>
-        estadoPermitidoConSinDoctor({ role: userRole, userId, citaDoctorId, destino }),
+        pasoPermitido({ role: userRole, userId, citaDoctorId, desde: appointment.status, destino }),
       ),
     [appointment.status, userRole, userId, citaDoctorId],
   );

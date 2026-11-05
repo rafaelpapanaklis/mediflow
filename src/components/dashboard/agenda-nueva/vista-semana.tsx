@@ -486,6 +486,7 @@ function useCitasDeLaSemana(ahora: Date): CitaVista[] {
   const { citaVisible } = useAgendaNueva();
   // WS1-T5 — con «Colorear por: Procedimiento», el color de cada cita.
   const colores = useColoresDeCitas();
+  const nombreSinDoctor = useT()("agenda.sinDoctor.nombre");
 
   return useMemo(
     () => {
@@ -495,6 +496,7 @@ function useCitasDeLaSemana(ahora: Date): CitaVista[] {
         unidades: state.resources,
         ahora,
         colores,
+        nombreSinDoctor,
       };
       return state.appointments
         .filter((a) => citaContada(a.status))
@@ -505,6 +507,6 @@ function useCitasDeLaSemana(ahora: Date): CitaVista[] {
     // propósito: solo alimenta los minutos de espera del detalle, que se
     // refrescan con el resto cuando llegan citas nuevas.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [state.appointments, state.doctors, state.resources, state.timezone, citaVisible, colores],
+    [state.appointments, state.doctors, state.resources, state.timezone, citaVisible, colores, nombreSinDoctor],
   );
 }

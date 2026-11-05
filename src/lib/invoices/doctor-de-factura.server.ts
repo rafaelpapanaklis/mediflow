@@ -12,8 +12,6 @@ import { diaSiguiente, elegirDoctorDeFactura, unicoDoctor, type DoctorDeFactura 
 
 /** Los estados de un caso de ortodoncia que sigue vivo (el tratante sigue llevándolo). */
 const CASO_VIVO = ["PLANNED", "IN_PROGRESS", "ON_HOLD", "RETENTION"] as const;
-/** ws1-t11 — una cita en estos estados ya se atendió (o se cerró): su «Sin doctor» ya no va a cambiar solo. */
-const CITA_YA_ATENDIDA = new Set(["COMPLETED", "CHECKED_OUT"]);
 
 export interface ArgsDoctorDeFactura {
   clinicId: string;
@@ -34,7 +32,7 @@ export interface ArgsDoctorDeFactura {
  * (`ATIENDE_WHERE`, la misma regla que valida el doctor elegido en POST /api/invoices y que llena
  * la lista de «Nueva factura»); si no, nace sin doctor.
  * Consultas: 1 (cita ligada) o hasta 4 (citas de hoy, planes en paralelo y la validación); con una
- * cita «Sin doctor», esa más las de las demás pistas. Nunca cae a quien pulsa Guardar.
+ * cita «Sin doctor», la cita y, si hay nota, la validación de su autor. Nunca cae a quien pulsa Guardar.
  */
 export async function doctorDeFacturaNueva(
   args: ArgsDoctorDeFactura,
@@ -58,37 +56,30 @@ async function leerDoctorDeFactura(args: ArgsDoctorDeFactura, db: ClienteDb): Pr
   if (!clinicId || !patientId) return { doctorId: null, origen: "ninguno" };
 
   let propuesta: DoctorDeFactura | null = null;
-  /** El día cuyas citas cuentan como «de hoy»: hoy, o el de la cita ligada «Sin doctor» ya atendida. */
-  let diaDeReferencia: Date = args.now ?? new Date();
   if (args.appointmentId) {
     const cita = await db.appointment.findFirst({
       // La cita tiene que ser del MISMO paciente (doctor-sugerido la recibe del cliente).
       where: { id: args.appointmentId, clinicId, patientId },
-      select: { doctorId: true, status: true, startsAt: true },
+      select: { doctorId: true },
     });
     // Una cita que no es de este paciente (o no existe) no da pista ni deja seguir: nace sin doctor.
     if (!cita) return { doctorId: null, origen: "ninguno" };
-    if (cita.doctorId) {
-      propuesta = elegirDoctorDeFactura(undefined, { cita: cita.doctorId });
-    } else if (!CITA_YA_ATENDIDA.has(String(cita.status))) {
-      // ws1-t11 · P2 (revisión): una «Sin doctor» que todavía no se atiende (anticipo, cobro antes de la
-      // consulta) NO adivina doctor: la factura nace sin él y los reportes siguen al doctor de la cita, que
-      // se le pone al llegar o al iniciar. Adivinar aquí dejaba el cobro a nombre de otro para siempre.
-      // La nota (si la hay) sí dice quién atendió.
-      return args.autorDeNota
+    // ws1-t11 · P2 v2 (M1, opción a): una cita «Sin doctor» —por atender o ya atendida sin consulta— NO adivina
+    // doctor con el plan, la cabecera ni las citas del día: la factura nace sin él y el dinero sigue al doctor
+    // que se le ponga a la cita (`citaDoctorId` en Finanzas, nómina y Analítica; fila «Sin doctor» si nunca se
+    // le pone). Adivinar dejaba el cobro a nombre de otro para siempre. Solo la nota de esa cita dice quién
+    // atendió, y pasa por la misma validación de abajo (m3: su autor tiene que atender en la clínica).
+    propuesta = cita.doctorId
+      ? elegirDoctorDeFactura(undefined, { cita: cita.doctorId })
+      : args.autorDeNota
         ? elegirDoctorDeFactura(undefined, { nota: args.autorDeNota })
         : { doctorId: null, origen: "ninguno" };
-    } else {
-      // Ya atendida y «Sin doctor» (se terminó sin consulta): las demás pistas, con las citas del DÍA DE LA
-      // CITA, no las de hoy (cobrar mañana la de ayer no puede tomar al doctor de otra visita).
-      diaDeReferencia = cita.startsAt;
-    }
   }
   if (!propuesta && args.autorDeNota) {
     propuesta = elegirDoctorDeFactura(undefined, { nota: args.autorDeNota });
   }
   if (!propuesta) {
-    const hoy = hoyEnZona(args.timezone, diaDeReferencia);
+    const hoy = hoyEnZona(args.timezone, args.now ?? new Date());
     const desde = inicioDelDiaEnZona(hoy, args.timezone);
     const hasta = inicioDelDiaEnZona(diaSiguiente(hoy), args.timezone);
     const citasDeHoy = desde && hasta

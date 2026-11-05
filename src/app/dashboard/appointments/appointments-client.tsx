@@ -22,6 +22,7 @@ import { possibleTransitions } from "@/lib/agenda/transitions";
 import type { AppointmentStatus } from "@/lib/agenda/types";
 import { DateField } from "@/components/ui/date-field";
 import { useT } from "@/i18n/i18n-provider";
+import { preguntaAntesDelEstado, usePedirDoctor } from "@/components/dashboard/agenda/elegir-doctor-cita";
 import { tzLocalToUtc } from "@/lib/agenda/time-utils";
 import { bloqueoQueTapa } from "@/lib/agenda-bloqueos/core";
 import { useBloqueosDeDia } from "@/components/dashboard/bloqueos/usar-bloqueos-dia";
@@ -340,6 +341,8 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
   const router = useRouter();
   const askConfirm = useConfirm();
   const askConfirmWithReason = useConfirmWithReason();
+  // ws1-t11 · P2 v2 (m2) — el doctor al llegar (opcional) y al iniciar la consulta (obligatorio).
+  const pedirDoctor = usePedirDoctor();
   const today = new Date();
   const [appts,       setAppts]       = useState<Appt[]>(initialAppts);
 
@@ -615,7 +618,13 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
       const endTime = addTime(form.startTime, form.durationMins);
       const res = await fetch(`/api/appointments/${showDetail.id}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...apptPayload(bloqueoConfirmado), ...campoDelAviso(avisoClinica, editCambiaHora, avisar) }),
+        // ws1-t11 · P2 v2 (observación de t12): el formulario de EDITAR no trae el sillón (`resourceId` sin definir) y
+        // `apptPayload` mandaba `null`, que se lo quitaba a la cita. Sin la clave, el servidor lo deja como está.
+        body: JSON.stringify({
+          ...apptPayload(bloqueoConfirmado),
+          ...(form.resourceId === undefined ? { resourceId: undefined } : {}),
+          ...campoDelAviso(avisoClinica, editCambiaHora, avisar),
+        }),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(apiErrorMessage(res.status, body, t("appointments.toast.saveError")));
@@ -643,10 +652,31 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
    * mientras en la base no había pasado nada (hallazgo 24).
    */
   async function updateStatus(id: string, status: string) {
+    // ws1-t11 · P2 v2 (m2, D9) — una «Sin doctor»: al llegar se pregunta quién lo atiende (opcional) y al iniciar
+    // es obligatorio (a un DOCTOR no: el servidor se la asigna). Antes, «En consulta» acababa en un 409 sin salida.
+    // El rol de quien mira sale de la lista de profesionales (quien no atiende —recepción— no está: no es DOCTOR).
+    const cita = appts.find((a) => a.id === id);
+    let doctorElegido: string | null = null;
+    const pregunta = cita
+      ? preguntaAntesDelEstado({
+          destino: status,
+          citaDoctorId: cita.doctorId ?? null,
+          role: doctors.find((d) => d.id === currentUserId)?.role ?? null,
+        })
+      : null;
+    if (pregunta) {
+      const r = await pedirDoctor.pedir({
+        modo: pregunta,
+        paciente: cita?.patient ? `${cita.patient.firstName ?? ""} ${cita.patient.lastName ?? ""}`.trim() || null : null,
+        doctores: doctors.map((d) => ({ id: d.id, nombre: nombreDeProfesional(d) })),
+      });
+      if (!r) return;
+      doctorElegido = r.doctorId;
+    }
     try {
       const res = await fetch(`/api/appointments/${id}/status`, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status }),
+        body: JSON.stringify({ status, ...(doctorElegido ? { doctorId: doctorElegido } : {}) }),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(apiErrorMessage(res.status, body, t("appointments.toast.updateError")));
@@ -1076,6 +1106,8 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
 
   return (
     <div className={styles.page} style={{ padding: "clamp(14px, 1.6vw, 28px)", maxWidth: 1400, margin: "0 auto" }}>
+      {/* ws1-t11 (m2) — «¿Quién lo atiende?» de una cita «Sin doctor» (va en un portal). */}
+      {pedirDoctor.dialogo}
       {/* Header: title + period nav + actions */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 22, gap: 24, flexWrap: "wrap" }}>
         <div>
