@@ -110,6 +110,16 @@ export const reagendarCita = definirHerramienta<ParamsReagendarCita, DatosAccion
         frase: `Esa cita ya está en curso («${etiquetaEstado(cita.status)}»); no la muevo. Si hace falta otra cita, la agendo nueva.`,
       };
     }
+    // Cita «Sin doctor» (ws1-t11, D3): un DOCTOR puede tomarla, no moverla (el
+    // PATCH contestaría 403 al confirmar). Se dice aquí, antes de proponer.
+    if (ctx.role === "DOCTOR" && !cita.doctorId) {
+      return {
+        estado: "sin_permiso",
+        permiso: "agenda.edit",
+        causa: "rol",
+        frase: `La cita de ${cita.paciente.nombre} (${antes.texto}) todavía no tiene doctor: la mueve recepción, o tómala tú primero desde la agenda.`,
+      };
+    }
     if (cita.startsAt.getTime() < ahora.getTime()) {
       return { estado: "no_se_puede", causa: "cita_no_movible", frase: `Esa cita (${antes.texto}) ya empezó o ya pasó; no la muevo. Si hace falta, agendo una nueva.` };
     }
@@ -204,10 +214,11 @@ export const reagendarCita = definirHerramienta<ParamsReagendarCita, DatosAccion
           cuerpo: { startsAt: inicio.toISOString(), endsAt: fin.toISOString(), notifyPatient: false },
         },
         titulo: "Mover cita",
-        frase: `Mover la cita de ${cita.paciente.nombre} con ${cita.doctor} del ${antes.texto} al ${despues.texto}.`,
+        // Cita «Sin doctor» (ws1-t10): se mueve y sigue sin doctor.
+        frase: `Mover la cita de ${cita.paciente.nombre} ${cita.doctorId ? `con ${cita.doctor}` : "(sin doctor)"} del ${antes.texto} al ${despues.texto}.`,
         detalle: [
           { campo: "Paciente", valor: cita.paciente.nombre },
-          { campo: "Doctor", valor: cita.doctor },
+          { campo: "Doctor", valor: cita.doctorId ? cita.doctor : "Sin doctor" },
           { campo: "Antes", valor: antes.texto },
           { campo: "Después", valor: despues.texto },
           ...(sillonDeLaCita ? [{ campo: "Sillón", valor: sillonDeLaCita.nombre }] : []),

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { prisma } from "@/lib/prisma";
+import { nombreDelDoctor } from "@/lib/reminders/doctor-del-mensaje";
 
 export async function GET(req: NextRequest, props: { params: Promise<{ appointmentId: string }> }) {
   const params = await props.params;
@@ -57,7 +58,8 @@ export async function GET(req: NextRequest, props: { params: Promise<{ appointme
       token: role === "doctor" ? appointment.teleDoctorToken : appointment.telePatientToken,
       appointmentId: appointment.id,
       patientName: `${appointment.patient.firstName} ${appointment.patient.lastName}`,
-      doctorName: `${appointment.doctor.firstName} ${appointment.doctor.lastName}`,
+      // Cita «Sin doctor» no llega aquí (D11); si llegara, sin nombre en vez de un 500.
+      doctorName: nombreDelDoctor(appointment.doctor) ?? "",
       type: appointment.type,
     });
   } catch (error) {

@@ -4576,6 +4576,8 @@
       "restoreDefaultBtn": "Restore the original message",
       "previewLabel": "Preview",
       "previewSampleDate": "Monday, June 24",
+      "previewSinDoctorLabel": "Preview · appointment without a doctor",
+      "previewSinDoctorHint": "What a patient receives when their appointment has no doctor yet: the doctor line is left out.",
       "confirmLinkNote": "The reminder always includes the public confirmation link: the patient can confirm or cancel without signing in, and the status is reflected in your schedule.",
       "savedToast": "Reminders saved",
       "saveErrorToast": "Error saving"

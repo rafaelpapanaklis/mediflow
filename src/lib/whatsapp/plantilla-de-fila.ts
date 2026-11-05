@@ -18,6 +18,7 @@
 // PURO: sin Prisma ni red.
 
 import type { WhatsAppSendKind } from "./system-message";
+import { doctorParaPlantilla } from "@/lib/reminders/doctor-del-mensaje";
 
 export interface FilaParaPlantilla {
   /** `WhatsAppReminder.type`: APPT_AUTO, FOLLOWUP, BIRTHDAY, RECALL… */
@@ -75,7 +76,9 @@ export function plantillaDeFila(f: FilaParaPlantilla): PlantillaDeFila {
         minute: "2-digit",
         hour12: false,
       }).format(f.startsAt),
-      f.doctor ? `Dr/a. ${f.doctor.firstName} ${f.doctor.lastName}`.trim() : "tu doctor(a)",
+      // {{5}} nunca vacío: Meta rechaza la variable vacía. Sin doctor (cita
+      // «Sin doctor», D5 del plan ws1-t11) va «nuestro equipo».
+      doctorParaPlantilla(f.doctor),
     ],
   };
 }

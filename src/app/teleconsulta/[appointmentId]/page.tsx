@@ -6,6 +6,7 @@ import { decidirDosPasos } from "@/lib/auth/two-factor-decision";
 import { TWO_FA_CHALLENGE_PATH, TWO_FA_SETUP_PATH } from "@/lib/auth/two-factor-constants";
 import { TeleconsultaClient } from "./teleconsulta-client";
 import { timeHHMMInTz } from "@/lib/agenda/legacy-helpers";
+import { doctorConTitulo } from "@/lib/reminders/doctor-del-mensaje";
 
 export const metadata = { title: "Teleconsulta — DaleControl" };
 
@@ -108,7 +109,8 @@ export default async function TeleconsultaPage(
       token={token}
       role={role}
       patientName={`${appointment.patient.firstName} ${appointment.patient.lastName}`}
-      doctorName={`Dr/a. ${appointment.doctor.firstName} ${appointment.doctor.lastName}`}
+      // Una teleconsulta nunca es «Sin doctor» (D11); si llegara, sin nombre en vez de un error.
+      doctorName={doctorConTitulo(appointment.doctor) ?? ""}
       clinicName={appointment.clinic.name}
       appointmentType={appointment.type}
       appointmentTime={timeHHMMInTz(appointment.startsAt, appointment.clinic.timezone)}

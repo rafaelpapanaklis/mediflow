@@ -31,6 +31,7 @@ import { sendEmail } from "@/lib/email";
 import { formatApptDateParts } from "@/lib/reminders/config";
 import { createPatientNotification } from "@/lib/patient-notifications/create";
 import { envioDeResolucion } from "@/lib/whatsapp/avisos-cita-plantilla";
+import { doctorConTitulo, doctorParaPlantilla } from "@/lib/reminders/doctor-del-mensaje";
 
 export async function notifyPatientChangeResolution(changeRequestId: string): Promise<void> {
   try {
@@ -72,7 +73,9 @@ export async function notifyPatientChangeResolution(changeRequestId: string): Pr
 
     const { appointment, patient, clinic } = cr;
     const { fecha, hora } = formatApptDateParts(appointment.startsAt, clinic.timezone);
-    const doctorName = `Dr/a. ${appointment.doctor.firstName} ${appointment.doctor.lastName}`.trim();
+    // null en una cita «Sin doctor» (ws1-t10): sin la frase «Te atiende» ni la
+    // fila del correo; el {{5}} de la plantilla lleva «nuestro equipo».
+    const doctorName = doctorConTitulo(appointment.doctor);
 
     let message: string;
     let subject: string;
@@ -83,7 +86,7 @@ export async function notifyPatientChangeResolution(changeRequestId: string): Pr
       // appointment.startsAt YA es la fecha nueva (el resolve actualizó la cita).
       message =
         `Hola ${patient.firstName} 👋. Tu cita en *${clinic.name}* quedó reagendada: ` +
-        `ahora es el *${fecha}* a las *${hora}*. Te atiende: ${doctorName}. ` +
+        `ahora es el *${fecha}* a las *${hora}*. ${doctorName ? `Te atiende: ${doctorName}. ` : ""}` +
         `Si no puedes asistir, entra al portal o contáctanos.`;
       subject = `Tu cita fue reagendada — ${clinic.name}`;
       showDoctor = true;
@@ -128,7 +131,7 @@ export async function notifyPatientChangeResolution(changeRequestId: string): Pr
             clinica: clinic.name,
             fecha,
             hora,
-            doctor: doctorName,
+            doctor: doctorParaPlantilla(appointment.doctor),
           }),
           patientId: cr.patientId,
         });

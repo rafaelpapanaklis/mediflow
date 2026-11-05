@@ -178,7 +178,8 @@ export default function PacienteInicioPage() {
                       }}
                     >
                       {cita.patientName ? `${cita.patientName} · ` : ""}
-                      {cita.doctorName} · {cita.type}
+                      {cita.doctorName ? `${cita.doctorName} · ` : ""}
+                      {cita.type}
                       {multiClinic ? ` · ${clinicName(clinics, cita.clinicId)}` : ""}
                     </div>
                   </div>

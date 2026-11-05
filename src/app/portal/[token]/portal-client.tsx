@@ -131,7 +131,7 @@ export function PatientPortalClient({ patient }: { patient: any }) {
                     </div>
                     <div className="flex-1">
                       <div className="font-bold">{formatDate(a.date)}</div>
-                      <div className="text-slate-400 text-sm">{a.startTime} · Dr/a. {a.doctor.firstName} {a.doctor.lastName}</div>
+                      <div className="text-slate-400 text-sm">{a.startTime}{a.doctor ? ` · Dr/a. ${a.doctor.firstName} ${a.doctor.lastName}` : ""}</div>
                       <div className="text-slate-500 text-xs mt-1">{a.type}</div>
                     </div>
                     <span className="text-xs font-bold px-2 py-1 rounded-lg" style={{background:`${(STATUS_MAP[a.status]?.color ?? "#6b7280")}22`, color:STATUS_MAP[a.status]?.color ?? "#6b7280"}}>
@@ -206,12 +206,15 @@ export function PatientPortalClient({ patient }: { patient: any }) {
                           {STATUS_MAP[a.status]?.label}
                         </span>
                       </div>
-                      <div className="flex items-center gap-2 text-sm text-slate-400">
-                        <div className="w-6 h-6 rounded-full shrink-0 flex items-center justify-center text-white text-xs font-bold" style={{background:a.doctor.color}}>
-                          {a.doctor.firstName[0]}
+                      {/* Cita «Sin doctor» (ws1-t10): sin la fila del doctor. */}
+                      {a.doctor && (
+                        <div className="flex items-center gap-2 text-sm text-slate-400">
+                          <div className="w-6 h-6 rounded-full shrink-0 flex items-center justify-center text-white text-xs font-bold" style={{background:a.doctor.color}}>
+                            {a.doctor.firstName[0]}
+                          </div>
+                          Dr/a. {a.doctor.firstName} {a.doctor.lastName}
                         </div>
-                        Dr/a. {a.doctor.firstName} {a.doctor.lastName}
-                      </div>
+                      )}
                       <div className="text-xs text-slate-500 mt-1">{a.type}</div>
                     </div>
                   ))}
@@ -224,8 +227,8 @@ export function PatientPortalClient({ patient }: { patient: any }) {
                 <div className="space-y-2">
                   {past.map((a: any) => (
                     <div key={a.id} className="bg-slate-900/60 border border-slate-800/60 rounded-xl p-3.5 flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center text-white text-xs font-bold" style={{background:a.doctor.color}}>
-                        {a.doctor.firstName[0]}
+                      <div className="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center text-white text-xs font-bold" style={{background:a.doctor?.color ?? "#6b7280"}}>
+                        {a.doctor?.firstName?.[0] ?? "—"}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="text-sm font-semibold truncate">{formatDate(a.date)} · {a.startTime}</div>

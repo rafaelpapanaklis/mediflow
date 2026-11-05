@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { PagoClient } from "./pago-client";
 import { timeHHMMInTz } from "@/lib/agenda/legacy-helpers";
 import { esTokenDePagoValido } from "@/lib/teleconsulta/pago-token";
+import { doctorConTitulo } from "@/lib/reminders/doctor-del-mensaje";
 
 export const metadata = { title: "Pagar teleconsulta — DaleControl" };
 
@@ -35,7 +36,8 @@ export default async function PagoPage(
     <PagoClient
       appointmentId={appointment.id}
       patientName={`${appointment.patient.firstName} ${appointment.patient.lastName}`}
-      doctorName={`Dr/a. ${appointment.doctor.firstName} ${appointment.doctor.lastName}`}
+      // Una teleconsulta nunca es «Sin doctor» (D11); si llegara, sin la fila del doctor.
+      doctorName={doctorConTitulo(appointment.doctor) ?? ""}
       clinicName={appointment.clinic.name}
       appointmentType={appointment.type}
       date={appointment.startsAt.toISOString()}

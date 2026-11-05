@@ -365,6 +365,11 @@ export async function createBotAppointment(params: {
   apartado?: ApartadoConAnticipo;
 }): Promise<CreateResult> {
   const { clinicId, patientId, doctorId, dateISO, time, reason, apartado } = params;
+  // m4 de la revisión de P1 (ws1-t12): el bot, la web de anticipos y Ortodoncia
+  // SIEMPRE asignan doctor. Sin esta guarda, `findFirst({ id: undefined })`
+  // perdería el filtro (Prisma descarta la clave), encontraría a cualquier
+  // doctor y el `create` escribiría una cita «Sin doctor» que nadie pidió.
+  if (!doctorId) return { ok: false, error: "doctor_not_found" };
   const [hh, mm] = time.split(":").map(Number);
   if (Number.isNaN(hh) || Number.isNaN(mm)) return { ok: false, error: "invalid" };
 
@@ -536,6 +541,10 @@ export async function rescheduleBotAppointment(params: {
   });
   if (!existing) return { ok: false, error: "not_found" };
   if (existing.status === "CANCELLED" || existing.status === "NO_SHOW") return { ok: false, error: "not_active" };
+  // Cita «Sin doctor» (ws1-t10, D6): el bot no la mueve —sus huecos dependen
+  // del doctor— y la pasa a una persona antes de llegar aquí. Si llegara, no
+  // se mueve («No pude reagendar… llama al consultorio»), nunca a ciegas.
+  if (!existing.doctorId) return { ok: false, error: "failed" };
   // WS1-T5 — una cita apartada cuyo anticipo venció ya no es de nadie: moverla
   // la «reviviría» vencida y la agenda seguiría tratándola como hueco libre.
   if (apartadoVencido(existing)) return { ok: false, error: "not_found" };

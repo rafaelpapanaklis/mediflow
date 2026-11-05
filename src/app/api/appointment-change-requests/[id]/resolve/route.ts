@@ -32,6 +32,7 @@ import { quitarMarcaDeSobreagenda } from "@/lib/agenda/sobreagendar.server";
 import { marcarPendienteSiHayDinero } from "@/lib/anticipos/cita-cancelada.server";
 import { textoCita } from "@/lib/movimientos-paciente/textos";
 import { zonaDeClinica } from "@/lib/movimientos-paciente/zona";
+import { doctorIdsDe, ramaDelDoctor } from "@/lib/agenda/sin-doctor";
 
 export const dynamic = "force-dynamic";
 
@@ -312,7 +313,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
   // su motivo). Con «Sí» no hace nada y solo se avisa abajo, como siempre.
   const bloqueoPrevio = bloqueaEsteHueco(
     await leerBloqueosDelRango(session.clinic.id, proposedStartsAt, proposedEndsAt, {
-      doctorIds: [appointment.doctorId],
+      doctorIds: doctorIdsDe(appointment.doctorId),
     }),
     proposedStartsAt,
     proposedEndsAt,
@@ -330,7 +331,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
   // es agendar en la comida sin el «¿Seguro?». Antes de mover nada; la
   // solicitud se queda PENDIENTE (se puede rechazar con su motivo).
   const comidaDestino = comidaQuePisa(
-    await leerHorariosDeDoctores(session.clinic.id, { doctorIds: [appointment.doctorId] }),
+    await leerHorariosDeDoctores(session.clinic.id, { doctorIds: doctorIdsDe(appointment.doctorId) }),
     proposedStartsAt,
     proposedEndsAt,
     appointment.doctorId,
@@ -353,6 +354,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     free = await isSlotFree({
       clinicId: session.clinic.id,
       doctorId: appointment.doctorId,
+      resourceId: appointment.resourceId,
       startsAt: proposedStartsAt,
       endsAt: proposedEndsAt,
       excludeAppointmentId: appointment.id,
@@ -385,8 +387,10 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
         where: {
           clinicId: session.clinic.id,
           id: { not: appointment.id },
+          // Cita «Sin doctor» (ws1-t10): sin la rama del doctor (IS NULL empataría
+          // con todas las «Sin doctor»); sin sillón tampoco, `OR: []` no da filas.
           OR: [
-            { doctorId: appointment.doctorId },
+            ...ramaDelDoctor(appointment.doctorId),
             ...(appointment.resourceId
               ? [{ resourceId: appointment.resourceId }]
               : []),
@@ -492,9 +496,9 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
   try {
     const [bloqueosDestino, horariosDestino] = await Promise.all([
       leerBloqueosDelRango(session.clinic.id, proposedStartsAt, proposedEndsAt, {
-        doctorIds: [appointment.doctorId],
+        doctorIds: doctorIdsDe(appointment.doctorId),
       }),
-      leerHorariosDeDoctores(session.clinic.id, { doctorIds: [appointment.doctorId] }),
+      leerHorariosDeDoctores(session.clinic.id, { doctorIds: doctorIdsDe(appointment.doctorId) }),
     ]);
     const bloqueoDestino = bloqueaEsteHueco(bloqueosDestino, proposedStartsAt, proposedEndsAt, appointment.doctorId);
     const fueraDelDoctor = doctorNoAtiende(

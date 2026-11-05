@@ -5,6 +5,7 @@ import { createRoom, createMeetingToken } from "@/lib/daily";
 import { sendWhatsAppLogged } from "@/lib/whatsapp/send-and-log";
 import { timeHHMMInTz } from "@/lib/agenda/legacy-helpers";
 import { PATIENT_INVOICE_KIND, applyInvoiceOnlinePayment } from "@/lib/patient-portal/online-payment";
+import { nombreDelDoctor } from "@/lib/reminders/doctor-del-mensaje";
 
 export const dynamic = "force-dynamic";
 
@@ -83,7 +84,10 @@ export async function POST(req: NextRequest) {
 
       const room = await createRoom(appointmentId, expiresAt);
       const roomName = appointmentId.replace(/[^a-zA-Z0-9-]/g, "").slice(0, 40);
-      const doctorToken = await createMeetingToken(roomName, true, `Dr. ${appointment.doctor.firstName} ${appointment.doctor.lastName}`);
+      // El pago YA quedó marcado arriba: nada de aquí puede tronar por una cita sin
+      // doctor (D11 lo impide; si llegara, la sala sale con el nombre de la clínica).
+      const nombreDoctor = nombreDelDoctor(appointment.doctor);
+      const doctorToken = await createMeetingToken(roomName, true, nombreDoctor ? `Dr. ${nombreDoctor}` : appointment.clinic.name);
       const patientToken = await createMeetingToken(roomName, false, `${appointment.patient.firstName} ${appointment.patient.lastName}`);
 
       await prisma.appointment.update({
@@ -110,7 +114,7 @@ export async function POST(req: NextRequest) {
       // Send WhatsApp to patient
       if (appointment.clinic.waConnected && appointment.clinic.waPhoneNumberId && appointment.clinic.waAccessToken && appointment.patient.phone) {
         try {
-          const patientMsg = `✅ Pago confirmado — Teleconsulta con Dr/a. ${appointment.doctor.firstName} ${appointment.doctor.lastName}\n📅 ${fecha}\n🕐 ${hora}\n💻 Únete aquí: ${appUrl}/teleconsulta/${appointmentId}?role=patient&token=${patientToken}\n\nRecomendaciones:\n- Usa conexión estable\n- Usa audífonos\n- Entra 5 min antes`;
+          const patientMsg = `✅ Pago confirmado — Teleconsulta${nombreDoctor ? ` con Dr/a. ${nombreDoctor}` : ""}\n📅 ${fecha}\n🕐 ${hora}\n💻 Únete aquí: ${appUrl}/teleconsulta/${appointmentId}?role=patient&token=${patientToken}\n\nRecomendaciones:\n- Usa conexión estable\n- Usa audífonos\n- Entra 5 min antes`;
 
           // Este SÍ va al paciente: se vincula el hilo (linkPatient) aunque el
           // kind sea "system" — el default de "system" es no vincular porque
@@ -128,7 +132,7 @@ export async function POST(req: NextRequest) {
       }
 
       // Send WhatsApp to doctor
-      if (appointment.clinic.waConnected && appointment.clinic.waPhoneNumberId && appointment.clinic.waAccessToken && appointment.doctor.phone) {
+      if (appointment.clinic.waConnected && appointment.clinic.waPhoneNumberId && appointment.clinic.waAccessToken && appointment.doctor?.phone) {
         try {
           const doctorMsg = `📹 Nueva teleconsulta pagada\n👤 Paciente: ${appointment.patient.firstName} ${appointment.patient.lastName}\n📅 ${fecha} a las ${hora}\n💻 Únete: ${appUrl}/teleconsulta/${appointmentId}?role=doctor\n💰 Recibirás $${doctorAmount} después de la sesión`;
 

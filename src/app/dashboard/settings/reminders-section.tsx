@@ -13,6 +13,7 @@ import {
   ALLOWED_REMINDER_OFFSETS,
   DEFAULT_REMINDER_TEMPLATE,
   getEffectiveReminderSettings,
+  renderReminderTemplate,
   type ReminderChannel,
   type ReminderSettings,
 } from "@/lib/reminders/config";
@@ -59,24 +60,22 @@ export function RemindersSection({ clinic, rediseno = false }: { clinic: any; re
     });
   }
 
-  // Preview con valores de ejemplo — mismas sustituciones (y alias legacy) que
-  // renderReminderTemplate en @/lib/reminders/config.
-  let preview = form.template
-    .replaceAll("{paciente}", "María")
-    .replaceAll("{nombre}", "María")
-    .replaceAll("{clinica}", clinic?.name || "Clínica Dental")
-    .replaceAll("{clinicName}", clinic?.name || "Clínica Dental")
+  // Preview con valores de ejemplo — pasa por renderReminderTemplate, la MISMA
+  // función del envío: lo que se ve es lo que recibe el paciente. La segunda
+  // (ws1-t10) es la de una cita «Sin doctor»: sin la línea del doctor.
+  const varsDeEjemplo = {
+    paciente: "María",
+    clinica: clinic?.name || "Clínica Dental",
     // ws1-t1 (N-54): mañana, no una fecha fija («lunes 24 de junio»).
-    .replaceAll("{fecha}", fechaDeEjemplo(new Date(), clinic?.timezone))
-    .replaceAll("{hora}", "10:00")
-    .replaceAll("{doctor}", "Dr/a. García")
-    .replaceAll("{doctorName}", "Dr/a. García")
-    .replaceAll("{link}", SAMPLE_LINK);
-  if (!preview.includes(SAMPLE_LINK)) {
+    fecha: fechaDeEjemplo(new Date(), clinic?.timezone),
+    hora: "10:00",
+    doctor: "Dr/a. García",
     // El backend siempre agrega el link si la plantilla no lo incluye (en español,
     // porque el mensaje al paciente viaja en español) — el preview lo refleja.
-    preview += `\n\nConfirma tu asistencia aquí: ${SAMPLE_LINK}`;
-  }
+    link: SAMPLE_LINK,
+  };
+  const preview = renderReminderTemplate(form.template, varsDeEjemplo);
+  const previewSinDoctor = renderReminderTemplate(form.template, { ...varsDeEjemplo, doctor: null });
 
   async function save() {
     setSaving(true);
@@ -165,6 +164,11 @@ export function RemindersSection({ clinic, rediseno = false }: { clinic: any; re
           <Bloque>
             <SubtituloGrupo>{t("settings.reminders.previewLabel")}</SubtituloGrupo>
             <Burbuja>{preview}</Burbuja>
+          </Bloque>
+          <Bloque>
+            <SubtituloGrupo>{t("settings.reminders.previewSinDoctorLabel")}</SubtituloGrupo>
+            <Burbuja>{previewSinDoctor}</Burbuja>
+            <Aviso tono="info">{t("settings.reminders.previewSinDoctorHint")}</Aviso>
           </Bloque>
 
           <Aviso tono="info">{t("settings.reminders.confirmLinkNote")}</Aviso>
@@ -316,6 +320,32 @@ export function RemindersSection({ clinic, rediseno = false }: { clinic: any; re
           }}
         >
           {preview}
+        </div>
+      </div>
+
+      {/* ws1-t10 — la misma, para una cita «Sin doctor» */}
+      <div style={{ borderRadius: "var(--radius)", border: "1px solid var(--border-soft)", background: "var(--bg-elev-2)", padding: 12 }}>
+        <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--text-3)", marginBottom: 8 }}>
+          {t("settings.reminders.previewSinDoctorLabel")}
+        </div>
+        <div
+          style={{
+            background: "var(--success)",
+            color: "#fff",
+            fontSize: 12,
+            borderRadius: 16,
+            borderTopLeftRadius: 0,
+            padding: "8px 12px",
+            maxWidth: 280,
+            lineHeight: 1.5,
+            whiteSpace: "pre-wrap",
+            overflowWrap: "anywhere",
+          }}
+        >
+          {previewSinDoctor}
+        </div>
+        <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 8 }}>
+          {t("settings.reminders.previewSinDoctorHint")}
         </div>
       </div>
 

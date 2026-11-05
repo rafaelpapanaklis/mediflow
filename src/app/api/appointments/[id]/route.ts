@@ -27,6 +27,7 @@ import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import {
   applyReminderReschedule,
   cancelPendingRemindersForAppointment,
+  rerenderPendingReminderText,
 } from "@/lib/reminders/reschedule.server";
 import { validateResourceSchedule } from "@/lib/agenda/resource-schedule";
 import { loadResourceSchedule } from "@/lib/agenda/resource-schedule.server";
@@ -563,8 +564,8 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
       //
       // Va DENTRO de la transacción: una cita movida con recordatorios viejos
       // es exactamente el estado que este arreglo no puede permitir.
-      // (ws1-t11: al cambiar SOLO el doctor no se re-encola: cancelaría un aviso ya vencido sin mandar. Poner
-      // al día el texto del pendiente es de P3.)
+      // (ws1-t11: al cambiar SOLO el doctor no se re-encola: cancelaría un aviso ya vencido sin mandar. El
+      // texto del pendiente se pone al día después de la transacción, abajo.)
       if (row.startsAt.getTime() !== existing.startsAt.getTime()) {
         await applyReminderReschedule(tx, {
           appointmentId: params.id,
@@ -574,6 +575,20 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
       }
       return row;
     });
+
+    // ws1-t10 — cambió SOLO el doctor (a una «Sin doctor» se le asigna, a otra se
+    // le quita, o pasa de A a B): el texto de los recordatorios que aún no salen
+    // se pone al día, sin cancelar ni re-encolar nada. No lanza.
+    if (
+      updated.startsAt.getTime() === existing.startsAt.getTime() &&
+      (updated.doctorId ?? null) !== (existing.doctorId ?? null)
+    ) {
+      try {
+        await rerenderPendingReminderText(prisma, { appointmentId: params.id, clinicId: session.clinic.id });
+      } catch (e) {
+        console.error("[appointments/patch] texto de recordatorios tras cambiar el doctor:", e);
+      }
+    }
 
     // Aviso de reagendado (H-1). Solo si la cita CAMBIÓ DE HORA — cambiar de
     // sillón o de motivo no es noticia para el paciente— y solo si la clínica

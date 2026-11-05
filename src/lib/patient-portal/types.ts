@@ -180,7 +180,8 @@ export interface PacienteCita {
   status: string;
   startsAt: string; // ISO UTC
   endsAt: string; // ISO UTC
-  doctorName: string;
+  /** «Nombre Apellido»; null = cita «Sin doctor» (ws1-t10): la interfaz omite «Con …». */
+  doctorName: string | null;
   /**
    * Solicitud de cambio PENDING de esta cita, o null. Solo la puebla
    * /api/paciente/appointments en `upcoming`; otros endpoints (summary) la omiten.

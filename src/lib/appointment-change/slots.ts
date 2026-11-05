@@ -11,9 +11,10 @@
 //     Slots "HH:mm" entre apertura y cierre (default 30 min).
 //   canPatientChange(startsAt: Date, minHours: number, now?: Date): boolean
 //     true si la cita está a más de minHours horas de distancia (ventana mínima).
-//   isSlotFree(opts: { clinicId: string; doctorId: string; startsAt: Date; endsAt: Date;
-//     excludeAppointmentId?: string }): Promise<boolean>
+//   isSlotFree(opts: { clinicId: string; doctorId: string | null; resourceId?: string | null;
+//     startsAt: Date; endsAt: Date; excludeAppointmentId?: string }): Promise<boolean>
 //     true si NO hay cita del doctor que se traslape (status notIn CANCELLED/NO_SHOW).
+//     Sin doctor (ws1-t10), solo su sillón.
 //
 // Aquí vivía `clearAutoRemindersForAppointment`, que BORRABA los recordatorios
 // de la cita —pendientes y enviados— y dejaba que el barrido re-encolara. Se
@@ -58,10 +59,29 @@ export function canPatientChange(startsAt: Date, minHours: number, now: Date = n
 
 export interface IsSlotFreeOpts {
   clinicId: string;
-  doctorId: string;
+  /** null = cita «Sin doctor» (ws1-t10): no ocupa a ningún doctor; cuenta solo su sillón. */
+  doctorId: string | null;
+  /** Sillón de la cita. Solo se mira sin doctor (con doctor, lo de siempre). */
+  resourceId?: string | null;
   startsAt: Date;
   endsAt: Date;
   excludeAppointmentId?: string;
+}
+
+/**
+ * Contra qué citas choca un hueco del portal: las del doctor de la cita, como
+ * siempre. Una cita «Sin doctor» (ws1-t10) no ocupa a ningún doctor —
+ * `doctorId: null` en Prisma es IS NULL y empataría con todas las demás «Sin
+ * doctor», que no se bloquean entre sí—: choca solo por su sillón, como la
+ * constraint `appt_resource_no_overlap`. Sin doctor ni sillón: con nada (null).
+ */
+export function quienOcupaElHueco(
+  doctorId: string | null | undefined,
+  resourceId: string | null | undefined,
+): { doctorId: string } | { resourceId: string } | null {
+  if (doctorId) return { doctorId };
+  if (resourceId) return { resourceId };
+  return null;
 }
 
 /**
@@ -70,10 +90,14 @@ export interface IsSlotFreeOpts {
  * startsAt, status notIn CANCELLED/NO_SHOW) — NO igualdad exacta de hora.
  */
 export async function isSlotFree(opts: IsSlotFreeOpts): Promise<boolean> {
+  // (c) de la casa: sin clinicId no se consulta.
+  if (!opts.clinicId) return false;
+  const porQuien = quienOcupaElHueco(opts.doctorId, opts.resourceId);
+  if (!porQuien) return true;
   const conflict = await prisma.appointment.findFirst({
     where: {
       clinicId: opts.clinicId,
-      doctorId: opts.doctorId,
+      ...porQuien,
       ...(opts.excludeAppointmentId ? { id: { not: opts.excludeAppointmentId } } : {}),
       status: { notIn: ["CANCELLED", "NO_SHOW"] },
       startsAt: { lt: opts.endsAt },

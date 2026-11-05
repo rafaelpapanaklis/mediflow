@@ -11,6 +11,7 @@ import {
   getConfirmUrl,
   renderReminderTemplate,
 } from "@/lib/reminders/config";
+import { doctorConTitulo } from "@/lib/reminders/doctor-del-mensaje";
 
 // Texto de respaldo cuando la clínica no guardó uno propio (waReminderMsg).
 // Mismas palabras que antes; ahora pasa por el MISMO render que el texto de la
@@ -98,7 +99,8 @@ export async function POST(req: NextRequest) {
     clinica: clinic.name,
     fecha: date,
     hora,
-    doctor: `Dr/a. ${appt.doctor.firstName} ${appt.doctor.lastName}`.trim(),
+    // Cita «Sin doctor» (ws1-t10): null → el render quita la línea del doctor.
+    doctor: doctorConTitulo(appt.doctor),
     link: getConfirmUrl(token),
   });
 

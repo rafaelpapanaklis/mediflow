@@ -31,6 +31,7 @@ import { parseWaTemplates, type WaTemplateMap } from "@/lib/whatsapp/template-co
 import { WA_ERROR_CODE } from "@/lib/whatsapp/errors";
 import type { WhatsAppSendKind } from "@/lib/whatsapp/system-message";
 import { esAvisoDeCobro, fraseAvisoYaEnviado, ultimoAvisoDeCobro } from "@/lib/whatsapp/aviso-cobro-tope";
+import { doctorParaPlantilla } from "@/lib/reminders/doctor-del-mensaje";
 
 /** Dónde se dan de alta las plantillas (lo abre el enlace del composer). */
 export const TEMPLATES_MANAGE_HREF = "/dashboard/whatsapp/plantillas";
@@ -227,11 +228,12 @@ function fmtMXN(n: number): string {
   return `${v} MXN`;
 }
 
-/** Meta rechaza las variables vacías: sin doctor en la cita va la fórmula genérica. */
+/**
+ * Meta rechaza las variables vacías: sin doctor en la cita (cita «Sin doctor»)
+ * va la fórmula neutra de D5, la misma que la cola y los avisos.
+ */
 function fmtDoctor(appt: ApptFact): string {
-  if (!appt.doctor) return "tu doctor(a)";
-  const name = `${appt.doctor.firstName ?? ""} ${appt.doctor.lastName ?? ""}`.trim();
-  return name ? `Dr/a. ${name}` : "tu doctor(a)";
+  return doctorParaPlantilla(appt.doctor);
 }
 
 // Motivos EN ESPAÑOL de por qué falta el dato. Se leen en el panel, así que

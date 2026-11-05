@@ -22,6 +22,12 @@ import { claveWhatsApp } from "@/lib/whatsapp/bot/booking-parse";
 import { sendEmail } from "@/lib/email";
 import { buildAppointmentReminderEmail } from "@/lib/reminders/email";
 import {
+  DOCTOR_NEUTRO,
+  doctorConTitulo,
+  nombreDelDoctor,
+  quitarDoctorDeLaPlantilla,
+} from "@/lib/reminders/doctor-del-mensaje";
+import {
   WA_REMINDER_STATUS,
   WA_REMINDER_PENDING_STATUSES,
   WA_REMINDER_REPLYABLE_APPT_STATUSES,
@@ -226,9 +232,8 @@ export async function processWhatsAppQueue(opts?: {
               hour12: false,
             }).format(startsAt)
           : "(hora por confirmar)";
-        const doctorName = r.appointment?.doctor
-          ? `Dr/a. ${r.appointment.doctor.firstName} ${r.appointment.doctor.lastName}`.trim()
-          : "tu doctor/a";
+        // Cita «Sin doctor» (ws1-t10): null → el correo no pinta la fila del doctor.
+        const doctorName = doctorConTitulo(r.appointment?.doctor);
 
         const built = buildAppointmentReminderEmail({
           clinicName: r.clinic.name,
@@ -318,9 +323,8 @@ export async function processWhatsAppQueue(opts?: {
         patient: patientCtx,
         clinic: clinicCtx,
         appointmentStartsAt: r.appointment?.startsAt ?? null,
-        doctorName: r.appointment?.doctor
-          ? `${r.appointment.doctor.firstName} ${r.appointment.doctor.lastName}`.trim()
-          : null,
+        doctorName: nombreDelDoctor(r.appointment?.doctor),
+        citaSinDoctor: !!r.appointment && !r.appointment.doctor,
       });
 
       if (!body) {
@@ -433,6 +437,13 @@ interface RenderInput {
   clinic: ClinicCtx;
   appointmentStartsAt: Date | null;
   doctorName: string | null;
+  /**
+   * ws1-t10 — la fila cuelga de una cita «Sin doctor». Solo entonces se quita
+   * la línea de {doctorName}. Una fila SIN cita (mantenimiento periodontal,
+   * progreso de ortodoncia…) tampoco tiene doctor y sigue como siempre
+   * («tu doctor/a»): esas plantillas firman con él (revisión de P3, M1).
+   */
+  citaSinDoctor?: boolean;
 }
 
 /**
@@ -461,12 +472,15 @@ export function renderMessage(input: RenderInput): string | null {
 
   // Sustituye placeholders globales tras el render. Usar replaceAll para
   // que se sustituyan todas las apariciones (algunas plantillas firman
-  // dos veces).
+  // dos veces). Si la fila cuelga de una cita «Sin doctor» (ws1-t10), la línea
+  // que solo lleva {doctorName} se quita y en una frase va «nuestro equipo»: la
+  // misma regla que los recordatorios (reminders/doctor-del-mensaje.ts).
+  if (!input.doctorName && input.citaSinDoctor) body = quitarDoctorDeLaPlantilla(body, ["{doctorName}"]);
   return body
     .replaceAll("{clinicName}", input.clinic.name)
     .replaceAll(
       "{doctorName}",
-      input.doctorName ? `Dr/a. ${input.doctorName}` : "tu doctor/a",
+      input.doctorName ? `Dr/a. ${input.doctorName}` : input.citaSinDoctor ? DOCTOR_NEUTRO : "tu doctor/a",
     )
     .replaceAll("{clinicPhone}", "")
     .replaceAll("{methods}", "transferencia, efectivo o tarjeta")

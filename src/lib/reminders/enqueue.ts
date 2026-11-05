@@ -32,6 +32,7 @@ import {
   textoRecordatorioDeCita,
 } from "@/lib/orthodontics/plantillas-mensaje";
 import type { NotifPrefs } from "@/lib/patient-notifications/types";
+import { doctorConTitulo } from "@/lib/reminders/doctor-del-mensaje";
 
 export interface SweepSummary {
   clinics: number;
@@ -114,7 +115,8 @@ export async function sweepAppointmentReminders(opts?: {
             phone: string | null;
             email: string | null;
           };
-          doctor: { firstName: string; lastName: string };
+          /** null = cita «Sin doctor» (ws1-t10): el texto sale sin la línea del doctor. */
+          doctor: { firstName: string; lastName: string } | null;
         }>;
       }> = [];
       for (const offset of settings.offsets) {
@@ -255,7 +257,8 @@ export async function sweepAppointmentReminders(opts?: {
           // Fecha/hora local (puro, barato): cuerpo de la notificación in-app
           // y del mensaje WA/email (más abajo).
           const { fecha, hora } = formatApptDateParts(appt.startsAt, clinic.timezone);
-          const doctorName = `Dr/a. ${appt.doctor.firstName} ${appt.doctor.lastName}`.trim();
+          // null en una cita «Sin doctor»: el render quita la línea del doctor.
+          const doctorName = doctorConTitulo(appt.doctor);
 
           // Centro de notificaciones in-app del portal: una por cita+momento,
           // solo si el paciente tiene cuenta. Idempotente por (patientId,
@@ -267,7 +270,7 @@ export async function sweepAppointmentReminders(opts?: {
               accountId,
               type: "APPOINTMENT_REMINDER",
               title: "Recordatorio de tu cita",
-              body: `Tu cita en ${clinic.name} es el ${fecha} a las ${hora}. Te atiende ${doctorName}.`,
+              body: `Tu cita en ${clinic.name} es el ${fecha} a las ${hora}.${doctorName ? ` Te atiende ${doctorName}.` : ""}`,
               dedupeKey: `${appt.id}:${offset}`,
             });
           }

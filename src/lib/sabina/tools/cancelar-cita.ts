@@ -92,6 +92,16 @@ export const cancelarCita = definirHerramienta<ParamsCancelarCita, DatosAccionAg
     if (cita.status === "CANCELLED") {
       return { estado: "no_se_puede", causa: "ya_cancelada", frase: `La cita de ${cita.paciente.nombre} del ${cuando} ya estaba cancelada.` };
     }
+    // Cita «Sin doctor» (ws1-t11, D3): un DOCTOR la ve y la puede tomar, pero no
+    // cancelarla (el DELETE contestaría 403 al confirmar). Se dice aquí.
+    if (ctx.role === "DOCTOR" && !cita.doctorId) {
+      return {
+        estado: "sin_permiso",
+        permiso: "agenda.delete",
+        causa: "rol",
+        frase: `La cita de ${cita.paciente.nombre} del ${cuando} todavía no tiene doctor: la cancela recepción o el administrador.`,
+      };
+    }
 
     // Misma traducción de PENDING que el DELETE: se evalúa como SCHEDULED.
     const desde = (cita.status === "PENDING" ? "SCHEDULED" : cita.status) as AppointmentStatus;
@@ -149,10 +159,10 @@ export const cancelarCita = definirHerramienta<ParamsCancelarCita, DatosAccionAg
           cuerpo: motivo ? { reason: motivo, notifyPatient: false } : { notifyPatient: false },
         },
         titulo: "Cancelar cita",
-        frase: `Cancelar la cita de ${cita.paciente.nombre} con ${cita.doctor} del ${cuando}${motivo ? `. Motivo: ${motivo}` : ""}.`,
+        frase: `Cancelar la cita de ${cita.paciente.nombre} ${cita.doctorId ? `con ${cita.doctor}` : "(sin doctor)"} del ${cuando}${motivo ? `. Motivo: ${motivo}` : ""}.`,
         detalle: [
           { campo: "Paciente", valor: cita.paciente.nombre },
-          { campo: "Doctor", valor: cita.doctor },
+          { campo: "Doctor", valor: cita.doctorId ? cita.doctor : "Sin doctor" },
           { campo: "Cita", valor: cuando },
           { campo: "Estado", valor: etiquetaEstado(cita.status) },
           ...(motivo ? [{ campo: "Motivo", valor: motivo }] : []),

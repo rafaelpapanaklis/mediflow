@@ -66,7 +66,7 @@ export default async function TeleconsultaPage() {
             ) : appointments.map(a => (
               <tr key={a.id}>
                 <td className={styles.cellStrong}>{a.patient.firstName} {a.patient.lastName}</td>
-                <td className={styles.cellMuted}>{t("pages.teleconsulta.doctorPrefix")} {a.doctor.firstName} {a.doctor.lastName}</td>
+                <td className={styles.cellMuted}>{a.doctor ? `${t("pages.teleconsulta.doctorPrefix")} ${a.doctor.firstName} ${a.doctor.lastName}` : "—"}</td>
                 <td className={styles.cellMuted}>{new Intl.DateTimeFormat("es-MX", { timeZone: tz, day: "numeric", month: "short" }).format(a.startsAt)}</td>
                 <td className={styles.cellTime}>{timeHHMMInTz(a.startsAt, tz)}</td>
                 <td>

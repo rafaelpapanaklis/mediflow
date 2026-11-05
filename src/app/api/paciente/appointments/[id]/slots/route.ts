@@ -31,6 +31,7 @@ import {
   CHANGEABLE_STATUSES,
   buildDaySlots,
   canPatientChange,
+  quienOcupaElHueco,
 } from "@/lib/appointment-change/slots";
 import { tzLocalToUtc, todayInTz } from "@/lib/agenda/time-utils";
 import { bloqueaEsteSlot } from "@/lib/agenda-bloqueos/core";
@@ -38,6 +39,7 @@ import { leerBloqueosDelRango } from "@/lib/agenda-bloqueos/consulta.server";
 import { doctorNoAtiendeSlot } from "@/lib/horario-doctor/core";
 import { leerHorariosDeDoctores } from "@/lib/horario-doctor/consulta.server";
 import { sinApartadoVencido } from "@/lib/agenda/apartado";
+import { doctorIdsDe } from "@/lib/agenda/sin-doctor";
 
 export const dynamic = "force-dynamic";
 
@@ -58,6 +60,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
       clinicId: true,
       patientId: true,
       doctorId: true,
+      resourceId: true,
       startsAt: true,
       endsAt: true,
       status: true,
@@ -118,11 +121,14 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
   // de la clínica, overlap para atrapar también citas que cruzan medianoche).
   const dayStartUtc = tzLocalToUtc(dateStr, 0, 0, timezone);
   const dayEndUtc = new Date(dayStartUtc.getTime() + 86_400_000);
+  // Cita «Sin doctor» (ws1-t10): los huecos son los de la clínica y su sillón —
+  // ni horario de doctor ni sus citas— y el cambio queda como solicitud (D6).
+  const ocupa = quienOcupaElHueco(appt.doctorId, appt.resourceId);
   const [busy, bloqueos, horarios] = await Promise.all([
-    prisma.appointment.findMany({
+    !ocupa ? Promise.resolve([] as { startsAt: Date; endsAt: Date }[]) : prisma.appointment.findMany({
       where: {
         clinicId: appt.clinicId,
-        doctorId: appt.doctorId,
+        ...ocupa,
         id: { not: appt.id }, // excluye la propia cita
         status: { notIn: ["CANCELLED", "NO_SHOW"] },
         startsAt: { lt: dayEndUtc },
@@ -137,12 +143,12 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
     // se cerró después de agendarla) no la ata: moverla FUERA es justo lo que
     // hay que dejar hacer.
     leerBloqueosDelRango(appt.clinicId, dayStartUtc, dayEndUtc, {
-      doctorIds: [appt.doctorId],
+      doctorIds: doctorIdsDe(appt.doctorId),
     }),
     // WS1-T2 · horario — el horario propio del doctor de la cita, si lo tiene.
     // Como con el bloqueo, se filtra el DESTINO: que la cita actual haya
     // quedado fuera de su horario no impide moverla.
-    leerHorariosDeDoctores(appt.clinicId, { doctorIds: [appt.doctorId] }),
+    leerHorariosDeDoctores(appt.clinicId, { doctorIds: doctorIdsDe(appt.doctorId) }),
   ]);
 
   const [closeH, closeM] = daySchedule.closeTime.split(":").map(Number);

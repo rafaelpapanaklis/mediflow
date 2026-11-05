@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { assertPatientVisible } from "@/lib/patient-visibility";
 import { createRoom, createMeetingToken } from "@/lib/daily";
 import { negarApiPorCategoria } from "@/lib/dashboard/guardia-categoria.server";
+import { TEXTO_TELECONSULTA_SIN_DOCTOR } from "@/lib/agenda/sin-doctor";
 
 export async function POST(req: NextRequest) {
   try {
@@ -38,6 +39,12 @@ export async function POST(req: NextRequest) {
 
     if (appointment.mode !== "TELECONSULTATION") {
       return NextResponse.json({ error: "Esta cita no es teleconsulta" }, { status: 400 });
+    }
+
+    // D11 (ws1-t11): una teleconsulta nunca es «Sin doctor» — el token de dueño
+    // de la sala es del doctor. El alta y el PATCH ya lo impiden; esto es la guarda.
+    if (!appointment.doctor) {
+      return NextResponse.json({ error: TEXTO_TELECONSULTA_SIN_DOCTOR }, { status: 409 });
     }
 
     if (appointment.paymentStatus !== "paid") {

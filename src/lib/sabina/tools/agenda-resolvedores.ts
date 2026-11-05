@@ -374,7 +374,8 @@ export interface CitaResuelta {
   status: string;
   startsAt: Date;
   endsAt: Date;
-  doctorId: string;
+  /** null = cita «Sin doctor» (ws1-t10); entonces `doctor` es "". */
+  doctorId: string | null;
   doctor: string;
   resourceId: string | null;
   motivo: string | null;
@@ -478,7 +479,7 @@ export async function resolverCita(
       opciones: citas.slice(0, TOPE_OPCIONES).map((a: any) => ({
         id: a.id,
         etiqueta: `${fechaLarga(new Date(a.startsAt), ctx.timezone)}, ${horaDe(new Date(a.startsAt), ctx.timezone)}`,
-        detalle: `con ${nombreDe(a.doctor)} · ${etiquetaEstado(a.status)}`,
+        detalle: `${a.doctor ? `con ${nombreDe(a.doctor)}` : "sin doctor"} · ${etiquetaEstado(a.status)}`,
       })),
     },
   };
@@ -490,7 +491,7 @@ function aCita(a: any): CitaResuelta {
     status: a.status,
     startsAt: new Date(a.startsAt),
     endsAt: new Date(a.endsAt),
-    doctorId: a.doctorId,
+    doctorId: a.doctorId ?? null,
     doctor: nombreDe(a.doctor),
     resourceId: a.resourceId ?? null,
     motivo: a.type ?? null,

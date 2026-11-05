@@ -127,7 +127,8 @@ export interface PropuestaAgenda {
    * Cómo estaba la cita al proponer (reagendar y cancelar). Si al confirmar ya
    * no está así, alguien la tocó entretanto y la propuesta caducó.
    */
-  esperado: { startsAt: string; endsAt: string; doctorId: string; status: string } | null;
+  /** `doctorId` null = cita «Sin doctor» (ws1-t10). */
+  esperado: { startsAt: string; endsAt: string; doctorId: string | null; status: string } | null;
 }
 
 export interface MomentoCita {

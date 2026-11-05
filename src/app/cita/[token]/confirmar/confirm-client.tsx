@@ -11,7 +11,8 @@ export interface ConfirmInfo {
   clinicPhone: string | null;
   clinicAddress: string | null;
   patientFirstName: string;
-  doctorName: string;
+  /** null = cita «Sin doctor»: no se pinta la fila. */
+  doctorName: string | null;
   fecha: string;
   hora: string;
   /** Estado actual de la cita al cargar la página. */
@@ -172,10 +173,12 @@ export function ConfirmClient({ token, info }: { token: string; info: ConfirmInf
               <span className="mr-2">🕐</span>
               {info.hora} h
             </p>
-            <p>
-              <span className="mr-2">👨‍⚕️</span>
-              {info.doctorName}
-            </p>
+            {info.doctorName && (
+              <p>
+                <span className="mr-2">👨‍⚕️</span>
+                {info.doctorName}
+              </p>
+            )}
             {info.clinicAddress && (
               <p>
                 <span className="mr-2">📍</span>

@@ -158,14 +158,15 @@ export interface ReviewInviteView {
 /**
  * Una cita COMPLETADA del paciente y, si existe, el estado de su reseña.
  * `status` null = aún no hay fila de reseña; `rating`/`comment` solo si ya la
- * calificó. La UI antepone "Dr(a)." a `doctorName`.
+ * calificó. La UI antepone "Dr(a)." a `doctorName` (null = cita «Sin doctor»:
+ * no se pinta).
  */
 export interface PatientReviewItemDTO {
   appointmentId: string;
   clinicId: string;
   clinicName: string;
   clinicSlug: string;
-  doctorName: string;
+  doctorName: string | null;
   type: string;
   date: string; // ISO (startsAt)
   rating: number | null;

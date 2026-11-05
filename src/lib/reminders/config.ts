@@ -9,6 +9,8 @@
 // email (Resend). NUNCA pasan por el bot IA: no gastan tokens ni cuentan para
 // el tope diario del bot.
 
+import { quitarDoctorDeLaPlantilla } from "./doctor-del-mensaje";
+
 export type ReminderChannel = "whatsapp" | "email" | "both";
 
 export interface ReminderSettings {
@@ -115,7 +117,8 @@ export interface ReminderTemplateVars {
   clinica: string;
   fecha: string;
   hora: string;
-  doctor: string;
+  /** «Dr/a. Nombre» (`doctorConTitulo`), o null / "" si la cita es «Sin doctor». */
+  doctor: string | null;
   link: string;
 }
 
@@ -123,17 +126,22 @@ export interface ReminderTemplateVars {
  * Sustituye variables de la plantilla. Soporta alias legacy ({nombre},
  * {clinicName}, {doctorName}). Si la plantilla no incluye {link}, lo agrega
  * al final para que el paciente siempre pueda confirmar sin login.
+ *
+ * Sin doctor (cita «Sin doctor», ws1-t10): la línea que solo habla del doctor
+ * se quita y una frase que sigue lo cambia por «nuestro equipo» — también en
+ * las plantillas que cada clínica ya personalizó (ver doctor-del-mensaje.ts).
  */
 export function renderReminderTemplate(template: string, vars: ReminderTemplateVars): string {
-  let body = template
+  const doctor = vars.doctor?.trim() ? vars.doctor : null;
+  let body = (doctor ? template : quitarDoctorDeLaPlantilla(template))
     .replaceAll("{paciente}", vars.paciente)
     .replaceAll("{nombre}", vars.paciente)
     .replaceAll("{clinica}", vars.clinica)
     .replaceAll("{clinicName}", vars.clinica)
     .replaceAll("{fecha}", vars.fecha)
     .replaceAll("{hora}", vars.hora)
-    .replaceAll("{doctor}", vars.doctor)
-    .replaceAll("{doctorName}", vars.doctor)
+    .replaceAll("{doctor}", doctor ?? "")
+    .replaceAll("{doctorName}", doctor ?? "")
     .replaceAll("{link}", vars.link)
     // `doctor` ya viene como "Dr/a. Nombre", pero el texto por defecto de
     // /dashboard/whatsapp (y muchos guardados en waReminderMsg) dicen
