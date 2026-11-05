@@ -342,7 +342,9 @@ export function buildPatientWhere(
                   clinicId: ctx.clinicId,
                   doctorId: null,
                   OR: [
-                    { status: { in: ["CHECKED_IN", "IN_CHAIR"] } },
+                    // v2 (m2): «en la clínica ahora» = de las últimas 24 h (una «Llegó» de hace meses que nadie
+                    // cerró no abre al paciente para siempre).
+                    { status: { in: ["CHECKED_IN", "IN_CHAIR"] }, startsAt: { gte: new Date(Date.now() - VENTANA_SIN_DOCTOR_PRESENTE_MS) } },
                     { status: { in: ["SCHEDULED", "CONFIRMED"] }, endsAt: { gte: new Date() } },
                   ],
                 },
@@ -383,6 +385,13 @@ export function buildPatientWhere(
 /**
  * Build appointment WHERE clause based on role.
  */
+/**
+ * ws1-t11 v2 (m2): hasta cuándo una cita «Sin doctor» en «Llegó» / «En sillón» cuenta como «el paciente
+ * está en la clínica» para abrirle el paciente a un doctor que la puede tomar. 24 h: cubre el turno del
+ * día en cualquier zona sin tener que leer la de la clínica aquí.
+ */
+export const VENTANA_SIN_DOCTOR_PRESENTE_MS = 24 * 60 * 60 * 1000;
+
 export function buildAppointmentWhere(ctx: AuthContext, extra: Record<string, any> = {}) {
   if (!ctx.isDoctor) return { clinicId: ctx.clinicId, ...extra };
   // ws1-t11 (D3) — un DOCTOR: las suyas y las «Sin doctor» de pacientes que puede ver

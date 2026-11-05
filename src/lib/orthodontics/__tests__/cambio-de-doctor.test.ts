@@ -39,7 +39,8 @@ test("sin controles no hay nada que mover", () => {
 test("la acción usa el caso y la clínica de la sesión, repite el filtro al mover y NO exporta el helper con clinicId", () => {
   const a = leer("app/actions/orthodontics/moverControlesFuturosAlDoctor.ts");
   assert.match(a, /where: \{ id: args\.treatmentPlanId, clinicId: ctx\.clinicId, deletedAt: null \}/);
-  assert.match(a, /where: \{ id: c\.id, clinicId: ctx\.clinicId, doctorId: \{ not: plan\.treatingDoctorId \}, status: \{ in:/);
+  // ws1-t11 v2 (m3): el filtro repite el doctor de origen, también «Sin doctor» (`{not: X}` deja fuera los NULL).
+  assert.match(a, /where: \{\s*id: c\.id,\s*clinicId: ctx\.clinicId,\s*OR: \[\{ doctorId: \{ not: plan\.treatingDoctorId \} \}, \{ doctorId: null \}\],\s*status: \{ in:/);
   assert.doesNotMatch(a, /export async function controlesConOtroDoctor/);
   const lib = leer("lib/orthodontics/controles-con-otro-doctor-db.ts");
   assert.match(lib, /if \(!clinicId \|\| !patientId \|\| !treatingDoctorId\) return \[\];/);

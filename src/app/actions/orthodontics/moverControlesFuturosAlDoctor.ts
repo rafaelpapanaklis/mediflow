@@ -15,6 +15,7 @@ import {
 import { controlesConOtroDoctor } from "@/lib/orthodontics/controles-con-otro-doctor-db";
 import { isOverlapError } from "@/lib/agenda/api-helpers";
 import { leerBloqueosDelRango } from "@/lib/agenda-bloqueos/consulta.server";
+import { ensureUserCanSeePatient } from "@/lib/patient-visibility";
 import { auditOrtho, getOrthoActionContext, loadPatientForOrtho } from "./_helpers";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
 import { fail, isFailure, ok, type ActionResult } from "./result";
@@ -76,7 +77,13 @@ export async function moverControlesFuturosAlDoctor(args: {
     // cambió (la atendieron, la cancelaron), no se toca.
     try {
       const { count } = await prisma.appointment.updateMany({
-        where: { id: c.id, clinicId: ctx.clinicId, doctorId: { not: plan.treatingDoctorId }, status: { in: [...ESTADOS_DE_CITA_POR_VENIR] } },
+        // ws1-t11 v2 (m3): `{not: X}` en SQL deja fuera los NULL: un control «Sin doctor» también se pasa.
+        where: {
+          id: c.id,
+          clinicId: ctx.clinicId,
+          OR: [{ doctorId: { not: plan.treatingDoctorId } }, { doctorId: null }],
+          status: { in: [...ESTADOS_DE_CITA_POR_VENIR] },
+        },
         data: { doctorId: plan.treatingDoctorId },
       });
       movidos += count;
@@ -87,6 +94,9 @@ export async function moverControlesFuturosAlDoctor(args: {
       conflictoTardio.push(c.id);
     }
   }
+
+  // v2 (m3): como el PATCH de la cita — el tratante que la recibe tiene que poder ver al paciente.
+  if (movidos > 0) await ensureUserCanSeePatient(prisma, plan.patientId, plan.treatingDoctorId, ctx.clinicId);
 
   await auditOrtho({
     ctx,
