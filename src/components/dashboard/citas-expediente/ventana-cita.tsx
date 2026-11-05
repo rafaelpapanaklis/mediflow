@@ -67,6 +67,8 @@ export interface VentanaCitaProps {
   pacienteNombre: string;
   agenda: AgendaDelExpediente;
   userRole?: string;
+  /** ws1-t11 (v3, m2) — quien mira: un DOCTOR con una «Sin doctor» solo puede tomarla al editar. */
+  userId?: string;
   /** Etiqueta unificada del estado, la misma que pinta la tabla. */
   estado: (status: string) => { texto: string; tono: string };
   onClose: () => void;
@@ -80,6 +82,7 @@ export function VentanaCita({
   pacienteNombre,
   agenda,
   userRole,
+  userId,
   estado,
   onClose,
   onEstadoCambiado,
@@ -131,8 +134,9 @@ export function VentanaCita({
       onGuardada: () => router.refresh(),
       // ws1-t11 (M2): un DOCTOR no pasa su propia cita a «Sin doctor».
       userRole,
+      userId,
     }),
-    [agenda.timezone, agenda.doctors, agenda.resources, router, userRole],
+    [agenda.timezone, agenda.doctors, agenda.resources, router, userRole, userId],
   );
 
   const estadoActual: string = cita?.status ?? "";

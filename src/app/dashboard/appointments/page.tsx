@@ -57,7 +57,8 @@ export default async function AppointmentsPage(
     }),
     prisma.user.findMany({
       where: { clinicId: user.clinicId, isActive: true },
-      select: { id: true, firstName: true, lastName: true, role: true },
+      // ws1-t11 (v3): `agendaActive` para que «¿Quién lo atiende?» solo ofrezca a quien recibe citas.
+      select: { id: true, firstName: true, lastName: true, role: true, agendaActive: true },
     }),
   ]);
 

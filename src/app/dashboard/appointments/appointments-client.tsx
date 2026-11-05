@@ -23,6 +23,7 @@ import type { AppointmentStatus } from "@/lib/agenda/types";
 import { DateField } from "@/components/ui/date-field";
 import { useT } from "@/i18n/i18n-provider";
 import { preguntaAntesDelEstado, usePedirDoctor } from "@/components/dashboard/agenda/elegir-doctor-cita";
+import { doctoresQueRecibenCitas } from "@/components/dashboard/agenda/doctores-elegibles";
 import { tzLocalToUtc } from "@/lib/agenda/time-utils";
 import { bloqueoQueTapa } from "@/lib/agenda-bloqueos/core";
 import { useBloqueosDeDia } from "@/components/dashboard/bloqueos/usar-bloqueos-dia";
@@ -42,7 +43,7 @@ import { campoDelAviso } from "@/lib/agenda/aviso-al-reprogramar";
 import { CasillaAvisarPaciente, useAvisoAlReprogramar } from "@/components/dashboard/agenda/aviso-al-reprogramar";
 
 interface Patient { id: string; firstName: string; lastName: string; patientNumber: string; phone?: string | null }
-interface Doctor  { id: string; firstName: string; lastName: string; role: string }
+interface Doctor  { id: string; firstName: string; lastName: string; role: string; agendaActive?: boolean | null }
 interface Appt {
   // ws1-t11 · fase 2 · P2: `null` = cita «Sin doctor» (el doctor se asigna al llegar o al iniciar).
   id: string; patientId: string; doctorId: string | null; type: string;
@@ -668,7 +669,8 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
       const r = await pedirDoctor.pedir({
         modo: pregunta,
         paciente: cita?.patient ? `${cita.patient.firstName ?? ""} ${cita.patient.lastName ?? ""}`.trim() || null : null,
-        doctores: doctors.map((d) => ({ id: d.id, nombre: nombreDeProfesional(d) })),
+        // v3 (m1): solo quien recibe citas (esta lista trae a todos los usuarios activos: recepción, etc.).
+        doctores: doctoresQueRecibenCitas(doctors, (d) => nombreDeProfesional(d)),
       });
       if (!r) return;
       doctorElegido = r.doctorId;
