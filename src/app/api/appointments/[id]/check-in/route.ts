@@ -139,7 +139,8 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
       // WS1-T3 v7 (revisión t8 de la v6) — con el estado que se leyó arriba: si
       // se canceló (o cambió) en este instante, no se toca y no hay efectos.
       const r = await tx.appointment.updateMany({
-        where: { id: params.id, clinicId: session.clinic.id, status: existing.status },
+        // v3 (m-a): al asignar doctor, también que siga «Sin doctor» (count 0 → el 409 de «la cita cambió»).
+        where: { id: params.id, clinicId: session.clinic.id, status: existing.status, ...(doctorAsignado ? { doctorId: null } : {}) },
         data: {
           status: "CHECKED_IN",
           checkedInAt: now,

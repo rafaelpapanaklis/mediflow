@@ -316,7 +316,8 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
     // leyó arriba. Con dos peticiones a la vez (doble clic en «Cancelar») solo
     // una ve `count === 1`; la otra sale con 409 sin avisar al paciente otra vez.
     const reclamo = await tx.appointment.updateMany({
-      where: { id: params.id, clinicId: session.clinic.id, status: existing.status },
+      // v3 (m-a): al asignar doctor, también que siga «Sin doctor» (si otro se la asignó entre medias, count 0 → 409).
+      where: { id: params.id, clinicId: session.clinic.id, status: existing.status, ...(doctorAsignado ? { doctorId: null } : {}) },
       data: {
         status: body.status,
         ...sideEffects,

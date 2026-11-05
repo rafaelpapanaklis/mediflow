@@ -213,7 +213,8 @@ export async function PATCH(req: NextRequest, props: Params) {
     // WS1-T3 v7 (revisión t8 de la v6) — con el estado que se leyó arriba: si
     // la cita se canceló (o cambió) en este instante, no se cierra ni se firma.
     const r = await tx.appointment.updateMany({
-      where: { id: params.id, clinicId: session.clinic.id, status: existing.status },
+      // v3 (m-a): al asignar doctor, también que siga «Sin doctor» (count 0 → el 409 de «la cita cambió»).
+      where: { id: params.id, clinicId: session.clinic.id, status: existing.status, ...(doctorAsignado ? { doctorId: null } : {}) },
       data: { status: "COMPLETED", completedAt, ...(doctorAsignado ? { doctorId: doctorAsignado } : {}), ...(sobreturno?.datos ?? {}) },
     });
     if (r.count !== 1) return null;
