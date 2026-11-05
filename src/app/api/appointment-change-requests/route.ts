@@ -6,6 +6,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { loadClinicSession, requireRole } from "@/lib/agenda/api-helpers";
 import { relatedPatientVisibilityAnd } from "@/lib/patient-visibility";
+import { nombreDoctorDeCita } from "@/lib/agenda/sin-doctor";
 
 export const dynamic = "force-dynamic";
 
@@ -92,7 +93,8 @@ export async function GET(req: NextRequest) {
         type: r.appointment.type,
         status: r.appointment.status,
         doctorId: r.appointment.doctorId,
-        doctorName: fullName(r.appointment.doctor) ?? "—",
+        // ws1-t11 (unión, R1): una «Sin doctor» dice «Sin doctor», no «—».
+        doctorName: nombreDoctorDeCita(r.appointment.doctor) || "—",
       },
     }));
 

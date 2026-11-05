@@ -169,6 +169,8 @@ export function valoresDeLaCita(d: DatosParaHoja, ahora: Date): ValoresHoja {
     procedimiento: textoDeProcedimientos(d.procedimientos, d.cita.motivo),
     lugar,
     fecha: fechaLarga(ahora, tz),
+    // ws1-t11 (unión): sin doctor, `[NOMBRE_DOCTOR]` sigue la regla de los recordatorios en vez de la raya.
+    sinDoctor: !!d.cita.sinDoctor,
   };
 }
 

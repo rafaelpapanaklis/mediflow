@@ -35,6 +35,21 @@ export const TEXTO_TELECONSULTA_SIN_DOCTOR = "Una teleconsulta necesita doctor: 
 export const TEXTO_DOCTOR_PARA_INICIAR = "Elige quién atiende al paciente antes de iniciar la consulta.";
 export const TEXTO_DOCTOR_EN_CONSULTA = "Una cita en consulta no puede quedarse sin doctor: cámbiale el doctor por otro.";
 
+/** Rótulo de una cita sin doctor en pantallas sin diccionario (el panel de solicitudes del portal). */
+export const TEXTO_SIN_DOCTOR = "Sin doctor";
+
+/**
+ * Nombre del doctor de una cita para mostrarlo en el panel (ws1-t11, unión: R1). Sin doctor devuelve el rótulo
+ * —`TEXTO_SIN_DOCTOR` o el que pase la pantalla, ya traducido—, nunca una celda vacía ni «—».
+ */
+export function nombreDoctorDeCita(
+  doctor: { firstName?: string | null; lastName?: string | null } | null | undefined,
+  sinDoctor: string = TEXTO_SIN_DOCTOR,
+): string {
+  if (!doctor) return sinDoctor;
+  return [doctor.firstName, doctor.lastName].filter(Boolean).join(" ").trim();
+}
+
 /**
  * Valor del filtro de doctores de la agenda que pide las citas «Sin doctor»
  * (`/api/agenda/range?doctorIds=…`). No es un id de la base (no tiene la

@@ -166,20 +166,31 @@ function esRotulo(linea: string): boolean {
  * Quita el doctor de una plantilla de texto libre ANTES de sustituir las
  * variables (regla 1 de arriba). Devuelve la plantilla sin ninguno de
  * `marcadores`; el resto de variables queda intacto para el render normal.
+ *
+ * `otros`: los demás marcadores de esa plantilla (una línea que lleva alguno es
+ * frase). Por defecto, los de los recordatorios; las hojas de indicaciones pasan
+ * los suyos, de corchetes (`[FECHA_CITA]`…), con la misma regla.
  */
 export function quitarDoctorDeLaPlantilla(
   plantilla: string,
   marcadores: readonly string[] = MARCADORES_DOCTOR,
+  otros: readonly string[] = OTROS_MARCADORES,
 ): string {
   if (!marcadores.some((m) => plantilla.includes(m))) return plantilla;
-  const texto = quitar(plantilla, marcadores, false);
+  const texto = quitar(plantilla, marcadores, false, otros);
   // Si al quitar la línea no queda nada que leer (una plantilla de una sola
   // línea con el doctor al final), mejor la frase con «nuestro equipo».
-  const sinVariables = texto.replace(/\{[^{}]+\}/g, "");
-  return /\p{L}/u.test(sinVariables) ? texto : quitar(plantilla, marcadores, true);
+  let sinVariables = texto.replace(/\{[^{}]+\}/g, "");
+  for (const m of otros) sinVariables = sinVariables.replaceAll(m, "");
+  return /\p{L}/u.test(sinVariables) ? texto : quitar(plantilla, marcadores, true, otros);
 }
 
-function quitar(plantilla: string, marcadores: readonly string[], todoFrase: boolean): string {
+function quitar(
+  plantilla: string,
+  marcadores: readonly string[],
+  todoFrase: boolean,
+  otros: readonly string[] = OTROS_MARCADORES,
+): string {
   const lineas = plantilla.split("\n");
   const salida: string[] = [];
   let quitada = false;
@@ -191,7 +202,7 @@ function quitar(plantilla: string, marcadores: readonly string[], todoFrase: boo
     }
     const esFrase =
       todoFrase ||
-      OTROS_MARCADORES.some((m) => linea.includes(m)) ||
+      otros.some((m) => linea.includes(m)) ||
       fraseSigue(linea, marcadores) ||
       !soloRotuloAntes(linea, marcadores);
     if (esFrase) {

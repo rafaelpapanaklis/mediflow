@@ -158,6 +158,7 @@ import { nombreDeProfesional } from "@/lib/nombre-profesional";
 // ws1-t10: al terminar la consulta, ofrecer las indicaciones de cuidado.
 import { OfertaIndicacionesFicha } from "@/components/indicaciones/oferta-indicaciones-ficha";
 import { etiquetasDeProfesionales } from "@/lib/agenda/etiqueta-profesional";
+import { nombreDoctorDeCita } from "@/lib/agenda/sin-doctor";
 
 // Fallback de carga de los módulos lazy (pestañas de especialidad). Componente
 // cliente para poder traducir el texto con useT — el `loading` de dynamicImport
@@ -3519,7 +3520,7 @@ export function PatientDetailClient({
                         <td className="font-medium">{formatDate(a.date)}</td>
                         <td className="text-muted-foreground font-mono tabular-nums">{a.startTime}</td>
                         <td>{a.type}</td>
-                        <td className="text-muted-foreground">{a.doctor?.firstName} {a.doctor?.lastName}</td>
+                        <td className="text-muted-foreground">{nombreDoctorDeCita(a.doctor, t("agenda.sinDoctor.nombre"))}</td>
                         <td>
                           {rediseno ? (() => {
                             const full = APPT_STATUS_FULL[a.status] ?? APPT_STATUS_FULL.PENDING;

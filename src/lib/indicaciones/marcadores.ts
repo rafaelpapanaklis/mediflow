@@ -5,6 +5,7 @@
 // PURO: sin Prisma ni React (lo carga el editor del navegador).
 
 import type { TipoHoja } from "./fabrica";
+import { quitarDoctorDeLaPlantilla } from "../reminders/doctor-del-mensaje";
 
 export interface MarcadorHoja {
   token: string;
@@ -48,7 +49,15 @@ export function marcadoresDelTipo(tipo: TipoHoja): MarcadorHoja[] {
 }
 
 /** Los valores con que se rellena; lo que falta sale como raya para llenarse a mano. */
-export type ValoresHoja = Partial<Record<MarcadorClave, string | null | undefined>>;
+export type ValoresHoja = Partial<Record<MarcadorClave, string | null | undefined>> & {
+  /**
+   * Cita «Sin doctor» (ws1-t11, unión): `[NOMBRE_DOCTOR]` no sale como raya. Misma regla que los recordatorios
+   * (`quitarDoctorDeLaPlantilla`): la línea que solo habla del doctor se quita; en una frase queda «nuestro equipo».
+   */
+  sinDoctor?: boolean;
+};
+
+const MARCADOR_NOMBRE_DOCTOR = "[NOMBRE_DOCTOR]";
 
 /** La raya de un dato que no hay (una cédula sin capturar): se llena a mano, nunca se inventa. */
 export const RAYA = "________";
@@ -61,7 +70,12 @@ const TOKEN = /\[([A-Z_]+)\]/g;
  */
 export function rellenarHoja(cuerpo: string, valores: ValoresHoja): string {
   const porToken = new Map(MARCADORES_HOJA.map((m) => [m.token, m.clave] as const));
-  return String(cuerpo ?? "").replace(TOKEN, (todo) => {
+  let texto = String(cuerpo ?? "");
+  if (valores.sinDoctor) {
+    const otros = MARCADORES_HOJA.map((m) => m.token).filter((t) => t !== MARCADOR_NOMBRE_DOCTOR);
+    texto = quitarDoctorDeLaPlantilla(texto, [MARCADOR_NOMBRE_DOCTOR], otros);
+  }
+  return texto.replace(TOKEN, (todo) => {
     const clave = porToken.get(todo);
     if (!clave) return todo;
     const v = (valores[clave] ?? "").toString().trim();
