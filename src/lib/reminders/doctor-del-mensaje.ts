@@ -69,7 +69,8 @@ const TRATAMIENTO = String.raw`(?:Dr\/a\.?|Dr\.?\/Dra\.?|Dr\(a\)\.?|Dra\.?|Dr\.?
  */
 function conTratamiento(marcador: string): RegExp {
   return new RegExp(
-    String.raw`(^|[^\p{L}\p{N}])(?:(el|la|tu|del|al)\s+)?(?:` + TRATAMIENTO + String.raw`\s*)?` + escapar(marcador),
+    // «el/la» y «la/el» primero: si no, «con el/la doctor(a) {doctor}» dejaba «con el/nuestro equipo» (revisión t12, M1).
+    String.raw`(^|[^\p{L}\p{N}])(?:(el\/la|la\/el|el|la|tu|del|al)\s+)?(?:` + TRATAMIENTO + String.raw`\s*)?` + escapar(marcador),
     "giu",
   );
 }
@@ -129,6 +130,18 @@ function fraseSigue(linea: string, marcadores: readonly string[]): boolean {
   return fin >= 0 && /[\p{L}\p{N}]/u.test(linea.slice(fin));
 }
 
+/**
+ * La línea que sigue a la del doctor ya no es algo que el rótulo de arriba
+ * presente: en blanco, el final, otro rótulo con su valor («Fecha: {fecha}») o
+ * solo el enlace. Si presenta datos sueltos ({fecha}, {hora}), el rótulo se
+ * queda (revisión t12, m1).
+ */
+function siguienteSueltaElRotulo(siguiente: string | undefined): boolean {
+  if (siguiente === undefined || siguiente.trim() === "") return true;
+  if (siguiente.trim() === "{link}") return true;
+  return /^\s*[^\s{][^:{}\n]{0,38}:/u.test(siguiente);
+}
+
 /** Un rótulo que solo presentaba la línea de abajo («Te atiende:», «*Doctor:*»). */
 function esRotulo(linea: string): boolean {
   const t = linea.replace(/[*_~\s]+$/u, "").trim();
@@ -178,7 +191,7 @@ function quitar(plantilla: string, marcadores: readonly string[], todoFrase: boo
     quitada = true;
     const siguiente = lineas[i + 1];
     const anterior = salida[salida.length - 1];
-    if (anterior !== undefined && esRotulo(anterior) && (siguiente === undefined || siguiente.trim() === "")) {
+    if (anterior !== undefined && esRotulo(anterior) && siguienteSueltaElRotulo(siguiente)) {
       salida.pop();
     }
   }

@@ -65,6 +65,24 @@ const citaNoActiva = () =>
   );
 
 /**
+ * ws1-t10 v2 (m4 de la revisión de t12) — se aprobaba el reagendado de una cita
+ * «Sin doctor» mientras alguien le asignaba doctor: los chequeos de bloqueos,
+ * comida y choques se hicieron sin doctor, así que la cita podía caer en la
+ * comida o el bloqueo del doctor recién puesto sin aviso. El movimiento exige
+ * que siga «Sin doctor»; si ya no, la solicitud queda PENDIENTE para revisarla.
+ */
+const CITA_CON_DOCTOR_NUEVO = "appointment_change_cita_con_doctor_nuevo";
+const citaConDoctorNuevo = () =>
+  NextResponse.json(
+    {
+      error: "appointment_doctor_changed",
+      reason:
+        "Mientras aprobabas, a esta cita se le asignó un doctor. Vuelve a abrir la solicitud para revisar su horario.",
+    },
+    { status: 409 },
+  );
+
+/**
  * M11 (ws1-t10): RECLAMAR la solicitud antes de mover nada o avisar. El
  * `updateMany` condiciona al estado pendiente: con dos peticiones a la vez
  * (doble clic, dos recepcionistas) solo una ve `count === 1`; la otra recibe
@@ -410,7 +428,13 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
 
       // N2: solo si sigue activa: una cita cancelada (o no asistida) no revive.
       const movida = await tx.appointment.updateMany({
-        where: { id: appointment.id, clinicId: session.clinic.id, status: { notIn: [...ESTADOS_NO_ACTIVOS] } },
+        where: {
+          id: appointment.id,
+          clinicId: session.clinic.id,
+          status: { notIn: [...ESTADOS_NO_ACTIVOS] },
+          // Una «Sin doctor» se mueve solo si SIGUE sin doctor (v2, m4). Con doctor, lo de siempre.
+          ...(appointment.doctorId === null ? { doctorId: null } : {}),
+        },
         data: {
           startsAt: proposedStartsAt,
           endsAt: proposedEndsAt,
@@ -418,7 +442,18 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
           confirmedAt: null,
         },
       });
-      if (movida.count !== 1) throw new Error(CITA_NO_ACTIVA);
+      if (movida.count !== 1) {
+        if (appointment.doctorId === null) {
+          const ahora = await tx.appointment.findFirst({
+            where: { id: appointment.id, clinicId: session.clinic.id },
+            select: { doctorId: true, status: true },
+          });
+          if (ahora && ahora.doctorId !== null && !(ESTADOS_NO_ACTIVOS as readonly string[]).includes(ahora.status)) {
+            throw new Error(CITA_CON_DOCTOR_NUEVO);
+          }
+        }
+        throw new Error(CITA_NO_ACTIVA);
+      }
       // WS1-T5 — si era una sobreagendada, en su hueco nuevo ya no lo es.
       await quitarMarcaDeSobreagenda(tx, appointment.id, session.clinic.id);
 
@@ -436,6 +471,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
       return NextResponse.json({ error: "not_pending" }, { status: 409 });
     }
     if (err instanceof Error && err.message === CITA_NO_ACTIVA) return citaNoActiva();
+    if (err instanceof Error && err.message === CITA_CON_DOCTOR_NUEVO) return citaConDoctorNuevo();
     // Chocó dentro de la tx (re-check o constraint EXCLUDE) → auto-rechazo.
     if (
       (err instanceof Error && err.message === SLOT_TAKEN_IN_TX) ||

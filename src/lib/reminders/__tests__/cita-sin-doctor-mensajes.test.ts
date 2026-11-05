@@ -205,6 +205,40 @@ test("el rótulo que solo presentaba al doctor en la línea de arriba también s
   assert.match(t2, /^Detalles:\n📅 lunes/);
 });
 
+test("v2 · m1 (revisión t12): el rótulo en su línea se va si lo que sigue es otro rótulo con valor o solo el enlace", () => {
+  const otro = renderReminderTemplate("Hola {paciente}.\nAtendido por:\n{doctor}\nFecha: {fecha}", SIN);
+  assert.equal(otro, `Hola María.\nFecha: lunes 9 de noviembre\n\nConfirma tu asistencia aquí: ${LINK}`);
+  const enlace = renderReminderTemplate("Hola {paciente}.\nAtentamente:\n{doctorName}\n{link}", SIN);
+  assert.equal(enlace, `Hola María.\n${LINK}`);
+  // Presenta datos sueltos ({fecha}, {hora}): el encabezado se queda.
+  assert.match(renderReminderTemplate("Datos de tu cita:\n{doctor}\n{fecha}\n{hora}", SIN), /^Datos de tu cita:\nlunes 9 de noviembre\n10:00/);
+  // Con doctor, todo igual.
+  assert.equal(
+    renderReminderTemplate("Atendido por:\n{doctor}\nFecha: {fecha}", BASE),
+    `Atendido por:\nDr/a. Luis Ruiz\nFecha: lunes 9 de noviembre\n\nConfirma tu asistencia aquí: ${LINK}`,
+  );
+});
+
+test("v2 · M1 (revisión t12): «el/la», «la/el» y las fórmulas con artículo se leen bien", () => {
+  const casos: [string, string][] = [
+    ["Tu cita será con el/la doctor(a) {doctor}.", "Tu cita será con nuestro equipo."],
+    ["Te atenderá el/la Dr(a). {doctor} el {fecha}", "Te atenderá nuestro equipo el lunes 9 de noviembre"],
+    ["Te atenderá la/el Dr(a). {doctor} el {fecha}", "Te atenderá nuestro equipo el lunes 9 de noviembre"],
+    ["Tu cita con el/la Dr(a). {doctor} es el {fecha}", "Tu cita con nuestro equipo es el lunes 9 de noviembre"],
+    ["Tu cita con la Dra. {doctor} es el {fecha}", "Tu cita con nuestro equipo es el lunes 9 de noviembre"],
+    ["Tu cita con el Dr. {doctor} es el {fecha}", "Tu cita con nuestro equipo es el lunes 9 de noviembre"],
+    ["Tu cita con el/la doctor(a) {doctor} es el {fecha}", "Tu cita con nuestro equipo es el lunes 9 de noviembre"],
+    ["El/la Dr(a). {doctor} te espera el {fecha}", "Nuestro equipo te espera el lunes 9 de noviembre"],
+  ];
+  for (const [plantilla, esperado] of casos) {
+    const t = renderReminderTemplate(plantilla, SIN);
+    assert.ok(t.startsWith(esperado), `${plantilla}\n→ ${t}`);
+    assert.doesNotMatch(t, /el\/|\/el|la\/|\/la|Dr|Dra|doctor\(a\)/i, t);
+    // Con doctor, letra por letra lo de antes.
+    assert.equal(renderReminderTemplate(plantilla, BASE), renderViejo(plantilla, BASE as any), plantilla);
+  }
+});
+
 test("alias {doctorName} y emoji con negritas («👨‍⚕️ *Te atiende:* {doctorName}»)", () => {
   const t = renderReminderTemplate("Hola {nombre}\n👨‍⚕️ *Te atiende:* {doctorName}\n{link}", SIN);
   sinRastroDelDoctor(t);
@@ -364,4 +398,19 @@ test("portal: contra qué choca un hueco — el doctor; sin doctor, su sillón; 
   assert.deepEqual(quienOcupaElHueco("clx9doc0a000108l4aaaa0001", "res_sillon_1"), { doctorId: "clx9doc0a000108l4aaaa0001" });
   assert.deepEqual(quienOcupaElHueco(null, "res_sillon_1"), { resourceId: "res_sillon_1" });
   assert.equal(quienOcupaElHueco(null, null), null, "nunca `{ doctorId: null }` (IS NULL empataría con todas las «Sin doctor»)");
+});
+
+/* ═══════════════ v2 · m3: el portal no promete «al instante» ═══════════════ */
+
+test("v2 · m3 (revisión t12): reagendar una «Sin doctor» no se anuncia como «al instante» en el portal; cancelar sigue la política", async () => {
+  const { reagendarSeAutoAprueba } = await import("@/lib/patient-portal/auto-aprobado");
+  assert.equal(reagendarSeAutoAprueba(true, { doctorName: null }), false, "Sin doctor: siempre solicitud (D6)");
+  assert.equal(reagendarSeAutoAprueba(true, { doctorName: "Luis Ruiz" }), true, "con doctor, como siempre");
+  assert.equal(reagendarSeAutoAprueba(false, { doctorName: "Luis Ruiz" }), false);
+  const { readFileSync } = await import("node:fs");
+  const pagina = readFileSync(new URL("../../../app/paciente/(panel)/citas/page.tsx", import.meta.url), "utf8");
+  const reagendar = pagina.slice(pagina.indexOf("<ReagendarModal"), pagina.indexOf("/>", pagina.indexOf("<ReagendarModal")));
+  const cancelar = pagina.slice(pagina.indexOf("<CancelarModal"), pagina.indexOf("/>", pagina.indexOf("<CancelarModal")));
+  assert.match(reagendar, /autoApprove=\{reagendarSeAutoAprueba\(selAutoApprove, sel\.cita\)\}/);
+  assert.match(cancelar, /autoApprove=\{selAutoApprove\}/, "cancelar no depende del doctor");
 });

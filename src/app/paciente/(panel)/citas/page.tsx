@@ -24,6 +24,7 @@ import {
 } from "@/components/paciente/ui";
 import { ReagendarModal } from "@/components/paciente/reagendar-modal";
 import { CancelarModal } from "@/components/paciente/cancelar-modal";
+import { reagendarSeAutoAprueba } from "@/lib/patient-portal/auto-aprobado";
 import { ConfirmarAsistencia } from "@/components/paciente/confirmar-asistencia-button";
 
 const GAP = "clamp(12px, 2vw, 20px)";
@@ -395,7 +396,8 @@ export default function PacienteCitasPage() {
           <ReagendarModal
             cita={sel.cita}
             clinicNombre={clinicName(clinics, sel.cita.clinicId)}
-            autoApprove={selAutoApprove}
+            // Una «Sin doctor» siempre queda como solicitud (D6): no se promete «al instante».
+            autoApprove={reagendarSeAutoAprueba(selAutoApprove, sel.cita)}
             open={sel.kind === "reagendar"}
             onClose={() => setSel(null)}
             onDone={() => mutate()}
