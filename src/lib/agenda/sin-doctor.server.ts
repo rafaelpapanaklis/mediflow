@@ -115,6 +115,27 @@ export async function asignacionAlCerrar(
   }
 }
 
+/**
+ * v3 (m-a de la revisión de t12) — el UPDATE que cierra la cita, con la asignación SOLO si la cita sigue
+ * «Sin doctor» (`doctorId: null` en el where). Si alguien le puso doctor entre la lectura y esta escritura
+ * (count 0), se cierra igual pero SIN asignar: su doctor se queda. `where` lo pone quien llama (clínica,
+ * estado). Devuelve si se cerró y si quedó asignada (para el rastro).
+ */
+export async function cerrarCitaConAsignacion(
+  db: { appointment: { updateMany(args: any): Promise<{ count: number }> } },
+  args: { where: Record<string, unknown>; cierre: Record<string, unknown>; asignacion: AsignacionAlCerrar },
+): Promise<{ cerrada: boolean; asignada: boolean }> {
+  if (args.asignacion.datos.doctorId) {
+    const r = await db.appointment.updateMany({
+      where: { ...args.where, doctorId: null },
+      data: { ...args.cierre, ...args.asignacion.datos },
+    });
+    if (r.count > 0) return { cerrada: true, asignada: true };
+  }
+  const r = await db.appointment.updateMany({ where: args.where, data: args.cierre });
+  return { cerrada: r.count > 0, asignada: false };
+}
+
 /** La fila de Movimientos de esa asignación (después de que el cierre se escribió). Nunca lanza. */
 export async function rastroDeAsignacionAlCerrar(args: {
   clinicId: string;

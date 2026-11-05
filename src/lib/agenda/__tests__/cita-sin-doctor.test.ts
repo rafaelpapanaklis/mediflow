@@ -225,6 +225,34 @@ test("asignacionAlCerrar (firmar o ligar la hoja de ortodoncia): solo «Sin doct
   assert.deepEqual(await asignacionAlCerrar(rota, args), { datos: {}, conCita: null });
 });
 
+test("v3 m-a · cerrarCitaConAsignacion: asigna solo si sigue «Sin doctor»; si otro le puso doctor, cierra SIN asignar", async () => {
+  const { cerrarCitaConAsignacion } = await import("@/lib/agenda/sin-doctor.server");
+  let doctorEnBase: string | null = null;
+  const escrituras: any[] = [];
+  const db = {
+    appointment: {
+      updateMany: async (a: any) => {
+        escrituras.push(a);
+        if (a.where.doctorId === null && doctorEnBase !== null) return { count: 0 };
+        return { count: 1 };
+      },
+    },
+  };
+  const where = { id: "cmh0cita0001", clinicId: "c1", status: "IN_PROGRESS" };
+  const cierre = { status: "COMPLETED" };
+  const asignacion = { datos: { doctorId: DRA, overrideReason: "Sobreagendada por el equipo" }, conCita: "x" };
+  assert.deepEqual(await cerrarCitaConAsignacion(db, { where, cierre, asignacion }), { cerrada: true, asignada: true });
+  assert.deepEqual(escrituras[0], { where: { ...where, doctorId: null }, data: { ...cierre, ...asignacion.datos } });
+  doctorEnBase = DR2; // recepción se la asignó entre medias
+  assert.deepEqual(await cerrarCitaConAsignacion(db, { where, cierre, asignacion }), { cerrada: true, asignada: false });
+  assert.deepEqual(escrituras[2], { where, data: cierre }, "se cierra sin tocar el doctor ni la marca");
+  // Sin asignación: una sola escritura, la de siempre.
+  escrituras.length = 0;
+  assert.deepEqual(await cerrarCitaConAsignacion(db, { where, cierre, asignacion: { datos: {}, conCita: null } }), { cerrada: true, asignada: false });
+  assert.equal(escrituras.length, 1);
+  assert.deepEqual(escrituras[0], { where, data: cierre });
+});
+
 test("datosDeSobreturno (v2 M1/m1): sin marca la pone; sobreagendada conserva la marca con quién y cuándo de ahora; otro motivo, intacto", async () => {
   const { datosDeSobreturno, sobreturnoSinPreguntar } = await import("@/lib/agenda/sin-doctor");
   const ahora = new Date("2026-11-10T16:05:00Z");

@@ -14,7 +14,7 @@
 // hoja que ya está ligada a otra cita.
 import { Prisma, type AppointmentStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { asignacionAlCerrar, rastroDeAsignacionAlCerrar } from "@/lib/agenda/sin-doctor.server";
+import { asignacionAlCerrar, cerrarCitaConAsignacion, rastroDeAsignacionAlCerrar } from "@/lib/agenda/sin-doctor.server";
 import { isClinicalNoteEmpty } from "@/lib/clinical/note-validation";
 import { sendReviewInvitation } from "@/lib/reviews/invite";
 import { tarjetaDeControlDeHoy } from "@/lib/orthodontics/redesign/control-del-dia";
@@ -112,12 +112,14 @@ export async function ligarHojaFirmadaDeHoyALaCita(a: LigarHojaFirmada): Promise
     doctorId: firma?.signedById ?? null,
     actorId,
   });
-  const cerradas = await prisma.appointment.updateMany({
+  // v3 (m-a): asignar solo si sigue «Sin doctor»; si otro le puso doctor entre medias, se cierra sin asignar.
+  const { cerrada, asignada } = await cerrarCitaConAsignacion(prisma, {
     where: { id: a.cita.id, clinicId: a.clinicId, status: a.cita.status as AppointmentStatus },
-    data: { ...cierre, ...asignacion.datos },
+    cierre,
+    asignacion,
   });
-  if (cerradas.count === 0) return { cardId: hoja.id, citaCerrada: null };
-  if (actorId) {
+  if (!cerrada) return { cardId: hoja.id, citaCerrada: null };
+  if (actorId && asignada) {
     await rastroDeAsignacionAlCerrar({ clinicId: a.clinicId, actorId, patientId: a.patientId, appointmentId: a.cita.id, asignacion });
   }
   // Igual que al firmar con la cita (signTreatmentCard): idempotente y nunca lanza.

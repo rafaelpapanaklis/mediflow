@@ -23,7 +23,7 @@ import { canSignSoap } from "./_predicates";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
 import { fail, isFailure, ok, type ActionResult } from "./result";
 import { citaAlFirmar, datosDeCierreDeCita, planDeCierreDeCita } from "@/lib/orthodontics/cerrar-cita-al-firmar";
-import { asignacionAlCerrar, rastroDeAsignacionAlCerrar } from "@/lib/agenda/sin-doctor.server";
+import { asignacionAlCerrar, cerrarCitaConAsignacion, rastroDeAsignacionAlCerrar } from "@/lib/agenda/sin-doctor.server";
 import { TIPO_CITA_CONTROL_ORTO } from "@/lib/orthodontics/agenda-constants";
 import { cargarModoDeCobro } from "@/lib/orthodontics/billing-mode-db";
 import { normalizarOrthoBillingMode } from "@/lib/orthodontics/billing-mode";
@@ -549,18 +549,29 @@ export async function signTreatmentCard(
             doctorId: ctx.userId,
             actorId: ctx.userId,
           });
-          await prisma.appointment.update({ where: { id: citaDeControl.id }, data: { ...cierre, ...asignacion.datos } });
-          await rastroDeAsignacionAlCerrar({
-            clinicId: ctx.clinicId,
-            actorId: ctx.userId,
-            patientId: plan.patientId,
-            appointmentId: citaDeControl.id,
+          // v3 (m-a): asignar solo si sigue «Sin doctor»; si otro le puso doctor entre medias, se cierra sin asignar.
+          const { cerrada, asignada } = await cerrarCitaConAsignacion(prisma, {
+            where: { id: citaDeControl.id, clinicId: ctx.clinicId },
+            cierre,
             asignacion,
           });
-          // Cerrar la cita al firmar pide la reseña igual que «Terminar consulta»
-          // (ws1-t4, 11.2). Idempotente y nunca lanza.
-          await sendReviewInvitation(citaDeControl.id);
-          citaCerrada = citaDeControl.id;
+          if (asignada) {
+            await rastroDeAsignacionAlCerrar({
+              clinicId: ctx.clinicId,
+              actorId: ctx.userId,
+              patientId: plan.patientId,
+              appointmentId: citaDeControl.id,
+              asignacion,
+            });
+          }
+          if (cerrada) {
+            // Cerrar la cita al firmar pide la reseña igual que «Terminar consulta»
+            // (ws1-t4, 11.2). Idempotente y nunca lanza.
+            await sendReviewInvitation(citaDeControl.id);
+            citaCerrada = citaDeControl.id;
+          } else {
+            console.warn(`[ortho] signTreatmentCard: la cita ${citaDeControl.id} ya no estaba para cerrar — se firmó igual`);
+          }
         } else {
           console.warn(`[ortho] signTreatmentCard: cita ${citaDeControl.id} (${citaDeControl.status}) no se puede pasar a COMPLETED — se firmó igual`);
         }

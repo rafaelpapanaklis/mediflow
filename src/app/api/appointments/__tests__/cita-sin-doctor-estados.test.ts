@@ -28,6 +28,8 @@ let nota: any;
 let constraintChoca: boolean;
 /** Citas vivas en la base, para la búsqueda de choques (v2: M1/m1). */
 let ocupadas: any[];
+/** v3 (m-a): lo que pasa en la base entre la lectura de la ruta y su escritura (p. ej. recepción le asigna doctor). */
+let carrera: (() => void) | null;
 
 const session = {
   user: { id: "u-recep", role: "RECEPTIONIST", clinicId: "c1", displayName: "Recepción", permissionsOverride: [] as string[] },
@@ -56,6 +58,7 @@ beforeEach(() => {
   nota = null;
   constraintChoca = false;
   ocupadas = [];
+  carrera = null;
   session.user.id = "u-recep";
   session.user.role = "RECEPTIONIST";
 });
@@ -71,6 +74,10 @@ function filaCompleta() {
 const tx = {
   appointment: {
     updateMany: async ({ where, data }: any) => {
+      carrera?.();
+      carrera = null;
+      // v3 (m-a): `doctorId: null` en el where = «que siga sin doctor», como en Postgres.
+      if (where.doctorId === null && existingRow.doctorId !== null) return { count: 0 };
       // La constraint de verdad: no ve las filas con `overrideReason` (sobreturno / sobreagendada).
       const conMarca = (data.overrideReason ?? existingRow.overrideReason) != null;
       if (constraintChoca && data.doctorId && !conMarca) throw Object.assign(new Error("exclusion constraint"), { code: "23P01" });
@@ -511,4 +518,58 @@ test("v2 m7 · Google: un DOCTOR LEE el aviso de una «Sin doctor» pero no la �
   const p2 = await google("POST");
   assert.equal(p2.status, 200, JSON.stringify(p2.body));
   assert.equal(descartados, 1);
+});
+
+// ═══════════════ v3 (m-a): asignar no pisa un doctor recién puesto ═══════════════
+
+/** Recepción le asigna la Dra. Y (DR2) a la cita justo después de que la ruta la leyó «Sin doctor». */
+function recepcionLaAsignaEntreMedias() {
+  carrera = () => { existingRow = { ...existingRow, doctorId: DR2 }; };
+}
+
+test("v3 m-a · /status: un DOCTOR inicia una «Sin doctor» que recepción acaba de asignar a otra → 409 «cambió», su doctor se queda", async () => {
+  session.user.role = "DOCTOR";
+  session.user.id = DRA;
+  existingRow.status = "CHECKED_IN";
+  recepcionLaAsignaEntreMedias();
+  const r = await estado({ status: "IN_PROGRESS" });
+  assert.equal(r.status, 409, JSON.stringify(r.body));
+  assert.match(r.body.reason, /cambió/);
+  assert.equal(existingRow.doctorId, DR2, "no pisa a la Dra. Y");
+  assert.equal(reclamos.length, 0);
+});
+
+test("v3 m-a · /check-in con «¿Quién lo atiende?» y la cita ya asignada entre medias → 409, su doctor se queda", async () => {
+  recepcionLaAsignaEntreMedias();
+  const r = await llegada({ doctorId: DRA });
+  assert.equal(r.status, 409, JSON.stringify(r.body));
+  assert.equal(existingRow.doctorId, DR2);
+  assert.equal(reclamos.length, 0);
+});
+
+test("v3 m-a · /complete de un DOCTOR sobre una «Sin doctor» asignada entre medias → 409, su doctor se queda", async () => {
+  session.user.role = "DOCTOR";
+  session.user.id = DRA;
+  existingRow.status = "IN_PROGRESS";
+  recepcionLaAsignaEntreMedias();
+  const r = await terminar();
+  assert.equal(r.status, 409, JSON.stringify(r.body));
+  assert.equal(existingRow.doctorId, DR2);
+});
+
+test("v3 · cita CON doctor y ese doctor con otra cita encima: /status y /check-in no marcan ni preguntan (como siempre)", async () => {
+  existingRow.doctorId = DRA;
+  laDraYaTieneOtra({ status: "CONFIRMED" });
+  constraintChoca = false; // ya conviven en la base (p. ej. una forzada): lo de hoy, sin cambios
+  let r = await llegada({ doctorId: DR2 });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(reclamos[0].doctorId, undefined, "por aquí no se reasigna");
+  assert.equal(reclamos[0].overrideReason, undefined);
+  assert.equal(r.body.sobreagendada, undefined);
+  session.user.role = "ADMIN";
+  r = await estado({ status: "IN_PROGRESS", doctorId: DR2 });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(reclamos[1].doctorId, undefined);
+  assert.equal(reclamos[1].overrideReason, undefined);
+  assert.equal(r.body.sobreagendada, undefined);
 });
