@@ -25,6 +25,7 @@ import { describeReminderFailure, type ReminderErrorKey } from "@/lib/whatsapp/r
 import { WhatsAppApiError, WhatsAppBlockedError } from "@/lib/whatsapp/errors";
 import { pastToleranceMs } from "@/lib/agenda/booking-rules";
 import { kindDeAvisoCita, paramsDeAvisoCita } from "@/lib/whatsapp/avisos-cita-plantilla";
+import { doctorConTitulo, doctorParaPlantilla } from "@/lib/reminders/doctor-del-mensaje";
 
 export type AvisoCitaEvento = "agendada" | "reprogramada" | "cancelada";
 
@@ -63,7 +64,9 @@ const AJUSTE_POR_EVENTO = {
  */
 export function textoAvisoCita(
   evento: AvisoCitaEvento,
-  v: { paciente: string; clinica: string; fecha: string; hora: string; doctor: string; contacto: string | null },
+  // `doctor` null = cita «Sin doctor» (ws1-t10): el texto libre no lleva la
+  // línea (ni la frase) «Te atiende». La plantilla de Meta sí lleva su {{5}}.
+  v: { paciente: string; clinica: string; fecha: string; hora: string; doctor: string | null; contacto: string | null },
 ): string {
   const contacto = v.contacto ? ` ${v.contacto}` : "";
   if (evento === "agendada") {
@@ -72,14 +75,16 @@ export function textoAvisoCita(
       `Hola ${v.paciente}, tu cita quedó registrada:\n` +
       `📅 *Fecha:* ${v.fecha}\n` +
       `🕐 *Hora:* ${v.hora}\n` +
-      `👨‍⚕️ *Te atiende:* ${v.doctor}\n\n` +
+      (v.doctor ? `👨‍⚕️ *Te atiende:* ${v.doctor}\n` : "") +
+      `\n` +
       `Para cambios o cancelaciones contáctanos${contacto}.`
     );
   }
   if (evento === "reprogramada") {
     return (
       `Hola ${v.paciente} 👋. Tu cita en *${v.clinica}* cambió: ahora es el *${v.fecha}* a las *${v.hora}*. ` +
-      `Te atiende: ${v.doctor}. Si no te queda bien, escríbenos por aquí.`
+      (v.doctor ? `Te atiende: ${v.doctor}. ` : "") +
+      `Si no te queda bien, escríbenos por aquí.`
     );
   }
   return (
@@ -143,7 +148,8 @@ export async function avisarCitaPorWhatsApp(args: AvisarCitaArgs): Promise<Aviso
     }
 
     const { fecha, hora } = formatApptDateParts(appt.startsAt, clinic.timezone);
-    const doctorName = `Dr/a. ${doctor.firstName} ${doctor.lastName}`.trim();
+    // null en una cita «Sin doctor»: fuera del texto libre; {{5}} = «nuestro equipo».
+    const doctorName = doctorConTitulo(doctor);
     const paciente = patient.firstName || "paciente";
 
     await sendWhatsAppLogged({
@@ -172,7 +178,7 @@ export async function avisarCitaPorWhatsApp(args: AvisarCitaArgs): Promise<Aviso
         clinica: clinic.name,
         fecha,
         hora,
-        doctor: doctorName,
+        doctor: doctorParaPlantilla(doctor),
       }),
     });
     return { enviado: true };

@@ -23,6 +23,7 @@ import { sendWhatsAppLogged } from "@/lib/whatsapp/send-and-log";
 import { formatDateHuman, formatTimeHuman, toISODate } from "@/lib/whatsapp/bot/booking-parse";
 import { textoCitaConfirmada, textoHorarioLiberado, textoPagoSinCita } from "./core";
 import type { AvisoAnticipo } from "./servicio.server";
+import { DOCTOR_NEUTRO, nombreDelDoctor } from "@/lib/reminders/doctor-del-mensaje";
 
 export async function avisarAlPaciente(aviso: AvisoAnticipo): Promise<void> {
   const dep = await prisma.appointmentDeposit.findUnique({
@@ -65,7 +66,9 @@ export async function avisarAlPaciente(aviso: AvisoAnticipo): Promise<void> {
   const cita = dep.appointment;
   const fechaHumana = cita ? formatDateHuman(toISODate(cita.startsAt, tz), tz) : "";
   const hora = cita ? formatTimeHuman(cita.startsAt, tz) : "";
-  const doctor = cita?.doctor ? `${cita.doctor.firstName} ${cita.doctor.lastName}`.trim() : "";
+  // {{5}} nunca vacío (Meta rechaza la variable vacía): sin doctor en la cita
+  // (cita «Sin doctor», ws1-t10) va «nuestro equipo».
+  const doctor = nombreDelDoctor(cita?.doctor) ?? DOCTOR_NEUTRO;
 
   let body: string;
   let templateParams: string[] | null = null;

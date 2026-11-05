@@ -60,6 +60,8 @@ export interface CitaParaHoja {
   checkedInAt: Date | null;
   startedAt: Date | null;
   completedAt: Date | null;
+  /** Cita «Sin doctor» (ws1-t10): no se emite la constancia (no hay nombre ni cédula que poner). */
+  sinDoctor?: boolean;
 }
 
 export interface DatosParaHoja {
@@ -118,16 +120,19 @@ export function horarioQueConsta(c: CitaParaHoja, tz: string | null | undefined,
 const mismoDia = (a: Date, b: Date, tz: string | null | undefined) => fechaLarga(a, tz) === fechaLarga(b, tz);
 
 /** Por qué NO se puede emitir la constancia de esta cita (o `null` si sí). N-29. */
-export type MotivoSinConstancia = "ESTADO" | "DIA_FUTURO" | "SIN_HORA_REAL";
+export type MotivoSinConstancia = "ESTADO" | "DIA_FUTURO" | "SIN_HORA_REAL" | "SIN_DOCTOR";
 
 export const MENSAJE_SIN_CONSTANCIA: Record<MotivoSinConstancia, string> = {
   ESTADO: "La constancia se emite cuando la consulta ya empezó o terminó.",
   DIA_FUTURO: "Esta cita es de un día que todavía no llega: no se puede hacer constar la asistencia.",
   SIN_HORA_REAL: "La cita no tiene registrada la hora real de llegada o de inicio: no se puede hacer constar.",
+  // Cita «Sin doctor» (ws1-t10): la constancia lleva el nombre y la cédula de quien atendió.
+  SIN_DOCTOR: "Asigna el doctor de la cita para emitir la constancia: lleva su nombre y su cédula.",
 };
 
 export function motivoSinConstancia(c: CitaParaHoja, tz: string | null | undefined, ahora: Date = new Date()): MotivoSinConstancia | null {
   if (!admiteConstancia(c.status)) return "ESTADO";
+  if (c.sinDoctor) return "SIN_DOCTOR";
   // Una cita de un día que no ha llegado no se atendió, aunque esté marcada «Completada».
   const dia = (d: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: tz || TZ_POR_DEFECTO, year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
   if (dia(c.startsAt) > dia(ahora)) return "DIA_FUTURO";

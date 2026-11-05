@@ -70,7 +70,8 @@ function esquemaPropuesta(accion: PropuestaAgenda["accion"]) {
     deshacer: z.object({ reversible: z.boolean(), como: z.string() }),
     revalidar: z.object({ herramienta: z.literal(accion), parametros: z.record(z.unknown()) }),
     esperado: z
-      .object({ startsAt: z.string(), endsAt: z.string(), doctorId: z.string(), status: z.string() })
+      // `doctorId` null = cita «Sin doctor» (ws1-t10): Sabina la mueve o la cancela conservándola así.
+      .object({ startsAt: z.string(), endsAt: z.string(), doctorId: z.string().nullable(), status: z.string() })
       .nullable(),
   }) as unknown as z.ZodType<PropuestaAgenda>;
 }

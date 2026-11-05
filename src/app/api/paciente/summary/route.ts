@@ -21,6 +21,7 @@ import type {
   PacienteClinica,
   PacienteSummaryResponse,
 } from "@/lib/patient-portal/types";
+import { nombreDelDoctor } from "@/lib/reminders/doctor-del-mensaje";
 
 export const dynamic = "force-dynamic";
 
@@ -128,7 +129,8 @@ export async function GET() {
       status: a.status,
       startsAt: a.startsAt.toISOString(),
       endsAt: a.endsAt.toISOString(),
-      doctorName: `${a.doctor.firstName} ${a.doctor.lastName}`,
+      // null en una cita «Sin doctor» (ws1-t10): la interfaz omite «Con …».
+      doctorName: nombreDelDoctor(a.doctor),
       ...(nombrar ? { patientName: `${a.patient.firstName} ${a.patient.lastName}`.trim() } : {}),
     }));
 

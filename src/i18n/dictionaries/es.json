@@ -4610,6 +4610,8 @@
       "restoreDefaultBtn": "Restaurar el mensaje original",
       "previewLabel": "Vista previa",
       "previewSampleDate": "lunes 24 de junio",
+      "previewSinDoctorLabel": "Vista previa · cita sin doctor",
+      "previewSinDoctorHint": "Así le llega a un paciente cuya cita todavía no tiene doctor: la línea del doctor no sale.",
       "confirmLinkNote": "El recordatorio siempre incluye el link público de confirmación: el paciente puede confirmar o cancelar sin iniciar sesión y el estado se refleja en tu agenda.",
       "savedToast": "Recordatorios guardados",
       "saveErrorToast": "Error al guardar"

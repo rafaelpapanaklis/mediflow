@@ -7,7 +7,8 @@ export interface ReminderEmailInput {
   patientName: string;
   fecha: string;
   hora: string;
-  doctorName: string;
+  /** null = cita «Sin doctor» (ws1-t10): el correo no pinta la fila del doctor. */
+  doctorName: string | null;
   confirmUrl: string;
   /** Texto plano del recordatorio ya renderizado (mismo cuerpo que WhatsApp). */
   message: string;
@@ -32,7 +33,7 @@ export function buildAppointmentReminderEmail(input: ReminderEmailInput): {
 
   const clinicName = escapeHtml(input.clinicName);
   const patientName = escapeHtml(input.patientName);
-  const doctorName = escapeHtml(input.doctorName);
+  const doctorName = input.doctorName ? escapeHtml(input.doctorName) : null;
   const fecha = escapeHtml(input.fecha);
   const hora = escapeHtml(input.hora);
   const confirmUrl = escapeHtml(input.confirmUrl);
@@ -62,7 +63,7 @@ export function buildAppointmentReminderEmail(input: ReminderEmailInput): {
       <div style="font-size: 15px; color: #f5f5f7; line-height: 1.7;">
         <div>📅 <strong style="color: #f5f5f7;">${fecha}</strong></div>
         <div>🕐 <strong style="color: #f5f5f7;">${hora}</strong></div>
-        <div>👨‍⚕️ <strong style="color: #f5f5f7;">${doctorName}</strong></div>
+        ${doctorName ? `<div>👨‍⚕️ <strong style="color: #f5f5f7;">${doctorName}</strong></div>` : ""}
       </div>
     </div>
 

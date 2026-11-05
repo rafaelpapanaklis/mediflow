@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { createCheckoutSession } from "@/lib/stripe-connect";
 import { timeHHMMInTz } from "@/lib/agenda/legacy-helpers";
 import { esTokenDePagoValido } from "@/lib/teleconsulta/pago-token";
+import { TEXTO_TELECONSULTA_SIN_DOCTOR } from "@/lib/agenda/sin-doctor";
 
 export async function POST(req: NextRequest) {
   try {
@@ -40,6 +41,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Esta cita ya fue pagada" }, { status: 400 });
     }
 
+    // D11 (ws1-t11): una teleconsulta nunca es «Sin doctor»; sin doctor no hay a quién pagarle.
+    if (!appointment.doctor) {
+      return NextResponse.json({ error: TEXTO_TELECONSULTA_SIN_DOCTOR }, { status: 400 });
+    }
     if (!appointment.doctor.stripeAccountId) {
       return NextResponse.json({ error: "Doctor no configurado para pagos" }, { status: 400 });
     }

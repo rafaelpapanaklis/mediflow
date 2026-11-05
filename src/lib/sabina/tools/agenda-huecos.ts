@@ -51,6 +51,7 @@ import {
 } from "./agenda-comun";
 import type { SabinaCtx } from "../tipos";
 import { apartadoVencido } from "@/lib/agenda/apartado";
+import { doctorIdsDe } from "@/lib/agenda/sin-doctor";
 
 /** Cuántas horas se ofrecen como mucho: las más cercanas, no la rejilla entera. */
 export const TOPE_HUECOS = 5;
@@ -334,7 +335,7 @@ export function respuestaNoDisponible(args: {
     huecos.length === 0 && causa !== "dia_cerrado"
       ? diaSinDoctor
         ? causa === "doctor_no_atiende" ? "" : ` Además, ${doctor} no atiende ese día.`
-        : ` Ese día ya no quedan huecos de ${duracion} min con ${doctor}${sillon ? ` en ${sillon.nombre}` : ""}.`
+        : ` Ese día ya no quedan huecos de ${duracion} min${doctor ? ` con ${doctor}` : ""}${sillon ? ` en ${sillon.nombre}` : ""}.`
       : "";
   return {
     estado: "no_disponible",
@@ -357,7 +358,8 @@ export async function leerOcupacion(
   db: AgendaDb,
   args: {
     fecha: string;
-    doctorId: string;
+    /** null = cita «Sin doctor» (ws1-t10): no ocupa a ningún doctor; solo su sillón y la clínica. */
+    doctorId: string | null;
     timezone: string;
     excluirCitaId?: string | null;
     /** El sillón de la cita que se mueve: entra aunque esté dado de baja (el PATCH lo sigue validando). */
@@ -398,7 +400,7 @@ export async function leerOcupacion(
     // Con el `db` de la sesión, igual que las dos de arriba: en pruebas es el
     // cliente de mentira y en producción el `prisma` del repo.
     leerBloqueosDelRango(ctx.clinicId, desde, hasta, {
-      doctorIds: [args.doctorId],
+      doctorIds: doctorIdsDe(args.doctorId),
       db: db as any,
     }),
   ]);
@@ -420,7 +422,8 @@ export async function leerOcupacion(
   return {
     doctorId: args.doctorId,
     bloqueos,
-    doctor: vivas.filter((c: any) => c.doctorId === args.doctorId).map(intervalo),
+    // Sin doctor, nada: `null === null` empataría con todas las «Sin doctor», que no se bloquean entre sí.
+    doctor: args.doctorId ? vivas.filter((c: any) => c.doctorId === args.doctorId).map(intervalo) : [],
     sillones: recursos.map((r: any) => ({
       id: r.id,
       nombre: r.name,

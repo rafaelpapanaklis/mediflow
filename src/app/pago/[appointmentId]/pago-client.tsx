@@ -97,10 +97,12 @@ export function PagoClient({
 
           {/* Appointment details */}
           <div className="space-y-4 mb-8">
-            <div className="flex justify-between items-start">
-              <span className="text-muted-foreground text-sm">Doctor/a</span>
-              <span className="text-sm font-semibold text-right">{doctorName}</span>
-            </div>
+            {doctorName && (
+              <div className="flex justify-between items-start">
+                <span className="text-muted-foreground text-sm">Doctor/a</span>
+                <span className="text-sm font-semibold text-right">{doctorName}</span>
+              </div>
+            )}
             <div className="flex justify-between items-start">
               <span className="text-muted-foreground text-sm">Clínica</span>
               <span className="text-sm font-semibold text-right">{clinicName}</span>

@@ -36,6 +36,7 @@ import { MARCA_SOBREAGENDADA } from "@/lib/agenda/agenda-flexible";
 import { hayQueNombrarAlPaciente, pacienteDeLaCita } from "@/lib/patient-portal/ortodoncia-portal";
 import { registrarMovimientoExterno } from "@/lib/movimientos-paciente/registrar";
 import { textoCita } from "@/lib/movimientos-paciente/textos";
+import { nombreDelDoctor } from "@/lib/reminders/doctor-del-mensaje";
 
 export const dynamic = "force-dynamic";
 
@@ -61,7 +62,8 @@ type CitaRow = {
   startsAt: Date;
   endsAt: Date;
   holdExpiresAt: Date | null;
-  doctor: { firstName: string; lastName: string };
+  /** null = cita «Sin doctor» (ws1-t10). */
+  doctor: { firstName: string; lastName: string } | null;
   patient: { firstName: string; lastName: string };
 };
 
@@ -77,7 +79,7 @@ function toCita(
     status: a.status,
     startsAt: a.startsAt.toISOString(),
     endsAt: a.endsAt.toISOString(),
-    doctorName: `${a.doctor.firstName} ${a.doctor.lastName}`,
+    doctorName: nombreDelDoctor(a.doctor),
     pendingChange,
     // WS1-T5 — apartada esperando el anticipo: se confirma sola al pagarse.
     esperaAnticipo: a.status === "SCHEDULED" && a.holdExpiresAt != null,

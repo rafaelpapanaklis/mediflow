@@ -206,6 +206,9 @@ export async function GET(req: NextRequest) {
     // tienen ocupado. Se parte la agenda por doctor y se pregunta por cada uno.
     const busyByDoctor = new Map<string, { startsAt: Date; endsAt: Date }[]>();
     for (const b of busy) {
+      // Una cita «Sin doctor» (ws1-t10, D4) no le quita horas a ningún doctor:
+      // todavía no es de nadie. Su sillón lo sigue cuidando la constraint.
+      if (!b.doctorId) continue;
       const list = busyByDoctor.get(b.doctorId);
       if (list) list.push(b);
       else busyByDoctor.set(b.doctorId, [b]);

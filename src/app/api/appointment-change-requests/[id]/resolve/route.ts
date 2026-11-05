@@ -32,6 +32,7 @@ import { quitarMarcaDeSobreagenda } from "@/lib/agenda/sobreagendar.server";
 import { marcarPendienteSiHayDinero } from "@/lib/anticipos/cita-cancelada.server";
 import { textoCita } from "@/lib/movimientos-paciente/textos";
 import { zonaDeClinica } from "@/lib/movimientos-paciente/zona";
+import { doctorIdsDe, ramaDelDoctor } from "@/lib/agenda/sin-doctor";
 
 export const dynamic = "force-dynamic";
 
@@ -59,6 +60,24 @@ const citaNoActiva = () =>
       reason:
         "La cita ya no está activa (se canceló o se marcó como no asistió), así que no se puede aprobar este cambio. " +
         "Rechaza la solicitud para cerrarla.",
+    },
+    { status: 409 },
+  );
+
+/**
+ * ws1-t10 v2 (m4 de la revisión de t12) — se aprobaba el reagendado de una cita
+ * «Sin doctor» mientras alguien le asignaba doctor: los chequeos de bloqueos,
+ * comida y choques se hicieron sin doctor, así que la cita podía caer en la
+ * comida o el bloqueo del doctor recién puesto sin aviso. El movimiento exige
+ * que siga «Sin doctor»; si ya no, la solicitud queda PENDIENTE para revisarla.
+ */
+const CITA_CON_DOCTOR_NUEVO = "appointment_change_cita_con_doctor_nuevo";
+const citaConDoctorNuevo = () =>
+  NextResponse.json(
+    {
+      error: "appointment_doctor_changed",
+      reason:
+        "Mientras aprobabas, a esta cita se le asignó un doctor. Vuelve a abrir la solicitud para revisar su horario.",
     },
     { status: 409 },
   );
@@ -312,7 +331,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
   // su motivo). Con «Sí» no hace nada y solo se avisa abajo, como siempre.
   const bloqueoPrevio = bloqueaEsteHueco(
     await leerBloqueosDelRango(session.clinic.id, proposedStartsAt, proposedEndsAt, {
-      doctorIds: [appointment.doctorId],
+      doctorIds: doctorIdsDe(appointment.doctorId),
     }),
     proposedStartsAt,
     proposedEndsAt,
@@ -330,7 +349,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
   // es agendar en la comida sin el «¿Seguro?». Antes de mover nada; la
   // solicitud se queda PENDIENTE (se puede rechazar con su motivo).
   const comidaDestino = comidaQuePisa(
-    await leerHorariosDeDoctores(session.clinic.id, { doctorIds: [appointment.doctorId] }),
+    await leerHorariosDeDoctores(session.clinic.id, { doctorIds: doctorIdsDe(appointment.doctorId) }),
     proposedStartsAt,
     proposedEndsAt,
     appointment.doctorId,
@@ -353,6 +372,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     free = await isSlotFree({
       clinicId: session.clinic.id,
       doctorId: appointment.doctorId,
+      resourceId: appointment.resourceId,
       startsAt: proposedStartsAt,
       endsAt: proposedEndsAt,
       excludeAppointmentId: appointment.id,
@@ -385,8 +405,10 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
         where: {
           clinicId: session.clinic.id,
           id: { not: appointment.id },
+          // Cita «Sin doctor» (ws1-t10): sin la rama del doctor (IS NULL empataría
+          // con todas las «Sin doctor»); sin sillón tampoco, `OR: []` no da filas.
           OR: [
-            { doctorId: appointment.doctorId },
+            ...ramaDelDoctor(appointment.doctorId),
             ...(appointment.resourceId
               ? [{ resourceId: appointment.resourceId }]
               : []),
@@ -406,7 +428,13 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
 
       // N2: solo si sigue activa: una cita cancelada (o no asistida) no revive.
       const movida = await tx.appointment.updateMany({
-        where: { id: appointment.id, clinicId: session.clinic.id, status: { notIn: [...ESTADOS_NO_ACTIVOS] } },
+        where: {
+          id: appointment.id,
+          clinicId: session.clinic.id,
+          status: { notIn: [...ESTADOS_NO_ACTIVOS] },
+          // Una «Sin doctor» se mueve solo si SIGUE sin doctor (v2, m4). Con doctor, lo de siempre.
+          ...(appointment.doctorId === null ? { doctorId: null } : {}),
+        },
         data: {
           startsAt: proposedStartsAt,
           endsAt: proposedEndsAt,
@@ -414,7 +442,18 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
           confirmedAt: null,
         },
       });
-      if (movida.count !== 1) throw new Error(CITA_NO_ACTIVA);
+      if (movida.count !== 1) {
+        if (appointment.doctorId === null) {
+          const ahora = await tx.appointment.findFirst({
+            where: { id: appointment.id, clinicId: session.clinic.id },
+            select: { doctorId: true, status: true },
+          });
+          if (ahora && ahora.doctorId !== null && !(ESTADOS_NO_ACTIVOS as readonly string[]).includes(ahora.status)) {
+            throw new Error(CITA_CON_DOCTOR_NUEVO);
+          }
+        }
+        throw new Error(CITA_NO_ACTIVA);
+      }
       // WS1-T5 — si era una sobreagendada, en su hueco nuevo ya no lo es.
       await quitarMarcaDeSobreagenda(tx, appointment.id, session.clinic.id);
 
@@ -432,6 +471,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
       return NextResponse.json({ error: "not_pending" }, { status: 409 });
     }
     if (err instanceof Error && err.message === CITA_NO_ACTIVA) return citaNoActiva();
+    if (err instanceof Error && err.message === CITA_CON_DOCTOR_NUEVO) return citaConDoctorNuevo();
     // Chocó dentro de la tx (re-check o constraint EXCLUDE) → auto-rechazo.
     if (
       (err instanceof Error && err.message === SLOT_TAKEN_IN_TX) ||
@@ -492,9 +532,9 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
   try {
     const [bloqueosDestino, horariosDestino] = await Promise.all([
       leerBloqueosDelRango(session.clinic.id, proposedStartsAt, proposedEndsAt, {
-        doctorIds: [appointment.doctorId],
+        doctorIds: doctorIdsDe(appointment.doctorId),
       }),
-      leerHorariosDeDoctores(session.clinic.id, { doctorIds: [appointment.doctorId] }),
+      leerHorariosDeDoctores(session.clinic.id, { doctorIds: doctorIdsDe(appointment.doctorId) }),
     ]);
     const bloqueoDestino = bloqueaEsteHueco(bloqueosDestino, proposedStartsAt, proposedEndsAt, appointment.doctorId);
     const fueraDelDoctor = doctorNoAtiende(

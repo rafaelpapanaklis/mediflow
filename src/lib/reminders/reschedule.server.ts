@@ -27,6 +27,13 @@ import {
   isPendingReminderStatus,
   planReminderReschedule,
 } from "@/lib/reminders/reschedule";
+import { doctorConTitulo } from "@/lib/reminders/doctor-del-mensaje";
+import { esCitaControlOrto } from "@/lib/orthodontics/agenda-constants";
+import {
+  CLAVE_RECORDATORIO_CONTROL,
+  plantillaUsable,
+  textoRecordatorioDeCita,
+} from "@/lib/orthodontics/plantillas-mensaje";
 
 /** Cliente de Prisma dentro de una transacción (o el global, si no hay). */
 type Tx = Prisma.TransactionClient;
@@ -168,9 +175,9 @@ export async function applyReminderReschedule(
   // esto. El mensaje viaja congelado en la fila, así que rendearlo aquí es lo
   // que hace que el paciente reciba la hora correcta.
   const { fecha, hora } = formatApptDateParts(args.newStartsAt, clinic.timezone);
-  // ws1-t11 · P1: una cita «Sin doctor» no puede tumbar la transacción que la mueve. El texto sin doctor
-  // (quitar la línea de {doctor}) es de P3; con "" la plantilla de hoy deja la línea vacía.
-  const doctorName = appt.doctor ? `Dr/a. ${appt.doctor.firstName} ${appt.doctor.lastName}`.trim() : "";
+  // Cita «Sin doctor» (ws1-t11/t10): null → el render quita la línea del doctor
+  // (y nunca tumba la transacción que mueve la cita).
+  const doctorName = doctorConTitulo(appt.doctor);
   const confirmUrl = getConfirmUrl(token);
   const message = renderReminderTemplate(settings.template, {
     paciente: appt.patient.firstName,
@@ -249,4 +256,120 @@ export async function cancelPendingRemindersForAppointment(
     },
   });
   return res.count;
+}
+
+/** La plantilla de controles de Ortodoncia de la clínica (la que usa el encolador). */
+async function plantillaControlDeLaClinica(clinicId: string): Promise<string | null> {
+  const { loadOrthoClinicSettings } = await import("@/lib/orthodontics/clinic-settings-db");
+  const cfg = await loadOrthoClinicSettings(clinicId);
+  return plantillaUsable(cfg.messageTemplates, CLAVE_RECORDATORIO_CONTROL);
+}
+
+/**
+ * ws1-t10 — pone al día el TEXTO de los recordatorios que aún no salen cuando a
+ * la cita le cambia SOLO el doctor (se le asigna a una «Sin doctor», se le
+ * quita, o pasa de A a B). El mensaje viaja congelado en la fila: sin esto, una
+ * cita que pasó de «Dr/a. X» a «Sin doctor» seguiría diciendo «Te atiende: X».
+ *
+ * A propósito NO es `applyReminderReschedule`: aquello cancela y re-encola, y
+ * un aviso ya vencido que el worker aún no recogía se cancelaba sin mandarse
+ * (lo vio la revisión de P1). Aquí no se cancela ni se crea nada: solo cambia
+ * `message`, con el mismo enlace de confirmar que ya lleva cada fila, y solo en
+ * las filas que siguen pendientes (el claim del worker gana: si ya la marcó
+ * SENT, no se toca).
+ *
+ * Fuera de la transacción que mueve la cita y sin lanzar: si falla, el texto se
+ * queda como estaba (lo de antes), nunca se deshace el cambio de doctor.
+ * Multi-tenant: todo acotado por clinicId.
+ */
+export async function rerenderPendingReminderText(
+  db: Tx,
+  args: {
+    appointmentId: string;
+    clinicId: string;
+    /** La plantilla propia de controles de Ortodoncia (la misma que usa el encolador). */
+    plantillaControl?: (clinicId: string) => Promise<string | null>;
+  },
+): Promise<number> {
+  if (!args.clinicId || !args.appointmentId) return 0;
+  try {
+    const appt = await db.appointment.findFirst({
+      where: { id: args.appointmentId, clinicId: args.clinicId },
+      select: {
+        id: true,
+        startsAt: true,
+        type: true,
+        confirmToken: true,
+        patient: { select: { firstName: true } },
+        doctor: { select: { firstName: true, lastName: true } },
+      },
+    });
+    if (!appt) return 0;
+
+    const pendientes = await db.whatsAppReminder.findMany({
+      where: {
+        appointmentId: appt.id,
+        clinicId: args.clinicId,
+        type: APPT_AUTO_TYPE,
+        status: { in: WA_REMINDER_PENDING_STATUSES },
+      },
+      select: { id: true, message: true, payload: true },
+    });
+    if (pendientes.length === 0) return 0;
+
+    const clinic = await db.clinic.findUnique({
+      where: { id: args.clinicId },
+      select: {
+        name: true,
+        timezone: true,
+        reminderSettings: true,
+        waReminderActive: true,
+        waReminder24h: true,
+        waReminder1h: true,
+        waReminderMsg: true,
+      },
+    });
+    if (!clinic) return 0;
+
+    const settings = getEffectiveReminderSettings(clinic);
+    const esControl = esCitaControlOrto(appt.type);
+    let plantillaControl: string | null = null;
+    if (esControl) {
+      try {
+        plantillaControl = await (args.plantillaControl ?? plantillaControlDeLaClinica)(args.clinicId);
+      } catch {
+        plantillaControl = null;
+      }
+    }
+    const { fecha, hora } = formatApptDateParts(appt.startsAt, clinic.timezone);
+    const doctor = doctorConTitulo(appt.doctor);
+
+    let cambiadas = 0;
+    for (const fila of pendientes) {
+      const p = (fila.payload ?? {}) as { confirmUrl?: unknown };
+      const link =
+        typeof p.confirmUrl === "string" && p.confirmUrl
+          ? p.confirmUrl
+          : appt.confirmToken
+            ? getConfirmUrl(appt.confirmToken)
+            : "";
+      if (!link) continue;
+      const message = textoRecordatorioDeCita({
+        esControl,
+        plantillaGeneral: settings.template,
+        plantillaControl,
+        vars: { paciente: appt.patient.firstName, clinica: clinic.name, fecha, hora, doctor, link },
+      });
+      if (message === fila.message) continue;
+      const r = await db.whatsAppReminder.updateMany({
+        where: { id: fila.id, clinicId: args.clinicId, status: { in: WA_REMINDER_PENDING_STATUSES } },
+        data: { message },
+      });
+      cambiadas += r.count;
+    }
+    return cambiadas;
+  } catch (e) {
+    console.error("[reminders] no se pudo poner al día el texto tras cambiar el doctor:", e);
+    return 0;
+  }
 }

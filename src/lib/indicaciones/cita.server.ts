@@ -154,6 +154,7 @@ export async function cargarCita(ctx: AuthContext, appointmentId: string): Promi
         checkedInAt: cita.checkedInAt,
         startedAt: cita.startedAt,
         completedAt: cita.completedAt,
+        sinDoctor: !cita.doctor,
       },
       paciente: { nombre: nombre(cita.patient?.firstName, cita.patient?.lastName) },
       doctor: {

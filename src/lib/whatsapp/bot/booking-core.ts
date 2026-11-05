@@ -149,7 +149,8 @@ export const OPCION_OTRA_PERSONA = "otra_persona";
 
 interface UpcomingAppt {
   id: string;
-  doctorId: string;
+  /** null = cita «Sin doctor» (ws1-t10): el bot no la reagenda, la pasa a una persona (D6). */
+  doctorId: string | null;
   startsAt: Date;
   endsAt: Date;
   type: string;
@@ -405,6 +406,32 @@ function indiceTocado(input: BotTurnInput, state: BookingState, options: Booking
 
 function done(reply: string, mode: FlowMode): BotTurnResult {
   return { reply, intent: intentFor(mode), newBotState: null };
+}
+
+/** D6 (ws1-t10) — reagendar una cita «Sin doctor»: con persona. */
+export const TEXTO_REAGENDAR_SIN_DOCTOR =
+  "Para cambiar esta cita te comunico con el equipo de la clínica, en breve te responden. 🙋";
+/** Lo mismo cuando la clínica no deja que el bot pase la conversación a una persona. */
+export const TEXTO_REAGENDAR_SIN_DOCTOR_SIN_PERSONA =
+  "Esta cita la cambia directamente el equipo de la clínica: comunícate con ellos y con gusto te ayudan. 🙋";
+
+/**
+ * Cita «Sin doctor» (ws1-t10, D6 del plan): el bot no la mueve. Sus huecos
+ * dependen del doctor y esta cita todavía no tiene; quién la atiende a la hora
+ * nueva lo decide la clínica. Antes era un callejón sin salida («Algo salió
+ * mal…»). Si la clínica permite el paso a una persona, se deriva (el motor le
+ * pone la marca de 12 h); si no, se le dice al paciente a quién acudir.
+ */
+function reagendarSinDoctor(fallbackToHuman: boolean | undefined): BotTurnResult {
+  if (fallbackToHuman !== false) {
+    return {
+      reply: TEXTO_REAGENDAR_SIN_DOCTOR,
+      intent: BotIntent.HANDOFF,
+      handoff: true,
+      newBotState: null,
+    };
+  }
+  return done(TEXTO_REAGENDAR_SIN_DOCTOR_SIN_PERSONA, "reschedule");
 }
 
 /**
@@ -710,6 +737,7 @@ async function startReschedule(
   const tz = await deps.getClinicTimezone(input.clinicId);
   if (appts.length === 1) {
     const a = appts[0];
+    if (!a.doctorId) return reagendarSinDoctor(config.fallbackToHuman);
     const state: BookingState = {
       flow: "booking",
       mode: "reschedule",
@@ -1351,6 +1379,7 @@ async function stepSelectAppt(
   state.misses = 0;
   const a = await deps.findAppointmentById(options[idx].id, input.clinicId);
   if (!a) return done("No encuentro esa cita. Intenta de nuevo.", state.mode);
+  if (!a.doctorId) return reagendarSinDoctor(state.fallbackToHuman);
 
   state.apptId = a.id;
   state.doctorId = a.doctorId;

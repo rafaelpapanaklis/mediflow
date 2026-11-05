@@ -114,7 +114,8 @@ function ReviewItem({ item, multiClinic }: { item: PatientReviewItemDTO; multiCl
             overflowWrap: "anywhere",
           }}
         >
-          Dr(a). {item.doctorName} · {item.type}
+          {item.doctorName ? `Dr(a). ${item.doctorName} · ` : ""}
+          {item.type}
           {multiClinic && item.clinicName ? ` · ${item.clinicName}` : ""}
         </div>
       </div>

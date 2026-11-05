@@ -251,7 +251,9 @@ export function CancelarModal({
                 {formatFechaHora(cita.startsAt)}
               </span>
               <span style={{ fontSize: 13, fontWeight: 600 }}>{cita.type}</span>
-              <span style={{ fontSize: 13, color: MUTED }}>Con {cita.doctorName}</span>
+              {cita.doctorName ? (
+                <span style={{ fontSize: 13, color: MUTED }}>Con {cita.doctorName}</span>
+              ) : null}
               <span style={{ fontSize: 12, color: FAINT }}>{clinicNombre}</span>
             </div>
 

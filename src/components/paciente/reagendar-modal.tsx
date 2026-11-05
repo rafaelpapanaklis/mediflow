@@ -463,8 +463,8 @@ export function ReagendarModal({
               Actual:{" "}
               <strong style={{ color: "rgba(245,245,247,0.9)", fontWeight: 600 }}>
                 {formatFechaHora(cita.startsAt)}
-              </strong>{" "}
-              · {cita.doctorName}
+              </strong>
+              {cita.doctorName ? ` · ${cita.doctorName}` : ""}
             </p>
 
             {/* Paso 1: fecha */}

@@ -56,6 +56,7 @@ import { tzLocalToUtc } from "@/lib/agenda/time-utils";
 import { bloqueaEsteHueco } from "@/lib/agenda-bloqueos/core";
 import { leerBloqueosDelRango } from "@/lib/agenda-bloqueos/consulta.server";
 import { doctorNoAtiende } from "@/lib/horario-doctor/core";
+import { doctorIdsDe } from "@/lib/agenda/sin-doctor";
 import { leerHorariosDeDoctores } from "@/lib/horario-doctor/consulta.server";
 import { sinApartadoVencido } from "@/lib/agenda/apartado";
 import { quitarMarcaDeSobreagenda } from "@/lib/agenda/sobreagendar.server";
@@ -109,6 +110,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
       clinicId: true,
       patientId: true,
       doctorId: true,
+      resourceId: true,
       startsAt: true,
       endsAt: true,
       status: true,
@@ -201,10 +203,11 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     // comprobación de arriba: la pantalla ya lo sabe pintar, y al paciente no
     // se le cuenta por qué su doctor no está.
     const [bloqueosDestino, horarios] = await Promise.all([
+      // Sin doctor (ws1-t10): listas vacías = solo los bloqueos de toda la clínica, sin horario de doctor.
       leerBloqueosDelRango(appt.clinicId, proposedStartsAt, proposedEndsAt, {
-        doctorIds: [appt.doctorId],
+        doctorIds: doctorIdsDe(appt.doctorId),
       }),
-      leerHorariosDeDoctores(appt.clinicId, { doctorIds: [appt.doctorId] }),
+      leerHorariosDeDoctores(appt.clinicId, { doctorIds: doctorIdsDe(appt.doctorId) }),
     ]);
     if (
       bloqueaEsteHueco(bloqueosDestino, proposedStartsAt, proposedEndsAt, appt.doctorId) ||
@@ -216,6 +219,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     const free = await isSlotFree({
       clinicId: appt.clinicId,
       doctorId: appt.doctorId,
+      resourceId: appt.resourceId,
       startsAt: proposedStartsAt,
       endsAt: proposedEndsAt,
       excludeAppointmentId: appt.id,
@@ -230,7 +234,10 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
   const reason = reasonTrimmed.length > 0 ? reasonTrimmed : null;
 
   // 7) Sin auto-aprobación: crear solicitud PENDING que resuelve la clínica.
-  if (appt.clinic.patientChangesAutoApprove !== true) {
+  //    Reagendar una cita «Sin doctor» (ws1-t10, D6) SIEMPRE queda como
+  //    solicitud: el hueco del portal es el de la clínica y del sillón, y
+  //    quién la atiende a esa hora lo decide la clínica al aprobarla.
+  if (appt.clinic.patientChangesAutoApprove !== true || (type === "RESCHEDULE" && !appt.doctorId)) {
     try {
       await prisma.appointmentChangeRequest.create({
         data: {
@@ -275,7 +282,8 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
   try {
     const cr = await prisma.$transaction(async (tx) => {
       if (type === "RESCHEDULE") {
-        // Re-check anti double-booking (patrón de /api/public/book).
+        // Re-check anti double-booking (patrón de /api/public/book). Aquí la
+        // cita siempre tiene doctor: una «Sin doctor» se quedó en el paso 7.
         const conflict = await tx.appointment.findFirst({
           where: {
             clinicId: appt.clinicId,
@@ -295,7 +303,9 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
         // leyeron. Dos peticiones a la vez (doble toque, dos pestañas) ya no
         // se aprueban las dos: la segunda ve `count === 0` y no avisa.
         const reclamo = await tx.appointment.updateMany({
-          where: { id: appt.id, clinicId: appt.clinicId, startsAt: appt.startsAt, status: appt.status },
+          // ws1-t10 (revisión de P3, m1): y con el MISMO doctor. Si recepción se lo
+          // quitó (o cambió) entretanto, no se mueve sola: CITA_YA_CAMBIADA.
+          where: { id: appt.id, clinicId: appt.clinicId, startsAt: appt.startsAt, status: appt.status, doctorId: appt.doctorId },
           data: {
             startsAt: proposedStartsAt!,
             endsAt: proposedEndsAt!,

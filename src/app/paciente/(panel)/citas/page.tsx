@@ -24,6 +24,7 @@ import {
 } from "@/components/paciente/ui";
 import { ReagendarModal } from "@/components/paciente/reagendar-modal";
 import { CancelarModal } from "@/components/paciente/cancelar-modal";
+import { reagendarSeAutoAprueba } from "@/lib/patient-portal/auto-aprobado";
 import { ConfirmarAsistencia } from "@/components/paciente/confirmar-asistencia-button";
 
 const GAP = "clamp(12px, 2vw, 20px)";
@@ -236,7 +237,9 @@ export default function PacienteCitasPage() {
                         {cita.patientName ? (
                           <span style={{ fontSize: 13.5, fontWeight: 600 }}>Para {cita.patientName}</span>
                         ) : null}
-                        <span style={{ fontSize: 13, color: MUTED }}>Con {cita.doctorName}</span>
+                        {cita.doctorName ? (
+                          <span style={{ fontSize: 13, color: MUTED }}>Con {cita.doctorName}</span>
+                        ) : null}
                         {multiClinic && (
                           <span style={{ fontSize: 12, color: FAINT }}>
                             {clinicName(clinics, cita.clinicId)}
@@ -368,7 +371,9 @@ export default function PacienteCitasPage() {
                       {cita.patientName ? (
                         <span style={{ fontSize: 13, color: MUTED }}>Para {cita.patientName}</span>
                       ) : null}
-                      <span style={{ fontSize: 13, color: FAINT }}>Con {cita.doctorName}</span>
+                      {cita.doctorName ? (
+                        <span style={{ fontSize: 13, color: FAINT }}>Con {cita.doctorName}</span>
+                      ) : null}
                       {multiClinic && (
                         <span style={{ fontSize: 12, color: FAINT }}>
                           {clinicName(clinics, cita.clinicId)}
@@ -391,7 +396,8 @@ export default function PacienteCitasPage() {
           <ReagendarModal
             cita={sel.cita}
             clinicNombre={clinicName(clinics, sel.cita.clinicId)}
-            autoApprove={selAutoApprove}
+            // Una «Sin doctor» siempre queda como solicitud (D6): no se promete «al instante».
+            autoApprove={reagendarSeAutoAprueba(selAutoApprove, sel.cita)}
             open={sel.kind === "reagendar"}
             onClose={() => setSel(null)}
             onDone={() => mutate()}

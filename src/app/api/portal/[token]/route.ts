@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
 import { dateISOInTz, timeHHMMInTz } from "@/lib/agenda/legacy-helpers";
+import { doctorConTitulo } from "@/lib/reminders/doctor-del-mensaje";
 
 // GET /api/portal/[token] — public endpoint, no auth required
 // Returns patient's own data for the portal
@@ -62,7 +63,8 @@ export async function GET(req: NextRequest, props: { params: Promise<{ token: st
       startTime: timeHHMMInTz(a.startsAt, patient.clinic.timezone),
       endTime:   timeHHMMInTz(a.endsAt,   patient.clinic.timezone),
       status:    a.status,
-      doctor:    `Dr/a. ${a.doctor.firstName} ${a.doctor.lastName}`,
+      // null en una cita «Sin doctor» (ws1-t10).
+      doctor:    doctorConTitulo(a.doctor),
       // `notes` NO: son las notas INTERNAS que escribe el staff sobre la cita.
       // El contrato paciente-safe del portal con cuenta lo prohíbe por escrito
       // (src/lib/patient-portal/types.ts, "Appointment: id, type, status,

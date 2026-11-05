@@ -6,6 +6,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { formatApptDateParts } from "@/lib/reminders/config";
 import { ConfirmClient } from "./confirm-client";
+import { doctorConTitulo } from "@/lib/reminders/doctor-del-mensaje";
 
 // NO cachear (ni ISR ni CDN): el token identifica la cita de UN paciente y la
 // página refleja su estatus en vivo; una versión cacheada filtraría sus datos
@@ -80,7 +81,8 @@ export default async function ConfirmAppointmentPage(props: Props) {
         clinicPhone: appt.clinic.phone,
         clinicAddress,
         patientFirstName: appt.patient.firstName,
-        doctorName: `Dr/a. ${appt.doctor.firstName} ${appt.doctor.lastName}`,
+        // null en una cita «Sin doctor» (ws1-t10): la tarjeta no pinta la fila.
+        doctorName: doctorConTitulo(appt.doctor),
         fecha,
         hora,
         status: appt.status,

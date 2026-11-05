@@ -490,9 +490,13 @@ export async function adminModerateReview(
 // admin puede ocultar). Multi-tenant: SIEMPRE filtra por los patientId de la
 // sesión (ctx.links); nunca confía en ids del cliente.
 
-/** "Juan" + "Pérez García" → "Juan Pérez García" para mostrar al paciente. */
-function doctorDisplayName(firstName?: string | null, lastName?: string | null): string {
-  return `${(firstName ?? "").trim()} ${(lastName ?? "").trim()}`.replace(/\s+/g, " ").trim() || "tu doctor";
+/**
+ * "Juan" + "Pérez García" → "Juan Pérez García" para mostrar al paciente. null
+ * sin doctor (cita «Sin doctor», ws1-t10): la UI omite el «Dr(a).» — antes
+ * salía «Dr(a). tu doctor».
+ */
+function doctorDisplayName(firstName?: string | null, lastName?: string | null): string | null {
+  return `${(firstName ?? "").trim()} ${(lastName ?? "").trim()}`.replace(/\s+/g, " ").trim() || null;
 }
 
 /**

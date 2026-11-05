@@ -36,6 +36,8 @@ let updated: any[];
 let visibilidad: any[];
 let auditorias: any[];
 let reagendados: any[];
+/** ws1-t10 (P3): el texto de los pendientes al cambiar SOLO el doctor. */
+let rerenders: any[];
 
 const CLAVE_COLUMNAS = Symbol.for("dalecontrol.horarioDoctor.columnasComida");
 const CLAVE_FLEX = Symbol.for("dalecontrol.agenda.flexible");
@@ -59,6 +61,7 @@ beforeEach(() => {
   visibilidad = [];
   auditorias = [];
   reagendados = [];
+  rerenders = [];
   session.user.id = "u-recep";
   session.user.role = "RECEPTIONIST";
   session.clinic.category = "DENTAL";
@@ -193,6 +196,10 @@ function apptRow(data: any) {
   namedExports: {
     applyReminderReschedule: async (_tx: unknown, args: unknown) => { reagendados.push(args); },
     cancelPendingRemindersForAppointment: async () => undefined,
+    rerenderPendingReminderText: async (db: unknown, args: unknown) => {
+      rerenders.push({ db, args });
+      return 1;
+    },
   },
 });
 (mock as any).module("@/lib/agenda/sin-doctor.server", {
@@ -364,6 +371,38 @@ test("editar · mover de hora una «Sin doctor» re-encola sus recordatorios (de
   const r = await patch({ startsAt: martes("11:00"), endsAt: martes("11:30") });
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.equal(reagendados.length, 1);
+});
+
+// ws1-t10 (P3) — el recordatorio pendiente lleva el texto congelado al encolar.
+test("editar · cambiar SOLO el doctor pone al día el texto de los pendientes (fuera de la transacción, sin re-encolar)", async () => {
+  existente({ doctorId: DRA });
+  let r = await patch({ doctorId: null });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(reagendados.length, 0, "no se re-encola (cancelaría un aviso vencido sin mandarlo)");
+  assert.equal(rerenders.length, 1);
+  assert.deepEqual(rerenders[0].args, { appointmentId: "a1", clinicId: "c1" }, "acotado a la clínica de la sesión");
+  assert.equal(rerenders[0].db, prismaStub, "con el cliente global, no con el tx que ya se cerró");
+
+  // Asignarle doctor a una «Sin doctor» (id de siembra), y pasar de A a B: también.
+  existente({ doctorId: null });
+  r = await patch({ doctorId: DR2 });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  existente({ doctorId: DRA });
+  r = await patch({ doctorId: DR2 });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(rerenders.length, 3);
+});
+
+test("editar · sin cambio de doctor (notas, o el mismo doctor reenviado) no toca los pendientes; mover de hora los re-encola y basta", async () => {
+  existente({ doctorId: DRA });
+  await patch({ notes: "x" });
+  await patch({ doctorId: DRA, notes: "y" });
+  assert.equal(rerenders.length, 0);
+  existente({ doctorId: DRA, startsAt: new Date(martes("09:00")), endsAt: new Date(martes("09:30")) });
+  const r = await patch({ startsAt: martes("11:00"), endsAt: martes("11:30"), doctorId: null });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(reagendados.length, 1, "el re-encolado ya renderiza con el doctor nuevo");
+  assert.equal(rerenders.length, 0);
 });
 
 test("editar · quitarle el doctor sin el SQL pegado → 409, nada escrito", async () => {

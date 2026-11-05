@@ -19,19 +19,26 @@ export const REMINDER_VARS_HELP: { vars: string[]; labelKey: string }[] = [
   { vars: ["{link}"], labelKey: "inbox.whatsapp.varLink" },
 ];
 
+/**
+ * `previewSinDoctor` (ws1-t10): el mismo mensaje para una cita «Sin doctor» —
+ * sin la línea del doctor, o con «nuestro equipo» si va dentro de una frase.
+ * Es lo que recibe el paciente cuando la cita todavía no tiene doctor.
+ */
 export function previewReminderMessage(
   template: string,
   sample: { clinica: string; fecha: string },
-): { preview: string; unknown: string[] } {
+): { preview: string; previewSinDoctor: string; unknown: string[] } {
+  const vars = {
+    paciente: "María",
+    clinica: sample.clinica,
+    fecha: sample.fecha,
+    hora: "10:00",
+    doctor: "Dr/a. García",
+    link: getConfirmUrl("ejemplo"),
+  };
   return {
-    preview: renderReminderTemplate(template, {
-      paciente: "María",
-      clinica: sample.clinica,
-      fecha: sample.fecha,
-      hora: "10:00",
-      doctor: "Dr/a. García",
-      link: getConfirmUrl("ejemplo"),
-    }),
+    preview: renderReminderTemplate(template, vars),
+    previewSinDoctor: renderReminderTemplate(template, { ...vars, doctor: null }),
     unknown: findUnknownReminderVars(template),
   };
 }
