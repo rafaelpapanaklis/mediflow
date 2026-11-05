@@ -256,11 +256,12 @@ test("sin agenda.create no hay botón «Nueva cita» ni clic en hueco (Día y Se
 test("sin agenda.edit ninguna tarjeta se arrastra (Día y Semana)", () => {
   assert.match(
     fuente("src/components/dashboard/agenda-nueva/vista-dia.tsx"),
-    /arrastrable=\{citaArrastrable\(cita\.dto, permissions\.canEdit\)\}/,
+    // ws1-t11 (D3): además, un DOCTOR no arrastra una «Sin doctor» (`&& !esDoctorConCitaSinDoctor(…)`).
+    /arrastrable=\{citaArrastrable\(cita\.dto, permissions\.canEdit\)(?: && !esDoctorConCitaSinDoctor\([^)]*\))?\}/,
   );
   const semana = fuente("src/components/dashboard/agenda-nueva/vista-semana.tsx");
   assert.match(semana, /puedeEditar=\{permissions\.canEdit\}/);
-  assert.match(semana, /arrastrable=\{citaArrastrable\(cita\.dto, props\.puedeEditar\)\}/);
+  assert.match(semana, /arrastrable=\{citaArrastrable\(cita\.dto, props\.puedeEditar\)(?: && !esDoctorConCitaSinDoctor\([^)]*\))?\}/);
 });
 
 test("el arrastre de la agenda nueva mide con la rejilla que dibuja (112 px/h desde horaInicio)", () => {

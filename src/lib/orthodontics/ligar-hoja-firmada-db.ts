@@ -14,7 +14,7 @@
 // hoja que ya está ligada a otra cita.
 import { Prisma, type AppointmentStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { asignarSiSinDoctor } from "@/lib/agenda/sin-doctor.server";
+import { asignacionAlCerrar, cerrarCitaConAsignacion, rastroDeAsignacionAlCerrar } from "@/lib/agenda/sin-doctor.server";
 import { isClinicalNoteEmpty } from "@/lib/clinical/note-validation";
 import { sendReviewInvitation } from "@/lib/reviews/invite";
 import { tarjetaDeControlDeHoy } from "@/lib/orthodontics/redesign/control-del-dia";
@@ -31,6 +31,8 @@ export interface LigarHojaFirmada {
   rol: string;
   zona: string;
   ahora?: Date;
+  /** ws1-t11 v2: quien hace la acción (sesión), para el rastro del sobreturno. Sin él, quien firmó la hoja. */
+  actorId?: string;
 }
 
 export interface HojaFirmadaLigada {
@@ -100,14 +102,26 @@ export async function ligarHojaFirmadaDeHoyALaCita(a: LigarHojaFirmada): Promise
 
   const cierre = datosDeCierreDeCita(planDeCierreDeCita(a.cita.status, a.rol, ahora, a.cita.startsAt), ahora);
   if (!cierre) return { cardId: hoja.id, citaCerrada: null };
-  const cerradas = await prisma.appointment.updateMany({
-    where: { id: a.cita.id, clinicId: a.clinicId, status: a.cita.status as AppointmentStatus },
-    data: cierre,
-  });
-  if (cerradas.count === 0) return { cardId: hoja.id, citaCerrada: null };
-  // ws1-t11 (D9): una «Sin doctor» queda a nombre de quien firmó la hoja (la atendió).
+  // ws1-t11 (D9): una «Sin doctor» queda a nombre de quien firmó la hoja (la atendió), en el MISMO update que la
+  // cierra; el sobreturno y el rastro, a nombre de quien actúa (v2).
   const firma = await prisma.orthoTreatmentCard.findFirst({ where: { id: hoja.id, clinicId: a.clinicId }, select: { signedById: true } });
-  await asignarSiSinDoctor(prisma, { clinicId: a.clinicId, appointmentId: a.cita.id, doctorId: firma?.signedById ?? null });
+  const actorId = a.actorId ?? firma?.signedById ?? "";
+  const asignacion = await asignacionAlCerrar(prisma, {
+    clinicId: a.clinicId,
+    appointmentId: a.cita.id,
+    doctorId: firma?.signedById ?? null,
+    actorId,
+  });
+  // v3 (m-a): asignar solo si sigue «Sin doctor»; si otro le puso doctor entre medias, se cierra sin asignar.
+  const { cerrada, asignada } = await cerrarCitaConAsignacion(prisma, {
+    where: { id: a.cita.id, clinicId: a.clinicId, status: a.cita.status as AppointmentStatus },
+    cierre,
+    asignacion,
+  });
+  if (!cerrada) return { cardId: hoja.id, citaCerrada: null };
+  if (actorId && asignada) {
+    await rastroDeAsignacionAlCerrar({ clinicId: a.clinicId, actorId, patientId: a.patientId, appointmentId: a.cita.id, asignacion });
+  }
   // Igual que al firmar con la cita (signTreatmentCard): idempotente y nunca lanza.
   await sendReviewInvitation(a.cita.id);
   return { cardId: hoja.id, citaCerrada: a.cita.id };

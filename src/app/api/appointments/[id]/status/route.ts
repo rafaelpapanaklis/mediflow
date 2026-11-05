@@ -33,6 +33,7 @@ import { MARCA_SOBREAGENDADA, confirmacionValida, esSobreagendada } from "@/lib/
 import { leerAgendaFlexibleConFallo } from "@/lib/agenda/agenda-flexible.server";
 import { buscarChoqueDeCita, type ChoqueDeCita } from "@/lib/agenda/sobreagendar.server";
 import { doctorAlCambiarEstado } from "@/lib/agenda/sin-doctor";
+import { sobreturnoAlAsignar } from "@/lib/agenda/sobreturno-al-asignar.server";
 import { RECIBE_CITAS_WHERE } from "@/lib/agenda/roles-que-atienden";
 import { cuerpoDoctorNoRecibeCitasDe } from "@/lib/agenda/roles-que-atienden-db";
 
@@ -266,6 +267,26 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
     userId: session.user.id,
   });
 
+  // ws1-t11 v2 (M1/m1) — el doctor que se le asigna ya tiene otra cita a esa hora: al iniciar o terminar,
+  // sobreturno sin preguntar; al llegar o al sillón, «¿Seguro?» (409 `sobreagendable`). Con adelanto a hoy
+  // no hace falta: el adelanto ya mira la agenda del doctor asignado y la marca él (`planDeAdelanto`).
+  const sobreturno = doctorAsignado && !adelanto
+    ? await sobreturnoAlAsignar({
+        clinicId: session.clinic.id,
+        appointmentId: params.id,
+        doctorId: doctorAsignado,
+        startsAt: existing.startsAt,
+        endsAt: existing.endsAt,
+        overrideActual: existing.overrideReason,
+        destino: body.status,
+        confirmacion: body,
+        viewer: { userId: session.user.id, role: session.user.role, clinicId: session.clinic.id },
+        userId: session.user.id,
+        ahora: now,
+      })
+    : null;
+  if (sobreturno?.rechazo) return NextResponse.json(sobreturno.rechazo, { status: 409 });
+
   // Estados que CIERRAN la cita: sus recordatorios pendientes ya no tienen a
   // quién avisar. El worker se negaba a enviarlos (re-check al salir), pero la
   // fila seguía en "En cola" en el panel hasta que le tocaba turno. Va en la
@@ -295,7 +316,8 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
     // leyó arriba. Con dos peticiones a la vez (doble clic en «Cancelar») solo
     // una ve `count === 1`; la otra sale con 409 sin avisar al paciente otra vez.
     const reclamo = await tx.appointment.updateMany({
-      where: { id: params.id, clinicId: session.clinic.id, status: existing.status },
+      // v3 (m-a): al asignar doctor, también que siga «Sin doctor» (si otro se la asignó entre medias, count 0 → 409).
+      where: { id: params.id, clinicId: session.clinic.id, status: existing.status, ...(doctorAsignado ? { doctorId: null } : {}) },
       data: {
         status: body.status,
         ...sideEffects,
@@ -303,6 +325,8 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
         ...(adelanto?.datos ?? {}),
         // ws1-t11 — la «Sin doctor» queda asignada en el mismo cambio (reclamada con su estado de arriba).
         ...(doctorAsignado ? { doctorId: doctorAsignado } : {}),
+        // v2 (M1): y, si ese doctor ya tenía otra cita a esa hora, como sobreturno.
+        ...(sobreturno?.datos ?? {}),
         // WS1-T5 (revisión t8, A3 y N-A1) — ver arriba: al reabrir, la marca
         // se quita (hueco libre) o se pone (confirmado encima de otra).
         ...(marcaAlReabrir === "quitar" ? { overrideReason: null, overriddenBy: null, overriddenAt: null } : {}),
@@ -371,7 +395,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
     // ws1-t11 — el doctor elegido ya tiene otra cita a esa hora (la constraint de siempre).
     if (doctorAsignado && isAppointmentOverlapError(err)) {
       return NextResponse.json(
-        { error: "appointment_overlap", reason: "Ese doctor ya tiene otra cita a esta hora. Elige a otro doctor o mueve la otra cita." },
+        { error: "appointment_overlap", reason: "Otra cita de ese doctor acaba de ocupar esta hora. Intenta de nuevo." },
         { status: 409 },
       );
     }
@@ -450,6 +474,8 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
         status: { before: existing.status, after: body.status },
         // ws1-t11 — quién la atiende, si se decidió en este cambio.
         ...(doctorAsignado ? { doctorId: { before: existing.doctorId, after: doctorAsignado } } : {}),
+        // v2 (M1): EL RASTRO del sobreturno — encima de qué cita del doctor quedó.
+        ...(sobreturno?.conCita ? { sobreturno: { before: null, after: { conCita: sobreturno.conCita, doctorId: doctorAsignado } } } : {}),
         // WS1-T5 — EL RASTRO de reabrirla sobreagendada: encima de qué cita
         // (quién, lo dice la fila). Si ya llevaba la marca, quién la puso antes.
         ...(marcaAlReabrir === "poner" && choqueAlReabrir
@@ -559,6 +585,8 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
       whatsapp,
       dineroCita,
       adelantada: adelanto ? adelantoParaRespuesta(adelanto) : null,
+      // v2 (M1): `true` = el doctor asignado ya tenía otra cita a esa hora y esta quedó como sobreturno.
+      ...(sobreturno?.conCita ? { sobreagendada: true } : {}),
     },
   );
 }

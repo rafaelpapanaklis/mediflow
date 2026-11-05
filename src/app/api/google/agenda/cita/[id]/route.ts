@@ -13,7 +13,12 @@ import { doctorPuedeVer } from "@/lib/agenda/sin-doctor";
  * La cita, si quien pide puede tocarla: de su clínica, con el paciente visible
  * y —si es DOCTOR— suya. Mismas reglas que PATCH /api/appointments/[id].
  */
-async function citaAccesible(session: ClinicSession, id: string): Promise<{ id: string; patientId: string } | Response> {
+async function citaAccesible(
+  session: ClinicSession,
+  id: string,
+  /** v2 (m7): para ESCRIBIR («mantener»), un DOCTOR solo sobre las suyas; para leer, también las «Sin doctor». */
+  para: "leer" | "escribir" = "leer",
+): Promise<{ id: string; patientId: string } | Response> {
   const cita = await prisma.appointment.findFirst({
     where: { id, clinicId: session.clinic.id },
     select: { id: true, patientId: true, doctorId: true },
@@ -26,7 +31,10 @@ async function citaAccesible(session: ClinicSession, id: string): Promise<{ id: 
   });
   if (vis) return vis;
   // ws1-t11 (D3): un DOCTOR, las suyas y las «Sin doctor» (como en la agenda).
-  if (!doctorPuedeVer(session.user.role, session.user.id, cita.doctorId)) {
+  const puede = para === "escribir"
+    ? session.user.role !== "DOCTOR" || cita.doctorId === session.user.id
+    : doctorPuedeVer(session.user.role, session.user.id, cita.doctorId);
+  if (!puede) {
     return NextResponse.json({ error: "not_your_appointment" }, { status: 403 });
   }
   return { id: cita.id, patientId: cita.patientId };
@@ -61,8 +69,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const body = (await req.json().catch(() => null)) as { accion?: unknown } | null;
   if (body?.accion !== "mantener") return NextResponse.json({ error: "accion_invalida" }, { status: 400 });
 
-  // De la clínica de la sesión (regla c), paciente visible y, si es DOCTOR, suya.
-  const cita = await citaAccesible(session, id);
+  // De la clínica de la sesión (regla c), paciente visible y, si es DOCTOR, suya (no una «Sin doctor» sin tomar).
+  const cita = await citaAccesible(session, id, "escribir");
   if (cita instanceof Response) return cita;
 
   const habia = await descartarAvisoDeCitaGoogle(session.clinic.id, id);

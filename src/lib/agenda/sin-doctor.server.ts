@@ -17,6 +17,10 @@ export interface DbSonda {
   $queryRaw(query: TemplateStringsArray, ...values: unknown[]): Promise<unknown>;
 }
 
+import { sinApartadoVencido } from "./apartado";
+import { datosDeSobreturno, type DatosDeSobreturno } from "./sin-doctor";
+import { RECIBE_CITAS_WHERE } from "./roles-que-atienden";
+
 const DIEZ_MIN = 10 * 60 * 1000;
 const CLAVE = Symbol.for("dalecontrol.ws1-t11.cita-sin-doctor");
 
@@ -55,26 +59,111 @@ export async function sinDoctorDisponibleAlGuardar(opts: { db?: DbSonda } = {}):
   return sinDoctorDisponible({ ...opts, forzar: true });
 }
 
+/** Lo que hay que añadir al UPDATE que cierra la cita: el doctor y, si choca, el sobreturno. Vacío = nada. */
+export interface AsignacionAlCerrar {
+  datos: { doctorId?: string } & DatosDeSobreturno;
+  /** La otra cita del doctor con la que quedó encima (para el rastro); null si no choca. */
+  conCita: string | null;
+}
+
 /**
- * ws1-t11 (D9) — el cierre que no pasa por /status ni /complete (firmar la hoja de control de
- * ortodoncia): si la cita sigue «Sin doctor», queda a nombre de quien la atendió. Condicional
- * (`doctorId: null`): nunca pisa un doctor ya puesto. Nunca lanza: si ese doctor ya tiene otra
- * cita a esa hora (la constraint), la cita se queda «Sin doctor» y la firma sigue en pie.
+ * ws1-t11 (D9) — el cierre que no pasa por /status ni /complete (firmar o ligar la hoja de control
+ * de ortodoncia): si la cita sigue «Sin doctor», queda a nombre de quien la atendió (`doctorId`).
+ * Se calcula ANTES y va en el MISMO update que cierra la cita (v2, revisión de t12: antes eran dos
+ * escrituras y un fallo de la segunda dejaba la cita atendida y «Sin doctor» sin aviso).
+ *  · v2 (m5): quien atendió tiene que recibir citas en la clínica (`RECIBE_CITAS_WHERE`); si no, nada.
+ *  · v2 (M1/m1): si ya tiene otra cita viva a esa hora (también una sobreagendada, que la constraint
+ *    no ve), la cita entra como sobreturno (`datosDeSobreturno`, a nombre de quien ACTÚA).
+ * Nunca lanza: ante un fallo, nada (la cita se cierra «Sin doctor», como antes de existir esto).
  */
-export async function asignarSiSinDoctor(
-  db: { appointment: { updateMany(args: any): Promise<{ count: number }> } },
-  args: { clinicId: string; appointmentId: string; doctorId: string | null | undefined },
-): Promise<boolean> {
-  if (!args.clinicId || !args.appointmentId || !args.doctorId) return false;
+export async function asignacionAlCerrar(
+  db: { appointment: { findFirst(args: any): Promise<any> }; user: { findFirst(args: any): Promise<any> } },
+  args: { clinicId: string; appointmentId: string; doctorId: string | null | undefined; actorId: string },
+): Promise<AsignacionAlCerrar> {
+  const nada: AsignacionAlCerrar = { datos: {}, conCita: null };
+  if (!args.clinicId || !args.appointmentId || !args.doctorId) return nada;
   try {
-    const r = await db.appointment.updateMany({
+    const cita = await db.appointment.findFirst({
       where: { id: args.appointmentId, clinicId: args.clinicId, doctorId: null },
-      data: { doctorId: args.doctorId },
+      select: { startsAt: true, endsAt: true, overrideReason: true },
     });
-    return r.count > 0;
+    if (!cita) return nada;
+    const atiende = await db.user.findFirst({
+      where: { id: args.doctorId, clinicId: args.clinicId, ...RECIBE_CITAS_WHERE },
+      select: { id: true },
+    });
+    if (!atiende) return nada;
+    const otra = await db.appointment.findFirst({
+      where: {
+        clinicId: args.clinicId,
+        doctorId: args.doctorId,
+        id: { not: args.appointmentId },
+        status: { notIn: ["CANCELLED", "NO_SHOW"] },
+        startsAt: { lt: cita.endsAt },
+        endsAt: { gt: cita.startsAt },
+        AND: [sinApartadoVencido()],
+      },
+      select: { id: true },
+    });
+    return {
+      datos: { doctorId: args.doctorId, ...(otra ? datosDeSobreturno(cita.overrideReason, args.actorId, new Date()) : {}) },
+      conCita: otra?.id ?? null,
+    };
   } catch (e) {
-    console.warn("[cita-sin-doctor] no se pudo asignar el doctor al cerrar:", e);
-    return false;
+    console.warn("[cita-sin-doctor] no se pudo decidir el doctor al cerrar:", e);
+    return nada;
+  }
+}
+
+/**
+ * v3 (m-a de la revisión de t12) — el UPDATE que cierra la cita, con la asignación SOLO si la cita sigue
+ * «Sin doctor» (`doctorId: null` en el where). Si alguien le puso doctor entre la lectura y esta escritura
+ * (count 0), se cierra igual pero SIN asignar: su doctor se queda. `where` lo pone quien llama (clínica,
+ * estado). Devuelve si se cerró y si quedó asignada (para el rastro).
+ */
+export async function cerrarCitaConAsignacion(
+  db: { appointment: { updateMany(args: any): Promise<{ count: number }> } },
+  args: { where: Record<string, unknown>; cierre: Record<string, unknown>; asignacion: AsignacionAlCerrar },
+): Promise<{ cerrada: boolean; asignada: boolean }> {
+  if (args.asignacion.datos.doctorId) {
+    const r = await db.appointment.updateMany({
+      where: { ...args.where, doctorId: null },
+      data: { ...args.cierre, ...args.asignacion.datos },
+    });
+    if (r.count > 0) return { cerrada: true, asignada: true };
+  }
+  const r = await db.appointment.updateMany({ where: args.where, data: args.cierre });
+  return { cerrada: r.count > 0, asignada: false };
+}
+
+/** La fila de Movimientos de esa asignación (después de que el cierre se escribió). Nunca lanza. */
+export async function rastroDeAsignacionAlCerrar(args: {
+  clinicId: string;
+  actorId: string;
+  patientId: string;
+  appointmentId: string;
+  asignacion: AsignacionAlCerrar;
+}): Promise<void> {
+  const doctorId = args.asignacion.datos.doctorId;
+  if (!doctorId) return;
+  try {
+    const { registrarMovimientoDelPaciente } = await import("@/lib/movimientos-paciente/registrar");
+    await registrarMovimientoDelPaciente({
+      clinicId: args.clinicId,
+      userId: args.actorId,
+      patientId: args.patientId,
+      entityType: "appointment",
+      entityId: args.appointmentId,
+      action: "update",
+      texto: "La cita quedó a nombre de quien firmó la hoja de control",
+      campos: args.asignacion.conCita ? ["doctorId", "overrideReason"] : ["doctorId"],
+      cambios: {
+        doctorId: { before: null, after: doctorId },
+        ...(args.asignacion.conCita ? { sobreturno: { before: null, after: { conCita: args.asignacion.conCita, doctorId } } } : {}),
+      },
+    });
+  } catch (e) {
+    console.warn("[cita-sin-doctor] no se pudo dejar el rastro de la asignación:", e);
   }
 }
 

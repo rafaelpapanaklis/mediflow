@@ -18,6 +18,8 @@ import { logMutation } from "@/lib/audit";
 import { EMPTY_NOTE_ERROR, isClinicalNoteEmpty } from "@/lib/clinical/note-validation";
 import { assertPatientVisible, ensureUserCanSeePatient } from "@/lib/patient-visibility";
 import { doctorAlCambiarEstado } from "@/lib/agenda/sin-doctor";
+import { sobreturnoAlAsignar } from "@/lib/agenda/sobreturno-al-asignar.server";
+import { RECIBE_CITAS_WHERE } from "@/lib/agenda/roles-que-atienden";
 import { denyIfMissingPermission } from "@/lib/auth/require-permission";
 import { canTransition, isAppointmentOverlapError } from "@/lib/agenda/transitions";
 import { inicioParaCompletar } from "@/lib/clinical/inicio-para-completar";
@@ -66,7 +68,7 @@ export async function PATCH(req: NextRequest, props: Params) {
 
   const existing = await prisma.appointment.findFirst({
     where: { id: params.id, clinicId: session.clinic.id },
-    select: { id: true, status: true, doctorId: true, patientId: true, startsAt: true, startedAt: true },
+    select: { id: true, status: true, doctorId: true, patientId: true, startsAt: true, endsAt: true, startedAt: true, overrideReason: true },
   });
   if (!existing) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
@@ -172,10 +174,36 @@ export async function PATCH(req: NextRequest, props: Params) {
 
   // ws1-t11 — una «Sin doctor» que se cierra con su nota de consulta es de quien escribió la nota (si no la
   // cierra un DOCTOR, que ya se la quedó). Sin nota, se cierra «Sin doctor» (D9 del plan).
+  // v2 (m5): el autor solo si la nota es de ESTA cita (`clinicalNoteId` puede ser cualquier nota del paciente)
+  // y el autor recibe citas en la clínica (no una asistente, ni un doctor dado de baja). Si no, «Sin doctor».
+  const notaDeEstaCita = (note?.specialtyData as { appointmentId?: unknown } | null)?.appointmentId === params.id;
+  const autorQueAtiende =
+    existing.doctorId === null && !decisionDoctor.asignar && note?.doctorId && notaDeEstaCita
+      ? await prisma.user.findFirst({
+          where: { id: note.doctorId, clinicId: session.clinic.id, ...RECIBE_CITAS_WHERE },
+          select: { id: true },
+        })
+      : null;
   const doctorAsignado: string | null =
-    existing.doctorId === null ? decisionDoctor.asignar ?? note?.doctorId ?? null : null;
+    existing.doctorId === null ? decisionDoctor.asignar ?? autorQueAtiende?.id ?? null : null;
 
   const completedAt = new Date();
+  // v2 (M1/m1): si quien la atendió ya tiene otra cita a esa hora, la cita se cierra como sobreturno (con rastro).
+  const sobreturno = doctorAsignado
+    ? await sobreturnoAlAsignar({
+        clinicId: session.clinic.id,
+        appointmentId: params.id,
+        doctorId: doctorAsignado,
+        startsAt: existing.startsAt,
+        endsAt: existing.endsAt,
+        overrideActual: existing.overrideReason,
+        destino: "COMPLETED",
+        confirmacion: {},
+        viewer: { userId: session.user.id, role: session.user.role, clinicId: session.clinic.id },
+        userId: session.user.id,
+        ahora: completedAt,
+      })
+    : null;
   const signedAtIso = new Date().toISOString();
   const prevSpec = (note?.specialtyData ?? {}) as Record<string, unknown>;
 
@@ -185,8 +213,9 @@ export async function PATCH(req: NextRequest, props: Params) {
     // WS1-T3 v7 (revisión t8 de la v6) — con el estado que se leyó arriba: si
     // la cita se canceló (o cambió) en este instante, no se cierra ni se firma.
     const r = await tx.appointment.updateMany({
-      where: { id: params.id, clinicId: session.clinic.id, status: existing.status },
-      data: { status: "COMPLETED", completedAt, ...(doctorAsignado ? { doctorId: doctorAsignado } : {}) },
+      // v3 (m-a): al asignar doctor, también que siga «Sin doctor» (count 0 → el 409 de «la cita cambió»).
+      where: { id: params.id, clinicId: session.clinic.id, status: existing.status, ...(doctorAsignado ? { doctorId: null } : {}) },
+      data: { status: "COMPLETED", completedAt, ...(doctorAsignado ? { doctorId: doctorAsignado } : {}), ...(sobreturno?.datos ?? {}) },
     });
     if (r.count !== 1) return null;
     // ws1-t11 — quien queda como doctor de la cita tiene que poder ver al paciente (como al agendar).
@@ -220,7 +249,7 @@ export async function PATCH(req: NextRequest, props: Params) {
     // ws1-t11 — quien la atendió ya tiene otra cita viva a esa hora (la constraint de siempre).
     if (doctorAsignado && isAppointmentOverlapError(err)) {
       return NextResponse.json(
-        { error: "appointment_overlap", reason: "Quien atendió esta cita ya tiene otra a la misma hora. Asígnale el doctor desde «Editar cita» y vuelve a cerrarla." },
+        { error: "appointment_overlap", reason: "Otra cita de ese doctor acaba de ocupar esta hora. Intenta de nuevo." },
         { status: 409 },
       );
     }
@@ -249,7 +278,13 @@ export async function PATCH(req: NextRequest, props: Params) {
     patientId: existing.patientId,
     texto: textoCita.completada(existing.startsAt, await zonaDeClinica(session.clinic.id)),
     before: { status: existing.status, ...(doctorAsignado ? { doctorId: null } : {}) },
-    after: { status: "COMPLETED", completedAt: completedAt.toISOString(), ...(doctorAsignado ? { doctorId: doctorAsignado } : {}) },
+    after: {
+      status: "COMPLETED",
+      completedAt: completedAt.toISOString(),
+      ...(doctorAsignado ? { doctorId: doctorAsignado } : {}),
+      // v2 (M1): EL RASTRO del sobreturno.
+      ...(sobreturno?.conCita ? { sobreturno: { conCita: sobreturno.conCita } } : {}),
+    },
   });
   if (willSign && note) {
     await logMutation({

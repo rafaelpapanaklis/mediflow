@@ -51,6 +51,7 @@ export async function ligarControlFirmadoDeHoy(
       planId: plan.id,
       cita,
       rol: String(ctx.role),
+      actorId: ctx.userId, // ws1-t11 v2: el rastro del sobreturno, a nombre de quien actúa
       zona,
     }),
   );

@@ -16,6 +16,7 @@ import { isAppointmentOverlapError } from "@/lib/agenda/transitions";
 import { cancelPendingRemindersForAppointment } from "@/lib/reminders/reschedule.server";
 import { sincronizarCitaEnSegundoPlano } from "@/lib/agenda/google-sync";
 import { doctorAlCambiarEstado } from "@/lib/agenda/sin-doctor";
+import { sobreturnoAlAsignar } from "@/lib/agenda/sobreturno-al-asignar.server";
 import { RECIBE_CITAS_WHERE } from "@/lib/agenda/roles-que-atienden";
 import { cuerpoDoctorNoRecibeCitasDe } from "@/lib/agenda/roles-que-atienden-db";
 
@@ -74,9 +75,12 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
 
   // ws1-t11 — «¿Quién lo atiende?» (opcional) de una cita «Sin doctor». Sin cuerpo, como siempre.
   let pedido: unknown = undefined;
+  // v2 (M1): la confirmación del «¿Seguro?» cuando ese doctor ya tiene otra cita a esa hora.
+  let confirmacion: { sobreagendar?: unknown; sobreagendarCita?: unknown; sobreagendarOtras?: unknown } = {};
   try {
-    const b = (await req.json()) as { doctorId?: unknown } | null;
+    const b = (await req.json()) as { doctorId?: unknown; sobreagendar?: unknown; sobreagendarCita?: unknown; sobreagendarOtras?: unknown } | null;
     pedido = b?.doctorId;
+    confirmacion = { sobreagendar: b?.sobreagendar, sobreagendarCita: b?.sobreagendarCita, sobreagendarOtras: b?.sobreagendarOtras };
   } catch {
     /* sin cuerpo: la llegada de siempre */
   }
@@ -111,18 +115,38 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     zona: zona ?? session.clinic.timezone ?? "America/Mexico_City",
     userId: session.user.id,
   });
+  // v2 (M1/m1) — el doctor elegido ya tiene otra cita a esa hora: «¿Seguro?» (409 `sobreagendable`) hasta que se
+  // confirme con esa cita; confirmado, la cita queda como sobreturno. Con adelanto a hoy decide el adelanto.
+  const sobreturno = doctorAsignado && !adelanto
+    ? await sobreturnoAlAsignar({
+        clinicId: session.clinic.id,
+        appointmentId: params.id,
+        doctorId: doctorAsignado,
+        startsAt: existing.startsAt,
+        endsAt: existing.endsAt,
+        overrideActual: existing.overrideReason,
+        destino: "CHECKED_IN",
+        confirmacion,
+        viewer: { userId: session.user.id, role: session.user.role, clinicId: session.clinic.id },
+        userId: session.user.id,
+        ahora: now,
+      })
+    : null;
+  if (sobreturno?.rechazo) return NextResponse.json(sobreturno.rechazo, { status: 409 });
   let reclamada = false;
   try {
     reclamada = await prisma.$transaction(async (tx) => {
       // WS1-T3 v7 (revisión t8 de la v6) — con el estado que se leyó arriba: si
       // se canceló (o cambió) en este instante, no se toca y no hay efectos.
       const r = await tx.appointment.updateMany({
-        where: { id: params.id, clinicId: session.clinic.id, status: existing.status },
+        // v3 (m-a): al asignar doctor, también que siga «Sin doctor» (count 0 → el 409 de «la cita cambió»).
+        where: { id: params.id, clinicId: session.clinic.id, status: existing.status, ...(doctorAsignado ? { doctorId: null } : {}) },
         data: {
           status: "CHECKED_IN",
           checkedInAt: now,
           ...(adelanto?.datos ?? {}),
           ...(doctorAsignado ? { doctorId: doctorAsignado } : {}),
+          ...(sobreturno?.datos ?? {}),
         },
       });
       if (r.count !== 1) return false;
@@ -141,7 +165,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
   } catch (err) {
     if (doctorAsignado && isAppointmentOverlapError(err)) {
       return NextResponse.json(
-        { error: "appointment_overlap", reason: "Ese doctor ya tiene otra cita a esta hora. Elige a otro doctor o mueve la otra cita." },
+        { error: "appointment_overlap", reason: "Otra cita de ese doctor acaba de ocupar esta hora. Intenta de nuevo." },
         { status: 409 },
       );
     }
@@ -198,6 +222,8 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     cambios: {
       status: { before: existing.status, after: "CHECKED_IN" },
       ...(doctorAsignado ? { doctorId: { before: existing.doctorId, after: doctorAsignado } } : {}),
+      // v2 (M1): EL RASTRO del sobreturno confirmado.
+      ...(sobreturno?.conCita ? { sobreturno: { before: null, after: { conCita: sobreturno.conCita, doctorId: doctorAsignado } } } : {}),
     },
     req,
   });
@@ -210,6 +236,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     checkedInAt: now.toISOString(),
     minutesWaiting: 0,
     doctorId: doctorAsignado ?? existing.doctorId,
+    ...(sobreturno?.conCita ? { sobreagendada: true } : {}),
     adelantada: adelanto ? adelantoParaRespuesta(adelanto) : null,
   });
 }

@@ -415,6 +415,9 @@ test("DOCTOR: no convierte el bloqueo de otro doctor ni toca el aviso de una cit
   assert.match(leer("src/lib/google/convertir.server.ts"), /quien\?\.role === "DOCTOR" && bloque\.doctorId !== null && bloque\.doctorId !== quien\.userId/);
   const r = leer("src/app/api/google/agenda/cita/[id]/route.ts");
   // ws1-t11 (D3): las suyas y las «Sin doctor»; las de otro doctor, no.
-  assert.match(r, /!doctorPuedeVer\(session\.user\.role, session\.user\.id, cita\.doctorId\)/);
+  assert.match(r, /doctorPuedeVer\(session\.user\.role, session\.user\.id, cita\.doctorId\)/);
+  // v2 (m7): para «mantener» (escribe), un DOCTOR solo sobre las suyas.
+  assert.match(r, /session\.user\.role !== "DOCTOR" \|\| cita\.doctorId === session\.user\.id/);
+  assert.match(r, /citaAccesible\(session, id, "escribir"\)/);
   assert.match(r, /assertPatientVisible\(cita\.patientId/);
 });

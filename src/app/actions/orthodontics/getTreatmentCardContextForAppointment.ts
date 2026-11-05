@@ -99,6 +99,7 @@ export async function getTreatmentCardContextForAppointment(
     planId: plan.id,
     cita: appt,
     rol: String(ctx.role),
+    actorId: ctx.userId, // ws1-t11 v2: el rastro del sobreturno, a nombre de quien actúa
     zona,
   });
   const citaVigente = ligada.citaCerrada

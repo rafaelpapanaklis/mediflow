@@ -65,6 +65,8 @@ test("doctorPuedeEditar: el DOCTOR toma una «Sin doctor» solo asignándosela a
   const { doctorPuedeEditar, doctorDelCambio: c } = await import("@/lib/agenda/sin-doctor");
   assert.equal(doctorPuedeEditar("RECEPTIONIST", "u", null, c(undefined)), true);
   assert.equal(doctorPuedeEditar("DOCTOR", DRA, DRA, c(DR2)), true, "las suyas, como siempre");
+  assert.equal(doctorPuedeEditar("DOCTOR", DRA, DRA, c(null)), false, "v2 m6: no suelta la suya a «Sin doctor» (eso lo hace recepción)");
+  assert.equal(doctorPuedeEditar("ADMIN", "u", DRA, c(null)), true, "recepción / admin sí");
   assert.equal(doctorPuedeEditar("DOCTOR", DRA, DR2, c(DRA)), false, "la de otro, nunca");
   assert.equal(doctorPuedeEditar("DOCTOR", DRA, null, c(undefined)), false, "sin tomarla no la edita");
   assert.equal(doctorPuedeEditar("DOCTOR", DRA, null, c(DR2)), false, "no se la da a otro");
@@ -90,6 +92,10 @@ test("doctorAlCambiarEstado: la matriz de D3/D9", async () => {
   assert.deepEqual(d({ ...base, role: "RECEPTIONIST", destino: "CHECKED_IN" }), { asignar: null, rechazo: null });
   assert.deepEqual(d({ ...base, role: "RECEPTIONIST", destino: "CHECKED_IN", pedido: DR2 }), { asignar: DR2, rechazo: null });
   assert.deepEqual(d({ ...base, role: "ADMIN", destino: "COMPLETED" }), { asignar: null, rechazo: null }, "terminar sin doctor se permite");
+  // v2: fuera de llegada/sillón/iniciar/terminar el «¿Quién lo atiende?» se ignora (reasignar es «Editar cita»).
+  for (const s of ["CANCELLED", "NO_SHOW", "SCHEDULED", "CONFIRMED"]) {
+    assert.deepEqual(d({ ...base, role: "ADMIN", destino: s, pedido: DR2 }), { asignar: null, rechazo: null }, s);
+  }
   // cita con doctor: como siempre, y no se reasigna por aquí
   assert.deepEqual(d({ ...base, citaDoctorId: DR2, role: "ADMIN", destino: "IN_PROGRESS", pedido: DRA }), { asignar: null, rechazo: null });
   assert.equal(d({ ...base, citaDoctorId: DR2, role: "DOCTOR", destino: "IN_PROGRESS" }).rechazo?.status, 403);
@@ -188,16 +194,73 @@ test("dondeCitasDelDoctor (D3): las suyas y las «Sin doctor» de pacientes que 
   assert.deepEqual(dondeDoctoresElegidos([DRA, FILTRO_SIN_DOCTOR]), { OR: [{ doctorId: { in: [DRA] } }, { doctorId: null }] });
 });
 
-test("asignarSiSinDoctor (firmar la hoja de ortodoncia): condicional a `doctorId: null` y nunca lanza", async () => {
-  const { asignarSiSinDoctor } = await import("@/lib/agenda/sin-doctor.server");
-  const llamadas: any[] = [];
-  const db = { appointment: { updateMany: async (a: any) => { llamadas.push(a); return { count: 1 }; } } };
-  assert.equal(await asignarSiSinDoctor(db, { clinicId: "c1", appointmentId: "cmh0cita0001", doctorId: DRA }), true);
-  assert.deepEqual(llamadas[0], { where: { id: "cmh0cita0001", clinicId: "c1", doctorId: null }, data: { doctorId: DRA } });
-  assert.equal(await asignarSiSinDoctor(db, { clinicId: "", appointmentId: "x", doctorId: DRA }), false);
-  assert.equal(llamadas.length, 1, "sin clínica no se consulta");
-  const choca = { appointment: { updateMany: async () => { throw Object.assign(new Error("exclusion"), { code: "23P01" }); } } };
-  assert.equal(await asignarSiSinDoctor(choca, { clinicId: "c1", appointmentId: "x", doctorId: DRA }), false);
+test("asignacionAlCerrar (firmar o ligar la hoja de ortodoncia): solo «Sin doctor», solo quien recibe citas (m5), sobreturno si choca (M1) y nunca lanza", async () => {
+  const { asignacionAlCerrar } = await import("@/lib/agenda/sin-doctor.server");
+  const cita = { startsAt: new Date("2026-11-10T16:00:00Z"), endsAt: new Date("2026-11-10T16:30:00Z"), overrideReason: null };
+  let otra: any = null;
+  let atiende = true;
+  let sinDoctor = true;
+  const lecturas: any[] = [];
+  const db = {
+    appointment: { findFirst: async (a: any) => { lecturas.push(a); return a.where.doctorId === null ? (sinDoctor ? cita : null) : otra; } },
+    user: { findFirst: async (a: any) => { lecturas.push(a); return atiende ? { id: a.where.id } : null; } },
+  };
+  const args = { clinicId: "c1", appointmentId: "cmh0cita0001", doctorId: DRA, actorId: "u-actor" };
+  assert.deepEqual(await asignacionAlCerrar(db, args), { datos: { doctorId: DRA }, conCita: null });
+  assert.equal(lecturas[1].where.agendaActive, true, "RECIBE_CITAS_WHERE");
+  assert.equal(lecturas[2].where.doctorId, DRA);
+  assert.deepEqual(lecturas[2].where.id, { not: "cmh0cita0001" });
+  otra = { id: "cmh0otra00001" };
+  const r = await asignacionAlCerrar(db, args);
+  assert.equal(r.datos.overrideReason, "Sobreagendada por el equipo");
+  assert.equal(r.datos.overriddenBy, "u-actor", "el sobreturno va a nombre de quien actúa");
+  assert.equal(r.conCita, "cmh0otra00001");
+  atiende = false;
+  assert.deepEqual(await asignacionAlCerrar(db, args), { datos: {}, conCita: null }, "quien no recibe citas no queda como doctor");
+  atiende = true;
+  sinDoctor = false;
+  assert.deepEqual(await asignacionAlCerrar(db, args), { datos: {}, conCita: null }, "una cita con doctor no se toca");
+  assert.deepEqual(await asignacionAlCerrar(db, { ...args, clinicId: "" }), { datos: {}, conCita: null });
+  const rota = { appointment: { findFirst: async () => { throw new Error("timeout"); } }, user: { findFirst: async () => null } };
+  assert.deepEqual(await asignacionAlCerrar(rota, args), { datos: {}, conCita: null });
+});
+
+test("v3 m-a · cerrarCitaConAsignacion: asigna solo si sigue «Sin doctor»; si otro le puso doctor, cierra SIN asignar", async () => {
+  const { cerrarCitaConAsignacion } = await import("@/lib/agenda/sin-doctor.server");
+  let doctorEnBase: string | null = null;
+  const escrituras: any[] = [];
+  const db = {
+    appointment: {
+      updateMany: async (a: any) => {
+        escrituras.push(a);
+        if (a.where.doctorId === null && doctorEnBase !== null) return { count: 0 };
+        return { count: 1 };
+      },
+    },
+  };
+  const where = { id: "cmh0cita0001", clinicId: "c1", status: "IN_PROGRESS" };
+  const cierre = { status: "COMPLETED" };
+  const asignacion = { datos: { doctorId: DRA, overrideReason: "Sobreagendada por el equipo" }, conCita: "x" };
+  assert.deepEqual(await cerrarCitaConAsignacion(db, { where, cierre, asignacion }), { cerrada: true, asignada: true });
+  assert.deepEqual(escrituras[0], { where: { ...where, doctorId: null }, data: { ...cierre, ...asignacion.datos } });
+  doctorEnBase = DR2; // recepción se la asignó entre medias
+  assert.deepEqual(await cerrarCitaConAsignacion(db, { where, cierre, asignacion }), { cerrada: true, asignada: false });
+  assert.deepEqual(escrituras[2], { where, data: cierre }, "se cierra sin tocar el doctor ni la marca");
+  // Sin asignación: una sola escritura, la de siempre.
+  escrituras.length = 0;
+  assert.deepEqual(await cerrarCitaConAsignacion(db, { where, cierre, asignacion: { datos: {}, conCita: null } }), { cerrada: true, asignada: false });
+  assert.equal(escrituras.length, 1);
+  assert.deepEqual(escrituras[0], { where, data: cierre });
+});
+
+test("datosDeSobreturno (v2 M1/m1): sin marca la pone; sobreagendada conserva la marca con quién y cuándo de ahora; otro motivo, intacto", async () => {
+  const { datosDeSobreturno, sobreturnoSinPreguntar } = await import("@/lib/agenda/sin-doctor");
+  const ahora = new Date("2026-11-10T16:05:00Z");
+  assert.deepEqual(datosDeSobreturno(null, "u1", ahora), { overrideReason: "Sobreagendada por el equipo", overriddenBy: "u1", overriddenAt: ahora });
+  assert.deepEqual(datosDeSobreturno("Sobreagendada por el equipo", "u1", ahora), { overriddenBy: "u1", overriddenAt: ahora });
+  assert.deepEqual(datosDeSobreturno("Adelantada a hoy: el paciente llegó antes…", "u1", ahora), {});
+  for (const s of ["IN_PROGRESS", "COMPLETED", "CHECKED_OUT"]) assert.equal(sobreturnoSinPreguntar(s), true, s);
+  for (const s of ["CHECKED_IN", "IN_CHAIR"]) assert.equal(sobreturnoSinPreguntar(s), false, s);
 });
 
 test("sonda «¿ya se pegó el SQL?»: YES/NO de information_schema, memoria, y al guardar vuelve a preguntar si dijo «no»", async () => {
