@@ -20,6 +20,7 @@
  *
  * Sin dependencias de base: se prueba sola.
  */
+import { MARCA_SOBREAGENDADA, esSobreagendada } from "./agenda-flexible";
 
 /** Error de la API: una teleconsulta necesita doctor. */
 export const ERROR_TELECONSULTA_SIN_DOCTOR = "teleconsult_requires_doctor" as const;
@@ -114,7 +115,8 @@ export function doctorPuedeEditar(
   cambio: ReturnType<typeof doctorDelCambio>,
 ): boolean {
   if (role !== "DOCTOR") return true;
-  if (citaDoctorId === userId) return true;
+  // v2 (m6): un DOCTOR no pasa su cita a «Sin doctor»; eso lo hace recepción. Dársela a otro, como siempre.
+  if (citaDoctorId === userId) return !(cambio.cambia && cambio.doctorId === null);
   if (citaDoctorId !== null) return false;
   return cambio.cambia && cambio.doctorId === userId;
 }
@@ -176,7 +178,9 @@ export function doctorAlCambiarEstado(args: {
     const seLaQueda = EL_DOCTOR_SE_LA_QUEDA.has(destino) || (pedido.cambia && pedido.doctorId === userId);
     return { asignar: seLaQueda ? userId : null, rechazo: null };
   }
-  const elegido = pedido.cambia ? pedido.doctorId : null;
+  // v2 (revisión del delta): el «¿Quién lo atiende?» solo cuenta al llegar, al sillón, al iniciar o al terminar.
+  // En cualquier otro cambio (reabrir, cancelar, no vino, confirmar) se ignora: reasignar es «Editar cita».
+  const elegido = pedido.cambia && DOCTOR_PUEDE_CON_SIN_DOCTOR.has(destino) ? pedido.doctorId : null;
   if (!elegido && ATENDIENDO.has(destino)) {
     return { asignar: null, rechazo: { status: 409, error: ERROR_DOCTOR_PARA_INICIAR, reason: TEXTO_DOCTOR_PARA_INICIAR } };
   }
@@ -186,4 +190,46 @@ export function doctorAlCambiarEstado(args: {
 /** «Movió la cita» NO incluye ponerle doctor a una «Sin doctor» (sí cambiarle uno por otro). */
 export function cambiaDeDoctor(antes: string | null, despues: string | null): boolean {
   return antes !== null && antes !== despues;
+}
+
+// ═══════════════ v2 (M1/m1 de la revisión de t12): el doctor que la toma ya tiene otra cita ═══════════════
+//
+// La constraint `appt_doctor_no_overlap` cuenta TODA cita viva del doctor (también la que ya terminó): la
+// Dra. que atiende una tras otra las «Sin doctor» de las 10:00 no podría iniciar la segunda. Regla:
+//  · al INICIAR o TERMINAR (ya lo está atendiendo) la cita entra sola como sobreturno, con rastro, igual que
+//    el adelanto a hoy (`planDeAdelanto`);
+//  · al MARCAR LA LLEGADA con el doctor elegido se pregunta «¿Seguro?» (409 `sobreagendable`) y se confirma
+//    con la cita que se enseñó (`confirmacionValida`), también sin la bandera de agenda flexible: el paciente
+//    ya está en la clínica, como en el adelanto. P2 pinta el «¿Seguro?».
+// Vale igual si la «Sin doctor» ya venía sobreagendada (m1): la constraint no la ve, así que se mira aquí.
+
+/** Destinos en los que el que se asigna ya lo está atendiendo: sobreturno sin preguntar. */
+const SOBRETURNO_SIN_PREGUNTAR = new Set(["IN_PROGRESS", "COMPLETED", "CHECKED_OUT"]);
+
+export function sobreturnoSinPreguntar(destino: string): boolean {
+  return SOBRETURNO_SIN_PREGUNTAR.has(destino);
+}
+
+/** Campos del sobreturno al asignarle a la cita un doctor que ya tiene otra a esa hora. */
+export interface DatosDeSobreturno {
+  overrideReason?: string;
+  overriddenBy?: string;
+  overriddenAt?: Date;
+}
+
+/**
+ * Sin marca: la marca de sobreagendada, quién y cuándo. Ya sobreagendada: conserva la marca y quién y cuándo
+ * pasan a ser los de ahora (como al reabrir confirmando). Con OTRO motivo (el de un administrador, el del
+ * adelanto a hoy): ya está fuera de la constraint y su motivo se conserva tal cual.
+ */
+export function datosDeSobreturno(overrideActual: string | null | undefined, userId: string, ahora: Date): DatosDeSobreturno {
+  if (!overrideActual) return { overrideReason: MARCA_SOBREAGENDADA, overriddenBy: userId, overriddenAt: ahora };
+  if (esSobreagendada(overrideActual)) return { overriddenBy: userId, overriddenAt: ahora };
+  return {};
+}
+
+/** El «¿Seguro?» de la llegada: texto del servidor para las pantallas que no saben preguntar. */
+export function textoSobreturnoAlLlegar(doctor: string | null, paciente: string, otras: number): string {
+  const quien = `${paciente}${otras > 0 ? ` y ${otras} más` : ""}`;
+  return `${doctor || "Ese doctor"} ya tiene otra cita a esa hora (${quien}). Si de todos modos lo atiende, confírmalo y la cita queda como sobreturno.`;
 }

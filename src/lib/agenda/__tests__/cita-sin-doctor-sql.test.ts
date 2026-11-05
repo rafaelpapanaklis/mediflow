@@ -216,3 +216,32 @@ test("con el SQL: el trigger del apartado vencido libera por sillón también a 
   const r = await db.query(`SELECT "status"::text AS s FROM "appointments" WHERE "id" = $1`, [apartada]);
   assert.equal(r.rows[0].s, "CANCELLED");
 });
+
+test("v2 M1/m1 · con la constraint real: asignar un doctor ocupado choca (23P01) en IN_PROGRESS/COMPLETED/CHECKED_OUT; con la marca de sobreturno en la MISMA escritura, entra", async (t) => {
+  const db = await abrir();
+  if (!db) return t.skip(SIN_PGLITE);
+  await db.exec(leer("sql/cita-sin-doctor.sql"));
+  for (const estado of ["IN_PROGRESS", "COMPLETED", "CHECKED_OUT"]) {
+    const desde = `2026-11-1${["IN_PROGRESS", "COMPLETED", "CHECKED_OUT"].indexOf(estado) + 1}T16:00:00Z`;
+    const hasta = desde.replace("16:00", "16:30");
+    await cita(db, { doctorId: DRA, desde, hasta, status: estado });
+    const sin = await cita(db, { doctorId: null, desde, hasta, patientId: "p2", status: "CHECKED_IN" });
+    // Lo de f4d8fe31d: solo el doctor → la constraint lo para (el 409 que dejaba atorada a la Dra.).
+    assert.equal(await codigoDe(db.query(`UPDATE "appointments" SET "doctorId" = $1, "status" = 'IN_PROGRESS' WHERE "id" = $2`, [DRA, sin])), "23P01", estado);
+    // v2: doctor + marca de sobreturno en la misma escritura → entra.
+    assert.equal(
+      await codigoDe(db.query(
+        `UPDATE "appointments" SET "doctorId" = $1, "status" = 'IN_PROGRESS', "overrideReason" = 'Sobreagendada por el equipo', "overriddenAt" = now() WHERE "id" = $2`,
+        [DRA, sin],
+      )),
+      null,
+      estado,
+    );
+  }
+  // m1: una «Sin doctor» que YA venía sobreagendada la constraint no la ve: entra sin freno. Por eso el
+  // servidor busca el choque con una consulta (y deja el rastro), no se fía del 23P01.
+  await cita(db, { doctorId: DRA, desde: "2026-11-20T16:00:00Z", hasta: "2026-11-20T16:30:00Z", status: "CONFIRMED" });
+  const marcada = await cita(db, { doctorId: null, desde: "2026-11-20T16:00:00Z", hasta: "2026-11-20T16:30:00Z", patientId: "p2" });
+  await db.query(`UPDATE "appointments" SET "overrideReason" = 'Sobreagendada por el equipo' WHERE "id" = $1`, [marcada]);
+  assert.equal(await codigoDe(db.query(`UPDATE "appointments" SET "doctorId" = $1 WHERE "id" = $2`, [DRA, marcada])), null);
+});

@@ -23,7 +23,7 @@ import { canSignSoap } from "./_predicates";
 import { ORTHO_AUDIT_ACTIONS } from "./audit-actions";
 import { fail, isFailure, ok, type ActionResult } from "./result";
 import { citaAlFirmar, datosDeCierreDeCita, planDeCierreDeCita } from "@/lib/orthodontics/cerrar-cita-al-firmar";
-import { asignarSiSinDoctor } from "@/lib/agenda/sin-doctor.server";
+import { asignacionAlCerrar, rastroDeAsignacionAlCerrar } from "@/lib/agenda/sin-doctor.server";
 import { TIPO_CITA_CONTROL_ORTO } from "@/lib/orthodontics/agenda-constants";
 import { cargarModoDeCobro } from "@/lib/orthodontics/billing-mode-db";
 import { normalizarOrthoBillingMode } from "@/lib/orthodontics/billing-mode";
@@ -532,17 +532,31 @@ export async function signTreatmentCard(
     let citaCerrada: string | undefined;
     if (citaDeControl && citaDeControl.status !== "COMPLETED") {
       try {
-        const plan = planDeCierreDeCita(
+        // (ws1-t11 v2: `planDeCierre`, no `plan`, para no tapar el caso de ortodoncia de arriba.)
+        const planDeCierre = planDeCierreDeCita(
           citaDeControl.status,
           String(ctx.role),
           now,
           citaDeControl.startsAt,
         );
-        const cierre = datosDeCierreDeCita(plan, now);
+        const cierre = datosDeCierreDeCita(planDeCierre, now);
         if (cierre) {
-          await prisma.appointment.update({ where: { id: citaDeControl.id }, data: cierre });
-          // ws1-t11 (D9): una «Sin doctor» queda a nombre de quien firmó la hoja (la atendió).
-          await asignarSiSinDoctor(prisma, { clinicId: ctx.clinicId, appointmentId: citaDeControl.id, doctorId: ctx.userId });
+          // ws1-t11 (D9): una «Sin doctor» queda a nombre de quien firmó la hoja (la atendió), en el MISMO
+          // update que la cierra (y como sobreturno si ya tenía otra cita a esa hora).
+          const asignacion = await asignacionAlCerrar(prisma, {
+            clinicId: ctx.clinicId,
+            appointmentId: citaDeControl.id,
+            doctorId: ctx.userId,
+            actorId: ctx.userId,
+          });
+          await prisma.appointment.update({ where: { id: citaDeControl.id }, data: { ...cierre, ...asignacion.datos } });
+          await rastroDeAsignacionAlCerrar({
+            clinicId: ctx.clinicId,
+            actorId: ctx.userId,
+            patientId: plan.patientId,
+            appointmentId: citaDeControl.id,
+            asignacion,
+          });
           // Cerrar la cita al firmar pide la reseña igual que «Terminar consulta»
           // (ws1-t4, 11.2). Idempotente y nunca lanza.
           await sendReviewInvitation(citaDeControl.id);

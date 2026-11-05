@@ -26,6 +26,8 @@ let movimientos: any[];
 let auditorias: any[];
 let nota: any;
 let constraintChoca: boolean;
+/** Citas vivas en la base, para la búsqueda de choques (v2: M1/m1). */
+let ocupadas: any[];
 
 const session = {
   user: { id: "u-recep", role: "RECEPTIONIST", clinicId: "c1", displayName: "Recepción", permissionsOverride: [] as string[] },
@@ -53,6 +55,7 @@ beforeEach(() => {
   auditorias = [];
   nota = null;
   constraintChoca = false;
+  ocupadas = [];
   session.user.id = "u-recep";
   session.user.role = "RECEPTIONIST";
 });
@@ -68,7 +71,9 @@ function filaCompleta() {
 const tx = {
   appointment: {
     updateMany: async ({ where, data }: any) => {
-      if (constraintChoca && data.doctorId) throw Object.assign(new Error("exclusion constraint"), { code: "23P01" });
+      // La constraint de verdad: no ve las filas con `overrideReason` (sobreturno / sobreagendada).
+      const conMarca = (data.overrideReason ?? existingRow.overrideReason) != null;
+      if (constraintChoca && data.doctorId && !conMarca) throw Object.assign(new Error("exclusion constraint"), { code: "23P01" });
       if (where.status !== existingRow.status) return { count: 0 };
       reclamos.push(data);
       existingRow = { ...existingRow, ...data };
@@ -82,7 +87,16 @@ const tx = {
 const prismaStub: any = {
   appointment: {
     findFirst: async () => ({ ...existingRow }),
-    findMany: async () => [],
+    // `buscarChoqueDeCita` (real): las vivas que pisan el rango, con las ramas del OR como Postgres.
+    findMany: async ({ where }: any) =>
+      ocupadas.filter(
+        (a) =>
+          a.clinicId === where.clinicId &&
+          (!where.id?.not || a.id !== where.id.not) &&
+          new Date(a.startsAt) < where.startsAt.lt &&
+          new Date(a.endsAt) > where.endsAt.gt &&
+          (!where.OR || where.OR.some((o: any) => Object.entries(o).every(([k, v]) => (v === null ? a[k] === null : a[k] === v)))),
+      ).map((a) => ({ ...a, startsAt: new Date(a.startsAt), endsAt: new Date(a.endsAt) })),
   },
   user: {
     findFirst: async ({ where }: any) => {
@@ -130,7 +144,13 @@ const prismaStub: any = {
 (mock as any).module("@/lib/agenda/agenda-flexible.server", {
   namedExports: { leerAgendaFlexibleConFallo: async () => ({ ajustes: { encendida: false }, fallo: false }), leerAgendaFlexible: async () => ({ encendida: false }) },
 });
-(mock as any).module("@/lib/audit", { namedExports: { logMutation: async (a: any) => { auditorias.push(a); } } });
+(mock as any).module("@/lib/audit", {
+  namedExports: { logMutation: async (a: any) => { auditorias.push(a); }, logAudit: async (a: any) => { auditorias.push(a); } },
+});
+(mock as any).module("@/lib/google/convertir.server", {
+  namedExports: { avisoDeCitaGoogle: async () => null, descartarAvisoDeCitaGoogle: async () => { descartados++; return true; } },
+});
+let descartados = 0;
 (mock as any).module("@/lib/odontogram/snapshot", {
   namedExports: {
     changesToTreatments: async () => [], createOrUpdateSnapshot: async () => ({ id: "s1" }), diffSnapshots: () => [],
@@ -211,13 +231,96 @@ test("iniciar · el elegido tiene que poder recibir citas", async () => {
   assert.equal(reclamos.length, 0);
 });
 
-test("iniciar · el doctor elegido ya tiene otra cita a esa hora → 409 claro (no 500)", async () => {
+/** Otra cita viva de la Dra. a la misma hora (la de otro paciente que ya atendió o está atendiendo). */
+function laDraYaTieneOtra(extra: Record<string, unknown> = {}) {
+  constraintChoca = true;
+  ocupadas = [{
+    id: "cmh0otra00001", clinicId: "c1", doctorId: DRA, resourceId: null, status: "COMPLETED", overrideReason: null,
+    startsAt: existingRow.startsAt, endsAt: existingRow.endsAt, patient: { firstName: "Mario", lastName: "López", visibleUserIds: [] }, ...extra,
+  }];
+}
+
+test("v2 M1 · iniciar: la Dra. ya atendió a otro a esa hora → la cita entra sola como sobreturno, con rastro (antes 409)", async () => {
+  session.user.role = "ADMIN";
+  session.user.id = "u-admin";
+  existingRow.status = "CHECKED_IN";
+  laDraYaTieneOtra();
+  const r = await estado({ status: "IN_PROGRESS", doctorId: DRA });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(reclamos[0].doctorId, DRA);
+  assert.equal(reclamos[0].overrideReason, "Sobreagendada por el equipo");
+  assert.equal(reclamos[0].overriddenBy, "u-admin");
+  assert.ok(reclamos[0].overriddenAt instanceof Date);
+  assert.deepEqual(movimientos.at(-1).cambios.sobreturno, { before: null, after: { conCita: "cmh0otra00001", doctorId: DRA } });
+  assert.equal(r.body.sobreagendada, true);
+});
+
+test("v2 M1 · un DOCTOR que toma la SEGUNDA «Sin doctor» de las 10:00 la inicia (sobreturno) en vez de quedarse atorado", async () => {
+  session.user.role = "DOCTOR";
+  session.user.id = DRA;
+  existingRow.status = "CHECKED_IN";
+  laDraYaTieneOtra({ status: "IN_PROGRESS" });
+  const r = await estado({ status: "IN_PROGRESS" });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(reclamos[0].doctorId, DRA);
+  assert.equal(reclamos[0].overrideReason, "Sobreagendada por el equipo");
+});
+
+test("v2 m1 · una «Sin doctor» YA sobreagendada (la constraint no la ve) también se marca: conserva la marca, quién y cuándo son los de ahora", async () => {
+  session.user.role = "ADMIN";
+  session.user.id = "u-admin";
+  existingRow.status = "CHECKED_IN";
+  existingRow.overrideReason = "Sobreagendada por el equipo";
+  existingRow.overriddenBy = "u-otra";
+  laDraYaTieneOtra();
+  constraintChoca = false; // la constraint no la ve: antes entraba sin rastro
+  const r = await estado({ status: "IN_PROGRESS", doctorId: DRA });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(reclamos[0].overrideReason, undefined, "la marca ya estaba");
+  assert.equal(reclamos[0].overriddenBy, "u-admin");
+  assert.ok(movimientos.at(-1).cambios.sobreturno, "deja el rastro del choque con el doctor");
+});
+
+test("v2 M1 · un motivo de administración se conserva tal cual (solo queda el rastro)", async () => {
   session.user.role = "ADMIN";
   existingRow.status = "CHECKED_IN";
-  constraintChoca = true;
+  existingRow.overrideReason = "Forzada por dirección";
+  laDraYaTieneOtra();
+  const r = await estado({ status: "IN_PROGRESS", doctorId: DRA });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(reclamos[0].overrideReason, undefined);
+  assert.equal(reclamos[0].overriddenBy, undefined);
+});
+
+test("v2 · cancelar o reabrir con `doctorId` no asigna ni pregunta «¿Seguro?» (reasignar es «Editar cita»)", async () => {
+  session.user.role = "ADMIN";
+  laDraYaTieneOtra();
+  let r = await estado({ status: "CANCELLED", doctorId: DRA });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(reclamos[0].doctorId, undefined);
+  existingRow.status = "CANCELLED";
+  r = await estado({ status: "SCHEDULED", doctorId: DRA });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(reclamos[1].doctorId, undefined);
+  assert.equal(reclamos[1].overrideReason, undefined);
+});
+
+test("v2 M1 · sin choque, nada de marca", async () => {
+  session.user.role = "ADMIN";
+  existingRow.status = "CHECKED_IN";
+  const r = await estado({ status: "IN_PROGRESS", doctorId: DRA });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(reclamos[0].overrideReason, undefined);
+  assert.equal(r.body.sobreagendada, undefined);
+});
+
+test("v2 · si otra cita entra justo entre la revisión y la escritura, 409 claro (no 500)", async () => {
+  session.user.role = "ADMIN";
+  existingRow.status = "CHECKED_IN";
+  constraintChoca = true; // la constraint choca, pero la búsqueda (antes) no vio nada
   const r = await estado({ status: "IN_PROGRESS", doctorId: DRA });
   assert.equal(r.status, 409);
-  assert.match(r.body.reason, /ya tiene otra cita/);
+  assert.match(r.body.reason, /acaba de ocupar/);
 });
 
 test("iniciar · un DOCTOR que inicia una «Sin doctor» se la queda", async () => {
@@ -284,6 +387,38 @@ test("llegada · sin cuerpo, la de siempre (sigue «Sin doctor»)", async () => 
   assert.equal(r.body.doctorId, null);
 });
 
+test("v2 M1 · llegada con un doctor que ya tiene otra cita: 409 `sobreagendable` con la otra cita; confirmando con ESA cita, sobreturno", async () => {
+  laDraYaTieneOtra({ status: "CONFIRMED" });
+  let r = await llegada({ doctorId: DRA });
+  assert.equal(r.status, 409);
+  assert.equal(r.body.error, "appointment_overlap");
+  assert.equal(r.body.sobreagendable, true);
+  assert.equal(r.body.conflictingAppointment.id, "cmh0otra00001");
+  assert.equal(r.body.conflictingAppointment.otras, 0);
+  assert.match(r.body.reason, /ya tiene otra cita a esa hora \(Mario López\)/);
+  assert.equal(reclamos.length, 0);
+  // Confirmar con OTRA cita (o sin decir cuál) vuelve a preguntar.
+  r = await llegada({ doctorId: DRA, sobreagendar: true, sobreagendarCita: "otra" });
+  assert.equal(r.status, 409);
+  r = await llegada({ doctorId: DRA, sobreagendar: true, sobreagendarCita: "cmh0otra00001", sobreagendarOtras: 0 });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(reclamos[0].doctorId, DRA);
+  assert.equal(reclamos[0].overrideReason, "Sobreagendada por el equipo");
+  assert.equal(r.body.sobreagendada, true);
+  assert.ok(movimientos.at(-1).cambios.sobreturno);
+});
+
+test("v2 M1 · /status a «Llegó» o «En sillón» con doctor que choca: el mismo «¿Seguro?»", async () => {
+  existingRow.status = "CHECKED_IN";
+  laDraYaTieneOtra({ status: "CONFIRMED" });
+  let r = await estado({ status: "IN_CHAIR", doctorId: DRA });
+  assert.equal(r.status, 409);
+  assert.equal(r.body.sobreagendable, true);
+  r = await estado({ status: "IN_CHAIR", doctorId: DRA, sobreagendar: true, sobreagendarCita: "cmh0otra00001" });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(reclamos[0].overrideReason, "Sobreagendada por el equipo");
+});
+
 test("llegada · con «¿Quién lo atiende?» se asigna al llegar", async () => {
   const r = await llegada({ doctorId: DRA });
   assert.equal(r.status, 200, JSON.stringify(r.body));
@@ -307,11 +442,41 @@ test("terminar · un ADMIN que cierra una «Sin doctor» con nota la deja a nomb
   session.user.role = "ADMIN";
   session.user.id = "u-admin";
   existingRow.status = "IN_PROGRESS";
-  nota = { id: "n1", doctorId: DR2, specialtyData: { status: "SIGNED" }, subjective: "x", objective: "x", assessment: "x", plan: "x" };
+  nota = { id: "n1", doctorId: DR2, specialtyData: { status: "SIGNED", appointmentId: "a1" }, subjective: "x", objective: "x", assessment: "x", plan: "x" };
   const r = await terminar();
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.equal(reclamos[0].doctorId, DR2);
   assert.deepEqual(visibilidad[0]?.slice(1), ["p1", DR2, "c1"], "el autor que queda como doctor puede ver al paciente");
+});
+
+test("v2 m5 · terminar con una nota de OTRA cita, o de alguien que no recibe citas: se cierra «Sin doctor»", async () => {
+  session.user.role = "ADMIN";
+  session.user.id = "u-admin";
+  existingRow.status = "IN_PROGRESS";
+  nota = { id: "n1", doctorId: DR2, specialtyData: { status: "SIGNED", appointmentId: "otra-cita" }, subjective: "x", objective: "x", assessment: "x", plan: "x" };
+  let r = await terminar({ clinicalNoteId: "n1" });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(reclamos[0].doctorId, undefined, "una nota vieja de otra cita no decide quién atendió esta");
+  existingRow.status = "IN_PROGRESS";
+  existingRow.doctorId = null;
+  reclamos = [];
+  nota = { id: "n2", doctorId: "u-asistente", specialtyData: { status: "SIGNED", appointmentId: "a1" }, subjective: "x", objective: "x", assessment: "x", plan: "x" };
+  r = await terminar();
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(reclamos[0].doctorId, undefined, "quien no recibe citas no queda como doctor");
+});
+
+test("v2 M1 · terminar: el autor de la nota ya tiene otra cita a esa hora → se cierra como sobreturno", async () => {
+  session.user.role = "ADMIN";
+  session.user.id = "u-admin";
+  existingRow.status = "IN_PROGRESS";
+  nota = { id: "n1", doctorId: DRA, specialtyData: { status: "SIGNED", appointmentId: "a1" }, subjective: "x", objective: "x", assessment: "x", plan: "x" };
+  laDraYaTieneOtra();
+  const r = await terminar();
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(reclamos[0].doctorId, DRA);
+  assert.equal(reclamos[0].overrideReason, "Sobreagendada por el equipo");
+  assert.deepEqual(auditorias.at(-1).after.sobreturno ?? auditorias.find((a) => a.after?.sobreturno)?.after.sobreturno, { conCita: "cmh0otra00001" });
 });
 
 test("terminar · sin nota y sin DOCTOR, se cierra «Sin doctor» (D9)", async () => {
@@ -321,4 +486,29 @@ test("terminar · sin nota y sin DOCTOR, se cierra «Sin doctor» (D9)", async (
   const r = await terminar();
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.equal(reclamos[0].doctorId, undefined);
+});
+
+// ═══════════════ v2 m7: «mantener» del aviso de Google ═══════════════
+
+async function google(metodo: "GET" | "POST") {
+  const r = await import("@/app/api/google/agenda/cita/[id]/route");
+  const res = metodo === "GET"
+    ? await r.GET(req(undefined), { params: Promise.resolve({ id: "a1" }) })
+    : await r.POST(req({ accion: "mantener" }), { params: Promise.resolve({ id: "a1" }) });
+  return { status: res.status, body: await res.json() };
+}
+
+test("v2 m7 · Google: un DOCTOR LEE el aviso de una «Sin doctor» pero no la «mantiene» (escritura) hasta tomarla", async () => {
+  session.user.role = "DOCTOR";
+  session.user.id = DRA;
+  descartados = 0;
+  const g = await google("GET");
+  assert.equal(g.status, 200);
+  const p = await google("POST");
+  assert.equal(p.status, 403);
+  assert.equal(descartados, 0);
+  existingRow.doctorId = DRA; // ya es suya
+  const p2 = await google("POST");
+  assert.equal(p2.status, 200, JSON.stringify(p2.body));
+  assert.equal(descartados, 1);
 });

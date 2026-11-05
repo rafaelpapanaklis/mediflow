@@ -436,6 +436,17 @@ test("editar · un DOCTOR toma una «Sin doctor» asignándosela a sí mismo; si
   assert.deepEqual(updated[0].doctor, { connect: { id: DRA } });
 });
 
+test("v2 m6 · un DOCTOR no pasa SU cita a «Sin doctor» (eso lo hace recepción); dársela a otro, como siempre", async () => {
+  session.user.role = "DOCTOR";
+  session.user.id = DRA;
+  existente({ doctorId: DRA });
+  let r = await patch({ doctorId: null });
+  assert.equal(r.status, 403);
+  assert.equal(updated.length, 0);
+  r = await patch({ doctorId: DR2 });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+});
+
 test("editar · un DOCTOR sigue sin tocar la cita de OTRO doctor", async () => {
   session.user.role = "DOCTOR";
   session.user.id = DRA;
