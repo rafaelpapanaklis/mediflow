@@ -219,6 +219,21 @@ test("v2 · m1 (revisión t12): el rótulo en su línea se va si lo que sigue es
   );
 });
 
+test("v3 · m1-v2 (revisión t12): si la línea del doctor trae su rótulo, el encabezado de sección de arriba se queda", () => {
+  const datos = renderReminderTemplate("Datos de tu cita:\nDoctor: {doctor}\nFecha: {fecha}", SIN);
+  assert.equal(datos, `Datos de tu cita:\nFecha: lunes 9 de noviembre\n\nConfirma tu asistencia aquí: ${LINK}`);
+  const detalles = renderReminderTemplate("📋 *Detalles de tu cita:*\n👨‍⚕️ *Doctor:* {doctor}\n📅 *Fecha:* {fecha}\n🕐 *Hora:* {hora}", SIN);
+  assert.equal(detalles, `📋 *Detalles de tu cita:*\n📅 *Fecha:* lunes 9 de noviembre\n🕐 *Hora:* 10:00\n\nConfirma tu asistencia aquí: ${LINK}`);
+  const tuCita = renderReminderTemplate("Tu cita:\nTe atiende: {doctor}\nFecha: {fecha}", SIN);
+  assert.equal(tuCita, `Tu cita:\nFecha: lunes 9 de noviembre\n\nConfirma tu asistencia aquí: ${LINK}`);
+  // …pero si debajo no queda nada, el encabezado sí se va (la regla de antes).
+  assert.equal(renderReminderTemplate("Hola {paciente}.\nTu cita:\nTe atiende: {doctor}", SIN), `Hola María.\n\nConfirma tu asistencia aquí: ${LINK}`);
+  // Con doctor, letra por letra lo de antes.
+  for (const t of ["Datos de tu cita:\nDoctor: {doctor}\nFecha: {fecha}", "📋 *Detalles de tu cita:*\n👨‍⚕️ *Doctor:* {doctor}\n📅 *Fecha:* {fecha}\n🕐 *Hora:* {hora}", "Tu cita:\nTe atiende: {doctor}\nFecha: {fecha}"]) {
+    assert.equal(renderReminderTemplate(t, BASE), renderViejo(t, BASE as any), t);
+  }
+});
+
 test("v2 · M1 (revisión t12): «el/la», «la/el» y las fórmulas con artículo se leen bien", () => {
   const casos: [string, string][] = [
     ["Tu cita será con el/la doctor(a) {doctor}.", "Tu cita será con nuestro equipo."],

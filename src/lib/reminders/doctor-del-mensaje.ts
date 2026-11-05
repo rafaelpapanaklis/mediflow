@@ -142,6 +142,20 @@ function siguienteSueltaElRotulo(siguiente: string | undefined): boolean {
   return /^\s*[^\s{][^:{}\n]{0,38}:/u.test(siguiente);
 }
 
+/**
+ * ¿La línea del doctor trae su propio rótulo («Doctor: {doctor}», «👨‍⚕️
+ * *Doctor:* {doctor}»)? Entonces el rótulo de arriba es de SECCIÓN («Datos de
+ * tu cita:») y solo se quita si debajo no queda nada (revisión t12, m1-v2).
+ */
+function lineaConRotulo(linea: string, marcadores: readonly string[]): boolean {
+  let ini = linea.length;
+  for (const m of marcadores) {
+    const i = linea.indexOf(m);
+    if (i >= 0) ini = Math.min(ini, i);
+  }
+  return /:\s*$/.test(linea.slice(0, ini).replace(/[*_~\s]+$/u, ""));
+}
+
 /** Un rótulo que solo presentaba la línea de abajo («Te atiende:», «*Doctor:*»). */
 function esRotulo(linea: string): boolean {
   const t = linea.replace(/[*_~\s]+$/u, "").trim();
@@ -191,7 +205,10 @@ function quitar(plantilla: string, marcadores: readonly string[], todoFrase: boo
     quitada = true;
     const siguiente = lineas[i + 1];
     const anterior = salida[salida.length - 1];
-    if (anterior !== undefined && esRotulo(anterior) && siguienteSueltaElRotulo(siguiente)) {
+    const suelta = lineaConRotulo(linea, marcadores)
+      ? siguiente === undefined || siguiente.trim() === ""
+      : siguienteSueltaElRotulo(siguiente);
+    if (anterior !== undefined && esRotulo(anterior) && suelta) {
       salida.pop();
     }
   }
