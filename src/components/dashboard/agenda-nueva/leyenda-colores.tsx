@@ -18,6 +18,7 @@ import { cssDeColor, leyendaDeProcedimientos } from "@/lib/agenda/color-procedim
 import { useT } from "@/i18n/i18n-provider";
 import { useAgendaNueva } from "./contexto-agenda-nueva";
 import { useColoresDeCitas } from "./usar-agenda-flexible";
+import { esResponsableSinDoctor } from "@/lib/agenda-nueva/vista-modelo";
 import s from "./agenda-nueva.module.css";
 
 /** Más de esto no cabe en una línea: el resto va como «+N». */
@@ -33,7 +34,14 @@ export function LeyendaColores() {
     if (!colores?.indice) {
       return {
         titulo: t("agenda.flexible.leyenda.porDoctor"),
-        lista: responsablesVisibles.map((r) => ({ clave: r.id, nombre: r.nombreCorto, color: r.color })),
+        // ws1-t11 — «Sin doctor» (gris) solo cuando de verdad hay alguna cita sin doctor a la vista.
+        lista: responsablesVisibles
+          .filter(
+            (r) =>
+              !esResponsableSinDoctor(r.id) ||
+              state.appointments.some((a) => !a.doctor?.id && citaContada(a.status) && citaVisible(null, a.resourceId)),
+          )
+          .map((r) => ({ clave: r.id, nombre: r.nombreCorto, color: r.color })),
         sinProcedimiento: false,
       };
     }

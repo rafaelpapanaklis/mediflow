@@ -28,6 +28,7 @@ import { minutosEnTz } from "./geometria";
 import { AGENDA_TOKENS } from "./tokens";
 import { esSobreagendada, type ModoColorCitas } from "@/lib/agenda/agenda-flexible";
 import { colorDeCita, type IndiceProcedimientos, type ProcedimientoConColor } from "@/lib/agenda/color-procedimiento";
+import { FILTRO_SIN_DOCTOR } from "@/lib/agenda/sin-doctor";
 
 /** Un responsable tal y como lo pintan las tres vistas. */
 export interface ResponsableVista {
@@ -122,6 +123,40 @@ export interface ContextoVista {
 }
 
 /** Los responsables visibles, en el orden en que los da el servidor. */
+/**
+ * ws1-t11 · P2 — el responsable «Sin doctor»: la columna (Día), el carril (Semana) y el segmento
+ * (Mes) de las citas que todavía no son de nadie. Su id es el mismo valor que el filtro de la
+ * agenda manda al servidor (`FILTRO_SIN_DOCTOR`), que nunca es un id de la base.
+ * Gris neutro (el mismo que ya usaba una cita sin doctor) y «—» en vez de iniciales.
+ */
+export const ID_SIN_DOCTOR = FILTRO_SIN_DOCTOR;
+export const NOMBRE_SIN_DOCTOR = "Sin doctor";
+
+export function responsableSinDoctor(nombre: string = NOMBRE_SIN_DOCTOR): ResponsableVista {
+  return { id: ID_SIN_DOCTOR, nombre, nombreCorto: nombre, color: AGENDA_TOKENS.texto2, iniciales: "—" };
+}
+
+export function esResponsableSinDoctor(id: string | null | undefined): boolean {
+  return id === ID_SIN_DOCTOR;
+}
+
+/** La columna/carril de una cita: su doctor, o «Sin doctor». */
+export function responsableDeCita(dto: Pick<AgendaAppointmentDTO, "doctor">): string {
+  return dto.doctor?.id ?? ID_SIN_DOCTOR;
+}
+
+/**
+ * ¿Se pinta la columna «Sin doctor»? Siempre que la clínica pueda agendar así (D2 del plan: con
+ * el defecto nuevo es lo habitual), o si en lo cargado hay alguna (nunca se esconde una cita).
+ * Sin el SQL y sin ninguna, la agenda se ve como hoy.
+ */
+export function hayColumnaSinDoctor(
+  sinDoctorDisponible: boolean | undefined,
+  citas: ReadonlyArray<Pick<AgendaAppointmentDTO, "doctor">>,
+): boolean {
+  return sinDoctorDisponible === true || citas.some((a) => !a.doctor?.id);
+}
+
 export function aResponsablesVista(doctores: readonly DoctorColumnDTO[]): ResponsableVista[] {
   return doctores.map((d) => ({
     id: d.id,
@@ -295,7 +330,8 @@ export function aCitaVista(dto: AgendaAppointmentDTO, ctx: ContextoVista): CitaV
     pinta,
     chip: chipDe(estado, pinta, minutosEsperando),
     responsableId,
-    responsableNombre: responsable?.displayName ?? dto.doctor?.shortName ?? "Sin responsable",
+    // ws1-t11 — una cita sin doctor dice «Sin doctor» (antes «Sin responsable», con iniciales «SR»).
+    responsableNombre: responsable?.displayName ?? dto.doctor?.shortName ?? NOMBRE_SIN_DOCTOR,
     colorResponsable,
     colorCita,
     procedimiento,

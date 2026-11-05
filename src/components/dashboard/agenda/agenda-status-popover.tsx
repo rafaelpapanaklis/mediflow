@@ -6,6 +6,7 @@ import toast from "react-hot-toast";
 import { MoreHorizontal } from "lucide-react";
 import { useAgenda } from "./agenda-provider";
 import { useEstadoConAviso } from "./use-estado-con-aviso";
+import { estadoPermitidoConSinDoctor, useQuienMira } from "./quien-mira";
 import { offRailsStatuses, STATUS_LABELS } from "@/lib/agenda/status-pipeline";
 import type { AgendaAppointmentDTO, AppointmentStatus } from "@/lib/agenda/types";
 import { useT } from "@/i18n/i18n-provider";
@@ -36,7 +37,17 @@ export function AgendaStatusPopover({ appointment }: Props) {
   // WS1-T5 (revisión t8, N3-A3): «Re-abrir cita» con el hueco ocupado pregunta.
   const estado = useEstadoConAviso();
 
-  const offRails = useMemo(() => offRailsStatuses(appointment.status), [appointment.status]);
+  // ws1-t11 (D3) — un DOCTOR con una «Sin doctor» no la cancela, ni la marca no-asistió, ni la reabre:
+  // no se le ofrece lo que el servidor le rechazaría con 403.
+  const { userRole, userId } = useQuienMira();
+  const citaDoctorId = appointment.doctor?.id ?? null;
+  const offRails = useMemo(
+    () =>
+      offRailsStatuses(appointment.status).filter((destino) =>
+        estadoPermitidoConSinDoctor({ role: userRole, userId, citaDoctorId, destino }),
+      ),
+    [appointment.status, userRole, userId, citaDoctorId],
+  );
 
   async function changeStatus(target: AppointmentStatus) {
     if (appointment.status === target) {
@@ -47,10 +58,16 @@ export function AgendaStatusPopover({ appointment }: Props) {
 
     const original = appointment;
     setPending(target);
+    // ws1-t11 (D9) — si hace falta, «¿Quién lo atiende?» antes del cambio optimista; cancelar = nada cambia.
+    const eleccion = await estado.elegirDoctor(appointment, target);
+    if (!eleccion) {
+      setPending(null);
+      return;
+    }
     dispatch({ type: "OPTIMISTIC_STATUS", id: appointment.id, status: target });
 
     try {
-      const updated = await estado.cambiar(appointment, target);
+      const updated = await estado.cambiar(appointment, target, eleccion);
       if (!updated) {
         // Dijo «Cancelar» en el «¿Seguro?»: nada cambió.
         dispatch({ type: "ROLLBACK_STATUS", original });

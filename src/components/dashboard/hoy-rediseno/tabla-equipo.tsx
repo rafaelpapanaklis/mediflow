@@ -89,9 +89,10 @@ export function TablaEquipo({ filas }: { filas: HomeAdminTeamRow[] }) {
                   <span>{r.sinDoctor ? t("home.teamPerf.sinDoctor") : r.doctorName}</span>
                 </div>
               </td>
-              <td className={s.num}>{r.sinDoctor ? "—" : r.appointments}</td>
+              {/* ws1-t11: la fila «Sin doctor» ya trae sus citas (el total de la columna cuadra). */}
+              <td className={s.num}>{r.sinDoctor && !r.appointments ? "—" : r.appointments}</td>
               <td className={s.num}>
-                {r.sinDoctor ? "—" : <Progreso pct={r.completionPct} />}
+                {r.sinDoctor && !r.appointments ? "—" : <Progreso pct={r.completionPct} />}
               </td>
               <td className={s.num}>{mxn.format(r.revenueMXN)}</td>
             </tr>

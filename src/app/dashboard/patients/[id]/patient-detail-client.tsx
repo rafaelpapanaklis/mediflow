@@ -146,6 +146,7 @@ import { SoloLectura } from "@/components/specialties/orthodontics/redesign/Solo
 import { OrtodonciaAdministrativa } from "@/components/specialties/orthodontics/redesign/OrtodonciaAdministrativa";
 import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
 import { citaParaIniciarDesdeLaFicha, iniciarConsultaArrancaLaCita, proximaCitaDeLaFicha } from "@/lib/patients/proxima-cita";
+import { preguntaAntesDelEstado, usePedirDoctor } from "@/components/dashboard/agenda/elegir-doctor-cita";
 import { adelantoDeLaRespuesta, textoDelAdelanto } from "@/lib/agenda/adelanto-texto";
 import { useTextosConsultaFicha } from "@/lib/patients/textos-consulta-ficha";
 import { hojaFirmadaDeHoy } from "@/lib/orthodontics/hoja-de-control-reglas";
@@ -714,6 +715,8 @@ export function PatientDetailClient({
   const [consultClosed, setConsultClosed] = useState(false);
   /** La cita que «Iniciar consulta» está arrancando (ws1-t8, fallo 3): botón ocupado hasta que la ficha la abre. */
   const [iniciandoCitaId, setIniciandoCitaId] = useState<string | null>(null);
+  // ws1-t11 (D9) — el doctor obligatorio al iniciar la consulta de una cita «Sin doctor».
+  const pedirDoctor = usePedirDoctor();
   const [noteDetailOpen, setNoteDetailOpen] = useState<ClinicalNote | null>(null);
   const [expandedConsultas, setExpandedConsultas] = useState<Set<string>>(new Set());
 
@@ -1410,13 +1413,29 @@ export function PatientDetailClient({
       return;
     }
     if (iniciandoCitaId) return;
+    // ws1-t11 (D9) — una cita «Sin doctor» que inicia alguien que no es DOCTOR: primero se elige quién atiende
+    // (la nota, el cobro y los reportes van a su nombre). Cancelar = no se inicia nada. A un DOCTOR no se le
+    // pregunta: el servidor se la asigna al iniciar.
+    let doctorParaIniciar: string | null = null;
+    if (
+      iniciarConsultaArrancaLaCita(cita, new Date(), zonaClinica) &&
+      preguntaAntesDelEstado({ destino: "IN_PROGRESS", citaDoctorId: cita.doctorId ?? null, role: currentUser.role }) === "iniciar"
+    ) {
+      const r = await pedirDoctor.pedir({
+        modo: "iniciar",
+        paciente: fullName || null,
+        doctores: (doctors ?? []).map((d) => ({ id: d.id, nombre: `${d.firstName} ${d.lastName ?? ""}`.trim() })),
+      });
+      if (!r?.doctorId) return;
+      doctorParaIniciar = r.doctorId;
+    }
     setIniciandoCitaId(cita.id);
     toast.loading(textosConsulta.iniciandoConsulta, { id: TOAST_INICIANDO_CONSULTA });
     if (iniciarConsultaArrancaLaCita(cita, new Date(), zonaClinica)) {
       const res = await fetch(`/api/appointments/${cita.id}/status`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "IN_PROGRESS" }),
+        body: JSON.stringify({ status: "IN_PROGRESS", ...(doctorParaIniciar ? { doctorId: doctorParaIniciar } : {}) }),
       }).catch(() => null);
       if (res?.ok) {
         const adelanto = adelantoDeLaRespuesta(await res.clone().json().catch(() => null));
@@ -2024,6 +2043,9 @@ export function PatientDetailClient({
   // come ~44px de un lado y con 28px pelados el primer chip de la tab bar y el
   // borde del hero quedaban debajo. Sin recorte, env(...) vale 0 y manda el 28.
   return (
+    <>
+    {/* ws1-t11 — «¿Quién atiende la consulta?» de una cita «Sin doctor» (va en un portal). */}
+    {pedirDoctor.dialogo}
     <div
       // Con el rediseño encendido, este contenedor es la RAÍZ: de aquí cuelgan
       // la tipografía (Instrument Sans, la misma instancia que el menú nuevo) y
@@ -4236,5 +4258,6 @@ export function PatientDetailClient({
       )}
 
     </div>
+    </>
   );
 }

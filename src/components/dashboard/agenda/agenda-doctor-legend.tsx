@@ -50,6 +50,9 @@ export function AgendaDoctorLegend() {
         state.appointments,
         state.filters.doctorIds,
         t("agenda.pageClient.professionalFallback"),
+        // ws1-t11 — «Sin doctor» (gris) solo si hay alguna cargada o está filtrada; el filtro
+        // completo (el «+N» y la pill) la ofrece además siempre que la clínica pueda agendar así.
+        { nombreSinDoctor: t("agenda.sinDoctor.nombre") },
       ),
     [state.doctors, state.appointments, state.filters.doctorIds, t],
   );

@@ -1,10 +1,15 @@
 "use client";
 
 import { doctorColorFor, doctorInitials, readableTextOn } from "@/lib/agenda/doctor-color";
+import { INICIALES_SIN_DOCTOR } from "@/lib/agenda/doctor-legend";
+import { useT } from "@/i18n/i18n-provider";
 import type { AgendaColumnDescriptor } from "@/app/dashboard/agenda/agenda-page-client";
 import styles from "./agenda.module.css";
 
 export function AgendaColumnHeader({ column }: { column: AgendaColumnDescriptor }) {
+  const t = useT();
+  // ws1-t11 — la columna «Sin doctor»: color gris del tema (viene en `column.color`), «—» en el chip
+  // y «N citas» en vez del % (varias «Sin doctor» a la misma hora no se estorban).
   const accent =
     column.type === "doctor" && column.doctorId
       ? doctorColorFor(column.doctorId, column.color)
@@ -26,7 +31,7 @@ export function AgendaColumnHeader({ column }: { column: AgendaColumnDescriptor 
             }}
             aria-hidden
           >
-            {doctorInitials(column.title)}
+            {column.sinDoctor ? INICIALES_SIN_DOCTOR : doctorInitials(column.title)}
           </div>
         )}
         <div className={styles.columnHeaderText}>
@@ -36,7 +41,13 @@ export function AgendaColumnHeader({ column }: { column: AgendaColumnDescriptor 
           )}
         </div>
       </div>
-      {column.type !== "unified" && (
+      {column.sinDoctor ? (
+        <div className={styles.columnHeaderOccupancy}>
+          <span className={styles.columnHeaderPct}>
+            {t("agenda.monthView.apptCount", { count: column.citas ?? 0 })}
+          </span>
+        </div>
+      ) : column.type !== "unified" && (
         <div className={styles.columnHeaderOccupancy}>
           <div className={styles.columnHeaderBar}>
             <div

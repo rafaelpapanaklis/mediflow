@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAuthContext } from "@/lib/auth-context";
 import { prisma } from "@/lib/prisma";
+import { ID_SIN_DOCTOR, NOMBRE_SIN_DOCTOR } from "@/lib/dinero/por-doctor";
 import { patientVisibilityAnd, relatedPatientVisibilityAnd } from "@/lib/patient-visibility";
 
 export const dynamic = "force-dynamic";
@@ -71,8 +72,12 @@ export async function GET() {
         }),
       ]);
 
-    const doctorIds   = doctorStats.map(d => d.doctorId);
-    const doctors     = await prisma.user.findMany({ where:{id:{in:doctorIds}}, select:{id:true,firstName:true,lastName:true,color:true} });
+    // ws1-t11 · P2: las citas «Sin doctor» agrupan bajo `doctorId: null`; `{ in: [null] }` revienta en
+    // Prisma, así que solo se buscan los ids reales (y solo de ESTA clínica).
+    const doctorIds   = doctorStats.map(d => d.doctorId).filter((id): id is string => !!id);
+    const doctors     = doctorIds.length > 0
+      ? await prisma.user.findMany({ where:{clinicId,id:{in:doctorIds}}, select:{id:true,firstName:true,lastName:true,color:true} })
+      : [];
     const doctorMap   = Object.fromEntries(doctors.map(d => [d.id, d]));
     const activeDoctor = await prisma.user.count({ where:{clinicId,isActive:true,role:{in:["DOCTOR","ADMIN","SUPER_ADMIN"]}} });
     const paidCount   = await prisma.invoice.count({ where:{clinicId,status:{in:["PAID","PARTIAL"]},updatedAt:{gte:firstMonth}} });
@@ -100,7 +105,10 @@ export async function GET() {
       pendingBalance, pendingInvoices: pendingCount,
       unconfirmedAppts, nextWeekAppointments: nextWeekAppts,
       lowInventory: lowInventoryAlerts, recentPatients,
-      doctorBreakdown: doctorStats.map(d => ({ doctor: doctorMap[d.doctorId], count: d._count.id })),
+      // La fila «Sin doctor» va con su nombre: la suma de `count` es la de las citas del mes.
+      doctorBreakdown: doctorStats.map(d => d.doctorId
+        ? { doctor: doctorMap[d.doctorId], count: d._count.id }
+        : { doctor: { id: ID_SIN_DOCTOR, firstName: NOMBRE_SIN_DOCTOR, lastName: "", color: null }, count: d._count.id, sinDoctor: true }),
     });
   } catch(err) {
     console.error("Dashboard error:", err);

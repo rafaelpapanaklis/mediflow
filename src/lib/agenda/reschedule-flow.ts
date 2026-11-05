@@ -27,6 +27,7 @@
  */
 
 import { calendarDayISO } from "./date-ranges";
+import { FILTRO_SIN_DOCTOR } from "./sin-doctor";
 import { detectOverlap, recomputeTimes, type DroppableData } from "./drag-utils";
 import {
   rescheduleAppointment,
@@ -85,7 +86,8 @@ export function resolveDropTarget(
   let toDayISO = currentDayISO;
   let newDoctorId = original.doctor?.id ?? null;
   let newResourceId = original.resourceId;
-  if (target.kind === "doctor-col") newDoctorId = target.doctorId;
+  // ws1-t11 — la columna «Sin doctor» lleva `FILTRO_SIN_DOCTOR`: soltar ahí le quita el doctor.
+  if (target.kind === "doctor-col") newDoctorId = target.doctorId === FILTRO_SIN_DOCTOR ? null : target.doctorId;
   else if (target.kind === "resource-col") newResourceId = target.resourceId;
   else if (target.kind === "day-col") toDayISO = target.dayISO;
   return { newDoctorId, newResourceId, toDayISO };
@@ -165,7 +167,8 @@ export function reschedulePayload(
     startsAt: plan.newStartsAt,
     endsAt: plan.newEndsAt,
   };
-  if (plan.newDoctorId !== currentDoctorId && plan.newDoctorId) payload.doctorId = plan.newDoctorId;
+  // ws1-t11 — `null` = a «Sin doctor» (solo sale de soltar en esa columna; el PATCH hace `disconnect`).
+  if (plan.newDoctorId !== currentDoctorId) payload.doctorId = plan.newDoctorId;
   if (plan.newResourceId !== currentResourceId) payload.resourceId = plan.newResourceId;
   if (bloqueoConfirmado) payload.bloqueoConfirmado = true;
   if (notifyPatient === false) payload.notifyPatient = false;
@@ -178,8 +181,9 @@ export function reschedulePayload(
 }
 
 /** El doctor con el que se pinta la cita mientras el servidor contesta. */
-export function optimisticDoctorIdOf(plan: ReschedulePlan): string {
-  return plan.newDoctorId ?? plan.original.doctor?.id ?? "";
+export function optimisticDoctorIdOf(plan: ReschedulePlan): string | null {
+  // `newDoctorId` ya es el de la cita cuando el destino no cambia el doctor; `null` = «Sin doctor».
+  return plan.newDoctorId;
 }
 
 // Los campos de la otra rama van como `?: undefined` a propósito: el repo

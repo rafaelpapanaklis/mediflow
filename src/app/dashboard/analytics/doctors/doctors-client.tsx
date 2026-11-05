@@ -26,7 +26,10 @@ interface DoctorRow {
   avgConsultMin: number | null;
 }
 
-/** ws1-t2 (C-10): la fila «Sin doctor» que manda la API (id fijo, sin citas). */
+/**
+ * ws1-t2 (C-10): la fila «Sin doctor» que manda la API (id fijo). Lleva lo cobrado sin doctor y,
+ * desde ws1-t11 · P2, las citas «Sin doctor» del periodo (sin ellas la columna no sumaba).
+ */
 export function esSinDoctor(d: { id: string }): boolean {
   return d.id === "sin-doctor";
 }
@@ -189,18 +192,25 @@ export function DoctorsClient({ rediseno = false }: { rediseno?: boolean } = {})
             <tbody>
               {data.doctors.map((d) => esSinDoctor(d) ? (
                 /* ws1-t2 (C-10): lo cobrado sin doctor en la factura ni en la cita. Sin esta
-                   fila la columna no sumaba los ingresos de Finanzas. No tiene citas. */
+                   fila la columna no sumaba los ingresos de Finanzas. ws1-t11 · P2: y las citas
+                   «Sin doctor» del periodo («—» si no hay ninguna). */
                 <tr key={d.id}>
                   <Td>
                     <strong style={{ color: "var(--text-1)" }}>{t("analytics.doctors.sinDoctor")}</strong>
                     <span style={{ fontSize: 10, color: "var(--text-3)", marginLeft: 8 }}>{t("analytics.doctors.sinDoctorHint")}</span>
                   </Td>
-                  <Td align="right" mono color="var(--text-3)">—</Td>
-                  <Td align="right" mono color="var(--text-3)">—</Td>
-                  <Td align="right" mono color="var(--text-3)">—</Td>
-                  <Td align="right" mono color="var(--text-3)">—</Td>
-                  <Td align="right" mono color="var(--text-3)">—</Td>
-                  <Td align="right" mono color="var(--text-3)">—</Td>
+                  <Td align="right" mono color="var(--text-3)">{d.apptsTotal > 0 ? d.apptsTotal : "—"}</Td>
+                  <Td align="right" mono color="var(--text-3)">{d.apptsTotal > 0 ? d.apptsCompleted : "—"}</Td>
+                  <Td align="right" mono color="var(--text-3)">{d.apptsTotal > 0 ? d.apptsPerDay : "—"}</Td>
+                  <Td align="right" mono color="var(--text-3)">
+                    {d.apptsTotal > 0 ? <>{d.apptsNoShow} <span style={{ fontSize: 10 }}>({d.noShowRate}%)</span></> : "—"}
+                  </Td>
+                  <Td align="right" mono color="var(--text-3)">
+                    {d.avgConsultMin != null ? t("analytics.doctors.minutes", { count: d.avgConsultMin }) : "—"}
+                  </Td>
+                  <Td align="right" mono color="var(--text-3)">
+                    {d.avgSatisfaction != null ? `${d.avgSatisfaction.toFixed(1)} (${d.satisfactionCount})` : "—"}
+                  </Td>
                   <Td align="right" mono>
                     <strong>${d.revenueGenerated.toLocaleString("es-MX", { maximumFractionDigits: 0 })}</strong>
                   </Td>

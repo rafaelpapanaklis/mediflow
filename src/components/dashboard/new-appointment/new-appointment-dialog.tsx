@@ -48,7 +48,15 @@ import {
   fraseTratanteFueraDeLaAgenda,
   tratanteFueraDeLaAgenda,
 } from "@/lib/orthodontics/doctor-tratante-cita";
-import { FRASE_NO_RECIBE_CITAS, doctorQueRecibeCitas } from "@/lib/agenda/roles-que-atienden";
+import { FRASE_NO_RECIBE_CITAS } from "@/lib/agenda/roles-que-atienden";
+import { ERROR_SIN_DOCTOR_NO_DISPONIBLE } from "@/lib/agenda/sin-doctor";
+import {
+  OPCION_SIN_DOCTOR,
+  doctorIdParaEnviar,
+  doctorInicialDeNuevaCita,
+  doctorRealDe,
+  esOpcionSinDoctor,
+} from "./doctor-inicial";
 import type { WeekScheduleDTO } from "@/lib/agenda/types";
 import type {
   OpenNewAppointmentParams,
@@ -100,6 +108,11 @@ interface BootData {
   waConnected: boolean;
   /** La clínica tiene encendida la confirmación al agendar (Dashboard → WhatsApp). */
   waConfirmOnCreate: boolean;
+  /**
+   * ws1-t11 — ¿se ofrece «Sin doctor»? Solo si el servidor lo dice (`sql/cita-sin-doctor.sql`
+   * pegado). Sin él, la ventana es la de siempre.
+   */
+  sinDoctorDisponible: boolean;
 }
 
 export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "clasica" }: Props) {
@@ -264,6 +277,7 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
           dayEnd: body.dayEnd,
           waConnected,
           waConfirmOnCreate,
+          sinDoctorDisponible: body.sinDoctorDisponible === true,
         });
         // Encendido solo si de verdad va a salir: conectada Y con la
         // confirmación encendida por la clínica. Si no, viaja `false`.
@@ -361,11 +375,14 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
     // próxima» con el tratante del caso) solo se usa si está en la lista. Antes
     // se aceptaba cualquiera: el <select> enseñaba al primero de la lista y la
     // cita se mandaba con el otro → doctor_not_found.
+    // ws1-t11 (D1): sin preferencia, o desde la columna «Sin doctor», abre en «Sin doctor».
     setDoctorId(
-      doctorQueRecibeCitas(
-        [initialSlot?.doctorId, params?.initialDoctorId, ...(params?.initialDoctorIds ?? [])],
-        boot.doctors.map((d) => d.id),
-      ),
+      doctorInicialDeNuevaCita({
+        delHueco: initialSlot?.doctorId,
+        candidatos: [params?.initialDoctorId, ...(params?.initialDoctorIds ?? [])],
+        lista: boot.doctors.map((d) => d.id),
+        sinDoctorDisponible: boot.sinDoctorDisponible,
+      }),
     );
 
     // ws1-t1 (F7): «Reagendar próxima» sin cita por delante trae el consultorio de su última cita.
@@ -458,7 +475,8 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
     casoPlaneado: orthoCasoPlaneado,
     tratanteId: orthoTratanteId,
     doctoresIds: (boot?.doctors ?? []).map((d) => d.id),
-    doctorActual: doctorId,
+    // «Sin doctor» no es «otro doctor»: el aviso no sale, y la propuesta del tratante sí.
+    doctorActual: doctorRealDe(doctorId) ?? "",
   };
   useEffect(() => {
     if (doctorTocadoAMano.current || slotIso) return;
@@ -502,7 +520,7 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
       bloqueosDelDia,
       inicio.toISOString(),
       fin.toISOString(),
-      doctorId || null,
+      doctorRealDe(doctorId),
     );
     return b ? { doctorId: b.doctorId, doctorNombre: b.doctorNombre, reason: b.reason } : null;
   };
@@ -552,7 +570,8 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           patientId: patient.id,
-          doctorId,
+          // ws1-t11: «Sin doctor» viaja como `null` explícito (ausente sería el 400 de siempre).
+          doctorId: doctorIdParaEnviar(doctorId),
           resourceId: resourceId || null,
           startsAt: startsAt.toISOString(),
           endsAt: endsAt.toISOString(),
@@ -575,6 +594,15 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
 
       if (res.status === 409) {
         const body = (await res.json()) as AppointmentConflictError;
+        // ws1-t11: falta pegar sql/cita-sin-doctor.sql (la sonda del servidor cambió de opinión):
+        // la opción se retira y se pide elegir doctor. Nada se guardó.
+        if ((body as { error?: unknown }).error === ERROR_SIN_DOCTOR_NO_DISPONIBLE) {
+          toast.error((body as { reason?: string }).reason ?? t("agenda.sinDoctor.noDisponible"), { duration: 6000 });
+          setBoot((b) => (b ? { ...b, sinDoctorDisponible: false } : b));
+          setDoctorId(boot.doctors[0]?.id ?? "");
+          setSubmitting(false);
+          return;
+        }
         // ws1-t1 (P8): un 409 de las filas del plan no es un choque de horario.
         if (esErrorDelPlan((body as { error?: unknown }).error)) {
           toast.error(t(`planTratamiento.citas.error.${(body as { error: string }).error}`), { duration: 6000 });
@@ -585,16 +613,17 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
         // AHÍ MISMO y nada se ha guardado todavía.
         // Si ya se confirmó y el servidor vuelve a preguntar es que hay OTRA
         // cita encima: se pregunta otra vez, con ésa.
-        const aviso = avisoDesdeRechazo(body, { doctorId, resourceId: resourceId || null }, boot.timezone);
+        const aviso = avisoDesdeRechazo(body, { doctorId: doctorRealDe(doctorId), resourceId: resourceId || null }, boot.timezone);
         const repetido = sobreagendar && aviso && aviso.citaId === sobreagendar.citaId && aviso.otras <= sobreagendar.otras;
         if (aviso && !repetido) {
           setSobreagendaPendiente({ aviso, bloqueo: bloqueoConfirmado });
           setSubmitting(false);
           return;
         }
+        const choque = body.conflictingAppointment;
         toast.error(
-          describeOverlapConflict(body.conflictingAppointment, {
-            doctorId,
+          describeOverlapConflict(choque ? { ...choque, doctorId: choque.doctorId ?? "" } : undefined, {
+            doctorId: doctorRealDe(doctorId),
             resourceId: resourceId || null,
           }),
           { duration: 5000 },
@@ -760,14 +789,24 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
                 </Field>
 
                 <div {...(nueva ? { className: nc.dosColumnas } : { style: gridTwo })}>
-                  <Field label={t("appointments.newApptDialog.fieldProfessional")} campo="doctorId">
+                  <Field
+                    // ws1-t11: con «Sin doctor» el campo deja de ser obligatorio (sin el `*`).
+                    label={boot.sinDoctorDisponible ? t("agenda.sinDoctor.campoProfesional") : t("appointments.newApptDialog.fieldProfessional")}
+                    campo="doctorId"
+                  >
                     <select
                       className={nueva ? `${nc.control} ${errors.doctorId ? nc.controlError : ""}` : "input-new"}
                       value={doctorId}
                       onChange={(e) => { doctorTocadoAMano.current = true; setDoctorId(e.target.value); if (errors.doctorId) setErrors((er) => ({ ...er, doctorId: undefined })); }}
                       style={nueva ? undefined : { borderColor: errors.doctorId ? "var(--danger)" : undefined }}
                     >
-                      {boot.doctors.length === 0 && <option value="">{t("appointments.newApptDialog.optionNoActiveProfessionals")}</option>}
+                      {boot.doctors.length === 0 && !boot.sinDoctorDisponible && <option value="">{t("appointments.newApptDialog.optionNoActiveProfessionals")}</option>}
+                      {/* ws1-t11: «Sin doctor», la primera; se asigna al llegar o al iniciar la consulta. */}
+                      {boot.sinDoctorDisponible && (
+                        <option value={OPCION_SIN_DOCTOR} data-opcion-sin-doctor>
+                          {t("agenda.sinDoctor.nombre")}
+                        </option>
+                      )}
                       {/* El nombre visible completo, único en el padrón (etiqueta-profesional.ts): con «Dr. » + el
                           primer nombre salían «Dr. Dr», «Dr. Cuenta» y tres «Dr. QA» (revisión de ws1-t10). */}
                       {boot.doctors.map((d) => (
@@ -888,7 +927,8 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
                   <Field label={t("appointments.newApptDialog.fieldAvailableTime")} campo="slot">
                     <SlotGridPicker
                       dateISO={dateISO}
-                      doctorId={doctorId}
+                      doctorId={doctorRealDe(doctorId)}
+                      sinDoctor={esOpcionSinDoctor(doctorId)}
                       resourceId={resourceId || null}
                       durationMin={duration}
                       config={config}
@@ -942,6 +982,7 @@ export function NewAppointmentDialog({ isOpen, onClose, params, apariencia = "cl
               duration,
               patientName: patient?.name ?? null,
               doctorName: boot?.doctors.find((d) => d.id === doctorId)?.displayName ?? null,
+              sinDoctor: esOpcionSinDoctor(doctorId) ? t("agenda.sinDoctor.nombre") : null,
               timezone: boot?.timezone ?? null,
               t,
               nueva,
@@ -1023,6 +1064,7 @@ function summaryNode({
   duration,
   patientName,
   doctorName,
+  sinDoctor = null,
   timezone,
   t,
   nueva = false,
@@ -1031,6 +1073,8 @@ function summaryNode({
   duration: number;
   patientName: string | null;
   doctorName: string | null;
+  /** ws1-t11 — el texto «Sin doctor» si se eligió esa opción (va tras un «·», no tras «con»). */
+  sinDoctor?: string | null;
   timezone: string | null;
   t: TFunction;
   nueva?: boolean;
@@ -1063,6 +1107,8 @@ function summaryNode({
           {` ${t("appointments.newApptDialog.summaryWith")} `}
           <b {...fuerte}>{doctorName}</b>
         </>
+      ) : sinDoctor ? (
+        <span data-resumen-sin-doctor>{` · ${sinDoctor}`}</span>
       ) : null}
     </>
   );

@@ -30,7 +30,8 @@ export type AgendaAction =
   | { type: "TOGGLE_WAITLIST"; open: boolean }
   | { type: "TOGGLE_PENDING"; open: boolean }
   | { type: "SELECT_IDS"; ids: string[] }
-  | { type: "OPTIMISTIC_RESCHEDULE"; id: string; doctorId: string; resourceId: string | null; startsAt: string; endsAt: string }
+  /** `doctorId: null` = la cita pasa a «Sin doctor» (ws1-t11). */
+  | { type: "OPTIMISTIC_RESCHEDULE"; id: string; doctorId: string | null; resourceId: string | null; startsAt: string; endsAt: string }
   | { type: "ROLLBACK_RESCHEDULE"; original: AgendaAppointmentDTO }
   | { type: "OPTIMISTIC_STATUS"; id: string; status: AppointmentStatus }
   | { type: "ROLLBACK_STATUS"; original: AgendaAppointmentDTO }
@@ -58,6 +59,19 @@ export type AgendaAction =
   | { type: "UPSERT_DOCTOR"; doctor: DoctorColumnDTO }
   | { type: "REMOVE_DOCTOR"; id: string };
 
+/** El doctor que pinta la cita mientras el servidor contesta un movimiento. */
+function doctorOptimista(
+  doctores: readonly DoctorColumnDTO[],
+  actual: AgendaAppointmentDTO["doctor"],
+  doctorId: string | null,
+): AgendaAppointmentDTO["doctor"] {
+  if (doctorId === null) return undefined;
+  if (actual && actual.id === doctorId) return actual;
+  const d = doctores.find((x) => x.id === doctorId);
+  if (d) return { ...(actual ?? {}), id: d.id, shortName: d.shortName } as AgendaAppointmentDTO["doctor"];
+  return actual ? { ...actual, id: doctorId } : actual;
+}
+
 export function buildInitialState(payload: AgendaDayResponse, dayISO: string): AgendaStoreState {
   return {
     dayISO,
@@ -78,6 +92,7 @@ export function buildInitialState(payload: AgendaDayResponse, dayISO: string): A
     bloqueos: payload.bloqueos ?? [],
     horariosDoctores: payload.horariosDoctores ?? {},
     agendaFlexible: payload.agendaFlexible ?? AGENDA_FLEXIBLE_DTO_APAGADA,
+    sinDoctorDisponible: payload.sinDoctorDisponible === true,
     drag: {
       draggingId: null,
       ghostStartsAt: null,
@@ -120,6 +135,7 @@ export function agendaReducer(
         // WS1-T2 · horario — mismo criterio: sin el campo, se conserva.
         horariosDoctores: action.payload.horariosDoctores ?? state.horariosDoctores,
         agendaFlexible: action.payload.agendaFlexible ?? state.agendaFlexible,
+        sinDoctorDisponible: action.payload.sinDoctorDisponible ?? state.sinDoctorDisponible,
         isLoading: false,
         error: null,
       };
@@ -160,9 +176,10 @@ export function agendaReducer(
         a.id === action.id
           ? {
               ...a,
-              doctor: a.doctor
-                ? { ...a.doctor, id: action.doctorId }
-                : a.doctor,
+              // ws1-t11 — con «Sin doctor» de por medio, el doctor se arma de la lista (antes solo se
+              // cambiaba el id de uno que ya existía: soltar una «Sin doctor» en una columna no la movía
+              // hasta que contestaba el servidor).
+              doctor: doctorOptimista(state.doctors, a.doctor, action.doctorId),
               resourceId: action.resourceId,
               startsAt: action.startsAt,
               endsAt: action.endsAt,

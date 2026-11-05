@@ -46,7 +46,7 @@ test("1 · con 22 columnas cada una mide al menos 128 px (antes ~45 px a 1280: n
 test("1 · vista-dia: pasa el ancho mínimo, el nombre completo en TODA la cabecera y el círculo sin texto leíble", () => {
   const src = sinComentarios(leer("src/components/dashboard/agenda-nueva/vista-dia.tsx"));
   assert.match(src, /anchoMinimoColumna=\{anchoMinimoColumnaDia\(columnasConSombra\.length\)\}/);
-  assert.match(src, /<div className=\{s\.cabeceraDiaMarco\} title=\{r\.nombre\}>/);
+  assert.match(src, /<div className=\{s\.cabeceraDiaMarco\} title=\{r\.nombre\}[^>]*>/); // ws1-t11: + data-columna-sin-doctor
   assert.match(src, /className=\{s\.avatarResponsable\}[^>]*aria-hidden/);
 });
 

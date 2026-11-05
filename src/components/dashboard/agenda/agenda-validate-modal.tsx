@@ -9,6 +9,7 @@ import { useT } from "@/i18n/i18n-provider";
 import { useAgenda } from "./agenda-provider";
 import { formatSlotTime } from "@/lib/agenda/time-utils";
 import { doctorColorFor, doctorInitials } from "@/lib/agenda/doctor-color";
+import { COLOR_SIN_DOCTOR, INICIALES_SIN_DOCTOR } from "@/lib/agenda/doctor-legend";
 import { batchValidateAppointments } from "@/lib/agenda/mutations";
 import type { AgendaAppointmentDTO } from "@/lib/agenda/types";
 import styles from "./agenda.module.css";
@@ -191,18 +192,17 @@ function ValidateRow({
             {appointment.endsAt &&
               ` – ${formatSlotTime(appointment.endsAt, timezone)}`}
           </span>
-          {appointment.doctor && (
-            <span className={styles.validateRowDoctor}>
-              <span
-                className={styles.validateRowDoctorDot}
-                style={{ background: doctorColor }}
-                aria-hidden
-              >
-                {doctorInitials(appointment.doctor.shortName)}
-              </span>
-              {appointment.doctor.shortName}
+          {/* ws1-t11 — una cita «Sin doctor» lo dice (antes la fila no decía de quién era). */}
+          <span className={styles.validateRowDoctor}>
+            <span
+              className={styles.validateRowDoctorDot}
+              style={{ background: doctorColor }}
+              aria-hidden
+            >
+              {appointment.doctor ? doctorInitials(appointment.doctor.shortName) : INICIALES_SIN_DOCTOR}
             </span>
-          )}
+            {appointment.doctor ? appointment.doctor.shortName : t("agenda.sinDoctor.nombre")}
+          </span>
           {resourceName && <span>· {resourceName}</span>}
           <span>· {appointment.reason ?? t("agenda.validateModal.consultationDefault")}</span>
         </div>
@@ -241,7 +241,7 @@ function doctorColorForAppt(
   appt: AgendaAppointmentDTO,
 ): string {
   const id = appt.doctor?.id;
-  if (!id) return "var(--brand)";
+  if (!id) return COLOR_SIN_DOCTOR;
   const meta = doctors.find((d) => d.id === id);
   return doctorColorFor(id, meta?.color ?? null);
 }

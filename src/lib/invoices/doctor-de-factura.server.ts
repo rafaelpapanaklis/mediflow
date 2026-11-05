@@ -12,6 +12,8 @@ import { diaSiguiente, elegirDoctorDeFactura, unicoDoctor, type DoctorDeFactura 
 
 /** Los estados de un caso de ortodoncia que sigue vivo (el tratante sigue llevándolo). */
 const CASO_VIVO = ["PLANNED", "IN_PROGRESS", "ON_HOLD", "RETENTION"] as const;
+/** ws1-t11 — una cita en estos estados ya se atendió (o se cerró): su «Sin doctor» ya no va a cambiar solo. */
+const CITA_YA_ATENDIDA = new Set(["COMPLETED", "CHECKED_OUT"]);
 
 export interface ArgsDoctorDeFactura {
   clinicId: string;
@@ -20,7 +22,7 @@ export interface ArgsDoctorDeFactura {
   appointmentId?: string | null;
   /** Lo que pidió el cuerpo (ver `doctorPedido`): texto ya validado, `null` = «Sin asignar», `undefined` = heredar. */
   pedido?: string | null;
-  /** Doctor de la nota clínica de la que sale la factura (se usa si no hay cita ligada). */
+  /** Doctor de la nota clínica de la que sale la factura (se usa si no hay cita ligada o si es «Sin doctor»). */
   autorDeNota?: string | null;
   /** Zona de la clínica, para saber qué es «hoy». */
   timezone?: string | null;
@@ -31,7 +33,8 @@ export interface ArgsDoctorDeFactura {
  * El doctor con el que nace la factura. Solo hereda a quien sigue ATENDIENDO en la clínica
  * (`ATIENDE_WHERE`, la misma regla que valida el doctor elegido en POST /api/invoices y que llena
  * la lista de «Nueva factura»); si no, nace sin doctor.
- * Consultas: 1 (cita ligada) o hasta 4 (citas de hoy, planes en paralelo y la validación).
+ * Consultas: 1 (cita ligada) o hasta 4 (citas de hoy, planes en paralelo y la validación); con una
+ * cita «Sin doctor», esa más las de las demás pistas. Nunca cae a quien pulsa Guardar.
  */
 export async function doctorDeFacturaNueva(
   args: ArgsDoctorDeFactura,
@@ -54,18 +57,38 @@ async function leerDoctorDeFactura(args: ArgsDoctorDeFactura, db: ClienteDb): Pr
   if (args.pedido !== undefined) return elegirDoctorDeFactura(args.pedido, {});
   if (!clinicId || !patientId) return { doctorId: null, origen: "ninguno" };
 
-  let propuesta: DoctorDeFactura;
+  let propuesta: DoctorDeFactura | null = null;
+  /** El día cuyas citas cuentan como «de hoy»: hoy, o el de la cita ligada «Sin doctor» ya atendida. */
+  let diaDeReferencia: Date = args.now ?? new Date();
   if (args.appointmentId) {
     const cita = await db.appointment.findFirst({
       // La cita tiene que ser del MISMO paciente (doctor-sugerido la recibe del cliente).
       where: { id: args.appointmentId, clinicId, patientId },
-      select: { doctorId: true },
+      select: { doctorId: true, status: true, startsAt: true },
     });
-    propuesta = elegirDoctorDeFactura(undefined, { cita: cita?.doctorId ?? null });
-  } else if (args.autorDeNota) {
+    // Una cita que no es de este paciente (o no existe) no da pista ni deja seguir: nace sin doctor.
+    if (!cita) return { doctorId: null, origen: "ninguno" };
+    if (cita.doctorId) {
+      propuesta = elegirDoctorDeFactura(undefined, { cita: cita.doctorId });
+    } else if (!CITA_YA_ATENDIDA.has(String(cita.status))) {
+      // ws1-t11 · P2 (revisión): una «Sin doctor» que todavía no se atiende (anticipo, cobro antes de la
+      // consulta) NO adivina doctor: la factura nace sin él y los reportes siguen al doctor de la cita, que
+      // se le pone al llegar o al iniciar. Adivinar aquí dejaba el cobro a nombre de otro para siempre.
+      // La nota (si la hay) sí dice quién atendió.
+      return args.autorDeNota
+        ? elegirDoctorDeFactura(undefined, { nota: args.autorDeNota })
+        : { doctorId: null, origen: "ninguno" };
+    } else {
+      // Ya atendida y «Sin doctor» (se terminó sin consulta): las demás pistas, con las citas del DÍA DE LA
+      // CITA, no las de hoy (cobrar mañana la de ayer no puede tomar al doctor de otra visita).
+      diaDeReferencia = cita.startsAt;
+    }
+  }
+  if (!propuesta && args.autorDeNota) {
     propuesta = elegirDoctorDeFactura(undefined, { nota: args.autorDeNota });
-  } else {
-    const hoy = hoyEnZona(args.timezone, args.now ?? new Date());
+  }
+  if (!propuesta) {
+    const hoy = hoyEnZona(args.timezone, diaDeReferencia);
     const desde = inicioDelDiaEnZona(hoy, args.timezone);
     const hasta = inicioDelDiaEnZona(diaSiguiente(hoy), args.timezone);
     const citasDeHoy = desde && hasta
@@ -75,9 +98,11 @@ async function leerDoctorDeFactura(args: ArgsDoctorDeFactura, db: ClienteDb): Pr
           take: 20,
         })
       : [];
-    if (unicoDoctor(citasDeHoy.map((c) => c.doctorId))) {
-      propuesta = elegirDoctorDeFactura(undefined, { citasDeHoy: citasDeHoy.map((c) => c.doctorId) });
-    } else if (citasDeHoy.length > 0) {
+    // Las «Sin doctor» de hoy (la propia cita ligada, p. ej.) no dicen quién atendió: no cuentan.
+    const doctoresDeHoy = citasDeHoy.map((c) => c.doctorId).filter((id): id is string => !!id);
+    if (unicoDoctor(doctoresDeHoy)) {
+      propuesta = elegirDoctorDeFactura(undefined, { citasDeHoy: doctoresDeHoy });
+    } else if (doctoresDeHoy.length > 0) {
       // Hoy lo vieron dos doctores distintos: no se adivina con el plan.
       propuesta = { doctorId: null, origen: "ninguno" };
     } else {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useCallback, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
@@ -22,6 +22,7 @@ import {
   Armchair,
   CheckCircle2,
   LogOut,
+  UserPlus,
   type LucideIcon,
 } from "lucide-react";
 import { useT } from "@/i18n/i18n-provider";
@@ -29,6 +30,10 @@ import { useAgenda } from "./agenda-provider";
 import { formatSlotTime } from "@/lib/agenda/time-utils";
 import { doctorColorFor, doctorInitials } from "@/lib/agenda/doctor-color";
 import { useEstadoConAviso } from "./use-estado-con-aviso";
+import { esDoctorConCitaSinDoctor, estadoPermitidoConSinDoctor, useQuienMira } from "./quien-mira";
+import { usePedirDoctor, type DoctorElegible } from "./elegir-doctor-cita";
+import { COLOR_SIN_DOCTOR, INICIALES_SIN_DOCTOR } from "@/lib/agenda/doctor-legend";
+import { rescheduleAppointment } from "@/lib/agenda/mutations";
 import {
   STATUS_PIPELINE,
   STATUS_LABELS,
@@ -148,6 +153,14 @@ export function AgendaDetailPanel({ clinicTaxMode }: AgendaDetailPanelProps) {
   // WS1-T5 (revisión t8, N-A1): «Re-abrir cita» con el hueco ya ocupado, con
   // la bandera `agenda-flexible` → «¿Seguro?» y se reabre sobreagendada.
   const estado = useEstadoConAviso();
+  // ws1-t11 (D3) — «Asignar doctor» / «Tomar cita» en una «Sin doctor».
+  const { userRole, userId } = useQuienMira();
+  const pedirDoctor = usePedirDoctor();
+  const [asignando, setAsignando] = useState(false);
+  const doctoresElegibles = useMemo<DoctorElegible[]>(
+    () => state.doctors.filter((d) => d.activeInAgenda !== false).map((d) => ({ id: d.id, nombre: d.displayName })),
+    [state.doctors],
+  );
 
   const appt = useMemo(
     () =>
@@ -156,6 +169,38 @@ export function AgendaDetailPanel({ clinicTaxMode }: AgendaDetailPanelProps) {
         : null,
     [state.appointments, state.selectedAppointmentId],
   );
+
+  /**
+   * ws1-t11 — ponerle doctor a una «Sin doctor» sin cambiar nada más (PATCH con solo `doctorId`),
+   * igual que el panel de la agenda nueva. Un DOCTOR solo se la puede dar a sí mismo («Tomar cita»);
+   * los demás eligen a quién.
+   */
+  const { pedir } = pedirDoctor;
+  const asignarDoctor = useCallback(async () => {
+    if (!appt || appt.doctor?.id || asignando) return;
+    let doctorId: string | null = null;
+    if (userRole === "DOCTOR") {
+      doctorId = userId ?? null;
+    } else {
+      const r = await pedir({ modo: "asignar", paciente: appt.patient?.name ?? null, doctores: doctoresElegibles });
+      doctorId = r?.doctorId ?? null;
+    }
+    if (!doctorId) return;
+    setAsignando(true);
+    try {
+      const { appointment } = await rescheduleAppointment(appt.id, { doctorId });
+      startTransition(() => {
+        dispatch({ type: "REPLACE_APPOINTMENT", appointment });
+      });
+      invalidateRangeCache();
+      toast.success(t("agenda.sinDoctor.asignar.listo"));
+    } catch (err) {
+      const e = err as { reason?: string };
+      toast.error(e?.reason ?? mensajeDeError(err, t, { porDefecto: t("agenda.sinDoctor.asignar.error") }));
+    } finally {
+      setAsignando(false);
+    }
+  }, [appt, asignando, userRole, userId, pedir, doctoresElegibles, dispatch, invalidateRangeCache, t]);
 
   if (!appt) {
     return (
@@ -182,7 +227,11 @@ export function AgendaDetailPanel({ clinicTaxMode }: AgendaDetailPanelProps) {
     : null;
   const docColor = appt.doctor
     ? doctorColorFor(appt.doctor.id, doctorMeta?.color ?? null)
-    : "var(--brand)";
+    : COLOR_SIN_DOCTOR;
+  // ws1-t11 (D3) — un DOCTOR con una «Sin doctor»: la toma, marca la llegada y la inicia; no la edita,
+  // cancela ni marca no-asistió mientras no sea suya (el servidor le daría 403).
+  const sinDoctor = !appt.doctor?.id;
+  const doctorSinSuCita = esDoctorConCitaSinDoctor(userRole, appt);
   const statusColor = STATUS_COLOR[appt.status];
 
   const start = formatSlotTime(appt.startsAt, state.timezone);
@@ -255,6 +304,11 @@ export function AgendaDetailPanel({ clinicTaxMode }: AgendaDetailPanelProps) {
       cancelReason = answer.reason?.trim() || undefined;
     }
 
+    // ws1-t11 (D9) — «¿Quién lo atiende?» de una «Sin doctor» (al llegar, opcional; al iniciar la
+    // consulta, obligatorio) ANTES del cambio optimista. Cancelar = no se cambia nada.
+    const eleccion = target === "CANCELLED" ? {} : await estado.elegirDoctor(appt, target);
+    if (!eleccion) return false;
+
     const original: AgendaAppointmentDTO = appt;
     setPendingStatus(target);
     dispatch({ type: "OPTIMISTIC_STATUS", id: appt.id, status: target });
@@ -262,7 +316,7 @@ export function AgendaDetailPanel({ clinicTaxMode }: AgendaDetailPanelProps) {
     try {
       const updated =
         cancelReason === undefined
-          ? await estado.cambiar(appt, target)
+          ? await estado.cambiar(appt, target, eleccion)
           : await patchStatusWithReason(appt.id, target, cancelReason);
       if (!updated) {
         // Dijo «Cancelar» en el «¿Seguro?»: nada cambió.
@@ -318,10 +372,14 @@ export function AgendaDetailPanel({ clinicTaxMode }: AgendaDetailPanelProps) {
   // El filtro por ROL se queda del lado del servidor: el rol no baja por este
   // árbol de props (el panel solo recibe `permissions`), así que aquí se filtra
   // por estado + permisos y la API vuelve a validar rol con 403.
+  // ws1-t11 (D3) — sin lo que el servidor le rechazaría a un DOCTOR en una «Sin doctor» (confirmar,
+  // cancelar, no-asistió, reabrir). Afecta a los botones, al riel y al menú «Más».
   const validTargets = possibleTransitions(appt.status, {
     now: new Date(),
     appointmentStart: new Date(appt.startsAt),
-  });
+  }).filter((destino) =>
+    estadoPermitidoConSinDoctor({ role: userRole, userId, citaDoctorId: appt.doctor?.id ?? null, destino }),
+  );
   // Para citas terminales (CANCELLED/NO_SHOW), "SCHEDULED" técnicamente es
   // una transición válida (revertir el status). Pero la UX clínica dental
   // espera que "Reagendar" abra una nueva cita — la cita vieja queda
@@ -344,6 +402,13 @@ export function AgendaDetailPanel({ clinicTaxMode }: AgendaDetailPanelProps) {
           !(isTerminal && s === "SCHEDULED"),
       )
     : [];
+  // ws1-t11 — «Asignar doctor» (o «Tomar cita» para un DOCTOR) en una «Sin doctor» viva.
+  const puedeAsignarDoctor =
+    sinDoctor &&
+    permissions.canEdit &&
+    !isTerminal &&
+    (userRole !== "DOCTOR" || !!userId) &&
+    (userRole === "DOCTOR" || doctoresElegibles.length > 0);
   const dangerActions = validTargets.filter(
     (s) =>
       (s === "CANCELLED" && permissions.canCancel) ||
@@ -383,7 +448,8 @@ export function AgendaDetailPanel({ clinicTaxMode }: AgendaDetailPanelProps) {
       initialDoctorId: appt.doctor?.id,
       initialReason: appt.reason ?? undefined,
       initialSlot: {
-        doctorId: appt.doctor?.id,
+        // ws1-t11 — una «Sin doctor» se reagenda «Sin doctor» (`null`), no con el primero de la lista.
+        doctorId: appt.doctor?.id ?? null,
         resourceId: appt.resourceId,
       },
       openAgendaAfter: false,
@@ -464,21 +530,22 @@ export function AgendaDetailPanel({ clinicTaxMode }: AgendaDetailPanelProps) {
 
       <div className={styles.detailSection}>
         <div className={styles.detailSectionTitle}>{t("agenda.detailPanel.sectionInfo")}</div>
-        {appt.doctor && (
-          <div className={styles.detailRow}>
-            <span className={styles.detailRowLabel}>{t("agenda.detailPanel.labelDoctor")}</span>
-            <span className={styles.detailRowValue}>
-              <span
-                className={styles.detailDocAvatar}
-                style={{ background: docColor }}
-                aria-hidden
-              >
-                {doctorInitials(appt.doctor.shortName)}
-              </span>
-              <span style={{ marginLeft: 8 }}>{appt.doctor.shortName}</span>
+        {/* ws1-t11 — la fila sale también sin doctor: «Sin doctor» en gris (antes se escondía). */}
+        <div className={styles.detailRow}>
+          <span className={styles.detailRowLabel}>{t("agenda.detailPanel.labelDoctor")}</span>
+          <span className={styles.detailRowValue} data-sin-doctor={sinDoctor ? "" : undefined}>
+            <span
+              className={styles.detailDocAvatar}
+              style={{ background: docColor }}
+              aria-hidden
+            >
+              {appt.doctor ? doctorInitials(appt.doctor.shortName) : INICIALES_SIN_DOCTOR}
             </span>
-          </div>
-        )}
+            <span style={{ marginLeft: 8, color: sinDoctor ? "var(--text-3)" : undefined }}>
+              {appt.doctor ? appt.doctor.shortName : t("agenda.sinDoctor.nombre")}
+            </span>
+          </span>
+        </div>
         <div className={styles.detailRow}>
           <span className={styles.detailRowLabel}>{t("agenda.detailPanel.labelTreatment")}</span>
           <span className={styles.detailRowValue}>{appt.reason ?? t("agenda.detailPanel.consultDefault")}</span>
@@ -607,7 +674,23 @@ export function AgendaDetailPanel({ clinicTaxMode }: AgendaDetailPanelProps) {
         >
           <FileText size={12} aria-hidden /> {t("agenda.detailPanel.record")}
         </button>
-        {!isTerminal && permissions.canEdit && (
+        {puedeAsignarDoctor && (
+          <button
+            type="button"
+            className={styles.detailAction}
+            onClick={(e) => { e.stopPropagation(); void asignarDoctor(); }}
+            disabled={asignando || pendingStatus !== null}
+            data-asignar-doctor
+          >
+            <UserPlus size={12} aria-hidden />
+            {asignando
+              ? t("agenda.sinDoctor.asignar.guardando")
+              : userRole === "DOCTOR"
+                ? t("agenda.sinDoctor.asignar.tomar")
+                : t("agenda.sinDoctor.asignar.boton")}
+          </button>
+        )}
+        {!isTerminal && permissions.canEdit && !doctorSinSuCita && (
           <button
             type="button"
             className={styles.detailAction}
@@ -681,6 +764,7 @@ export function AgendaDetailPanel({ clinicTaxMode }: AgendaDetailPanelProps) {
       />
 
       {estado.dialogo}
+      {pedirDoctor.dialogo}
 
       {/* Cobro inline: reusa el modal de billing (que ya contiene el
           PaymentModal). La factura vinculada a la cita se resuelve vía

@@ -16,6 +16,7 @@ import {
   useDragOverlap,
   type AgendaColumnDescriptor,
 } from "@/app/dashboard/agenda/agenda-page-client";
+import { columnaDeDoctorDe, doctorDelHuecoDe } from "./columnas-dia";
 import styles from "./agenda.module.css";
 
 export function AgendaColumn({ column }: { column: AgendaColumnDescriptor }) {
@@ -24,6 +25,8 @@ export function AgendaColumn({ column }: { column: AgendaColumnDescriptor }) {
   const { open: openNewAppointment } = useNewAppointmentDialog();
   const ref = useRef<HTMLDivElement | null>(null);
 
+  // En la columna «Sin doctor» (ws1-t11) `doctorId` es `FILTRO_SIN_DOCTOR`: `resolveDropTarget`
+  // lo convierte en `null`, así que soltar ahí le quita el doctor a la cita.
   const droppableData: DroppableData =
     column.type === "doctor"
       ? {
@@ -72,7 +75,8 @@ export function AgendaColumn({ column }: { column: AgendaColumnDescriptor }) {
     );
     if (column.type === "unified") return sameDay;
     if (column.type === "doctor") {
-      return sameDay.filter((a) => a.doctor?.id === column.doctorId);
+      // ws1-t11 — la columna «Sin doctor» recoge las citas sin doctor (antes quedaban ocultas).
+      return sameDay.filter((a) => columnaDeDoctorDe(a) === column.doctorId);
     }
     return sameDay.filter((a) => a.resourceId === column.resourceId);
   }, [state.appointments, state.dayISO, state.timezone, column]);
@@ -134,7 +138,8 @@ export function AgendaColumn({ column }: { column: AgendaColumnDescriptor }) {
       openNewAppointment({
         initialSlot: {
           startsAt: startsAt.toISOString(),
-          doctorId: column.doctorId ?? undefined,
+          // ws1-t11 (D1): el hueco de la columna «Sin doctor» abre «Nueva cita» en «Sin doctor» (`null`).
+          doctorId: doctorDelHuecoDe({ doctorId: column.doctorId }),
           resourceId: column.resourceId,
         },
         openAgendaAfter: true,
@@ -169,6 +174,7 @@ export function AgendaColumn({ column }: { column: AgendaColumnDescriptor }) {
       onClick={handleClick}
       role="grid"
       aria-label={t("agenda.column.columnAriaLabel", { title: column.title })}
+      data-columna-sin-doctor={column.sinDoctor ? "" : undefined}
       style={{
         height: `calc(${slotsTotal} * var(--mf-agenda-slot-h))`,
       }}

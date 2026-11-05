@@ -12,7 +12,7 @@ import { netoDelPeriodo } from "@/lib/dinero/ingresos";
 import { ID_SIN_DOCTOR, NOMBRE_SIN_DOCTOR, idsConIngresoFueraDeLista, ingresoSinDoctor } from "@/lib/dinero/por-doctor";
 import { citasDelPeriodoWhere } from "@/lib/agenda/citas-del-periodo";
 import { avisoDeFacturasVencidas } from "@/lib/dinero/aviso-vencido";
-import { contarCitasPorDoctor, idsConCitasFueraDeLista } from "@/lib/agenda/citas-por-doctor";
+import { contarCitasPorDoctor, contarCitasSinDoctor, idsConCitasFueraDeLista } from "@/lib/agenda/citas-por-doctor";
 import { ATIENDE_WHERE } from "@/lib/agenda/roles-que-atienden";
 import { cargarOcupacionDelPeriodo } from "@/lib/agenda/ocupacion-del-periodo.server";
 import type { OcupacionDelPeriodo } from "@/lib/agenda/ocupacion-del-periodo";
@@ -481,14 +481,17 @@ async function buildTeamPerformance(
     };
   });
 
+  // La fila «Sin doctor»: lo cobrado que no es de nadie y (ws1-t11 · P2) las citas «Sin doctor»
+  // del periodo. Con las dos, las columnas de citas e ingresos suman lo de las tarjetas.
   const sinDoctor = ingresoSinDoctor(cobrado);
-  if (sinDoctor) {
+  const citasSinDoctor = contarCitasSinDoctor(grouped);
+  if (sinDoctor || citasSinDoctor.citas > 0) {
     rows.push({
       userId: ID_SIN_DOCTOR,
       doctorName: NOMBRE_SIN_DOCTOR,
-      appointments: 0,
-      completionPct: 0,
-      revenueMXN: sinDoctor.total,
+      appointments: citasSinDoctor.citas,
+      completionPct: citasSinDoctor.citas > 0 ? Math.round((citasSinDoctor.atendidas / citasSinDoctor.citas) * 100) : 0,
+      revenueMXN: sinDoctor?.total ?? 0,
       sinDoctor: true,
     });
   }

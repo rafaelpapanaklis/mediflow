@@ -39,7 +39,7 @@ import { useAgendaNueva } from "./contexto-agenda-nueva";
 import { useT } from "@/i18n/i18n-provider";
 import { useBloqueosAgenda } from "@/components/dashboard/bloqueos/usar-bloqueos-agenda";
 import { bandasDelDia, type BandaBloqueo } from "@/components/dashboard/bloqueos/fechas";
-import { aCitaVista, type CitaVista } from "@/lib/agenda-nueva/vista-modelo";
+import { aCitaVista, ID_SIN_DOCTOR, type CitaVista } from "@/lib/agenda-nueva/vista-modelo";
 import { diaEnTz } from "@/lib/agenda-nueva/geometria";
 import {
   notaDelDia,
@@ -120,7 +120,8 @@ export function VistaMes(props: PropsVistaMes) {
               startsAt: c.dto.startsAt,
               endsAt: c.dto.endsAt,
               status: c.estado,
-              doctorId: c.responsableId,
+              // ws1-t11 — las «Sin doctor» pintan su segmento gris («Sin doctor»).
+              doctorId: c.responsableId ?? ID_SIN_DOCTOR,
               resourceId: c.unidadId,
             })),
             schedules: state.schedules,

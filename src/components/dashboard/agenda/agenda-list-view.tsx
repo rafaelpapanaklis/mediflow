@@ -5,6 +5,7 @@ import { useAgenda } from "./agenda-provider";
 import { useT } from "@/i18n/i18n-provider";
 import { calendarDayISO, formatTimeInTz } from "@/lib/agenda/date-ranges";
 import { doctorColorFor, doctorInitials } from "@/lib/agenda/doctor-color";
+import { COLOR_SIN_DOCTOR, INICIALES_SIN_DOCTOR } from "@/lib/agenda/doctor-legend";
 import type { AgendaAppointmentDTO, AppointmentStatus } from "@/lib/agenda/types";
 import styles from "./agenda.module.css";
 
@@ -108,7 +109,7 @@ function ListRow({ appointment }: { appointment: AgendaAppointmentDTO }) {
     : null;
   const docColor = appointment.doctor
     ? doctorColorFor(appointment.doctor.id, doctorMeta?.color ?? null)
-    : "var(--brand)";
+    : COLOR_SIN_DOCTOR;
   const isSelected = state.selectedAppointmentId === appointment.id;
 
   return (
@@ -137,15 +138,12 @@ function ListRow({ appointment }: { appointment: AgendaAppointmentDTO }) {
       <div className={styles.listItemMid}>
         <div className={styles.listItemName}>{appointment.patient.name}</div>
         <div className={styles.listItemMeta}>
-          {appointment.doctor && (
-            <>
-              <span className={styles.listItemDocAvatar} aria-hidden>
-                {doctorInitials(appointment.doctor.shortName)}
-              </span>
-              <span>{appointment.doctor.shortName}</span>
-              <span>·</span>
-            </>
-          )}
+          {/* ws1-t11 — sin doctor se dice «Sin doctor» (antes la fila no decía de quién era). */}
+          <span className={styles.listItemDocAvatar} aria-hidden>
+            {appointment.doctor ? doctorInitials(appointment.doctor.shortName) : INICIALES_SIN_DOCTOR}
+          </span>
+          <span>{appointment.doctor ? appointment.doctor.shortName : t("agenda.sinDoctor.nombre")}</span>
+          <span>·</span>
           <span>{appointment.reason ?? t("agenda.listView.consultation")}</span>
         </div>
       </div>

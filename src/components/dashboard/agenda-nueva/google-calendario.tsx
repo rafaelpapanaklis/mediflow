@@ -26,6 +26,7 @@ import { CalendarClock, Layers, Loader2, RefreshCw, UserPlus, X } from "lucide-r
 import toast from "react-hot-toast";
 import { instrumentSans } from "@/fonts/menu";
 import { useLocale, useT } from "@/i18n/i18n-provider";
+import { OPCION_SIN_DOCTOR, doctorIdParaEnviar } from "@/components/dashboard/new-appointment/doctor-inicial";
 import { useAgenda } from "@/components/dashboard/agenda/agenda-provider";
 import { PatientSearchField } from "@/components/dashboard/new-appointment/patient-search-field";
 import { MotivoField } from "@/components/dashboard/new-appointment/motivo-field";
@@ -300,10 +301,13 @@ function PanelBloqueoGoogle({ bloqueoId, onCerrar }: { bloqueoId: string; onCerr
         const d = leerDetalle(raw);
         setDetalle(d);
         if (d?.doctorFijo && d.doctorId) setDoctorId(d.doctorId);
+        // ws1-t11 (D1) — un evento de toda la clínica abre en «Sin doctor» si la clínica puede agendar así.
+        else if (d && !d.doctorFijo && !d.doctorId && state.sinDoctorDisponible) setDoctorId(OPCION_SIN_DOCTOR);
       })
       .catch(() => { if (vivo) setDetalle(null); })
       .finally(() => { if (vivo) setCargando(false); });
     return () => { vivo = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bloqueoId, recargas]);
 
   const doctores = useMemo(() => state.doctors.filter((d) => d.activeInAgenda !== false), [state.doctors]);
@@ -322,6 +326,8 @@ function PanelBloqueoGoogle({ bloqueoId, onCerrar }: { bloqueoId: string; onCerr
     if (!paciente) return setError(t("agenda.google.faltaPaciente"));
     const doctor = detalle.doctorFijo && detalle.doctorId ? detalle.doctorId : doctorId;
     if (!doctor) return setError(t("agenda.google.faltaDoctor"));
+    // ws1-t11 — «Sin doctor» viaja como `null` explícito (el servidor lo acepta en un bloqueo de toda la clínica).
+    const doctorParaEnviar = doctorIdParaEnviar(doctor);
     if (!motivo.trim()) return setError(t("agenda.google.faltaProcedimiento"));
     setError(null);
     setGuardando(true);
@@ -332,7 +338,7 @@ function PanelBloqueoGoogle({ bloqueoId, onCerrar }: { bloqueoId: string; onCerr
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           patientId: paciente.id,
-          doctorId: doctor,
+          doctorId: doctorParaEnviar,
           startsAt: detalle.inicio,
           endsAt: detalle.fin,
           reason: motivo.trim(),
@@ -468,6 +474,9 @@ function PanelBloqueoGoogle({ bloqueoId, onCerrar }: { bloqueoId: string; onCerr
                       <span className={s.datoRotulo}>{t("agenda.google.doctor")}</span>
                       <select className={g.selector} value={doctorId} onChange={(e) => { setDoctorId(e.target.value); setError(null); }}>
                         <option value="">{t("agenda.google.elegirDoctor")}</option>
+                        {state.sinDoctorDisponible && !detalle.doctorId && (
+                          <option value={OPCION_SIN_DOCTOR}>{t("agenda.sinDoctor.nombre")}</option>
+                        )}
                         {doctores.map((d) => (
                           <option key={d.id} value={d.id}>{d.displayName}</option>
                         ))}

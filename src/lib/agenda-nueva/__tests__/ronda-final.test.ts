@@ -29,7 +29,7 @@ test("🔴→🟢 N-B: en la Semana con varios doctores la tarjeta lleva las ini
   assert.equal(inicialesDelResponsable("Sabina"), "SA");
   assert.equal(inicialesDelResponsable(""), "");
   assert.match(leer("components/dashboard/agenda-nueva/vista-semana.tsx"), /conResponsable=\{carriles\.length > 1\}/);
-  assert.match(leer("components/dashboard/agenda-nueva/tarjeta-cita.tsx"), /variante === "semana" && conResponsable && inicialesDelResponsable/);
+  assert.match(leer("components/dashboard/agenda-nueva/tarjeta-cita.tsx"), /variante === "semana" && conResponsable && (?:cita\.responsableId && )?inicialesDelResponsable/);
 });
 
 test("🔴→🟢 N-40: «Ortodoncia», «Limpieza dental» e «Implantes» toman el «Desde» de su familia del tarifario", async () => {

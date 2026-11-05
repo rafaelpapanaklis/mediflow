@@ -125,6 +125,10 @@ export function doctorVigente(
  *   · ninguna de las dos → el doctor de la factura (o `null`, «sin doctor»).
  * `caso` es `null` si la factura no es de un caso de ortodoncia.
  *
+ * ws1-t11 · fase 2 · P2: un control agendado «Sin doctor» cuya factura tampoco tiene doctor ya
+ * no se queda en «Sin doctor tratante»: como último recurso va a quien llevaba el caso el día
+ * del cobro (el tratante), que es quien responde por ese control.
+ *
  * `orto` (ws1-t2, auditoría de uso C-08, segunda vuelta): ¿es dinero de un
  * caso de ortodoncia? Lo es TODA factura ligada a un caso —también el cargo
  * de un control que nació de una cita—, igual que en el bloque «Ortodoncia»
@@ -138,7 +142,8 @@ export function doctorDeUnCobro(
   if (caso && !cobro.appointmentId) {
     return { doctorId: doctorVigente(caso.planId, cobro.paidAt, caso.doctorActual, caso.cambios), orto: true };
   }
-  return { doctorId: cobro.facturaDoctorId ?? cobro.citaDoctorId ?? null, orto: caso !== null };
+  const delCaso = caso ? doctorVigente(caso.planId, cobro.paidAt, caso.doctorActual, caso.cambios) : null;
+  return { doctorId: cobro.facturaDoctorId || cobro.citaDoctorId || delCaso || null, orto: caso !== null };
 }
 
 export interface ProduccionInput {

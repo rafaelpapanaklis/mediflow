@@ -31,8 +31,12 @@ import type { AgendaViewMode } from "@/lib/agenda/types";
 import { TREATMENT_KINDS, type DoctorColumnDTO, type ResourceDTO } from "@/lib/agenda/types";
 import {
   aResponsablesVista,
+  hayColumnaSinDoctor,
+  ID_SIN_DOCTOR,
+  responsableSinDoctor,
   type ResponsableVista,
 } from "@/lib/agenda-nueva/vista-modelo";
+import { useT } from "@/i18n/i18n-provider";
 
 export type VistaAgenda = "dia" | "semana" | "mes";
 export type PanelAbierto = null | "cita" | "huecos";
@@ -74,7 +78,7 @@ export interface AgendaNuevaValor {
   /** ¿Está todo marcado? Entonces el botón va en su pinta neutra. */
   todoMarcado: boolean;
 
-  /** ¿Esta cita pasa el filtro? */
+  /** ¿Esta cita pasa el filtro? `doctorId: null` = «Sin doctor» (se oculta desmarcando esa fila). */
   citaVisible: (doctorId: string | null, unidadId: string | null) => boolean;
 }
 
@@ -113,6 +117,7 @@ export function vistaInicialDesdeParametro(view: string | null | undefined): Vis
 
 export function AgendaNuevaProvider({ children }: { children: ReactNode }) {
   const { state, setViewMode } = useAgenda();
+  const t = useT();
   const searchParams = useSearchParams();
 
   const [vista, setVista] = useState<VistaAgenda>(() =>
@@ -195,8 +200,13 @@ export function AgendaNuevaProvider({ children }: { children: ReactNode }) {
       );
     }
 
-    return aResponsablesVista([...enAgenda, ...huerfanos]);
-  }, [state.doctors, state.appointments]);
+    // ws1-t11 (D2) — «Sin doctor» va primero (a la izquierda) y se oculta en el filtro como cualquier
+    // otro responsable. Sin el SQL y sin ninguna cita sin doctor, no sale: la agenda se ve como hoy.
+    const sinDoctor = hayColumnaSinDoctor(state.sinDoctorDisponible, state.appointments)
+      ? [responsableSinDoctor(t("agenda.sinDoctor.nombre"))]
+      : [];
+    return [...sinDoctor, ...aResponsablesVista([...enAgenda, ...huerfanos])];
+  }, [state.doctors, state.appointments, state.sinDoctorDisponible, t]);
 
   // Solo lugares donde se atiende: recepción, sala de espera, laboratorio y
   // radiografía se gestionan en su modal pero no son columnas de agenda.
@@ -254,7 +264,7 @@ export function AgendaNuevaProvider({ children }: { children: ReactNode }) {
 
   const citaVisible = useCallback(
     (doctorId: string | null, unidadId: string | null) => {
-      if (doctorId !== null && docsOcultos.has(doctorId)) return false;
+      if (docsOcultos.has(doctorId ?? ID_SIN_DOCTOR)) return false;
       // Una cita SIN unidad no se esconde al desmarcar unidades: si se colara
       // en el filtro de sillones, una clínica que no usa sillones se quedaría
       // con la agenda en blanco al tocar el desplegable.

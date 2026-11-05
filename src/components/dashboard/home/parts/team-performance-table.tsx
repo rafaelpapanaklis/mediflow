@@ -105,10 +105,11 @@ export function TeamPerformanceTable({ rows }: { rows: HomeAdminTeamRow[] }) {
                   fontVariantNumeric: "tabular-nums",
                 }}
               >
-                {r.sinDoctor ? "—" : r.appointments}
+                {/* ws1-t11: la fila «Sin doctor» ya trae sus citas (el total de la columna cuadra). */}
+                {r.sinDoctor && !r.appointments ? "—" : r.appointments}
               </td>
               <td style={{ textAlign: "right" }}>
-                {r.sinDoctor ? "—" : <CompletionCell pct={r.completionPct} />}
+                {r.sinDoctor && !r.appointments ? "—" : <CompletionCell pct={r.completionPct} />}
               </td>
               <td
                 style={{

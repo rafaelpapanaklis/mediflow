@@ -212,7 +212,7 @@ export function PayrollDocument({ clinicName, periodLabel, generatedAt, timezone
         <Text style={styles.subtitle}>
           Citas, ingresos generados, satisfacción de pacientes y tiempos promedio por doctor.
           Ingresos = lo cobrado en el período (por fecha de cobro), menos reembolsos, al doctor de cada factura; sin historia migrada.
-          El total es el ingreso del período: «Sin doctor» son cobros cuya factura y cita no tienen doctor.
+          El total es el ingreso del período: «Sin doctor» son las citas sin doctor asignado y los cobros cuya factura y cita no tienen doctor.
         </Text>
 
         <View style={styles.tableHeader} fixed>
@@ -229,11 +229,12 @@ export function PayrollDocument({ clinicName, periodLabel, generatedAt, timezone
         {rows.map((r, i) => (
           <View key={i} style={styles.tableRow} wrap={false}>
             <Text style={[styles.td, styles.cellName, r.sinDoctor ? styles.tdMuted : styles.tdBold]}>{r.name}</Text>
-            <Text style={[styles.tdMono, styles.cellAppts]}>{r.sinDoctor ? "—" : r.apptsTotal}</Text>
-            <Text style={[styles.tdMono, styles.cellCompl, styles.tdBold]}>{r.sinDoctor ? "—" : r.apptsCompleted}</Text>
-            <Text style={[styles.tdMono, styles.cellPerDay, styles.tdMuted]}>{r.sinDoctor ? "—" : r.apptsPerDay}</Text>
+            {/* ws1-t11 · P2: la fila «Sin doctor» también lleva las citas «Sin doctor» (el total ya las sumaba). */}
+            <Text style={[styles.tdMono, styles.cellAppts]}>{r.sinDoctor && r.apptsTotal === 0 ? "—" : r.apptsTotal}</Text>
+            <Text style={[styles.tdMono, styles.cellCompl, styles.tdBold]}>{r.sinDoctor && r.apptsTotal === 0 ? "—" : r.apptsCompleted}</Text>
+            <Text style={[styles.tdMono, styles.cellPerDay, styles.tdMuted]}>{r.sinDoctor && r.apptsTotal === 0 ? "—" : r.apptsPerDay}</Text>
             <Text style={[styles.tdMono, styles.cellNoShow, r.noShowRate > 10 ? styles.tdRed : styles.tdMuted]}>
-              {r.sinDoctor ? "—" : `${r.apptsNoShow} (${r.noShowRate}%)`}
+              {r.sinDoctor && r.apptsTotal === 0 ? "—" : `${r.apptsNoShow} (${r.noShowRate}%)`}
             </Text>
             <Text style={[styles.tdMono, styles.cellTime, styles.tdMuted]}>
               {r.avgConsultMin != null ? `${r.avgConsultMin}m` : "—"}

@@ -1689,6 +1689,34 @@
     }
   },
   "agenda": {
+    "sinDoctor": {
+      "nombre": "Sin doctor",
+      "campoProfesional": "Profesional",
+      "noDisponible": "Todavía no se pueden agendar citas sin doctor en esta clínica. Elige un doctor.",
+      "notaRejilla": "Sin doctor: se muestran los horarios de la clínica y del sillón elegido. Las citas sin doctor no se bloquean entre sí.",
+      "decidirDespues": "Sin doctor (decidir después)",
+      "eligeDoctor": "Elige un doctor",
+      "llegada": {
+        "titulo": "¿Quién lo atiende?",
+        "explicacion": "Puedes elegirlo ahora o dejarlo para cuando inicie la consulta.",
+        "confirmar": "Registrar llegada"
+      },
+      "iniciar": {
+        "titulo": "¿Quién atiende la consulta?",
+        "explicacion": "Para iniciar la consulta la cita necesita doctor: la nota, el cobro y los reportes quedan a su nombre.",
+        "confirmar": "Iniciar consulta"
+      },
+      "asignar": {
+        "titulo": "Asignar doctor",
+        "explicacion": "La cita pasa a ser de este doctor. Puedes cambiarlo después desde «Editar».",
+        "confirmar": "Asignar",
+        "boton": "Asignar doctor",
+        "tomar": "Tomar cita",
+        "guardando": "Guardando…",
+        "listo": "Doctor asignado.",
+        "error": "No se pudo asignar el doctor."
+      }
+    },
     "google": {
       "panelRotulo": "Evento de Google Calendar",
       "abrirAria": "Ver el evento de Google: {titulo}",

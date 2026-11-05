@@ -203,7 +203,8 @@ test("el padrón de la Agenda (columnas y Nueva cita) son los roles que atienden
   // ws1-t1 (F7): después de `initialDoctorId` caben más candidatos («Reagendar próxima»: última cita, tratante).
   assert.match(
     dialogo,
-    /doctorQueRecibeCitas\(\s*\[initialSlot\?\.doctorId, params\?\.initialDoctorId, \.\.\.\(params\?\.initialDoctorIds \?\? \[\]\)\],\s*boot\.doctors\.map\(\(d\) => d\.id\),?\s*\)/,
+    // ws1-t11 (D1): la misma regla, ahora con «Sin doctor» (`doctorInicialDeNuevaCita`, doctor-inicial.ts).
+    /doctorInicialDeNuevaCita\(\{\s*delHueco: initialSlot\?\.doctorId,\s*candidatos: \[params\?\.initialDoctorId, \.\.\.\(params\?\.initialDoctorIds \?\? \[\]\)\],\s*lista: boot\.doctors\.map\(\(d\) => d\.id\),/,
   );
   assert.doesNotMatch(dialogo, /setDoctorId\(params\.initialDoctorId\)/, "el id de fuera ya no se acepta a ciegas");
 });

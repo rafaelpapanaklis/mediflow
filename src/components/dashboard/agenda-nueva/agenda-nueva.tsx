@@ -61,6 +61,7 @@ import { ConParamsDeNuevaCita } from "@/components/dashboard/new-appointment/new
 import { useAgendarDelPlan } from "./agendar-del-plan";
 import { DetallesAlPasarProvider } from "./detalles-al-pasar";
 import s from "./agenda-nueva.module.css";
+import { QuienMiraProvider } from "@/components/dashboard/agenda/quien-mira";
 
 export interface AgendaNuevaProps {
   /**
@@ -71,6 +72,8 @@ export interface AgendaNuevaProps {
   clinicTaxMode: string | null;
   /** El rol de quien mira, para no ofrecer transiciones que su rol no permite. */
   userRole?: Role;
+  /** ws1-t11 — quien mira (para que un DOCTOR tome una cita «Sin doctor»). */
+  userId?: string;
   /** `?highlight=<id>`: la cita a la que mandan desde fuera. Se abre su panel. */
   highlightId?: string | null;
   /** La preferencia «Mostrar detalles al pasar el mouse», ya leída en la SSR. */
@@ -82,13 +85,17 @@ export function AgendaNueva(props: AgendaNuevaProps) {
     <AgendaNuevaProvider>
       {/* Decisión de Rafael (28-oct): la tarjeta de detalles al pasar el mouse sobre una cita. */}
       <DetallesAlPasarProvider inicial={props.detallesAlPasar}>
-        <Armazon {...props} />
+        {/* ws1-t11 — rol e id de quien mira, para que un DOCTOR no arrastre una «Sin doctor» (el servidor le
+            daría 403: solo puede tomarla desde el panel). */}
+        <QuienMiraProvider value={{ userRole: props.userRole, userId: props.userId }}>
+          <Armazon {...props} />
+        </QuienMiraProvider>
       </DetallesAlPasarProvider>
     </AgendaNuevaProvider>
   );
 }
 
-function Armazon({ clinicTaxMode, userRole, highlightId }: AgendaNuevaProps) {
+function Armazon({ clinicTaxMode, userRole, userId, highlightId }: AgendaNuevaProps) {
   const ag = useAgendaNueva();
   const { state, invalidateRangeCache } = useAgenda();
   const router = useRouter();
@@ -160,7 +167,7 @@ function Armazon({ clinicTaxMode, userRole, highlightId }: AgendaNuevaProps) {
           </ConParamsDeNuevaCita>
         </div>
 
-        {ag.panel === "cita" && <PanelCita clinicTaxMode={clinicTaxMode} userRole={userRole} />}
+        {ag.panel === "cita" && <PanelCita clinicTaxMode={clinicTaxMode} userRole={userRole} userId={userId} />}
         {ag.panel === "huecos" && (
           <ConParamsDeNuevaCita extra={delPlan.extra}>
             <PanelHuecos />

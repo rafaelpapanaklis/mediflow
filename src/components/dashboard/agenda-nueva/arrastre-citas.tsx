@@ -63,6 +63,7 @@ import { altoDeHueco, mensajeDeRechazo, rechazoIncierto } from "@/lib/agenda-nue
 import { ConfirmarMovimiento } from "./confirmar-movimiento";
 import { useHorariosFlexibles } from "./usar-agenda-flexible";
 import { comidaQuePisa } from "@/lib/horario-doctor/core";
+import { TEXTO_DOCTOR_EN_CONSULTA, esEstadoQueExigeDoctor } from "@/lib/agenda/sin-doctor";
 import {
   avisoDesdeAgenda,
   avisoDesdeRechazo,
@@ -167,7 +168,8 @@ export function ArrastreCitas({ children }: { children: ReactNode }) {
       bloqueos,
       pendiente.newStartsAt,
       pendiente.newEndsAt,
-      pendiente.newDoctorId ?? pendiente.original.doctor?.id ?? null,
+      // ws1-t11 — `newDoctorId` ya es el doctor de destino (el de la cita si no cambia); `null` = «Sin doctor».
+      pendiente.newDoctorId,
     );
     return b ? { doctorId: b.doctorId, doctorNombre: b.doctorNombre, reason: b.reason } : null;
   }, [pendiente, bloqueos]);
@@ -185,10 +187,11 @@ export function ArrastreCitas({ children }: { children: ReactNode }) {
     // a cada clic sin enseñar nada.
     if (avisoServidor) return avisoServidor;
     if (!flexEncendida) return null;
-    const doctorId = pendiente.newDoctorId ?? pendiente.original.doctor?.id ?? null;
+    const doctorId = pendiente.newDoctorId;
     // El choque, contando también las citas YA sobreagendadas (`findOverlap`
     // se las salta porque la constraint no las ve; aquí sí cuentan).
-    const encima = doctorId ? choquesEnPantalla(pendiente, doctorId, state.appointments) : [];
+    // ws1-t11 — también sin doctor: una «Sin doctor» sigue chocando por su sillón.
+    const encima = choquesEnPantalla(pendiente, doctorId, state.appointments);
     const choque = encima[0] ?? null;
     // La comida aunque además se salga del horario (revisión t8, A2): la
     // misma `comidaQuePisa` que el servidor.
@@ -288,6 +291,11 @@ export function ArrastreCitas({ children }: { children: ReactNode }) {
         return;
       }
       if (d.plan.unchanged) return;
+      // ws1-t11 — una cita en consulta no se queda sin doctor (el servidor la rechazaría): se dice aquí.
+      if (d.plan.newDoctorId === null && d.plan.original.doctor?.id && esEstadoQueExigeDoctor(String(d.plan.original.status))) {
+        toast.error(TEXTO_DOCTOR_EN_CONSULTA);
+        return;
+      }
       // WS1-T5 — con la bandera, el choque se pregunta en la ventana de mover.
       if (d.plan.overlap && !flexEncendida) {
         toast.error("Ahí ya hay otra cita del mismo doctor o de la misma unidad. La cita no se movió.");
@@ -339,7 +347,7 @@ export function ArrastreCitas({ children }: { children: ReactNode }) {
         !r.ok
           ? avisoDesdeRechazo(
               r.error,
-              { doctorId: plan.newDoctorId ?? plan.original.doctor?.id ?? null, resourceId: plan.newResourceId },
+              { doctorId: plan.newDoctorId, resourceId: plan.newResourceId },
               state.timezone,
             )
           : null;
@@ -448,7 +456,8 @@ export function ArrastreCitas({ children }: { children: ReactNode }) {
  */
 function choquesEnPantalla(
   plan: PlannedReschedule,
-  doctorId: string,
+  /** `null` = «Sin doctor»: no ocupa a ningún doctor, solo choca por el sillón. */
+  doctorId: string | null,
   citas: readonly AgendaAppointmentDTO[],
 ): AgendaAppointmentDTO[] {
   const desde = new Date(plan.newStartsAt).getTime();
@@ -460,7 +469,7 @@ function choquesEnPantalla(
       const ini = new Date(c.startsAt).getTime();
       const fin = c.endsAt ? new Date(c.endsAt).getTime() : ini;
       if (!(ini < hasta && fin > desde)) return false;
-      return c.doctor?.id === doctorId || (!!plan.newResourceId && c.resourceId === plan.newResourceId);
+      return (!!doctorId && c.doctor?.id === doctorId) || (!!plan.newResourceId && c.resourceId === plan.newResourceId);
     })
     // Mismo orden que el servidor: hora y, a la misma hora, id.
     .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime() || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));

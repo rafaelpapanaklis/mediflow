@@ -31,8 +31,11 @@ export function AgendaDoctorOptions({ emptyLabel }: { emptyLabel: string }) {
         state.appointments,
         state.filters.doctorIds,
         t("agenda.pageClient.professionalFallback"),
+        // ws1-t11 (D2) — «Sin doctor» como una opción más del filtro: el servidor entiende
+        // `FILTRO_SIN_DOCTOR` en `/api/agenda/range?doctorIds=`.
+        { nombreSinDoctor: t("agenda.sinDoctor.nombre"), ofrecerSinDoctor: state.sinDoctorDisponible === true },
       ),
-    [state.doctors, state.appointments, state.filters.doctorIds, t],
+    [state.doctors, state.appointments, state.filters.doctorIds, state.sinDoctorDisponible, t],
   );
 
   if (doctors.length === 0) {

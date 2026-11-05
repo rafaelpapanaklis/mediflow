@@ -37,6 +37,7 @@ import {
   Receipt,
   RotateCcw,
   SkipForward,
+  UserPlus,
   UserX,
   Wallet,
   X,
@@ -57,7 +58,8 @@ import { EnEstaCita } from "@/components/dashboard/plan-a-agenda/en-esta-cita";
 import { esCitaOrtoConHoja } from "@/lib/orthodontics/agenda-constants";
 import { ocultarAnticipoPorMensualidad } from "@/lib/orthodontics/anticipo-control";
 import { paramsDeReagendar, type DatosDeReagendar } from "@/components/dashboard/plan-a-agenda/agendar-plan-datos";
-import { patchAppointmentStatus } from "@/lib/agenda/mutations";
+import { patchAppointmentStatus, rescheduleAppointment } from "@/lib/agenda/mutations";
+import { preguntaAntesDelEstado, usePedirDoctor, type DoctorElegible } from "@/components/dashboard/agenda/elegir-doctor-cita";
 import { enviarConAvisoDeSobreagenda, type AvisoSobreagenda } from "@/lib/agenda/agenda-flexible";
 import { ConfirmarSobreagenda } from "./confirmar-sobreagenda";
 import { possibleTransitions } from "@/lib/agenda/transitions";
@@ -188,9 +190,11 @@ export interface PanelCitaProps {
   clinicTaxMode: string | null;
   /** El rol de quien mira; sin él no se sabe qué transiciones le tocan. */
   userRole?: Role;
+  /** ws1-t11 — quien mira: un DOCTOR «toma» una cita «Sin doctor» asignándosela a sí mismo. */
+  userId?: string;
 }
 
-export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
+export function PanelCita({ clinicTaxMode, userRole, userId }: PanelCitaProps) {
   const t = useT();
   // ws1-t2 (9a): la línea de ayuda bajo «Marcar llegada», «Pasar al sillón» y «Pasar a consulta».
   const ayudaDelPaso = useAyudaDelPaso();
@@ -205,6 +209,9 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
   // H15 (ws1-t4) y C-86 (ws1-t1): cancelar pregunta qué hacer con el dinero pagado y si se avisa al
   // paciente — el MISMO diálogo que la ficha y «Editar cita» del expediente.
   const cancelarCita = useCancelarCita();
+  // ws1-t11 (D9) — «¿Quién lo atiende?» al llegar, y el doctor obligatorio al iniciar la consulta.
+  const pedirDoctor = usePedirDoctor();
+  const [asignando, setAsignando] = useState(false);
 
   const [enVuelo, setEnVuelo] = useState<AppointmentStatus | null>(null);
   const [enviandoWa, setEnviandoWa] = useState(false);
@@ -231,6 +238,12 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
     [state.appointments, ag.citaAbiertaId],
   );
 
+  /** ws1-t11 — a quién se le puede dar la cita: quien recibe citas (las opciones de «Nueva cita»). */
+  const doctoresElegibles = useMemo<DoctorElegible[]>(
+    () => state.doctors.filter((d) => d.activeInAgenda !== false).map((d) => ({ id: d.id, nombre: d.displayName })),
+    [state.doctors],
+  );
+
   const cita = useMemo<CitaVista | null>(
     () =>
       dto
@@ -247,6 +260,8 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
   /** La siguiente cita del mismo responsable ese día — la tarjeta gris del pie. */
   const siguiente = useMemo(() => {
     if (!dto || !cita) return null;
+    // ws1-t11 — sin doctor no hay «siguiente con…»: emparejaría con cualquier otra «Sin doctor».
+    if (!dto.doctor?.id) return null;
     const finMs = dto.endsAt ? new Date(dto.endsAt).getTime() : new Date(dto.startsAt).getTime();
     const mismas = state.appointments
       .filter(
@@ -301,6 +316,18 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
         if (!respuesta.confirmed) return false;
       }
 
+      // ws1-t11 (D9) — una cita «Sin doctor»: al llegar se pregunta quién lo atiende (opcional) y al
+      // iniciar la consulta es obligatorio (a un DOCTOR no: el servidor se la asigna). Cancelar = nada cambia.
+      let doctorElegido: { doctorId?: string | null } | undefined;
+      const pregunta = esCancelar
+        ? null
+        : preguntaAntesDelEstado({ destino, citaDoctorId: dto.doctor?.id ?? null, role: userRole });
+      if (pregunta) {
+        const r = await pedirDoctor.pedir({ modo: pregunta, paciente: cita?.nombrePaciente ?? null, doctores: doctoresElegibles });
+        if (!r) return false;
+        if (r.doctorId) doctorElegido = { doctorId: r.doctorId };
+      }
+
       const original: AgendaAppointmentDTO = dto;
       setEnVuelo(destino);
       dispatch({ type: "OPTIMISTIC_STATUS", id: dto.id, status: destino });
@@ -309,10 +336,12 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
         const actualizada: AgendaAppointmentDTO | null = respuesta
           ? (await cancelarCitaEnServidor(dto.id, respuesta)).appointment
           : await enviarConAvisoDeSobreagenda({
-              enviar: (confirmacion) => patchAppointmentStatus(dto.id, destino, confirmacion),
+              enviar: (confirmacion) => patchAppointmentStatus(dto.id, destino, confirmacion, doctorElegido),
               preguntar: (aviso) =>
                 new Promise<boolean>((responder) => setAvisoReabrir({ aviso, responder })),
-              intento: { doctorId: dto.doctor?.id ?? null, resourceId: dto.resourceId },
+              // ws1-t11 (P1 v2) — al llegar con un doctor elegido que ya tiene otra cita, el «¿Seguro?» habla de
+              // ESE doctor (no del sillón): el 409 `sobreagendable` se confirma y la cita queda como sobreturno.
+              intento: { doctorId: doctorElegido?.doctorId ?? dto.doctor?.id ?? null, resourceId: dto.resourceId },
               timeZone: state.timezone,
             });
         if (!actualizada) {
@@ -344,8 +373,40 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
         setEnVuelo(null);
       }
     },
-    [dto, permissions, cancelarCita, dispatch, invalidateRangeCache, router, state.timezone],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [dto, permissions, cancelarCita, dispatch, invalidateRangeCache, router, state.timezone, userRole, pedirDoctor.pedir, doctoresElegibles],
   );
+
+  /**
+   * ws1-t11 — ponerle doctor a una «Sin doctor» sin cambiar nada más (PATCH con solo `doctorId`).
+   * Un DOCTOR solo se la puede dar a sí mismo («Tomar cita»); los demás eligen.
+   */
+  const asignarDoctor = useCallback(async () => {
+    if (!dto || dto.doctor?.id) return;
+    let doctorId: string | null = null;
+    if (userRole === "DOCTOR") {
+      doctorId = userId ?? null;
+    } else {
+      const r = await pedirDoctor.pedir({ modo: "asignar", paciente: dto.patient?.name ?? null, doctores: doctoresElegibles });
+      doctorId = r?.doctorId ?? null;
+    }
+    if (!doctorId) return;
+    setAsignando(true);
+    try {
+      const { appointment } = await rescheduleAppointment(dto.id, { doctorId });
+      startTransition(() => {
+        dispatch({ type: "REPLACE_APPOINTMENT", appointment });
+      });
+      invalidateRangeCache();
+      toast.success(t("agenda.sinDoctor.asignar.listo"));
+    } catch (err) {
+      const e = err as { reason?: string; error?: string; message?: string };
+      toast.error(e?.reason ?? mensajeDeError(err, t, { porDefecto: t("agenda.sinDoctor.asignar.error") }));
+    } finally {
+      setAsignando(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dto, userRole, userId, pedirDoctor.pedir, doctoresElegibles, dispatch, invalidateRangeCache, t]);
 
   const enviarWhatsapp = useCallback(async () => {
     if (!dto) return;
@@ -406,6 +467,17 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
   if (!cita || !dto) return null;
 
   const permitida = (e: AppointmentStatus) => transiciones.includes(e);
+  // ws1-t11 (D3) — un DOCTOR con una «Sin doctor»: puede tomarla, marcar la llegada e iniciarla; no
+  // editarla, cancelarla ni marcarla no-asistió mientras no sea suya (el servidor lo rechazaría).
+  const sinDoctor = !dto.doctor?.id;
+  const doctorSinSuCita = sinDoctor && userRole === "DOCTOR";
+  const puedeAsignarDoctor =
+    sinDoctor &&
+    permissions.canEdit &&
+    cita.estado !== "CANCELLED" &&
+    cita.estado !== "NO_SHOW" &&
+    (userRole !== "DOCTOR" || !!userId) &&
+    (userRole === "DOCTOR" || doctoresElegibles.length > 0);
 
   // El siguiente paso: el primero de la lista de preferencia que ESTE rol
   // pueda dar. Los demás que también pueda, abajo como secundarios.
@@ -692,7 +764,24 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
                 vivas y el paciente recibía los recordatorios de las dos. Igual
                 que la agenda de siempre: «Editar» en las vivas, «Reagendar»
                 solo en canceladas y no asistidas. */}
-            {!terminal && permissions.canEdit && (
+            {/* ws1-t11 (D3) — «Asignar doctor» en una «Sin doctor»; un DOCTOR la «toma» (se la asigna a sí mismo). */}
+            {puedeAsignarDoctor && (
+              <button
+                type="button"
+                className={s.accionSecundaria}
+                onClick={() => void asignarDoctor()}
+                disabled={asignando || enVuelo !== null}
+                data-asignar-doctor
+              >
+                <UserPlus size={18} strokeWidth={2} />
+                {asignando
+                  ? t("agenda.sinDoctor.asignar.guardando")
+                  : userRole === "DOCTOR"
+                    ? t("agenda.sinDoctor.asignar.tomar")
+                    : t("agenda.sinDoctor.asignar.boton")}
+              </button>
+            )}
+            {!terminal && permissions.canEdit && !doctorSinSuCita && (
               <button type="button" className={s.accionSecundaria} onClick={() => setEditando(true)}>
                 <Pencil size={18} strokeWidth={2} />
                 Editar
@@ -716,7 +805,8 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
                       : undefined,
                     initialDoctorId: dto.doctor?.id,
                     initialReason: dto.reason ?? undefined,
-                    initialSlot: { doctorId: dto.doctor?.id, resourceId: dto.resourceId },
+                    // ws1-t11 — una «Sin doctor» se reagenda «Sin doctor» (`null`), no con el primero de la lista.
+                    initialSlot: { doctorId: dto.doctor?.id ?? null, resourceId: dto.resourceId },
                     openAgendaAfter: false,
                     ...(delPlan ?? {}),
                   });
@@ -727,7 +817,7 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
               </button>
             )}
 
-            {permitida("CANCELLED") && permissions.canCancel && (
+            {permitida("CANCELLED") && permissions.canCancel && !doctorSinSuCita && (
               <button
                 type="button"
                 className={`${s.accionSecundaria} ${s.accionCancelar}`}
@@ -773,7 +863,7 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
             {/* Contextual: no asistió (antes de empezar) o marcar salida
                 (después de terminar). El diseño solo tiene dos botones aquí,
                 pero dejarlos fuera sería QUITAR funcionalidad de la agenda. */}
-            {permitida("NO_SHOW") && permissions.canEdit && (
+            {permitida("NO_SHOW") && permissions.canEdit && !doctorSinSuCita && (
               <button
                 type="button"
                 className={s.accionSecundaria}
@@ -823,6 +913,8 @@ export function PanelCita({ clinicTaxMode, userRole }: PanelCitaProps) {
           )}
         </div>
       </aside>
+
+      {pedirDoctor.dialogo}
 
       <AgendaEditAppointmentModal
         appt={editando ? dto : null}

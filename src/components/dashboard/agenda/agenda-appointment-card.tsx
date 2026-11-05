@@ -9,6 +9,8 @@ import { CSS } from "@dnd-kit/utilities";
 import { useAgenda } from "./agenda-provider";
 import { AgendaStatusPopover } from "./agenda-status-popover";
 import { useEstadoConAviso } from "./use-estado-con-aviso";
+import { esDoctorConCitaSinDoctor, estadoPermitidoConSinDoctor, useQuienMira } from "./quien-mira";
+import { COLOR_SIN_DOCTOR, INICIALES_SIN_DOCTOR } from "@/lib/agenda/doctor-legend";
 import { timeToSlotIndex } from "@/lib/agenda/time-utils";
 import { formatTimeInTz } from "@/lib/agenda/date-ranges";
 import { doctorColorFor, doctorInitials, readableTextOn } from "@/lib/agenda/doctor-color";
@@ -72,6 +74,9 @@ export function AgendaAppointmentCard({
   const [pendingNext, setPendingNext] = useState(false);
   // WS1-T5 (revisión t8, N3-A3): «Re-abrir» con el hueco ocupado pregunta.
   const estado = useEstadoConAviso();
+  // ws1-t11 (D3) — un DOCTOR con una «Sin doctor»: no la mueve (el servidor le daría 403); la toma desde el panel.
+  const { userRole, userId } = useQuienMira();
+  const doctorSinSuCita = esDoctorConCitaSinDoctor(userRole, appointment);
 
   const config = { timezone, slotMinutes, dayStart, dayEnd: 24 };
   const rawSlot = timeToSlotIndex(appointment.startsAt, dayISO, config);
@@ -80,6 +85,7 @@ export function AgendaAppointmentCard({
   const dragDisabled =
     !draggable ||
     !permissions.canEdit ||
+    doctorSinSuCita ||
     appointment.status === "CANCELLED" ||
     appointment.status === "COMPLETED" ||
     appointment.status === "NO_SHOW";
@@ -161,9 +167,10 @@ export function AgendaAppointmentCard({
   const doctorMeta = appointment.doctor
     ? state.doctors.find((d) => d.id === appointment.doctor!.id) ?? null
     : null;
+  // ws1-t11 — sin doctor, gris neutro del tema (antes el violeta de marca, que parecía un doctor más).
   const docColor = appointment.doctor
     ? doctorColorFor(appointment.doctor.id, doctorMeta?.color ?? null)
-    : "var(--brand)";
+    : COLOR_SIN_DOCTOR;
   const statusColor = STATUS_COLOR[appointment.status];
 
   const isSelected = state.selectedAppointmentId === appointment.id;
@@ -178,9 +185,20 @@ export function AgendaAppointmentCard({
   // pone CONFIRMED). Para citas validadas, usa el flujo normal del pipeline.
   const needsValidation =
     appointment.requiresValidation && appointment.status === "SCHEDULED";
-  const nextStep = needsValidation
+  const pasoLogico = needsValidation
     ? { status: "CONFIRMED" as AppointmentStatus, label: t("agenda.apptCard.approve") }
     : nextLogicalStatus(appointment.status);
+  // ws1-t11 — a un DOCTOR no se le ofrece el paso que el servidor le rechazaría en una «Sin doctor» (p. ej. confirmar).
+  const nextStep =
+    pasoLogico &&
+    estadoPermitidoConSinDoctor({
+      role: userRole,
+      userId,
+      citaDoctorId: appointment.doctor?.id ?? null,
+      destino: pasoLogico.status,
+    })
+      ? pasoLogico
+      : null;
 
   async function advanceStatus() {
     if (!nextStep || pendingNext) return;
@@ -205,9 +223,16 @@ export function AgendaAppointmentCard({
       return;
     }
 
+    // ws1-t11 (D9) — «¿Quién lo atiende?» ANTES del cambio optimista: cancelar = nada cambió.
+    const eleccion = await estado.elegirDoctor(appointment, nextStep.status);
+    if (!eleccion) {
+      setPendingNext(false);
+      return;
+    }
+
     dispatch({ type: "OPTIMISTIC_STATUS", id: appointment.id, status: nextStep.status });
     try {
-      const updated = await estado.cambiar(appointment, nextStep.status);
+      const updated = await estado.cambiar(appointment, nextStep.status, eleccion);
       if (!updated) {
         // Dijo «Cancelar» en el «¿Seguro?»: nada cambió.
         dispatch({ type: "ROLLBACK_STATUS", original });
@@ -238,9 +263,10 @@ export function AgendaAppointmentCard({
     .filter(Boolean)
     .join(" ");
 
+  // ws1-t11 — la «Sin doctor» lleva su chip gris con «—» (antes no llevaba chip y no se sabía de quién era).
   const initials = appointment.doctor
     ? doctorInitials(appointment.doctor.shortName ?? "")
-    : null;
+    : INICIALES_SIN_DOCTOR;
 
   const treatment = appointment.reason ?? t("agenda.apptCard.consultationFallback");
 
@@ -336,7 +362,11 @@ export function AgendaAppointmentCard({
       )}
       <div className={styles.apptRow1}>
         {initials && (
-          <span className={styles.apptDocAvatar} aria-hidden>
+          <span
+            className={styles.apptDocAvatar}
+            aria-hidden
+            title={appointment.doctor ? undefined : t("agenda.sinDoctor.nombre")}
+          >
             {initials}
           </span>
         )}

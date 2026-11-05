@@ -228,7 +228,8 @@ export function TarjetaCita({
         {cita.notaAnticipo && <Wallet size={11} strokeWidth={2} className={s.tarjetaNotaIcono} aria-hidden />}
         {/* ws1-t1 (C-96): en tarjeta angosta la hora baja aquí (CSS: `.tarjetaHoraEstrecha`). */}
         {variante === "dia" && !cita.notaAnticipo && <span className={s.tarjetaHoraEstrecha}>{cita.horaInicio} · </span>}
-        {variante === "semana" && conResponsable && inicialesDelResponsable(cita.responsableNombre) && (
+        {/* ws1-t11 — «Sin doctor» no lleva iniciales («SD» se leía como un doctor más). */}
+        {variante === "semana" && conResponsable && cita.responsableId && inicialesDelResponsable(cita.responsableNombre) && (
           <abbr className={s.tarjetaResponsable} title={cita.responsableNombre}>
             {inicialesDelResponsable(cita.responsableNombre)} ·{" "}
           </abbr>

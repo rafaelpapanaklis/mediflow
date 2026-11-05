@@ -61,11 +61,20 @@ export async function patchAppointmentStatus(
   status: AppointmentStatus,
   /** WS1-T5 (revisión t8, N-A1) — reabrir sobreagendada tras el «¿Seguro?». */
   sobreagenda?: CamposDeSobreagenda,
+  /**
+   * ws1-t11 — «¿Quién lo atiende?» de una cita «Sin doctor» (al llegar, opcional; al iniciar la
+   * consulta, obligatorio si quien la inicia no es DOCTOR). Ausente = el cuerpo de siempre.
+   */
+  extra?: { doctorId?: string | null },
 ): Promise<AgendaAppointmentDTO> {
   const res = await fetch(`/api/appointments/${id}/status`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ status, ...(sobreagenda ?? {}) }),
+    body: JSON.stringify({
+      status,
+      ...(sobreagenda ?? {}),
+      ...(extra?.doctorId !== undefined ? { doctorId: extra.doctorId } : {}),
+    }),
   });
   const body = await jsonOrThrow<{ appointment: AgendaAppointmentDTO; whatsapp?: ResultadoAvisoWhatsApp }>(res);
   // Si tocaba avisar al paciente (cancelación con el aviso encendido), se dice
@@ -109,7 +118,8 @@ export async function batchValidateAppointments(
 export interface RescheduleAppointmentInput {
   startsAt?: string;
   endsAt?: string;
-  doctorId?: string;
+  /** `null` = quitarle el doctor («Sin doctor», ws1-t11). */
+  doctorId?: string | null;
   resourceId?: string | null;
   reason?: string | null;
   overrideReason?: string | null;

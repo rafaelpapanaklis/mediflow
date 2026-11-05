@@ -1,4 +1,5 @@
 import { doctorColorFor, doctorInitials, readableTextOn } from "./doctor-color";
+import { FILTRO_SIN_DOCTOR } from "./sin-doctor";
 import type {
   AgendaAppointmentDTO,
   AgendaColumnMode,
@@ -32,6 +33,14 @@ export const LEGEND_CHIP_GAP_PX = 4;
  */
 export const LEGEND_MIN_DOCTORS = 2;
 
+/**
+ * ws1-t11 — el color de la cita «Sin doctor» en la agenda de siempre (tarjeta, fila de la lista,
+ * cabecera de su columna, panel y leyenda): gris neutro con el token del tema, nunca un hex del
+ * hash (pintaría a un doctor que no existe). El chip de iniciales lleva «—».
+ */
+export const COLOR_SIN_DOCTOR = "var(--text-3)";
+export const INICIALES_SIN_DOCTOR = "—";
+
 export interface LegendDoctor {
   id: string;
   /** `shortName` — el mismo texto del que la card saca las iniciales. */
@@ -43,6 +52,8 @@ export interface LegendDoctor {
   /** Tinta legible encima de `color` (negro o blanco por luminancia). */
   ink: string;
   initials: string;
+  /** ws1-t11 — la entrada «Sin doctor» (id = `FILTRO_SIN_DOCTOR`, el valor que entiende el filtro). */
+  sinDoctor?: boolean;
   /** Tiene ≥1 cita en el rango que la vista trae cargado. */
   present: boolean;
   /** Está en `filters.doctorIds` (el filtro que ya existía). */
@@ -92,24 +103,66 @@ function buildLegendDoctor(
  * El orden es el del padrón, y los huérfanos al final en el orden en que
  * aparecen en las citas. Determinista.
  */
+export interface OpcionesSinDoctor {
+  /** El texto de la entrada (i18n `agenda.sinDoctor.nombre`). */
+  nombreSinDoctor?: string;
+  /**
+   * ¿Se ofrece aunque no haya ninguna cita sin doctor cargada? Sí en el FILTRO cuando la clínica
+   * puede agendar «Sin doctor» (`state.sinDoctorDisponible`): con el filtro puesto en otro doctor
+   * esas citas no llegan, y sin la opción no habría cómo volver a pedirlas. La tira de colores no
+   * lo pasa: ahí solo sale si hay alguna (o si está filtrada).
+   */
+  ofrecerSinDoctor?: boolean;
+}
+
+/**
+ * ws1-t11 — «Sin doctor» como un responsable más (decisión D2 del plan): va PRIMERO (a la
+ * izquierda, como su columna) y se filtra con el mismo `filters.doctorIds`, con el valor
+ * `FILTRO_SIN_DOCTOR` que `/api/agenda/range` ya entiende. Sale si hay alguna cita sin doctor
+ * en lo cargado (todo color pintado necesita entrada), si está seleccionada en el filtro (el
+ * contador y la lista no se contradicen) o si el filtro la ofrece (`ofrecerSinDoctor`). Sin nada
+ * de eso, la lista es la de siempre.
+ */
 export function legendDoctors(
   doctors: DoctorColumnDTO[],
   appointments: AgendaAppointmentDTO[],
   selectedIds: string[],
   fallbackName: string,
+  opciones: OpcionesSinDoctor = {},
 ): LegendDoctor[] {
   const selected = new Set(selectedIds);
   const present = new Set<string>();
   const nameFromAppt = new Map<string, string>();
+  let haySinDoctor = false;
   for (const a of appointments) {
     const d = a.doctor;
-    if (!d?.id) continue;
+    if (!d?.id) {
+      haySinDoctor = true;
+      continue;
+    }
     present.add(d.id);
     if (!nameFromAppt.has(d.id) && d.shortName) nameFromAppt.set(d.id, d.shortName);
   }
 
   const out: LegendDoctor[] = [];
-  const seen = new Set<string>();
+  // El id virtual nunca se cuela como «Profesional» con un color del hash (bucle de huérfanos).
+  const seen = new Set<string>([FILTRO_SIN_DOCTOR]);
+
+  const sinDoctorSeleccionado = selected.has(FILTRO_SIN_DOCTOR);
+  if (haySinDoctor || sinDoctorSeleccionado || opciones.ofrecerSinDoctor === true) {
+    const nombre = opciones.nombreSinDoctor || "Sin doctor";
+    out.push({
+      id: FILTRO_SIN_DOCTOR,
+      name: nombre,
+      fullName: nombre,
+      color: COLOR_SIN_DOCTOR,
+      ink: readableTextOn(COLOR_SIN_DOCTOR),
+      initials: INICIALES_SIN_DOCTOR,
+      sinDoctor: true,
+      present: haySinDoctor,
+      selected: sinDoctorSeleccionado,
+    });
+  }
 
   for (const d of doctors) {
     if (!d.activeInAgenda && !present.has(d.id) && !selected.has(d.id)) continue;

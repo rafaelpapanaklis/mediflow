@@ -1689,6 +1689,34 @@
     }
   },
   "agenda": {
+    "sinDoctor": {
+      "nombre": "No doctor",
+      "campoProfesional": "Professional",
+      "noDisponible": "Appointments without a doctor are not available in this clinic yet. Choose a doctor.",
+      "notaRejilla": "No doctor: the clinic's hours and the selected chair are shown. Appointments without a doctor don't block each other.",
+      "decidirDespues": "No doctor (decide later)",
+      "eligeDoctor": "Choose a doctor",
+      "llegada": {
+        "titulo": "Who will see the patient?",
+        "explicacion": "You can choose now or leave it for when the consultation starts.",
+        "confirmar": "Check in"
+      },
+      "iniciar": {
+        "titulo": "Who is seeing this patient?",
+        "explicacion": "To start the consultation the appointment needs a doctor: the note, the charge and the reports go under their name.",
+        "confirmar": "Start consultation"
+      },
+      "asignar": {
+        "titulo": "Assign doctor",
+        "explicacion": "The appointment becomes this doctor's. You can change it later from «Edit».",
+        "confirmar": "Assign",
+        "boton": "Assign doctor",
+        "tomar": "Take appointment",
+        "guardando": "Saving…",
+        "listo": "Doctor assigned.",
+        "error": "Could not assign the doctor."
+      }
+    },
     "google": {
       "panelRotulo": "Google Calendar event",
       "abrirAria": "View Google event: {titulo}",

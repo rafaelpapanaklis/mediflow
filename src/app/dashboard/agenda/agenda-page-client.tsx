@@ -48,6 +48,13 @@ import {
   planReschedule,
 } from "@/lib/agenda/reschedule-flow";
 import { bloqueoQueTapa } from "@/lib/agenda-bloqueos/core";
+import { FILTRO_SIN_DOCTOR, TEXTO_DOCTOR_EN_CONSULTA, esEstadoQueExigeDoctor } from "@/lib/agenda/sin-doctor";
+import {
+  columnasPorDoctor,
+  occupancyOf,
+  type AgendaColumnDescriptor,
+} from "@/components/dashboard/agenda/columnas-dia";
+import { QuienMiraProvider } from "@/components/dashboard/agenda/quien-mira";
 import { useBloqueosAgenda } from "@/components/dashboard/bloqueos/usar-bloqueos-agenda";
 import {
   RESOURCE_KIND_LABELS,
@@ -82,6 +89,8 @@ interface Props {
    * botón que el servidor rechazará. El servidor revalida igual.
    */
   userRole?: Role;
+  /** ws1-t11 — el id de quien mira: un DOCTOR «toma» una cita «Sin doctor» asignándosela a sí mismo. */
+  userId?: string;
   /** «Mostrar detalles al pasar el mouse» de quien mira, leído en la SSR (sin pedido extra al abrir). */
   detallesAlPasar?: boolean;
 }
@@ -103,11 +112,17 @@ export function AgendaPageClient(props: Props) {
         <AgendaNueva
           clinicTaxMode={props.clinicTaxMode}
           userRole={props.userRole}
+          userId={props.userId}
           highlightId={props.highlightId}
           detallesAlPasar={props.detallesAlPasar}
         />
       ) : (
-        <AgendaShell highlightId={props.highlightId} clinicTaxMode={props.clinicTaxMode} />
+        <AgendaShell
+          highlightId={props.highlightId}
+          clinicTaxMode={props.clinicTaxMode}
+          userRole={props.userRole}
+          userId={props.userId}
+        />
       )}
     </AgendaProvider>
   );
@@ -288,8 +303,20 @@ const AGX_CSS = `
 }
 `;
 
-function AgendaShell({ highlightId, clinicTaxMode }: { highlightId: string | null; clinicTaxMode: string | null }) {
+function AgendaShell({
+  highlightId,
+  clinicTaxMode,
+  userRole,
+  userId,
+}: {
+  highlightId: string | null;
+  clinicTaxMode: string | null;
+  /** ws1-t11 — quién mira: un DOCTOR con una cita «Sin doctor» solo puede tomarla, marcar llegada e iniciarla. */
+  userRole?: Role;
+  userId?: string;
+}) {
   const { state, dispatch, permissions, setDay, invalidateRangeCache, slotHpx, viewportRef } = useAgenda();
+  const quienMira = useMemo(() => ({ userRole, userId }), [userRole, userId]);
   const router = useRouter();
   const t = useT();
   const { open: openNewAppointment } = useNewAppointmentDialog();
@@ -384,11 +411,13 @@ function AgendaShell({ highlightId, clinicTaxMode }: { highlightId: string | nul
         const slotIdx = Math.max(0, Math.min(slotsTotal - 1, Math.floor(yInColumn / slotHpx)));
 
         let toDayISO = state.dayISO;
-        let doctorId: string | undefined = dragData.preferredDoctorId ?? undefined;
+        // `null` = la soltó en la columna «Sin doctor» (ws1-t11): abre en «Sin doctor» aunque
+        // tuviera doctor preferido. `undefined` = sin preferencia (también «Sin doctor», D1).
+        let doctorId: string | null | undefined = dragData.preferredDoctorId ?? undefined;
         let resourceId: string | null | undefined;
 
         if (target.kind === "doctor-col") {
-          doctorId = target.doctorId;
+          doctorId = target.doctorId === FILTRO_SIN_DOCTOR ? null : target.doctorId;
         } else if (target.kind === "resource-col") {
           resourceId = target.resourceId;
         } else if (target.kind === "day-col") {
@@ -405,7 +434,7 @@ function AgendaShell({ highlightId, clinicTaxMode }: { highlightId: string | nul
         openNewAppointment({
           initialPatient: dragData.patient,
           initialReason: dragData.reason ?? undefined,
-          initialDoctorId: doctorId,
+          initialDoctorId: doctorId ?? undefined,
           initialSlot: {
             startsAt: startsAt.toISOString(),
             doctorId,
@@ -455,10 +484,29 @@ function AgendaShell({ highlightId, clinicTaxMode }: { highlightId: string | nul
         return;
       }
 
-      const doctor = state.doctors.find(
-        (d) => d.id === (planned.newDoctorId ?? original.doctor?.id ?? null),
-      );
-      const doctorName = doctor?.shortName ?? doctor?.displayName ?? t("agenda.pageClient.doctorFallback");
+      // ws1-t11 — una cita en consulta no se queda «Sin doctor» (el servidor lo rechaza igual).
+      const doctorAntes = original.doctor?.id ?? null;
+      if (planned.newDoctorId === null && doctorAntes !== null && esEstadoQueExigeDoctor(original.status)) {
+        toast.error(TEXTO_DOCTOR_EN_CONSULTA);
+        return;
+      }
+
+      // `newDoctorId` ya es el doctor con el que queda (el de la cita si el destino no lo cambia);
+      // `null` = «Sin doctor». Si cambia, «Sin doctor → Dra. X» (antes «Doctor: Doctor»).
+      const nombreDe = (id: string | null): string => {
+        if (!id) return t("agenda.sinDoctor.nombre");
+        const d = state.doctors.find((x) => x.id === id);
+        return (
+          d?.shortName ||
+          d?.displayName ||
+          (original.doctor?.id === id ? original.doctor.shortName : "") ||
+          t("agenda.pageClient.doctorFallback")
+        );
+      };
+      const doctorName =
+        planned.newDoctorId !== doctorAntes
+          ? `${nombreDe(doctorAntes)} → ${nombreDe(planned.newDoctorId)}`
+          : nombreDe(planned.newDoctorId);
 
       setPendingReschedule({
         original,
@@ -499,7 +547,9 @@ function AgendaShell({ highlightId, clinicTaxMode }: { highlightId: string | nul
       bloqueosCargados,
       pendingReschedule.newStartsAt,
       pendingReschedule.newEndsAt,
-      pendingReschedule.newDoctorId ?? pendingReschedule.original.doctor?.id ?? null,
+      // ws1-t11 — el doctor con el que QUEDA (`null` = «Sin doctor»: solo los bloqueos de toda la clínica).
+      // Antes caía al doctor original y, al soltar en «Sin doctor», avisaba de SU bloqueo.
+      pendingReschedule.newDoctorId,
     );
     return b ? { doctorId: b.doctorId, doctorNombre: b.doctorNombre, reason: b.reason } : null;
   }, [pendingReschedule, bloqueosCargados]);
@@ -646,6 +696,7 @@ function AgendaShell({ highlightId, clinicTaxMode }: { highlightId: string | nul
   );
 
   return (
+    <QuienMiraProvider value={quienMira}>
     <div
       className={`${styles.page} ${detailOpen ? "" : styles.detailClosed} agx-agenda`}
       style={{ "--mf-subbar-h": "40px" } as React.CSSProperties}
@@ -686,19 +737,12 @@ function AgendaShell({ highlightId, clinicTaxMode }: { highlightId: string | nul
       )}
       {highlightId && <AgendaHighlightListener highlightId={highlightId} />}
     </div>
+    </QuienMiraProvider>
   );
 }
 
-export interface AgendaColumnDescriptor {
-  key: string;
-  type: "doctor" | "resource" | "unified";
-  doctorId: string | null;
-  resourceId: string | null;
-  title: string;
-  subtitle?: string;
-  color?: string | null;
-  occupancyPct: number;
-}
+// El tipo vive en columnas-dia.ts (lógica pura, con su prueba); se reexporta para quien ya lo importaba de aquí.
+export type { AgendaColumnDescriptor };
 
 function computeColumns(
   state: ReturnType<typeof useAgenda>["state"],
@@ -721,50 +765,17 @@ function computeColumns(
   }
 
   if (state.columnMode === "doctor") {
-    // Columnas para doctores explícitamente activos en agenda.
-    const activeDoctors = state.doctors.filter((d) => d.activeInAgenda);
-    const renderedIds = new Set(activeDoctors.map((d) => d.id));
-
-    // Doctores con citas hoy pero que NO están marcados como activos en
-    // agenda (o que no aparecen en state.doctors). Sin esta unión, una
-    // cita queda silenciosamente oculta cuando el doctor fue desactivado
-    // pero todavía tiene citas — es la causa raíz observada de la
-    // vista Día vacía aunque el contador muestre N citas.
-    const orphanIds = new Set<string>();
-    for (const a of state.appointments) {
-      const id = a.doctor?.id;
-      if (id && !renderedIds.has(id)) orphanIds.add(id);
-    }
-
-    const orphanDoctors = Array.from(orphanIds).map((id) => {
-      const known = state.doctors.find((d) => d.id === id);
-      if (known) return known;
-      // El doctor no está en state.doctors (ej. role != DOCTOR o
-      // isActive=false). Construimos un descriptor mínimo a partir del
-      // shortName que viene en la cita.
-      const fromAppt = state.appointments.find((a) => a.doctor?.id === id)?.doctor;
-      return {
-        id,
-        displayName: fromAppt?.shortName ?? t("agenda.pageClient.professionalFallback"),
-        shortName: fromAppt?.shortName ?? t("agenda.pageClient.professionalFallback"),
-        color: null,
-        avatarUrl: null,
-        activeInAgenda: false,
-      };
-    });
-
-    return [...activeDoctors, ...orphanDoctors].map((d) => {
-      const apptsHere = state.appointments.filter((a) => a.doctor?.id === d.id);
-      return {
-        key: `doctor:${d.id}`,
-        type: "doctor",
-        doctorId: d.id,
-        resourceId: null,
-        title: d.shortName,
-        subtitle: undefined,
-        color: d.color,
-        occupancyPct: occupancyOf(apptsHere, slotsAvailablePerColumn, state.slotMinutes),
-      };
+    // ws1-t11 (D2) — con la columna «Sin doctor» a la izquierda cuando toca; ver columnas-dia.ts.
+    return columnasPorDoctor({
+      doctors: state.doctors,
+      appointments: state.appointments,
+      dayISO: state.dayISO,
+      timezone: state.timezone,
+      sinDoctorDisponible: state.sinDoctorDisponible,
+      slotsAvailablePerColumn,
+      slotMinutes: state.slotMinutes,
+      nombreSinDoctor: t("agenda.sinDoctor.nombre"),
+      nombreProfesional: t("agenda.pageClient.professionalFallback"),
     });
   }
 
@@ -784,20 +795,4 @@ function computeColumns(
       occupancyPct: occupancyOf(apptsHere, slotsAvailablePerColumn, state.slotMinutes),
     };
   });
-}
-
-function occupancyOf(
-  appts: { startsAt: string; endsAt?: string; status: string }[],
-  totalSlots: number,
-  slotMinutes: number,
-): number {
-  if (totalSlots === 0) return 0;
-  let occupied = 0;
-  for (const a of appts) {
-    if (a.status === "CANCELLED" || a.status === "NO_SHOW") continue;
-    if (!a.endsAt) continue;
-    const dur = (new Date(a.endsAt).getTime() - new Date(a.startsAt).getTime()) / 60_000;
-    occupied += Math.ceil(dur / slotMinutes);
-  }
-  return Math.min(100, Math.round((occupied / totalSlots) * 100));
 }

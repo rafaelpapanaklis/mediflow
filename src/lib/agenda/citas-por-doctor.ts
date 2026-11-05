@@ -27,7 +27,17 @@ export interface CitasDeDoctor {
   noAsistio: number;
 }
 
-/** Filas de `groupBy({ by: ["doctorId", "status"] })` → citas por doctor. */
+/** Suma una fila de citas a un conteo. */
+function sumarCitas(g: CitasDeDoctor, status: string, n: number): void {
+  g.citas += n;
+  if ((ESTADOS_ATENDIDOS as readonly string[]).includes(status)) g.atendidas += n;
+  if (status === "NO_SHOW") g.noAsistio += n;
+}
+
+/**
+ * Filas de `groupBy({ by: ["doctorId", "status"] })` → citas por doctor. Solo las que tienen
+ * doctor: las «Sin doctor» las cuenta `contarCitasSinDoctor` (van en su propia fila).
+ */
 export function contarCitasPorDoctor(
   filas: ReadonlyArray<{ doctorId: string | null; status: string; _count: { _all: number } }>,
 ): Map<string, CitasDeDoctor> {
@@ -35,13 +45,24 @@ export function contarCitasPorDoctor(
   for (const f of filas) {
     if (!f.doctorId) continue;
     const g = out.get(f.doctorId) ?? { citas: 0, atendidas: 0, noAsistio: 0 };
-    const n = f._count._all;
-    g.citas += n;
-    if ((ESTADOS_ATENDIDOS as readonly string[]).includes(f.status)) g.atendidas += n;
-    if (f.status === "NO_SHOW") g.noAsistio += n;
+    sumarCitas(g, f.status, f._count._all);
     out.set(f.doctorId, g);
   }
   return out;
+}
+
+/**
+ * Las citas «Sin doctor» del periodo (ws1-t11 · fase 2 · P2): `doctorId = null` en las mismas
+ * filas. Van en la fila «Sin doctor» de cada pantalla para que la columna «Citas» siga sumando
+ * las citas del periodo (C-11); sin ella, una clínica que agenda «Sin doctor» veía menos citas
+ * por doctor que en la tarjeta.
+ */
+export function contarCitasSinDoctor(
+  filas: ReadonlyArray<{ doctorId: string | null; status: string; _count: { _all: number } }>,
+): CitasDeDoctor {
+  const g: CitasDeDoctor = { citas: 0, atendidas: 0, noAsistio: 0 };
+  for (const f of filas) if (!f.doctorId) sumarCitas(g, f.status, f._count._all);
+  return g;
 }
 
 /** Quienes tuvieron citas en el periodo sin estar en la lista que la pantalla ya pinta. */

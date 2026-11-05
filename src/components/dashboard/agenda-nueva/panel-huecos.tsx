@@ -26,6 +26,7 @@ import { deHora } from "@/lib/agenda-nueva/geometria";
 import { diaAbreviado, esHoy, numeroDeDia } from "@/lib/agenda-nueva/fechas";
 import { useAgendaNueva } from "./contexto-agenda-nueva";
 import s from "./agenda-nueva.module.css";
+import { esResponsableSinDoctor } from "@/lib/agenda-nueva/vista-modelo";
 
 const DURACIONES = [30, 45, 60, 90];
 
@@ -50,6 +51,11 @@ interface Hueco {
 export function PanelHuecos() {
   const { state, setDay, permissions } = useAgenda();
   const ag = useAgendaNueva();
+  // ws1-t11 — «Buscar espacio» busca huecos de DOCTORES: «Sin doctor» no tiene agenda propia que buscar.
+  const responsablesConHuecos = useMemo(
+    () => ag.responsablesVisibles.filter((r) => !esResponsableSinDoctor(r.id)),
+    [ag.responsablesVisibles],
+  );
   const { open: abrirNuevaCita } = useNewAppointmentDialog();
 
   const [doctorSel, setDoctorSel] = useState<string>("cualquiera");
@@ -75,9 +81,9 @@ export function PanelHuecos() {
   const idsBuscados = useMemo(
     () =>
       doctorSel === "cualquiera"
-        ? ag.responsablesVisibles.map((r) => r.id)
+        ? responsablesConHuecos.map((r) => r.id)
         : [doctorSel],
-    [doctorSel, ag.responsablesVisibles],
+    [doctorSel, responsablesConHuecos],
   );
 
   const clave = `${cuando}|${duracion}|${idsBuscados.join(",")}|${repetir}`;
@@ -171,7 +177,7 @@ export function PanelHuecos() {
             onClick={() => setDoctorSel("cualquiera")}
             etiqueta="Cualquiera"
           />
-          {ag.responsablesVisibles.map((r) => (
+          {responsablesConHuecos.map((r) => (
             <Chip
               key={r.id}
               activo={doctorSel === r.id}
@@ -248,7 +254,7 @@ export function PanelHuecos() {
           !fallo &&
           huecos.map((h, i) => {
             const hoy = esHoy(h.fecha, state.timezone);
-            const color = ag.responsablesVisibles.find((r) => r.id === h.doctorId)?.color;
+            const color = responsablesConHuecos.find((r) => r.id === h.doctorId)?.color;
             return (
               <div
                 key={`${h.fecha}-${h.hora}-${h.doctorId}`}

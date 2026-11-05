@@ -44,7 +44,13 @@ import {
 } from "@/lib/agenda-nueva/geometria";
 import { ALTO_ENCABEZADO_DIA, anchoMinimoColumnaDia } from "@/lib/agenda-nueva/tokens";
 import { citasFueraDeHorario, minutoDeEntrada } from "@/lib/agenda-nueva/entrada-dia";
-import { aCitaVista, resumenDeColumna, type CitaVista } from "@/lib/agenda-nueva/vista-modelo";
+import {
+  aCitaVista,
+  esResponsableSinDoctor,
+  responsableDeCita,
+  resumenDeColumna,
+  type CitaVista,
+} from "@/lib/agenda-nueva/vista-modelo";
 import { Cuadricula, type ColumnaCuadricula } from "./cuadricula";
 import { TarjetaCita } from "./tarjeta-cita";
 import { FantasmaCita } from "./fantasma-cita";
@@ -57,6 +63,7 @@ import { useColoresDeCitas, useHorariosFlexibles } from "./usar-agenda-flexible"
 import { comidaDelDoctorEnFecha, horaDeMinutos } from "@/lib/horario-doctor/core";
 import { useT } from "@/i18n/i18n-provider";
 import s from "./agenda-nueva.module.css";
+import { esDoctorConCitaSinDoctor, useQuienMira } from "@/components/dashboard/agenda/quien-mira";
 
 export function VistaDia() {
   const { state, permissions } = useAgenda();
@@ -77,6 +84,7 @@ export function VistaDia() {
   const colores = useColoresDeCitas();
   const horariosFlexibles = useHorariosFlexibles();
   const t = useT();
+  const quienMira = useQuienMira();
 
   const ventana = useMemo(
     () => ventanaDeRejilla(state.dayStart, state.dayEnd),
@@ -155,7 +163,8 @@ export function VistaDia() {
 
     return responsablesVisibles.map((r) => {
       const suyas = citasDelDia.filter(
-        (a) => a.doctor?.id === r.id && citaVisible(a.doctor?.id ?? null, a.resourceId),
+        // ws1-t11 — la columna «Sin doctor» recoge las citas sin doctor.
+        (a) => responsableDeCita(a) === r.id && citaVisible(a.doctor?.id ?? null, a.resourceId),
       );
 
       // Carriles primero (sobre el DTO, que es lo que assignLanes entiende),
@@ -176,8 +185,10 @@ export function VistaDia() {
       const paraResumen = suyas.map((a) => aCitaVista(a, ctx));
 
       // Soltar aquí cambia el DOCTOR: el mismo `doctor-col` que usan las
-      // columnas de la agenda de siempre.
+      // columnas de la agenda de siempre. En «Sin doctor» (ws1-t11) lleva su id de filtro, que
+      // `resolveDropTarget` convierte en `null`: soltar ahí le quita el doctor.
       const columnKey = `doctor:${r.id}`;
+      const sinDoctor = esResponsableSinDoctor(r.id);
 
       return {
         clave: r.id,
@@ -199,7 +210,8 @@ export function VistaDia() {
                     inicioMin % 60,
                     state.timezone,
                   ).toISOString(),
-                  doctorId: r.id,
+                  // ws1-t11 (D1): el hueco de la columna «Sin doctor» abre en «Sin doctor».
+                  doctorId: sinDoctor ? null : r.id,
                   resourceId: null,
                 },
                 openAgendaAfter: true,
@@ -216,7 +228,7 @@ export function VistaDia() {
           // El marco es el contenedor de la consulta `@container`: con la columna estrecha (muchas columnas) la
           // cabecera pasa a compacta — sin círculo de iniciales, que se repetían («WS» ×3), y con el nombre corto
           // en dos renglones. El nombre completo sale al pasar el puntero por TODA la cabecera, círculo incluido.
-          <div className={s.cabeceraDiaMarco} title={r.nombre}>
+          <div className={s.cabeceraDiaMarco} title={r.nombre} data-columna-sin-doctor={sinDoctor ? "" : undefined}>
             <div className={s.cabeceraDia}>
               <span className={s.avatarResponsable} style={{ background: r.color }} aria-hidden>
                 {r.iniciales}
@@ -237,7 +249,7 @@ export function VistaDia() {
             variante="dia"
             seleccionada={citaAbiertaId === cita.id}
             onAbrir={abrirCita}
-            arrastrable={citaArrastrable(cita.dto, permissions.canEdit)}
+            arrastrable={citaArrastrable(cita.dto, permissions.canEdit) && !esDoctorConCitaSinDoctor(quienMira.userRole, cita.dto)}
             geometria={{
               top: topDeCita(cita.inicioMin, ventana.minutoInicio),
               alto: altoDeCita(cita.duracionMin),
@@ -259,6 +271,7 @@ export function VistaDia() {
     abrirNuevaCita,
     permissions.canCreate,
     permissions.canEdit,
+    quienMira.userRole,
     ahora,
     bandasPorResponsable,
     comidaPorResponsable,
@@ -299,7 +312,7 @@ export function VistaDia() {
   const entrada = useMemo(() => {
     const visibles = new Set(responsablesVisibles.map((r) => r.id));
     const citas = citasDelDia
-      .filter((a) => visibles.has(a.doctor?.id ?? ""))
+      .filter((a) => visibles.has(responsableDeCita(a)))
       .map((a) => ({ id: a.id, inicioMin: minutosEnTz(a.startsAt, state.timezone), estado: a.status }));
     return {
       minuto: minutoDeEntrada(citas, horarioDelDia.cerrado ? null : horarioDelDia.abre),

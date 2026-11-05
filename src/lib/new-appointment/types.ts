@@ -2,7 +2,11 @@ import type { AppointmentStatus } from "@/lib/agenda/types";
 
 export interface NewAppointmentInitialSlot {
   startsAt?: string;
-  doctorId?: string;
+  /**
+   * El doctor de la columna/carril en que se hizo clic. `null` = la columna «Sin doctor»
+   * (ws1-t11): abre en «Sin doctor». Ausente = sin preferencia.
+   */
+  doctorId?: string | null;
   resourceId?: string | null;
 }
 

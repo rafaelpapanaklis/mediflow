@@ -185,7 +185,9 @@ export async function ingresosPorDoctorDelPeriodo(
       const planes = new Set<string>();
       for (const m of [...movCobros, ...movReembolsos]) {
         const p = casoPorFactura.get(m.invoiceId);
-        if (p && !m.appointmentId) planes.add(p);
+        // ws1-t11 · P2 (revisión): también el cobro de un control «Sin doctor» (cita y factura sin doctor), que
+        // cae al tratante VIGENTE el día del pago (`doctorDeUnCobro`); sin su historial saldría el de hoy.
+        if (p && (!m.appointmentId || (!m.facturaDoctorId && !m.citaDoctorId))) planes.add(p);
       }
       if (planes.size > 0) cambios = await cargarCambiosDeDoctor(clinicId, Array.from(planes), paidAt.gte, db);
     }

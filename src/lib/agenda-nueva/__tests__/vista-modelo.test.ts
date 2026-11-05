@@ -169,7 +169,8 @@ test("el color del responsable es el de la clínica; sin color, uno estable", ()
 test("una cita sin responsable no revienta", () => {
   const v = aCitaVista(cita({ doctor: undefined }), CTX);
   assert.equal(v.responsableId, null);
-  assert.equal(v.responsableNombre, "Sin responsable");
+  // ws1-t11: una cita sin doctor dice «Sin doctor» (antes «Sin responsable»).
+  assert.equal(v.responsableNombre, "Sin doctor");
   assert.ok(v.colorResponsable.length > 0);
 });
 

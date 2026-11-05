@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { getAuthContext } from "@/lib/auth-context";
 import { rateLimit } from "@/lib/rate-limit";
 import { prisma } from "@/lib/prisma";
+import { NOMBRE_SIN_DOCTOR } from "@/lib/dinero/por-doctor";
 import { dateISOInTz, timeHHMMInTz } from "@/lib/agenda/legacy-helpers";
 import { patientVisibilityAnd, relatedPatientVisibilityAnd } from "@/lib/patient-visibility";
 import { patientSearchTokens } from "@/lib/patients/patient-search-core";
@@ -227,7 +228,8 @@ export async function GET(req: NextRequest) {
       date: dateISOInTz(a.startsAt, tz),
       startTime: timeHHMMInTz(a.startsAt, tz),
       patientName: `${a.patient.firstName} ${a.patient.lastName}`,
-      doctorName: `${a.doctor.firstName} ${a.doctor.lastName}`,
+      // ws1-t11 · P2: una cita «Sin doctor» no trae `doctor` (antes tronaba la búsqueda entera).
+      doctorName: a.doctor ? `${a.doctor.firstName} ${a.doctor.lastName}` : NOMBRE_SIN_DOCTOR,
       status: a.status,
     })),
     invoices: rankedInvoices.map(i => ({

@@ -60,6 +60,7 @@ import {
   type BloqueoDTO,
 } from "@/lib/agenda-bloqueos/core";
 import { ventanaDelDoctor } from "@/lib/horario-doctor/core";
+import { FILTRO_SIN_DOCTOR } from "@/lib/agenda/sin-doctor";
 
 /** Lo mínimo que la ocupación necesita saber de una cita. */
 export interface CitaOcupacion {
@@ -257,6 +258,9 @@ export function ocupacionDelDia(entrada: EntradaOcupacion): OcupacionDia {
   const horarios = modo === "doctor" ? entrada.horariosDoctores ?? null : null;
   const dow = ventanaClinica && horarios ? scheduleDayOfISO(dayISO, timezone) : 0;
   const minutosDisponibles = carriles.reduce((total, carril) => {
+    // ws1-t11 — el carril «Sin doctor» pinta su segmento, pero no es un doctor más: no suma capacidad
+    // (si sumara, inflaría el denominador y el día se leería más vacío de lo que está).
+    if (carril.id === FILTRO_SIN_DOCTOR) return total;
     const filas = horarios?.[carril.id];
     if (!ventanaClinica || !filas || filas.length === 0) return total + minutosAbiertos;
     const v = ventanaDelDoctor(ventanaClinica, filas, dow);

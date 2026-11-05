@@ -64,7 +64,8 @@ export function DoctorsRediseno({
             <tbody>
               {data.doctors.map((d) => esSinDoctor(d) ? (
                 /* ws1-t2 (C-10): lo cobrado sin doctor en la factura ni en la cita. Sin esta
-                   fila la columna no sumaba los ingresos de Finanzas. No tiene citas. */
+                   fila la columna no sumaba los ingresos de Finanzas. ws1-t11 · P2: y las citas
+                   «Sin doctor» del periodo («—» si no hay ninguna). */
                 <tr key={d.id}>
                   <Td>
                     <div className={s.celdaNombre}>
@@ -72,12 +73,18 @@ export function DoctorsRediseno({
                       <span className={`${s.pequeno} ${s.apagado}`}>{t("analytics.doctors.sinDoctorHint")}</span>
                     </div>
                   </Td>
-                  <Td align="right" cifra tono="neutro">—</Td>
-                  <Td align="right" cifra tono="neutro">—</Td>
-                  <Td align="right" cifra tono="neutro">—</Td>
-                  <Td align="right" cifra tono="neutro">—</Td>
-                  <Td align="right" cifra tono="neutro">—</Td>
-                  <Td align="right" cifra tono="neutro">—</Td>
+                  <Td align="right" cifra tono="neutro">{d.apptsTotal > 0 ? d.apptsTotal : "—"}</Td>
+                  <Td align="right" cifra tono="neutro">{d.apptsTotal > 0 ? d.apptsCompleted : "—"}</Td>
+                  <Td align="right" cifra tono="neutro">{d.apptsTotal > 0 ? d.apptsPerDay : "—"}</Td>
+                  <Td align="right" cifra tono="neutro">
+                    {d.apptsTotal > 0 ? <>{d.apptsNoShow} <span className={s.pequeno}>({d.noShowRate}%)</span></> : "—"}
+                  </Td>
+                  <Td align="right" cifra tono="neutro">
+                    {d.avgConsultMin != null ? t("analytics.doctors.minutes", { count: d.avgConsultMin }) : "—"}
+                  </Td>
+                  <Td align="right" cifra tono="neutro">
+                    {d.avgSatisfaction != null ? `${d.avgSatisfaction.toFixed(1)} (${d.satisfactionCount})` : "—"}
+                  </Td>
                   <Td align="right" cifra>
                     <strong>${d.revenueGenerated.toLocaleString("es-MX", { maximumFractionDigits: 0 })}</strong>
                   </Td>

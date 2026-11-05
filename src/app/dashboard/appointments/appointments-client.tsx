@@ -36,19 +36,27 @@ import { mensajeDeError } from "@/lib/errores/mensaje-de-error";
 import { apiErrorMessage } from "./mensaje-error-citas";
 // Sin «Dr.» delante: el título, si lo hay, ya viene en el nombre («Dr. Dr Juan», revisión de ws1-t10).
 import { nombreDeProfesional } from "@/lib/nombre-profesional";
+import { FILTRO_SIN_DOCTOR } from "@/lib/agenda/sin-doctor";
 import { campoDelAviso } from "@/lib/agenda/aviso-al-reprogramar";
 import { CasillaAvisarPaciente, useAvisoAlReprogramar } from "@/components/dashboard/agenda/aviso-al-reprogramar";
 
 interface Patient { id: string; firstName: string; lastName: string; patientNumber: string; phone?: string | null }
 interface Doctor  { id: string; firstName: string; lastName: string; role: string }
 interface Appt {
-  id: string; patientId: string; doctorId: string; type: string;
+  // ws1-t11 · fase 2 · P2: `null` = cita «Sin doctor» (el doctor se asigna al llegar o al iniciar).
+  id: string; patientId: string; doctorId: string | null; type: string;
   date: string; startTime: string; endTime: string; durationMins: number;
   status: string; notes?: string | null; reminderSent: boolean;
   googleCalendarEventId?: string | null;
   mode?: string; paymentStatus?: string;
   patient: { id: string; firstName: string; lastName: string; phone?: string | null };
-  doctor:  { id: string; firstName: string; lastName: string };
+  doctor:  { id: string; firstName: string; lastName: string } | null;
+}
+
+/** «Dr/a. Nombre Apellido» o «Sin doctor»: una cita «Sin doctor» no tiene `doctor` (antes la pantalla tronaba). */
+function doctorDeLaCita(a: Pick<Appt, "doctor">, t: ReturnType<typeof useT>): string {
+  if (!a.doctor) return t("agenda.sinDoctor.nombre");
+  return `${t("appointments.doctorPrefix")} ${a.doctor.firstName} ${a.doctor.lastName}`;
 }
 
 interface Props {
@@ -201,9 +209,15 @@ interface ApptFormProps {
   onCancel: () => void;
   label: string;
   clinicCategory?: string | null;
+  /**
+   * ws1-t11 · P2: se edita una cita «Sin doctor». La opción «Sin doctor» (valor "") sale solo
+   * entonces: el PATCH lee "" como «no cambia el doctor», así que guardar la deja sin doctor.
+   * En el alta no se ofrece: esta pantalla no sabe si ya se pegó sql/cita-sin-doctor.sql.
+   */
+  editandoSinDoctor?: boolean;
 }
 
-function ApptForm({ form, setForm, doctors, patients, loading, onSubmit, onCancel, label, clinicCategory = null }: ApptFormProps) {
+function ApptForm({ form, setForm, doctors, patients, loading, onSubmit, onCancel, label, clinicCategory = null, editandoSinDoctor = false }: ApptFormProps) {
   const t = useT();
   // El tipo que ya trae la cita se conserva en la lista aunque no se ofrezca
   // (una cita vieja de «Nutrición»): si no, guardar le cambiaría el tipo.
@@ -227,6 +241,7 @@ function ApptForm({ form, setForm, doctors, patients, loading, onSubmit, onCance
               <div className="field-new">
                 <label className="field-new__label">{t("appointments.form.doctor")} <span className="req">*</span></label>
                 <select className="input-new" value={form.doctorId} onChange={e => setF("doctorId", e.target.value)}>
+                  {editandoSinDoctor && <option value="">{t("agenda.sinDoctor.nombre")}</option>}
                   {doctors.map(d => <option key={d.id} value={d.id}>{nombreDeProfesional(d)}</option>)}
                 </select>
               </div>
@@ -387,7 +402,10 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
     };
   }, [router]);
 
-  const emptyForm = { patientId:"", doctorId:currentUserId, type:"Consulta general", date:toDateStr(today), startTime:"09:00", durationMins:30, notes:"", mode:"IN_PERSON", resourceId:"" };
+  // El doctor de una cita nueva: quien está en sesión si atiende; si no (recepción), el primero de
+  // la lista, que es lo que el <select> enseña. Antes se mandaba el id de recepción sin que se viera.
+  const doctorInicialDelAlta = doctors.some(d => d.id === currentUserId) ? currentUserId : (doctors[0]?.id ?? "");
+  const emptyForm = { patientId:"", doctorId:doctorInicialDelAlta, type:"Consulta general", date:toDateStr(today), startTime:"09:00", durationMins:30, notes:"", mode:"IN_PERSON", resourceId:"" };
   // resourceId opcional en el tipo: el form de EDITAR cita (setForm) no lo pasa;
   // el de NUEVA cita sí (preselección de sillón desde Mi Clínica 3D).
   const [form, setForm] = useState<{ patientId: string; doctorId: string; type: string; date: string; startTime: string; durationMins: number; notes: string; mode: string; resourceId?: string }>(emptyForm);
@@ -455,7 +473,11 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
 
   const apptsByDate = useMemo(() => {
     const map: Record<string, Appt[]> = {};
-    const filtered = filterDoc === "all" ? appts : appts.filter(a => a.doctorId === filterDoc);
+    const filtered = filterDoc === "all"
+      ? appts
+      : filterDoc === FILTRO_SIN_DOCTOR
+        ? appts.filter(a => !a.doctorId)
+        : appts.filter(a => a.doctorId === filterDoc);
     for (const a of filtered) {
       const key = a.date.split("T")[0];
       if (!map[key]) map[key] = [];
@@ -583,7 +605,7 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
       form.date !== showDetail.date.split("T")[0] ||
       form.startTime !== showDetail.startTime ||
       form.durationMins !== showDetail.durationMins ||
-      form.doctorId !== showDetail.doctorId;
+      (form.doctorId || null) !== showDetail.doctorId;
     if (!bloqueoConfirmado && semueve) {
       const b = bloqueoDelHueco();
       if (b) { setBloqueoPendiente({ bloqueo: b, accion: "editar" }); return; }
@@ -600,10 +622,11 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
       setAppts(prev => prev.map(a => a.id === showDetail.id
         ? serializeAppt({
             ...a,
-            doctorId: form.doctorId, type: form.type, date: form.date,
+            // "" = se dejó «Sin doctor» (el PATCH no lo cambia).
+            doctorId: form.doctorId || a.doctorId, type: form.type, date: form.date,
             startTime: form.startTime, endTime, durationMins: form.durationMins,
             notes: form.notes || null, mode: form.mode,
-            doctor: doctors.find(x => x.id === form.doctorId) ?? a.doctor,
+            doctor: (form.doctorId ? doctors.find(x => x.id === form.doctorId) : null) ?? a.doctor,
           })
         : a));
       setShowEdit(false);
@@ -1021,7 +1044,7 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
                         {a.patient.firstName} {a.patient.lastName}
                       </div>
                       <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2 }}>
-                        {a.type} · {t("appointments.doctorPrefix")} {a.doctor.firstName} {a.doctor.lastName} · {t("appointments.form.minutesShort", { count: a.durationMins })}
+                        {a.type} · {doctorDeLaCita(a, t)} · {t("appointments.form.minutesShort", { count: a.durationMins })}
                       </div>
                       {a.notes && (
                         <div style={{ fontSize: 11, color: "var(--text-3)", fontStyle: "italic", marginTop: 4 }}>
@@ -1083,6 +1106,10 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
           >
             <option value="all">{t("appointments.filter.allDoctors")}</option>
             {doctors.map(d => <option key={d.id} value={d.id}>{nombreDeProfesional(d)}</option>)}
+            {/* ws1-t11 — solo si hay alguna cita sin doctor (sin el SQL no hay ninguna: el filtro queda como hoy). */}
+            {(filterDoc === FILTRO_SIN_DOCTOR || appts.some((a) => !a.doctorId)) && (
+              <option value={FILTRO_SIN_DOCTOR}>{t("agenda.sinDoctor.nombre")}</option>
+            )}
           </select>
           <div className="segment-new">
             {([["month", "appointments.view.month", Calendar], ["week", "appointments.view.week", CalendarDays], ["day", "appointments.view.day", List]] as const).map(([v, lblKey, Icon]) => (
@@ -1203,7 +1230,7 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
                 <CasillaAvisarPaciente estado={avisoClinica} cambiaHora={editCambiaHora} marcada={avisar} onCambiar={setAvisar} disabled={loading} />
               </div>
             )}
-            <ApptForm form={form} setForm={setForm} doctors={doctors} patients={patients} loading={loading} onSubmit={() => { void saveEdit(); }} onCancel={() => { setShowNew(false); setShowEdit(false); }} label={t("appointments.modal.saveChanges")} clinicCategory={clinicCategory} />
+            <ApptForm form={form} setForm={setForm} doctors={doctors} patients={patients} loading={loading} onSubmit={() => { void saveEdit(); }} onCancel={() => { setShowNew(false); setShowEdit(false); }} label={t("appointments.modal.saveChanges")} clinicCategory={clinicCategory} editandoSinDoctor={!!showDetail && !showDetail.doctorId} />
           </div>
         </div>
       )}
@@ -1212,7 +1239,7 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
       {showDetail && !showEdit && (() => {
         const appt  = showDetail;
         const cfg   = STATUS_CONFIG[appt.status]??STATUS_CONFIG.PENDING;
-        const color = docColorMap[appt.doctorId]??DOC_COLORS[0];
+        const color = (appt.doctorId ? docColorMap[appt.doctorId] : undefined) ?? DOC_COLORS[0];
         return (
           <div className="modal-overlay" onClick={() => setShowDetail(null)}>
             <div className="modal" onClick={e => e.stopPropagation()} style={{ borderLeftWidth: 4, borderLeftColor: color.border }}>
@@ -1223,7 +1250,7 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
                 </div>
                 <div className="flex items-center gap-1">
                   <button onClick={() => {
-                    setForm({ patientId:appt.patientId, doctorId:appt.doctorId, type:appt.type,
+                    setForm({ patientId:appt.patientId, doctorId:appt.doctorId ?? "", type:appt.type,
                       date:appt.date.split("T")[0], startTime:appt.startTime, durationMins:appt.durationMins, notes:appt.notes??"", mode:appt.mode??"IN_PERSON"
                     });
                     setShowEdit(true);
@@ -1249,7 +1276,7 @@ export function AppointmentsClient({ appointments: initialAppts, patients, docto
                   {[
                     { label:t("common.date"),                  val:parseDate(appt.date).toLocaleDateString("es-MX",{weekday:"long",day:"numeric",month:"long"}) },
                     { label:t("appointments.detail.schedule"), val:`${appt.startTime} – ${appt.endTime}` },
-                    { label:t("appointments.form.doctor"),     val:`${t("appointments.doctorPrefix")} ${appt.doctor.firstName} ${appt.doctor.lastName}` },
+                    { label:t("appointments.form.doctor"),     val:doctorDeLaCita(appt, t) },
                     { label:t("appointments.form.duration"),   val:t("appointments.detail.minutesLong", { count: appt.durationMins }) },
                   ].map(r => (
                     <div key={r.label} className="bg-muted/20 rounded-xl p-3">

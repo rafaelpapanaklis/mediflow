@@ -442,6 +442,11 @@ export interface AgendaStoreState {
   horariosDoctores: Record<string, ScheduleDay[]>;
   /** WS1-T5 — ver `AgendaDayResponse.agendaFlexible`. Apagada = la agenda de siempre. */
   agendaFlexible: AgendaFlexibleDTO;
+  /**
+   * ws1-t11 · P2 — ver `AgendaDayResponse.sinDoctorDisponible`. Con `true` la agenda pinta la
+   * columna/carril «Sin doctor» aunque ese día no haya ninguna. Ausente = no se sabe (no se ofrece).
+   */
+  sinDoctorDisponible?: boolean;
 
   drag: AgendaDragState;
   waitlistOpen: boolean;

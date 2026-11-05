@@ -38,7 +38,7 @@ import {
   topDeCita,
   ventanaDeRejilla,
 } from "@/lib/agenda-nueva/geometria";
-import { aCitaVista, type CitaVista } from "@/lib/agenda-nueva/vista-modelo";
+import { aCitaVista, esResponsableSinDoctor, ID_SIN_DOCTOR, type CitaVista } from "@/lib/agenda-nueva/vista-modelo";
 import { useColoresDeCitas, useHorariosFlexibles } from "./usar-agenda-flexible";
 import { comidaDelDoctorEnFecha, horaDeMinutos } from "@/lib/horario-doctor/core";
 import { useT } from "@/i18n/i18n-provider";
@@ -49,6 +49,10 @@ import { assignLanes } from "@/lib/agenda/lane-layout";
 import { todayInTz, tzLocalToUtc } from "@/lib/agenda/time-utils";
 import { doctorColorFor } from "@/lib/agenda/doctor-color";
 import css from "./vista-semana-mes.module.css";
+import { esDoctorConCitaSinDoctor, useQuienMira } from "@/components/dashboard/agenda/quien-mira";
+
+/** ws1-t11 — el carril de una cita: su doctor, o el carril «Sin doctor». */
+const carrilDeCitaVista = (c: CitaVista): string => c.responsableId ?? ID_SIN_DOCTOR;
 
 /**
  * Ancho mínimo de un carril de responsable, en px. Por debajo de esto la
@@ -147,7 +151,8 @@ export function VistaSemana(props: PropsVistaSemana) {
     // de la cabecera las siguiera sumando.
     const conCitas = new Set(
       // Todas las del día, también canceladas: sin carril, una cita no se pintaría en la semana.
-      delDia.map((c) => c.responsableId).filter((id): id is string => !!id),
+      // ws1-t11 — las «Sin doctor» van al carril «Sin doctor».
+      delDia.map((c) => carrilDeCitaVista(c)),
     );
     const carriles = carrilesConHuerfanos(
       responsablesConCarril(responsables, conCitas).map((r) => ({ id: r.id, nombre: r.nombreCorto, color: r.color })),
@@ -155,11 +160,11 @@ export function VistaSemana(props: PropsVistaSemana) {
         startsAt: c.dto.startsAt,
         endsAt: c.dto.endsAt,
         status: c.estado,
-        doctorId: c.responsableId,
+        doctorId: carrilDeCitaVista(c),
         resourceId: c.unidadId,
       })),
       (id) => {
-        const suya = delDia.find((c) => c.responsableId === id);
+        const suya = delDia.find((c) => carrilDeCitaVista(c) === id);
         return {
           id,
           nombre: suya?.responsableNombre ?? "Profesional",
@@ -229,7 +234,8 @@ export function VistaSemana(props: PropsVistaSemana) {
                   inicioMin % 60,
                   state.timezone,
                 ).toISOString(),
-                doctorId: carril?.id,
+                // ws1-t11 (D1): el carril «Sin doctor» abre en «Sin doctor».
+                doctorId: carril && esResponsableSinDoctor(carril.id) ? null : carril?.id,
                 resourceId: null,
               },
               openAgendaAfter: true,
@@ -405,6 +411,8 @@ function ColumnaDeDia(props: {
   puedeEditar: boolean;
 }) {
   const { citas, carriles, minutoInicio, slotMinutes } = props;
+  // ws1-t11 — un DOCTOR no arrastra una «Sin doctor» (el servidor le daría 403; la toma desde el panel).
+  const quienMira = useQuienMira();
 
   // Cada responsable tiene su carril dentro del día (README: `left =
   // i/n·100% + 2px`, `width = 100%/n − 4px`). Y DENTRO de su carril, dos citas
@@ -418,7 +426,7 @@ function ColumnaDeDia(props: {
     const salida: Array<{ cita: CitaVista; left: string; width: string }> = [];
 
     carriles.forEach((carril, i) => {
-      const suyas = citas.filter((c) => c.responsableId === carril.id);
+      const suyas = citas.filter((c) => carrilDeCitaVista(c) === carril.id);
       if (suyas.length === 0) return;
       const izquierda = i * anchoCarril;
       const porId = new Map(suyas.map((c) => [c.id, c]));
@@ -454,7 +462,7 @@ function ColumnaDeDia(props: {
           }}
           seleccionada={cita.id === props.citaAbiertaId}
           onAbrir={props.onAbrirCita}
-          arrastrable={citaArrastrable(cita.dto, props.puedeEditar)}
+          arrastrable={citaArrastrable(cita.dto, props.puedeEditar) && !esDoctorConCitaSinDoctor(quienMira.userRole, cita.dto)}
           conResponsable={carriles.length > 1}
         />
       ))}

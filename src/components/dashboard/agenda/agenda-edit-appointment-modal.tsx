@@ -7,6 +7,7 @@ import { useT } from "@/i18n/i18n-provider";
 import { useAgendaOpcional } from "./agenda-provider";
 import { rescheduleAppointment, type ApiError } from "@/lib/agenda/mutations";
 import { describeOverlapConflict, describeResourceUnavailable } from "@/lib/agenda/conflict-copy";
+import { OPCION_SIN_DOCTOR, doctorIdParaEnviar, doctorRealDe } from "@/components/dashboard/new-appointment/doctor-inicial";
 import { claveDelHueco, conflictoVigente, type ConflictoDelServidor } from "@/lib/agenda/conflicto-editar-cita";
 import { getTzParts } from "@/lib/agenda/time-utils";
 import { DateField } from "@/components/ui/date-field";
@@ -139,6 +140,13 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose, ropa, presta
   const agenda = useAgendaOpcional();
   if (!agenda && !prestado) throw new Error("useAgenda must be used inside <AgendaProvider>");
   const state = prestado ?? agenda!.state;
+  // ws1-t11 — «Sin doctor» se ofrece si la clínica puede agendar así (o si la cita ya lo es), nunca en una
+  // teleconsulta ni en una cita en consulta (el servidor las rechazaría).
+  const ofreceSinDoctor =
+    !!appt &&
+    appt.isTeleconsult !== true &&
+    String(appt.status) !== "IN_PROGRESS" &&
+    ((state as { sinDoctorDisponible?: boolean }).sinDoctorDisponible === true || !appt.doctor?.id);
   const [form, setForm] = useState<FormState | null>(null);
   const [submitting, setSubmitting] = useState(false);
   /**
@@ -194,13 +202,16 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose, ropa, presta
       date: startLocal.date,
       startTime: startLocal.time,
       durationMin,
-      doctorId: appt.doctor?.id ?? "",
+      // ws1-t11 — una «Sin doctor» abre en «Sin doctor» (antes en «Selecciona…», y no se podía guardar
+      // ni un cambio de hora sin ponerle doctor).
+      doctorId: appt.doctor?.id ?? (ofreceSinDoctor ? OPCION_SIN_DOCTOR : ""),
       resourceId: appt.resourceId ?? "",
       reason: appt.reason ?? "",
       overrideReason: "",
     });
     setConflict(null);
     setAvisar(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, appt, state.timezone]);
 
   // Cerrar con Escape.
@@ -277,10 +288,10 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose, ropa, presta
     // duración o el doctor, que es cuando la cita entra en el bloqueo.
     const semueve =
       startsAtIso !== appt.startsAt ||
-      form.doctorId !== (appt.doctor?.id ?? "") ||
+      doctorRealDe(form.doctorId) !== (appt.doctor?.id ?? null) ||
       endsAtIso !== (appt.endsAt ?? appt.startsAt);
     if (!bloqueoConfirmado && semueve && bloqueosDelDia.length > 0) {
-      const b = bloqueoQueTapa(bloqueosDelDia, startsAtIso, endsAtIso, form.doctorId || null);
+      const b = bloqueoQueTapa(bloqueosDelDia, startsAtIso, endsAtIso, doctorRealDe(form.doctorId));
       if (b) {
         setBloqueoPendiente({
           doctorId: b.doctorId,
@@ -296,7 +307,11 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose, ropa, presta
       const { appointment: updated, scheduleWarning } = await rescheduleAppointment(appt.id, {
         startsAt: startsAtIso,
         endsAt: endsAtIso,
-        doctorId: form.doctorId,
+        // ws1-t11 — «Sin doctor» viaja como `null` (le quita el doctor). Si ya era «Sin doctor» y sigue
+        // así, no se manda: el cambio es solo de hora, sillón o motivo.
+        ...(doctorIdParaEnviar(form.doctorId) !== null || appt.doctor?.id
+          ? { doctorId: doctorIdParaEnviar(form.doctorId) }
+          : {}),
         resourceId: form.resourceId || null,
         // El motivo para forzar solo viaja si el aviso sigue en pantalla: apaga el no-solape en el servidor, y
         // uno escrito para el doctor de antes no puede colar la cita sobre otra en el hueco nuevo.
@@ -323,14 +338,14 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose, ropa, presta
       // WS1-T5 — con la bandera, el equipo puede sobreagendar: se pregunta
       // ahí mismo (nada se guardó) en vez de pedir el motivo de administración.
       // Ya confirmado y el servidor vuelve a preguntar = hay OTRA cita encima: se pregunta con ésa.
-      const aviso = avisoDesdeRechazo(e, { doctorId: form.doctorId, resourceId: form.resourceId || null }, state.timezone);
+      const aviso = avisoDesdeRechazo(e, { doctorId: doctorRealDe(form.doctorId), resourceId: form.resourceId || null }, state.timezone);
       if (aviso && !(sobreagendar && aviso.citaId === sobreagendar.citaId && aviso.otras <= sobreagendar.otras)) {
         setSobreagendaPendiente({ aviso, bloqueo: bloqueoConfirmado });
       } else if (e?.error === "appointment_overlap") {
         setConflict({
           clave: claveDelHueco(form),
           texto: describeOverlapConflict(e.conflictingAppointment, {
-            doctorId: form.doctorId,
+            doctorId: doctorRealDe(form.doctorId),
             resourceId: form.resourceId || null,
           }),
         });
@@ -471,10 +486,21 @@ export function AgendaEditAppointmentModal({ appt, isOpen, onClose, ropa, presta
               className={ropa?.control}
               style={ropa ? undefined : inputStyle}
             >
-              <option value="">{t("agenda.editApptModal.selectOption")}</option>
+              {ofreceSinDoctor ? (
+                <option value={OPCION_SIN_DOCTOR} data-opcion-sin-doctor>{t("agenda.sinDoctor.nombre")}</option>
+              ) : (
+                <option value="">{t("agenda.editApptModal.selectOption")}</option>
+              )}
               {activeDoctors.map((d) => (
                 <option key={d.id} value={d.id}>{d.displayName}</option>
               ))}
+              {/* ws1-t11 (revisión) — el doctor de la cita aunque ya no esté activo en la agenda: sin su opción el
+                  selector enseñaba la primera («Sin doctor») sin que la cita la tuviera. */}
+              {appt.doctor?.id && !activeDoctors.some((d) => d.id === appt.doctor?.id) && (
+                <option value={appt.doctor.id}>
+                  {state.doctors.find((d) => d.id === appt.doctor?.id)?.displayName ?? appt.doctor.shortName}
+                </option>
+              )}
             </select>
           </Field>
           <Field label={t("agenda.editApptModal.careLocation")} ropa={campo}>

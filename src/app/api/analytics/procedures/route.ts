@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { ID_SIN_DOCTOR, NOMBRE_SIN_DOCTOR } from "@/lib/dinero/por-doctor";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +14,7 @@ export const dynamic = "force-dynamic";
  *  - benchmark: heurística inicial de tiempo "esperado" por tipo
  *  - variance: avg - benchmark
  *  - fastestDoctor / slowestDoctor: doctor con menor/mayor tiempo promedio
+ *  - (interno) porDoctor: cada doctor y la cubeta «Sin doctor» (ws1-t11 · P2); sus `count` suman `count`
  *
  * Solo cuenta citas con timeline completo (consultStartAt + consultEndAt).
  * Si <30 citas con timeline, devuelve insufficientData=true.
@@ -38,6 +40,8 @@ const BENCHMARKS_MIN: Record<string, number> = {
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
   const clinicId = user.clinicId;
+  // `clinicId: undefined` no filtraría nada (Prisma descarta la clave).
+  if (!clinicId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const url = new URL(req.url);
   const fromParam = url.searchParams.get("from");
@@ -77,7 +81,7 @@ export async function GET(req: NextRequest) {
   const byType = new Map<string, {
     count: number;
     totalMin: number;
-    perDoctor: Map<string, { name: string; total: number; count: number }>;
+    perDoctor: Map<string, { name: string; total: number; count: number; sinDoctor: boolean }>;
   }>();
   for (const a of appts) {
     const min = a.timeline?.totalConsultMin ?? 0;
@@ -85,9 +89,10 @@ export async function GET(req: NextRequest) {
     const entry = byType.get(a.type) ?? { count: 0, totalMin: 0, perDoctor: new Map() };
     entry.count += 1;
     entry.totalMin += min;
-    const doctorKey = a.doctorId;
-    const docName = `${a.doctor.firstName} ${a.doctor.lastName}`;
-    const docEntry = entry.perDoctor.get(doctorKey) ?? { name: docName, total: 0, count: 0 };
+    // ws1-t11 · P2: una cita «Sin doctor» va a su propia cubeta (antes tronaba en `a.doctor.firstName`).
+    const doctorKey = a.doctorId ?? ID_SIN_DOCTOR;
+    const docName = a.doctor ? `${a.doctor.firstName} ${a.doctor.lastName}` : NOMBRE_SIN_DOCTOR;
+    const docEntry = entry.perDoctor.get(doctorKey) ?? { name: docName, total: 0, count: 0, sinDoctor: !a.doctorId };
     docEntry.total += min;
     docEntry.count += 1;
     entry.perDoctor.set(doctorKey, docEntry);
@@ -100,11 +105,17 @@ export async function GET(req: NextRequest) {
       const benchmark = BENCHMARKS_MIN[type] ?? null;
       const variance = benchmark != null ? avgConsultMin - benchmark : null;
 
-      const doctorAverages = Array.from(entry.perDoctor.values()).map((d) => ({
+      // Todas las cubetas, «Sin doctor» incluida: sus `count` suman el `count` del tipo.
+      const porDoctor = Array.from(entry.perDoctor.entries()).map(([id, d]) => ({
+        id,
         name: d.name,
         avgMin: Math.round(d.total / d.count),
         count: d.count,
+        ...(d.sinDoctor ? { sinDoctor: true } : {}),
       }));
+      // «Más rápido / más lento» compara doctores: la cubeta «Sin doctor» cuenta en el total del
+      // tipo, pero no es nadie a quien nombrar como el más rápido.
+      const doctorAverages = porDoctor.filter((d) => !d.sinDoctor).map(({ name, avgMin, count }) => ({ name, avgMin, count }));
       const sorted = [...doctorAverages].sort((a, b) => a.avgMin - b.avgMin);
       const fastest = sorted[0] ?? null;
       const slowest = sorted[sorted.length - 1] ?? null;
@@ -117,6 +128,8 @@ export async function GET(req: NextRequest) {
         variance,
         fastest,
         slowest: fastest && slowest && fastest.name === slowest.name ? null : slowest,
+        // ws1-t11 (revisión): `porDoctor` se arma para las cuentas de arriba pero NO viaja: ninguna pantalla
+        // lo usa y la ruta no pide rol (no se expone el detalle de cada doctor a quien no lo veía).
       };
     })
     .sort((a, b) => b.count - a.count);

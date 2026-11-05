@@ -24,7 +24,14 @@ import type {
 
 interface Props {
   dateISO: string;
-  doctorId: string;
+  /** `null` o "" = sin doctor real (o «Sin doctor» con `sinDoctor`, o todavía nada elegido). */
+  doctorId: string | null;
+  /**
+   * ws1-t11 (§2.2 del plan) — se eligió «Sin doctor»: la rejilla se pinta igual, con el horario
+   * de la clínica; ocupa solo lo del sillón elegido (sus citas y su horario). Las demás «Sin
+   * doctor» no ocupan el hueco: la clínica puede poner varias a la misma hora.
+   */
+  sinDoctor?: boolean;
   resourceId: string | null;
   durationMin: number;
   config: ClinicTimeConfig;
@@ -61,6 +68,7 @@ interface FetchedDay {
 export function SlotGridPicker({
   dateISO,
   doctorId,
+  sinDoctor = false,
   resourceId,
   durationMin,
   config,
@@ -80,7 +88,7 @@ export function SlotGridPicker({
     // Vaciar ANTES del corte por falta de doctor: si se quita el doctor, la
     // lista del día/doctor anterior no puede quedarse viva en el padre.
     onBloqueos?.(undefined);
-    if (!doctorId) return;
+    if (!doctorId && !sinDoctor) return;
     setLoading(true);
     setDay({ appointments: [], loaded: false });
     // Dos cambios de fecha seguidos lanzan dos consultas, y la que responda
@@ -114,7 +122,7 @@ export function SlotGridPicker({
     // consultar el día entero en cada tecla. El efecto se dispara por el día y
     // el doctor, que es lo que de verdad cambia la respuesta.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dateISO, doctorId]);
+  }, [dateISO, doctorId, sinDoctor]);
 
   const total = slotsPerDay(config);
   const dayStartUtcMs = useMemo(
@@ -126,13 +134,17 @@ export function SlotGridPicker({
 
   const occupiedDoctor = useMemo(
     () =>
-      buildOccupiedSlotSet(
-        day.appointments,
-        { doctorId },
-        dayStartUtcMs,
-        config.slotMinutes,
-        total,
-      ),
+      // ws1-t11 — sin doctor real no hay agenda de doctor que ocupar. Ojo: `buildOccupiedSlotSet` sin
+      // `doctorId` cuenta TODAS las citas de la clínica (el filtro vacío no filtra).
+      doctorId
+        ? buildOccupiedSlotSet(
+            day.appointments,
+            { doctorId },
+            dayStartUtcMs,
+            config.slotMinutes,
+            total,
+          )
+        : new Set<number>(),
     [day.appointments, doctorId, dayStartUtcMs, config.slotMinutes, total],
   );
 
@@ -211,7 +223,7 @@ export function SlotGridPicker({
     onChange(utc.toISOString());
   };
 
-  if (!doctorId) {
+  if (!doctorId && !sinDoctor) {
     return (
       <div {...(nueva ? { className: nc.huecosVacio } : { style: emptyHintStyle })}>
         {t("appointments.slotGrid.selectProfessional")}
@@ -342,6 +354,18 @@ export function SlotGridPicker({
   const headerConAviso = (
     <>
       {header}
+      {sinDoctor && (
+        // ws1-t11 (§2.2): qué cuenta como ocupado con «Sin doctor», dicho donde se elige la hora.
+        <div
+          role="note"
+          data-nota-sin-doctor
+          {...(nueva
+            ? { className: nc.notaSinDoctor }
+            : { style: { fontSize: 12, lineHeight: 1.4, color: "var(--text-3)", margin: "0 0 8px" } })}
+        >
+          {t("agenda.sinDoctor.notaRejilla")}
+        </div>
+      )}
       {avisoHorario && (
         <div role="note" data-aviso-horario style={{ fontSize: 12, lineHeight: 1.4, color: "var(--warning, var(--text-2))", margin: "4px 0 6px" }}>
           {avisoHorario}

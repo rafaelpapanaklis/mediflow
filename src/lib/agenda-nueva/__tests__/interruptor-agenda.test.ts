@@ -81,7 +81,7 @@ test("con la bandera apagada se monta el AgendaShell de SIEMPRE", () => {
   // El ternario tiene que tener a AgendaShell en la rama del `else`.
   assert.match(
     client,
-    /props\.agendaNueva\s*\?[\s\S]{0,300}<AgendaNueva[\s\S]{0,200}:\s*[\s\S]{0,200}<AgendaShell/,
+    /props\.agendaNueva\s*\?[\s\S]{0,300}<AgendaNueva[\s\S]{0,400}:\s*[\s\S]{0,200}<AgendaShell/, // ws1-t11: + userId
     "el ternario del interruptor cambió de forma: revisa que apagado siga dando AgendaShell",
   );
   assert.match(client, /function AgendaShell\(/, "AgendaShell sigue existiendo");

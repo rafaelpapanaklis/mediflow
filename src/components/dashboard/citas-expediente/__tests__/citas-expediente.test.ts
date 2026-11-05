@@ -180,7 +180,7 @@ test("la fila abre la cita sin tragarse el «Cancelar» de siempre", () => {
 test("se abren las mismas citas que la agenda deja editar: vivas y con permiso", () => {
   // La regla de la agenda, para que este candado avise si cambia allí.
   const panel = leer("components/dashboard/agenda-nueva/panel-cita.tsx");
-  assert.match(panel, /\{!terminal && permissions\.canEdit && \(\s*<button[^>]*onClick=\{\(\) => setEditando\(true\)\}/);
+  assert.match(panel, /\{!terminal && permissions\.canEdit && (?:!doctorSinSuCita && )?\(\s*<button[^>]*onClick=\{\(\) => setEditando\(true\)\}/);
   assert.match(VENTANA, /return permisos\.canEdit && status !== "CANCELLED" && status !== "NO_SHOW";/);
   assert.match(FICHA, /abrible=\{agendaCitas \? \(a\) => citaAbrible\(a\.status, agendaCitas\.permisos\) : undefined\}/);
 });

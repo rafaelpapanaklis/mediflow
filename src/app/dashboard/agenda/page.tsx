@@ -27,6 +27,7 @@ import { menuDosNivelesEncendido } from "@/lib/menu-dos-niveles/interruptor";
 import { canSendManualReminder } from "@/lib/whatsapp/manual-reminder-access";
 import { viewRangeUtc } from "@/lib/agenda/date-ranges";
 import { listarBloqueos } from "@/lib/agenda-bloqueos/consulta.server";
+import { sinDoctorDisponible } from "@/lib/agenda/sin-doctor.server";
 import { ctxDeUsuario } from "@/lib/agenda-bloqueos/core-ctx";
 import type { AgendaDayResponse } from "@/lib/agenda/types";
 import { leerAgendaFlexible } from "@/lib/agenda/agenda-flexible.server";
@@ -178,7 +179,9 @@ export default async function AgendaPage(props: PageProps) {
   const flexible = await leerAgendaFlexible(clinic.id);
   // La preferencia «Mostrar detalles al pasar el mouse» (decisión de Rafael, 28-oct) va en la SSR: sin pedido
   // extra al abrir y sin que quien la tiene apagada la vea encendida un instante. Solo con la agenda nueva.
-  const [bloqueos, horariosFlexibles, procedimientos, detallesAlPasar] = await Promise.all([
+  // ws1-t11 · P2 — ¿se ofrece «Sin doctor»? (`sql/cita-sin-doctor.sql` pegado; en memoria 10 min). Va en
+  // esta tanda (cinco consultas, el tope son menos de siete) y casi nunca consulta.
+  const [bloqueos, horariosFlexibles, procedimientos, detallesAlPasar, sinDoctor] = await Promise.all([
     listarBloqueos(ctxDeUsuario({ ...user, clinic }), {
       desde: range.fromUtc.toISOString(),
       hasta: range.toUtc.toISOString(),
@@ -188,6 +191,7 @@ export default async function AgendaPage(props: PageProps) {
       ? procedimientosConColor(clinic.id)
       : Promise.resolve([]),
     agendaNueva ? leerDetallesAlPasar(clinic.id, user.id) : Promise.resolve(true),
+    sinDoctorDisponible(),
   ]);
 
   const payload: AgendaDayResponse = {
@@ -212,6 +216,7 @@ export default async function AgendaPage(props: PageProps) {
     bloqueos,
     ...(horariosFlexibles ? { horariosDoctores: horariosComoObjeto(horariosFlexibles) } : {}),
     agendaFlexible: { ...flexible, procedimientos },
+    sinDoctorDisponible: sinDoctor,
   };
 
   return (
@@ -232,6 +237,8 @@ export default async function AgendaPage(props: PageProps) {
       // clínico), y sin él el panel de la agenda nueva ofrecería botones que
       // el servidor va a rechazar con un 403.
       userRole={user.role}
+      // ws1-t11 — para «Tomar cita» de un DOCTOR con una cita «Sin doctor» (solo se la puede asignar a sí mismo).
+      userId={user.id}
       detallesAlPasar={detallesAlPasar}
     />
   );

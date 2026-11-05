@@ -891,6 +891,18 @@ select.control {
   opacity: 0.7;
 }
 
+/* ws1-t11 — qué cuenta como ocupado con «Sin doctor» (encima de la rejilla). */
+.notaSinDoctor {
+  margin: -2px 0 10px;
+  padding: 8px 12px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--nc-texto-3);
+  background: var(--nc-fondo-apagado);
+  border: 1px solid var(--nc-borde-divisor);
+  border-radius: 10px;
+}
+
 .huecosVacio {
   padding: 22px;
   text-align: center;
