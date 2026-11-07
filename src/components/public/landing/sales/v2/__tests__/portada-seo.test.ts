@@ -5,13 +5,14 @@
  * Fallan con el código anterior: no existían portada-seo.ts ni src/lib/llms;
  * page.tsx llevaba la descripción (167 caracteres) con «$419» y «$19» escritos a
  * mano, y la Organización del JSON-LD no tenía `sameAs`.
+ * 7-nov-2026: la descripción es el texto fijo de Rafael (166 caracteres, sin precio).
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
-import { DESCRIPCION_MAX, REDES_SOCIALES, SAME_AS, descripcionPortada } from "../portada-seo";
+import { REDES_SOCIALES, SAME_AS, descripcionPortada } from "../portada-seo";
 import { textoLlms } from "@/lib/llms/llms-txt";
 import { PRODUCTO_SLUGS } from "@/lib/producto/data";
 
@@ -19,27 +20,21 @@ const aqui = dirname(fileURLToPath(import.meta.url));
 const pagina = readFileSync(join(aqui, "../../../../../../app/page.tsx"), "utf8");
 
 describe("meta description de la portada", () => {
-  it("cabe en el límite de Google con cualquier precio razonable del primer mes", () => {
-    for (const precio of ["$19", "$199", "$1,999"]) {
-      const d = descripcionPortada(precio);
-      assert.ok(d.length <= DESCRIPCION_MAX, `${d.length} caracteres con ${precio}`);
-      assert.ok(d.endsWith(`Primer mes desde ${precio}.`));
-    }
-  });
-
-  it("es el texto que pidió ws7 (él lo contó en 150; son 140 con $19)", () => {
+  it("es el texto exacto que eligió Rafael (7-nov-2026), sin precio", () => {
     assert.equal(
-      descripcionPortada("$19"),
-      "Software dental para clínicas en México: agenda, expediente, odontograma 3D, cobros, CFDI y WhatsApp en un solo lugar. Primer mes desde $19.",
+      descripcionPortada(),
+      "DaleControl el mejor software para tu clínica dental y consultorios en México. Organiza tu clínica dental en un solo lugar con la mejor tecnología y con IA integrada.",
     );
-    assert.equal(descripcionPortada("$19").length, 140);
+    assert.equal(descripcionPortada().length, 166);
   });
 
   it("page.tsx ya no lleva precios escritos a mano y arma la descripción en generateMetadata", () => {
     assert.ok(pagina.includes("export async function generateMetadata"));
     assert.ok(!pagina.includes("export const metadata"));
     assert.ok(!/\$\d/.test(pagina), "hay un precio escrito a mano en page.tsx");
-    assert.ok(pagina.includes("descripcionPortada(cheapestFirstMonthLabel("));
+    assert.ok(pagina.includes("const description = descripcionPortada();"));
+    assert.ok(pagina.includes("openGraph: { ...metadataFija.openGraph, description }"));
+    assert.ok(pagina.includes("twitter: { ...metadataFija.twitter, description }"));
   });
 });
 

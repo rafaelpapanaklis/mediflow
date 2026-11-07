@@ -20,11 +20,11 @@ const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.dalecontrol.co
 /**
  * 12-oct-2026 (ws1-t4, encargo de ws7, punto 3c): la descripción pasó de 167 a
  * 140 caracteres y el precio del primer mes sale de plan_configs (antes iban
- * dos precios escritos a mano). getResolvedPlans cachea 60 s: la segunda
- * llamada (la de la página) no vuelve a la base.
+ * dos precios escritos a mano).
+ * 7-nov-2026: texto fijo elegido por Rafael, sin precio (portada-seo.ts).
  */
 export async function generateMetadata(): Promise<Metadata> {
-  const description = descripcionPortada(cheapestFirstMonthLabel(buildPlanCards(await getResolvedPlans())));
+  const description = descripcionPortada();
   return {
     ...metadataFija,
     description,

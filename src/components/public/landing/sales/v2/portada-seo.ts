@@ -11,10 +11,15 @@
  *   el mismo usuario (@dalecontrol.com, el que dio ws7). Se exporta como lista
  *   para que /llms.txt diga lo mismo.
  *
+ * · 7-nov-2026: texto fijo elegido por Rafael (166 caracteres, sin precio); sabe que en escritorio Google lo corta.
+ *
  * Sin JSX ni CSS: se prueba con tsx (portada-seo.test.ts).
  */
 
-/** Tope de Google para la descripción en resultados móviles. */
+/**
+ * Tope de Google para la descripción en resultados móviles. Desde el 7-nov-2026 la
+ * descripción de la portada lo rebasa a propósito (texto de Rafael); se conserva como referencia.
+ */
 export const DESCRIPCION_MAX = 155;
 
 /** Usuario único en las tres redes. */
@@ -31,13 +36,7 @@ export const SAME_AS: readonly string[] = REDES_SOCIALES.map((r) => r.url);
 
 export const TITULO_PORTADA = "DaleControl · El software dental más completo de México";
 
-/**
- * Texto propuesto por ws7 (él lo contó en 150; son 140 con «$19»); el precio es el primer
- * mes más barato de plan_configs, ya formateado («$19»).
- */
-export function descripcionPortada(firstMonthFrom: string): string {
-  return (
-    "Software dental para clínicas en México: agenda, expediente, odontograma 3D, cobros, CFDI y WhatsApp " +
-    `en un solo lugar. Primer mes desde ${firstMonthFrom}.`
-  );
+/** Texto exacto elegido por Rafael el 7-nov-2026 (166 caracteres, sin precio). */
+export function descripcionPortada(): string {
+  return "DaleControl el mejor software para tu clínica dental y consultorios en México. Organiza tu clínica dental en un solo lugar con la mejor tecnología y con IA integrada.";
 }
