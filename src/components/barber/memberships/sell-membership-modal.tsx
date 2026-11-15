@@ -53,9 +53,9 @@ export function SellMembershipModal({
   onClose: () => void;
   onSold: () => void;
   /** «Volver a contratar»: arranca con el cliente y el plan de la membresía cancelada. */
-  initial?: { client: ClientHit; planId: string };
+  initial?: { client: ClientHit; planId: string; planName?: string };
 }) {
-  const [q, setQ] = useState("");
+  const [q, setQ] = useState(initial?.client.name ?? "");
   const [hits, setHits] = useState<ClientHit[]>([]);
   const [searching, setSearching] = useState(false);
   const [client, setClient] = useState<ClientHit | null>(initial?.client ?? null);
@@ -195,6 +195,9 @@ export function SellMembershipModal({
         {/* 2. Plan */}
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           <span className="bmem-step">{t("barber.membresias.clientes.sellModal.step2")}</span>
+          {initial && !sellable.some((p) => p.id === initial.planId) ? (
+            <p className="bmem-hint" role="status">{t("barber.membresias.clientes.sellModal.planGone", { plan: initial.planName ?? "" })}</p>
+          ) : null}
           {sellable.length === 0 ? (
             <p className="bmem-hint">{t("barber.membresias.clientes.sellModal.noPlans")}</p>
           ) : (

@@ -304,6 +304,7 @@ export function SubscriptionsTab({
           initial={{
             client: { id: rehiring.clientId, name: rehiring.clientName, phone: rehiring.clientPhone, activeMembership: null },
             planId: rehiring.membershipId,
+            planName: rehiring.membershipName,
           }}
           onClose={() => setRehiring(null)}
           onSold={onRefresh}

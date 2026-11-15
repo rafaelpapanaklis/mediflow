@@ -126,6 +126,7 @@
       "step2": "2. Which one?",
       "step3": "3. How do they pay?",
       "searchClient": "Type the client name or phone",
+      "planGone": "The plan “{plan}” is no longer sold. Pick another one to sign up again.",
       "noClients": "No clients matched that.",
       "alreadyHas": "Already has {plan} until {date}",
       "choosePlan": "Choose the membership",
