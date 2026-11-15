@@ -55,6 +55,32 @@ export const BARBER_LOGIN_PATH = "/barber/entrar" as const;
 export const BARBER_FORGOT_PASSWORD_PATH = "/forgot-password" as const;
 /** Donde se contrata. Aquí aterriza quien llega con un plan ya elegido. */
 export const BARBER_BILLING_PATH = "/barber/suscripcion" as const;
+/** Tickets a DaleControl. Exenta del candado de pago: se llega aunque no se haya pagado. */
+export const BARBER_SUPPORT_PATH = "/barber/soporte" as const;
+
+/**
+ * WhatsApp OFICIAL de DaleControl, en E.164 sin "+" (lo que pide wa.me).
+ * Es el mismo número de la portada del sitio. UNA sola copia: el texto que
+ * se lee se deriva de aquí (dalecontrolWhatsappDisplay), no se reescribe.
+ */
+export const DALECONTROL_WHATSAPP_E164 = "529994387769" as const;
+
+/** "+52 999 438 7769" a partir del E.164 (52 + 10 dígitos). */
+export function dalecontrolWhatsappDisplay(): string {
+  const n = DALECONTROL_WHATSAPP_E164;
+  return `+${n.slice(0, 2)} ${n.slice(2, 5)} ${n.slice(5, 8)} ${n.slice(8)}`;
+}
+
+/**
+ * Liga de WhatsApp a DaleControl con el mensaje ya escrito. El nombre de la
+ * barbería va en el texto para que soporte sepa quién escribe sin preguntar.
+ */
+export function barberSupportWhatsappUrl(shopName?: string | null): string {
+  const quien = shopName?.trim() ? ` de la barbería ${shopName.trim()}` : "";
+  const texto = `Hola, soy${quien} y necesito ayuda con mi suscripción de DaleControl Barber.`;
+  return `https://wa.me/${DALECONTROL_WHATSAPP_E164}?text=${encodeURIComponent(texto)}`;
+}
+
 /** Parámetro con el que el plan elegido en la portada viaja hasta Suscripción. */
 export const BARBER_PLAN_PARAM = "plan" as const;
 

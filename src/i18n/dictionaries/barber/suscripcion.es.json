@@ -23,7 +23,7 @@
     "resume": "Reanudar suscripción",
     "payOpenInvoice": "Pagar factura pendiente",
     "stripeError": "No pudimos leer tu suscripción en Stripe ahora mismo. Los planes de abajo siguen disponibles.",
-    "notConfigured": "El cobro en línea todavía no está conectado. Escríbenos a soporte para activar tu plan.",
+    "notConfigured": "El cobro en línea todavía no está conectado. Escríbenos y activamos tu plan.",
     "onlyOwner": "Solo el dueño de la barbería puede contratar, cambiar o cancelar el plan."
   },
   "alerts": {
@@ -167,9 +167,13 @@
     "authentication_required": "Tu banco pidió autenticar el cargo: paga la factura pendiente desde «Actualizar tarjeta» y vuelve a intentar.",
     "declined": "Tu banco rechazó el cargo; revisa tu método de pago e intenta de nuevo."
   },
+  "support": {
+    "goToSupport": "Ir a Soporte",
+    "whatsapp": "WhatsApp {number}"
+  },
   "errors": {
-    "generic": "Algo falló. Intenta de nuevo en un momento.",
+    "generic": "Algo falló. Intenta de nuevo en un momento; si sigue igual, escríbenos y lo vemos contigo.",
     "alreadySubscribed": "Ya tienes una suscripción activa: cambia de plan desde aquí o paga la factura pendiente.",
-    "notConfigured": "El cobro en línea todavía no está conectado. Escríbenos a soporte."
+    "notConfigured": "El cobro en línea todavía no está conectado. Escríbenos y activamos tu plan."
   }
 }

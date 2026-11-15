@@ -21,10 +21,26 @@ import {
 } from "./shared";
 
 type NoticeTone = "ok" | "warn" | "danger" | "info";
+interface NoticeAction {
+  label: string;
+  href: string;
+  external?: boolean;
+}
 interface Notice {
   tone: NoticeTone;
   text: string;
-  action?: { label: string; href: string; external?: boolean };
+  /** El primero se pinta como botón principal. */
+  actions?: NoticeAction[];
+}
+
+/** A quién escribirle cuando algo falla. Lo arma la página (server). */
+export interface BarberBillingSupport {
+  /** /barber/soporte — exenta del candado de pago. */
+  path: string;
+  /** wa.me del WhatsApp oficial de DaleControl, con el mensaje ya escrito. */
+  whatsappUrl: string;
+  /** El número como se lee: "+52 999 438 7769". */
+  whatsappNumber: string;
 }
 
 interface CheckoutReturn {
@@ -64,6 +80,7 @@ export function BillingScreen({
   summary,
   checkout,
   chosenPlanId = null,
+  support,
 }: {
   locale: string;
   dict: Dictionary;
@@ -74,6 +91,7 @@ export function BillingScreen({
   checkout: CheckoutReturn;
   /** Plan elegido en la portada (viaja en ?plan= por registro y entrada). */
   chosenPlanId?: BarberPlanCardDTO["id"] | null;
+  support: BarberBillingSupport;
 }) {
   const t = useMemo(() => makeBarberT(dict), [dict]);
   const router = useRouter();
@@ -88,6 +106,21 @@ export function BillingScreen({
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [cancelOpen, setCancelOpen] = useState(false);
   const stoppedRef = useRef(false);
+
+  // Las dos salidas de TODO error de cobro (G4): antes el mensaje decía
+  // «escríbenos a soporte» sin enlace ni teléfono, y con la suscripción sin
+  // pagar Soporte ni siquiera salía en el menú.
+  const supportActions = useMemo<NoticeAction[]>(
+    () => [
+      { label: t("barber.suscripcion.support.goToSupport"), href: support.path },
+      {
+        label: t("barber.suscripcion.support.whatsapp", { number: support.whatsappNumber }),
+        href: support.whatsappUrl,
+        external: true,
+      },
+    ],
+    [support, t],
+  );
 
   const statusKey = billingStatusKey(gate.subscriptionStatus);
   const sub = summary.subscription;
@@ -120,7 +153,7 @@ export function BillingScreen({
           setNotice({
             tone: "ok",
             text: t("barber.suscripcion.alerts.confirmed"),
-            action: { label: t("barber.suscripcion.alerts.goToPanel"), href: "/barber" },
+            actions: [{ label: t("barber.suscripcion.alerts.goToPanel"), href: "/barber" }],
           });
           router.replace("/barber/suscripcion");
           router.refresh();
@@ -132,7 +165,7 @@ export function BillingScreen({
       attempts += 1;
       if (attempts >= 10) {
         setConfirming(false);
-        setNotice({ tone: "warn", text: t("barber.suscripcion.alerts.confirmSlow") });
+        setNotice({ tone: "warn", text: t("barber.suscripcion.alerts.confirmSlow"), actions: supportActions });
         return;
       }
       setTimeout(run, 3000);
@@ -149,28 +182,41 @@ export function BillingScreen({
     (data: any, fallbackKey = "barber.suscripcion.errors.generic") => {
       const code = data?.code;
       if (code === "STRIPE_NOT_CONFIGURED") {
-        setNotice({ tone: "warn", text: t("barber.suscripcion.errors.notConfigured") });
+        setNotice({ tone: "warn", text: t("barber.suscripcion.errors.notConfigured"), actions: supportActions });
         return;
       }
       if (code === "ALREADY_SUBSCRIBED") {
         setNotice({
           tone: "info",
           text: t("barber.suscripcion.errors.alreadySubscribed"),
-          action: data?.openInvoiceUrl
-            ? { label: t("barber.suscripcion.hero.payOpenInvoice"), href: data.openInvoiceUrl, external: true }
+          actions: data?.openInvoiceUrl
+            ? [{ label: t("barber.suscripcion.hero.payOpenInvoice"), href: data.openInvoiceUrl, external: true }]
             : undefined,
         });
         return;
       }
       if (code === "UPGRADE_PAYMENT_FAILED") {
         const reason = typeof data?.reason === "string" ? data.reason : "declined";
-        setNotice({ tone: "danger", text: `${data?.error ?? ""} ${t(`barber.suscripcion.charge.${reason}`)}`.trim() });
+        setNotice({
+          tone: "danger",
+          text: `${data?.error ?? ""} ${t(`barber.suscripcion.charge.${reason}`)}`.trim(),
+          actions: supportActions,
+        });
         return;
       }
-      setNotice({ tone: "danger", text: typeof data?.error === "string" ? data.error : t(fallbackKey) });
+      setNotice({
+        tone: "danger",
+        text: typeof data?.error === "string" ? data.error : t(fallbackKey),
+        actions: supportActions,
+      });
     },
-    [t],
+    [supportActions, t],
   );
+
+  /** Falla de red o respuesta ilegible: el aviso genérico, con sus salidas. */
+  const failGeneric = useCallback(() => {
+    setNotice({ tone: "danger", text: t("barber.suscripcion.errors.generic"), actions: supportActions });
+  }, [supportActions, t]);
 
   // ── Acciones ─────────────────────────────────────────────────────────
   const contract = useCallback(
@@ -185,12 +231,12 @@ export function BillingScreen({
         }
         failWith(data);
       } catch {
-        setNotice({ tone: "danger", text: t("barber.suscripcion.errors.generic") });
+        failGeneric();
       } finally {
         setBusy(null);
       }
     },
-    [failWith, t],
+    [failGeneric, failWith],
   );
 
   const openChange = useCallback(
@@ -238,11 +284,11 @@ export function BillingScreen({
         failWith(data);
       }
     } catch {
-      setNotice({ tone: "danger", text: t("barber.suscripcion.errors.generic") });
+      failGeneric();
     } finally {
       setBusy(null);
     }
-  }, [changeTarget, failWith, router, t]);
+  }, [changeTarget, failGeneric, failWith, router, t]);
 
   const openPortal = useCallback(async () => {
     setBusy("portal");
@@ -254,11 +300,11 @@ export function BillingScreen({
       }
       failWith(data);
     } catch {
-      setNotice({ tone: "danger", text: t("barber.suscripcion.errors.generic") });
+      failGeneric();
     } finally {
       setBusy(null);
     }
-  }, [failWith, t]);
+  }, [failGeneric, failWith]);
 
   const doCancel = useCallback(async () => {
     setBusy("cancel");
@@ -278,11 +324,11 @@ export function BillingScreen({
         failWith(data);
       }
     } catch {
-      setNotice({ tone: "danger", text: t("barber.suscripcion.errors.generic") });
+      failGeneric();
     } finally {
       setBusy(null);
     }
-  }, [failWith, locale, router, t]);
+  }, [failGeneric, failWith, locale, router, t]);
 
   const doResume = useCallback(async () => {
     setBusy("resume");
@@ -293,11 +339,11 @@ export function BillingScreen({
         router.refresh();
       } else failWith(data);
     } catch {
-      setNotice({ tone: "danger", text: t("barber.suscripcion.errors.generic") });
+      failGeneric();
     } finally {
       setBusy(null);
     }
-  }, [failWith, router, t]);
+  }, [failGeneric, failWith, router, t]);
 
   // ── Avisos de estado ─────────────────────────────────────────────────
   const stateAlert = (() => {
@@ -328,7 +374,10 @@ export function BillingScreen({
         <Alert tone="warn" title={t("barber.suscripcion.alerts.pendingTitle")} body={t("barber.suscripcion.alerts.pendingBody")}>
           {!canManage && <p className="dcbb-alert__body" style={{ marginTop: 6 }}>{t("barber.suscripcion.hero.onlyOwner")}</p>}
           {canManage && !summary.configured && (
-            <p className="dcbb-alert__body" style={{ marginTop: 6 }}>{t("barber.suscripcion.hero.notConfigured")}</p>
+            <>
+              <p className="dcbb-alert__body" style={{ marginTop: 6 }}>{t("barber.suscripcion.hero.notConfigured")}</p>
+              <NoticeActions actions={supportActions} />
+            </>
           )}
         </Alert>
       );
@@ -412,17 +461,7 @@ export function BillingScreen({
           <NoticeIcon size={18} className="dcbb-alert__icon" aria-hidden />
           <div style={{ minWidth: 0, flex: 1 }}>
             <p className="dcbb-alert__body" style={{ color: "var(--text-1)" }}>{notice.text}</p>
-            {notice.action && (
-              <div className="dcbb-alert__actions">
-                <a
-                  className="dcbb-btn barber-btn-primary"
-                  href={notice.action.href}
-                  {...(notice.action.external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
-                >
-                  {notice.action.label}
-                </a>
-              </div>
-            )}
+            {notice.actions && <NoticeActions actions={notice.actions} />}
           </div>
         </div>
       )}
@@ -577,6 +616,25 @@ export function BillingScreen({
           </button>
         </div>
       </BillingModal>
+    </div>
+  );
+}
+
+/** Botones de un aviso. El primero es el principal. */
+function NoticeActions({ actions }: { actions: NoticeAction[] }) {
+  if (actions.length === 0) return null;
+  return (
+    <div className="dcbb-alert__actions">
+      {actions.map((a, i) => (
+        <a
+          key={a.href}
+          className={`dcbb-btn ${i === 0 ? "barber-btn-primary" : ""}`.trim()}
+          href={a.href}
+          {...(a.external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+        >
+          {a.label}
+        </a>
+      ))}
     </div>
   );
 }

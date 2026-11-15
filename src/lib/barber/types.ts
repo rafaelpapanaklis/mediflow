@@ -357,6 +357,11 @@ export const BARBER_NAV_ITEMS: BarberNavItemDef[] = [
   { key: "campanas", href: "/barber/campanas", icon: "message-circle", section: "crecimiento", permission: "whatsapp.view", featureKey: "whatsappInbox" },
   { key: "suscripcion", href: "/barber/suscripcion", icon: "credit-card", section: "cuenta", permission: "billing.manage", featureKey: null },
   { key: "configuracion", href: "/barber/configuracion", icon: "settings", section: "cuenta", permission: "settings.edit", featureKey: null },
+  // Soporte: en TODOS los planes y también con la suscripción sin pagar (la
+  // pantalla está exenta del candado a propósito). Antes solo se llegaba por
+  // una pestaña dentro de Barberos: quien no podía pagar no tenía a quién
+  // escribirle (auditoría 14-nov, G4). Ver BARBER_UNPAID_NAV_KEYS.
+  { key: "soporte", href: "/barber/soporte", icon: "life-buoy", section: "cuenta", permission: "support.view", featureKey: null },
 ];
 
 /** Item de navegación YA resuelto (label + visibilidad) que recibe el sidebar. */

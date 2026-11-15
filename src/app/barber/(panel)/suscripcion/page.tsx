@@ -13,6 +13,11 @@ import {
   isBarberStripeConfigured,
   toCents,
 } from "@/lib/barber/billing";
+import {
+  BARBER_SUPPORT_PATH,
+  barberSupportWhatsappUrl,
+  dalecontrolWhatsappDisplay,
+} from "@/lib/barber/marketing";
 import { getBarberDict } from "@/i18n/dictionaries/barber";
 import { BillingScreen } from "@/components/barber/billing/billing-screen";
 import {
@@ -88,6 +93,12 @@ export default async function BarberSuscripcionPage(props: PageProps) {
       // El plan que se eligió en la portada (?plan=). Solo ids de la casa:
       // lo que no lo sea se ignora y la pantalla sale como siempre.
       chosenPlanId={isBarberPlanId(searchParams?.plan) ? searchParams.plan : null}
+      // A quién escribirle cuando el cobro falla: ticket + WhatsApp oficial.
+      support={{
+        path: BARBER_SUPPORT_PATH,
+        whatsappUrl: barberSupportWhatsappUrl(ctx.barbershop.name),
+        whatsappNumber: dalecontrolWhatsappDisplay(),
+      }}
     />
   );
 }

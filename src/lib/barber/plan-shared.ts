@@ -232,14 +232,22 @@ export function isBarbershopSubscriptionActive(
 }
 
 /**
- * Menú con la suscripción IMPAGA (pending_payment / past_due / canceled):
- * solo la sección "cuenta" sin Configuración — el camino claro es pagar.
- * Helper PURO para el layout del panel (una línea allí):
- *   const nav = isBarbershopSubscriptionActive(ctx.barbershop)
- *     ? BARBER_NAV_ITEMS : barberNavItemsWhileUnpaid(BARBER_NAV_ITEMS);
- * La ola de suscripción lo aporta; cablearlo en el layout es un cambio de
- * shell fuera de su allowlist (ver ORQUESTA [Barber Planes]).
+ * Lo ÚNICO que se ve en el menú con la suscripción IMPAGA (pending_payment /
+ * past_due / canceled): dónde se paga y a quién pedirle ayuda. Son justo las
+ * dos pantallas exentas del candado de pago (requireBarberPaidAccess); todo
+ * lo demás redirige a Suscripción, y un menú que redirige en cada clic se
+ * lee como una app rota.
+ *
+ * Es una lista EXPLÍCITA y no «la sección cuenta» a propósito: cualquier
+ * entrada nueva de esa sección (Socios, p. ej.) se colaba sola en el menú
+ * de quien no ha pagado.
+ */
+export const BARBER_UNPAID_NAV_KEYS: readonly string[] = ["suscripcion", "soporte"];
+
+/**
+ * Menú con la suscripción IMPAGA. Helper PURO para el layout del panel:
+ *   const nav = paid ? BARBER_NAV_ITEMS : barberNavItemsWhileUnpaid(BARBER_NAV_ITEMS);
  */
 export function barberNavItemsWhileUnpaid<T extends { key: string; section: string }>(items: T[]): T[] {
-  return items.filter((i) => i.section === "cuenta" && i.key !== "configuracion");
+  return items.filter((i) => BARBER_UNPAID_NAV_KEYS.includes(i.key));
 }

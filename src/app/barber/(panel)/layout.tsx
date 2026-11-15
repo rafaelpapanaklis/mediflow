@@ -26,7 +26,7 @@ import "../barber-theme.css";
  * prueba src/lib/barber/__tests__/candado-suscripcion.test.ts.
  *
  * Lo que SÍ hace el layout es no mentir: con la suscripción impaga el menú
- * se recorta a lo único que se puede hacer (pagar), porque un sidebar
+ * se recorta a lo único que se puede hacer (pagar o pedir ayuda), porque un sidebar
  * completo que redirige en cada clic se lee como una app rota, no como una
  * cuenta sin pagar.
  *
@@ -45,9 +45,11 @@ export default async function BarberPanelLayout({
   const t = getBarberT(ctx.barbershop.locale);
   const paid = await hasBarberPaidAccess(ctx);
 
-  // Impaga: solo la sección "cuenta" sin Configuración (helper PURO y ya
-  // probado de plan-shared). El recorte va ANTES del filtro de plan/permiso
-  // — no después: el orden importa porque Suscripción se indulta abajo.
+  // Impaga: solo Suscripción y Soporte, las dos pantallas exentas del candado
+  // (helper PURO y ya probado de plan-shared). El recorte va ANTES del filtro
+  // de plan/permiso — no después: el orden importa porque Suscripción se
+  // indulta abajo. Soporte sí respeta su permiso (support.view): a quien no
+  // lo tiene la pantalla le diría «sin acceso».
   const navSource = paid ? BARBER_NAV_ITEMS : barberNavItemsWhileUnpaid(BARBER_NAV_ITEMS);
 
   const permUser = { role: ctx.role, permissionsOverride: ctx.user.permissionsOverride };

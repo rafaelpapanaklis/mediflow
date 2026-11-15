@@ -11,6 +11,7 @@ import {
   Globe,
   Home,
   Inbox,
+  LifeBuoy,
   LogOut,
   Menu,
   MessageCircle,
@@ -43,6 +44,7 @@ const ICONS: Record<string, React.ComponentType<{ size?: number | string }>> = {
   "message-circle": MessageCircle,
   "credit-card": CreditCard,
   settings: Settings,
+  "life-buoy": LifeBuoy,
 };
 
 const SECTION_ORDER: BarberNavItem["section"][] = [
