@@ -16,6 +16,7 @@ export function ItemBars({
   shareLabel,
   marginLabel,
   noCostLabel,
+  showMargin = true,
 }: {
   items: ReportItemRow[];
   locale: string;
@@ -24,6 +25,8 @@ export function ItemBars({
   shareLabel: string;
   marginLabel: string;
   noCostLabel: string;
+  /** false = quien no administra productos: ni margen ni «sin costo». */
+  showMargin?: boolean;
 }) {
   const max = items.reduce((m, it) => Math.max(m, it.revenue), 0);
   return (
@@ -51,7 +54,7 @@ export function ItemBars({
                 {shareLabel} {fmtPct(it.share)}
               </span>
             )}
-            {kind === "product" && (
+            {kind === "product" && showMargin && (
               <span>
                 {it.margin === null ? noCostLabel : `${marginLabel} ${fmtMoney(it.margin)} (${fmtPct(it.marginPct)})`}
               </span>

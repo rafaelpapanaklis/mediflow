@@ -332,7 +332,7 @@ export function ReportesView({
           )}
         </CardNew>
         {s.can.products && (
-          <CardNew title={t("items.productsTitle")} sub={t("items.marginHint")}>
+          <CardNew title={t("items.productsTitle")} sub={s.can.productCost === false ? undefined : t("items.marginHint")}>
             {s.topProducts.length === 0 ? (
               <div className="bdash-empty">{t("items.empty")}</div>
             ) : (
@@ -344,6 +344,7 @@ export function ReportesView({
                 shareLabel={t("items.colShare")}
                 marginLabel={t("items.colMargin")}
                 noCostLabel={t("items.noCost")}
+                showMargin={s.can.productCost !== false}
               />
             )}
           </CardNew>

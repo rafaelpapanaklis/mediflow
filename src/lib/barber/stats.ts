@@ -993,7 +993,8 @@ export interface ReportsSummary {
   timezone: string;
   period: ReportPeriod;
   scope: InicioSummary["scope"];
-  can: { commissions: boolean; products: boolean };
+  /** productCost: ve costo y margen de productos (products.manage); sin él viajan en null. */
+  can: { commissions: boolean; products: boolean; productCost?: boolean };
   totals: {
     tickets: number;
     services: number;
@@ -1112,6 +1113,10 @@ export async function getReportsSummary(ctx: BarberContext, opts: ReportsOptions
 
   const includeCommission = can(ctx, "commissions.view");
   const includeProducts = features.products === true;
+  // Costo y margen de productos: solo quien administra el catálogo (QA B,
+  // 15-nov). Recepción y el Barbero veían «Margen $109.50 (54.9%)» aquí y la
+  // columna Costo en el CSV, aunque en Productos ya no les llega el costo.
+  const includeProductCost = can(ctx, "products.manage");
   const ids = Prisma.join(branchIds);
   const rangeSql = (col: string) =>
     Prisma.sql`${Prisma.raw(col)} >= ${utcTs(start)} AND ${Prisma.raw(col)} < ${utcTs(end)}`;
@@ -1364,7 +1369,7 @@ export async function getReportsSummary(ctx: BarberContext, opts: ReportsOptions
     const revenue = money(D(it.revenue as never));
     const kind: "service" | "product" = it.productId ? "product" : "service";
     const base = kind === "product" ? productsRevenue : servicesRevenue;
-    const cost = kind === "product" && it.cost !== null && it.cost !== undefined ? money(D(it.cost as never)) : null;
+    const cost = kind === "product" && includeProductCost && it.cost !== null && it.cost !== undefined ? money(D(it.cost as never)) : null;
     const margin = cost === null ? null : money(revenue.minus(cost));
     const row: ReportItemRow = {
       id: (it.productId ?? it.serviceId) as string,
@@ -1500,7 +1505,7 @@ export async function getReportsSummary(ctx: BarberContext, opts: ReportsOptions
       selfOnly,
       barberLinked: !selfOnly || Boolean(ctx.barber),
     },
-    can: { commissions: includeCommission, products: includeProducts },
+    can: { commissions: includeCommission, products: includeProducts, productCost: includeProductCost },
     totals: {
       tickets: tot.tickets,
       services: toNum(tot.services),
@@ -1656,8 +1661,14 @@ export function buildReportsCsv(s: ReportsSummary, L: ReportsCsvLabels): string 
 
   if (s.can.products) {
     push([L.sections.products]);
-    push([L.item, L.qty, L.revenue, L.cost, L.margin, L.marginPct, L.share]);
-    for (const it of s.topProducts) push([it.name, it.qty, it.revenue, it.cost ?? "", it.margin ?? "", it.marginPct ?? "", it.share ?? ""]);
+    if (s.can.productCost === false) {
+      // Sin costo ni margen (Recepción, Barbero): ni columnas vacías.
+      push([L.item, L.qty, L.revenue, L.share]);
+      for (const it of s.topProducts) push([it.name, it.qty, it.revenue, it.share ?? ""]);
+    } else {
+      push([L.item, L.qty, L.revenue, L.cost, L.margin, L.marginPct, L.share]);
+      for (const it of s.topProducts) push([it.name, it.qty, it.revenue, it.cost ?? "", it.margin ?? "", it.marginPct ?? "", it.share ?? ""]);
+    }
     blank();
   }
 
