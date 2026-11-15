@@ -100,7 +100,7 @@
     "pause": "Pause",
     "resume": "Resume",
     "cancel": "Cancel",
-    "cancelConfirm": "Cancel this membership? If it is charged by card, the automatic charge is stopped too.",
+    "cancelConfirm": "Cancel this membership? This does not refund the money or change the cash count: to undo the charge, cancel its ticket in Cash. If it is charged automatically by card, the automatic charge is stopped too.",
     "empty": {
       "all": "Nobody has a membership yet. Sell the first one to a regular.",
       "active": "No active memberships right now.",
@@ -112,7 +112,8 @@
       "title": "Renew membership",
       "body": "{client} · {plan}. The new period is chained to the current one, so no days are lost.",
       "howPaid": "How did they pay?",
-      "confirm": "Record payment and renew"
+      "confirm": "Record payment and renew",
+      "cashHint": "A {amount} ticket is recorded in the open shift in Cash. You cannot renew without an open shift."
     },
     "sellModal": {
       "title": "Sell a membership",
@@ -128,7 +129,8 @@
       "confirmOnline": "Charge the card",
       "onlineHint": "Stripe secure checkout opens. The membership activates once the charge is confirmed.",
       "recurring": "Charge automatically each period (subscription)",
-      "recurringHint": "The card is charged by itself each period, so you never have to chase anyone."
+      "recurringHint": "The card is charged by itself each period, so you never have to chase anyone.",
+      "cashHint": "A {amount} ticket is recorded in the open shift in Cash: it shows in the cash count, on Home and in Reports. You cannot sell without an open shift."
     }
   },
   "payment": {
@@ -136,7 +138,7 @@
     "SPEI": "Bank transfer (SPEI)",
     "CARD": "Card at the counter",
     "STRIPE": "Card online",
-    "chooseHint": "For cash and transfers you record the payment; we work out the expiry date and tell you when it is time to charge again."
+    "chooseHint": "For cash, transfers or card at the counter you record the payment; we work out the expiry date and tell you when it is time to charge again."
   },
   "status": {
     "ACTIVE": "Active",

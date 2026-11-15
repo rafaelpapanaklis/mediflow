@@ -118,6 +118,13 @@ before(async () => {
     )`);
   shops.A = await makeShop("A");
   shops.B = await makeShop("B");
+  // Vender o renovar una membresía a mano es COBRAR: exige un turno abierto
+  // (el dinero entra al corte como ticket). Se abre uno por barbería.
+  for (const shop of [shops.A, shops.B]) {
+    await prisma.barberCashSession.create({
+      data: { barbershopId: shop.id, openingAmount: new Prisma.Decimal(0), openedByUserId: shop.userId },
+    });
+  }
 });
 
 after(async () => {
@@ -137,6 +144,7 @@ test("membresía de 2 cortes: cubre 2 y el TERCERO se cobra", { skip }, async ()
   const planId = await makePlan(A.id, 2);
   const sold = await sellMembership({
     barbershopId: A.id,
+    soldByUserId: A.userId,
     clientId: A.clientId,
     membershipId: planId,
     paymentMethod: "CASH",
@@ -174,6 +182,7 @@ test("5 cierres SIMULTÁNEOS sobre 2 cortes: exactamente 2 pasan (Postgres real)
   const planId = await makePlan(A.id, 2);
   const sold = await sellMembership({
     barbershopId: A.id,
+    soldByUserId: A.userId,
     clientId: A.clientId,
     membershipId: planId,
     paymentMethod: "SPEI",
@@ -201,6 +210,7 @@ test("CONTROL: leer el cupo y luego incrementar SIN condición SÍ se pasa", { s
   const planId = await makePlan(A.id, 2);
   const sold = await sellMembership({
     barbershopId: A.id,
+    soldByUserId: A.userId,
     clientId: A.clientId,
     membershipId: planId,
     paymentMethod: "CASH",
@@ -231,6 +241,7 @@ test("el candado sirve DENTRO de una transacción ajena (el que usa la caja)", {
   const planId = await makePlan(A.id, 1);
   const sold = await sellMembership({
     barbershopId: A.id,
+    soldByUserId: A.userId,
     clientId: A.clientId,
     membershipId: planId,
     paymentMethod: "CASH",
@@ -302,6 +313,7 @@ test("la membresía de efectivo vence sola y sale en 'por vencer' (sin tocar Str
   const antes = post.endAt;
   const renovada = await renewClientMembership({
     barbershopId: A.id,
+    soldByUserId: A.userId,
     clientMembershipId: vencida.id,
     paymentMethod: "CASH",
   });
@@ -460,6 +472,7 @@ test("la barbería B no ve planes, membresías ni anticipos de A", { skip }, asy
   const planA = await makePlan(A.id, 2);
   const ventaA = await sellMembership({
     barbershopId: A.id,
+    soldByUserId: A.userId,
     clientId: A.clientId,
     membershipId: planA,
     paymentMethod: "CASH",
@@ -513,6 +526,7 @@ test("no se le puede vender una segunda membresía a quien ya tiene una vigente"
   const planId = await makePlan(A.id, 2);
   const primera = await sellMembership({
     barbershopId: A.id,
+    soldByUserId: A.userId,
     clientId: A.clientId,
     membershipId: planId,
     paymentMethod: "CASH",
@@ -522,6 +536,7 @@ test("no se le puede vender una segunda membresía a quien ya tiene una vigente"
     () =>
       sellMembership({
         barbershopId: A.id,
+        soldByUserId: A.userId,
         clientId: A.clientId,
         membershipId: planId,
         paymentMethod: "CASH",

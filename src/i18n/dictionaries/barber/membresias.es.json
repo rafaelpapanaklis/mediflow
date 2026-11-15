@@ -100,7 +100,7 @@
     "pause": "Pausar",
     "resume": "Reactivar",
     "cancel": "Cancelar",
-    "cancelConfirm": "¿Cancelar esta membresía? Si se cobra con tarjeta, también se corta el cobro automático.",
+    "cancelConfirm": "¿Cancelar esta membresía? Esto no devuelve el dinero ni cambia el corte: para deshacer el cobro, cancela su ticket en Caja. Si se cobra sola con tarjeta, también se corta el cobro automático.",
     "empty": {
       "all": "Todavía nadie tiene membresía. Véndele la primera a un cliente de confianza.",
       "active": "No hay membresías vigentes ahora mismo.",
@@ -112,7 +112,8 @@
       "title": "Renovar membresía",
       "body": "{client} · {plan}. El periodo nuevo se encadena al actual, así no pierde días.",
       "howPaid": "¿Cómo pagó?",
-      "confirm": "Registrar pago y renovar"
+      "confirm": "Registrar pago y renovar",
+      "cashHint": "Se registra un ticket de {amount} en el turno abierto de Caja. Sin turno abierto no se puede renovar."
     },
     "sellModal": {
       "title": "Vender membresía",
@@ -128,7 +129,8 @@
       "confirmOnline": "Cobrar con tarjeta",
       "onlineHint": "Se abre el pago seguro de Stripe. La membresía se activa cuando el cobro se confirma.",
       "recurring": "Cobrar solo cada periodo (suscripción)",
-      "recurringHint": "Con esto la tarjeta se cobra sola cada periodo y no tienes que perseguir a nadie."
+      "recurringHint": "Con esto la tarjeta se cobra sola cada periodo y no tienes que perseguir a nadie.",
+      "cashHint": "Se registra un ticket de {amount} en el turno abierto de Caja: aparece en el corte, en Inicio y en Reportes. Sin turno abierto no se puede vender."
     }
   },
   "payment": {
@@ -136,7 +138,7 @@
     "SPEI": "Transferencia (SPEI)",
     "CARD": "Tarjeta en mostrador",
     "STRIPE": "Tarjeta en línea",
-    "chooseHint": "En efectivo y transferencia tú registras el pago; nosotros calculamos la vigencia y te avisamos cuándo toca cobrar de nuevo."
+    "chooseHint": "En efectivo, transferencia o tarjeta de mostrador tú registras el pago; nosotros calculamos la vigencia y te avisamos cuándo toca cobrar de nuevo."
   },
   "status": {
     "ACTIVE": "Activa",

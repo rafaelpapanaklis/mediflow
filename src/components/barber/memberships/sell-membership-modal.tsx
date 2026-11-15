@@ -239,6 +239,13 @@ export function SellMembershipModal({
               ? t("barber.membresias.clientes.sellModal.onlineHint")
               : t("barber.membresias.payment.chooseHint")}
           </p>
+          {!online && plan ? (
+            <p className="bmem-hint">
+              {t("barber.membresias.clientes.sellModal.cashHint", {
+                amount: formatCents(moneyToCents(plan.price), "MXN", locale),
+              })}
+            </p>
+          ) : null}
 
           {online ? (
             <CheckCard
