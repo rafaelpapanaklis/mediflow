@@ -192,9 +192,22 @@ export async function POST(req: Request) {
     // 5) Plantillas del catálogo dentro de la WABA recién conectada, en
     //    segundo plano: son varias llamadas a Meta y el onboarding no puede
     //    demorarse ni fallar por esto. El botón de la pantalla lo repite.
-    void provisionBarberTemplates(shopId).catch((e) => {
-      console.error(`[barber/whatsapp/connect] alta de plantillas (${shopId}):`, e);
-    });
+    void provisionBarberTemplates(shopId)
+      .then((r) => {
+        // Antes la lista `failed` se ignoraba: una plantilla rechazada por
+        // Meta (la de código de acceso, 15-nov) no dejaba rastro. Sin token.
+        for (const f of r.failed) {
+          console.error(
+            `[barber/whatsapp/connect] Meta no aceptó la plantilla ${f.name} (${shopId}): ` +
+              `${[f.userTitle, f.userMsg, f.message].filter(Boolean).join(" — ") || f.error}` +
+              `${f.code != null ? ` (#${f.code}${f.subcode != null ? `/${f.subcode}` : ""})` : ""}`,
+          );
+        }
+        if (!r.ok && r.reason) console.error(`[barber/whatsapp/connect] alta de plantillas (${shopId}): ${r.reason}`);
+      })
+      .catch((e) => {
+        console.error(`[barber/whatsapp/connect] alta de plantillas (${shopId}):`, e);
+      });
 
     return NextResponse.json({ ok: true, displayName, verified, subscribed });
   } catch (err) {

@@ -77,6 +77,17 @@
     "created": "Se dieron de alta {count}. Meta las revisa y suelen aprobarse en minutos.",
     "noneNeeded": "No falta ninguna.",
     "failed": "No se pudieron dar de alta: {names}",
+    "failure": {
+      "token": "La conexión con Meta venció. Vuelve a conectar tu WhatsApp y después da de alta las plantillas.",
+      "permission": "Meta no nos dio permiso para crear plantillas en tu cuenta. Vuelve a conectar y acepta todos los permisos.",
+      "rateLimit": "Meta pidió esperar: hubo demasiados intentos seguidos. Vuelve a intentarlo en unos minutos.",
+      "deleting": "Meta todavía está borrando una plantilla anterior con ese nombre. Puede tardar varias semanas; avísanos y la damos de alta con otro nombre.",
+      "authNotAccepted": "Meta no aceptó la plantilla de código de acceso para tu cuenta. Abajo va lo que dijo Meta; mándanos una captura y lo revisamos.",
+      "invalid": "Meta dice que a la plantilla le falta o le sobra un dato. Mándanos una captura de este aviso y lo corregimos.",
+      "network": "Meta no respondió a tiempo. Vuelve a intentarlo en un momento.",
+      "other": "Meta no aceptó esta plantilla. Abajo va lo que dijo Meta.",
+      "metaSaid": "Lo que dijo Meta"
+    },
     "rejected": {
       "ABUSIVE_CONTENT": "Meta considera que el contenido incumple sus políticas.",
       "CATEGORY_NOT_AVAILABLE": "Meta no permite esta categoría de plantilla en tu cuenta.",

@@ -78,6 +78,17 @@
     "created": "{count} registered. Meta reviews them, usually within minutes.",
     "noneNeeded": "None missing.",
     "failed": "Could not register: {names}",
+    "failure": {
+      "token": "Your Meta connection expired. Reconnect your WhatsApp and then create the templates.",
+      "permission": "Meta didn’t give us permission to create templates in your account. Reconnect and accept all permissions.",
+      "rateLimit": "Meta asked us to wait: too many attempts in a row. Try again in a few minutes.",
+      "deleting": "Meta is still deleting an older template with that name. It can take several weeks; let us know and we’ll create it under another name.",
+      "authNotAccepted": "Meta didn’t accept the access-code template for your account. Meta’s message is below; send us a screenshot and we’ll look into it.",
+      "invalid": "Meta says the template is missing a field or has an extra one. Send us a screenshot of this notice and we’ll fix it.",
+      "network": "Meta didn’t respond in time. Try again in a moment.",
+      "other": "Meta didn’t accept this template. Meta’s message is below.",
+      "metaSaid": "What Meta said"
+    },
     "rejected": {
       "ABUSIVE_CONTENT": "Meta considers the content against its policies.",
       "CATEGORY_NOT_AVAILABLE": "Meta doesn’t allow this template category on your account.",

@@ -54,7 +54,11 @@ import {
 } from "@/lib/barber/wa-acuse-core";
 import { getBarberWaAck } from "@/lib/barber/wa-acuse";
 import { wabaIdsFromDebugToken } from "@/lib/barber/wa-signup-core";
-import { barberTemplateRejection } from "@/lib/barber/wa-plantillas-core";
+import {
+  barberTemplateRejection,
+  readBarberTemplateFailure,
+  type BarberTemplateFailure,
+} from "@/lib/barber/wa-plantillas-core";
 import {
   BARBER_WA_ARCHIVE_MARK,
   BARBER_WA_CLAIM_LOST_MESSAGE,
@@ -888,7 +892,16 @@ export async function listBarberTemplates(barbershopId: string): Promise<{
 export async function provisionBarberTemplates(
   barbershopId: string,
   opts: { includeMarketing?: boolean } = {},
-): Promise<{ ok: boolean; reason?: string; created: string[]; failed: { name: string; error: string }[] }> {
+): Promise<{
+  ok: boolean;
+  reason?: string;
+  created: string[];
+  /**
+   * Las que Meta no aceptó, con TODO lo que dijo (código, subcódigo,
+   * error_user_title, error_user_msg). `error` es el texto de siempre.
+   */
+  failed: Array<BarberTemplateFailure & { error: string; kind: BarberWaKind }>;
+}> {
   const shop = await loadShop(barbershopId);
   if (!shop) return { ok: false, reason: "No se encontró la barbería.", created: [], failed: [] };
   const creds = resolveSenderCredentials(shop);
@@ -909,7 +922,7 @@ export async function provisionBarberTemplates(
   );
 
   const created: string[] = [];
-  const failed: { name: string; error: string }[] = [];
+  const failed: Array<BarberTemplateFailure & { error: string; kind: BarberWaKind }> = [];
 
   for (const tpl of BARBER_WA_TEMPLATES) {
     if (tpl.optional && !opts.includeMarketing) continue;
@@ -934,9 +947,23 @@ export async function provisionBarberTemplates(
       if (/already exists/i.test(err.message) || err.code === 2388023) {
         continue;
       }
-      failed.push({ name: tpl.name, error: err.message });
+      // Lo útil de Meta suele venir en error_user_msg, no en message.
+      const detail = readBarberTemplateFailure(tpl.name, tpl.category, json);
+      failed.push({
+        ...detail,
+        kind: tpl.kind,
+        error: detail.userMsg ?? err.message,
+        code: detail.code ?? (res.status === 401 ? 190 : null),
+      });
     } catch (e) {
-      failed.push({ name: tpl.name, error: e instanceof Error ? e.message : "Error de red" });
+      failed.push({
+        name: tpl.name,
+        kind: tpl.kind,
+        category: tpl.category,
+        network: true,
+        message: e instanceof Error ? e.name : null,
+        error: e instanceof Error ? e.message : "Error de red",
+      });
     }
   }
 
