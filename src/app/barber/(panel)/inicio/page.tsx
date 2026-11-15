@@ -35,10 +35,19 @@ export default async function Page() {
   // dice Mi web. Antes se medía con «alguna vez se publicó un cambio», y una
   // página que ya se veía en /b/<slug> salía «pendiente». Está en línea
   // mientras no esté apagada («muy pronto»).
-  const landing = await prisma.barberLandingConfig
-    .findUnique({ where: { barbershopId: ctx.barbershopId }, select: { config: true } })
-    .catch(() => null); // sin tabla/fila: la página base igual se ve
-  const webOnline = ctx.barbershop.isActive && !normalizarConfigBarberWeb(landing?.config).oculta;
+  // La sede es la que YA resolvió el resumen (`summary.scope`, validada contra
+  // las sedes que la sesión alcanza): con el selector en otra sede, el paso mira
+  // la web de esa sede; en la vista de toda la cadena, la de la sesión.
+  const webShopId = summary.scope.activeBranchId ?? ctx.barbershopId;
+  const [landing, webShop] = await Promise.all([
+    prisma.barberLandingConfig
+      .findUnique({ where: { barbershopId: webShopId }, select: { config: true } })
+      .catch(() => null), // sin tabla/fila: la página base igual se ve
+    webShopId === ctx.barbershopId
+      ? Promise.resolve({ isActive: ctx.barbershop.isActive })
+      : prisma.barbershop.findUnique({ where: { id: webShopId }, select: { isActive: true } }),
+  ]);
+  const webOnline = Boolean(webShop?.isActive) && !normalizarConfigBarberWeb(landing?.config).oculta;
 
   return (
     <InicioView
