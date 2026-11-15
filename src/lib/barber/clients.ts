@@ -1431,6 +1431,16 @@ export async function listBarberClientPhotos(
     clientId,
   };
   if (opts.appointmentId !== undefined) where.appointmentId = opts.appointmentId;
+  // Rol Barbero en un cliente SUYO (decisión #9 de Rafael, 15-nov: «que vea
+  // solo lo de él»): solo las fotos de las citas que atendió él, más las
+  // sueltas que subió él mismo. Las de las citas de otro barbero no salen.
+  const scope = clientsViewScope(scopeUserFromCtx(ctx));
+  if (scope.kind === "own") {
+    where.OR = [
+      { appointment: { barberId: scope.barberId } },
+      { appointmentId: null, uploadedByUserId: ctx.barberUserId },
+    ];
+  }
 
   const rows = await prisma.barberVisitPhoto.findMany({
     where: { ...where, barbershopId: ctx.barbershopId },
