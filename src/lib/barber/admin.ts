@@ -4,7 +4,11 @@ import { createClient as createSupabaseAdmin } from "@supabase/supabase-js";
 import { prisma } from "@/lib/prisma";
 import { isMissingTableError } from "@/lib/barber/db-errors";
 import { getBarberPlans } from "@/lib/barber/plans";
-import { cargarCobrosAdmin, marcarReactivacionManualBarber } from "@/lib/barber/cobros";
+import {
+  cargarCobrosAdmin,
+  marcarReactivacionManualBarber,
+  revalidarWebPublicaBarber,
+} from "@/lib/barber/cobros";
 import {
   clasificarCobro,
   pagoMensual,
@@ -1094,6 +1098,8 @@ export async function setBarbershopSuspension(
   ]);
 
   if (!input.suspend) await marcarReactivacionManualBarber(shop.id);
+  // Su web /b/<slug> se oculta o vuelve al momento (no al caducar el ISR).
+  await revalidarWebPublicaBarber([shop.id]);
 
   const audited = await recordBarberAdminAction({
     barbershopId: shop.id,

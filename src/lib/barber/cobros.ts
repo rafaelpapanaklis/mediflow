@@ -198,12 +198,43 @@ export async function marcarReactivacionManualBarber(barbershopId: string, at: D
  */
 async function suspenderFamilias(rootIds: string[]): Promise<number> {
   if (rootIds.length === 0) return 0;
-  return prisma.$executeRaw(Prisma.sql`
+  const n = await prisma.$executeRaw(Prisma.sql`
     UPDATE barber_shops
        SET "subscriptionStatus" = ${BARBER_VENCIDA_STATUS}, "updatedAt" = now()
      WHERE (id = ANY(${rootIds}::text[]) OR "parentId" = ANY(${rootIds}::text[]))
        AND "subscriptionStatus" = ANY(${ACTIVOS}::text[])
   `);
+  if (n > 0) await revalidarWebPublicaBarber(rootIds);
+  return n;
+}
+
+/**
+ * La web pública /b/<slug> es ISR de 5 min: al cambiar el acceso de una
+ * barbería (se suspende, paga, se reactiva a mano) se revalida la página de
+ * la matriz y de sus sucursales, para que se oculte o VUELVA al momento y no
+ * hasta 5 minutos después. Nunca lanza: fuera de una petición de Next
+ * (pruebas, scripts) revalidatePath no tiene dónde actuar, y entonces el
+ * tope sigue siendo los 5 min del ISR.
+ */
+export async function revalidarWebPublicaBarber(rootIds: string[]): Promise<void> {
+  const ids = rootIds.filter(Boolean);
+  if (ids.length === 0) return;
+  try {
+    const rows = await prisma.barbershop.findMany({
+      where: { OR: [{ id: { in: ids } }, { parentId: { in: ids } }] },
+      select: { slug: true },
+    });
+    const { revalidatePath } = await import("next/cache");
+    for (const r of rows) {
+      try {
+        revalidatePath(`/b/${r.slug}`);
+      } catch {
+        /* fuera de una petición de Next: queda el ISR de 5 min */
+      }
+    }
+  } catch (e) {
+    console.warn("[barber cobros] no se pudo revalidar la web pública:", (e as Error)?.message ?? e);
+  }
 }
 
 /**
@@ -219,6 +250,53 @@ export async function vencerSiTocaBarber(rootId: string, status: string, now: Da
   await suspenderFamilias([rootId]);
   console.log("[barber cobros] suspendida al entrar: periodo pagado vencido", JSON.stringify({ rootId }));
   return true;
+}
+
+// ── EL criterio único de «al corriente» (panel y todo lo público) ────────
+
+/**
+ * ¿La MATRIZ `rootId`, con estado `rootStatus`, está al corriente? Es el
+ * criterio del candado del panel (hasBarberPaidAccess) y, desde el 15-nov
+ * (decisión #10: «si está suspendida no borres nada, pero que no se pueda
+ * acceder hasta que pague»), también de lo público: la web /b/<slug>, la
+ * reserva, la fila y «mi cuenta».
+ *
+ *   · estado con acceso (active | trialing | paid), Y
+ *   · su periodo pagado no venció — salvo que Stripe ya haya renovado y siga
+ *     «active» (ronda 2): nunca se oculta lo de quien sí pagó.
+ *
+ * Si venció, la deja suspendida en ese momento (vencerSiTocaBarber). Un fallo
+ * al leer el registro NO cierra nada (lo deja en el log): el cron vuelve a
+ * pasar en ≤ 5 min. Las cortesías (sin cobros) y la barbería de prueba siguen
+ * «al corriente» mientras su estado lo esté.
+ */
+export async function matrizAlCorriente(rootId: string, rootStatus: string, now: Date = new Date()): Promise<boolean> {
+  if (!BARBER_ACTIVE_SUBSCRIPTION_STATUSES.has(rootStatus)) return false;
+  try {
+    return !(await vencerSiTocaBarber(rootId, rootStatus, now));
+  } catch (e) {
+    console.error("[barber cobros] no se pudo revisar el periodo pagado:", e);
+    return true;
+  }
+}
+
+/**
+ * Lo mismo para una fila cualquiera (matriz o sucursal) que llega por su
+ * slug: manda SU MATRIZ. Una sucursal de una matriz suspendida queda igual de
+ * cerrada, aunque su propia fila diga otra cosa.
+ */
+export async function barberiaAlCorriente(
+  shop: { id: string; parentId: string | null; subscriptionStatus: string },
+  now: Date = new Date(),
+): Promise<boolean> {
+  const rootId = shop.parentId ?? shop.id;
+  let status = shop.subscriptionStatus;
+  if (rootId !== shop.id) {
+    const root = await prisma.barbershop.findUnique({ where: { id: rootId }, select: { subscriptionStatus: true } });
+    // Matriz inexistente: se evalúa con su propia fila (igual que el panel).
+    status = root?.subscriptionStatus ?? status;
+  }
+  return matrizAlCorriente(rootId, status, now);
 }
 
 /**

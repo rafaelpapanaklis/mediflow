@@ -2,8 +2,7 @@ import "server-only";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import type { BarberContext } from "@/lib/barber-auth";
-import { isBarbershopSubscriptionActive } from "@/lib/barber/plan-shared";
-import { vencerSiTocaBarber } from "@/lib/barber/cobros";
+import { matrizAlCorriente } from "@/lib/barber/cobros";
 
 /**
  * DaleControl BARBER — CANDADO DE ACCESO AL PANEL. Una sola regla, un solo
@@ -61,20 +60,6 @@ async function rootSubscriptionStatus(ctx: BarberContext): Promise<{ rootId: str
 }
 
 /**
- * ¿El periodo pagado de la matriz ya venció? Si sí, la deja suspendida. Un
- * fallo al leer el registro NO cierra el panel (lo deja en el log): el cron de
- * barber vuelve a pasar cada 5 minutos y corta lo vencido.
- */
-async function vencidaAlEntrar(rootId: string, status: string): Promise<boolean> {
-  try {
-    return await vencerSiTocaBarber(rootId, status);
-  } catch (e) {
-    console.error("[barber paid-access] no se pudo revisar el periodo pagado:", e);
-    return false;
-  }
-}
-
-/**
  * ¿Esta sesión puede USAR el panel? Sede activa Y suscripción de la matriz
  * al día (active | trialing | paid). No redirige: lo usa el layout para
  * decidir qué menú pintar.
@@ -85,8 +70,10 @@ export async function hasBarberPaidAccess(ctx: BarberContext): Promise<boolean> 
   // ronda 2 M1): se queda en su sede, sin quedar encerrado en Suscripción.
   if (!(ctx.homeBarbershop ?? ctx.barbershop).isActive) return false;
   const { rootId, status } = await rootSubscriptionStatus(ctx);
-  if (!isBarbershopSubscriptionActive({ subscriptionStatus: status })) return false;
-  return !(await vencidaAlEntrar(rootId, status));
+  // EL criterio único (cobros.ts): el mismo que usa lo público (/b/<slug>,
+  // reserva, fila, «mi cuenta»). Estado con acceso + periodo pagado sin
+  // vencer (o Stripe ya renovó). Un fallo al leer el registro no cierra.
+  return matrizAlCorriente(rootId, status);
 }
 
 /**

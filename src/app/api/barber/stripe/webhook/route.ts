@@ -7,6 +7,7 @@ import {
   isBarberWebhookEventType,
   prismaBillingDb,
 } from "@/lib/barber/billing";
+import { revalidarWebPublicaBarber } from "@/lib/barber/cobros";
 
 // Raw body para verificar la firma: sin body-parsing automático.
 export const runtime = "nodejs";
@@ -69,6 +70,9 @@ export async function POST(req: NextRequest) {
   try {
     const plans = await getBarberPlans();
     const outcome = await handleBarberStripeEvent(stripe, prismaBillingDb(), event, { plans });
+    // Pagó (o dejó de pagar): su web /b/<slug> se oculta o vuelve AL MOMENTO
+    // y no hasta que caduque el ISR de 5 min. Nunca lanza.
+    if (outcome.handled && outcome.shopId) await revalidarWebPublicaBarber([outcome.shopId]);
     console.log(
       "[barber webhook]",
       JSON.stringify({ id: event.id, type: event.type, ...outcome }),

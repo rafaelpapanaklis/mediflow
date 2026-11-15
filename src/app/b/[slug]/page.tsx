@@ -85,6 +85,11 @@ export default async function PaginaBarberia(props: Props) {
   // Registrada y sin haber pagado nunca: no hay página. Sin esto, cualquiera
   // se registraba gratis y publicaba /b/<nombre-de-otra-barbería>.
   if (carga.nuncaPagada) notFound();
+  // Suspendida o cancelada por falta de pago (la MATRIZ, con el mismo
+  // criterio que el panel): «no encontrada», sin un solo dato. Nada se
+  // borra: en cuanto paga, la página vuelve sola (se revalida al cambiar
+  // de estado; ver revalidarWebPublicaBarber en cobros.ts).
+  if (carga.sinAcceso) notFound();
 
   // Apagada a propósito desde el editor. No es un 404: el slug existe y la
   // barbería puede volver a encenderla en un clic, así que se le deja al

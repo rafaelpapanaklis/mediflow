@@ -15,7 +15,7 @@
 import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { getBarberDict } from "@/i18n/dictionaries/barber";
-import { isBarbershopSubscriptionActive } from "@/lib/barber/plan-shared";
+import { barberiaAlCorriente } from "@/lib/barber/cobros";
 import { WalkinPublic } from "@/components/barber/walkin/walkin-public";
 import { barberCaptchaSiteKey } from "@/lib/barber/captcha";
 import "../../barber-theme.css";
@@ -36,12 +36,16 @@ async function loadShop(slug: string) {
     return await prisma.barbershop.findFirst({
       where: { slug: slug.toLowerCase() },
       select: {
+        // id y parentId: para mirar a la MATRIZ (criterio único de cobros.ts).
+        // No se pintan: la página solo usa nombre, logo y locale.
+        id: true,
         name: true,
         slug: true,
         logoUrl: true,
         locale: true,
         isActive: true,
         subscriptionStatus: true,
+        parentId: true,
       },
     });
   } catch {
@@ -53,7 +57,8 @@ export async function generateMetadata(props: PageProps): Promise<Metadata> {
   const params = await props.params;
   const shop = await loadShop(params.slug);
   return {
-    title: shop ? `Fila virtual · ${shop.name}` : "Fila virtual",
+    // Suspendida o cancelada: ni el nombre (mismo criterio que la página).
+    title: shop && shop.isActive && (await barberiaAlCorriente(shop)) ? `Fila virtual · ${shop.name}` : "Fila virtual",
     description: "Anótate en la fila desde tu celular y mira tu lugar en vivo.",
     // La fila de una barbería no es contenido para buscadores: se llega por
     // el QR del mostrador y punto.
@@ -64,7 +69,9 @@ export async function generateMetadata(props: PageProps): Promise<Metadata> {
 export default async function BarberPublicQueuePage(props: PageProps) {
   const params = await props.params;
   const shop = await loadShop(params.slug);
-  const open = Boolean(shop && shop.isActive && isBarbershopSubscriptionActive(shop));
+  // Mismo criterio que el panel: la MATRIZ al corriente (cobros.ts). Una
+  // barbería suspendida o cancelada por falta de pago no abre su fila.
+  const open = Boolean(shop && shop.isActive && (await barberiaAlCorriente(shop)));
 
   return (
     <div className="barber-shell">

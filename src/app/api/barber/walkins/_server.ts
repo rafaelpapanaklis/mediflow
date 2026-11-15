@@ -8,10 +8,8 @@
 // ═══════════════════════════════════════════════════════════════════════
 import { prisma } from "@/lib/prisma";
 import { persistentRateLimitKey } from "@/lib/failban";
-import {
-  barberPlanHasFeature,
-  isBarbershopSubscriptionActive,
-} from "@/lib/barber/plan-shared";
+import { barberPlanHasFeature } from "@/lib/barber/plan-shared";
+import { barberiaAlCorriente } from "@/lib/barber/cobros";
 import { getBarberPlan } from "@/lib/barber/plans";
 import type { BarberWalkInStatus } from "@/lib/barber/types";
 
@@ -105,10 +103,12 @@ export async function resolvePublicShop(slug: string): Promise<PublicShopResult>
       isActive: true,
       plan: true,
       subscriptionStatus: true,
+      parentId: true,
     },
   });
   if (!shop) return { shop: null, error: "NOT_FOUND" };
-  if (!shop.isActive || !isBarbershopSubscriptionActive(shop)) {
+  // Mismo criterio que el panel: matriz al corriente (cobros.ts).
+  if (!shop.isActive || !(await barberiaAlCorriente(shop))) {
     return { shop: null, error: "CLOSED" };
   }
   const plan = await getBarberPlan(shop.plan);

@@ -55,7 +55,12 @@ const DOUBLES = new Map<string, unknown>([
     },
   ],
   // El corte por fecha del candado (ws6-t6) lee el registro de cobros: sin base, nada vencido.
-  [abs("src/lib/barber/cobros.ts"), { __esModule: true, vencerSiTocaBarber: async () => false }],
+  [abs("src/lib/barber/cobros.ts"), {
+      __esModule: true,
+      vencerSiTocaBarber: async () => false,
+      // Criterio único (cobros.ts): sin base, «al corriente» = solo el estado.
+      matrizAlCorriente: async (_id: string, status: string) => ["active", "trialing", "paid"].includes(status),
+    },],
   [abs("src/components/barber/billing/billing-screen.tsx"), { __esModule: true, BillingScreen: SCREEN }],
 ]);
 

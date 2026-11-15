@@ -6,6 +6,7 @@ import {
   type BarberWebConfig,
 } from "@/lib/barber/landing";
 import { isBarbershopSubscriptionActive } from "@/lib/barber/plan-shared";
+import { barberiaAlCorriente } from "@/lib/barber/cobros";
 import { manifiestoBarberWeb } from "@/components/barber/templates/manifest";
 import type { BarberWebData } from "@/components/barber/templates/types";
 
@@ -47,6 +48,15 @@ export interface BarberWebCarga {
    */
   nuncaPagada: boolean;
   /**
+   * true = su MATRIZ no está al corriente: nunca pagó, o está suspendida o
+   * cancelada por falta de pago (decisión #10 de Rafael, 15-nov-2026: «si
+   * está suspendida no borres nada, pero que no se pueda acceder hasta que
+   * pague»). La página pública responde «no encontrada» y vuelve sola en
+   * cuanto paga. EXACTAMENTE el criterio del panel (cobros.ts →
+   * barberiaAlCorriente): nunca se oculta la página de quien sí pagó.
+   */
+  sinAcceso: boolean;
+  /**
    * true = la tabla barber_landing_configs NO existe todavía en la base.
    * La página pública no se entera (sale con todo por defecto); el editor
    * SÍ, y lo dice, porque sin la tabla no puede guardar nada.
@@ -75,10 +85,10 @@ const ESTADOS_SIN_PRIMER_PAGO = new Set(["pending_payment", "incomplete", "incom
  * ¿Esta barbería NUNCA ha pagado? Solo esas pierden la página pública.
  *
  * Una que pagó y hoy está vencida (`past_due`, `unpaid`) o cancelada
- * (`canceled`) NO entra aquí: su página sigue como estaba (decisión de
- * Rafael, 14-nov-2026; el sitemap ya la deja de anunciar, ver seo-query.ts).
- * Un estado vacío (filas viejas) tampoco: ante la duda, no se apaga la
- * página de nadie.
+ * (`canceled`) NO entra aquí; desde el 15-nov-2026 (decisión #10) su página
+ * también se oculta, pero por `sinAcceso` (criterio único de cobros.ts), no
+ * por esta función. Esta queda para que el editor del panel distinga «nunca
+ * pagaste» de «tu suscripción venció».
  */
 export function barberiaNuncaPagada(shop: { subscriptionStatus?: string | null }): boolean {
   if (isBarbershopSubscriptionActive(shop)) return false;
@@ -103,10 +113,12 @@ export async function cargarBarberWeb(slug: string): Promise<BarberWebCarga | nu
       logoUrl: true,
       isActive: true,
       subscriptionStatus: true,
+      parentId: true,
     },
   });
 
   if (!shop || !shop.isActive) return null;
+  const alCorriente = await barberiaAlCorriente(shop);
 
   const [servicios, barberos, landing] = await Promise.all([
     prisma.barberService.findMany({
@@ -138,6 +150,7 @@ export async function cargarBarberWeb(slug: string): Promise<BarberWebCarga | nu
     oculta: config.oculta,
     version: landing?.version ?? 0,
     nuncaPagada: barberiaNuncaPagada(shop),
+    sinAcceso: !alCorriente,
     sinTabla: landing === SIN_TABLA,
     data: {
       shop: {
@@ -225,9 +238,14 @@ export async function cargarSeoBarberWeb(slug: string): Promise<{
       state: true,
       logoUrl: true,
       isActive: true,
+      subscriptionStatus: true,
+      parentId: true,
     },
   });
   if (!shop || !shop.isActive) return null;
+  // Sin acceso (nunca pagó, suspendida o cancelada): metadatos de «no
+  // encontrada» con noindex, coherentes con el 404 de la página.
+  if (!(await barberiaAlCorriente(shop))) return null;
 
   const landing = await leerConfig(shop.id);
   return {
