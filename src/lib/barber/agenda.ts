@@ -925,6 +925,7 @@ export function toAppointmentDTO(row: {
     depositStatus: row.depositStatus,
     notes: row.notes,
     services,
+    deposit: row.depositStatus ? { status: row.depositStatus, amount: numOrNull(row.depositAmount) } : null,
   };
 }
 

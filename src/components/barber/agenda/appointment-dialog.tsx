@@ -12,6 +12,7 @@
 // helper. El precio que se ve aquí es el VIVO del catálogo; al guardar, el
 // servidor lo congela en BarberAppointmentService.priceAtBooking.
 // ═══════════════════════════════════════════════════════════════════════
+import { soloDigitosTelefono } from "@/lib/barber/phone-format";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, Minus, Plus, RotateCcw, Search, UserPlus } from "lucide-react";
 import type { BarberAppointmentDTO, BarberDTO, BarberServiceDTO } from "@/lib/barber/types";
@@ -53,14 +54,28 @@ export interface AppointmentDialogProps {
   appointment?: BarberAppointmentDTO | null;
   initialBarberId?: string | null;
   initialStartAt?: Date | null;
+  /**
+   * Campo que recibe el foco al abrir (los botones directos de la cita:
+   * «Mover de hora», «Cambiar barbero», «Cambiar servicios»).
+   */
+  focus?: AppointmentDialogFocus | null;
+  /**
+   * «Repetir esta cita» (solo en alta): cliente, servicios, barbero, duración
+   * y nota copiados de otra visita. La hora la pone initialStartAt.
+   */
+  prefill?: BarberAppointmentDTO | null;
   t: (key: string, vars?: Record<string, string | number>) => string;
   onClose: () => void;
   onSaved: (appointment: BarberAppointmentDTO) => void;
 }
 
+export type AppointmentDialogFocus = "time" | "barber" | "services";
+
 export function AppointmentDialog(props: AppointmentDialogProps) {
   const { t, timezone, mode, appointment } = props;
   const editing = mode === "edit" && appointment;
+  // Lo que se copia: la visita que se edita, o la que se repite.
+  const source = editing ? appointment : mode === "create" ? (props.prefill ?? null) : null;
 
   const activeBarbers = useMemo(() => props.barbers.filter((b) => b.isActive), [props.barbers]);
   const activeServices = useMemo(
@@ -70,25 +85,67 @@ export function AppointmentDialog(props: AppointmentDialogProps) {
 
   const startDate = editing ? new Date(appointment.startAt) : (props.initialStartAt ?? new Date());
 
-  const [clientId, setClientId] = useState<string | null>(editing ? appointment.clientId : null);
-  const [clientName, setClientName] = useState(editing ? (appointment.clientName ?? "") : "");
-  const [clientPhone, setClientPhone] = useState(editing ? (appointment.clientPhone ?? "") : "");
+  const [clientId, setClientId] = useState<string | null>(source ? source.clientId : null);
+  const [clientName, setClientName] = useState(source ? (source.clientName ?? "") : "");
+  const [clientPhone, setClientPhone] = useState(source ? (source.clientPhone ?? "") : "");
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<ClientHit[]>([]);
-  const [manual, setManual] = useState(Boolean(editing));
+  const [manual, setManual] = useState(Boolean(editing) || Boolean(source?.clientName));
 
   const [barberId, setBarberId] = useState(
-    editing ? (appointment.barberId ?? "") : (props.initialBarberId ?? activeBarbers[0]?.id ?? ""),
+    editing
+      ? (appointment.barberId ?? "")
+      : (props.initialBarberId ??
+          // Al repetir, el mismo barbero si sigue activo.
+          (source?.barberId && activeBarbers.some((b) => b.id === source.barberId)
+            ? source.barberId
+            : null) ??
+          activeBarbers[0]?.id ??
+          ""),
   );
   const [dateISO, setDateISO] = useState(shopDateISO(startDate, timezone));
   const [hhmm, setHhmm] = useState(minuteToHHMM(shopMinuteOfDay(startDate, timezone)));
-  const [selected, setSelected] = useState<string[]>(
-    editing ? appointment.services.map((s) => s.serviceId) : [],
-  );
-  const [notes, setNotes] = useState(editing ? (appointment.notes ?? "") : "");
+  const [selected, setSelected] = useState<string[]>(() => {
+    if (!source) return [];
+    const ids = source.services.map((s) => s.serviceId);
+    // Al repetir solo se copian los que siguen a la venta: uno dado de baja
+    // no se puede volver a agendar (el servidor lo rechazaría).
+    return editing ? ids : ids.filter((id) => activeServices.some((s) => s.id === id));
+  });
+  const [notes, setNotes] = useState(source ? (source.notes ?? "") : "");
+
+  // ── Foco en el campo que se pidió («Mover de hora», «Cambiar barbero»…).
+  // El efecto del Modal (hijo) corre ANTES que este: aquí se pisa su foco
+  // en el primer campo.
+  const timeRef = useRef<HTMLInputElement | null>(null);
+  const barberRef = useRef<HTMLSelectElement | null>(null);
+  const servicesRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const target =
+      props.focus === "time"
+        ? timeRef.current
+        : props.focus === "barber"
+          ? barberRef.current
+          : props.focus === "services"
+            ? servicesRef.current?.querySelector<HTMLElement>("button") ?? null
+            : null;
+    if (!target) return;
+    target.scrollIntoView({ block: "center" });
+    target.focus();
+    // Solo al abrir.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // El aviso va arriba del formulario, que se desplaza: sin esto, quien
+  // pulsa «Agendar» desde el pie no ve por qué no pasó nada.
+  const errorRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (error) errorRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [error]);
+  // Texto que se está tecleando en «Duración» (permite borrar y reescribir).
+  const [durDraft, setDurDraft] = useState<string | null>(null);
 
   // ── Buscador de clientes (con freno para no pegarle a cada tecla) ────
   const abortRef = useRef<AbortController | null>(null);
@@ -127,10 +184,12 @@ export function AppointmentDialog(props: AppointmentDialogProps) {
   // solo si la visita guardada YA no coincide con lo que suma su catálogo:
   // si coincide, tocar un servicio debe seguir ajustando la duración sola.
   const [customMinutes, setCustomMinutes] = useState<number | null>(() => {
-    if (!editing) return null;
-    const saved = appointmentMinutes(appointment);
+    // Al repetir también: si la original duró distinto que su catálogo, la
+    // copia dura lo mismo que la original.
+    if (!source) return null;
+    const saved = appointmentMinutes(source);
     const fromCatalog = totalServiceMinutes(
-      props.services.filter((s) => appointment.services.some((x) => x.serviceId === s.id)),
+      props.services.filter((s) => source.services.some((x) => x.serviceId === s.id)),
     );
     return saved === fromCatalog ? null : saved;
   });
@@ -234,10 +293,10 @@ export function AppointmentDialog(props: AppointmentDialogProps) {
         </>
       }
     >
-      {error ? <div className={css.errorBox}>{error}</div> : null}
+      {error ? <div ref={errorRef} className={css.errorBox}>{error}</div> : null}
 
       {/* ── Cliente ── */}
-      {clientName && (clientId || manual) ? (
+      {clientId && clientName ? (
         <Field label={t("barber.agenda.modal.client")}>
           <div className={css.chosen}>
             <span>
@@ -249,6 +308,16 @@ export function AppointmentDialog(props: AppointmentDialogProps) {
             </button>
           </div>
         </Field>
+      ) : manual ? (
+        // Cliente nuevo: los campos de abajo SON la captura; no se repite el nombre en
+        // una tarjeta mientras se teclea. La tarjeta solo sale al elegir de la lista.
+        editing || !props.canSearchClients ? null : (
+          <Field label={t("barber.agenda.modal.client")}>
+            <button type="button" className={css.btn} onClick={clearClient} style={{ alignSelf: "flex-start" }}>
+              <Search size={14} /> {t("barber.agenda.modal.searchExisting")}
+            </button>
+          </Field>
+        )
       ) : (
         <Field
           label={t("barber.agenda.modal.client")}
@@ -329,7 +398,7 @@ export function AppointmentDialog(props: AppointmentDialogProps) {
             <input
               className={css.input}
               value={clientPhone}
-              onChange={(e) => setClientPhone(e.target.value)}
+              onChange={(e) => setClientPhone(soloDigitosTelefono(e.target.value))}
               inputMode="numeric"
               autoComplete="off"
             />
@@ -342,7 +411,7 @@ export function AppointmentDialog(props: AppointmentDialogProps) {
         {activeServices.length === 0 ? (
           <p className={css.hint}>{t("barber.agenda.modal.servicesEmpty")}</p>
         ) : (
-          <div className={css.chips}>
+          <div className={css.chips} ref={servicesRef}>
             {activeServices.map((service) => {
               const on = selected.includes(service.id);
               return (
@@ -369,6 +438,7 @@ export function AppointmentDialog(props: AppointmentDialogProps) {
       <div className={css.row}>
         <Field label={t("barber.agenda.modal.barber")}>
           <select
+            ref={barberRef}
             className={css.select}
             value={barberId}
             onChange={(e) => setBarberId(e.target.value)}
@@ -394,6 +464,7 @@ export function AppointmentDialog(props: AppointmentDialogProps) {
         <Field label={t("barber.agenda.modal.time")}>
           <input
             type="time"
+            ref={timeRef}
             step={900}
             className={css.input}
             value={hhmm}
@@ -422,13 +493,16 @@ export function AppointmentDialog(props: AppointmentDialogProps) {
               <input
                 className={css.stepperValue}
                 inputMode="numeric"
-                value={durationMin}
+                value={durDraft ?? durationMin}
                 aria-label={t("barber.agenda.modal.duration")}
                 onChange={(e) => {
-                  const raw = parseInt(e.target.value.replace(/\D/g, ""), 10);
+                  const digits = e.target.value.replace(/\D/g, "").slice(0, 4);
+                  setDurDraft(digits);
+                  const raw = parseInt(digits, 10);
                   if (Number.isFinite(raw)) setCustomMinutes(raw);
                 }}
                 onBlur={() => {
+                  setDurDraft(null);
                   if (customMinutes !== null) setDuration(customMinutes);
                 }}
               />

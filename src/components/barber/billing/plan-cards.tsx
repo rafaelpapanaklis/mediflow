@@ -126,10 +126,12 @@ export function PlanCards({
           const busy = busyPlan === plan.id;
           const belowMin = minPlan !== null && barberPlanRank(plan.id) < barberPlanRank(minPlan.id);
           const disabled =
-            !canManage || !configured || !plan.isActive || !hasPrice || busy || belowMin || (isCurrent && hasLiveSubscription);
-          const cta = isCurrent && hasLiveSubscription
-            ? t("barber.suscripcion.plans.current")
-            : hasLiveSubscription
+            !canManage || !configured || !plan.isActive || !hasPrice || busy || belowMin || isCurrent;
+          // Con un plan activo (también uno puesto a mano, sin Stripe): su tarjeta dice «Tu plan» y las
+          // demás «Cambiar a este plan». «Contratar» solo para quien todavía no tiene plan. El cobro no cambia.
+          const cta = isCurrent
+            ? t("barber.suscripcion.plans.yourPlan")
+            : subscribed || hasLiveSubscription
               ? t("barber.suscripcion.plans.change")
               : t("barber.suscripcion.plans.contract");
 
@@ -137,7 +139,7 @@ export function PlanCards({
             <article key={plan.id} className={`dcbb-plan ${isCurrent ? "dcbb-plan--current" : ""}`}>
               <div className="dcbb-plan__head">
                 <h3 className="dcbb-plan__name">{plan.name}</h3>
-                {isCurrent && <span className="dcbb-plan__current">{t("barber.suscripcion.plans.current")}</span>}
+                {isCurrent && <span className="dcbb-plan__current">{t("barber.suscripcion.plans.yourPlan")}</span>}
               </div>
 
               <div className="dcbb-plan__price">
@@ -190,7 +192,7 @@ export function PlanCards({
               <div className="dcbb-plan__cta">
                 <button
                   type="button"
-                  className={`dcbb-btn dcbb-btn--block ${isCurrent && hasLiveSubscription ? "" : "barber-btn-primary"}`}
+                  className={`dcbb-btn dcbb-btn--block ${isCurrent ? "" : "barber-btn-primary"}`}
                   disabled={disabled}
                   onClick={() => (hasLiveSubscription ? onChange(plan) : onContract(plan.id, interval))}
                 >

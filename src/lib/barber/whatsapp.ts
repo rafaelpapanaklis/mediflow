@@ -1932,6 +1932,177 @@ export async function scheduleBarberReminders(barbershopId: string): Promise<{ q
   return { queued };
 }
 
+/* ─────────────── recordatorio AHORA desde la cita (cita «B») ─────────────── */
+
+/**
+ * Si ya salió (o está en cola) un recordatorio de esta cita en las últimas X
+ * horas, «Recordatorio ahora» no manda otro: lo dice. DECISIÓN PARA RAFAEL
+ * (reporte ws6-t5, cita servidor): una constante.
+ */
+export const REMIND_NOW_DEDUPE_MS = 6 * 60 * 60 * 1000;
+
+export interface RemindNowResult {
+  status: "sent" | "queued" | "skipped";
+  /** Por qué no salió (texto para la pantalla), o null si salió. */
+  reason: string | null;
+  code:
+    | "PLAN"
+    | "NOT_CONNECTED"
+    | "NOT_FOUND"
+    | "CLOSED"
+    | "REQUEST_PENDING"
+    | "PAST"
+    | "TOO_EARLY"
+    | "NO_PHONE"
+    | "ALREADY_QUEUED"
+    | "RECENT"
+    | "QUOTA"
+    | "TEMPLATE_PENDING"
+    | "SEND_FAILED"
+    | "BUSY"
+    | null;
+  messageId?: string | null;
+}
+
+const skipped = (code: NonNullable<RemindNowResult["code"]>, reason: string): RemindNowResult => ({
+  status: "skipped",
+  reason,
+  code,
+});
+
+/**
+ * «Mandar recordatorio ahora» desde la cita. El MISMO motor que el automático
+ * (scheduleBarberReminders + la cola):
+ *   · misma plantilla («reminder») y el mismo texto, recalculado al enviar;
+ *   · mismo plan (whatsappReminders), misma conexión, mismo cupo;
+ *   · mismo candado por barbería, así que no se encima con el cron;
+ *   · misma ventana: solo citas por venir en las próximas 24 h, pendientes o
+ *     confirmadas (nunca pasadas ni canceladas; una solicitud en línea sin
+ *     aceptar tampoco);
+ *   · sin duplicar: si ya hay uno en cola, o salió uno en las últimas
+ *     REMIND_NOW_DEDUPE_MS, lo dice y no manda otro. Y como la fila queda en
+ *     la cola con la plantilla de recordatorio, el automático ya no manda el
+ *     suyo para esa cita.
+ *
+ * Nunca lanza. Si el envío falla (cupo, plantilla sin aprobar…), la fila se
+ * marca como invalidada para que el automático pueda intentarlo después.
+ */
+export async function sendBarberReminderNow(args: {
+  barbershopId: string;
+  appointmentId: string;
+  now?: Date;
+}): Promise<RemindNowResult> {
+  try {
+    const now = args.now ?? new Date();
+    const shop = await loadShop(args.barbershopId);
+    if (!shop || !shop.isActive) return skipped("NOT_CONNECTED", "La barbería no está activa.");
+    const rootId = rootIdOf(shop);
+    const root = rootId === shop.id ? shop : ((await loadShop(rootId)) ?? shop);
+    if (!isBarbershopSubscriptionActive(root)) return skipped("PLAN", "La suscripción de la barbería no está activa.");
+    const plan = await getBarberPlan(root.plan);
+    if (!barberPlanHasFeature(plan, "whatsappReminders")) {
+      return skipped("PLAN", "Tu plan no incluye recordatorios por WhatsApp.");
+    }
+    if (!resolveSenderCredentials(shop)) {
+      return skipped("NOT_CONNECTED", "No hay WhatsApp conectado: conéctalo en WhatsApp para mandar recordatorios.");
+    }
+
+    const appt = await prisma.barberAppointment.findFirst({
+      where: { id: args.appointmentId, barbershopId: shop.id },
+      select: {
+        id: true,
+        startAt: true,
+        status: true,
+        source: true,
+        clientId: true,
+        clientName: true,
+        clientPhone: true,
+        client: { select: { name: true, phone: true } },
+        barber: { select: { name: true, nickname: true } },
+        services: { select: { service: { select: { name: true } } } },
+      },
+    });
+    if (!appt) return skipped("NOT_FOUND", "Esa visita no existe.");
+    if (appt.status !== "PENDING" && appt.status !== "CONFIRMED") {
+      return skipped("CLOSED", "Solo se recuerda una visita pendiente o confirmada.");
+    }
+    if (appt.status === "PENDING" && (BARBER_REQUEST_SOURCES as readonly string[]).includes(appt.source)) {
+      return skipped("REQUEST_PENDING", "Es una solicitud sin aceptar: acéptala antes de recordarla.");
+    }
+    if (appt.startAt.getTime() <= now.getTime()) return skipped("PAST", "Esa visita ya pasó.");
+    if (appt.startAt.getTime() > now.getTime() + REMINDER_MAX_LEAD_MS) {
+      return skipped("TOO_EARLY", "Falta más de un día: el recordatorio se manda dentro de las 24 h antes de la visita.");
+    }
+    const phone = mxTenDigits(appt.client?.phone ?? appt.clientPhone ?? "");
+    if (!phone) return skipped("NO_PHONE", "Esta visita no tiene un WhatsApp a 10 dígitos.");
+
+    const template = barberWaTemplate("reminder");
+    const [lockA, lockB] = advisoryLockKey(`barber:wa:reminders:${shop.id}`);
+    const decision = await prisma.$transaction(
+      async (tx) => {
+        await tx.$executeRawUnsafe(`SELECT pg_advisory_xact_lock(${Math.trunc(lockA)}, ${Math.trunc(lockB)})`);
+        const rows = await tx.barberMessage.findMany({
+          where: { barbershopId: shop.id, appointmentId: appt.id, templateName: template.name, direction: "OUTBOUND" },
+          select: { status: true, errorMessage: true, createdAt: true },
+          orderBy: { createdAt: "desc" },
+        });
+        if (rows.some((r) => r.status === "PENDING")) return { kind: "queued-already" as const, at: null };
+        const recent = rows.find(
+          (r) =>
+            r.status !== "FAILED" &&
+            !isInvalidatedReminder(r.errorMessage) &&
+            now.getTime() - r.createdAt.getTime() < REMIND_NOW_DEDUPE_MS,
+        );
+        if (recent) return { kind: "recent" as const, at: recent.createdAt };
+        const created = await tx.barberMessage.create({
+          data: {
+            barbershopId: shop.id,
+            direction: "OUTBOUND",
+            phone,
+            body: renderReminderText(reminderParamsFrom(shop, appt as unknown as ApptForMessage)),
+            templateName: template.name,
+            status: "PENDING",
+            clientId: appt.clientId,
+            appointmentId: appt.id,
+          },
+          select: { id: true },
+        });
+        return { kind: "created" as const, id: created.id };
+      },
+      { maxWait: 10_000, timeout: 20_000 },
+    );
+
+    if (decision.kind === "queued-already") {
+      return skipped("ALREADY_QUEUED", "Ya hay un recordatorio de esta visita en camino.");
+    }
+    if (decision.kind === "recent") {
+      const hora = new Intl.DateTimeFormat("es-MX", {
+        hour: "numeric",
+        minute: "2-digit",
+        timeZone: shop.timezone || "America/Mexico_City",
+      }).format(decision.at!);
+      return skipped("RECENT", `Ya le salió un recordatorio a las ${hora}; no se manda otro tan pronto.`);
+    }
+
+    const sent = await deliverBarberMessageNow(shop.id, decision.id);
+    if (sent.status === "SENT") return { status: "sent", reason: null, code: null, messageId: decision.id };
+    if (sent.status === "PENDING") return { status: "queued", reason: null, code: "BUSY", messageId: decision.id };
+    // No salió: se deja la puerta abierta al automático (fila invalidada).
+    await prisma.barberMessage
+      .updateMany({
+        where: { id: decision.id, barbershopId: shop.id, status: "FAILED" },
+        data: { errorMessage: `${BARBER_REMINDER_INVALIDATED_MARK} recordatorio manual que no salió: ${sent.error ?? ""}`.trim() },
+      })
+      .catch(() => {});
+    const code: RemindNowResult["code"] =
+      sent.code === "QUOTA" || sent.code === "TEMPLATE_PENDING" || sent.code === "NOT_CONNECTED" ? sent.code : "SEND_FAILED";
+    return { status: "skipped", reason: sent.error ?? "No se pudo enviar el recordatorio.", code, messageId: decision.id };
+  } catch (err) {
+    console.error(`[barber/wa] recordatorio ahora ${args.appointmentId}:`, err);
+    return skipped("SEND_FAILED", "No se pudo enviar el recordatorio.");
+  }
+}
+
 /**
  * Cuánto puede durar una pasada del cron. La ruta declara maxDuration = 300;
  * se corta bastante antes para que la función termine por las buenas y

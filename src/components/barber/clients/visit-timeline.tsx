@@ -110,6 +110,10 @@ export function VisitTimeline({
                 <span className={s.tlServices}>{entry.services.join(" · ")}</span>
               ) : null}
 
+              {entry.cancelReason ? (
+                <p className={s.tlNote}>{t("history.cancelReason", { reason: entry.cancelReason })}</p>
+              ) : null}
+
               {entry.notes ? <p className={s.tlNote}>{entry.notes}</p> : null}
 
               {entry.photos.length > 0 ? (

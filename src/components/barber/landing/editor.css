@@ -940,3 +940,12 @@ textarea.dcbwe-input {
 
 /* Interruptor y botones: el café del tema (antes caramelo fijo de respaldo). */
 .dcbwe-switch input:checked + .dcbwe-switch-pista { background: var(--brand); }
+
+/* Toques a 390 px: botones, iconos, horas y el selector Celular/Computadora a 40 px.
+   El editor mide por @container; aquí el ancho útil del editor es el del teléfono. */
+@container dcbwe (max-width: 560px) {
+  .dcbwe-btn,
+  .dcbwe-input,
+  .dcbwe-modo { min-height: 40px; }
+  .dcbwe-btn-icono { min-height: 40px; width: 40px; }
+}

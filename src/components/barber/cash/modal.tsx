@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, type ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 import { X } from "lucide-react";
+import { DIALOGO_CERRAR, useDialogo } from "../dialogo";
 
 /**
  * Modal del dinero barber sobre .modal-overlay/.modal de globals.css. Se
@@ -26,19 +27,16 @@ export function BarberModal({
   wide?: boolean;
   closeLabel?: string;
 }) {
-  useEffect(() => {
-    if (!open) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  // Esc y foco inicial (primer campo) UNA vez al abrir (ver ../dialogo.ts).
+  // Antes no ponía el foco dentro: el teclado se quedaba detrás.
+  useDialogo({ panel: panelRef, onClose, abierta: open, bloquearScroll: false });
 
   if (!open) return null;
   return (
     <div className="modal-overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div
+        ref={panelRef}
         className={`modal barber-shell ${wide ? "modal--wide" : ""}`}
         role="dialog"
         aria-modal="true"
@@ -46,7 +44,7 @@ export function BarberModal({
       >
         <div className="modal__header">
           <div className="modal__title">{title}</div>
-          <button type="button" className="icon-btn-new" onClick={onClose} aria-label={closeLabel}>
+          <button type="button" className="icon-btn-new" onClick={onClose} aria-label={closeLabel} {...{ [DIALOGO_CERRAR]: "" }}>
             <X size={14} />
           </button>
         </div>

@@ -117,9 +117,11 @@ export function BarbersClient({
   const used = Math.max(0, seat.used + (activeNow - activeAtLoad));
   const seatCanCreate = seat.unlimited || used < seat.max;
 
-  const seatText = seat.unlimited
+  const planText = seat.unlimited
     ? t("barbers.seatUnlimited", { used, plan: seat.planName })
     : t("barbers.seat", { used, max: seat.max, plan: seat.planName });
+  // En una sede, primero los de ESA sede; el tope del plan va aparte y dice que es de toda la cadena.
+  const seatText = isConsolidated ? planText : `${t("barbers.seatHere", { here: activeNow })} · ${planText}`;
 
   // Alta por defecto en la sede que se ve, salvo que esté cerrada: entonces la
   // primera abierta (una sede cerrada no recibe altas).

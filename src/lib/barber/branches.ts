@@ -10,6 +10,7 @@ import {
 } from "@/lib/barber-auth";
 import { getBarberPlan } from "@/lib/barber/plans";
 import { barberPlanHasFeature, isBarberUnlimited } from "@/lib/barber/plan-shared";
+import { revalidarWebPublicaBarber } from "@/lib/barber/cobros";
 import { makeBarberSlug } from "@/lib/barber/types";
 import { serviciosParaSedeNueva } from "@/lib/barber/branch-services";
 import { BARBER_BRANCH_ALL, BARBER_BRANCH_COOKIE } from "@/lib/barber/branch-cookie";
@@ -566,6 +567,8 @@ export async function setBranchActive(
     throw new BarberAdminError("La barbería principal no se puede cerrar desde aquí.", 409);
   }
   await prisma.barbershop.update({ where: { id: branchId }, data: { isActive } });
+  // La página pública está cacheada 5 min: sin esto, una sede cerrada seguía invitando a reservar.
+  await revalidarWebPublicaBarber([branch.parentId ?? branchId]);
 }
 
 // ── Puente a HTTP ──────────────────────────────────────────────────────

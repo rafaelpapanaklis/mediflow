@@ -221,6 +221,7 @@ export function TeamClient({
                   {m.barberName ? (
                     <Chip tone="muted">{t("team.linkedBarberChip", { name: m.barberName })}</Chip>
                   ) : null}
+                  {m.noSchedule ? <Chip tone="warn">{t("team.noScheduleWarn")}</Chip> : null}
                   {isConsolidated ? (
                     <Chip tone="muted">{branchLabelById.get(m.barbershopId) ?? ""}</Chip>
                   ) : null}

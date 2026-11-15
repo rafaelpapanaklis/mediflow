@@ -1,8 +1,9 @@
 "use client";
 
+import { soloDigitosTelefono } from "@/lib/barber/phone-format";
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
   Ban,
@@ -105,6 +106,10 @@ export function BarberClientDetailScreen({
   const t = useBarberT(dict);
   const toast = useToast();
   const router = useRouter();
+  // Llegó desde el alta con un teléfono que ya tenía ficha (?ya=1&intento=<lo escrito>).
+  const searchParams = useSearchParams();
+  const [linkedOpen, setLinkedOpen] = useState(searchParams.get("ya") === "1");
+  const typedName = (searchParams.get("intento") ?? "").trim();
 
   const [client, setClient] = useState<BarberClientDTO>(detail.client);
   const [preferences, setPreferences] = useState<BarberClientPreferences>(detail.preferences);
@@ -199,6 +204,49 @@ export function BarberClientDetailScreen({
             {t("detail.back")}
           </Link>
         </div>
+
+        {linkedOpen ? (
+          <div
+            role="status"
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              alignItems: "center",
+              gap: 10,
+              padding: "10px 14px",
+              borderRadius: 12,
+              background: "var(--bg-elev)",
+              border: "1px solid var(--border-soft)",
+              fontSize: 13.5,
+              color: "var(--text-2)",
+            }}
+          >
+            <span style={{ flex: "1 1 240px" }}>
+              {typedName && typedName.toLowerCase() !== client.name.trim().toLowerCase()
+                ? t("new.existingDiff", { name: client.name, typed: typedName })
+                : t("new.existing", { name: client.name })}
+            </span>
+            {typedName ? (
+              <button
+                type="button"
+                className={`${s.btn} ${s.btnSm}`}
+                onClick={() => router.push(`/barber/clientes?alta=1&nombre=${encodeURIComponent(typedName)}`)}
+              >
+                {t("new.notSame")}
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className={`${s.btn} ${s.btnGhost} ${s.btnSm}`}
+              onClick={() => {
+                setLinkedOpen(false);
+                router.replace(`/barber/clientes/${client.id}`);
+              }}
+            >
+              {t("new.sameOk")}
+            </button>
+          </div>
+        ) : null}
 
         {blocked ? (
           <div className={s.blockWarn} role="status">
@@ -707,7 +755,7 @@ function EditClientModal({
           className={s.input}
           inputMode="tel"
           value={form.phone}
-          onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+          onChange={(e) => setForm((f) => ({ ...f, phone: soloDigitosTelefono(e.target.value) }))}
         />
       </Field>
 

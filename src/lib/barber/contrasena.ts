@@ -100,6 +100,14 @@ export function problemaContrasenaNueva(pwd: unknown): ProblemaContrasena | null
   return null;
 }
 
+/**
+ * El texto de «contraseña débil». UNO solo, para el registro (cliente y servidor) y
+ * para Configuración: antes el registro aceptaba cualquier cosa de 8+ y Configuración
+ * exigía mezcla. Misma regla (`problemaContrasenaNueva`), mismas palabras.
+ */
+export const BARBER_PASSWORD_WEAK_MESSAGE =
+  "Muy débil: usa al menos 8 caracteres y mezcla mayúsculas, minúsculas y números.";
+
 // ── Último acceso ──────────────────────────────────────────────────────
 
 /**

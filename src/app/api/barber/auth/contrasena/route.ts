@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { BARBER_PASSWORD_WEAK_MESSAGE } from "@/lib/barber/contrasena";
 import { createClient as createSupabaseJs } from "@supabase/supabase-js";
 import { createClient as createSessionClient } from "@/lib/supabase/server";
 import { getBarberContext } from "@/lib/barber-auth";
@@ -43,7 +44,7 @@ type Codigo =
 
 const TEXTO: Record<Codigo, string> = {
   sin_sesion: "Tu sesión se cerró. Vuelve a entrar para cambiar tu contraseña.",
-  debil: "Muy débil: usa al menos 8 caracteres y mezcla mayúsculas, minúsculas y números.",
+  debil: BARBER_PASSWORD_WEAK_MESSAGE,
   larga: "Usa 72 caracteres o menos.",
   no_coinciden: "Las contraseñas nuevas no coinciden.",
   falta_actual: "Escribe tu contraseña actual.",

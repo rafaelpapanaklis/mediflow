@@ -684,3 +684,11 @@ describe("RONDA 2 · el restablecer exige el enlace (M1) y quita la marca (M3)",
     assert.doesNotMatch(sinComentarios(leer("src/lib/barber/recuperacion-cookie.ts")), /fallback|\|\| "/);
   });
 });
+
+test("registro y Configuración comparten la regla: sinmayus1 y abcdefgh son débiles, Qwerty-2026 vale", async () => {
+  const { problemaContrasenaNueva, BARBER_PASSWORD_WEAK_MESSAGE } = await import("../contrasena");
+  assert.equal(problemaContrasenaNueva("abcdefgh"), "debil");
+  assert.equal(problemaContrasenaNueva("corta1A"), "debil");
+  assert.equal(problemaContrasenaNueva("QaF-Registro2026x"), null);
+  assert.match(BARBER_PASSWORD_WEAK_MESSAGE, /mayúsculas, minúsculas y números/);
+});
