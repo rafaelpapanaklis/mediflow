@@ -82,6 +82,15 @@ import {
 } from "@/lib/barber/loyalty-core";
 import { markSaleDraftChargedTx, reopenSaleDraftOfCancelledSaleTx, saleDraftsReady } from "@/lib/barber/sale-drafts-core";
 import {
+  checkOrderLines,
+  isOpenOrderStatus,
+  lockOrderForChargeTx,
+  markOrderPickedUpTx,
+  reopenOrderOfCancelledSaleTx,
+  tiendaReady,
+  type OrderForCharge,
+} from "@/lib/barber/tienda-core";
+import {
   activeBonuses,
   availableBonuses,
   legacyBonus,
@@ -1022,6 +1031,14 @@ export interface CreateSaleInput {
    * transacción, una sola vez: si ya se cobró o descartó, el ticket no se crea.
    */
   draftId?: string | null;
+  /**
+   * Pedido de la tienda que este cobro ENTREGA (ws6-t1). Sus productos van a
+   * su precio CONGELADO al apartar; el pedido queda PICKED_UP con el id del
+   * ticket en esta misma transacción, una sola vez. Si se pagó en línea, el
+   * ticket va con paymentMethod STRIPE («Pago en línea»: fuera del efectivo
+   * del turno, dentro de los reportes) y tal cual se pagó.
+   */
+  productOrderId?: string | null;
   notes?: unknown;
 }
 
@@ -1117,8 +1134,12 @@ export async function createSale(
     }
     return { kind: it.kind, id: it.id, qty: parseQty(it.qty ?? 1, `items[${i}].qty`) };
   });
+  const productOrderId = optionalId(input.productOrderId, "productOrderId");
   const paymentMethod = input.paymentMethod as BarberPaymentMethod;
-  if (!POS_PAYMENT_METHODS.includes(paymentMethod)) {
+  // «Pago en línea» (STRIPE) solo existe para entregar un pedido de la tienda
+  // ya pagado: dentro de la transacción se exige que lo esté.
+  const onlinePaidDelivery = productOrderId !== null && paymentMethod === "STRIPE";
+  if (!POS_PAYMENT_METHODS.includes(paymentMethod) && !onlinePaidDelivery) {
     throw new BarberCajaError(400, "INVALID_PAYMENT_METHOD", "Método de pago inválido (efectivo, tarjeta o SPEI)");
   }
   const discountAmount = parseMoneyInput(input.discount, { field: "discount" });
@@ -1140,6 +1161,13 @@ export async function createSale(
   }
   if (!tip.isZero() && features.tips !== true) {
     throw new BarberCajaError(403, "FEATURE_NOT_IN_PLAN", `Tu plan no incluye "${barberFeatureLabel("tips")}"`, { feature: "tips" });
+  }
+  if (onlinePaidDelivery) {
+    // Lo pagado en línea se registra tal cual se pagó: ni descuento, ni
+    // propina, ni canjes, ni otra cosa que se cobre aparte.
+    if (!discountAmount.isZero() || discountPct !== null || !tip.isZero() || loyaltyIdx !== null || bonusId !== null || membershipIdx !== null || draftId !== null || appointmentId !== null) {
+      throw new BarberCajaError(400, "ORDER_PAID_AS_IS", "Un pedido pagado en línea se entrega tal cual: sin descuento, propina ni canjes");
+    }
   }
 
   const sale = await prisma.$transaction(
@@ -1193,6 +1221,34 @@ export async function createSale(
         if (paid) depositToApply = { amount: paid, label: depositLabel(appt.startAt, tz) };
       }
 
+      // 2b. Pedido de la tienda (opcional): de esta barbería, sin entregar,
+      //     BLOQUEADO (dos entregas del mismo pedido se ponen en fila) y con
+      //     sus piezas exactas en el ticket. Pagado en línea ⇔ STRIPE.
+      let order: OrderForCharge | null = null;
+      const frozenProducts = new Map<string, Money>();
+      if (productOrderId) {
+        if (!(await tiendaReady(tx)).orders) {
+          throw new BarberCajaError(409, "ORDERS_SQL_PENDING", "Falta aplicar sql/barber_tienda.sql");
+        }
+        order = await lockOrderForChargeTx(tx, { orderId: productOrderId, barbershopId });
+        if (!order) throw new BarberCajaError(404, "ORDER_NOT_FOUND", "Pedido no encontrado");
+        if (!isOpenOrderStatus(order.status)) {
+          throw new BarberCajaError(409, "ORDER_NOT_OPEN", "Ese pedido ya se entregó, se canceló o venció");
+        }
+        const paid = order.paidAt !== null;
+        if (paid !== (paymentMethod === "STRIPE")) {
+          throw new BarberCajaError(
+            409,
+            "ORDER_PAYMENT_MISMATCH",
+            paid ? "Ese pedido ya se pagó en línea: entrégalo sin volver a cobrar" : "Ese pedido no se ha pagado en línea: cóbralo en efectivo, tarjeta o transferencia",
+          );
+        }
+        const mismatch = checkOrderLines(order, lines, { exact: paid });
+        if (mismatch) throw new BarberCajaError(400, "ORDER_LINES_MISMATCH", mismatch);
+        for (const it of order.items) frozenProducts.set(it.productId, D(it.unitPrice));
+        if (!clientId && order.clientId) clientId = order.clientId;
+      }
+
       // 3. Barbero y cliente de ESTA barbería.
       const barber = barberId
         ? await tx.barber.findFirst({
@@ -1236,8 +1292,11 @@ export async function createSale(
         }
         const p = productById.get(l.id);
         if (!p) throw new BarberCajaError(404, "PRODUCT_NOT_FOUND", `items[${i}]: producto no encontrado`);
-        if (!p.isActive) throw new BarberCajaError(409, "PRODUCT_INACTIVE", `"${p.name}" está retirado del catálogo`);
-        return { kind: "product", serviceId: null, productId: p.id, description: p.name, qty: l.qty, unitPrice: D(p.price) };
+        // Lo apartado se entrega a su precio congelado aunque el producto ya
+        // se haya retirado del catálogo después.
+        const frozenPrice = frozenProducts.get(p.id);
+        if (!p.isActive && !frozenPrice) throw new BarberCajaError(409, "PRODUCT_INACTIVE", `"${p.name}" está retirado del catálogo`);
+        return { kind: "product", serviceId: null, productId: p.id, description: p.name, qty: l.qty, unitPrice: frozenPrice ?? D(p.price) };
       });
 
       // 5. Canjes: lealtad y membresía cubren UNA línea de servicio cada uno.
@@ -1418,10 +1477,10 @@ export async function createSale(
           productId: b.productId,
           delta: -b.qty,
           type: "SALE",
-          reason: "Venta",
+          reason: order ? `Venta · pedido ${order.folio}` : "Venta",
           saleId: created.id,
           userId: ctx.barberUserId,
-          requireActive: true,
+          requireActive: !frozenProducts.has(b.productId),
         });
       }
 
@@ -1478,6 +1537,13 @@ export async function createSale(
           userId: ctx.barberUserId,
         });
         if (!marked) throw new BarberCajaError(409, "DRAFT_NOT_OPEN", "Esa nota ya se cobró o se descartó");
+      }
+
+      // 11c. Pedido de la tienda: entregado por ESTE ticket, en la misma
+      //      transacción (el candado de arriba ya lo tiene en fila).
+      if (order) {
+        const picked = await markOrderPickedUpTx(tx, { orderId: order.id, barbershopId, saleId: created.id });
+        if (!picked) throw new BarberCajaError(409, "ORDER_NOT_OPEN", "Ese pedido ya se entregó, se canceló o venció");
       }
 
       // 12. Lealtad: se RECUENTAN los sellos del cliente con este ticket ya
@@ -1734,6 +1800,10 @@ export async function cancelSaleTx(
   // pendiente —para cobrarse otra vez o descartarse—, como todo lo demás que
   // el ticket se llevó. Misma transacción que la cancelación.
   await reopenSaleDraftOfCancelledSaleTx(tx, { saleId: s.id, barbershopId, userId: actor.userId });
+
+  // Pedido de la tienda que este ticket entregó: vuelve a «Listo para
+  // recoger» (o a «Pagado en línea»). Las piezas regresan arriba con RETURN.
+  await reopenOrderOfCancelledSaleTx(tx, { saleId: s.id, barbershopId });
 
   // Lealtad: con el ticket ya cancelado se recuentan los sellos del cliente
   // (deja de contar la visita de mostrador y vuelve lo que se había canjeado).
