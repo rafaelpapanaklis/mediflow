@@ -116,5 +116,6 @@ test("aviso de rechazo: nombra la barbería y la hora en su zona, sin liga", () 
   });
   assert.match(text, /^El Corte: no pudimos apartar tu cita del sábado, 21 de noviembre/);
   assert.match(text, /5:00/);
+  assert.ok(!text.includes(".."), "sin doble punto tras «p.m.»");
   assert.ok(!/https?:|www\./.test(text));
 });

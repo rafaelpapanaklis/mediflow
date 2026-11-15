@@ -109,8 +109,10 @@ export function bookingRejectedText(args: {
     minute: "2-digit",
     hour12: true,
   }).format(args.startAt);
+  // "5:00 p.m." ya trae su punto: no se le pone otro.
+  const end = when.endsWith(".") ? "" : ".";
   return (
-    `${args.shopName}: no pudimos apartar tu cita del ${when}. ` +
+    `${args.shopName}: no pudimos apartar tu cita del ${when}${end} ` +
     "Escríbenos por aquí y te buscamos otro horario."
   );
 }
