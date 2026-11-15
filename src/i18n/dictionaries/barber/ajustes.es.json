@@ -201,6 +201,31 @@
       "note": "En los dos casos el hueco queda apartado desde que el cliente reserva: nadie más puede tomarlo mientras decides.",
       "planNote": "Tu plan no incluye reservas en línea. El ajuste queda guardado y aplica en cuanto las actives.",
       "saved": "Guardado"
+    },
+    "password": {
+      "title": "Tu contraseña",
+      "sub": "Cámbiala cuando quieras. No se cierra tu sesión.",
+      "accountTitle": "Tu cuenta",
+      "accountSub": "Lo de tu acceso al panel.",
+      "current": "Contraseña actual",
+      "new": "Contraseña nueva",
+      "newHint": "Mínimo 8 caracteres; mezcla mayúsculas, minúsculas y números.",
+      "confirm": "Repite la contraseña nueva",
+      "save": "Cambiar contraseña",
+      "saved": "Listo, tu contraseña cambió.",
+      "errors": {
+        "sin_sesion": "Tu sesión se cerró. Vuelve a entrar para cambiar tu contraseña.",
+        "debil": "Muy débil: usa al menos 8 caracteres y mezcla mayúsculas, minúsculas y números.",
+        "larga": "Usa 72 caracteres o menos.",
+        "no_coinciden": "Las contraseñas nuevas no coinciden.",
+        "falta_actual": "Escribe tu contraseña actual.",
+        "actual_incorrecta": "Tu contraseña actual no es correcta.",
+        "igual": "La contraseña nueva tiene que ser distinta de la actual.",
+        "filtrada": "Esa contraseña apareció en filtraciones públicas. Elige otra.",
+        "rechazada": "Esa contraseña no se acepta. Prueba con otra más larga y variada.",
+        "demasiados": "Demasiados intentos. Espera unos minutos y vuelve a intentarlo.",
+        "error": "No pudimos cambiar tu contraseña. Inténtalo de nuevo."
+      }
     }
   }
 }

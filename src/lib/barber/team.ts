@@ -1,4 +1,5 @@
 import "server-only";
+import { randomBytes } from "node:crypto";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { prisma } from "@/lib/prisma";
 import {
@@ -22,6 +23,11 @@ import {
 import { getBarberPlan } from "@/lib/barber/plans";
 import { barberPlanHasFeature, isBarberUnlimited } from "@/lib/barber/plan-shared";
 import type { BarberCommissionType, BarberRole } from "@/lib/barber/types";
+import {
+  BARBER_MUST_CHANGE_KEY,
+  BARBER_TEMP_PASSWORD_BYTES,
+  barberTempPasswordFromBytes,
+} from "@/lib/barber/contrasena";
 
 // ═══════════════════════════════════════════════════════════════════════
 // DaleControl BARBER — EQUIPO: la ficha del barbero y los usuarios del panel.
@@ -708,11 +714,12 @@ export interface InviteMemberInput {
   barbershopId?: unknown;
 }
 
-/** Contraseña temporal legible. Se le enseña UNA vez a quien da de alta. */
+/**
+ * Contraseña temporal legible. Se le enseña UNA vez a quien da de alta.
+ * Aleatoriedad criptográfica (antes Math.random; auditoría 14-nov, M5).
+ */
 function tempPassword(): string {
-  const letters = Math.random().toString(36).slice(2, 6).toUpperCase();
-  const digits = String(Math.floor(100 + Math.random() * 900));
-  return `Barber${letters}${digits}!`;
+  return barberTempPasswordFromBytes(randomBytes(BARBER_TEMP_PASSWORD_BYTES));
 }
 
 /** La ficha de barbero existe y es de la MISMA sede que el usuario. */
@@ -769,6 +776,10 @@ export async function inviteMember(
     password,
     email_confirm: true,
     user_metadata: { firstName, lastName, barbershopName: ctx.barbershop.name },
+    // La temporal la conoce quien dio de alta: en su primer acceso la persona
+    // tiene que poner la suya (el panel la manda a /barber/cambiar-contrasena).
+    // En app_metadata, que solo escribe la service role (ver contrasena.ts).
+    app_metadata: { [BARBER_MUST_CHANGE_KEY]: true },
   });
 
   if (error || !created?.user) {

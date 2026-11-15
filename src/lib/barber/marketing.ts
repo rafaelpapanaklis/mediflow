@@ -57,8 +57,13 @@ export const BARBER_LOGIN_PATH = "/barber/entrar" as const;
  * de barbería necesita saber por dónde sí entra (revisión 14-nov, M2).
  */
 export const DALECONTROL_CLINIC_LOGIN_PATH = "/login" as const;
-/** Recuperar contraseña: la pantalla es la compartida (no hay una propia). */
-export const BARBER_FORGOT_PASSWORD_PATH = "/forgot-password" as const;
+/**
+ * Recuperar contraseña: la pantalla PROPIA del vertical (src/app/barber/recuperar),
+ * con la cara de /barber/entrar y cuyo correo regresa a Barber. Antes era
+ * /forgot-password, la de las clínicas (auditoría 14-nov, M1). Igual a
+ * BARBER_RECOVER_PATH de @/lib/barber/contrasena (lo fija una prueba).
+ */
+export const BARBER_FORGOT_PASSWORD_PATH = "/barber/recuperar" as const;
 /** Donde se contrata. Aquí aterriza quien llega con un plan ya elegido. */
 export const BARBER_BILLING_PATH = "/barber/suscripcion" as const;
 /** Tickets a DaleControl. Exenta del candado de pago: se llega aunque no se haya pagado. */

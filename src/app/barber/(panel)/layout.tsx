@@ -9,6 +9,7 @@ import { hasBarberPaidAccess } from "@/lib/barber/paid-access";
 import { barberNavItemsWhileUnpaid } from "@/lib/barber/plan-shared";
 import { BARBER_NAV_ITEMS, type BarberNavItem } from "@/lib/barber/types";
 import { BARBER_LOGIN_PATH, BARBER_PRODUCT_NAME } from "@/lib/barber/marketing";
+import { BARBER_CHANGE_PASSWORD_PATH } from "@/lib/barber/contrasena";
 import { getBarberT } from "@/i18n/dictionaries/barber";
 import { BarberSidebar } from "@/components/barber/barber-sidebar";
 import { BarberTopbar } from "@/components/barber/barber-topbar";
@@ -49,6 +50,9 @@ export default async function BarberPanelLayout({
 }) {
   const ctx = await getBarberContext();
   if (!ctx) redirect(BARBER_LOGIN_PATH);
+  // Contraseña temporal pendiente: primero la suya. La pantalla del cambio
+  // vive FUERA de (panel), así que este redirect no puede hacer bucle.
+  if (ctx.mustChangePassword) redirect(BARBER_CHANGE_PASSWORD_PATH);
 
   const plan = await getBarberPlan(ctx.barbershop.plan);
   const t = getBarberT(ctx.barbershop.locale);
@@ -68,6 +72,9 @@ export default async function BarberPanelLayout({
     // permiso la escondiera un empleado vería el menú VACÍO, sin una sola
     // pista de por qué su barbería dejó de funcionar.
     if (!paid && item.key === "suscripcion") return true;
+    // Configuración se ve con CUALQUIER rol: quien no edita la barbería entra
+    // ahí a cambiar su propia contraseña (la página le enseña solo eso).
+    if (item.key === "configuracion") return true;
     if (item.featureKey && plan.features[item.featureKey] !== true) return false;
     if (item.permission && !hasBarberPermission(permUser, item.permission as BarberPermissionKey)) {
       return false;
