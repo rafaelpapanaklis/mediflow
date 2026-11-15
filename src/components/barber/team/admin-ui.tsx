@@ -1,12 +1,13 @@
 "use client";
 
+import { DIALOGO_CERRAR, useDialogo } from "../dialogo";
 import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useId,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -213,19 +214,10 @@ export function Modal({
   wide?: boolean;
 }) {
   const titleId = useId();
-
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    document.addEventListener("keydown", onKey);
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = previous;
-    };
-  }, [onClose]);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  // Esc, scroll y foco inicial (al primer campo) UNA vez al abrir: antes el
+  // efecto se re-hacía en cada tecla (onClose nuevo en cada render).
+  useDialogo({ panel: panelRef, onClose });
 
   return (
     <div
@@ -235,6 +227,7 @@ export function Modal({
       }}
     >
       <div
+        ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
@@ -247,7 +240,7 @@ export function Modal({
             </h2>
             {subtitle ? <p className={s.modalSub}>{subtitle}</p> : null}
           </div>
-          <Btn variant="ghost" size="sm" onClick={onClose} aria-label="Cerrar">
+          <Btn variant="ghost" size="sm" onClick={onClose} aria-label="Cerrar" {...{ [DIALOGO_CERRAR]: "" }}>
             <X size={16} />
           </Btn>
         </div>

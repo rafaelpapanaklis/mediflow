@@ -10,7 +10,8 @@
 // position:fixed) — por eso los modales cuelgan de la raíz de cada
 // pantalla y no de la rejilla.
 // ═══════════════════════════════════════════════════════════════════════
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
+import { DIALOGO_CERRAR, useDialogo } from "../dialogo";
 import { X } from "lucide-react";
 import css from "./agenda.module.css";
 
@@ -71,28 +72,12 @@ export function Modal({
   closeLabel: string;
 }) {
   const panelRef = useRef<HTMLDivElement | null>(null);
-  const returnFocusRef = useRef<Element | null>(null);
   const downOnBackdrop = useRef(false);
 
-  useEffect(() => {
-    returnFocusRef.current = document.activeElement;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.stopPropagation();
-        onClose();
-      }
-    };
-    document.addEventListener("keydown", onKey);
-    const firstFocusable = panelRef.current?.querySelector<HTMLElement>(
-      "input, select, textarea, button, [tabindex]:not([tabindex='-1'])",
-    );
-    firstFocusable?.focus();
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      const back = returnFocusRef.current;
-      if (back instanceof HTMLElement) back.focus();
-    };
-  }, [onClose]);
+  // Esc (sin que llegue a la agenda), foco inicial al primer campo y foco de
+  // vuelta al cerrar, UNA vez por apertura (ver ../dialogo.ts). Sin candado
+  // de scroll, como antes.
+  useDialogo({ panel: panelRef, onClose, detenerEsc: true, bloquearScroll: false });
 
   return (
     <div
@@ -114,7 +99,7 @@ export function Modal({
       >
         <div className={css.modalHead}>
           <h2 className={css.modalTitle}>{title}</h2>
-          <button type="button" className={css.iconBtn} onClick={onClose} aria-label={closeLabel}>
+          <button type="button" className={css.iconBtn} onClick={onClose} aria-label={closeLabel} {...{ [DIALOGO_CERRAR]: "" }}>
             <X size={16} />
           </button>
         </div>
