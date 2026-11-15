@@ -789,6 +789,9 @@ export async function getClientLookup(ctx: BarberContext, clientId: string, now:
   return toClientLookup(row, now, catalog.rule, fresh.get(row.id)?.count, activeBonuses(catalog.bonuses));
 }
 
+/** Días hacia atrás que «Citas por cobrar» sigue enseñando una visita terminada sin ticket. */
+export const PENDING_LOOKBACK_DAYS = 7;
+
 export async function getCheckoutContext(
   ctx: BarberContext,
   features: Record<string, boolean>,
@@ -797,7 +800,11 @@ export async function getCheckoutContext(
   assertBarberPermission(ctx, "cash.view");
   const tz = ctx.barbershop.timezone || DEFAULT_BARBER_TZ;
   const todayStart = startOfDayInTz(now, tz);
-  const windowStart = new Date(todayStart.getTime() - 24 * 60 * 60 * 1000);
+  // Citas TERMINADAS sin cobrar de los últimos días (lógica L2): con un día
+  // nada más, la visita del viernes que no se cobró (se fue la luz, no traía
+  // dinero) desaparecía el domingo de Caja y de Agenda y ya no había dónde
+  // cobrarla. Caja enseña la fecha de las que no son de hoy.
+  const windowStart = new Date(todayStart.getTime() - PENDING_LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
   const windowEnd = new Date(todayStart.getTime() + 2 * 24 * 60 * 60 * 1000);
 
   const [services, products, barbers, appointments] = await Promise.all([

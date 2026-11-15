@@ -47,6 +47,24 @@ const METHOD_ICON: Record<BarberPaymentMethod, LucideIcon> = {
   STRIPE: CreditCard,
 };
 
+/** "2026-11-15" del instante en la zona de la barbería (para saber si una cita es de hoy). */
+function dayKey(iso: string, tz: string): string {
+  try {
+    return new Intl.DateTimeFormat("en-CA", { year: "numeric", month: "2-digit", day: "2-digit", timeZone: tz }).format(new Date(iso));
+  } catch {
+    return iso.slice(0, 10);
+  }
+}
+
+/** "13 nov" en la zona de la barbería. */
+function fmtShortDate(iso: string, tz: string): string {
+  try {
+    return new Date(iso).toLocaleDateString("es-MX", { day: "numeric", month: "short", weekday: "short", timeZone: tz });
+  } catch {
+    return iso.slice(0, 10);
+  }
+}
+
 export function CajaClient({
   dict,
   state,
@@ -80,6 +98,7 @@ export function CajaClient({
 
   const open = state.open;
   const tz = state.timezone;
+  const todayKey = dayKey(new Date().toISOString(), tz);
   const methodLabel = (m: BarberPaymentMethod) => t(PAYMENT_METHOD_KEYS[m]);
 
   return (
@@ -171,6 +190,11 @@ export function CajaClient({
                       <span className="bcaja-appt__time">{fmtTime(a.startAt, tz)}</span>
                       <div style={{ minWidth: 0 }}>
                         <div className="bcaja-appt__name">{a.clientName ?? t("caja.walkIn")}</div>
+                        {dayKey(a.startAt, tz) !== todayKey ? (
+                          <div className="bcaja-appt__meta" style={{ color: "var(--warning, var(--text-1))", fontWeight: 600 }}>
+                            {t("caja.pendingOlder", { date: fmtShortDate(a.startAt, tz) })}
+                          </div>
+                        ) : null}
                         <div className="bcaja-appt__meta">
                           {a.services.map((s) => s.name).join(", ")}
                           {a.barberName ? ` · ${a.barberName}` : ""}
