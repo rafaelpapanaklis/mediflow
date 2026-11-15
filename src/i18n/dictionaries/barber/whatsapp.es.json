@@ -5,7 +5,9 @@
     "conexion": "Conexión",
     "inbox": "Conversaciones",
     "plantillas": "Plantillas",
-    "campanas": "Campañas"
+    "campanas": "Campañas",
+    "bot": "Bot",
+    "botHint": "El bot que contesta tu WhatsApp y agenda por ti"
   },
   "connection": {
     "title": "Tu número de WhatsApp",

@@ -5,7 +5,9 @@
     "conexion": "Connection",
     "inbox": "Conversations",
     "plantillas": "Templates",
-    "campanas": "Campaigns"
+    "campanas": "Campaigns",
+    "bot": "Bot",
+    "botHint": "The bot that answers your WhatsApp and books for you"
   },
   "connection": {
     "title": "Your WhatsApp number",

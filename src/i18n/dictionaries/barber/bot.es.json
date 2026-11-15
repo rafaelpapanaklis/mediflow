@@ -1,5 +1,6 @@
 {
   "title": "Bot de WhatsApp",
+  "back": "Volver a WhatsApp",
   "subtitle": "Contesta tu WhatsApp y agenda solo. Los horarios que ofrece salen de tu agenda real: nunca inventa un hueco.",
   "errors": {
     "noPermission": "No tienes permiso para ver el bot de WhatsApp.",

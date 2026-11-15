@@ -1,5 +1,6 @@
 {
   "title": "WhatsApp bot",
+  "back": "Back to WhatsApp",
   "subtitle": "It answers your WhatsApp and books on its own. Every time it offers comes from your real schedule — it never makes a slot up.",
   "errors": {
     "noPermission": "You don't have permission to see the WhatsApp bot.",

@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Inbox, Link2, Megaphone, MessageSquareText } from "lucide-react";
+import Link from "next/link";
+import { ArrowUpRight, Bot, Inbox, Link2, Megaphone, MessageSquareText } from "lucide-react";
 import { apiCall } from "../team/admin-ui";
 import type { Dictionary } from "@/i18n/t";
 import type { BarberWaConnectionDTO, BarberWaQuotaDTO } from "@/lib/barber/whatsapp-core";
@@ -129,6 +130,14 @@ function Screen({
             {item.label}
           </button>
         ))}
+        {/* El bot tiene su propia pantalla (/barber/whatsapp/bot) y no había
+            forma de llegar a ella sin teclear la dirección. Es un enlace, no
+            una pestaña más: la configuración del bot no vive aquí. */}
+        <Link href="/barber/whatsapp/bot" className={`${s.tab} ${s.tabLink}`} title={t("tabs.botHint")}>
+          <Bot size={14} />
+          {t("tabs.bot")}
+          <ArrowUpRight size={12} aria-hidden />
+        </Link>
       </nav>
 
       {tab === "conexion" ? (
