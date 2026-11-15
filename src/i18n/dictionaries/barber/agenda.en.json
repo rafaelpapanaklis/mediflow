@@ -243,6 +243,7 @@
     },
     "errors": {
       "name": "Type a name.",
+      "serveService": "Pick at least one service: without it the visit stays at $0 and there is nothing to charge.",
       "generic": "We couldn't update the queue."
     }
   },

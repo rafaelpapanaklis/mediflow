@@ -243,6 +243,7 @@
     },
     "errors": {
       "name": "Escribe el nombre.",
+      "serveService": "Elige al menos un servicio: sin él la visita queda en $0 y no hay qué cobrar.",
       "generic": "No se pudo actualizar la fila."
     }
   },

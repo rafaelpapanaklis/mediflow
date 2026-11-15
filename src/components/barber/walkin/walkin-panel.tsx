@@ -479,6 +479,7 @@ function ServeDialog(props: {
   const [barberId, setBarberId] = useState(props.row.barberId ?? props.barbers[0]?.id ?? "");
   const [selected, setSelected] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   return (
     <Modal
@@ -495,6 +496,9 @@ function ServeDialog(props: {
             className={`${agendaCss.btn} ${agendaCss.btnPrimary}`}
             disabled={busy || !barberId}
             onClick={async () => {
+              // Una visita de $0 por olvido no sirve para cobrar ni para la comisión.
+              if (selected.length === 0) return setError(t("barber.agenda.queue.errors.serveService"));
+              setError(null);
               setBusy(true);
               await props.onConfirm(barberId, selected);
               setBusy(false);
@@ -505,6 +509,7 @@ function ServeDialog(props: {
         </>
       }
     >
+      {error ? <div className={agendaCss.errorBox}>{error}</div> : null}
       <p className={agendaCss.hint}>{t("barber.agenda.queue.serveBody")}</p>
       <Field label={t("barber.agenda.queue.barber")}>
         <select
