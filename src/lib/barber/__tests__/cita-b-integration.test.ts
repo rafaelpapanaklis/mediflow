@@ -91,6 +91,24 @@ const HOUR = 60 * MIN;
 const DAY = 24 * HOUR;
 let seq = 0;
 
+// ── Horas FIJAS (pase 11) ──────────────────────────────────────────────
+// Antes cada visita era «Date.now() + algo» calculado al crearla: dos
+// visitas del mismo barbero «a la misma hora» quedaban desfasadas unos
+// milisegundos y se encimaban (barber_appt_no_overlap, 23P01). Ahora toda la
+// suite cuenta desde UN instante, redondeado al minuto, y cada visita activa
+// del barbero de A tiene su propia hora:
+//   · relativas a «ahora»: prueba 3 en T0+3 h, prueba 4 en T0−40 min,
+//     prueba 5 (ya cobrada) en T0−2 h → franja ocupada [T0−2 h, T0+3.5 h];
+//   · «hoy» (prueba 2): a la 1:00 y 2:00 de México, o a las 21:00 y 22:00 si
+//     «ahora» es antes del mediodía; así nunca cae dentro de esa franja;
+//   · días por venir: cada prueba en su propia hora del día.
+const T0 = Math.floor(Date.now() / MIN) * MIN;
+const TZ_SEDE = "America/Mexico_City";
+const horaEnSede = (ms: number) =>
+  Number(new Intl.DateTimeFormat("en-US", { timeZone: TZ_SEDE, hour: "numeric", hourCycle: "h23" }).format(new Date(ms)));
+/** Hora del día (en la sede) para las visitas de «hoy», lejos de las relativas a «ahora». */
+const HORA_HOY = horaEnSede(T0) < 12 ? 21 : 1;
+
 interface Shop {
   id: string;
   ctx: BarberContext;
@@ -149,7 +167,7 @@ async function appt(
   startInMs: number,
   extra: Record<string, unknown> = {},
 ) {
-  const start = new Date(Date.now() + startInMs);
+  const start = new Date(T0 + startInMs);
   return prisma.barberAppointment.create({
     data: {
       barbershopId: shop.id, clientId, barberId: shop.barberId, status, startAt: start, endAt: new Date(start.getTime() + 30 * MIN),
@@ -266,8 +284,8 @@ test("1 · cancelar con motivo: sin el SQL cancela igual; con el SQL lo guarda; 
 test("2 · «Ya llegó»: solo pendiente/confirmada de hoy; se quita; Barbero solo en lo suyo; sin el SQL, 409", { skip }, async () => {
   const arrived = await import("@/app/api/barber/appointments/[id]/arrived/route");
   const { startOfDayInTz } = await import("@/lib/barber/commissions");
-  const todayStart = startOfDayInTz(new Date(), "America/Mexico_City").getTime();
-  const todayMs = todayStart + 60 * MIN - Date.now(); // hoy a la 1:00, en la zona de la sede
+  const todayStart = startOfDayInTz(new Date(T0), TZ_SEDE).getTime();
+  const todayMs = todayStart + HORA_HOY * HOUR - T0; // hoy, lejos de las visitas relativas a «ahora»
   const readArrived = async (id: string) =>
     (await prisma.$queryRaw<Array<{ arrivedAt: Date | null }>>`SELECT "arrivedAt" FROM "barber_appointments" WHERE "id" = ${id}`)[0]?.arrivedAt ?? null;
   const leo = await newClient(A, "Leo");
@@ -290,9 +308,9 @@ test("2 · «Ya llegó»: solo pendiente/confirmada de hoy; se quita; Barbero so
   assert.equal((await arrived.DELETE(req("/x", "DELETE"), params(hoy.id))).status, 200);
   assert.equal(await readArrived(hoy.id), null, "se quita");
 
-  const manana = await appt(A, leo, "CONFIRMED", 2 * DAY);
+  const manana = await appt(A, leo, "CONFIRMED", 2 * DAY + 2 * HOUR);
   assert.equal(((await (await arrived.POST(req("/x", "POST"), params(manana.id))).json()) as { code: string }).code, "NOT_TODAY");
-  const enSilla = await appt(A, leo, "IN_PROGRESS", todayMs);
+  const enSilla = await appt(A, leo, "IN_PROGRESS", todayMs + HOUR); // misma mañana/noche, otra hora
   assert.equal(((await (await arrived.POST(req("/x", "POST"), params(enSilla.id))).json()) as { code: string }).code, "BAD_STATUS");
 
   // Barbero: en su visita sí; en la de otro barbero, no.
@@ -420,7 +438,7 @@ test("5 · anticipo desde la cita: mismo registro que Anticipos (turno, ticket a
     /* ya abierto por la prueba anterior */
   }
   const cli = await newClient(A, "Anticipo");
-  const cita = await appt(A, cli, "CONFIRMED", 2 * DAY);
+  const cita = await appt(A, cli, "CONFIRMED", 2 * DAY + 4 * HOUR);
   const get = async () => (await deposit.GET(req("/x", "GET"), params(cita.id))).json() as Promise<{ status: string | null; amount: number | null; canRegister: boolean }>;
   const post = (body: unknown, id = cita.id) => deposit.POST(req("/x", "POST", body), params(id));
 
@@ -435,7 +453,7 @@ test("5 · anticipo desde la cita: mismo registro que Anticipos (turno, ticket a
   assert.deepEqual(await get(), { status: "PAID", amount: 100, totalOfServices: 200, canRegister: false });
 
   assert.equal((await post({ amount: 50, paymentMethod: "CASH" })).status, 409, "una sola vez");
-  const otra = await appt(A, cli, "CONFIRMED", 3 * DAY);
+  const otra = await appt(A, cli, "CONFIRMED", 3 * DAY + 4 * HOUR);
   assert.equal((await post({ amount: 500, paymentMethod: "CASH" }, otra.id)).status, 400, "no más que el total de la cita");
   assert.equal((await post({ amount: 50, paymentMethod: "BITCOIN" }, otra.id)).status, 400);
 
@@ -450,7 +468,7 @@ test("5 · anticipo desde la cita: mismo registro que Anticipos (turno, ticket a
   assert.equal((await post({ amount: 50, paymentMethod: "CASH" }, otra.id)).status, 403, "el Barbero no cobra");
 
   // Al cobrar la cita, el anticipo se descuenta solo (lo de siempre).
-  await prisma.barberAppointment.update({ where: { id: cita.id }, data: { status: "DONE", startAt: new Date(Date.now() - HOUR), endAt: new Date(Date.now() - 30 * MIN) } });
+  await prisma.barberAppointment.update({ where: { id: cita.id }, data: { status: "DONE", startAt: new Date(T0 - 2 * HOUR), endAt: new Date(T0 - 90 * MIN) } });
   const sale = await cash.createSale(A.ctx, { appointmentId: cita.id, items: [{ kind: "service", id: A.serviceId }], paymentMethod: "CASH" }, FEATURES);
   assert.equal(sale.total, 100, "200 − 100 de anticipo");
   session = null;
@@ -462,8 +480,8 @@ test("6 · DTO: arrivedAt, cancelReason, deposit y client {totalVisits, stars}, 
   const server = await import("@/app/api/barber/appointments/_server");
   const detail = await import("@/app/api/barber/appointments/[id]/route");
   const { startOfDayInTz } = await import("@/lib/barber/commissions");
-  const dayStart = startOfDayInTz(new Date(), "America/Mexico_City");
-  const at = (h: number) => new Date(dayStart.getTime() + h * HOUR).getTime() - Date.now();
+  const dayStart = startOfDayInTz(new Date(T0), TZ_SEDE);
+  const at = (h: number) => dayStart.getTime() + h * HOUR - T0;
 
   // Una barbería limpia para contar exacto.
   const C = await makeShop("C");
