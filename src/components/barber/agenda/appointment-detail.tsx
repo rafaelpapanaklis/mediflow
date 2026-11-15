@@ -42,7 +42,6 @@ import {
   shopMinuteOfDay,
 } from "@/lib/barber/agenda";
 import { sumMoneyBy } from "@/lib/barber/money";
-import { formatBarberPhone } from "@/lib/barber/phone-format";
 import { isOwnVisitStatus } from "@/lib/barber/own-visits";
 import { isBarberUnacceptedRequest } from "@/lib/barber/whatsapp-core";
 import { Field, Modal, Pill, agendaCss as css } from "./agenda-ui";
