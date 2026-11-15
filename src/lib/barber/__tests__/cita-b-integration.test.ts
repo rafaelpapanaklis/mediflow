@@ -307,3 +307,26 @@ test("2 · «Ya llegó»: solo pendiente/confirmada de hoy; se quita; Barbero so
   assert.equal((await arrived.POST(req("/x", "POST"), params(hoy.id))).status, 404);
   session = null;
 });
+
+// ── 3. Recordatorio ahora — la ruta (el motor se prueba en cita-b-recordatorio) ─
+
+test("3 · ruta del recordatorio: Recepción recibe {status, reason}; el Barbero no manda WhatsApp; otra barbería, 404", { skip }, async () => {
+  const remind = await import("@/app/api/barber/appointments/[id]/remind/route");
+  const cli = await newClient(A, "Rec");
+  const cita = await appt(A, cli, "CONFIRMED", 3 * HOUR);
+
+  session = await staff(A, "RECEPTION");
+  const res = await remind.POST(req("/x", "POST"), params(cita.id));
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { status: string; reason: string | null; code: string };
+  assert.equal(body.status, "skipped", "esta barbería de prueba no tiene WhatsApp conectado");
+  assert.equal(body.code, "NOT_CONNECTED");
+  assert.ok(body.reason);
+
+  session = await staff(A, "BARBER", A.barberId);
+  assert.equal((await remind.POST(req("/x", "POST"), params(cita.id))).status, 403, "sin whatsapp.send");
+
+  session = B.ctx;
+  assert.equal((await remind.POST(req("/x", "POST"), params(cita.id))).status, 404);
+  session = null;
+});
