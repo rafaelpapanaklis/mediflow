@@ -497,6 +497,14 @@ test("el respaldo de los botones es el mismo mensaje con las opciones numeradas"
   );
 });
 
+test("🔴 el cron del despacho solo entra con CRON_SECRET, no con una cabecera que cualquiera puede escribir", () => {
+  const src = readFileSync("src/app/api/barber/whatsapp/_server.ts", "utf8");
+  const sinComentarios = src.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:])\/\/[^\n]*/g, "$1");
+  assert.ok(!sinComentarios.includes("x-vercel-cron"), "la cabecera x-vercel-cron no autoriza nada");
+  assert.ok(sinComentarios.includes("Bearer ${secret}"), "se exige el secreto");
+  assert.ok(/if \(!secret\)[\s\S]{0,200}status: 503/.test(sinComentarios), "sin secreto configurado: 503");
+});
+
 /* ══════════ 9. TERMINOLOGÍA: es una barbería, no una clínica ═════════ */
 
 const PROHIBIDAS = [

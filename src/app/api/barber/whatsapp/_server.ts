@@ -38,15 +38,23 @@ export async function openWaGate(opts: {
 }
 
 /**
- * Autoriza al cron. Mismo criterio que los crons del dental: cabecera de
- * Vercel o CRON_SECRET. En producción SIN secreto configurado se rechaza —
- * un endpoint que dispara envíos de pago no puede quedar abierto.
+ * Autoriza al cron. EL MISMO criterio que los crons del dental
+ * (src/app/api/cron/whatsapp-queue): `Authorization: Bearer ${CRON_SECRET}`,
+ * que es lo que Vercel Cron manda solo cuando la variable existe. Sin
+ * CRON_SECRET configurado se responde 503 — un endpoint que dispara envíos
+ * de pago no puede quedar abierto.
+ *
+ * 🔴 Antes bastaba con que la petición trajera la cabecera `x-vercel-cron`.
+ * Esa cabecera la puede escribir cualquiera desde su casa: con un
+ * `curl -H "x-vercel-cron: 1"` se disparaba el despacho de TODAS las
+ * barberías sin credencial alguna.
  */
 export function cronAuthorized(req: Request): NextResponse | null {
   const secret = process.env.CRON_SECRET;
-  const auth = req.headers.get("authorization");
-  if (secret && auth === `Bearer ${secret}`) return null;
-  // Vercel firma sus invocaciones de cron con esta cabecera.
-  if (req.headers.get("x-vercel-cron")) return null;
+  if (!secret) {
+    console.error("[barber/whatsapp/dispatch] CRON_SECRET no configurado");
+    return NextResponse.json({ error: "Cron no configurado" }, { status: 503 });
+  }
+  if (req.headers.get("authorization") === `Bearer ${secret}`) return null;
   return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 }
