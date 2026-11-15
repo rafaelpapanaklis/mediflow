@@ -518,9 +518,21 @@ function TimeOffTab(props: {
     await props.onChanged();
   };
 
+  // «lun 16 nov · 1:00 p. m.»: el dueño lee el día de la semana, no 2026-11-16 (lógica L3).
+  const fmtDia = (date: Date) =>
+    new Intl.DateTimeFormat("es-MX", { timeZone: timezone, weekday: "short", day: "numeric", month: "short" })
+      .format(date)
+      .replace(/\./g, "");
   const fmt = (iso: string) => {
     const date = new Date(iso);
-    return `${shopDateISO(date, timezone)} ${minuteToLabel(shopMinuteOfDay(date, timezone))}`;
+    return `${fmtDia(date)} · ${minuteToLabel(shopMinuteOfDay(date, timezone))}`;
+  };
+  /** Fin del bloqueo: si es el mismo día, solo la hora. */
+  const fmtFin = (inicioIso: string, finIso: string) => {
+    const fin = new Date(finIso);
+    return shopDateISO(new Date(inicioIso), timezone) === shopDateISO(fin, timezone)
+      ? minuteToLabel(shopMinuteOfDay(fin, timezone))
+      : fmt(finIso);
   };
 
   return (
@@ -648,7 +660,7 @@ function TimeOffTab(props: {
                 {off.reason ? ` · ${off.reason}` : ""}
                 <br />
                 <span className={css.resultMeta}>
-                  {fmt(off.startAt)} → {fmt(off.endAt)}
+                  {fmt(off.startAt)} → {fmtFin(off.startAt, off.endAt)}
                 </span>
               </span>
               {props.canManage ? (
