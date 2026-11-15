@@ -72,6 +72,12 @@ import {
   barberReminderButtons,
   barberTooLateToChange,
   decideBarberReminderReply,
+  decideBarberBotTurn,
+  barberBotReplyIsStale,
+  barberBotTurnMark,
+  parseBarberBotTurnMark,
+  isBarberBotTurnMark,
+  BARBER_WA_TURN_PREFIX,
   type BarberWaAttachment,
 } from "@/lib/barber/whatsapp-core";
 import { BARBER_CANCEL_WINDOW_HOURS } from "@/lib/barber/portal-core";
@@ -725,4 +731,125 @@ test("los diccionarios del vertical hablan de cliente/barbero/barbería", () => 
   assert.match(es, /cliente/);
   assert.match(es, /barber[íi]a/);
   for (const re of PROHIBIDAS) assert.equal(re.test(es), false, String(re));
+});
+
+/* ═══════ G4 — un solo turno del bot por conversación ═══════ */
+
+test("🔴 G4 — quién corre: uno a la vez, y el mensaje más nuevo contesta por todos", () => {
+  const t0 = new Date("2026-11-14T18:00:00.000Z");
+  const en = (ms: number) => new Date(t0.getTime() + ms);
+  const fila = (id: string, llego: number, marca: string | null) => ({
+    id,
+    createdAt: en(llego),
+    errorMessage: marca,
+  });
+  const ahora = en(5_000);
+  const vigente = en(50_000);
+  const caducada = en(1_000);
+  const yo = { id: "m2", createdAt: en(2_000) };
+
+  // Nadie más: corro.
+  assert.equal(decideBarberBotTurn(yo, [], ahora), "run");
+  // Un entrante sin marca (un «CONFIRMAR», una foto) no pinta nada.
+  assert.equal(decideBarberBotTurn(yo, [fila("m1", 1_000, null)], ahora), "run");
+
+  // Otro turno está corriendo: espero (da igual si es anterior o posterior).
+  assert.equal(
+    decideBarberBotTurn(yo, [fila("m1", 1_000, barberBotTurnMark("atendiendo", vigente))], ahora),
+    "wait",
+  );
+  // …aunque además haya uno más nuevo esperando: primero que acabe el que corre.
+  assert.equal(
+    decideBarberBotTurn(
+      yo,
+      [fila("m1", 1_000, barberBotTurnMark("atendiendo", vigente)), fila("m3", 3_000, barberBotTurnMark("espera", vigente))],
+      ahora,
+    ),
+    "wait",
+  );
+  // Nadie corre y hay uno MÁS NUEVO esperando: cedo, él contesta por los dos.
+  assert.equal(
+    decideBarberBotTurn(yo, [fila("m3", 3_000, barberBotTurnMark("espera", vigente))], ahora),
+    "yield",
+  );
+  // El que espera es más VIEJO que yo: corro yo (él cederá).
+  assert.equal(
+    decideBarberBotTurn(yo, [fila("m1", 1_000, barberBotTurnMark("espera", vigente))], ahora),
+    "run",
+  );
+  // Misma hora exacta: desempata el id, y solo uno de los dos corre.
+  const gemelo = { id: "m9", createdAt: yo.createdAt };
+  assert.equal(
+    decideBarberBotTurn(yo, [{ ...gemelo, errorMessage: barberBotTurnMark("espera", vigente) }], ahora),
+    "yield",
+  );
+  assert.equal(
+    decideBarberBotTurn(gemelo, [{ ...yo, errorMessage: barberBotTurnMark("espera", vigente) }], ahora),
+    "run",
+  );
+
+  // Un turno ya contestó habiendo visto mi mensaje: cedo, no contesto dos veces.
+  assert.equal(
+    decideBarberBotTurn(yo, [fila("m3", 3_000, barberBotTurnMark("listo", en(3_000)))], ahora),
+    "yield",
+  );
+  assert.equal(
+    decideBarberBotTurn(yo, [fila("m3", 3_000, barberBotTurnMark("listo", yo.createdAt))], ahora),
+    "yield",
+  );
+  // …pero un «listo» de ANTES de que yo llegara no me vio: corro.
+  assert.equal(
+    decideBarberBotTurn(yo, [fila("m1", 1_000, barberBotTurnMark("listo", en(1_000)))], ahora),
+    "run",
+  );
+
+  // 🔴 Una marca caducada es de un proceso que murió: no puede dejar mudo el hilo.
+  assert.equal(
+    decideBarberBotTurn(yo, [fila("m1", 1_000, barberBotTurnMark("atendiendo", caducada))], ahora),
+    "run",
+  );
+  assert.equal(
+    decideBarberBotTurn(yo, [fila("m3", 3_000, barberBotTurnMark("espera", caducada))], ahora),
+    "run",
+  );
+  // Mi propia fila no cuenta, y un error de verdad en esa columna tampoco.
+  assert.equal(
+    decideBarberBotTurn(yo, [{ ...yo, errorMessage: barberBotTurnMark("atendiendo", vigente) }], ahora),
+    "run",
+  );
+  assert.equal(decideBarberBotTurn(yo, [fila("m1", 1_000, "(#131047) Re-engagement message")], ahora), "run");
+});
+
+test("G4 — la respuesta nace vieja solo si llegó algo DESPUÉS de lo que vio el turno y sigue esperando", () => {
+  const t0 = new Date("2026-11-14T18:00:00.000Z");
+  const en = (ms: number) => new Date(t0.getTime() + ms);
+  const ahora = en(5_000);
+  const visto = en(1_000);
+  const fila = (llego: number, marca: string | null) => ({ id: `m${llego}`, createdAt: en(llego), errorMessage: marca });
+
+  assert.equal(barberBotReplyIsStale(visto, [], ahora), false);
+  assert.equal(barberBotReplyIsStale(visto, [fila(2_000, barberBotTurnMark("espera", en(50_000)))], ahora), true);
+  // Lo que ya había visto no la vuelve vieja.
+  assert.equal(barberBotReplyIsStale(visto, [fila(1_000, barberBotTurnMark("espera", en(50_000)))], ahora), false);
+  // Un mensaje nuevo que NO va al bot (sin marca) no se la traga: nadie más contestaría.
+  assert.equal(barberBotReplyIsStale(visto, [fila(2_000, null)], ahora), false);
+  // El que esperaba ya se rindió (marca caducada): contesto yo.
+  assert.equal(barberBotReplyIsStale(visto, [fila(2_000, barberBotTurnMark("espera", en(4_000)))], ahora), false);
+  assert.equal(barberBotReplyIsStale(visto, [fila(2_000, barberBotTurnMark("listo", en(2_000)))], ahora), false);
+});
+
+test("G4 — las marcas del turno se leen de vuelta y no se confunden con un error ni con la cola", () => {
+  const cuando = new Date("2026-11-14T18:00:00.000Z");
+  for (const kind of ["atendiendo", "espera", "listo"] as const) {
+    const marca = barberBotTurnMark(kind, cuando);
+    assert.ok(marca.startsWith(BARBER_WA_TURN_PREFIX));
+    assert.ok(isBarberBotTurnMark(marca));
+    assert.deepEqual(parseBarberBotTurnMark(marca), { kind, at: cuando });
+    assert.equal(isBarberWaClaim(marca), false, "no es el reclamo «[enviando]» de la cola");
+    assert.equal(isInvalidatedReminder(marca), false);
+  }
+  for (const raro of [null, undefined, "", "(#100) Invalid parameter", "[bot:otra] 2026-11-14T18:00:00.000Z", "[bot:listo] ayer"]) {
+    assert.equal(parseBarberBotTurnMark(raro), null, String(raro));
+  }
+  assert.equal(isBarberBotTurnMark("(#100) Invalid parameter"), false);
 });

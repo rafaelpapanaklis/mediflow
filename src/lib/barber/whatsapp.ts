@@ -65,6 +65,11 @@ import {
   BARBER_REQUEST_SOURCES,
   BARBER_WA_CANCEL_ASK,
   barberBookingRejectedText,
+  barberBotReplyIsStale,
+  barberBotTurnMark,
+  BARBER_WA_TURN_PREFIX,
+  decideBarberBotTurn,
+  isBarberBotTurnMark,
   barberCancelAskButtons,
   barberLateChangeReply,
   barberReminderButtons,
@@ -2347,7 +2352,7 @@ export async function ingestBarberInbound(value: any, msg: any): Promise<boolean
       // Fuera del horario del bot no se transcribe (no se gasta), pero el
       // cliente recibe el mismo aviso que si hubiera escrito.
       if (voz.fueraDeHorario) {
-        await runBotIfEnabled(shop, creds, phone, incoming.body, deadlineAt);
+        await runBotIfEnabled(shop, creds, phone, incoming.body, { deadlineAt, inboundId: stored.id });
       }
       return true;
     }
@@ -2389,7 +2394,9 @@ export async function ingestBarberInbound(value: any, msg: any): Promise<boolean
   // El BOT es el último en la fila, a propósito: primero manda lo que el
   // cliente respondió a un recordatorio nuestro (eso ya tiene dueño y no
   // se le consulta a ninguna IA). Solo lo que nadie atendió llega al bot.
-  if (!handled) await runBotIfEnabled(shop, creds, phone, rawText, deadlineAt);
+  if (!handled) {
+    await runBotIfEnabled(shop, creds, phone, rawText, { deadlineAt, inboundId: stored.id });
+  }
   return true;
 }
 
@@ -2516,6 +2523,127 @@ async function understandBarberVoice(
     : result;
 }
 
+/** Cada cuánto vuelve a mirar un mensaje que espera su turno. */
+const TURN_POLL_MS = 350;
+/** Un turno necesita al menos esto para valer la pena; con menos, no se toma. */
+const TURN_MIN_ROOM_MS = 10_000;
+
+/** Los entrantes de la conversación que llevan una marca de turno. */
+function turnRowsWhere(barbershopId: string, phone: string) {
+  return {
+    barbershopId,
+    phone,
+    direction: "INBOUND" as const,
+    errorMessage: { startsWith: BARBER_WA_TURN_PREFIX },
+  };
+}
+
+/**
+ * Toma (o cede) el turno del bot para UN mensaje entrante.
+ *
+ * La decisión se toma dentro de un candado de Postgres por (barbería,
+ * teléfono) que dura milisegundos — leer las marcas y escribir la propia—,
+ * así que dos mensajes del mismo cliente nunca deciden a la vez. El turno en
+ * sí NO corre dentro de esa transacción: lo que lo protege durante los
+ * segundos que tarda es la marca «atendiendo».
+ *
+ * Devuelve `run` con `seenUpTo` (la hora del entrante más nuevo que este
+ * turno va a ver: reloj de la base, no del servidor), o `skip` si otro turno
+ * contesta por éste o si ya no queda tiempo.
+ */
+async function claimBotTurn(
+  barbershopId: string,
+  phone: string,
+  inboundId: string,
+  deadlineAt: number,
+): Promise<{ decision: "run"; seenUpTo: Date } | { decision: "skip" }> {
+  const [lockA, lockB] = advisoryLockKey(`barber:wa:turn:${barbershopId}:${phone}`);
+  const waitUntil = new Date(deadlineAt - TURN_MIN_ROOM_MS);
+
+  for (;;) {
+    const now = new Date();
+    const outOfTime = now.getTime() >= waitUntil.getTime();
+    const step = await prisma.$transaction(
+      async (tx) => {
+        await tx.$executeRawUnsafe(
+          `SELECT pg_advisory_xact_lock(${Math.trunc(lockA)}, ${Math.trunc(lockB)})`,
+        );
+        const me = await tx.barberMessage.findFirst({
+          where: { id: inboundId, barbershopId },
+          select: { id: true, createdAt: true },
+        });
+        if (!me) return { decision: "yield" as const, seenUpTo: null };
+        const others = await tx.barberMessage.findMany({
+          where: { ...turnRowsWhere(barbershopId, phone), id: { not: me.id } },
+          select: { id: true, createdAt: true, errorMessage: true },
+        });
+        let decision = decideBarberBotTurn(me, others, now);
+        if (decision === "wait" && outOfTime) decision = "yield";
+
+        let seenUpTo: Date | null = null;
+        if (decision === "run") {
+          const newest = await tx.barberMessage.findFirst({
+            where: { barbershopId, phone, direction: "INBOUND" },
+            orderBy: { createdAt: "desc" },
+            select: { createdAt: true },
+          });
+          seenUpTo = newest?.createdAt ?? me.createdAt;
+        }
+        await tx.barberMessage.update({
+          where: { id: me.id },
+          data: {
+            errorMessage:
+              decision === "run"
+                ? barberBotTurnMark("atendiendo", new Date(deadlineAt))
+                : decision === "wait"
+                  ? barberBotTurnMark("espera", waitUntil)
+                  : null,
+          },
+        });
+        return { decision, seenUpTo };
+      },
+      { maxWait: 10_000, timeout: 15_000 },
+    );
+
+    if (step.decision === "run" && step.seenUpTo) return { decision: "run", seenUpTo: step.seenUpTo };
+    if (step.decision !== "wait") return { decision: "skip" };
+    await new Promise((resolve) => setTimeout(resolve, TURN_POLL_MS));
+  }
+}
+
+/**
+ * Suelta el turno. Si contestó (`seenUpTo`), deja la marca «listo» con la
+ * hora hasta la que vio —es lo que hace ceder a los mensajes anteriores que
+ * seguían esperando— y borra los «listo» viejos de la conversación (queda
+ * como mucho uno). Si NO contestó (su respuesta nació vieja), solo se quita.
+ */
+async function releaseBotTurn(
+  barbershopId: string,
+  phone: string,
+  inboundId: string,
+  seenUpTo: Date | null,
+): Promise<void> {
+  try {
+    if (seenUpTo) {
+      await prisma.barberMessage.updateMany({
+        where: {
+          ...turnRowsWhere(barbershopId, phone),
+          id: { not: inboundId },
+          errorMessage: { startsWith: `${BARBER_WA_TURN_PREFIX}listo]` },
+        },
+        data: { errorMessage: null },
+      });
+    }
+    await prisma.barberMessage.updateMany({
+      where: { id: inboundId, barbershopId },
+      data: { errorMessage: seenUpTo ? barberBotTurnMark("listo", seenUpTo) : null },
+    });
+  } catch (err) {
+    // La marca «atendiendo» caduca sola con su hora: no puede dejar mudo el hilo.
+    console.error(`[barber/wa] no se pudo soltar el turno del bot (${barbershopId}):`, err);
+  }
+}
+
 /**
  * Puente al bot que agenda (src/lib/barber/bot.ts).
  *
@@ -2527,26 +2655,74 @@ async function understandBarberVoice(
  * El bot decide QUÉ decir; el envío sigue siendo de aquí (replyInline:
  * ventana de 24 h, cupo y registro en el Inbox incluidos). Así el bot no
  * puede inventarse un camino de envío ni saltarse el cupo.
+ *
+ * 🔴 UN TURNO POR CONVERSACIÓN (G4). Antes de correr se toma el turno de ese
+ * (barbería, teléfono): si otro mensaje del mismo cliente se está
+ * atendiendo, éste espera; si hay uno más nuevo esperando, cede. Y antes de
+ * MANDAR la respuesta se mira si llegó algo que este turno no alcanzó a ver:
+ * entonces la respuesta ya nació vieja y no sale — el turno del mensaje
+ * nuevo contesta por todos. Tres mensajes seguidos = una respuesta. Como los
+ * turnos van uno tras otro, cada uno lee el gasto de IA que dejó el anterior
+ * y una ráfaga ya no puede rebasar el tope diario.
  */
 async function runBotIfEnabled(
   shop: ShopWaRow,
   creds: BarberWaCredentials | null,
   phone: string,
   text: string,
-  deadlineAt?: number,
+  opts: { deadlineAt: number; inboundId: string },
 ): Promise<void> {
+  let seenUpTo: Date | null = null;
+  let claimed = false;
+  let answered = false;
   try {
-    const { runBarberBotTurn } = await import("@/lib/barber/bot");
+    const { runBarberBotTurn, barberBotIsOn } = await import("@/lib/barber/bot");
+    // Con el bot apagado no hay turno que ordenar: ni candado ni marcas (la
+    // enorme mayoría de los mensajes de una barbería sin bot pasan por aquí).
+    if (!(await barberBotIsOn(shop.id))) return;
+
+    const claim = await claimBotTurn(shop.id, phone, opts.inboundId, opts.deadlineAt);
+    if (claim.decision !== "run") return;
+    claimed = true;
+    seenUpTo = claim.seenUpTo;
+
     const turn = await runBarberBotTurn({
       barbershopId: shop.id,
       phone,
       text,
       // Se le deja un margen para mandar la respuesta después del turno.
-      deadlineAt: deadlineAt ? deadlineAt - 4000 : undefined,
+      deadlineAt: opts.deadlineAt - 4000,
+      // Tomó el turno y ningún turno anterior vio este mensaje: hay que atenderlo
+      // aunque la respuesta a lo anterior haya quedado guardada después.
+      unanswered: true,
     });
-    if (turn.reply) await replyInline(shop, creds, phone, turn.reply, { options: turn.options });
+    answered = true;
+    if (!turn.reply) return;
+
+    // Lo que el turno YA HIZO (agendó, canceló, movió, pasó con una persona)
+    // o un aviso fijo (fuera de horario, tope) se dice siempre. Solo una
+    // respuesta de pura conversación puede "nacer vieja".
+    const hizoAlgo =
+      turn.skipped !== null ||
+      turn.effects.handoff ||
+      turn.effects.booked.length > 0 ||
+      turn.effects.cancelled.length > 0 ||
+      turn.effects.rescheduled.length > 0;
+    if (!hizoAlgo) {
+      const others = await prisma.barberMessage.findMany({
+        where: { ...turnRowsWhere(shop.id, phone), id: { not: opts.inboundId } },
+        select: { id: true, createdAt: true, errorMessage: true },
+      });
+      if (barberBotReplyIsStale(seenUpTo, others, new Date())) {
+        answered = false;
+        return;
+      }
+    }
+    await replyInline(shop, creds, phone, turn.reply, { options: turn.options });
   } catch (err) {
     console.error(`[barber/wa] el bot no pudo atender (${shop.id}):`, err);
+  } finally {
+    if (claimed) await releaseBotTurn(shop.id, phone, opts.inboundId, answered ? seenUpTo : null);
   }
 }
 
@@ -3118,9 +3294,12 @@ function toMessageDTO(row: {
     body: row.body,
     // Un recordatorio que invalidamos nosotros NO es un fallo que enseñarle a
     // la barbería como si Meta lo hubiera rechazado.
-    // …y la marca "[enviando]" tampoco: es un mensaje que está saliendo.
+    // …y la marca "[enviando]" tampoco: es un mensaje que está saliendo. Ni
+    // las del turno del bot ("[bot:…]"), que viven en los ENTRANTES.
     error:
-      isInvalidatedReminder(row.errorMessage) || isBarberWaClaim(row.errorMessage)
+      isInvalidatedReminder(row.errorMessage) ||
+      isBarberWaClaim(row.errorMessage) ||
+      isBarberBotTurnMark(row.errorMessage)
         ? null
         : row.errorMessage,
     // Los adjuntos y las marcas de sistema no son "una plantilla".

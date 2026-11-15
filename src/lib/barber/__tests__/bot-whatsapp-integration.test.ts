@@ -23,6 +23,7 @@ import {
   instalarFetch,
   limpiar,
   mensajes,
+  modelMaxConcurrent,
   modelQueue,
   modelRequests,
   oggDe,
@@ -31,6 +32,7 @@ import {
   restaurarFetch,
   say,
   setAudio,
+  setModelDelay,
   setWhisper,
   skip,
   telefono,
@@ -935,4 +937,156 @@ test("🔴 G3 — política manual: el bot dice «solicitud», no «agendada», 
   const r2 = toolResults.find((r) => r && r.referencia);
   assert.equal(r2.estado, "confirmada");
   assert.equal(r2.aclaracion, "La cita quedó confirmada.");
+});
+
+/* ═══════ G4 — un solo turno del bot por conversación ═══════ */
+
+const pausa = (ms: number) => new Promise((r) => setTimeout(r, ms));
+/** Espera a que el primer turno ya esté hablando con el modelo (así el orden no depende del reloj). */
+async function conElPrimerTurnoEnCurso(): Promise<void> {
+  for (let i = 0; i < 400 && modelRequests.length === 0; i++) await pausa(10);
+  assert.ok(modelRequests.length >= 1, "el primer turno nunca llegó al modelo");
+}
+/** Lo que el bot le MANDÓ a ese teléfono (texto o botones), en orden. */
+const respuestasA = (phone: string) =>
+  enviados()
+    .filter((c) => c.body?.to === `52${phone}`)
+    .map((c) => c.body.text?.body ?? c.body.interactive?.body?.text ?? "");
+const marcasDeTurno = async (t: Tienda, phone: string) =>
+  (await prisma.barberMessage.findMany({
+    where: { barbershopId: t.id, phone, direction: "INBOUND" },
+    orderBy: { createdAt: "asc" },
+    select: { body: true, errorMessage: true },
+  })) as { body: string; errorMessage: string | null }[];
+
+test("🔴 G4 — tres mensajes seguidos: un turno a la vez y UNA respuesta que los vio todos", { skip }, async () => {
+  const phone = telefono();
+  setModelDelay(1200);
+  // Si los turnos se encimaran, cada uno se llevaría una de éstas.
+  modelQueue.push(say("Respuesta al primer mensaje (ya nació vieja)."));
+  modelQueue.push(say("¡Hola! Mañana a las 5 tengo lugar para tu corte. ¿Te lo aparto?"));
+  modelQueue.push(say("Tercera respuesta, que no debe existir."));
+
+  const uno = escribe(P, phone, "hola");
+  await conElPrimerTurnoEnCurso();
+  const dos = escribe(P, phone, "quiero corte mañana");
+  await pausa(120);
+  const tres = escribe(P, phone, "a las 5");
+  await Promise.all([uno, dos, tres]);
+
+  assert.equal(modelMaxConcurrent, 1, "nunca hubo dos turnos hablando con el modelo a la vez");
+  assert.deepEqual(
+    respuestasA(phone),
+    ["¡Hola! Mañana a las 5 tengo lugar para tu corte. ¿Te lo aparto?"],
+    "una sola respuesta, la del turno que vio los tres mensajes",
+  );
+  assert.equal(modelRequests.length, 2, "el segundo mensaje cedió sin gastar; el tercero contestó por todos");
+  const loQueVio = modelRequests[modelRequests.length - 1].messages;
+  const delCliente = loQueVio[loQueVio.length - 1];
+  assert.equal(delCliente.role, "user");
+  for (const frase of ["hola", "quiero corte mañana", "a las 5"]) {
+    assert.ok(String(delCliente.content).includes(frase), `el turno que contestó vio «${frase}»`);
+  }
+  // En la bandeja hay una sola respuesta del bot y los tres entrantes, sin "errores".
+  const hilo = await listBarberThreadMessages(P.id, phone);
+  assert.equal(hilo.messages.filter((m) => m.direction === "OUTBOUND").length, 1);
+  assert.ok(hilo.messages.every((m) => m.error === null), "las marcas del turno no se enseñan como fallo");
+  // No queda nadie "atendiendo" ni "esperando": el siguiente mensaje no se atora.
+  const marcas = await marcasDeTurno(P, phone);
+  assert.ok(marcas.every((m) => !/\[bot:(atendiendo|espera)\]/.test(m.errorMessage ?? "")), JSON.stringify(marcas));
+
+  // …y el siguiente mensaje se atiende normal, a la primera.
+  limpiar();
+  modelQueue.push(say("Va, te lo aparto."));
+  await escribe(P, phone, "sí, apártalo");
+  assert.deepEqual(respuestasA(phone), ["Va, te lo aparto."]);
+  assert.equal(modelRequests.length, 1);
+});
+
+test("🔴 G4 — una ráfaga no rebasa el tope diario de IA", { skip }, async () => {
+  const tienda = await crearTienda({ plan: "PROFESIONAL" });
+  await saveBarberBotSettings(tienda.id, { ...BOT_ON, aiDailyCapMxn: 1 });
+  // Queda saldo para UNA llamada: el tope es de $1 y ya se gastó casi todo.
+  await prisma.barberBotUsage.create({
+    data: { barbershopId: tienda.id, day: barberTodayISO(TZ), spentMicros: BigInt(1_000_000 - 10), turns: 9 },
+  });
+  const phone = telefono();
+  setModelDelay(1200);
+
+  const uno = escribe(tienda, phone, "hola");
+  await conElPrimerTurnoEnCurso();
+  const dos = escribe(tienda, phone, "quiero corte");
+  await pausa(100);
+  const tres = escribe(tienda, phone, "mañana a las 5");
+  await Promise.all([uno, dos, tres]);
+
+  // Con los tres turnos a la vez, los tres leían «queda saldo» y los tres gastaban.
+  assert.equal(modelRequests.length, 1, "solo el turno que encontró saldo llamó al modelo");
+  assert.equal(await gastoDeHoy(tienda), 1_000_000 - 10 + COSTO_LLAMADA);
+  // Y el cliente no se queda sin respuesta: el turno siguiente ve el tope y avisa.
+  const dichas = respuestasA(phone);
+  assert.equal(dichas.length, 1);
+  assert.ok((await listBarberBotPauses(tienda.id)).some((p) => p.phone === phone), "el hilo queda para una persona");
+});
+
+test("G4 — lo que el turno YA HIZO se dice aunque el cliente siga escribiendo", { skip }, async () => {
+  const phone = telefono();
+  const dia = addIsoDays(MANANA, 5);
+  setModelDelay(400);
+  modelQueue.push(() => useTool("buscar_horarios", { fecha: dia, servicioIds: [P.corteId] }));
+  modelQueue.push((seen) =>
+    useTool("agendar", {
+      fecha: dia,
+      hora: seen[seen.length - 1].horarios[1].hora,
+      servicioIds: [P.corteId],
+      nombre: "Beto Lara",
+    }),
+  );
+  modelQueue.push(say("Listo, quedó tu solicitud."));
+  modelQueue.push(say("¡De nada!"));
+
+  const uno = escribe(P, phone, "agéndame un corte");
+  await conElPrimerTurnoEnCurso();
+  const dos = escribe(P, phone, "gracias");
+  await Promise.all([uno, dos]);
+
+  assert.equal(modelMaxConcurrent, 1);
+  const dichas = respuestasA(phone);
+  assert.equal(dichas.length, 2, "la reserva se avisa siempre; el «gracias» se atiende después, no encima");
+  assert.match(dichas[0], /Listo, quedó tu solicitud\./);
+  assert.equal(dichas[1], "¡De nada!");
+  // El turno del «gracias» lo leyó donde lo leyó el cliente: después de nuestra respuesta.
+  const visto = modelRequests[modelRequests.length - 1].messages;
+  assert.deepEqual(visto.slice(-2).map((m: any) => [m.role, m.content]), [
+    ["assistant", "Listo, quedó tu solicitud."],
+    ["user", "gracias"],
+  ]);
+  assert.equal(await prisma.barberAppointment.count({ where: { barbershopId: P.id, clientPhone: phone } }), 1);
+});
+
+test("G4 — un turno que murió a medias no deja muda la conversación; con el bot apagado no hay marcas", { skip }, async () => {
+  // Un proceso que se cayó dejó su marca; ya caducó.
+  const phone = telefono();
+  await prisma.barberMessage.create({
+    data: {
+      barbershopId: P.id,
+      direction: "INBOUND",
+      phone,
+      body: "hola",
+      status: "DELIVERED",
+      errorMessage: `[bot:atendiendo] ${new Date(Date.now() - 1_000).toISOString()}`,
+      createdAt: new Date(Date.now() - 120_000),
+    },
+  });
+  modelQueue.push(say("¡Hola! ¿En qué te ayudo?"));
+  await escribe(P, phone, "¿sigues ahí?");
+  assert.deepEqual(respuestasA(phone), ["¡Hola! ¿En qué te ayudo?"]);
+
+  // Bot apagado: ni candado ni marcas en los mensajes de una barbería sin bot.
+  const sinBot = await crearTienda({ plan: "PROFESIONAL" });
+  const p2 = telefono();
+  limpiar();
+  await escribe(sinBot, p2, "hola");
+  assert.equal(modelRequests.length, 0);
+  assert.deepEqual((await marcasDeTurno(sinBot, p2)).map((m) => m.errorMessage), [null]);
 });

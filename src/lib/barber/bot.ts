@@ -223,6 +223,17 @@ export async function getBarberBotSettings(
   }
 }
 
+/**
+ * ¿Esta barbería tiene el bot encendido? Pregunta barata (la configuración
+ * va en caché) para quien solo necesita saber si vale la pena ordenar un
+ * turno. NO sustituye a las puertas del turno (plan, pago, pausa, horario,
+ * tope): ésas las sigue decidiendo runBarberBotTurn.
+ */
+export async function barberBotIsOn(barbershopId: string): Promise<boolean> {
+  const { settings, storageReady } = await getBarberBotSettings(barbershopId);
+  return storageReady && settings.enabled;
+}
+
 export class BarberBotStorageError extends Error {
   constructor(message: string) {
     super(message);
@@ -1655,6 +1666,14 @@ export interface BarberBotTurnInput {
    * usa para que turno + nota de voz quepan en el tiempo de la función.
    */
   deadlineAt?: number;
+  /**
+   * Quien llama GARANTIZA que este mensaje no ha sido contestado (la ingesta
+   * de WhatsApp lo sabe: tomó el turno de la conversación y ningún turno
+   * anterior lo vio). Importa cuando el cliente escribe mientras el bot
+   * contestaba lo anterior: esa respuesta se guarda DESPUÉS de su mensaje,
+   * así que lo último del hilo es nuestro y sin esto se quedaba sin atender.
+   */
+  unanswered?: boolean;
 }
 
 export interface BarberBotTurnResult {
@@ -1942,6 +1961,11 @@ async function runTurnInner(input: BarberBotTurnInput): Promise<BarberBotTurnRes
   const history = await loadHistory(shopId, phone);
   // Sin nada del cliente, o con el equipo como último en hablar, no hay
   // pregunta que contestar (y la API exige que el último turno sea suyo).
+  if (history.length > 0 && history[history.length - 1].role !== "user" && input.unanswered) {
+    // Escribió mientras se le contestaba lo anterior: su mensaje va al final,
+    // que es donde lo leyó el cliente (después de nuestra respuesta).
+    history.push({ role: "user", content: text });
+  }
   if (history.length === 0 || history[history.length - 1].role !== "user") {
     return NO_REPLY(null);
   }

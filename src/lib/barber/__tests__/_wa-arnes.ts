@@ -75,6 +75,14 @@ export let modelQueue: Canned[] = [];
 export let modelRequests: { model: string; system: string; messages: any[]; raw: any }[] = [];
 export let toolResults: any[] = [];
 let toolSeq = 0;
+/** Cuánto tarda en contestar el modelo simulado (para encimar turnos). */
+export let modelDelayMs = 0;
+export function setModelDelay(ms: number): void {
+  modelDelayMs = ms;
+}
+/** Llamadas al modelo en curso ahora mismo y el máximo que llegó a haber a la vez. */
+let modelInFlight = 0;
+export let modelMaxConcurrent = 0;
 /** Tokens que "gasta" cada llamada al modelo simulado. */
 export const TOKENS_POR_LLAMADA = { input_tokens: 900, output_tokens: 90 };
 
@@ -199,6 +207,13 @@ export function instalarFetch(): void {
           }
         }
       }
+      modelInFlight++;
+      modelMaxConcurrent = Math.max(modelMaxConcurrent, modelInFlight);
+      try {
+        if (modelDelayMs > 0) await new Promise((r) => setTimeout(r, modelDelayMs));
+      } finally {
+        modelInFlight--;
+      }
       const next = modelQueue.shift();
       const blocks: CannedBlock[] = !next
         ? [{ type: "text", text: "Ahí te va." }]
@@ -227,6 +242,9 @@ export function limpiar(): void {
   graphDelayMs = 0;
   modelQueue = [];
   modelRequests = [];
+  modelDelayMs = 0;
+  modelInFlight = 0;
+  modelMaxConcurrent = 0;
   toolResults = [];
   whisper = { text: "", duration: 4 };
   whisperCalls = 0;

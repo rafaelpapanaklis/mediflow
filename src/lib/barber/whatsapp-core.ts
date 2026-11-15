@@ -490,6 +490,117 @@ export function sanitizeBarberWaParam(value: unknown, fallback = "—"): string 
     : clean;
 }
 
+// ── El bot: UN turno por conversación ───────────────────────────────────
+//
+// 🔴 G4 de la revisión. La gente escribe en varios mensajes seguidos:
+// «hola» / «quiero corte mañana» / «a las 5». Son tres webhooks, y sin esto
+// eran tres turnos del bot A LA VEZ: cada uno contestaba a todo sin ver la
+// respuesta del otro (dos o tres respuestas que se pisan, cada una con su
+// gasto de IA y su mensaje del cupo, y el tope diario leído tres veces antes
+// de que nadie sumara nada).
+//
+// No hay tabla de conversaciones y el schema no se toca, así que el turno se
+// anota en el `errorMessage` del propio mensaje ENTRANTE (un entrante nunca
+// lo usa para otra cosa) con una de tres marcas, y quién corre se decide
+// dentro de un candado corto de Postgres por (barbería, teléfono):
+//   [bot:atendiendo] <hasta>  → el turno de ESE mensaje está corriendo;
+//   [bot:espera] <hasta>      → ese mensaje espera su turno;
+//   [bot:listo] <visto hasta> → un turno terminó y contestó viendo todos
+//                               los mensajes llegados hasta esa hora.
+// La decisión es pura (decideBarberBotTurn) y se prueba sin base.
+
+export const BARBER_WA_TURN_PREFIX = "[bot:" as const;
+export type BarberBotTurnMark = "atendiendo" | "espera" | "listo";
+
+export function barberBotTurnMark(kind: BarberBotTurnMark, at: Date): string {
+  return `${BARBER_WA_TURN_PREFIX}${kind}] ${at.toISOString()}`;
+}
+
+export function parseBarberBotTurnMark(
+  errorMessage: string | null | undefined,
+): { kind: BarberBotTurnMark; at: Date } | null {
+  if (typeof errorMessage !== "string" || !errorMessage.startsWith(BARBER_WA_TURN_PREFIX)) return null;
+  const m = /^\[bot:(atendiendo|espera|listo)\] (.+)$/.exec(errorMessage);
+  if (!m) return null;
+  const at = new Date(m[2]);
+  if (Number.isNaN(at.getTime())) return null;
+  return { kind: m[1] as BarberBotTurnMark, at };
+}
+
+export function isBarberBotTurnMark(errorMessage: string | null | undefined): boolean {
+  return typeof errorMessage === "string" && errorMessage.startsWith(BARBER_WA_TURN_PREFIX);
+}
+
+export interface BarberBotTurnRow {
+  id: string;
+  createdAt: Date;
+  errorMessage: string | null;
+}
+
+/** ¿`a` llegó después que `b`? (Con la misma hora desempata el id.) */
+function arrivedAfter(a: { id: string; createdAt: Date }, b: { id: string; createdAt: Date }): boolean {
+  const diff = a.createdAt.getTime() - b.createdAt.getTime();
+  return diff > 0 || (diff === 0 && a.id > b.id);
+}
+
+/**
+ * ¿Qué hace el turno de ESTE mensaje, viendo las marcas de los demás
+ * entrantes de la misma conversación?
+ *
+ *   · `yield` (ceder, sin contestar) si OTRO turno ya contestó habiendo
+ *     visto este mensaje (marca «listo» con hora ≥ la de llegada de éste), o
+ *     si hay un mensaje MÁS NUEVO esperando turno: ése contestará por todos.
+ *   · `wait`  si otro turno está corriendo ahora.
+ *   · `run`   en otro caso.
+ *
+ * Las marcas «atendiendo» y «espera» llevan hasta cuándo valen: una caducada
+ * es de un proceso que murió y no cuenta (no puede dejar muda la conversación).
+ */
+export function decideBarberBotTurn(
+  me: { id: string; createdAt: Date },
+  others: BarberBotTurnRow[],
+  now: Date,
+): "run" | "wait" | "yield" {
+  let running = false;
+  let newerWaiting = false;
+  for (const row of others) {
+    if (row.id === me.id) continue;
+    const mark = parseBarberBotTurnMark(row.errorMessage);
+    if (!mark) continue;
+    if (mark.kind === "listo") {
+      if (mark.at.getTime() >= me.createdAt.getTime()) return "yield";
+      continue;
+    }
+    if (mark.at.getTime() <= now.getTime()) continue; // caducada
+    if (mark.kind === "atendiendo") running = true;
+    else if (arrivedAfter(row, me)) newerWaiting = true;
+  }
+  if (running) return "wait";
+  if (newerWaiting) return "yield";
+  return "run";
+}
+
+/**
+ * El turno terminó y tiene una respuesta lista. ¿Hay un mensaje que llegó
+ * DESPUÉS de lo que este turno alcanzó a ver, y que sigue esperando su
+ * turno? Entonces esta respuesta ya nació vieja: no se manda, y el turno de
+ * ese mensaje contesta por los dos.
+ */
+export function barberBotReplyIsStale(
+  seenUpTo: Date,
+  others: BarberBotTurnRow[],
+  now: Date,
+): boolean {
+  return others.some((row) => {
+    const mark = parseBarberBotTurnMark(row.errorMessage);
+    return (
+      mark?.kind === "espera" &&
+      mark.at.getTime() > now.getTime() &&
+      row.createdAt.getTime() > seenUpTo.getTime()
+    );
+  });
+}
+
 // ── La cola: reclamar una fila antes de mandarla ────────────────────────
 //
 // BarberMessage no tiene un estado "enviando" y el schema no se toca. Sin
