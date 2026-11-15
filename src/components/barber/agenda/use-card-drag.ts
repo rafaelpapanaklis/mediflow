@@ -29,6 +29,7 @@ import type { BarberAppointmentDTO } from "@/lib/barber/types";
 import {
   DRAG_START_PX,
   LONG_PRESS_MS,
+  avisarSinArrastre,
   edgeScrollDelta,
   minuteAtOffset,
   moveStartMinute,
@@ -80,6 +81,12 @@ export interface CardDragOptions {
   onRejected: (appt: BarberAppointmentDTO, preview: DragPreview) => void;
   /** Al empezar a arrastrar (p. ej. para cerrar el resumen al pasar). */
   onStart?: () => void;
+  /**
+   * Se intentó arrastrar una visita que no se puede mover (completada,
+   * cancelada, sin barbero o sin permiso): la pantalla dice por qué. Se
+   * llama una vez por gesto, cuando el arrastre habría empezado.
+   */
+  onDenied?: (appt: BarberAppointmentDTO) => void;
 }
 
 interface Session {
@@ -115,6 +122,52 @@ export function useCardDrag(options: CardDragOptions) {
   // cancelar) un arrastre ACTIVO y lo consume el siguiente clic.
   const justDragged = useRef(false);
   const listeners = useRef<(() => void) | null>(null);
+  // El gesto sobre una visita que NO se mueve: solo para avisar (no arrastra).
+  const deniedWatch = useRef<(() => void) | null>(null);
+
+  /** Vigila el gesto sobre una visita que no se mueve y avisa una vez. */
+  const watchDenied = useCallback((e: React.PointerEvent, appt: BarberAppointmentDTO) => {
+    deniedWatch.current?.();
+    const o = opt.current;
+    if (!o.onDenied) return;
+    const pointerId = e.pointerId;
+    const pointerType = e.pointerType;
+    const x0 = e.clientX;
+    const y0 = e.clientY;
+    const t0 = performance.now();
+    let lastX = x0;
+    let lastY = y0;
+    let timer: number | null = null;
+    const stop = () => {
+      if (timer !== null) window.clearTimeout(timer);
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", stop);
+      window.removeEventListener("pointercancel", stop);
+      if (deniedWatch.current === stop) deniedWatch.current = null;
+    };
+    const check = () => {
+      const elapsed = performance.now() - t0;
+      const moved = Math.hypot(lastX - x0, lastY - y0);
+      if (avisarSinArrastre(pointerType, elapsed, moved)) {
+        stop();
+        opt.current.onDenied?.(appt);
+      } else if (pointerType === "touch" && touchGesture(elapsed, moved) === "scroll") {
+        // El dedo se movió antes de tiempo: era scroll, no se avisa nada.
+        stop();
+      }
+    };
+    function onMove(ev: PointerEvent) {
+      if (ev.pointerId !== pointerId) return;
+      lastX = ev.clientX;
+      lastY = ev.clientY;
+      check();
+    }
+    if (pointerType === "touch") timer = window.setTimeout(check, LONG_PRESS_MS);
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", stop);
+    window.addEventListener("pointercancel", stop);
+    deniedWatch.current = stop;
+  }, []);
 
   const publish = useCallback((next: DragPreview | null) => {
     const prev = previewRef.current;
@@ -279,8 +332,11 @@ export function useCardDrag(options: CardDragOptions) {
     (e: React.PointerEvent, appt: BarberAppointmentDTO, mode: DragMode) => {
       justDragged.current = false;
       const o = opt.current;
-      if (!o.canDrag(appt)) return;
       if (e.pointerType === "mouse" && e.button !== 0) return;
+      if (!o.canDrag(appt)) {
+        watchDenied(e, appt);
+        return;
+      }
       if (session.current) end(false);
       const homeKey = o.homeColumn(appt);
       if (!homeKey) return;
@@ -376,7 +432,7 @@ export function useCardDrag(options: CardDragOptions) {
         window.removeEventListener("keydown", onKey, true);
       };
     },
-    [activate, compute, end, pointerMinuteIn],
+    [activate, compute, end, pointerMinuteIn, watchDenied],
   );
 
   // Con el dedo y la visita ya «agarrada», el navegador no debe desplazar la
@@ -392,7 +448,13 @@ export function useCardDrag(options: CardDragOptions) {
   }, []);
 
   // Al desmontar, nada colgando.
-  useEffect(() => () => end(false), [end]);
+  useEffect(
+    () => () => {
+      end(false);
+      deniedWatch.current?.();
+    },
+    [end],
+  );
 
   /** ¿Este clic es la cola de un arrastre? (y lo consume) */
   const consumeClick = useCallback(() => {
