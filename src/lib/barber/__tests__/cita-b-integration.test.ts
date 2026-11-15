@@ -455,3 +455,74 @@ test("5 · anticipo desde la cita: mismo registro que Anticipos (turno, ticket a
   assert.equal(sale.total, 100, "200 − 100 de anticipo");
   session = null;
 });
+
+// ── 6. DTO de la cita ──────────────────────────────────────────────────
+
+test("6 · DTO: arrivedAt, cancelReason, deposit y client {totalVisits, stars}, en lote (2 lecturas para toda la agenda)", { skip }, async () => {
+  const server = await import("@/app/api/barber/appointments/_server");
+  const detail = await import("@/app/api/barber/appointments/[id]/route");
+  const { startOfDayInTz } = await import("@/lib/barber/commissions");
+  const dayStart = startOfDayInTz(new Date(), "America/Mexico_City");
+  const at = (h: number) => new Date(dayStart.getTime() + h * HOUR).getTime() - Date.now();
+
+  // Una barbería limpia para contar exacto.
+  const C = await makeShop("C");
+  const diego = (await prisma.barberClient.create({
+    data: { barbershopId: C.id, name: `Diego ${RUN}`, phone: `58${String(Date.now()).slice(-8)}`, totalVisits: 18, loyaltyCount: 7 },
+  })).id;
+  const nuevo = await newClient(C, "Nuevo");
+  const a1 = await appt(C, diego, "CONFIRMED", at(1), { depositAmount: new Prisma.Decimal(100), depositStatus: "PAID" });
+  const a2 = await appt(C, nuevo, "CANCELLED", at(2));
+  const a3 = await appt(C, null, "PENDING", at(3), { clientName: "Sin ficha" });
+  await prisma.$executeRaw`UPDATE "barber_appointments" SET "arrivedAt" = NOW() WHERE "id" = ${a1.id}`;
+  await prisma.$executeRaw`UPDATE "barber_appointments" SET "cancelReason" = ${"Se le cruzó el trabajo"} WHERE "id" = ${a2.id}`;
+
+  // Contar las lecturas de clientes: UNA para toda la agenda.
+  let clientReads = 0;
+  const original = prisma.barberClient.findMany.bind(prisma.barberClient);
+  (prisma.barberClient as unknown as { findMany: unknown }).findMany = (...a: unknown[]) => {
+    clientReads++;
+    return (original as (...x: unknown[]) => unknown)(...a);
+  };
+  let agenda: Awaited<ReturnType<typeof server.loadAgendaWindow>>;
+  try {
+    agenda = await server.loadAgendaWindow(C.id, new Date(dayStart.getTime()), new Date(dayStart.getTime() + DAY));
+  } finally {
+    (prisma.barberClient as unknown as { findMany: unknown }).findMany = original;
+  }
+  assert.equal(clientReads, 1, "una sola lectura de clientes para las tres citas");
+
+  const byId = new Map(agenda.appointments.map((x) => [x.id, x] as const));
+  const d1 = byId.get(a1.id)!;
+  assert.ok(d1.arrivedAt, "Ya llegó");
+  assert.deepEqual(d1.deposit, { status: "PAID", amount: 100 });
+  assert.deepEqual(d1.client, { totalVisits: 18, stars: 7 });
+  assert.equal(d1.cancelReason, null);
+  const d2 = byId.get(a2.id)!;
+  assert.equal(d2.cancelReason, "Se le cruzó el trabajo");
+  assert.deepEqual(d2.client, { totalVisits: 0, stars: 0 }, "cliente nuevo");
+  assert.equal(d2.deposit, null);
+  const d3 = byId.get(a3.id)!;
+  assert.equal(d3.client, null, "sin ficha ligada");
+  assert.equal(d3.arrivedAt, null);
+
+  // El detalle (GET /appointments/[id]) trae lo mismo.
+  session = C.ctx;
+  const res = await detail.GET(req("/x", "GET"), params(a1.id));
+  const one = ((await res.json()) as { appointment: { arrivedAt: string | null; client: unknown; deposit: unknown } }).appointment;
+  assert.ok(one.arrivedAt);
+  assert.deepEqual(one.client, { totalVisits: 18, stars: 7 });
+  assert.deepEqual(one.deposit, { status: "PAID", amount: 100 });
+  session = null;
+
+  // Sin las columnas del SQL, la agenda sigue (sin esos dos campos).
+  await dropColumns();
+  try {
+    const sinSql = await server.loadAgendaWindow(C.id, new Date(dayStart.getTime()), new Date(dayStart.getTime() + DAY));
+    assert.equal(sinSql.appointments.length, 3);
+    assert.equal(sinSql.appointments.find((x) => x.id === a1.id)!.arrivedAt, null);
+    assert.deepEqual(sinSql.appointments.find((x) => x.id === a1.id)!.client, { totalVisits: 18, stars: 7 });
+  } finally {
+    await applySql();
+  }
+});

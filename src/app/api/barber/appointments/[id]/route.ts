@@ -28,6 +28,7 @@ import { isTerminalAppointmentStatus } from "@/lib/barber/types";
 import { agendaViewScope, scopeAppointmentsWhere, scopeUserFromCtx } from "@/lib/barber/own-visits";
 import {
   APPOINTMENT_INCLUDE,
+  enrichAppointmentDTO,
   asDate,
   asString,
   asStringArray,
@@ -54,7 +55,7 @@ export async function GET(_req: Request, props: { params: Promise<{ id: string }
     include: APPOINTMENT_INCLUDE,
   });
   if (!appt) return jsonError("Esa visita no existe.", 404);
-  return NextResponse.json({ appointment: toAppointmentDTO(appt) });
+  return NextResponse.json({ appointment: await enrichAppointmentDTO(gate.gate.shopId, toAppointmentDTO(appt)) });
 }
 
 export async function PATCH(req: Request, props: { params: Promise<{ id: string }> }) {
@@ -234,7 +235,7 @@ export async function PATCH(req: Request, props: { params: Promise<{ id: string 
     }
 
     return NextResponse.json({
-      appointment: toAppointmentDTO(updated),
+      appointment: await enrichAppointmentDTO(shopId, toAppointmentDTO(updated)),
       remindersInvalidated,
       // Para el "Deshacer" del panel: dónde estaba antes de moverla.
       previous: {

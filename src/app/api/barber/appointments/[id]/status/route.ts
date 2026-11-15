@@ -38,6 +38,7 @@ import {
 } from "@/lib/barber/appointment-extras";
 import {
   APPOINTMENT_INCLUDE,
+  enrichAppointmentDTO,
   asString,
   invalidateAppointmentReminders,
   jsonError,
@@ -119,7 +120,7 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
       where: { id: current.id },
       include: APPOINTMENT_INCLUDE,
     });
-    return NextResponse.json({ appointment: toAppointmentDTO(same), remindersInvalidated: 0 });
+    return NextResponse.json({ appointment: await enrichAppointmentDTO(shopId, toAppointmentDTO(same)), remindersInvalidated: 0 });
   }
 
   if (!canTransition(current.status, to)) {
@@ -157,7 +158,7 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
   }
 
   return NextResponse.json({
-    appointment: toAppointmentDTO(updated),
+    appointment: await enrichAppointmentDTO(shopId, toAppointmentDTO(updated)),
     remindersInvalidated,
     previousStatus: current.status,
     ...(to === "CANCELLED" ? { reasonSaved } : {}),
