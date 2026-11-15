@@ -229,6 +229,18 @@ export function PortalLogin({
           error: t("barber.reserva.captcha.error"),
           retry: t("barber.reserva.captcha.reintentar"),
         }}
+        fallback={
+          <p className="dcb-alert dcb-alert--info" role="status">
+            {shop.phone ? (
+              <>
+                {t("barber.reserva.captcha.ayudaPortal")}{" "}
+                <a href={`tel:${shop.phone.replace(/[^\d+]/g, "")}`}>{shop.phone}</a>
+              </>
+            ) : (
+              t("barber.reserva.captcha.ayudaPortalSinTelefono")
+            )}
+          </p>
+        }
       />
     </section>
   );

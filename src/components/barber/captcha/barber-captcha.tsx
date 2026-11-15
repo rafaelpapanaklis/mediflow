@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type ReactNode,
 } from "react";
 import { RotateCw } from "lucide-react";
 import { TURNSTILE_SCRIPT_URL, type BarberCaptchaAction } from "@/lib/barber/captcha-core";
@@ -69,6 +70,14 @@ declare global {
 /** Cuánto espera el envío a que Cloudflare entregue el token. */
 const TOKEN_WAIT_MS = 15_000;
 
+/**
+ * A partir de cuántos intentos fallidos se enseña la salida (`fallback`: el
+ * WhatsApp y el teléfono de la barbería). Revisión ronda 15, M2: con el
+ * script bloqueado o la llave del sitio mal copiada, «Reintentar» nunca
+ * funciona y el cliente no tenía otra puerta.
+ */
+export const BARBER_CAPTCHA_GIVE_UP_AFTER = 2;
+
 // ── El script se carga UNA vez por página, aunque haya dos formularios. ──
 let scriptPromise: Promise<TurnstileApi> | null = null;
 
@@ -122,12 +131,18 @@ export interface BarberCaptchaProps {
   buttonClassName?: string;
   /** Estilo del botón, para formularios sin clases propias (el alta). */
   buttonStyle?: CSSProperties;
+  /**
+   * La salida cuando el captcha no carga: se enseña desde el segundo intento
+   * fallido (p. ej. «Si no puedes reservar aquí, escríbenos» + WhatsApp y
+   * teléfono). Sin ella, solo queda «Reintentar».
+   */
+  fallback?: ReactNode;
 }
 
 type Status = "off" | "loading" | "ready" | "error";
 
 export const BarberCaptcha = forwardRef<BarberCaptchaHandle, BarberCaptchaProps>(function BarberCaptcha(
-  { siteKey, action, locale, labels, className, textClassName, buttonClassName, buttonStyle },
+  { siteKey, action, locale, labels, className, textClassName, buttonClassName, buttonStyle, fallback },
   ref,
 ) {
   const boxRef = useRef<HTMLDivElement | null>(null);
@@ -137,6 +152,8 @@ export const BarberCaptcha = forwardRef<BarberCaptchaHandle, BarberCaptchaProps>
   const [status, setStatus] = useState<Status>(siteKey ? "loading" : "off");
   // Cambiarlo vuelve a montar el widget desde cero (botón «Reintentar»).
   const [attempt, setAttempt] = useState(0);
+  // Cuántas veces terminó en error (carga, Cloudflare o espera agotada).
+  const [failures, setFailures] = useState(0);
 
   const settle = useCallback((token: string | null) => {
     tokenRef.current = token;
@@ -144,6 +161,12 @@ export const BarberCaptcha = forwardRef<BarberCaptchaHandle, BarberCaptchaProps>
     waitersRef.current = [];
     for (const w of waiters) w(token);
   }, []);
+
+  const fail = useCallback(() => {
+    setStatus("error");
+    setFailures((n) => n + 1);
+    settle(null);
+  }, [settle]);
 
   useEffect(() => {
     if (!siteKey) {
@@ -179,9 +202,7 @@ export const BarberCaptcha = forwardRef<BarberCaptchaHandle, BarberCaptchaProps>
           },
           "error-callback": () => {
             if (cancelled) return true;
-            tokenRef.current = null;
-            setStatus("error");
-            settle(null);
+            fail();
             // true = lo atendimos nosotros (Cloudflare no lanza al aire).
             return true;
           },
@@ -193,8 +214,7 @@ export const BarberCaptcha = forwardRef<BarberCaptchaHandle, BarberCaptchaProps>
       })
       .catch(() => {
         if (cancelled) return;
-        setStatus("error");
-        settle(null);
+        fail();
       });
 
     return () => {
@@ -209,7 +229,7 @@ export const BarberCaptcha = forwardRef<BarberCaptchaHandle, BarberCaptchaProps>
         }
       }
     };
-  }, [siteKey, action, locale, attempt, settle]);
+  }, [siteKey, action, locale, attempt, settle, fail]);
 
   const reset = useCallback(() => {
     tokenRef.current = null;
@@ -240,7 +260,7 @@ export const BarberCaptcha = forwardRef<BarberCaptchaHandle, BarberCaptchaProps>
         return new Promise<BarberCaptchaResult>((resolve) => {
           const timer = setTimeout(() => {
             waitersRef.current = waitersRef.current.filter((w) => w !== onToken);
-            setStatus("error");
+            fail();
             resolve({ ok: false });
           }, TOKEN_WAIT_MS);
           const onToken = (token: string | null) => {
@@ -251,7 +271,7 @@ export const BarberCaptcha = forwardRef<BarberCaptchaHandle, BarberCaptchaProps>
         });
       },
     }),
-    [reset, siteKey, status],
+    [reset, siteKey, status, fail],
   );
 
   if (!siteKey) return null;
@@ -276,6 +296,10 @@ export const BarberCaptcha = forwardRef<BarberCaptchaHandle, BarberCaptchaProps>
             <RotateCw size={14} aria-hidden="true" /> {labels.retry}
           </button>
         </p>
+      ) : null}
+      {/* Ya no se esconde mientras reintenta: se va solo cuando llega un token. */}
+      {status !== "ready" && failures >= BARBER_CAPTCHA_GIVE_UP_AFTER && fallback ? (
+        <div data-captcha-salida="">{fallback}</div>
       ) : null}
     </div>
   );

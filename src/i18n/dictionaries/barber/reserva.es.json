@@ -203,6 +203,11 @@
   },
   "captcha": {
     "error": "No pudimos comprobar que eres una persona.",
-    "reintentar": "Reintentar"
+    "reintentar": "Reintentar",
+    "ayudaTitulo": "Si no puedes reservar aquí, escríbenos",
+    "ayudaCuerpo": "Por WhatsApp o por teléfono te apartamos tu lugar.",
+    "ayudaPortal": "Si no puedes entrar aquí, llámanos al",
+    "ayudaPortalSinTelefono": "Si no puedes entrar aquí, pídele ayuda a la barbería.",
+    "ayudaFila": "Si no puedes anotarte aquí, pide en el mostrador que te anoten."
   }
 }

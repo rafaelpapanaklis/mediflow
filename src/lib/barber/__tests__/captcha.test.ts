@@ -314,3 +314,30 @@ test("la reserva: el campo trampa sigue contestando «éxito» sin gastar captch
   assert.equal(res.status, 200);
   assert.equal(calls.length, 0);
 });
+
+// ── M2 (ronda 15): si el widget no carga, el cliente tiene otra puerta ──
+
+test("tras el 2.º intento fallido, la reserva, «mi cuenta» y la fila enseñan su salida (es/en)", async () => {
+  const { readFileSync } = await import("node:fs");
+  const widget = readFileSync("src/components/barber/captcha/barber-captcha.tsx", "utf8");
+  assert.match(widget, /export const BARBER_CAPTCHA_GIVE_UP_AFTER = 2;/);
+  assert.match(widget, /failures >= BARBER_CAPTCHA_GIVE_UP_AFTER && fallback/);
+
+  const reserva = readFileSync("src/components/barber/booking/booking-flow.tsx", "utf8");
+  assert.match(reserva, /fallback=\{\s*<NoScheduleNotice[\s\S]{0,200}captcha\.ayudaTitulo[\s\S]{0,200}waHref=\{waHref\}\s*telHref=\{telHref\}/);
+  const cuenta = readFileSync("src/components/barber/portal/portal-login.tsx", "utf8");
+  assert.match(cuenta, /fallback=\{[\s\S]{0,200}shop\.phone[\s\S]{0,200}tel:/);
+  const fila = readFileSync("src/components/barber/walkin/walkin-public.tsx", "utf8");
+  assert.match(fila, /fallback=\{[\s\S]{0,120}captcha\.ayudaFila/);
+
+  for (const l of ["es", "en"]) {
+    const j = JSON.parse(readFileSync(`src/i18n/dictionaries/barber/reserva.${l}.json`, "utf8"));
+    for (const k of ["ayudaTitulo", "ayudaCuerpo", "ayudaPortal", "ayudaPortalSinTelefono", "ayudaFila"]) {
+      assert.ok(typeof j.captcha[k] === "string" && j.captcha[k].length > 5, `${l}: captcha.${k}`);
+    }
+  }
+  assert.equal(
+    JSON.parse(readFileSync("src/i18n/dictionaries/barber/reserva.es.json", "utf8")).captcha.ayudaTitulo,
+    "Si no puedes reservar aquí, escríbenos",
+  );
+});

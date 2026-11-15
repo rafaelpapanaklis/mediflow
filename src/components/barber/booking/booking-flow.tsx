@@ -699,6 +699,15 @@ export function BookingFlow({
                 error: t("barber.reserva.captcha.error"),
                 retry: t("barber.reserva.captcha.reintentar"),
               }}
+              fallback={
+                <NoScheduleNotice
+                  title={t("barber.reserva.captcha.ayudaTitulo")}
+                  body={t("barber.reserva.captcha.ayudaCuerpo")}
+                  waHref={waHref}
+                  telHref={telHref}
+                  {...contactLabels}
+                />
+              }
             />
 
             <button type="submit" className="dcb-btn dcb-btn--primary" disabled={sending}>

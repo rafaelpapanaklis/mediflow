@@ -343,6 +343,7 @@ export function WalkinPublic(props: WalkinPublicProps) {
                 }}
                 textClassName={agendaCss.hint}
                 buttonClassName={agendaCss.btn}
+                fallback={<div className={agendaCss.errorBox}>{t("barber.reserva.captcha.ayudaFila")}</div>}
               />
 
               <button
