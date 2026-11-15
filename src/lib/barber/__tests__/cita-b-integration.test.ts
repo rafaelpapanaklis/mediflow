@@ -330,3 +330,81 @@ test("3 · ruta del recordatorio: Recepción recibe {status, reason}; el Barbero
   assert.equal((await remind.POST(req("/x", "POST"), params(cita.id))).status, 404);
   session = null;
 });
+
+// ── 4. Productos al cobro desde la cita ────────────────────────────────
+
+async function applyDraftsSql() {
+  const sql = fs.readFileSync(path.join(ROOT, "sql/barber_por_cobrar.sql"), "utf8").replace(/^\s*--.*$/gm, "");
+  for (const stmt of sql.split(/;\s*\n/).map((x) => x.trim()).filter(Boolean)) await prisma.$executeRawUnsafe(stmt);
+}
+const draftRow = async (id: string) =>
+  (await prisma.$queryRaw<Array<{ status: string; saleId: string | null }>>`SELECT "status", "saleId" FROM "barber_sale_drafts" WHERE "id" = ${id}`)[0];
+
+test("4 · productos desde la cita: van a su nota, no tocan existencias; el ticket de la cita los trae y la salda una vez", { skip }, async () => {
+  await applyDraftsSql();
+  const items = await import("@/app/api/barber/appointments/[id]/draft-items/route");
+  const cash = await import("@/lib/barber/cash");
+  const drafts = await import("@/lib/barber/sale-drafts");
+  const caja = await import("@/lib/barber/commissions");
+  await cash.openCashSession(A.ctx, { openingAmount: 0 });
+
+  const eva = await newClient(A, "EvaProd");
+  const cita = await appt(A, eva, "IN_PROGRESS", -40 * MIN);
+  session = A.ctx;
+  const post = (body: unknown, id = cita.id) => items.POST(req("/x", "POST", body), params(id));
+
+  const r1 = await post({ productId: A.productId });
+  assert.equal(r1.status, 201);
+  await post({ productId: A.productId, qty: 2 });
+  const view = (await (await items.GET(req("/x", "GET"), params(cita.id))).json()) as { draftId: string; items: Array<{ productId: string; qty: number; unitPrice: number }> };
+  assert.deepEqual(view.items.map((i) => [i.productId, i.qty, i.unitPrice]), [[A.productId, 3, 150]], "suma en el mismo renglón");
+  assert.equal((await prisma.barberProduct.findUniqueOrThrow({ where: { id: A.productId } })).stock, 5, "no aparta existencias");
+  assert.equal((await drafts.listSaleDrafts(A.ctx)).drafts.some((d) => d.id === view.draftId), false, "no sale en «Por cobrar» general");
+
+  // Validaciones.
+  assert.equal((await post({ productId: B.productId })).status, 404, "un producto de otra barbería");
+  assert.equal((await post({ productId: A.productId, qty: 0 })).status, 400);
+  session = await staff(A, "BARBER", A.barberId);
+  assert.equal((await post({ productId: A.productId })).status, 201, "el Barbero en SU visita");
+  await items.DELETE(req("/x", "DELETE", { productId: A.productId }), params(cita.id)); // quita el renglón (y la nota)
+  session = A.ctx;
+  await post({ productId: A.productId, qty: 3 });
+  session = B.ctx;
+  assert.equal((await post({ productId: A.productId })).status, 404, "otra barbería no la ve");
+  session = A.ctx;
+
+  // Completar y cobrar: Caja ve los productos de la cita…
+  await prisma.barberAppointment.update({ where: { id: cita.id }, data: { status: "DONE" } });
+  const ctxCaja = await cash.getCheckoutContext(A.ctx, FEATURES);
+  const pend = ctxCaja.pendingAppointments.find((p) => p.id === cita.id);
+  assert.ok(pend?.draft, "la cita trae su nota");
+  assert.deepEqual(pend!.draft!.items.map((i) => [i.productId, i.qty]), [[A.productId, 3]]);
+
+  // …y una nota de cita no la salda un cobro sin esa cita.
+  await assert.rejects(
+    cash.createSale(A.ctx, { clientId: eva, items: [{ kind: "product", id: A.productId }], paymentMethod: "CASH", draftId: pend!.draft!.id }, FEATURES),
+    (e: unknown) => e instanceof caja.BarberCajaError && e.code === "DRAFT_NOT_OPEN",
+  );
+
+  const sale = await cash.createSale(
+    A.ctx,
+    {
+      appointmentId: cita.id,
+      items: [{ kind: "service", id: A.serviceId }, { kind: "product", id: A.productId, qty: 3 }],
+      paymentMethod: "CASH",
+      draftId: pend!.draft!.id,
+    },
+    FEATURES,
+  );
+  assert.equal(sale.total, 200 + 450);
+  assert.deepEqual(await draftRow(pend!.draft!.id), { status: "CHARGED", saleId: sale.id });
+  assert.equal((await prisma.barberProduct.findUniqueOrThrow({ where: { id: A.productId } })).stock, 2, "existencias bajan al COBRAR");
+
+  // Ya cobrada: no se agregan más desde la cita.
+  assert.equal((await post({ productId: A.productId })).status, 409);
+
+  // Una cita cancelada tampoco.
+  const cancelada = await appt(A, eva, "CANCELLED", 2 * DAY);
+  assert.equal((await post({ productId: A.productId }, cancelada.id)).status, 409);
+  session = null;
+});
