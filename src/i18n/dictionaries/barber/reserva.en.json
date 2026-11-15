@@ -189,7 +189,17 @@
     "modoAuto": "Mode: auto-confirm. Online bookings go straight into the calendar.",
     "tuLiga": "Your booking link",
     "copiar": "Copy",
-    "copiado": "Copied!"
+    "copiado": "Copied!",
+    "confirmarRechazo": "Decline {nombre}'s request?",
+    "confirmarRechazoSi": "Yes, decline",
+    "confirmarRechazoNo": "No, go back",
+    "avisaTuAcepto": "You accepted {nombre}'s request.",
+    "avisaTuRechazo": "You declined {nombre}'s request.",
+    "avisaTu": "Let them know yourself: this client didn't get a message.",
+    "avisaTuLlamar": "Call",
+    "avisaTuWhatsapp": "Message on WhatsApp",
+    "avisaTuSinTelefono": "They didn't leave a phone number.",
+    "avisaTuCerrar": "Got it"
   },
   "tope": {
     "titulo": "No more online bookings for today",

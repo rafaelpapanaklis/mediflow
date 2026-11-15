@@ -189,7 +189,17 @@
     "modoAuto": "Modo: confirmación automática. Las reservas en línea entran directo a la agenda.",
     "tuLiga": "Tu liga de reservas",
     "copiar": "Copiar",
-    "copiado": "¡Copiada!"
+    "copiado": "¡Copiada!",
+    "confirmarRechazo": "¿Rechazar la solicitud de {nombre}?",
+    "confirmarRechazoSi": "Sí, rechazar",
+    "confirmarRechazoNo": "No, volver",
+    "avisaTuAcepto": "Aceptaste la solicitud de {nombre}.",
+    "avisaTuRechazo": "Rechazaste la solicitud de {nombre}.",
+    "avisaTu": "Avísale tú: a este cliente no le llegó mensaje.",
+    "avisaTuLlamar": "Llamar",
+    "avisaTuWhatsapp": "Escribirle por WhatsApp",
+    "avisaTuSinTelefono": "No dejó teléfono.",
+    "avisaTuCerrar": "Entendido"
   },
   "tope": {
     "titulo": "Por hoy ya no hay reservas en línea",

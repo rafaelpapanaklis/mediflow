@@ -40,6 +40,7 @@ import {
   type PublicBarbershopDTO,
   type BusyInterval,
 } from "@/lib/barber/booking-core";
+import { barberiaTieneWhatsApp } from "@/lib/barber/wa-conectado";
 // Qué es una «solicitud»: PENDIENTE con origen web (PUBLIC) o bot (WHATSAPP).
 // Mismo criterio que los recordatorios y el «CONFIRMAR» del cliente.
 import { BARBER_REQUEST_SOURCES } from "@/lib/barber/whatsapp-core";
@@ -397,7 +398,7 @@ export async function notifyBookingCreated(payload: {
   barbershopId: string;
   appointmentId: string;
   policy: BarberBookingPolicy;
-}): Promise<void> {
+}): Promise<boolean> {
   if (process.env.NODE_ENV !== "production") {
     console.info(
       `[barber/reserva] cita ${payload.appointmentId} creada (${payload.policy}) — encolando el aviso de WhatsApp`,
@@ -405,14 +406,18 @@ export async function notifyBookingCreated(payload: {
   }
   try {
     const { queueBarberBookingConfirmation } = await import("@/lib/barber/whatsapp");
-    await queueBarberBookingConfirmation({
+    const messageId = await queueBarberBookingConfirmation({
       barbershopId: payload.barbershopId,
       appointmentId: payload.appointmentId,
     });
+    // true = quedó un mensaje en la cola (sin WhatsApp conectado o sin
+    // teléfono no se encola nada y es false).
+    return messageId !== null;
   } catch (err) {
     // La reserva YA está creada y es lo que importa. Un aviso que no se pudo
     // encolar no puede tumbarla.
     console.error(`[barber/reserva] aviso no encolado (${payload.appointmentId}):`, err);
+    return false;
   }
 }
 
@@ -1164,6 +1169,12 @@ export async function listBookingRequests(args: {
 export interface RequestActionOk {
   ok: true;
   status: "CONFIRMED" | "CANCELLED";
+  /**
+   * ¿Al cliente le va a llegar aviso por WhatsApp? false = sin WhatsApp
+   * conectado, sin teléfono, o (al rechazar) fuera de las 24 h: la pantalla
+   * le dice al dueño «avísale tú». Es «quedó en la cola», no «ya lo leyó».
+   */
+  notified: boolean;
 }
 export interface RequestActionErr {
   ok: false;
@@ -1228,14 +1239,15 @@ export async function resolveBookingRequest(args: {
   // Una solicitud del bot (WHATSAPP) pasa por lo mismo: el cliente acaba de
   // escribir, así que la ventana de 24 h está abierta y los dos avisos salen
   // como texto (la cola elige texto con la ventana abierta).
+  let notified: boolean;
   if (target === "CONFIRMED") {
-    await notifyBookingCreated({
+    notified = await notifyBookingCreated({
       barbershopId: current.barbershopId,
       appointmentId: current.id,
       policy: "manual",
     });
   } else {
-    await notifyBookingRejected({
+    notified = await notifyBookingRejected({
       barbershopId: current.barbershopId,
       appointmentId: current.id,
       clientId: current.clientId,
@@ -1243,7 +1255,7 @@ export async function resolveBookingRequest(args: {
       startAt: current.startAt,
     });
   }
-  return { ok: true, status: target };
+  return { ok: true, status: target, notified };
 }
 
 /**
@@ -1266,26 +1278,28 @@ async function notifyBookingRejected(args: {
   phone: string | null;
   startAt: Date;
   now?: Date;
-}): Promise<void> {
+}): Promise<boolean> {
   try {
     const phone = normalizeBarberPhone(args.phone ?? "");
-    if (!phone) return;
+    if (!phone) return false;
+    // Sin WhatsApp conectado no sale nada, aunque haya un mensaje viejo del cliente.
+    if (!(await barberiaTieneWhatsApp(args.barbershopId))) return false;
     const lastIn = await prisma.barberMessage.findFirst({
       where: { barbershopId: args.barbershopId, phone, direction: "INBOUND" },
       orderBy: { createdAt: "desc" },
       select: { createdAt: true },
     });
     const { barberWaWindowOpen } = await import("@/lib/barber/whatsapp-core");
-    if (!barberWaWindowOpen(lastIn?.createdAt ?? null, args.now ?? new Date())) return;
+    if (!barberWaWindowOpen(lastIn?.createdAt ?? null, args.now ?? new Date())) return false;
 
     const shop = await prisma.barbershop.findUnique({
       where: { id: args.barbershopId },
       select: { name: true, timezone: true },
     });
-    if (!shop) return;
+    if (!shop) return false;
 
     const { enqueueBarberMessage } = await import("@/lib/barber/whatsapp");
-    await enqueueBarberMessage({
+    const messageId = await enqueueBarberMessage({
       barbershopId: args.barbershopId,
       phone,
       body: bookingRejectedText({ shopName: shop.name, startAt: args.startAt, timezone: shop.timezone }),
@@ -1293,7 +1307,9 @@ async function notifyBookingRejected(args: {
       clientId: args.clientId,
       appointmentId: args.appointmentId,
     });
+    return messageId !== null;
   } catch (err) {
     console.error(`[barber/solicitudes] aviso de rechazo no encolado (${args.appointmentId}):`, err);
+    return false;
   }
 }

@@ -206,8 +206,9 @@ test("rechazar avisa por texto SOLO si el cliente escribió en las últimas 24 h
   const p1 = telefono();
   await reservar(A, { phone: p1, dateISO: dia(5), time: "11:00" });
   const c1 = await prisma.barberAppointment.findFirst({ where: { barbershopId: A.id, clientPhone: p1 } });
-  await resolveBookingRequest({ barbershopIds: [A.id], appointmentId: c1!.id, action: "rechazar" });
+  const r1 = await resolveBookingRequest({ barbershopIds: [A.id], appointmentId: c1!.id, action: "rechazar" });
   assert.equal(await prisma.barberMessage.count({ where: { barbershopId: A.id, phone: p1 } }), 0);
+  assert.deepEqual(r1, { ok: true, status: "CANCELLED", notified: false }, "sin conversación no llegó nada: el dueño avisa");
 
   // Escribió hace 2 h: sale un texto (sin plantilla) que dice que no se pudo.
   const p2 = telefono();
@@ -223,7 +224,8 @@ test("rechazar avisa por texto SOLO si el cliente escribió en las últimas 24 h
   });
   await reservar(A, { phone: p2, dateISO: dia(5), time: "12:00" });
   const c2 = await prisma.barberAppointment.findFirst({ where: { barbershopId: A.id, clientPhone: p2 } });
-  await resolveBookingRequest({ barbershopIds: [A.id], appointmentId: c2!.id, action: "rechazar" });
+  const r2 = await resolveBookingRequest({ barbershopIds: [A.id], appointmentId: c2!.id, action: "rechazar" });
+  assert.deepEqual(r2, { ok: true, status: "CANCELLED", notified: true });
   const salientes = await prisma.barberMessage.findMany({
     where: { barbershopId: A.id, phone: p2, direction: "OUTBOUND" },
   });
@@ -245,11 +247,12 @@ test("rechazar avisa por texto SOLO si el cliente escribió en las últimas 24 h
   });
   await reservar(A, { phone: p3, dateISO: dia(5), time: "13:00" });
   const c3 = await prisma.barberAppointment.findFirst({ where: { barbershopId: A.id, clientPhone: p3 } });
-  await resolveBookingRequest({ barbershopIds: [A.id], appointmentId: c3!.id, action: "rechazar" });
+  const r3 = await resolveBookingRequest({ barbershopIds: [A.id], appointmentId: c3!.id, action: "rechazar" });
   assert.equal(
     await prisma.barberMessage.count({ where: { barbershopId: A.id, phone: p3, direction: "OUTBOUND" } }),
     0,
   );
+  assert.deepEqual(r3, { ok: true, status: "CANCELLED", notified: false }, "fuera de las 24 h no llegó nada");
 });
 
 test("automática: confirma al reservar SOLO al cliente con historial", { skip }, async () => {
@@ -287,7 +290,7 @@ test("bot en manual: nace PENDIENTE, sale en Solicitudes «por WhatsApp» y acep
 
   const cita = pendientes.find((p) => p.clientPhone === phone)!;
   const ok = await resolveBookingRequest({ barbershopIds: [H.id], appointmentId: cita.id, action: "aceptar" });
-  assert.deepEqual(ok, { ok: true, status: "CONFIRMED" });
+  assert.deepEqual(ok, { ok: true, status: "CONFIRMED", notified: true });
   assert.equal(await confirmacionesDe(H, phone), 1, "al aceptar sale la confirmación, como la de la web");
   const resueltas = await listBookingRequests({ barbershopIds: [H.id], scope: "resueltas" });
   assert.equal(resueltas.find((p) => p.id === cita.id)?.source, "WHATSAPP");
@@ -309,13 +312,49 @@ test("bot en manual: rechazarla avisa por texto (el cliente acaba de escribir)",
   assert.ok(r.ok && r.status === "PENDING");
   const cita = await prisma.barberAppointment.findFirst({ where: { barbershopId: A.id, clientPhone: phone } });
   const res = await resolveBookingRequest({ barbershopIds: [A.id], appointmentId: cita!.id, action: "rechazar" });
-  assert.deepEqual(res, { ok: true, status: "CANCELLED" });
+  assert.deepEqual(res, { ok: true, status: "CANCELLED", notified: true });
   const salientes = await prisma.barberMessage.findMany({
     where: { barbershopId: A.id, phone, direction: "OUTBOUND" },
   });
   assert.equal(salientes.length, 1);
   assert.equal(salientes[0].templateName, null, "texto, sin plantilla");
   assert.match(salientes[0].body ?? "", /no pudimos apartar tu cita/);
+});
+
+test("sin WhatsApp conectado: aceptar y rechazar dicen notified=false (el dueño avisa)", { skip }, async () => {
+  const S = await crearTienda({ conectada: false });
+  const p1 = telefono();
+  await reservar(S, { phone: p1, dateISO: dia(8), time: "10:00" });
+  const c1 = await prisma.barberAppointment.findFirst({ where: { barbershopId: S.id, clientPhone: p1 } });
+  assert.deepEqual(
+    await resolveBookingRequest({ barbershopIds: [S.id], appointmentId: c1!.id, action: "aceptar" }),
+    { ok: true, status: "CONFIRMED", notified: false },
+  );
+  assert.equal(await prisma.barberMessage.count({ where: { barbershopId: S.id } }), 0);
+
+  // Aunque el cliente haya escrito hace 1 h: sin WhatsApp conectado no sale nada.
+  const p2 = telefono();
+  await prisma.barberMessage.create({
+    data: {
+      barbershopId: S.id,
+      direction: "INBOUND",
+      phone: p2,
+      body: "hola",
+      status: "DELIVERED",
+      createdAt: new Date(Date.now() - 3600_000),
+    },
+  });
+  await reservar(S, { phone: p2, dateISO: dia(8), time: "11:00" });
+  const c2 = await prisma.barberAppointment.findFirst({ where: { barbershopId: S.id, clientPhone: p2 } });
+  assert.deepEqual(
+    await resolveBookingRequest({ barbershopIds: [S.id], appointmentId: c2!.id, action: "rechazar" }),
+    { ok: true, status: "CANCELLED", notified: false },
+  );
+  assert.equal(
+    await prisma.barberMessage.count({ where: { barbershopId: S.id, direction: "OUTBOUND" } }),
+    0,
+    "sin WhatsApp no se encola ningún mensaje",
+  );
 });
 
 test("el bot NO entra al tope diario ni a la regla de nombre y teléfono de la web", { skip }, async () => {

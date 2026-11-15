@@ -1285,7 +1285,7 @@ test("🔴 la cita que agenda el BOT en manual también es solicitud: sin record
   // La barbería la acepta en Solicitudes: el aviso sale como TEXTO (ventana abierta).
   limpiar();
   const ok = await resolveBookingRequest({ barbershopIds: [A.id], appointmentId: delBot.id, action: "aceptar" });
-  assert.deepEqual(ok, { ok: true, status: "CONFIRMED" });
+  assert.deepEqual(ok, { ok: true, status: "CONFIRMED", notified: true });
   await drainBarberOutbox(A.id);
   const aEl = enviados().filter((c) => c.body.to === `52${phone}`);
   assert.equal(aEl.length, 1);

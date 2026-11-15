@@ -13,7 +13,8 @@ import { isRequestActionError, resolveBookingRequest } from "@/lib/barber/bookin
  *   { accion: "rechazar" } → PENDING → CANCELLED
  *
  * La cita ya existe y ya aparta el hueco desde que el cliente reservó: esto
- * solo cambia el estado. La transición se valida contra la máquina de
+ * solo cambia el estado. Responde `notified` (le llegó aviso por WhatsApp o no).
+ * La transición se valida contra la máquina de
  * estados del vertical (canTransition), no a mano.
  */
 
@@ -48,7 +49,8 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
         ? NextResponse.json({ error: "No encontramos esa solicitud" }, { status: 404 })
         : NextResponse.json({ error: "Esa solicitud ya se resolvió" }, { status: 409 });
     }
-    return NextResponse.json({ ok: true, status: result.status });
+    // `notified`: ¿le va a llegar aviso al cliente? false → el dueño le avisa él.
+    return NextResponse.json({ ok: true, status: result.status, notified: result.notified });
   } catch (err) {
     console.error("[barber/booking-requests/:id] error:", err);
     return NextResponse.json({ error: "No pudimos guardar el cambio" }, { status: 500 });
