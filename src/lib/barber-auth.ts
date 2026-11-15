@@ -254,7 +254,8 @@ export function assertBarberPermission(
  * Reglas:
  *  · Familia = la matriz de la cadena (parentId null) + sus sucursales; si
  *    la barbería del usuario no tiene parentId, ella es la matriz.
- *  · OWNER ve la familia COMPLETA (no necesita filas de acceso).
+ *  · OWNER de la MATRIZ ve la familia COMPLETA (no necesita filas de acceso);
+ *    un OWNER cuya sede propia es una sucursal, como cualquier otro rol.
  *  · Cualquier otro rol ve su propia sede + sus filas BarberUserBranchAccess,
  *    SIEMPRE recortadas a la familia (una fila que apunte a una cadena ajena
  *    se ignora — defensa en profundidad).
@@ -279,7 +280,11 @@ export async function getAccessibleBranchIds(ctx: BarberContext): Promise<string
   });
   const ordered = [rootId, ...family.map((s) => s.id).filter((id) => id !== rootId)];
 
-  if (ctx.role === "OWNER") return ordered;
+  // Dueño = toda la cadena SOLO si su sede propia es la matriz (ronda 2, M2).
+  // Un «dueño» dado de alta en una sucursal (socio, franquiciatario) ve y opera
+  // su sede más las que le concedan, como cualquier otro rol: antes, con el
+  // contexto siguiendo a la sede elegida, podía cobrar en la matriz.
+  if (ctx.role === "OWNER" && homeId === rootId) return ordered;
 
   const grants = await prisma.barberUserBranchAccess.findMany({
     where: { userId: ctx.barberUserId },

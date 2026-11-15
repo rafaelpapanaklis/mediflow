@@ -170,6 +170,8 @@ before(async () => {
 
   const duenoId = await persona("dueno", matriz, "OWNER");
   await persona("encargado-norte", sucursal, "MANAGER");
+  // Un «dueño» dado de alta en la sucursal (socio o franquiciatario).
+  await persona("dueno-norte", sucursal, "OWNER");
   const dosSedes = await persona("recepcion-dos-sedes", matriz, "RECEPTION");
   await prisma.barberUserBranchAccess.create({ data: { userId: dosSedes, barbershopId: sucursal } });
   // Una fila de acceso que apunta a OTRA cadena: se ignora.
@@ -335,6 +337,26 @@ test("encargado de una sucursal CERRADA: sigue sin poder trabajar (su sede está
   const ctx = await como("encargado-sur", null);
   assert.equal(ctx.barbershopId, tercera);
   assert.equal(await paid.hasBarberPaidAccess(ctx), false);
+});
+
+/* ═══════════════ Dueño de una sucursal (ronda 2, M2) ═══════════════ */
+
+test("🔴 RONDA 2 · M2: un DUEÑO cuya sede es una sucursal no opera la matriz ni las demás", { skip }, async () => {
+  const ctx = await como("dueno-norte", matriz);
+  assert.equal(ctx.barbershopId, sucursal, "la cookie de la matriz no lo saca de su sede");
+  assert.deepEqual(await auth.getAccessibleBranchIds(ctx), [sucursal]);
+  const servicios = await texto(await servicesRoute.GET());
+  assert.ok(servicios.text.includes("Corte Norte") && !servicios.text.includes("Corte Matriz"), servicios.text);
+  // Con un acceso concedido, sí (como cualquier otro rol).
+  const id = (await prisma.barberUser.findFirstOrThrow({ where: { supabaseId: sb["dueno-norte"] } })).id;
+  const grant = await prisma.barberUserBranchAccess.create({ data: { userId: id, barbershopId: matriz } });
+  try {
+    assert.equal((await como("dueno-norte", matriz)).barbershopId, matriz);
+  } finally {
+    await prisma.barberUserBranchAccess.delete({ where: { id: grant.id } });
+  }
+  // El dueño de la matriz sigue alcanzando toda la cadena.
+  assert.deepEqual(await auth.getAccessibleBranchIds(await como("dueno", null)), [matriz, sucursal, tercera]);
 });
 
 /* ═══════════════ Usuario con acceso a dos sedes ═══════════════ */
