@@ -471,6 +471,7 @@ export function AgendaClient(props: AgendaClientProps) {
             canSchedule={data.can.schedule}
             t={t}
             onSlotClick={(barberId, startAt) => setCreating({ barberId, startAt })}
+            onSlotRejected={(message) => setToast({ message, tone: "bad" })}
             onCardClick={setDetail}
             onMove={(appt, startAt, barberId) => void handleMove(appt, startAt, barberId)}
           />

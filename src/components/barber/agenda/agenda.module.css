@@ -459,6 +459,60 @@
   cursor: copy;
 }
 
+/* ── El hueco bajo el mouse ────────────────────────────────────────────
+   Dice DÓNDE se va a agendar antes del clic: «+ 10:30 a. m. · Beto». Si
+   ahí no se puede, en rojo y con el motivo, y el cursor lo dice también.
+   Va debajo de las visitas y no captura el puntero (el clic es de la
+   columna). Rojo con los tokens globales --danger/--danger-soft: el tema
+   de barber no redefine «peligro» y así claro/oscuro salen solos. */
+.columnPick {
+  cursor: pointer;
+}
+
+.columnBlocked {
+  cursor: not-allowed;
+}
+
+.slotGuide {
+  position: absolute;
+  left: 3px;
+  right: 3px;
+  z-index: 0;
+  border-radius: 7px;
+  background: var(--brand-soft);
+  box-shadow: inset 0 0 0 1px var(--border-brand);
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  overflow: hidden;
+}
+
+.slotGuideText {
+  font-size: 11.5px;
+  font-weight: 700;
+  line-height: 14px;
+  font-variant-numeric: tabular-nums;
+  color: var(--caramel-700);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+:global(.dark) .slotGuideText {
+  color: var(--caramel-200);
+}
+
+.slotGuideBad {
+  background: var(--danger-soft);
+  box-shadow: inset 0 0 0 1px var(--danger);
+}
+
+.slotGuideBad .slotGuideText,
+:global(.dark) .slotGuideBad .slotGuideText {
+  color: var(--danger);
+}
+
 /* ── Separada por tiempos ──────────────────────────────────────────────
    Hora en punto: línea marcada. Media hora: punteada y más suave. Así se
    lee «10:30» de un vistazo sin contar rayitas (lo que hace el dental con

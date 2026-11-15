@@ -53,7 +53,8 @@ import {
   type MinuteWindow,
 } from "@/lib/barber/agenda";
 import { sumMoneyBy } from "@/lib/barber/money";
-import { complementWindows, rulerMarks } from "./rejilla";
+import type { BarberSlotCheck } from "@/lib/barber/agenda";
+import { complementWindows, rulerMarks, slotAtOffset, slotIssueText, slotVerdict } from "./rejilla";
 import { ClosedBands, GridLines, NowLine, TimeOffBand } from "./rejilla-piezas";
 import { agendaCss as css, barberColor, initials } from "./agenda-ui";
 
@@ -70,6 +71,8 @@ export interface DayBoardProps {
   canSchedule: boolean;
   t: (key: string, vars?: Record<string, string | number>) => string;
   onSlotClick: (barberId: string, startAt: Date) => void;
+  /** Clic en un hueco que no vale: la pantalla avisa por qué (no abre nada). */
+  onSlotRejected: (message: string) => void;
   onCardClick: (appointment: BarberAppointmentDTO) => void;
   onMove: (appointment: BarberAppointmentDTO, startAt: Date, barberId: string) => void;
 }
@@ -87,6 +90,14 @@ interface DragState {
 }
 
 const PX = BARBER_DAY_PX_PER_MIN;
+
+/** El hueco señalado con el mouse: dónde, si vale y, si no, por qué. */
+interface SlotGuideState {
+  barberId: string;
+  startMin: number;
+  ok: boolean;
+  reason: string;
+}
 
 export function DayBoard(props: DayBoardProps) {
   const { dateISO, timezone, barbers, appointments, schedules, timeOff, charged, canEdit, t } = props;
@@ -248,12 +259,80 @@ export function DayBoard(props: DayBoardProps) {
     props.onMove(appt, new Date(dayStartUtc + current.startMin * 60_000), current.barberId);
   };
 
-  // ── Huecos: tocar la columna para agendar ────────────────────────────
+  // ── Huecos: señalar con el mouse y tocar para agendar ────────────────
+  // El resalte y el clic usan LA MISMA cuenta (slotAtOffset + slotVerdict):
+  // lo que se ve señalado es exactamente lo que se abre. Un hueco que no
+  // vale (fuera de horario, bloqueado, ocupado) se pinta en rojo con el
+  // motivo ANTES del clic, y el clic ahí no abre nada: avisa por qué.
+  const slotCtx = useMemo(
+    () => ({ timezone, schedules, timeOff, appointments }),
+    [timezone, schedules, timeOff, appointments],
+  );
+  const issueText = useCallback(
+    (check: BarberSlotCheck) => {
+      const issue = slotIssueText(check, {
+        ...slotCtx,
+        clientNameOf: (id) => appointments.find((a) => a.id === id)?.clientName ?? null,
+      });
+      return issue ? t(issue.key, issue.vars) : "";
+    },
+    [slotCtx, appointments, t],
+  );
+
+  const [guide, setGuide] = useState<SlotGuideState | null>(null);
+
+  const slotUnder = useCallback(
+    (e: { clientY: number; target: EventTarget | null; currentTarget: EventTarget }, barberId: string) => {
+      // Sobre una visita el clic abre ESA visita, no agenda otra.
+      if ((e.target as HTMLElement | null)?.closest?.("[data-card]")) return null;
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      const startMin = slotAtOffset({
+        offsetY: e.clientY - rect.top,
+        boundsStart: bounds.start,
+        boundsEnd: bounds.end,
+        pxPerMin: PX,
+      });
+      const check = slotVerdict(slotCtx, {
+        barberId,
+        dayStartUtc,
+        startMin,
+        durationMin: BARBER_SLOT_MINUTES,
+      });
+      return { barberId, startMin, ok: check.ok, reason: check.ok ? "" : issueText(check) };
+    },
+    [bounds.start, bounds.end, slotCtx, dayStartUtc, issueText],
+  );
+
+  const onColumnPointerMove = (e: React.PointerEvent, barberId: string) => {
+    // Solo con mouse y sin botón apretado: con el dedo no hay «pasar por
+    // encima», y con el botón apretado se está arrastrando una visita.
+    if (!canEdit || e.pointerType !== "mouse" || e.buttons !== 0 || dragRef.current) {
+      if (guide) setGuide(null);
+      return;
+    }
+    const next = slotUnder(e, barberId);
+    setGuide((prev) =>
+      prev && next && prev.barberId === next.barberId && prev.startMin === next.startMin && prev.ok === next.ok
+        ? prev
+        : next,
+    );
+  };
+
   const onColumnClick = (e: React.MouseEvent, barberId: string) => {
     if (!canEdit || drag) return;
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const minute = snapMinute(bounds.start + (e.clientY - rect.top) / PX, BARBER_SLOT_MINUTES);
-    props.onSlotClick(barberId, new Date(dayStartUtc + minute * 60_000));
+    if (justDragged.current) {
+      // La cola de un arrastre que terminó fuera de la tarjeta.
+      justDragged.current = false;
+      return;
+    }
+    const slot = slotUnder(e, barberId);
+    if (!slot) return;
+    setGuide(null);
+    if (!slot.ok) {
+      props.onSlotRejected(`${minuteToLabel(slot.startMin)} · ${slot.reason}`);
+      return;
+    }
+    props.onSlotClick(barberId, new Date(dayStartUtc + slot.startMin * 60_000));
   };
 
   if (columns.length === 0) {
@@ -358,6 +437,8 @@ export function DayBoard(props: DayBoardProps) {
               cards.map((a) => ({ start: toMinutes(a.startAt), end: toMinutes(a.endAt) })),
             );
             const ghost = drag?.active && drag.barberId === barber.id ? drag : null;
+            const colGuide = guide && guide.barberId === barber.id ? guide : null;
+            const barberLabel = barber.nickname || barber.name;
 
             return (
               <div
@@ -366,9 +447,16 @@ export function DayBoard(props: DayBoardProps) {
                   if (node) columnRefs.current.set(barber.id, node);
                   else columnRefs.current.delete(barber.id);
                 }}
-                className={`${css.column} ${canEdit ? css.columnClickable : ""}`}
+                className={[
+                  css.column,
+                  colGuide ? (colGuide.ok ? css.columnPick : css.columnBlocked) : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
                 style={{ height }}
                 onClick={(e) => onColumnClick(e, barber.id)}
+                onPointerMove={(e) => onColumnPointerMove(e, barber.id)}
+                onPointerLeave={() => setGuide(null)}
               >
                 <GridLines marks={marks} yOf={yOf} end={bounds.end} />
 
@@ -398,6 +486,21 @@ export function DayBoard(props: DayBoardProps) {
                     />
                   );
                 })}
+
+                {/* El hueco que se agendaría con el clic. Debajo de las visitas. */}
+                {colGuide ? (
+                  <div
+                    className={`${css.slotGuide} ${colGuide.ok ? "" : css.slotGuideBad}`}
+                    style={{ top: yOf(colGuide.startMin), height: BARBER_SLOT_MINUTES * PX }}
+                    aria-hidden
+                  >
+                    <span className={css.slotGuideText}>
+                      {colGuide.ok
+                        ? `+ ${minuteToLabel(colGuide.startMin)} · ${barberLabel}`
+                        : `${minuteToLabel(colGuide.startMin)} · ${colGuide.reason}`}
+                    </span>
+                  </div>
+                ) : null}
 
                 {cards.map((appt, index) => (
                   <AppointmentCard
@@ -513,6 +616,7 @@ function AppointmentCard(props: CardProps) {
     <button
       type="button"
       data-status={appt.status}
+      data-card=""
       className={[
         css.card,
         compact ? css.cardCompact : "",
