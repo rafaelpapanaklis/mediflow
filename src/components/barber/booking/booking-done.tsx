@@ -36,10 +36,14 @@ export function BookingDone({
   slug,
   shop,
   confirmation,
+  whatsappConnected = true,
 }: {
   slug: string;
   shop: PublicBarbershopDTO;
   confirmation: BookingConfirmation;
+  /** Sin WhatsApp conectado: ni «por WhatsApp» ni «Ver mis citas» (el código
+   *  de acceso solo sale por WhatsApp). */
+  whatsappConnected?: boolean;
 }) {
   const t = useMemo(() => getBarberT(shop.locale), [shop.locale]);
   const locale = shop.locale === "en" ? "en-US" : "es-MX";
@@ -121,7 +125,9 @@ export function BookingDone({
       <p className="dcb-sub">
         {confirmed
           ? t("barber.reserva.confirmacion.subConfirmada")
-          : t("barber.reserva.confirmacion.subPendiente")}
+          : whatsappConnected
+            ? t("barber.reserva.confirmacion.subPendiente")
+            : t("barber.reserva.confirmacion.subPendienteSinWa")}
       </p>
 
       {confirmation.duplicate ? (
@@ -197,9 +203,11 @@ export function BookingDone({
       <div className="dcb-actions">
         {/* Superficie pública → superficie pública, con <a> duro: nada de
             navegación suave hacia una página que decide sesión en el server. */}
-        <a className="dcb-btn dcb-btn--ghost" href={`/b/${slug}/mi-cuenta`}>
-          {t("barber.reserva.confirmacion.verMisCitas")}
-        </a>
+        {whatsappConnected ? (
+          <a className="dcb-btn dcb-btn--ghost" href={`/b/${slug}/mi-cuenta`}>
+            {t("barber.reserva.confirmacion.verMisCitas")}
+          </a>
+        ) : null}
         <a className="dcb-btn dcb-btn--ghost" href={`/b/${slug}/reservar`}>
           {t("barber.reserva.confirmacion.otraCita")}
         </a>

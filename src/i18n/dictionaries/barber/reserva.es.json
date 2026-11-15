@@ -61,18 +61,21 @@
     "telefono": "Tu WhatsApp",
     "telefonoPlaceholder": "10 dígitos",
     "telefonoAyuda": "Ahí te llega la confirmación.",
+    "telefonoAyudaSinWa": "La barbería lo usa para contactarte si hace falta.",
     "notas": "¿Algo que deba saber tu barbero?",
     "notasPlaceholder": "Opcional: el corte de siempre, alergias, etc.",
     "enviar": "Apartar mi lugar",
     "enviando": "Apartando…",
     "resumen": "Tu cita",
-    "aviso": "Al apartar aceptas que la barbería te contacte por WhatsApp para confirmar."
+    "aviso": "Al apartar aceptas que la barbería te contacte por WhatsApp para confirmar.",
+    "avisoSinWa": "Al apartar aceptas que la barbería te contacte para confirmar."
   },
   "confirmacion": {
     "tituloConfirmada": "¡Listo, {nombre}!",
     "tituloPendiente": "Ya casi, {nombre}",
     "subConfirmada": "Tu lugar está apartado.",
     "subPendiente": "La barbería te confirma en un momento por WhatsApp.",
+    "subPendienteSinWa": "La barbería te confirma.",
     "referencia": "Referencia",
     "conBarbero": "Con {barbero}",
     "cualquierBarbero": "Te asignamos barbero al llegar",
