@@ -1,6 +1,8 @@
 {
   "title": "Suscripción",
   "subtitle": "Tu plan de DaleControl Barber: lo que incluye, cómo se cobra y tus facturas.",
+  "noPermissionTitle": "Sin acceso a esta sección",
+  "noPermissionBody": "La suscripción y los pagos de DaleControl los ve y los cambia solo el dueño de la barbería.",
   "status": {
     "active": "Activa",
     "trialing": "Activa (prueba)",

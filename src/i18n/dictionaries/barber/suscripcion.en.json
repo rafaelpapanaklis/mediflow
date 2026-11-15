@@ -1,6 +1,8 @@
 {
   "title": "Subscription",
   "subtitle": "Your DaleControl Barber plan: what it includes, how it is billed and your invoices.",
+  "noPermissionTitle": "No access to this section",
+  "noPermissionBody": "Only the barbershop owner can see and change the DaleControl subscription and payments.",
   "status": {
     "active": "Active",
     "trialing": "Active (trial)",
