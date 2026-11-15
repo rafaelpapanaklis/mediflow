@@ -880,3 +880,24 @@
   color: var(--text-3);
 }
 .tableWrap { border-radius: var(--radius-lg); }
+
+/* Chips de variables bajo el texto de la plantilla */
+.tokenChips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.tokenChip {
+  min-height: 32px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-elev);
+  color: var(--text-1);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.tokenChip:hover { border-color: var(--border-strong); }
+.tokenChip:focus-visible { box-shadow: var(--ring); outline: none; }

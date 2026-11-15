@@ -130,6 +130,16 @@
       "shop": "your barbershop",
       "reward": "your reward"
     },
+    "tokens": {
+      "label": "Variables (tap to insert):",
+      "nombre": { "example": "Luis", "hint": "the client name" },
+      "barberia": { "example": "your barbershop", "hint": "your barbershop name" },
+      "servicio": { "example": "haircut", "hint": "their usual service" },
+      "barbero": { "example": "Uno", "hint": "their barber" },
+      "dias": { "example": "45", "hint": "days since their last visit" },
+      "premio": { "example": "your reward", "hint": "the loyalty reward they earned" },
+      "vence": { "example": "Nov 30", "hint": "the date their membership ends" }
+    },
     "sqlPending": "Can't save yet: sql/barber_campanas.sql hasn't been applied. Meanwhile the suggested wording is used and you can still send campaigns."
   },
   "results": {

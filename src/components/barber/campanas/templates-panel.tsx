@@ -58,6 +58,22 @@ export function TemplatesPanel({
    * barbería, {{3}} el texto de la barbería) y {premio} con un EJEMPLO. Antes
    * el dueño veía «Hola {{1}}… en {{2}}… tienes {premio}» tal cual (QA C, 15-nov).
    */
+  // Variables que valen en el texto (las mismas que sustituye el servidor al mandar).
+  const TOKENS = ["nombre", "barberia", "servicio", "barbero", "dias", "premio", "vence"] as const;
+  const tokenExample = (k: string): string =>
+    k === "barberia" ? shopName?.trim() || t("templates.sample.shop") : t(`templates.tokens.${k}.example`);
+  /** Vista previa del texto de la barbería: {nombre}… con un ejemplo, igual que al enviarlo. */
+  const withTokens = (text: string) =>
+    text.replace(/\{(\w+)\}/g, (m, k: string) => ((TOKENS as readonly string[]).includes(k) ? tokenExample(k) : m));
+  function insertToken(rowId: string, token: string, el: HTMLElement) {
+    const ta = el.closest("li")?.querySelector("textarea");
+    const cur = promos[rowId] ?? "";
+    const at = ta ? ta.selectionStart ?? cur.length : cur.length;
+    const to = ta ? ta.selectionEnd ?? at : at;
+    const ins = `{${token}}`;
+    setPromos((p) => ({ ...p, [rowId]: cur.slice(0, at) + ins + cur.slice(to) }));
+    window.setTimeout(() => { ta?.focus(); ta?.setSelectionRange(at + ins.length, at + ins.length); }, 0);
+  }
   const ejemplo = (body: string, promo: string) =>
     body
       .split("{{3}}").join(promo)
@@ -169,7 +185,7 @@ export function TemplatesPanel({
             {row.templateBody ? (
               <>
                 <span className={s.templateMeta}>{t("templates.sample.label")}</span>
-                <p className={s.templateBody}>{ejemplo(row.templateBody, promos[row.id] ?? row.promo)}</p>
+                <p className={s.templateBody}>{ejemplo(row.templateBody, withTokens(promos[row.id] ?? row.promo))}</p>
               </>
             ) : null}
 
@@ -180,6 +196,16 @@ export function TemplatesPanel({
               disabled={!canEdit}
               onChange={(e) => setPromos((p) => ({ ...p, [row.id]: e.target.value }))}
             />
+            {canEdit ? (
+              <div className={s.tokenChips} aria-label={t("templates.tokens.label")}>
+                <span className={s.templateMeta}>{t("templates.tokens.label")}</span>
+                {TOKENS.map((k) => (
+                  <button key={k} type="button" className={s.tokenChip} title={t(`templates.tokens.${k}.hint`)} onClick={(e) => insertToken(row.id, k, e.currentTarget)}>
+                    {`{${k}}`}
+                  </button>
+                ))}
+              </div>
+            ) : null}
             {row.templateName ? (
               <span className={s.templateMeta}>{t("templates.sentWith")}</span>
             ) : null}
