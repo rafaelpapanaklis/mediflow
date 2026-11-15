@@ -43,8 +43,10 @@ const DOUBLES = new Map<string, unknown>([
       hasBarberPermission,
     },
   ],
-  [abs("src/lib/barber/plans.ts"), { __esModule: true, getBarberPlan: async () => ({ id: "PROFESIONAL", name: "Profesional", features: FEATURES }) }],
 ]);
+// plans.ts NO se sustituye: las rutas de Caja resuelven el plan con un import()
+// dinámico que no ve el doble; contra la base de pruebas cae al respaldo del
+// plan Profesional (igual que cobro-cita-no-completada-integration).
 
 const M = Module as unknown as {
   _load: (request: string, parent: unknown, isMain: boolean) => unknown;
@@ -402,4 +404,50 @@ test("3 · descartar no borra; otra sede no la toca; otro cliente no la salda; p
   await drafts.discardSaleDraft(A.ctx, id);
   assert.equal((await draftStatus(id)).status, "DISCARDED", "descartada, no borrada");
   await assert.rejects(charge(A, val, { draftId: id }), cajaError("DRAFT_NOT_OPEN"));
+});
+
+// ── 4. Permisos por las RUTAS (lo que llama la pantalla) ───────────────
+
+test("4 · rutas: Recepción cobra y guarda notas; el Barbero solo ve sus cobros y no toca notas; otra sede, 404/403", { skip }, async () => {
+  const salesRoute = await import("@/app/api/barber/clients/[id]/sales/route");
+  const draftsRoute = await import("@/app/api/barber/sales/drafts/route");
+  const discardRoute = await import("@/app/api/barber/sales/drafts/[id]/route");
+  const ctxRoute = await import("@/app/api/barber/sales/checkout-context/route");
+  const ivo = await newClient(A, "Ivo");
+  await charge(A, ivo); // con Beto
+  await charge(A, ivo, { barberId: A.otherBarberId });
+
+  const getSales = (id: string) =>
+    salesRoute.GET(new Request(`http://localhost/api/barber/clients/${id}/sales`), { params: Promise.resolve({ id }) });
+  const postDraft = (body: unknown) =>
+    draftsRoute.POST(new Request("http://localhost/api/barber/sales/drafts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }));
+
+  session = await staff(A, "RECEPTION");
+  const r1 = await getSales(ivo);
+  assert.equal(r1.status, 200);
+  assert.equal(((await r1.json()) as { count: number }).count, 2);
+  const created = await postDraft({ clientId: ivo, payload: { items: [{ kind: "service", id: A.serviceId }] } });
+  assert.equal(created.status, 201, "Recepción guarda la nota");
+  const { id: draftId } = (await created.json()) as { id: string };
+  const ctxRes = await ctxRoute.GET(new Request(`http://localhost/api/barber/sales/checkout-context?clientId=${ivo}`));
+  assert.equal(((await ctxRes.json()) as { client: { id: string } }).client.id, ivo, "y abre el cobro con el cliente puesto");
+
+  session = await staff(A, "BARBER", { barberId: A.barberId });
+  const r2 = await getSales(ivo);
+  assert.equal(r2.status, 200);
+  assert.equal(((await r2.json()) as { count: number; scope: string }).count, 1, "el Barbero: solo el suyo");
+  assert.equal((await postDraft({ clientId: ivo, payload: { items: [{ kind: "service", id: A.serviceId }] } })).status, 403);
+  assert.equal(
+    (await discardRoute.DELETE(new Request("http://localhost/x", { method: "DELETE" }), { params: Promise.resolve({ id: draftId }) })).status,
+    403,
+  );
+
+  session = B.ctx;
+  assert.equal((await getSales(ivo)).status, 403, "otra barbería: nada");
+  assert.equal(
+    (await discardRoute.DELETE(new Request("http://localhost/x", { method: "DELETE" }), { params: Promise.resolve({ id: draftId }) })).status,
+    409,
+    "ni descartarla",
+  );
+  session = null;
 });
