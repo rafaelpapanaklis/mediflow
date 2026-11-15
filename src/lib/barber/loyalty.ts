@@ -24,8 +24,11 @@ import {
   type ClientBlockInfo,
 } from "@/lib/barber/clients";
 import type { BarberClientDTO } from "@/lib/barber/types";
-// El sufijo con el que la caja (T6) marca la línea que se llevó el canje.
-import { LOYALTY_SUFFIX } from "@/lib/barber/cash";
+// La marca con la que la caja señala la línea que se llevó el canje (y
+// cuántos sellos costó) vive en el núcleo compartido.
+import { isLoyaltyLine } from "@/lib/barber/loyalty-core";
+// El sello interno de los tickets de mostrador nunca se enseña.
+import { stripSaleTag } from "@/lib/barber/memberships-core";
 
 /**
  * ═══════════════════════════════════════════════════════════════════════
@@ -57,6 +60,11 @@ import { LOYALTY_SUFFIX } from "@/lib/barber/cash";
  *
  *     import { registerBarberVisit } from "@/lib/barber/loyalty";
  *     await registerBarberVisit(ctx, { clientId, appointmentId });
+ *
+ *   YA ESTÁ CONECTADO (14-nov-2026): la ruta de estado de la cita, el cobro
+ *   y la cancelación de tickets llaman a refreshLoyalty() de loyalty-core.ts
+ *   —el mismo recuento que usa este archivo, sin necesitar el contexto de
+ *   sesión— así que los sellos se actualizan en el momento.
  *
  *   T1 al ABRIR una cita, para el aviso de "corte gratis disponible":
  *
@@ -474,7 +482,7 @@ export async function getBarberVisitHistory(
       photos: byAppointment.get(appt.id) ?? [],
       reward: null,
       loyaltyRedeemed: Boolean(
-        sale && sale.items.some((i) => i.description.endsWith(LOYALTY_SUFFIX)),
+        sale && sale.items.some((i) => isLoyaltyLine(i.description)),
       ),
     });
   }
@@ -491,10 +499,10 @@ export async function getBarberVisitHistory(
       services: (serviceLines.length ? serviceLines : sale.items).map((i) => i.description),
       amount: Number(sale.total),
       amountIsEstimate: false,
-      notes: sale.notes,
+      notes: stripSaleTag(sale.notes),
       photos: [],
       reward: null,
-      loyaltyRedeemed: sale.items.some((i) => i.description.endsWith(LOYALTY_SUFFIX)),
+      loyaltyRedeemed: sale.items.some((i) => isLoyaltyLine(i.description)),
     });
   }
 

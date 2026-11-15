@@ -41,6 +41,7 @@ import {
   shopMinuteOfDay,
 } from "@/lib/barber/agenda";
 import { sumMoneyBy } from "@/lib/barber/money";
+import { isOwnVisitStatus } from "@/lib/barber/own-visits";
 import { Field, Modal, Pill, agendaCss as css } from "./agenda-ui";
 
 export interface AppointmentDetailProps {
@@ -48,6 +49,11 @@ export interface AppointmentDetailProps {
   timezone: string;
   branchId: string;
   canEdit: boolean;
+  /**
+   * Rol Barbero (sin agenda.edit): id de SU ficha de barbero. En sus propias
+   * visitas puede marcar «En silla» y «Completada»; nada más. null = no aplica.
+   */
+  ownBarberId?: string | null;
   /** clients.view: sin él, el nombre del cliente no es liga a su ficha. */
   canViewClients: boolean;
   /** cash.manage + el plan incluye caja. */
@@ -84,11 +90,17 @@ export function AppointmentDetail(props: AppointmentDetailProps) {
 
   const ui = BARBER_APPOINTMENT_STATUS_UI[appt.status];
   const options = nextStatuses(appt.status).filter((s) => canTransition(appt.status, s));
-  const primary = options.find((s) => FORWARD.includes(s)) ?? null;
+  // Quién puede AVANZAR esta visita: quien edita la agenda (todo el flujo), o
+  // su propio barbero, y solo hacia «En silla» / «Completada». El servidor
+  // aplica la misma regla (own-visits.ts); aquí solo se decide qué se pinta.
+  const isOwnVisit = Boolean(props.ownBarberId) && appt.barberId === props.ownBarberId;
+  const canAdvance = (s: BarberAppointmentStatus) => props.canEdit || (isOwnVisit && isOwnVisitStatus(s));
+  const primary = options.find((s) => FORWARD.includes(s) && canAdvance(s)) ?? null;
   const secondary = options.filter((s) => s !== primary);
   const terminal = isTerminalAppointmentStatus(appt.status);
 
   const total = sumMoneyBy(appt.services, (s) => s.priceAtBooking);
+  const depositPaid = appt.depositStatus === "PAID" && appt.depositAmount ? appt.depositAmount : 0;
   const startLabel = minuteToLabel(shopMinuteOfDay(new Date(appt.startAt), timezone));
   const endLabel = minuteToLabel(shopMinuteOfDay(new Date(appt.endAt), timezone));
   const dayLabel = new Intl.DateTimeFormat("es-MX", {
@@ -197,7 +209,7 @@ export function AppointmentDetail(props: AppointmentDetailProps) {
               <Receipt size={14} /> {t("barber.agenda.detail.charge")}
             </button>
           ) : null}
-          {props.canEdit && primary ? (
+          {primary ? (
             <button
               type="button"
               className={`${css.btn} ${primary === "DONE" && chargeable ? css.btnMoney : css.btnPrimary}`}
@@ -359,6 +371,22 @@ export function AppointmentDetail(props: AppointmentDetailProps) {
           <span>{t("barber.agenda.detail.total")}</span>
           <span className={css.totalsValue}>{formatMXN(total)}</span>
         </div>
+        {/* Anticipo PAGADO de la cita: la caja lo descuenta sola al cobrar.
+            (Textos del diccionario de caja: son los mismos del ticket.) */}
+        {depositPaid > 0 ? (
+          <>
+            <div className={css.serviceLine}>
+              <span className={css.serviceName}>{t("barber.caja.ticket.depositApplied")}</span>
+              <span className={css.servicePrice}>−{formatMXN(depositPaid)}</span>
+            </div>
+            {!props.sale ? (
+              <div className={css.totals}>
+                <span>{t("barber.caja.ticket.depositDue")}</span>
+                <span className={css.totalsValue}>{formatMXN(Math.max(0, total - depositPaid))}</span>
+              </div>
+            ) : null}
+          </>
+        ) : null}
       </Field>
 
       {appt.notes ? (

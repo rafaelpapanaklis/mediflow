@@ -275,6 +275,9 @@ export const BARBER_CASH_MEMBERSHIP_SUFFIX = " · Membresía";
 /** Reconoce las DOS marcas para que nada descuente dos veces la misma visita. */
 export function isMembershipLine(description: string | null | undefined): boolean {
   if (typeof description !== "string") return false;
+  // La línea de un ticket de mostrador («Venta de membresía · …») NO es un
+  // corte cubierto, se llame como se llame el plan.
+  if (isCounterTicketLine(description)) return false;
   return (
     description.startsWith(BARBER_MEMBERSHIP_LINE_PREFIX) ||
     description.endsWith(BARBER_CASH_MEMBERSHIP_SUFFIX)
@@ -291,6 +294,170 @@ export function membershipLineDescription(planName: string, serviceName: string)
 
 export function depositLineDescription(label: string): string {
   return `${BARBER_DEPOSIT_LINE_PREFIX}${label}`;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Tickets de mostrador que NO son una visita: venta/renovación de membresía
+// y anticipo recibido
+// ═══════════════════════════════════════════════════════════════════════
+//
+// Todo el dinero que entra por el mostrador pasa por un ticket (BarberSale)
+// del turno abierto: así cae solo en el corte, en Inicio y en Reportes. Estos
+// tres tickets llevan UNA línea sin servicio ni producto (no generan visita,
+// ni sello de lealtad, ni comisión) y un sello en `notes` que dice a qué
+// membresía o a qué cita pertenecen, para que CANCELAR el ticket pueda
+// deshacer también la membresía o el anticipo.
+//
+// Por qué el sello vive en `notes` y no en una columna: el schema no tiene
+// dónde ligar un ticket con una membresía ni guardar el estado anterior de
+// una renovación, y una columna nueva sería un SQL manual más. `notes` ya
+// carga la marca de cancelación (CANCELLED_MARK) con el mismo criterio. El
+// sello es UNA línea que empieza con BARBER_SALE_TAG_PREFIX; la caja no deja
+// que una nota escrita a mano lo contenga y nunca lo muestra en pantalla.
+
+export const BARBER_MEMBERSHIP_SALE_LINE_PREFIX = "Venta de membresía · ";
+export const BARBER_MEMBERSHIP_RENEWAL_LINE_PREFIX = "Renovación de membresía · ";
+export const BARBER_DEPOSIT_RECEIVED_LINE_PREFIX = "Anticipo recibido · ";
+/**
+ * Devolución de un anticipo cobrado en mostrador: ticket NEGATIVO en el turno
+ * abierto del día en que se devuelve, con el método con que sale el dinero.
+ * Baja el esperado de ese turno y el ingreso del mes (el ticket original, que
+ * puede estar en un turno ya cerrado, no se toca).
+ */
+export const BARBER_DEPOSIT_REFUND_LINE_PREFIX = "Devolución de anticipo · ";
+
+export function depositRefundLineDescription(label: string): string {
+  return `${BARBER_DEPOSIT_REFUND_LINE_PREFIX}${label}`;
+}
+
+/** ¿Es la línea de una devolución de anticipo (ticket negativo)? */
+export function isDepositRefundLine(description: string | null | undefined): boolean {
+  return typeof description === "string" && description.startsWith(BARBER_DEPOSIT_REFUND_LINE_PREFIX);
+}
+
+export function membershipSaleLineDescription(planName: string, renewal = false): string {
+  return `${renewal ? BARBER_MEMBERSHIP_RENEWAL_LINE_PREFIX : BARBER_MEMBERSHIP_SALE_LINE_PREFIX}${planName}`;
+}
+
+export function depositReceivedLineDescription(label: string): string {
+  return `${BARBER_DEPOSIT_RECEIVED_LINE_PREFIX}${label}`;
+}
+
+/** ¿Es la línea de un ticket de mostrador (membresía vendida o anticipo recibido)? */
+export function isCounterTicketLine(description: string | null | undefined): boolean {
+  if (typeof description !== "string") return false;
+  return (
+    description.startsWith(BARBER_MEMBERSHIP_SALE_LINE_PREFIX) ||
+    description.startsWith(BARBER_MEMBERSHIP_RENEWAL_LINE_PREFIX) ||
+    description.startsWith(BARBER_DEPOSIT_RECEIVED_LINE_PREFIX) ||
+    description.startsWith(BARBER_DEPOSIT_REFUND_LINE_PREFIX)
+  );
+}
+
+export const BARBER_SALE_TAG_PREFIX = "#dcb ";
+
+/** Estado de la membresía ANTES de una renovación (para poder deshacerla). */
+export interface BarberMembershipSnapshot {
+  start: string;
+  end: string;
+  cuts: number;
+  status: string;
+  method: string;
+}
+
+export type BarberSaleTag =
+  | { k: "deposit"; appt: string }
+  /** Devolución (ticket negativo) del anticipo de esa cita. */
+  | { k: "refund"; appt: string }
+  | {
+      k: "membership";
+      op: "sell" | "renew";
+      /** id de BarberClientMembership. */
+      cm: string;
+      /** endAt que dejó este ticket: si ya no coincide, alguien la movió después. */
+      end: string;
+      prev?: BarberMembershipSnapshot;
+    };
+
+export type BarberSaleKind = "sale" | "membership" | "deposit" | "refund";
+
+export function buildSaleTag(tag: BarberSaleTag): string {
+  // El orden de las llaves es FIJO: depositTagNeedle() busca ese texto exacto.
+  const canon =
+    tag.k === "deposit" || tag.k === "refund"
+      ? { k: tag.k, appt: tag.appt }
+      : { k: tag.k, op: tag.op, cm: tag.cm, end: tag.end, ...(tag.prev ? { prev: tag.prev } : {}) };
+  return `${BARBER_SALE_TAG_PREFIX}${JSON.stringify(canon)}`;
+}
+
+function isSnapshot(v: unknown): v is BarberMembershipSnapshot {
+  const o = v as Record<string, unknown> | null;
+  return (
+    !!o &&
+    typeof o === "object" &&
+    typeof o.start === "string" &&
+    typeof o.end === "string" &&
+    typeof o.cuts === "number" &&
+    Number.isInteger(o.cuts) &&
+    o.cuts >= 0 &&
+    typeof o.status === "string" &&
+    typeof o.method === "string"
+  );
+}
+
+/** Lee el sello de un ticket (o null). Tolera la marca de cancelación delante. */
+export function parseSaleTag(notes: string | null | undefined): BarberSaleTag | null {
+  if (typeof notes !== "string" || notes.indexOf(BARBER_SALE_TAG_PREFIX) < 0) return null;
+  for (const line of notes.split("\n")) {
+    if (!line.startsWith(BARBER_SALE_TAG_PREFIX)) continue;
+    try {
+      const raw = JSON.parse(line.slice(BARBER_SALE_TAG_PREFIX.length)) as Record<string, unknown>;
+      if ((raw.k === "deposit" || raw.k === "refund") && typeof raw.appt === "string" && raw.appt) {
+        return { k: raw.k, appt: raw.appt };
+      }
+      if (
+        raw.k === "membership" &&
+        (raw.op === "sell" || raw.op === "renew") &&
+        typeof raw.cm === "string" &&
+        raw.cm &&
+        typeof raw.end === "string"
+      ) {
+        if (raw.op === "renew" && !isSnapshot(raw.prev)) return null;
+        return {
+          k: "membership",
+          op: raw.op,
+          cm: raw.cm,
+          end: raw.end,
+          ...(raw.op === "renew" ? { prev: raw.prev as BarberMembershipSnapshot } : {}),
+        };
+      }
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+/** Las notas SIN el sello (lo único que se le enseña a una persona). */
+export function stripSaleTag(notes: string | null | undefined): string | null {
+  if (typeof notes !== "string") return null;
+  if (notes.indexOf(BARBER_SALE_TAG_PREFIX) < 0) return notes;
+  const kept = notes
+    .split("\n")
+    .filter((line) => !line.startsWith(BARBER_SALE_TAG_PREFIX))
+    .join("\n")
+    .trim();
+  return kept || null;
+}
+
+export function saleKindOf(notes: string | null | undefined): BarberSaleKind {
+  const tag = parseSaleTag(notes);
+  return tag ? tag.k : "sale";
+}
+
+/** Texto que busca, en `notes`, el ticket de anticipo de UNA cita. */
+export function depositTagNeedle(appointmentId: string): string {
+  return `"k":"deposit","appt":"${appointmentId}"`;
 }
 
 /** Línea de servicio del ticket, tal como la ve el núcleo (dinero en centavos). */

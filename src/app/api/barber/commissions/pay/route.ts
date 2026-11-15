@@ -5,9 +5,11 @@ import { getCommissionSummary, markCommissionsPaid } from "@/lib/barber/commissi
 
 export const dynamic = "force-dynamic";
 
-// POST /api/barber/commissions/pay { barberId, periodKey } → marca pagadas
-// (paidAt = ahora) todas las entradas pendientes del barbero en el periodo y
-// devuelve su fila actualizada. commissions.manage (dueño/encargado).
+// POST /api/barber/commissions/pay { barberId, periodKey, expectedTotal? } →
+// paga lo PENDIENTE del barbero en el periodo (marca sus entradas sin pagar)
+// y devuelve cuánto cubrió el pago y su fila actualizada. `expectedTotal` es
+// el «a pagar» que la pantalla le enseñó a quien paga: si ya cambió, 409
+// PAYOUT_CHANGED y no se marca nada. commissions.manage (dueño/encargado).
 export async function POST(req: NextRequest) {
   const ctx = await getBarberContext();
   if (!ctx) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
@@ -17,7 +19,7 @@ export async function POST(req: NextRequest) {
     const barberId = typeof body.barberId === "string" ? body.barberId : "";
     const periodKey = typeof body.periodKey === "string" ? body.periodKey : "";
     if (!barberId) return NextResponse.json({ error: "barberId requerido" }, { status: 400 });
-    const result = await markCommissionsPaid(ctx, { barberId, periodKey });
+    const result = await markCommissionsPaid(ctx, { barberId, periodKey, expectedTotal: body.expectedTotal });
     const summary = await getCommissionSummary(ctx, periodKey, { barberId });
     return NextResponse.json({ ...result, row: summary.rows[0] ?? null });
   } catch (e) {

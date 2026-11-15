@@ -39,7 +39,11 @@ export async function GET(req: Request) {
   }
 }
 
-/** Vender una membresía cobrada en efectivo, SPEI o tarjeta de mostrador. */
+/**
+ * Vender una membresía cobrada en efectivo, SPEI o tarjeta de mostrador.
+ * Exige turno abierto: la venta crea su ticket en el corte (409
+ * NO_OPEN_SESSION si no lo hay). Devuelve la membresía y el id del ticket.
+ */
 export async function POST(req: Request) {
   const g = await requireBarberApi({ permission: "memberships.manage", feature: "memberships" });
   if (!g.ok) return g.res;
@@ -63,14 +67,20 @@ export async function POST(req: Request) {
       clientId,
       membershipId,
       paymentMethod: method,
+      soldByUserId: g.ctx.barberUserId,
     });
-    return NextResponse.json({ membership: created }, { status: 201 });
+    return NextResponse.json({ membership: created, saleId: created.saleId }, { status: 201 });
   } catch (err) {
     return barberApiError(err);
   }
 }
 
-/** Renovar, pausar, reactivar o cancelar una membresía vendida. */
+/**
+ * Renovar, pausar, reactivar o cancelar una membresía vendida. `renew` exige
+ * método de pago y turno abierto (crea su ticket, igual que la venta).
+ * `cancel` solo corta la membresía: NO devuelve dinero ni toca el corte —
+ * para deshacer un cobro se cancela su ticket en Caja.
+ */
 export async function PATCH(req: Request) {
   const g = await requireBarberApi({ permission: "memberships.manage", feature: "memberships" });
   if (!g.ok) return g.res;
@@ -81,15 +91,20 @@ export async function PATCH(req: Request) {
     if (!id) return NextResponse.json({ error: "Falta el id de la membresía." }, { status: 400 });
 
     if (action === "renew") {
-      const method = MANUAL_METHODS.includes(body.paymentMethod as BarberPaymentMethod)
-        ? (body.paymentMethod as BarberPaymentMethod)
-        : undefined;
+      // Renovar es cobrar: sin método de pago no hay ticket que meter al corte.
+      if (!MANUAL_METHODS.includes(body.paymentMethod as BarberPaymentMethod)) {
+        return NextResponse.json(
+          { error: "Elige cómo pagó: efectivo, transferencia o tarjeta.", code: "PAYMENT_METHOD_REQUIRED" },
+          { status: 400 },
+        );
+      }
       const membership = await renewClientMembership({
         barbershopId: g.ctx.barbershopId,
         clientMembershipId: id,
-        paymentMethod: method,
+        paymentMethod: body.paymentMethod as BarberPaymentMethod,
+        soldByUserId: g.ctx.barberUserId,
       });
-      return NextResponse.json({ membership });
+      return NextResponse.json({ membership, saleId: membership.saleId });
     }
 
     if (action === "cancel") {

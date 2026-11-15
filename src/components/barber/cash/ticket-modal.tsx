@@ -113,6 +113,12 @@ export function TicketModal({
     if (membershipKey && (!membershipAvailable || !lines.some((l) => l.key === membershipKey && l.kind === "service" && l.qty === 1))) setMembershipKey(null);
   }, [lines, loyaltyAvailable, membershipAvailable, loyaltyKey, membershipKey]);
 
+  // Anticipo PAGADO de la cita (lo manda el servidor en `appointment.deposit`).
+  // Aquí solo se PINTA: quien lo descuenta de verdad es createSale, dentro
+  // de la transacción del cobro y con la misma cuenta (después del descuento
+  // y sin dejar el ticket en negativo).
+  const depositPaidCents = appointment?.deposit ? toCents(appointment.deposit.amount) : 0;
+
   const totals = useMemo(() => {
     const gross = lines.reduce((s, l) => {
       const covered = l.key === loyaltyKey || l.key === membershipKey;
@@ -120,16 +126,19 @@ export function TicketModal({
     }, 0);
     const discountParsed = parseAmountText(discountText);
     const discount = Math.min(discountParsed === null ? 0 : toCents(discountParsed), gross);
-    const subtotal = gross - discount;
+    // Lo que vale el servicio ya con descuento: base de la propina en %.
+    const due = gross - discount;
+    const deposit = Math.min(depositPaidCents, due);
+    const subtotal = due - deposit;
     let tip = 0;
     if (tipMode.kind === "fixed") tip = toCents(tipMode.amount);
-    else if (tipMode.kind === "pct") tip = Math.round((subtotal * tipMode.pct) / 100);
+    else if (tipMode.kind === "pct") tip = Math.round((due * tipMode.pct) / 100);
     else if (tipMode.kind === "custom") {
       const p = parseAmountText(tipText);
       tip = p === null ? 0 : toCents(p);
     }
-    return { gross, discount, subtotal, tip, total: subtotal + tip, discountInvalid: discountParsed === null };
-  }, [lines, loyaltyKey, membershipKey, discountText, tipMode, tipText]);
+    return { gross, discount, deposit, depositRest: depositPaidCents - deposit, subtotal, tip, total: subtotal + tip, discountInvalid: discountParsed === null };
+  }, [lines, loyaltyKey, membershipKey, discountText, tipMode, tipText, depositPaidCents]);
 
   function addService() {
     const s = checkout.services.find((x) => x.id === addServiceId);
@@ -261,6 +270,12 @@ export function TicketModal({
       <div className="bcaja-form">
         {error && <div className="bcaja-alert bcaja-alert--danger" role="alert">{error}</div>}
 
+        {depositPaidCents > 0 && (
+          <div className="bcaja-alert bcaja-alert--info">
+            {t("ticket.depositNotice", { amount: fmtMoney(fromCents(depositPaidCents)) })}
+          </div>
+        )}
+
         <div className="bcaja-form__grid">
           {/* Barbero */}
           <div className="field-new">
@@ -281,8 +296,10 @@ export function TicketModal({
                 <div style={{ minWidth: 0 }}>
                   <div className="bcaja-client__name">{client.name}</div>
                   <div className="bcaja-client__meta">
-                    {client.phone} · {t("ticket.loyaltyStamps", { count: client.loyaltyCount, target: checkout.loyaltyTarget })}
-                    {client.loyaltyEligible ? ` · ${t("ticket.loyaltyEligible")}` : ""}
+                    {client.phone}
+                    {/* Sellos y premio: los de ESTA barbería (umbral, premio y encendido). */}
+                    {checkout.loyaltyEnabled ? ` · ${t("ticket.loyaltyStamps", { count: client.loyaltyCount, target: checkout.loyaltyTarget })}` : ""}
+                    {client.loyaltyEligible ? ` · ${t("ticket.loyaltyEligible", { reward: checkout.loyaltyReward })}` : ""}
                     {client.activeMembership
                       ? ` · ${t("ticket.membershipActive", { name: client.activeMembership.name })} (${client.activeMembership.cutsLeft === null ? t("ticket.membershipUnlimited") : t("ticket.membershipCutsLeft", { count: client.activeMembership.cutsLeft })})`
                       : ""}
@@ -300,7 +317,7 @@ export function TicketModal({
                     {suggestions.map((c) => (
                       <button key={c.id} type="button" className="bcaja-suggest__item" onClick={() => { setClient(c); setQuery(""); setSuggestions([]); }}>
                         <div className="bcaja-client__name">{c.name}</div>
-                        <div className="bcaja-client__meta">{c.phone} · {t("ticket.loyaltyStamps", { count: c.loyaltyCount, target: checkout.loyaltyTarget })}</div>
+                        <div className="bcaja-client__meta">{c.phone}{checkout.loyaltyEnabled ? ` · ${t("ticket.loyaltyStamps", { count: c.loyaltyCount, target: checkout.loyaltyTarget })}` : ""}</div>
                       </button>
                     ))}
                   </div>
@@ -383,7 +400,7 @@ export function TicketModal({
               <div className="field-new">
                 <label className="field-new__label" style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <input type="checkbox" checked={loyaltyKey !== null} onChange={(e) => setLoyaltyKey(e.target.checked ? (serviceLines.find((l) => l.key !== membershipKey)?.key ?? null) : null)} />
-                  {t("ticket.loyaltyRedeem")}
+                  {t("ticket.loyaltyRedeem", { reward: checkout.loyaltyReward, count: checkout.loyaltyTarget })}
                 </label>
                 {loyaltyKey && (
                   <select className="input-new" value={loyaltyKey} onChange={(e) => setLoyaltyKey(e.target.value)} aria-label={t("ticket.loyaltyApplyTo")}>
@@ -459,6 +476,12 @@ export function TicketModal({
         <div className="bcaja-totals">
           {totals.discount > 0 && (
             <div className="bcaja-totals__row"><span>{t("common.discount")}</span><span>−{fmtMoney(fromCents(totals.discount))}</span></div>
+          )}
+          {totals.deposit > 0 && (
+            <div className="bcaja-totals__row"><span>{t("ticket.depositApplied")}</span><span>−{fmtMoney(fromCents(totals.deposit))}</span></div>
+          )}
+          {depositPaidCents > 0 && totals.depositRest > 0 && (
+            <div className="bcaja-hint">{t("ticket.depositRest", { amount: fmtMoney(fromCents(totals.depositRest)) })}</div>
           )}
           <div className="bcaja-totals__row"><span>{t("ticket.subtotal")}</span><span>{fmtMoney(fromCents(totals.subtotal))}</span></div>
           {totals.tip > 0 && (

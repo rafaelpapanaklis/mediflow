@@ -61,6 +61,7 @@ import {
   type Money,
 } from "@/lib/barber/commissions";
 import { NOT_CANCELLED } from "@/lib/barber/clients";
+import { BARBER_DEPOSIT_LINE_PREFIX, BARBER_DEPOSIT_REFUND_LINE_PREFIX } from "@/lib/barber/memberships-core";
 import { BARBER_DEFAULT_DAY_END_MIN, BARBER_DEFAULT_DAY_START_MIN } from "@/lib/barber/agenda";
 import type {
   BarberAppointmentStatus,
@@ -205,6 +206,16 @@ function localTs(tz: string, column: string): Prisma.Sql {
 function liveSale(alias: string): Prisma.Sql {
   const col = Prisma.raw(`${alias}."notes"`);
   return Prisma.sql`(${col} IS NULL OR ${col} NOT LIKE ${`${CANCELLED_MARK}%`})`;
+}
+
+/**
+ * ¿Esta fila cuenta como un «ticket» en los CONTEOS de Inicio y Reportes
+ * (Tickets y ticket promedio)? No cuenta la devolución de un anticipo: es un
+ * ticket de subtotal NEGATIVO que devuelve dinero, no una venta. Solo afecta
+ * al conteo; el ingreso sigue sumando (y restando) todas las filas vivas.
+ */
+function countsAsTicket(alias: string): Prisma.Sql {
+  return Prisma.sql`${Prisma.raw(`${alias}."subtotal"`)} >= 0`;
 }
 
 /** Recorte por barbero para una columna dada; [] = nada (AND FALSE). */
@@ -454,7 +465,7 @@ export async function getInicioSummary(ctx: BarberContext, opts: InicioOptions =
   const [dayRows, todayAppointments, queueGroups, alertsRows, openSessionRows] = await Promise.all([
     prisma.$queryRaw<DayMoneyRow[]>`
       SELECT to_char(${localTs(tz, 's."createdAt"')}, 'YYYY-MM-DD') AS day,
-             COUNT(*) FILTER (WHERE ${liveSale("s")})::int AS tickets,
+             COUNT(*) FILTER (WHERE ${liveSale("s")} AND ${countsAsTicket("s")})::int AS tickets,
              COALESCE(SUM(s."subtotal"), 0) AS subtotal,
              COALESCE(SUM(s."tip"), 0) AS tip,
              COALESCE(SUM(s."total"), 0) AS total
@@ -811,9 +822,16 @@ export function resolveReportPeriod(
 export interface ReportDayRow {
   day: string;
   tickets: number;
-  /** Servicios NETOS de descuentos (misma base que la comisión: servicios + ajustes). */
+  /** Servicios NETOS de descuentos. NO incluye membresías ni anticipos. */
   services: number;
   products: number;
+  /**
+   * Membresías y anticipos: lo que no es un servicio ni un producto ni un
+   * descuento. Suma las membresías vendidas y los anticipos recibidos, y
+   * resta los anticipos aplicados al cobrar la cita y los devueltos (puede
+   * ser negativo). Servicios + Productos + esto = Ingresos.
+   */
+  other: number;
   tips: number;
   /** Descuentos aplicados (positivo). */
   discounts: number;
@@ -920,6 +938,8 @@ export interface ReportsSummary {
     tickets: number;
     services: number;
     products: number;
+    /** Membresías y anticipos (ver ReportDayRow.other). */
+    other: number;
     tips: number;
     discounts: number;
     revenue: number;
@@ -952,10 +972,23 @@ interface ReportDaySql {
   services: unknown;
   products: unknown;
   adjustments: unknown;
+  /** Solo los descuentos de verdad (negativo): sin el anticipo aplicado. */
+  discounts: unknown;
   tips: unknown;
   revenue: unknown;
   total: unknown;
 }
+
+/**
+ * Líneas sin servicio ni producto que NO son un descuento: el crédito del
+ * anticipo («Anticipo aplicado · …», negativo) y los tickets de mostrador
+ * («Venta de membresía», «Anticipo recibido», positivos). Siguen entrando al
+ * ingreso neto del día —por eso Servicios + Productos = Ingresos—, pero ya
+ * no inflan ni esconden la cifra de «Descuentos».
+ */
+const DEPOSIT_CREDIT_LIKE = `${BARBER_DEPOSIT_LINE_PREFIX}%`;
+/** La devolución de un anticipo (ticket negativo) tampoco es un descuento. */
+const DEPOSIT_REFUND_LIKE = `${BARBER_DEPOSIT_REFUND_LINE_PREFIX}%`;
 
 interface ReportBarberSql {
   id: string;
@@ -1027,10 +1060,11 @@ export async function getReportsSummary(ctx: BarberContext, opts: ReportsOptions
   const [dayRows, barberRows, itemRows, heatRows, noShowRows, statusGroups] = await Promise.all([
     prisma.$queryRaw<ReportDaySql[]>`
       SELECT to_char(${localTs(tz, 's."createdAt"')}, 'YYYY-MM-DD') AS day,
-             COUNT(*)::int AS tickets,
+             COUNT(*) FILTER (WHERE ${countsAsTicket("s")})::int AS tickets,
              COALESCE(SUM(i.services), 0) AS services,
              COALESCE(SUM(i.products), 0) AS products,
              COALESCE(SUM(i.adjustments), 0) AS adjustments,
+             COALESCE(SUM(i.discounts), 0) AS discounts,
              COALESCE(SUM(s."tip"), 0) AS tips,
              COALESCE(SUM(s."subtotal"), 0) AS revenue,
              COALESCE(SUM(s."total"), 0) AS total
@@ -1038,7 +1072,11 @@ export async function getReportsSummary(ctx: BarberContext, opts: ReportsOptions
       LEFT JOIN LATERAL (
         SELECT COALESCE(SUM(CASE WHEN it."serviceId" IS NOT NULL THEN it."qty" * it."unitPrice" END), 0) AS services,
                COALESCE(SUM(CASE WHEN it."productId" IS NOT NULL THEN it."qty" * it."unitPrice" END), 0) AS products,
-               COALESCE(SUM(CASE WHEN it."serviceId" IS NULL AND it."productId" IS NULL THEN it."qty" * it."unitPrice" END), 0) AS adjustments
+               COALESCE(SUM(CASE WHEN it."serviceId" IS NULL AND it."productId" IS NULL THEN it."qty" * it."unitPrice" END), 0) AS adjustments,
+               COALESCE(SUM(CASE WHEN it."serviceId" IS NULL AND it."productId" IS NULL AND it."unitPrice" < 0
+                                  AND it."description" NOT LIKE ${DEPOSIT_CREDIT_LIKE}
+                                  AND it."description" NOT LIKE ${DEPOSIT_REFUND_LIKE}
+                                 THEN it."qty" * it."unitPrice" END), 0) AS discounts
         FROM "barber_sale_items" it WHERE it."saleId" = s."id"
       ) i ON TRUE
       WHERE s."barbershopId" IN (${ids}) AND ${rangeSql('s."createdAt"')} AND ${liveSale("s")}
@@ -1054,7 +1092,7 @@ export async function getReportsSummary(ctx: BarberContext, opts: ReportsOptions
              COALESCE(ce.amount, 0) AS commission
       FROM "barber_barbers" b
       LEFT JOIN LATERAL (
-        SELECT COUNT(*) AS tickets, SUM(s."subtotal") AS produced, SUM(s."tip") AS tips
+        SELECT COUNT(*) FILTER (WHERE ${countsAsTicket("s")}) AS tickets, SUM(s."subtotal") AS produced, SUM(s."tip") AS tips
         FROM "barber_sales" s
         WHERE s."barberId" = b."id" AND s."barbershopId" IN (${ids}) AND ${rangeSql('s."createdAt"')} AND ${liveSale("s")}
       ) sa ON TRUE
@@ -1189,21 +1227,31 @@ export async function getReportsSummary(ctx: BarberContext, opts: ReportsOptions
   const fromYmd = parseDateKey(period.from)!;
   const fromDays = ymdToUtcDays(fromYmd);
   const byDay: ReportDayRow[] = [];
-  const tot = { tickets: 0, services: ZERO, products: ZERO, tips: ZERO, discounts: ZERO, revenue: ZERO, total: ZERO };
+  const tot = { tickets: 0, services: ZERO, products: ZERO, other: ZERO, tips: ZERO, discounts: ZERO, revenue: ZERO, total: ZERO };
   for (let i = 0; i < period.days; i++) {
     const key = ymdKey(ymdFromUtcDays(fromDays + i));
     const r = byDayMap.get(key);
     const services = D(r?.services as never);
-    const adjustments = D(r?.adjustments as never); // negativo (descuentos)
+    // Líneas sin servicio ni producto: descuentos (−), anticipo aplicado (−)
+    // y tickets de mostrador (+: membresías vendidas, anticipos recibidos).
+    const adjustments = D(r?.adjustments as never);
     const products = D(r?.products as never);
     const tips = D(r?.tips as never);
     const revenue = D(r?.revenue as never);
     const total = D(r?.total as never);
-    const netServices = services.plus(adjustments);
-    const discounts = adjustments.isNegative() ? adjustments.negated() : ZERO;
+    // Los descuentos de verdad (negativo): lo único que baja «Servicios».
+    const rawDiscounts = D(r?.discounts as never);
+    const netServices = services.plus(rawDiscounts);
+    const discounts = rawDiscounts.negated();
+    // El resto de esas líneas NO es un servicio: membresías vendidas y
+    // anticipos recibidos (+), anticipos aplicados o devueltos (−). Va en
+    // su propio renglón, así un día con un corte de $180 y una membresía de
+    // $500 dice Servicios $180 y Membresías y anticipos $500 — no «$680».
+    const other = adjustments.minus(rawDiscounts);
     tot.tickets += intOf(r?.tickets);
     tot.services = tot.services.plus(netServices);
     tot.products = tot.products.plus(products);
+    tot.other = tot.other.plus(other);
     tot.tips = tot.tips.plus(tips);
     tot.discounts = tot.discounts.plus(discounts);
     tot.revenue = tot.revenue.plus(revenue);
@@ -1213,6 +1261,7 @@ export async function getReportsSummary(ctx: BarberContext, opts: ReportsOptions
       tickets: intOf(r?.tickets),
       services: toNum(netServices),
       products: toNum(products),
+      other: toNum(other),
       tips: toNum(tips),
       discounts: toNum(discounts),
       revenue: toNum(revenue),
@@ -1396,6 +1445,7 @@ export async function getReportsSummary(ctx: BarberContext, opts: ReportsOptions
       tickets: tot.tickets,
       services: toNum(tot.services),
       products: toNum(tot.products),
+      other: toNum(tot.other),
       tips: toNum(tot.tips),
       discounts: toNum(tot.discounts),
       revenue: revenue.toNumber(),
@@ -1435,6 +1485,8 @@ export interface ReportsCsvLabels {
   tickets: string;
   services: string;
   products: string;
+  /** «Membresías y anticipos». */
+  other: string;
   tips: string;
   discounts: string;
   revenue: string;
@@ -1522,8 +1574,8 @@ export function buildReportsCsv(s: ReportsSummary, L: ReportsCsvLabels): string 
   blank();
 
   push([L.sections.byDay]);
-  push([L.day, L.tickets, L.services, L.products, L.tips, L.discounts, L.revenue, L.total]);
-  for (const d of s.byDay) push([d.day, d.tickets, d.services, d.products, d.tips, d.discounts, d.revenue, d.total]);
+  push([L.day, L.tickets, L.services, L.products, L.other, L.tips, L.discounts, L.revenue, L.total]);
+  for (const d of s.byDay) push([d.day, d.tickets, d.services, d.products, d.other, d.tips, d.discounts, d.revenue, d.total]);
   blank();
 
   push([L.sections.byBarber]);

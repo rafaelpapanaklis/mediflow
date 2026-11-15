@@ -6,8 +6,13 @@ import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { mxTenDigits } from "@/lib/phone-mx";
 // Constantes de T6 (caja). Se IMPORTAN, no se copian: si la caja cambia el
 // sufijo con el que marca un canje, este módulo lo sigue viendo.
-import { BARBER_LOYALTY_STAMPS_TARGET, LOYALTY_SUFFIX } from "@/lib/barber/cash";
-import { CANCELLED_MARK } from "@/lib/barber/commissions";
+import {
+  LOYALTY_THRESHOLD_MAX,
+  LOYALTY_THRESHOLD_MIN,
+  NOT_CANCELLED,
+  tallyVisits,
+  type BarberVisitTally,
+} from "@/lib/barber/loyalty-core";
 import {
   BARBER_FILES_BUCKET,
   type BarberClientDTO,
@@ -75,8 +80,9 @@ export const BARBER_CLIENTS_CONFIG_DEFAULTS = {
   inactiveDays: 60,
 } as const;
 
-export const LOYALTY_THRESHOLD_MIN = 1;
-export const LOYALTY_THRESHOLD_MAX = 100;
+// El rango del umbral vive en loyalty-core.ts (lo comparten la caja y el
+// portal); se re-exporta para quien ya lo importaba de aquí.
+export { LOYALTY_THRESHOLD_MAX, LOYALTY_THRESHOLD_MIN };
 export const INACTIVE_DAYS_MIN = 7;
 export const INACTIVE_DAYS_MAX = 730;
 
@@ -482,107 +488,21 @@ export function birthdayToInputValue(date: Date | null): string {
 
 // ── Recuento REAL de visitas (la fuente de verdad del contador) ───────
 
-export interface BarberVisitTally {
-  visits: number;
-  lastVisitAt: Date | null;
-  /**
-   * Sellos que YA consumió la caja (T6) canjeando cortes gratis desde el
-   * ticket. Se cuentan aparte de la bitácora de la ficha porque son dos
-   * caminos distintos hacia el mismo premio.
-   */
-  cashRedeemedStamps: number;
-}
-
-/**
- * Un ticket cancelado no cuenta para nada: ni como visita ni como canje.
- * T6 hace soft-cancel marcando `notes` con CANCELLED_MARK (y borrando las
- * líneas). OJO Prisma: un `NOT { startsWith }` descarta las filas con notes
- * NULL, así que hace falta la rama explícita del null.
- */
-export const NOT_CANCELLED: Prisma.BarberSaleWhereInput = {
-  OR: [{ notes: null }, { NOT: { notes: { startsWith: CANCELLED_MARK } } }],
-};
+// El recuento vive en loyalty-core.ts: UNA definición de «qué es una visita»
+// y de «cuántos sellos consumió cada canje» para la lista, la ficha, la caja
+// y «mi cuenta». Aquí solo se re-exporta con el nombre de siempre.
+export { NOT_CANCELLED };
+export type { BarberVisitTally };
 
 /**
  * Cuántas veces se ha sentado de verdad cada cliente, PARA TODA UNA PÁGINA
- * en dos lecturas (dos groupBy), no 4 por ficha.
- *
- * Qué cuenta como visita:
- *   · Cita en DONE — la que pasó por la agenda.
- *   · Venta SIN cita con al menos una línea de SERVICIO — el walk-in que
- *     llegó, se sentó y pagó en mostrador. Una venta de solo producto (una
- *     cera) NO es visita: nadie regala un corte por comprar pomada.
- * Las canceladas y los NO_SHOW no cuentan.
- *
- * Vive aquí (capa de datos) y no en loyalty.ts para que la lista pueda
- * usarlo sin importar el motor de lealtad — si no, el ciclo de imports.
+ * (ver tallyVisits en loyalty-core.ts).
  */
 export async function tallyVisitsForClients(
   barbershopId: string,
   clientIds: string[],
 ): Promise<Map<string, BarberVisitTally>> {
-  const out = new Map<string, BarberVisitTally>();
-  if (clientIds.length === 0) return out;
-
-  const [appts, sales, canjesEnCaja] = await Promise.all([
-    prisma.barberAppointment.groupBy({
-      by: ["clientId"],
-      where: { barbershopId, clientId: { in: clientIds }, status: "DONE" },
-      _count: { _all: true },
-      _max: { startAt: true },
-    }),
-    prisma.barberSale.groupBy({
-      by: ["clientId"],
-      where: {
-        barbershopId,
-        clientId: { in: clientIds },
-        appointmentId: null,
-        items: { some: { serviceId: { not: null } } },
-        ...NOT_CANCELLED,
-      },
-      _count: { _all: true },
-      _max: { createdAt: true },
-    }),
-    // Canjes hechos en la CAJA: cada ticket con una línea marcada con
-    // LOYALTY_SUFFIX se llevó BARBER_LOYALTY_STAMPS_TARGET sellos.
-    prisma.barberSale.groupBy({
-      by: ["clientId"],
-      where: {
-        barbershopId,
-        clientId: { in: clientIds },
-        items: { some: { description: { endsWith: LOYALTY_SUFFIX } } },
-        ...NOT_CANCELLED,
-      },
-      _count: { _all: true },
-    }),
-  ]);
-
-  const blank = (): BarberVisitTally => ({ visits: 0, lastVisitAt: null, cashRedeemedStamps: 0 });
-
-  const bump = (id: string | null, count: number, at: Date | null) => {
-    if (!id) return;
-    const prev = out.get(id) ?? blank();
-    const nextAt =
-      at && (!prev.lastVisitAt || at.getTime() > prev.lastVisitAt.getTime())
-        ? at
-        : prev.lastVisitAt;
-    out.set(id, { ...prev, visits: prev.visits + count, lastVisitAt: nextAt });
-  };
-
-  for (const g of appts) bump(g.clientId, g._count._all, g._max.startAt ?? null);
-  for (const g of sales) bump(g.clientId, g._count._all, g._max.createdAt ?? null);
-
-  for (const g of canjesEnCaja) {
-    if (!g.clientId) continue;
-    const prev = out.get(g.clientId) ?? blank();
-    out.set(g.clientId, {
-      ...prev,
-      cashRedeemedStamps: prev.cashRedeemedStamps + g._count._all * BARBER_LOYALTY_STAMPS_TARGET,
-    });
-  }
-
-  for (const id of clientIds) if (!out.has(id)) out.set(id, blank());
-  return out;
+  return tallyVisits(prisma, barbershopId, clientIds);
 }
 
 /** Atajo de un solo cliente (mismo motor, misma definición de visita). */

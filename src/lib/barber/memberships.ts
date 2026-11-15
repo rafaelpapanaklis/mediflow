@@ -5,6 +5,8 @@ import type {
   BarberClientMembershipStatus,
   BarberPaymentMethod,
 } from "@/lib/barber/types";
+import { createCounterTicketTx } from "@/lib/barber/cash";
+import { BarberCajaError } from "@/lib/barber/commissions";
 import {
   BARBER_MEMBERSHIP_STRIPE_GRACE_DAYS,
   addDays,
@@ -14,6 +16,7 @@ import {
   coverageReason,
   daysUntil,
   membershipLineDescription,
+  membershipSaleLineDescription,
   membershipUrgency,
   moneyToCents,
   nextPeriodEnd,
@@ -363,11 +366,34 @@ export async function getMembershipStats(barbershopId: string): Promise<Membersh
   };
 }
 
+/** Mensaje único de «sin turno no se registra dinero» para las membresías. */
+export const MEMBERSHIP_NEEDS_SESSION_MESSAGE =
+  "Abre un turno en Caja antes de registrar el cobro de la membresía: así entra al corte con su método de pago.";
+
+/** La caja habla con BarberCajaError; las APIs de esta ola, con el nuestro. */
+function asMembershipError(err: unknown): unknown {
+  if (err instanceof BarberCajaError) return new BarberMembershipError(err.code, err.message, err.status);
+  return err;
+}
+
+/** Lo que devuelve una venta o renovación manual: la membresía + su ticket. */
+export type MembershipSaleResult = BarberClientMembershipView & {
+  /** Ticket del turno en el que quedó el dinero. */
+  saleId: string;
+};
+
 /**
  * Vende una membresía cobrada A MANO (efectivo, SPEI o tarjeta en el
  * datáfono). Aquí está el hueco del mercado: no hace falta Stripe para tener
  * membresías — la barbería registra el pago y el sistema calcula la vigencia
  * y avisa cuándo toca renovar.
+ *
+ * EL DINERO PASA POR LA CAJA: exige un turno abierto y, en la MISMA
+ * transacción que crea la membresía, crea un ticket «Venta de membresía · …»
+ * por el precio del plan con su método de pago. Así aparece en el corte, en
+ * Inicio y en Reportes. Sin turno no se vende (409 NO_OPEN_SESSION) y no
+ * queda nada a medias. El ticket NO lleva barbero: la venta de una membresía
+ * no genera comisión. Cancelar ese ticket en Caja cancela la membresía.
  *
  * Para el cobro recurrente con tarjeta ver `payments.ts`
  * (createMembershipCheckoutSession) — ese camino crea la fila desde el pago.
@@ -377,10 +403,13 @@ export async function sellMembership(args: {
   clientId: string;
   membershipId: string;
   paymentMethod: BarberPaymentMethod;
+  /** Quién cobra (BarberUser.id): es el «cobró» del ticket. */
+  soldByUserId: string;
   startAt?: Date;
-}): Promise<BarberClientMembershipView> {
+  now?: Date;
+}): Promise<MembershipSaleResult> {
   const shopId = requireShop(args.barbershopId);
-  const now = new Date();
+  const now = args.now ?? new Date();
 
   if (args.paymentMethod === "STRIPE") {
     throw new BarberMembershipError(
@@ -388,102 +417,186 @@ export async function sellMembership(args: {
       "El cobro recurrente con tarjeta se genera desde el pago en línea, no a mano.",
     );
   }
+  if (!args.soldByUserId || typeof args.soldByUserId !== "string") {
+    throw new BarberMembershipError("NO_USER", "Falta quién registra la venta.", 401);
+  }
 
-  const [client, plan, current] = await Promise.all([
-    prisma.barberClient.findFirst({
-      where: { id: args.clientId, barbershopId: shopId },
-      select: { id: true },
-    }),
-    prisma.barberMembership.findFirst({
-      where: { id: args.membershipId, barbershopId: shopId },
-      select: { id: true, isActive: true, periodDays: true },
-    }),
-    prisma.barberClientMembership.findFirst({
-      where: {
-        barbershopId: shopId,
-        clientId: args.clientId,
-        status: "ACTIVE",
-        endAt: { gt: now },
+  try {
+    return await prisma.$transaction(
+      async (tx) => {
+        // Dos clics a la vez sobre el mismo cliente se ponen en fila: el
+        // segundo ya ve la membresía del primero y no cobra dos veces.
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`dcb:memsell:${shopId}:${args.clientId}`}))`;
+
+        const [client, plan, current] = await Promise.all([
+          tx.barberClient.findFirst({
+            where: { id: args.clientId, barbershopId: shopId },
+            select: { id: true },
+          }),
+          tx.barberMembership.findFirst({
+            where: { id: args.membershipId, barbershopId: shopId },
+            select: { id: true, name: true, price: true, isActive: true, periodDays: true },
+          }),
+          tx.barberClientMembership.findFirst({
+            where: {
+              barbershopId: shopId,
+              clientId: args.clientId,
+              status: "ACTIVE",
+              endAt: { gt: now },
+            },
+            select: { id: true },
+          }),
+        ]);
+
+        if (!client) throw new BarberMembershipError("CLIENT_NOT_FOUND", "No encontramos a ese cliente.", 404);
+        if (!plan) throw new BarberMembershipError("PLAN_NOT_FOUND", "No encontramos esa membresía.", 404);
+        if (!plan.isActive) {
+          throw new BarberMembershipError("PLAN_INACTIVE", "Esa membresía está desactivada.");
+        }
+        if (current) {
+          throw new BarberMembershipError(
+            "ALREADY_ACTIVE",
+            "Este cliente ya tiene una membresía vigente. Renuévala en vez de venderle otra.",
+            409,
+          );
+        }
+
+        const startAt = args.startAt ?? now;
+        const endAt = computePeriodEnd(startAt, plan.periodDays);
+        const created = await tx.barberClientMembership.create({
+          data: {
+            barbershopId: shopId,
+            clientId: args.clientId,
+            membershipId: args.membershipId,
+            status: "ACTIVE",
+            startAt,
+            endAt,
+            cutsUsed: 0,
+            paymentMethod: args.paymentMethod,
+          },
+          include: CLIENT_MEMBERSHIP_INCLUDE,
+        });
+
+        const ticket = await createCounterTicketTx(tx, {
+          barbershopId: shopId,
+          soldByUserId: args.soldByUserId,
+          clientId: args.clientId,
+          description: membershipSaleLineDescription(plan.name),
+          amount: plan.price,
+          paymentMethod: args.paymentMethod,
+          tag: { k: "membership", op: "sell", cm: created.id, end: endAt.toISOString() },
+          now,
+          noSessionMessage: MEMBERSHIP_NEEDS_SESSION_MESSAGE,
+        });
+
+        return { ...toClientMembershipView(created, now), saleId: ticket.id };
       },
-      select: { id: true },
-    }),
-  ]);
-
-  if (!client) throw new BarberMembershipError("CLIENT_NOT_FOUND", "No encontramos a ese cliente.", 404);
-  if (!plan) throw new BarberMembershipError("PLAN_NOT_FOUND", "No encontramos esa membresía.", 404);
-  if (!plan.isActive) {
-    throw new BarberMembershipError("PLAN_INACTIVE", "Esa membresía está desactivada.");
-  }
-  if (current) {
-    throw new BarberMembershipError(
-      "ALREADY_ACTIVE",
-      "Este cliente ya tiene una membresía vigente. Renuévala en vez de venderle otra.",
-      409,
+      { maxWait: 5000, timeout: 15000 },
     );
+  } catch (err) {
+    throw asMembershipError(err);
   }
-
-  const startAt = args.startAt ?? now;
-  const created = await prisma.barberClientMembership.create({
-    data: {
-      barbershopId: shopId,
-      clientId: args.clientId,
-      membershipId: args.membershipId,
-      status: "ACTIVE",
-      startAt,
-      endAt: computePeriodEnd(startAt, plan.periodDays),
-      cutsUsed: 0,
-      paymentMethod: args.paymentMethod,
-    },
-    include: CLIENT_MEMBERSHIP_INCLUDE,
-  });
-
-  return toClientMembershipView(created, now);
 }
 
 /**
  * Renovación MANUAL (efectivo / SPEI / tarjeta en mostrador): extiende el
  * periodo y pone el contador de cortes en cero. Si todavía está vigente, el
  * periodo nuevo se encadena al final del actual (el cliente no pierde días).
+ *
+ * Igual que la venta: exige turno abierto y deja un ticket «Renovación de
+ * membresía · …» por el precio ACTUAL del plan. El ticket guarda cómo estaba
+ * la membresía antes de renovar; cancelarlo en Caja la deja exactamente así.
  */
 export async function renewClientMembership(args: {
   barbershopId: string;
   clientMembershipId: string;
-  paymentMethod?: BarberPaymentMethod;
-}): Promise<BarberClientMembershipView> {
+  /** CASH | SPEI | CARD: cómo pagó la renovación. */
+  paymentMethod: BarberPaymentMethod;
+  soldByUserId: string;
+  now?: Date;
+}): Promise<MembershipSaleResult> {
   const shopId = requireShop(args.barbershopId);
-  const now = new Date();
+  const now = args.now ?? new Date();
 
-  const row = await prisma.barberClientMembership.findFirst({
-    where: { id: args.clientMembershipId, barbershopId: shopId },
-    include: CLIENT_MEMBERSHIP_INCLUDE,
-  });
-  if (!row) throw new BarberMembershipError("NOT_FOUND", "No encontramos esa membresía.", 404);
-  if (row.stripeSubscriptionId) {
+  if (!args.paymentMethod || args.paymentMethod === "STRIPE") {
     throw new BarberMembershipError(
-      "AUTO_RENEW",
-      "Esta membresía se cobra sola con tarjeta. No hace falta renovarla a mano.",
-      409,
+      "PAYMENT_METHOD_REQUIRED",
+      "Elige cómo pagó la renovación: efectivo, transferencia o tarjeta en mostrador.",
     );
   }
+  if (!args.soldByUserId || typeof args.soldByUserId !== "string") {
+    throw new BarberMembershipError("NO_USER", "Falta quién registra la renovación.", 401);
+  }
 
-  const startAt = row.endAt.getTime() > now.getTime() ? row.endAt : now;
-  const endAt = nextPeriodEnd(row.endAt, row.membership.periodDays, now);
+  try {
+    return await prisma.$transaction(
+      async (tx) => {
+        // Candado de fila: dos renovaciones a la vez no encadenan dos periodos
+        // con un solo cobro a la vista.
+        await tx.$queryRaw`
+          SELECT "id" FROM "barber_client_memberships"
+          WHERE "id" = ${args.clientMembershipId} AND "barbershopId" = ${shopId}
+          FOR UPDATE
+        `;
+        const row = await tx.barberClientMembership.findFirst({
+          where: { id: args.clientMembershipId, barbershopId: shopId },
+          include: CLIENT_MEMBERSHIP_INCLUDE,
+        });
+        if (!row) throw new BarberMembershipError("NOT_FOUND", "No encontramos esa membresía.", 404);
+        if (row.stripeSubscriptionId) {
+          throw new BarberMembershipError(
+            "AUTO_RENEW",
+            "Esta membresía se cobra sola con tarjeta. No hace falta renovarla a mano.",
+            409,
+          );
+        }
 
-  const updated = await prisma.barberClientMembership.update({
-    where: { id: row.id },
-    data: {
-      status: "ACTIVE",
-      startAt,
-      endAt,
-      cutsUsed: 0,
-      ...(args.paymentMethod && args.paymentMethod !== "STRIPE"
-        ? { paymentMethod: args.paymentMethod }
-        : {}),
-    },
-    include: CLIENT_MEMBERSHIP_INCLUDE,
-  });
+        const startAt = row.endAt.getTime() > now.getTime() ? row.endAt : now;
+        const endAt = nextPeriodEnd(row.endAt, row.membership.periodDays, now);
 
-  return toClientMembershipView(updated, now);
+        const updated = await tx.barberClientMembership.update({
+          where: { id: row.id },
+          data: {
+            status: "ACTIVE",
+            startAt,
+            endAt,
+            cutsUsed: 0,
+            paymentMethod: args.paymentMethod,
+          },
+          include: CLIENT_MEMBERSHIP_INCLUDE,
+        });
+
+        const ticket = await createCounterTicketTx(tx, {
+          barbershopId: shopId,
+          soldByUserId: args.soldByUserId,
+          clientId: row.clientId,
+          description: membershipSaleLineDescription(row.membership.name, true),
+          amount: row.membership.price,
+          paymentMethod: args.paymentMethod,
+          tag: {
+            k: "membership",
+            op: "renew",
+            cm: row.id,
+            end: endAt.toISOString(),
+            prev: {
+              start: row.startAt.toISOString(),
+              end: row.endAt.toISOString(),
+              cuts: row.cutsUsed,
+              status: row.status,
+              method: row.paymentMethod,
+            },
+          },
+          now,
+          noSessionMessage: MEMBERSHIP_NEEDS_SESSION_MESSAGE,
+        });
+
+        return { ...toClientMembershipView(updated, now), saleId: ticket.id };
+      },
+      { maxWait: 5000, timeout: 15000 },
+    );
+  } catch (err) {
+    throw asMembershipError(err);
+  }
 }
 
 export async function setClientMembershipStatus(args: {

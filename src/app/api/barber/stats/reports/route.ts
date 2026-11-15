@@ -17,6 +17,7 @@ function csvLabelsFor(t: ReturnType<typeof getBarberT>): ReportsCsvLabels {
     tickets: c("tickets"),
     services: c("services"),
     products: c("products"),
+    other: c("other"),
     tips: c("tips"),
     discounts: c("discounts"),
     revenue: c("revenue"),

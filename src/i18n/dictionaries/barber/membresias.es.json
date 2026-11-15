@@ -100,7 +100,7 @@
     "pause": "Pausar",
     "resume": "Reactivar",
     "cancel": "Cancelar",
-    "cancelConfirm": "¿Cancelar esta membresía? Si se cobra con tarjeta, también se corta el cobro automático.",
+    "cancelConfirm": "¿Cancelar esta membresía? Esto no devuelve el dinero ni cambia el corte: para deshacer el cobro, cancela su ticket en Caja. Si se cobra sola con tarjeta, también se corta el cobro automático.",
     "empty": {
       "all": "Todavía nadie tiene membresía. Véndele la primera a un cliente de confianza.",
       "active": "No hay membresías vigentes ahora mismo.",
@@ -112,7 +112,8 @@
       "title": "Renovar membresía",
       "body": "{client} · {plan}. El periodo nuevo se encadena al actual, así no pierde días.",
       "howPaid": "¿Cómo pagó?",
-      "confirm": "Registrar pago y renovar"
+      "confirm": "Registrar pago y renovar",
+      "cashHint": "Se registra un ticket de {amount} en el turno abierto de Caja. Sin turno abierto no se puede renovar."
     },
     "sellModal": {
       "title": "Vender membresía",
@@ -128,7 +129,8 @@
       "confirmOnline": "Cobrar con tarjeta",
       "onlineHint": "Se abre el pago seguro de Stripe. La membresía se activa cuando el cobro se confirma.",
       "recurring": "Cobrar solo cada periodo (suscripción)",
-      "recurringHint": "Con esto la tarjeta se cobra sola cada periodo y no tienes que perseguir a nadie."
+      "recurringHint": "Con esto la tarjeta se cobra sola cada periodo y no tienes que perseguir a nadie.",
+      "cashHint": "Se registra un ticket de {amount} en el turno abierto de Caja: aparece en el corte, en Inicio y en Reportes. Sin turno abierto no se puede vender."
     }
   },
   "payment": {
@@ -136,7 +138,7 @@
     "SPEI": "Transferencia (SPEI)",
     "CARD": "Tarjeta en mostrador",
     "STRIPE": "Tarjeta en línea",
-    "chooseHint": "En efectivo y transferencia tú registras el pago; nosotros calculamos la vigencia y te avisamos cuándo toca cobrar de nuevo."
+    "chooseHint": "En efectivo, transferencia o tarjeta de mostrador tú registras el pago; nosotros calculamos la vigencia y te avisamos cuándo toca cobrar de nuevo."
   },
   "status": {
     "ACTIVE": "Activa",
@@ -190,14 +192,39 @@
       "applied": "Aplicado al ticket",
       "refund": "Devolver",
       "forfeit": "Retener",
-      "refundConfirm": "¿Devolver el anticipo? Si se pagó con tarjeta, se reembolsa en Stripe.",
-      "forfeitConfirm": "¿Retener el anticipo? El cliente no lo recupera."
+      "forfeitConfirm": "¿Retener el anticipo? El cliente no lo recupera.",
+      "howItWorks": "El anticipo pagado se descuenta solo al cobrar la cita. Si lo cobras en mostrador, entra al corte del turno con su método de pago.",
+      "notApplied": "Se descuenta al cobrar la cita",
+      "refundedTicket": "Anticipo devuelto. Quedó un ticket «Devolución de anticipo» en el turno de hoy: ya bajó del efectivo esperado y del ingreso.",
+      "refundedNoTicket": "Anticipo devuelto, pero la devolución NO quedó registrada en el corte (falta un ajuste en la base de datos). Anota esta salida de dinero en la nota de tu corte de hoy."
     },
     "depositStatus": {
       "PENDING": "Por pagar",
       "PAID": "Pagado",
       "REFUNDED": "Devuelto",
       "FORFEITED": "Retenido"
+    },
+    "register": {
+      "open": "Registrar anticipo",
+      "title": "Registrar anticipo",
+      "intro": "Para un anticipo que el cliente paga en mostrador. Necesitas un turno abierto: el dinero entra al corte con su método de pago y se descuenta solo cuando cobres la cita.",
+      "loading": "Cargando citas…",
+      "noAppointments": "No hay citas próximas sin anticipo.",
+      "appointment": "¿De qué cita?",
+      "amount": "Monto del anticipo",
+      "amountHint": "Máximo {total}, el total de la cita.",
+      "tooHigh": "El anticipo no puede ser mayor que el total de la cita.",
+      "howPaid": "¿Cómo pagó?",
+      "confirm": "Registrar anticipo",
+      "done": "Anticipo registrado. Ya está en el corte del turno."
+    },
+    "refund": {
+      "title": "Devolver anticipo",
+      "who": "Vas a devolverle {amount} a {client}.",
+      "warning": "Antes de confirmar: necesitas un turno abierto en Caja. La devolución se registra HOY como un ticket negativo de {amount}, así que baja el efectivo esperado de este turno (si la devuelves en efectivo) y el ingreso del mes. El turno donde se cobró no cambia.",
+      "howReturned": "¿Cómo se lo devuelves?",
+      "sameMethod": "Igual que como se cobró",
+      "confirm": "Devolver {amount}"
     }
   },
   "errors": {

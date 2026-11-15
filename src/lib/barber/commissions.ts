@@ -12,6 +12,10 @@
 //    explícito y ocurre UNA vez, al final, con money().
 //  · La comisión se calcula sobre el SUBTOTAL del ticket SIN propina. La
 //    propina es del barbero íntegra (BarberSale.tip) y jamás entra a la base.
+//  · Excepción (decisión de Rafael, 14-nov-2026): un corte cubierto por
+//    membresía o gratis por lealtad se cobra en $0, pero SÍ comisiona sobre
+//    el precio normal del servicio (cash.ts guarda ese precio solo para la
+//    base). El ingreso de la barbería no cambia: el ticket sigue en $0.
 //  · Base configurable por barbería (CommissionPolicy): "SERVICES" = solo
 //    servicios (+ descuentos del ticket); "SERVICES_AND_PRODUCTS" = también el
 //    retail. Ver getCommissionPolicy: hoy la política persiste en código
@@ -27,6 +31,14 @@
 //    Se genera UNA entrada por venta con barbero, congelada al cobrar
 //    (cambiar el esquema del barbero no reescribe el pasado).
 //  · periodKey = "YYYY-MM" en la zona horaria de la barbería.
+//  · «A pagar» es SOLO LO PENDIENTE (decisión de Rafael, 14-nov-2026): la
+//    comisión sin pagar + las propinas de los tickets aún no pagados − la
+//    renta de silla si todavía no se descontó. Lo ya pagado se muestra
+//    aparte. La cifra sale de UNA función (ledgerRowFor) que usan la tabla,
+//    el diálogo de pagar, el recibo y el propio pago: no pueden diferir.
+//    No hay columnas nuevas: una propina está pagada cuando lo está la
+//    entrada de comisión de su ticket (cada ticket con barbero tiene una), y
+//    la renta está descontada cuando el periodo ya tiene algún pago.
 // ═══════════════════════════════════════════════════════════════════════
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -36,6 +48,9 @@ import type {
   BarberCommissionType,
   BarberPaymentMethod,
 } from "@/lib/barber/types";
+// Núcleo puro (sin prisma): no rompe el DAG commissions ← inventory ← cash.
+import { isDepositLine, isMembershipLine } from "@/lib/barber/memberships-core";
+import { isLoyaltyLine } from "@/lib/barber/loyalty-core";
 
 // ── Dinero ──────────────────────────────────────────────────────────────
 
@@ -371,6 +386,68 @@ export function payoutFor(
   }
 }
 
+export interface PayoutSplit {
+  /** Lo que falta por pagarle (puede ser negativo en renta de silla). */
+  toPay: Money;
+  /** Lo que ya se le pagó en el periodo. */
+  paid: Money;
+  /** ¿La renta de silla del periodo ya se descontó en un pago anterior? */
+  rentDiscounted: boolean;
+  /** Renta que TODAVÍA se va a descontar de «a pagar» (null si no renta silla). */
+  rentPending: Money | null;
+}
+
+/**
+ * Parte lo del periodo en «a pagar» y «ya pagado».
+ *   COMMISSION → a pagar = comisión pendiente + propinas pendientes.
+ *   CHAIR_RENT → igual, menos la renta SI aún no se descontó. La renta se
+ *                descuenta UNA vez: en el primer pago del periodo. A partir
+ *                de ahí cuenta dentro de «ya pagado» y no vuelve a restar.
+ *   SALARY     → solo propinas (el sueldo va por nómina).
+ * Invariante: toPay + paid === payoutFor(total del periodo). Nada se pierde
+ * ni se cuenta dos veces al pasar de un lado al otro.
+ */
+export function splitPayout(
+  type: BarberCommissionType,
+  parts: {
+    commissionPending: Money;
+    commissionPaid: Money;
+    tipsPending: Money;
+    tipsPaid: Money;
+    chairRent: Money | null;
+    /** Ya hubo al menos un pago en el periodo. */
+    anyPaid: boolean;
+  },
+): PayoutSplit {
+  switch (type) {
+    case "COMMISSION":
+      return {
+        toPay: money(parts.commissionPending.plus(parts.tipsPending)),
+        paid: money(parts.commissionPaid.plus(parts.tipsPaid)),
+        rentDiscounted: false,
+        rentPending: null,
+      };
+    case "CHAIR_RENT": {
+      const rent = money(parts.chairRent ?? ZERO);
+      const rentDiscounted = parts.anyPaid;
+      return {
+        toPay: money(parts.commissionPending.plus(parts.tipsPending).minus(rentDiscounted ? ZERO : rent)),
+        paid: rentDiscounted ? money(parts.commissionPaid.plus(parts.tipsPaid).minus(rent)) : ZERO,
+        rentDiscounted,
+        rentPending: rentDiscounted ? ZERO : rent,
+      };
+    }
+    case "SALARY":
+    default:
+      return {
+        toPay: money(parts.tipsPending),
+        paid: money(parts.tipsPaid),
+        rentDiscounted: false,
+        rentPending: null,
+      };
+  }
+}
+
 // ── Lectura / pago (DB) ─────────────────────────────────────────────────
 
 export type CommissionPaidStatus = "EMPTY" | "PENDING" | "PARTIAL" | "PAID";
@@ -395,7 +472,24 @@ export interface CommissionSummaryRow {
   commissionTotal: number;
   commissionPaid: number;
   commissionPending: number;
+  /** Propinas de tickets cuya entrada ya está pagada. */
+  tipsPaid: number;
+  /** Propinas de tickets aún no pagados. */
+  tipsPending: number;
+  /** ¿La renta de silla del periodo ya se descontó en un pago anterior? */
+  chairRentDiscounted: boolean;
+  /** Renta que todavía se descuenta de «a pagar» (null si no renta silla). */
+  chairRentPending: number | null;
+  /**
+   * A PAGAR = solo lo pendiente: comisión sin pagar + propinas de tickets
+   * sin pagar − renta aún no descontada. Es la cifra de la tabla, del
+   * diálogo de pagar y del recibo.
+   */
   totalToPay: number;
+  /** YA PAGADO en el periodo (comisión + propinas pagadas − renta descontada). */
+  paidTotal: number;
+  /** totalToPay + paidTotal: todo lo que le toca por el periodo. */
+  periodTotal: number;
   paidStatus: CommissionPaidStatus;
   lastPaidAt: string | null;
   entryCount: number;
@@ -413,7 +507,10 @@ export interface CommissionSummary {
     tips: number;
     commissionTotal: number;
     commissionPending: number;
+    /** Σ «a pagar» (pendiente). */
     totalToPay: number;
+    /** Σ «ya pagado». */
+    paidTotal: number;
   };
 }
 
@@ -438,12 +535,197 @@ export function resolveCommissionScope(
   return { selfOnly: false, barberIds: requestedBarberId ? [requestedBarberId] : null };
 }
 
-function paidStatusOf(entryCount: number, pending: Money, paid: Money): CommissionPaidStatus {
-  if (entryCount === 0) return "EMPTY";
-  if (pending.isZero() && !paid.isZero()) return "PAID";
-  if (!pending.isZero() && !paid.isZero()) return "PARTIAL";
-  if (pending.isZero() && paid.isZero()) return "PAID"; // solo entradas de $0 (sueldo)
-  return "PENDING";
+/**
+ * Estado del periodo para un barbero.
+ *   EMPTY   → sin tickets.
+ *   PENDING → hay algo por pagar y todavía no se le ha pagado nada.
+ *   PARTIAL → ya hubo un pago y volvió a juntarse algo por pagar.
+ *   PAID    → nada pendiente (o solo entradas de $0 sin propina: sueldo fijo).
+ */
+function paidStatusOf(a: { entryCount: number; pendingCount: number; paidCount: number; pendingAmount: Money }): CommissionPaidStatus {
+  if (a.entryCount === 0) return "EMPTY";
+  if (a.pendingCount === 0 || a.pendingAmount.isZero()) return "PAID";
+  return a.paidCount > 0 ? "PARTIAL" : "PENDING";
+}
+
+// ── Libro del periodo: UNA sola cuenta para tabla, diálogo, recibo y pago ──
+
+type Db = Pick<Prisma.TransactionClient, "barber" | "barberSale" | "barberCommissionEntry">;
+
+const LEDGER_BARBER_SELECT = {
+  id: true,
+  name: true,
+  nickname: true,
+  isActive: true,
+  commissionType: true,
+  commissionPct: true,
+  chairRent: true,
+} satisfies Prisma.BarberSelect;
+
+type LedgerBarber = Prisma.BarberGetPayload<{ select: typeof LEDGER_BARBER_SELECT }>;
+
+interface LedgerSale {
+  id: string;
+  barberId: string | null;
+  subtotal: Prisma.Decimal;
+  tip: Prisma.Decimal;
+  notes: string | null;
+  items: Array<{ serviceId: string | null; productId: string | null; description: string; qty: number; unitPrice: Prisma.Decimal }>;
+}
+
+interface LedgerEntry {
+  id: string;
+  barberId: string;
+  saleId: string | null;
+  base: Prisma.Decimal;
+  amount: Prisma.Decimal;
+  paidAt: Date | null;
+}
+
+async function loadLedger(
+  db: Db,
+  args: { barbershopId: string; barberIds: string[] | null; periodKey: string; tz: string },
+): Promise<{ barbers: LedgerBarber[]; sales: LedgerSale[]; entries: LedgerEntry[] }> {
+  const { start, end } = periodRange(args.periodKey, args.tz);
+  const barberWhere: Prisma.BarberWhereInput = { barbershopId: args.barbershopId };
+  if (args.barberIds) barberWhere.id = { in: args.barberIds };
+
+  const [barbers, sales, entries] = await Promise.all([
+    db.barber.findMany({
+      where: barberWhere,
+      orderBy: [{ isActive: "desc" }, { sortOrder: "asc" }, { name: "asc" }],
+      select: LEDGER_BARBER_SELECT,
+    }),
+    db.barberSale.findMany({
+      where: {
+        barbershopId: args.barbershopId,
+        createdAt: { gte: start, lt: end },
+        barberId: args.barberIds ? { in: args.barberIds } : { not: null },
+      },
+      select: {
+        id: true,
+        barberId: true,
+        subtotal: true,
+        tip: true,
+        notes: true,
+        items: { select: { serviceId: true, productId: true, description: true, qty: true, unitPrice: true } },
+      },
+    }),
+    db.barberCommissionEntry.findMany({
+      where: {
+        barbershopId: args.barbershopId,
+        periodKey: args.periodKey,
+        ...(args.barberIds ? { barberId: { in: args.barberIds } } : {}),
+      },
+      select: { id: true, barberId: true, saleId: true, base: true, amount: true, paidAt: true },
+    }),
+  ]);
+  return { barbers, sales, entries };
+}
+
+/** Fila del barbero + los ids de las entradas que un pago marcaría ahora. */
+function ledgerRowFor(
+  b: LedgerBarber,
+  sales: LedgerSale[],
+  entries: LedgerEntry[],
+): { row: CommissionSummaryRow; pendingEntryIds: string[] } {
+  let ticketCount = 0;
+  let services = ZERO;
+  let products = ZERO;
+  let adjustments = ZERO;
+  let produced = ZERO;
+  let tips = ZERO;
+  let tipsPaid = ZERO;
+  let base = ZERO;
+  let total = ZERO;
+  let paid = ZERO;
+  let pending = ZERO;
+  let paidCount = 0;
+  let lastPaidAt: Date | null = null;
+  const pendingEntryIds: string[] = [];
+
+  // Un ticket está «pagado al barbero» cuando lo está su entrada de comisión.
+  const paidSaleIds = new Set<string>();
+  for (const e of entries) {
+    if (e.barberId !== b.id) continue;
+    base = base.plus(D(e.base));
+    total = total.plus(D(e.amount));
+    if (e.paidAt) {
+      paidCount += 1;
+      paid = paid.plus(D(e.amount));
+      if (e.saleId) paidSaleIds.add(e.saleId);
+      if (!lastPaidAt || e.paidAt > lastPaidAt) lastPaidAt = e.paidAt;
+    } else {
+      pending = pending.plus(D(e.amount));
+      pendingEntryIds.push(e.id);
+    }
+  }
+  const entryCount = paidCount + pendingEntryIds.length;
+
+  for (const s of sales) {
+    if (s.barberId !== b.id || isSaleCancelled(s)) continue;
+    ticketCount += 1;
+    tips = tips.plus(D(s.tip));
+    if (paidSaleIds.has(s.id)) tipsPaid = tipsPaid.plus(D(s.tip));
+    let depositCredit = ZERO;
+    for (const it of s.items) {
+      const t = lineTotal(it);
+      if (it.serviceId) services = services.plus(t);
+      else if (it.productId) products = products.plus(t);
+      // El anticipo aplicado no es un descuento ni baja la producción del
+      // barbero: el servicio se hizo completo (la otra parte ya se cobró).
+      else if (isDepositLine(it.description)) depositCredit = depositCredit.plus(t);
+      else adjustments = adjustments.plus(t);
+    }
+    produced = produced.plus(D(s.subtotal)).minus(depositCredit);
+  }
+  const tipsPending = tips.minus(tipsPaid);
+
+  const chairRent = b.commissionType === "CHAIR_RENT" ? money(b.chairRent ?? 0) : null;
+  const split = splitPayout(b.commissionType, {
+    commissionPending: pending,
+    commissionPaid: paid,
+    tipsPending,
+    tipsPaid,
+    chairRent,
+    anyPaid: paidCount > 0,
+  });
+
+  const row: CommissionSummaryRow = {
+    barberId: b.id,
+    barberName: b.name,
+    nickname: b.nickname,
+    isActive: b.isActive,
+    commissionType: b.commissionType,
+    commissionPct: b.commissionPct === null ? null : toNum(b.commissionPct),
+    chairRent: b.chairRent === null ? null : toNum(b.chairRent),
+    ticketCount,
+    servicesTotal: toNum(services),
+    productsTotal: toNum(products),
+    adjustmentsTotal: toNum(adjustments),
+    produced: toNum(produced),
+    tips: toNum(tips),
+    commissionBase: toNum(base),
+    commissionTotal: toNum(total),
+    commissionPaid: toNum(paid),
+    commissionPending: toNum(pending),
+    tipsPaid: toNum(tipsPaid),
+    tipsPending: toNum(tipsPending),
+    chairRentDiscounted: split.rentDiscounted,
+    chairRentPending: split.rentPending === null ? null : toNum(split.rentPending),
+    totalToPay: toNum(split.toPay),
+    paidTotal: toNum(split.paid),
+    periodTotal: toNum(split.toPay.plus(split.paid)),
+    paidStatus: paidStatusOf({
+      entryCount,
+      pendingCount: pendingEntryIds.length,
+      paidCount,
+      pendingAmount: pending.plus(tipsPending),
+    }),
+    lastPaidAt: lastPaidAt ? lastPaidAt.toISOString() : null,
+    entryCount,
+  };
+  return { row, pendingEntryIds };
 }
 
 export async function getCommissionSummary(
@@ -453,148 +735,20 @@ export async function getCommissionSummary(
 ): Promise<CommissionSummary> {
   assertBarberPermission(ctx, "commissions.view");
   const tz = ctx.barbershop.timezone || DEFAULT_BARBER_TZ;
-  const { start, end } = periodRange(periodKey, tz);
+  if (!isValidPeriodKey(periodKey)) {
+    throw new BarberCajaError(400, "INVALID_PERIOD", "Periodo inválido (usa YYYY-MM)");
+  }
   const scope = resolveCommissionScope(ctx, opts.barberId);
   const barbershopId = ctx.barbershopId;
   const policy = await getCommissionPolicy(barbershopId);
 
-  const barberWhere: Prisma.BarberWhereInput = { barbershopId };
-  if (scope.barberIds) barberWhere.id = { in: scope.barberIds };
-
-  const [barbers, sales, entries] = await Promise.all([
-    prisma.barber.findMany({
-      where: barberWhere,
-      orderBy: [{ isActive: "desc" }, { sortOrder: "asc" }, { name: "asc" }],
-      select: {
-        id: true,
-        name: true,
-        nickname: true,
-        isActive: true,
-        commissionType: true,
-        commissionPct: true,
-        chairRent: true,
-      },
-    }),
-    prisma.barberSale.findMany({
-      where: {
-        barbershopId,
-        createdAt: { gte: start, lt: end },
-        barberId: scope.barberIds ? { in: scope.barberIds } : { not: null },
-      },
-      select: {
-        id: true,
-        barberId: true,
-        subtotal: true,
-        tip: true,
-        notes: true,
-        items: { select: { serviceId: true, productId: true, qty: true, unitPrice: true } },
-      },
-    }),
-    prisma.barberCommissionEntry.findMany({
-      where: {
-        barbershopId,
-        periodKey,
-        ...(scope.barberIds ? { barberId: { in: scope.barberIds } } : {}),
-      },
-      select: { barberId: true, base: true, amount: true, paidAt: true },
-    }),
-  ]);
-
-  type Acc = {
-    ticketCount: number;
-    services: Money;
-    products: Money;
-    adjustments: Money;
-    produced: Money;
-    tips: Money;
-    base: Money;
-    total: Money;
-    paid: Money;
-    pending: Money;
-    entryCount: number;
-    lastPaidAt: Date | null;
-  };
-  const acc = new Map<string, Acc>();
-  const get = (id: string): Acc => {
-    let a = acc.get(id);
-    if (!a) {
-      a = {
-        ticketCount: 0,
-        services: ZERO,
-        products: ZERO,
-        adjustments: ZERO,
-        produced: ZERO,
-        tips: ZERO,
-        base: ZERO,
-        total: ZERO,
-        paid: ZERO,
-        pending: ZERO,
-        entryCount: 0,
-        lastPaidAt: null,
-      };
-      acc.set(id, a);
-    }
-    return a;
-  };
-
-  for (const s of sales) {
-    if (!s.barberId || isSaleCancelled(s)) continue;
-    const a = get(s.barberId);
-    a.ticketCount += 1;
-    a.produced = a.produced.plus(D(s.subtotal));
-    a.tips = a.tips.plus(D(s.tip));
-    for (const it of s.items) {
-      const t = lineTotal(it);
-      if (it.serviceId) a.services = a.services.plus(t);
-      else if (it.productId) a.products = a.products.plus(t);
-      else a.adjustments = a.adjustments.plus(t);
-    }
-  }
-  for (const e of entries) {
-    const a = get(e.barberId);
-    a.entryCount += 1;
-    a.base = a.base.plus(D(e.base));
-    a.total = a.total.plus(D(e.amount));
-    if (e.paidAt) {
-      a.paid = a.paid.plus(D(e.amount));
-      if (!a.lastPaidAt || e.paidAt > a.lastPaidAt) a.lastPaidAt = e.paidAt;
-    } else {
-      a.pending = a.pending.plus(D(e.amount));
-    }
-  }
-
-  const rows: CommissionSummaryRow[] = barbers.map((b) => {
-    const a = get(b.id);
-    const chairRent = b.commissionType === "CHAIR_RENT" ? money(b.chairRent ?? 0) : null;
-    const totalToPay = payoutFor(b.commissionType, {
-      commissionTotal: a.total,
-      tips: a.tips,
-      chairRent,
-    });
-    return {
-      barberId: b.id,
-      barberName: b.name,
-      nickname: b.nickname,
-      isActive: b.isActive,
-      commissionType: b.commissionType,
-      commissionPct: b.commissionPct === null ? null : toNum(b.commissionPct),
-      chairRent: b.chairRent === null ? null : toNum(b.chairRent),
-      ticketCount: a.ticketCount,
-      servicesTotal: toNum(a.services),
-      productsTotal: toNum(a.products),
-      adjustmentsTotal: toNum(a.adjustments),
-      produced: toNum(a.produced),
-      tips: toNum(a.tips),
-      commissionBase: toNum(a.base),
-      commissionTotal: toNum(a.total),
-      commissionPaid: toNum(a.paid),
-      commissionPending: toNum(a.pending),
-      totalToPay: toNum(totalToPay),
-      paidStatus: paidStatusOf(a.entryCount, a.pending, a.paid),
-      lastPaidAt: a.lastPaidAt ? a.lastPaidAt.toISOString() : null,
-      entryCount: a.entryCount,
-    };
+  const { barbers, sales, entries } = await loadLedger(prisma, {
+    barbershopId,
+    barberIds: scope.barberIds,
+    periodKey,
+    tz,
   });
+  const rows = barbers.map((b) => ledgerRowFor(b, sales, entries).row);
 
   const totals = rows.reduce(
     (t, r) => ({
@@ -603,8 +757,9 @@ export async function getCommissionSummary(
       commissionTotal: t.commissionTotal.plus(r.commissionTotal),
       commissionPending: t.commissionPending.plus(r.commissionPending),
       totalToPay: t.totalToPay.plus(r.totalToPay),
+      paidTotal: t.paidTotal.plus(r.paidTotal),
     }),
-    { produced: ZERO, tips: ZERO, commissionTotal: ZERO, commissionPending: ZERO, totalToPay: ZERO },
+    { produced: ZERO, tips: ZERO, commissionTotal: ZERO, commissionPending: ZERO, totalToPay: ZERO, paidTotal: ZERO },
   );
 
   return {
@@ -619,6 +774,7 @@ export async function getCommissionSummary(
       commissionTotal: toNum(totals.commissionTotal),
       commissionPending: toNum(totals.commissionPending),
       totalToPay: toNum(totals.totalToPay),
+      paidTotal: toNum(totals.paidTotal),
     },
   };
 }
@@ -631,6 +787,12 @@ export interface CommissionEntryRow extends BarberCommissionEntryDTO {
   saleCancelled: boolean;
   clientName: string | null;
   itemsSummary: string | null;
+  /**
+   * El ticket trae un corte cubierto por membresía o gratis por lealtad: se
+   * cobró en $0 pero comisiona sobre el precio normal del servicio (por eso
+   * la base puede ser mayor que el total del ticket).
+   */
+  coveredCut: boolean;
 }
 
 export function toCommissionEntryDTO(e: {
@@ -696,39 +858,87 @@ export async function getCommissionEntries(
     itemsSummary: e.sale
       ? e.sale.items.map((it) => (it.qty > 1 ? `${it.qty}× ${it.description}` : it.description)).join(", ") || null
       : null,
+    coveredCut: e.sale ? e.sale.items.some((it) => isMembershipLine(it.description) || isLoyaltyLine(it.description)) : false,
   }));
 }
 
+export interface CommissionPayoutResult {
+  /** Entradas (tickets) que este pago marcó. 0 = no había nada pendiente. */
+  marked: number;
+  paidAt: string;
+  /** Lo que cubrió ESTE pago: el «a pagar» que había justo antes de marcar. */
+  paidAmount: number;
+}
+
 /**
- * Marca como pagadas TODAS las entradas pendientes del barbero en el periodo
- * (paidAt = ahora). Devuelve cuántas se marcaron. Requiere commissions.manage;
- * el barbero debe ser de ESTA barbería (updateMany scopeado → 0 filas si no).
+ * Paga lo PENDIENTE del barbero en el periodo: marca (paidAt = ahora) todas
+ * sus entradas sin pagar y devuelve cuánto cubrió el pago — la misma cifra
+ * «a pagar» que enseñan la tabla, el diálogo y el recibo (ledgerRowFor).
+ *
+ * No paga doble:
+ *  · un candado por barbero+periodo pone en fila dos clics simultáneos; el
+ *    segundo ya no encuentra nada pendiente (marked 0, paidAmount 0);
+ *  · solo se marcan las entradas que se LEYERON como pendientes dentro de la
+ *    transacción: un ticket que entra justo después queda para el siguiente
+ *    pago, no se cuela en este sin haberse mostrado;
+ *  · `expectedTotal` (lo que la pantalla le enseñó a quien paga): si ya no
+ *    coincide con lo pendiente, 409 PAYOUT_CHANGED y no se marca nada.
+ *
+ * Requiere commissions.manage; el barbero debe ser de ESTA barbería.
  */
 export async function markCommissionsPaid(
   ctx: BarberContext,
-  params: { barberId: string; periodKey: string },
+  params: { barberId: string; periodKey: string; expectedTotal?: unknown },
   now: Date = new Date(),
-): Promise<{ marked: number; paidAt: string }> {
+): Promise<CommissionPayoutResult> {
   assertBarberPermission(ctx, "commissions.manage");
   if (!isValidPeriodKey(params.periodKey)) {
     throw new BarberCajaError(400, "INVALID_PERIOD", "Periodo inválido (usa YYYY-MM)");
   }
-  const barber = await prisma.barber.findFirst({
-    where: { id: params.barberId, barbershopId: ctx.barbershopId },
-    select: { id: true },
-  });
-  if (!barber) throw new BarberCajaError(404, "BARBER_NOT_FOUND", "Barbero no encontrado");
+  const barbershopId = ctx.barbershopId;
+  const tz = ctx.barbershop.timezone || DEFAULT_BARBER_TZ;
+  let expected: Money | null = null;
+  if (params.expectedTotal !== undefined && params.expectedTotal !== null) {
+    if (typeof params.expectedTotal !== "number" || !Number.isFinite(params.expectedTotal)) {
+      throw new BarberCajaError(400, "INVALID_AMOUNT", "expectedTotal: monto inválido");
+    }
+    expected = money(params.expectedTotal);
+  }
 
-  const r = await prisma.barberCommissionEntry.updateMany({
-    where: {
-      barbershopId: ctx.barbershopId,
-      barberId: params.barberId,
-      periodKey: params.periodKey,
-      paidAt: null,
+  return prisma.$transaction(
+    async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`dcb:pay:${barbershopId}:${params.barberId}:${params.periodKey}`}))`;
+
+      const { barbers, sales, entries } = await loadLedger(tx, {
+        barbershopId,
+        barberIds: [params.barberId],
+        periodKey: params.periodKey,
+        tz,
+      });
+      const barber = barbers[0];
+      if (!barber) throw new BarberCajaError(404, "BARBER_NOT_FOUND", "Barbero no encontrado");
+
+      const { row, pendingEntryIds } = ledgerRowFor(barber, sales, entries);
+      if (pendingEntryIds.length === 0) {
+        return { marked: 0, paidAt: now.toISOString(), paidAmount: 0 };
+      }
+      if (expected !== null && !expected.equals(money(row.totalToPay))) {
+        throw new BarberCajaError(
+          409,
+          "PAYOUT_CHANGED",
+          `Lo pendiente cambió mientras tenías la pantalla abierta: ahora son ${money(row.totalToPay).toFixed(2)}. Revisa la cifra y vuelve a marcar.`,
+          { totalToPay: row.totalToPay },
+        );
+      }
+
+      const r = await tx.barberCommissionEntry.updateMany({
+        where: { id: { in: pendingEntryIds }, barbershopId, barberId: params.barberId, paidAt: null },
+        data: { paidAt: now },
+      });
+      return { marked: r.count, paidAt: now.toISOString(), paidAmount: row.totalToPay };
     },
-    data: { paidAt: now },
-  });
-  return { marked: r.count, paidAt: now.toISOString() };
+    { maxWait: 5000, timeout: 15000 },
+  );
 }
 
 /** Recibo imprimible: resumen del barbero + sus entradas del periodo. */

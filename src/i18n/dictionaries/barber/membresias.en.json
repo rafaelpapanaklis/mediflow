@@ -100,7 +100,7 @@
     "pause": "Pause",
     "resume": "Resume",
     "cancel": "Cancel",
-    "cancelConfirm": "Cancel this membership? If it is charged by card, the automatic charge is stopped too.",
+    "cancelConfirm": "Cancel this membership? This does not refund the money or change the cash count: to undo the charge, cancel its ticket in Cash. If it is charged automatically by card, the automatic charge is stopped too.",
     "empty": {
       "all": "Nobody has a membership yet. Sell the first one to a regular.",
       "active": "No active memberships right now.",
@@ -112,7 +112,8 @@
       "title": "Renew membership",
       "body": "{client} · {plan}. The new period is chained to the current one, so no days are lost.",
       "howPaid": "How did they pay?",
-      "confirm": "Record payment and renew"
+      "confirm": "Record payment and renew",
+      "cashHint": "A {amount} ticket is recorded in the open shift in Cash. You cannot renew without an open shift."
     },
     "sellModal": {
       "title": "Sell a membership",
@@ -128,7 +129,8 @@
       "confirmOnline": "Charge the card",
       "onlineHint": "Stripe secure checkout opens. The membership activates once the charge is confirmed.",
       "recurring": "Charge automatically each period (subscription)",
-      "recurringHint": "The card is charged by itself each period, so you never have to chase anyone."
+      "recurringHint": "The card is charged by itself each period, so you never have to chase anyone.",
+      "cashHint": "A {amount} ticket is recorded in the open shift in Cash: it shows in the cash count, on Home and in Reports. You cannot sell without an open shift."
     }
   },
   "payment": {
@@ -136,7 +138,7 @@
     "SPEI": "Bank transfer (SPEI)",
     "CARD": "Card at the counter",
     "STRIPE": "Card online",
-    "chooseHint": "For cash and transfers you record the payment; we work out the expiry date and tell you when it is time to charge again."
+    "chooseHint": "For cash, transfers or card at the counter you record the payment; we work out the expiry date and tell you when it is time to charge again."
   },
   "status": {
     "ACTIVE": "Active",
@@ -190,14 +192,39 @@
       "applied": "Applied to the ticket",
       "refund": "Refund",
       "forfeit": "Keep",
-      "refundConfirm": "Refund the deposit? If it was paid by card, it is refunded through Stripe.",
-      "forfeitConfirm": "Keep the deposit? The client does not get it back."
+      "forfeitConfirm": "Keep the deposit? The client does not get it back.",
+      "howItWorks": "A paid deposit is taken off automatically when you charge the appointment. If you take it at the counter, it goes into the shift's cash count with its payment method.",
+      "notApplied": "Taken off when the appointment is charged",
+      "refundedTicket": "Deposit refunded. A \"Devolución de anticipo\" ticket was recorded in today's shift: it is already off the expected cash and the income.",
+      "refundedNoTicket": "Deposit refunded, but the refund was NOT recorded in the cash count (a database change is pending). Write this money going out in the note of today's count."
     },
     "depositStatus": {
       "PENDING": "Unpaid",
       "PAID": "Paid",
       "REFUNDED": "Refunded",
       "FORFEITED": "Kept"
+    },
+    "register": {
+      "open": "Record a deposit",
+      "title": "Record a deposit",
+      "intro": "For a deposit the client pays at the counter. You need an open shift: the money goes into the cash count with its payment method and is taken off automatically when you charge the appointment.",
+      "loading": "Loading appointments…",
+      "noAppointments": "There are no upcoming appointments without a deposit.",
+      "appointment": "Which appointment?",
+      "amount": "Deposit amount",
+      "amountHint": "Up to {total}, the appointment total.",
+      "tooHigh": "The deposit cannot be more than the appointment total.",
+      "howPaid": "How did they pay?",
+      "confirm": "Record deposit",
+      "done": "Deposit recorded. It is now in the shift's cash count."
+    },
+    "refund": {
+      "title": "Refund deposit",
+      "who": "You are about to refund {amount} to {client}.",
+      "warning": "Before you confirm: you need an open shift in Cash. The refund is recorded TODAY as a negative {amount} ticket, so it lowers this shift's expected cash (if you return it in cash) and the month's income. The shift where it was taken does not change.",
+      "howReturned": "How are you returning it?",
+      "sameMethod": "Same way it was taken",
+      "confirm": "Refund {amount}"
     }
   },
   "errors": {

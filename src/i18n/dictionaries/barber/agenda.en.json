@@ -32,6 +32,7 @@
     "noSchedule": "No hours set",
     "closed": "Outside working hours",
     "readOnly": "You can only view the schedule. Ask for permission to edit it.",
+    "readOnlyOwnBarber": "You can start and complete your confirmed visits; the front desk handles the rest.",
     "noScheduleAction": "Set their hours"
   },
   "summary": {

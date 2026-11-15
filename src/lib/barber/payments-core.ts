@@ -18,6 +18,56 @@ import {
 } from "@/lib/barber/memberships-core";
 
 // ═══════════════════════════════════════════════════════════════════════
+// Interruptor de «Tarjeta en línea» (membresías y anticipos)
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * APAGADO a propósito (14-nov-2026, decisión de Rafael).
+ *
+ * Hoy el cobro en línea usa la llave de Stripe de DaleControl y la barbería
+ * no tiene forma de conectar su propia cuenta desde el panel: el dinero del
+ * cliente final caería en la cuenta de DaleControl y nadie tiene pantalla
+ * para liquidarlo. Mientras eso no exista, «Tarjeta en línea» no se ofrece:
+ *   · Membresías → Vender: el método STRIPE no aparece.
+ *   · POST /api/barber/memberships/checkout responde ONLINE_CARD_DISABLED
+ *     antes de tocar Stripe.
+ *   · Anticipos: se esconden el interruptor «cobrar en línea» y el campo
+ *     acct_…, y la política se guarda siempre con onlineEnabled = false.
+ *
+ * El código de Stripe NO se borró: para volver a encenderlo basta poner esta
+ * constante en `true`. Efectivo, transferencia y tarjeta de mostrador no
+ * dependen de ella. Las suscripciones que ya existieran en Stripe siguen
+ * confirmándose (webhook y retorno de Checkout): apagar NO corta lo ya cobrado.
+ */
+export const BARBER_ONLINE_CARD_ENABLED: boolean = false;
+
+/** Texto único de «por ahora no disponible» (lo devuelven las APIs). */
+export const BARBER_ONLINE_CARD_DISABLED_MESSAGE =
+  "El cobro con tarjeta en línea por ahora no está disponible. Registra el pago en efectivo, por transferencia o con tarjeta en mostrador.";
+
+export const BARBER_ONLINE_CARD_DISABLED_CODE = "ONLINE_CARD_DISABLED";
+
+/** Métodos con los que se registra un cobro a mano en el mostrador. */
+export const BARBER_COUNTER_PAYMENT_METHODS = ["CASH", "SPEI", "CARD"] as const;
+export type BarberCounterPaymentMethod = (typeof BARBER_COUNTER_PAYMENT_METHODS)[number];
+
+export function isCounterPaymentMethod(value: unknown): value is BarberCounterPaymentMethod {
+  return (BARBER_COUNTER_PAYMENT_METHODS as readonly unknown[]).includes(value);
+}
+
+/**
+ * Métodos que ofrece «Membresías → Vender». La pantalla pinta EXACTAMENTE
+ * esta lista: con el interruptor apagado, «Tarjeta en línea» ni se dibuja.
+ */
+export function membershipSaleMethods(
+  onlineEnabled: boolean = BARBER_ONLINE_CARD_ENABLED,
+): Array<BarberCounterPaymentMethod | "STRIPE"> {
+  return onlineEnabled
+    ? [...BARBER_COUNTER_PAYMENT_METHODS, "STRIPE"]
+    : [...BARBER_COUNTER_PAYMENT_METHODS];
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // Frontera de webhooks — la lista que hace imposible el doble procesamiento
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -220,7 +270,9 @@ export function normalizeDepositPolicy(raw: unknown): BarberDepositPolicy {
     maxCents,
     refundWindowHours,
     policyText: typeof b.policyText === "string" ? b.policyText.trim().slice(0, 800) : "",
-    onlineEnabled: b.onlineEnabled === true,
+    // Con «Tarjeta en línea» apagada la política NUNCA queda en cobro en
+    // línea, venga lo que venga del formulario o de una fila vieja.
+    onlineEnabled: BARBER_ONLINE_CARD_ENABLED && b.onlineEnabled === true,
     // Solo aceptamos el formato real de Stripe Connect; cualquier otra cosa
     // se descarta en vez de guardarse a medias.
     stripeAccountId: /^acct_[A-Za-z0-9]+$/.test(stripeAccountRaw) ? stripeAccountRaw : "",

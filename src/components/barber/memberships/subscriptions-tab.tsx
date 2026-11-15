@@ -273,7 +273,10 @@ export function SubscriptionsTab({
               <button
                 type="button"
                 className="bmem-btn bmem-btn-ghost"
-                onClick={() => setRenewing(null)}
+                onClick={() => {
+                  setError(null);
+                  setRenewing(null);
+                }}
               >
                 {t("barber.membresias.planes.form.cancel")}
               </button>
@@ -312,6 +315,14 @@ export function SubscriptionsTab({
               }))}
               onChange={setRenewMethod}
             />
+            <p className="bmem-hint">
+              {t("barber.membresias.clientes.renewModal.cashHint", {
+                amount: formatCents(moneyToCents(renewing.price), "MXN", locale),
+              })}
+            </p>
+            {/* El error (p. ej. «abre un turno en Caja…») se ve AQUÍ, no
+                detrás del modal. */}
+            {error ? <p className="bmem-error">{error}</p> : null}
           </div>
         </Modal>
       ) : null}

@@ -74,14 +74,25 @@ export function ComisionesClient({
       const res = await fetch("/api/barber/commissions/pay", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ barberId: payRow.barberId, periodKey: summary.periodKey }),
+        // expectedTotal = la cifra que se le está enseñando a quien paga. Si
+        // entró un ticket nuevo entretanto, el servidor NO marca nada y avisa.
+        body: JSON.stringify({ barberId: payRow.barberId, periodKey: summary.periodKey, expectedTotal: payRow.totalToPay }),
       });
-      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      const data = (await res.json().catch(() => ({}))) as { error?: string; code?: string; marked?: number; paidAmount?: number };
       if (!res.ok) {
         toast.error(data.error ?? t("common.error"));
+        if (data.code === "PAYOUT_CHANGED") {
+          setPayRow(null);
+          setEntries({});
+          router.refresh();
+        }
         return;
       }
-      toast.success(t("comisiones.markedPaid"));
+      toast.success(
+        data.marked && data.marked > 0
+          ? t("comisiones.markedPaidAmount", { amount: fmtSigned(data.paidAmount ?? 0) })
+          : t("comisiones.nothingToPay"),
+      );
       setPayRow(null);
       setEntries({});
       router.refresh();
@@ -113,7 +124,7 @@ export function ComisionesClient({
         <KpiCard label={t("comisiones.kpiProduced")} value={fmtMoney(summary.totals.produced)} icon={Scissors} hero />
         <KpiCard label={t("comisiones.kpiCommission")} value={fmtMoney(summary.totals.commissionTotal)} icon={Percent} />
         <KpiCard label={t("comisiones.kpiTips")} value={fmtMoney(summary.totals.tips)} />
-        <KpiCard label={t("comisiones.kpiToPay")} value={fmtMoney(summary.totals.totalToPay)} icon={Wallet} hint={`${t("comisiones.policy")}: ${t(`comisiones.policy${summary.policy.base}`)}`} />
+        <KpiCard label={t("comisiones.kpiToPay")} value={fmtMoney(summary.totals.totalToPay)} icon={Wallet} hint={t("comisiones.kpiToPayHint", { paid: fmtMoney(summary.totals.paidTotal) })} />
       </div>
 
       <div className="bcaja-alert bcaja-alert--info">
@@ -136,6 +147,7 @@ export function ComisionesClient({
                   <th className="bcaja-num">{t("comisiones.colCommission")}</th>
                   <th className="bcaja-num">{t("comisiones.colTips")}</th>
                   <th className="bcaja-num">{t("comisiones.colRent")}</th>
+                  <th className="bcaja-num">{t("comisiones.colPaid")}</th>
                   <th className="bcaja-num">{t("comisiones.colToPay")}</th>
                   <th>{t("comisiones.colStatus")}</th>
                   <th />
@@ -159,6 +171,7 @@ export function ComisionesClient({
                         <td className="bcaja-num">{fmtMoney(r.commissionTotal)}</td>
                         <td className="bcaja-num">{fmtMoney(r.tips)}</td>
                         <td className="bcaja-num">{r.chairRent === null ? "—" : `−${fmtMoney(r.chairRent)}`}</td>
+                        <td className="bcaja-num">{r.paidTotal === 0 ? <span className="bcaja-muted">{fmtMoney(0)}</span> : fmtSigned(r.paidTotal)}</td>
                         <td className="bcaja-num"><strong style={{ color: r.totalToPay < 0 ? "var(--danger)" : undefined }}>{fmtSigned(r.totalToPay)}</strong></td>
                         <td><BadgeNew tone={STATUS_TONE[r.paidStatus]} dot>{t(`comisiones.status${r.paidStatus}`)}</BadgeNew></td>
                         <td>
@@ -179,7 +192,9 @@ export function ComisionesClient({
                       </tr>
                       {isOpen && (
                         <tr>
-                          <td colSpan={11} style={{ background: "var(--bg-elev-2)", whiteSpace: "normal" }}>
+                          <td colSpan={12} style={{ background: "var(--bg-elev-2)", whiteSpace: "normal" }}>
+                            <div className="bcaja-hint" style={{ marginBottom: 8 }}>{t("comisiones.toPayExplain")}</div>
+                            {r.commissionType === "CHAIR_RENT" && r.chairRentDiscounted && <div className="bcaja-hint" style={{ marginBottom: 8 }}>{t("comisiones.rentAlreadyDiscounted")}</div>}
                             {r.commissionType === "SALARY" && <div className="bcaja-hint" style={{ marginBottom: 8 }}>{t("comisiones.salaryNote")}</div>}
                             {r.commissionType === "CHAIR_RENT" && r.totalToPay < 0 && <div className="bcaja-hint" style={{ marginBottom: 8, color: "var(--danger)" }}>{t("comisiones.rentNegative")}</div>}
                             {rows === "loading" || !rows ? (
@@ -205,7 +220,11 @@ export function ComisionesClient({
                                     <tr key={e.id}>
                                       <td>{fmtDateTime(e.createdAt, tz)}</td>
                                       <td>{e.clientName ?? "—"}</td>
-                                      <td style={{ whiteSpace: "normal" }}>{e.itemsSummary ?? "—"}</td>
+                                      <td style={{ whiteSpace: "normal" }}>
+                                        {e.itemsSummary ?? "—"}
+                                        {/* Corte cubierto: el ticket vale $0 pero comisiona sobre el precio normal. */}
+                                        {e.coveredCut && <div className="bcaja-hint">{t("comisiones.entryCovered")}</div>}
+                                      </td>
                                       <td className="bcaja-num">{fmtMoney(e.base)}</td>
                                       <td className="bcaja-num">{fmtPct(e.pct)}</td>
                                       <td className="bcaja-num">{fmtMoney(e.amount)}</td>
@@ -241,9 +260,21 @@ export function ComisionesClient({
             </>
           }
         >
-          <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.6, color: "var(--text-2)" }}>
-            {t("comisiones.markPaidBody", { name: payRow.nickname || payRow.barberName, period: fmtPeriod(summary.periodKey, locale), amount: fmtMoney(payRow.commissionPending) })}
+          <p style={{ margin: "0 0 12px", fontSize: 13.5, lineHeight: 1.6, color: "var(--text-2)" }}>
+            {t("comisiones.markPaidBody", { name: payRow.nickname || payRow.barberName, period: fmtPeriod(summary.periodKey, locale) })}
           </p>
+          {/* La MISMA cifra de la columna «A pagar» y del recibo, con su desglose. */}
+          <div className="bcaja-totals">
+            <div className="bcaja-totals__row"><span>{t("comisiones.payCommission")}</span><span>{fmtMoney(payRow.commissionPending)}</span></div>
+            <div className="bcaja-totals__row"><span>{t("comisiones.payTips")}</span><span>{fmtMoney(payRow.tipsPending)}</span></div>
+            {payRow.chairRentPending !== null && payRow.chairRentPending > 0 && (
+              <div className="bcaja-totals__row"><span>{t("comisiones.payRent")}</span><span>−{fmtMoney(payRow.chairRentPending)}</span></div>
+            )}
+            <div className="bcaja-totals__row bcaja-totals__row--big"><span>{t("comisiones.colToPay")}</span><span>{fmtSigned(payRow.totalToPay)}</span></div>
+          </div>
+          {payRow.paidTotal !== 0 && (
+            <p className="bcaja-hint" style={{ margin: "10px 0 0" }}>{t("comisiones.payAlreadyPaid", { amount: fmtSigned(payRow.paidTotal) })}</p>
+          )}
         </BarberModal>
       )}
     </div>
