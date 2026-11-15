@@ -11,6 +11,8 @@ import type {
 } from "@/lib/barber/booking";
 import { sumMoneyBy } from "@/lib/barber/money";
 import { BookingDone, type BookingConfirmation } from "./booking-done";
+import { BarberCaptcha, type BarberCaptchaHandle } from "@/components/barber/captcha/barber-captcha";
+import { BARBER_CAPTCHA_ACTIONS } from "@/lib/barber/captcha-core";
 
 /* ═══════════════════════════════════════════════════════════════════════
    El embudo de reserva. MÓVIL PRIMERO: casi todo el tráfico llega desde
@@ -50,6 +52,11 @@ export interface BookingFlowProps {
   pinnedBarberId: string | null;
   /** Servicio ya elegido por la liga directa (?servicio=). */
   pinnedServiceId?: string | null;
+  /**
+   * Llave del SITIO de Cloudflare Turnstile, resuelta en el servidor. null =
+   * captcha apagado (faltan las variables): se reserva como siempre.
+   */
+  captchaSiteKey?: string | null;
 }
 
 const ANY = "any";
@@ -112,8 +119,10 @@ export function BookingFlow({
   whatsappConnected = true,
   pinnedBarberId,
   pinnedServiceId = null,
+  captchaSiteKey = null,
 }: BookingFlowProps) {
   const t = useMemo(() => getBarberT(shop.locale), [shop.locale]);
+  const captcha = useRef<BarberCaptchaHandle>(null);
 
   // Con un solo barbero no hay nada que preguntar; con la liga directa,
   // tampoco.
@@ -147,7 +156,7 @@ export function BookingFlow({
   const [website, setWebsite] = useState(""); // campo trampa
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // La barbería llegó al tope de reservas en línea de hoy (dailyCap).
+  // Sin captcha, la barbería llegó al tope de reservas en línea de hoy (dailyCap).
   const [capReached, setCapReached] = useState(false);
   const [done, setDone] = useState<BookingConfirmation | null>(null);
 
@@ -292,7 +301,15 @@ export function BookingFlow({
     if (!dateISO || !time) return setError(t("barber.reserva.errores.sinHora"));
 
     setSending(true);
+    let sentToken = false;
     try {
+      // Captcha: casi siempre el token ya está listo cuando la persona
+      // termina de escribir. Si no, se espera un momento aquí mismo.
+      const check = await captcha.current?.getToken();
+      // Sin token: el aviso con «Reintentar» lo pinta el propio captcha.
+      if (check && !check.ok) return;
+      const captchaToken = check?.ok ? check.token : null;
+      sentToken = !!captchaToken;
       const res = await fetch(`/api/barber/public/booking/${slug}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -305,6 +322,7 @@ export function BookingFlow({
           phone,
           notes: notes.trim() || null,
           website,
+          captchaToken,
         }),
       });
       const data = await res.json().catch(() => null);
@@ -339,6 +357,8 @@ export function BookingFlow({
     } catch {
       setError(t("barber.reserva.errores.sinRed"));
     } finally {
+      // El token es de UN solo uso: para el siguiente intento, uno nuevo.
+      if (sentToken) captcha.current?.reset();
       setSending(false);
     }
   };
@@ -694,6 +714,27 @@ export function BookingFlow({
                 />
               </label>
             </div>
+
+            {/* Captcha: casi nunca se ve; Cloudflare solo pinta una casilla si duda. */}
+            <BarberCaptcha
+              ref={captcha}
+              siteKey={captchaSiteKey}
+              action={BARBER_CAPTCHA_ACTIONS.booking}
+              locale={shop.locale}
+              labels={{
+                error: t("barber.reserva.captcha.error"),
+                retry: t("barber.reserva.captcha.reintentar"),
+              }}
+              fallback={
+                <NoScheduleNotice
+                  title={t("barber.reserva.captcha.ayudaTitulo")}
+                  body={t("barber.reserva.captcha.ayudaCuerpo")}
+                  waHref={waHref}
+                  telHref={telHref}
+                  {...contactLabels}
+                />
+              }
+            />
 
             <button type="submit" className="dcb-btn dcb-btn--primary" disabled={sending}>
               {sending ? (

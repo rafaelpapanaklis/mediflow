@@ -12,6 +12,7 @@ import {
 } from "@/lib/barber/memberships-core";
 import { SellMembershipModal } from "./sell-membership-modal";
 import { Badge, Chips, EmptyState, Modal, apiCall, type BadgeTone } from "./ui";
+import { formatBarberPhone } from "@/lib/barber/phone-format";
 
 export type SubsFilter = "all" | "active" | "soon" | "expired";
 
@@ -160,7 +161,7 @@ export function SubscriptionsTab({
               <div key={m.id} className={`bmem-row${rowClass}`}>
                 <div className="bmem-cell">
                   <span className="bmem-cell-main">{m.clientName}</span>
-                  <span className="bmem-cell-sub">{m.clientPhone}</span>
+                  <span className="bmem-cell-sub">{formatBarberPhone(m.clientPhone)}</span>
                 </div>
 
                 <div className="bmem-cell">

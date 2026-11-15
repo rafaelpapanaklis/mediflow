@@ -40,7 +40,28 @@ import {
   reminderInvalidationData,
 } from "@/lib/barber/agenda";
 import { canTransition, type BarberAppointmentStatus } from "@/lib/barber/types";
-import { advisoryLockKey } from "@/lib/barber/booking-core";
+import {
+  advisoryLockKey,
+  barberTodayISO,
+  barberTzLocalToUtc,
+} from "@/lib/barber/booking-core";
+import {
+  BARBER_WA_ACK_MARK,
+  barberWaAckText,
+  decideBarberWaAck,
+  isBarberWaAckRow,
+  type BarberWaAckDecision,
+} from "@/lib/barber/wa-acuse-core";
+import { getBarberWaAck } from "@/lib/barber/wa-acuse";
+import { wabaIdsFromDebugToken } from "@/lib/barber/wa-signup-core";
+import {
+  decideBarberTemplateNameTaken,
+  isBarberTemplateNameTaken,
+  pickBarberTemplateRow,
+  readBarberTemplateFailure,
+  type BarberTemplateFailure,
+  type MetaTemplateRow,
+} from "@/lib/barber/wa-plantillas-core";
 import {
   BARBER_WA_ARCHIVE_MARK,
   BARBER_WA_CLAIM_LOST_MESSAGE,
@@ -248,6 +269,48 @@ async function loadShop(barbershopId: string): Promise<ShopWaRow | null> {
   })) as ShopWaRow | null;
 }
 
+/* ─────────────── descifrar el token SIN tumbar a nadie ─────────────── */
+
+/**
+ * `decryptField` (helper compartido con el dental, NO se toca) LANZA si el
+ * dato se cifró con otra llave: llave rotada, un entorno con otra
+ * DATA_ENCRYPTION_KEY (panel.108 con un token de producción, 15-nov-2026),
+ * dato dañado o la variable sin poner. Antes eso tumbaba /barber/whatsapp
+ * entera («No se pudo mostrar esta pantalla») y podía tumbar el cron.
+ *
+ * Aquí se envuelve: el error se registra (sin el token, como mucho una vez
+ * cada 10 min por barbería y proceso) y se devuelve `ok: false`. Quien
+ * llama trata eso como «sin credenciales» = hay que volver a conectar.
+ */
+const TOKEN_WARN_EVERY_MS = 10 * 60 * 1000;
+const tokenWarnedAt = new Map<string, number>();
+
+export function readBarberWaSecret(
+  raw: string | null | undefined,
+  who: string,
+): { ok: true; value: string | null } | { ok: false } {
+  if (!raw) return { ok: true, value: null };
+  try {
+    return { ok: true, value: decryptField(raw) ?? raw };
+  } catch (err) {
+    const now = Date.now();
+    if (now - (tokenWarnedAt.get(who) ?? 0) > TOKEN_WARN_EVERY_MS) {
+      tokenWarnedAt.set(who, now);
+      console.error(
+        `[barber/wa] no se pudo descifrar el token de WhatsApp (${who}): ` +
+          `${err instanceof Error ? err.message : "error"}. Se trata como «hay que volver a conectar».`,
+      );
+    }
+    return { ok: false };
+  }
+}
+
+/** ¿Esta barbería tiene un token guardado que NO se puede descifrar? */
+export function barberWaTokenUnreadable(shop: Pick<ShopWaRow, "id" | "whatsappToken">): boolean {
+  if (!shop.whatsappToken) return false;
+  return readBarberWaSecret(shop.whatsappToken, shop.id).ok === false;
+}
+
 /**
  * Credenciales con las que sale un mensaje de ESTA barbería.
  *
@@ -266,7 +329,10 @@ export function resolveSenderCredentials(shop: ShopWaRow): BarberWaCredentials |
 
   if (shop.whatsappSenderMode === "OWN_WABA" || !platformSenderEnabled()) {
     if (!shop.phoneNumberId || !shop.whatsappToken) return null;
-    const token = decryptField(shop.whatsappToken) ?? shop.whatsappToken;
+    // Nunca lanza: un token que no se puede descifrar = sin credenciales.
+    const read = readBarberWaSecret(shop.whatsappToken, shop.id);
+    if (read.ok === false) return null;
+    const token = read.value;
     if (!token) return null;
     return { ...base, phoneNumberId: shop.phoneNumberId, accessToken: token, wabaId: shop.wabaId };
   }
@@ -275,10 +341,12 @@ export function resolveSenderCredentials(shop: ShopWaRow): BarberWaCredentials |
   const phoneNumberId = process.env.BARBER_WA_PLATFORM_PHONE_NUMBER_ID;
   const rawToken = process.env.BARBER_WA_PLATFORM_TOKEN;
   if (!phoneNumberId || !rawToken) return null;
+  const platform = readBarberWaSecret(rawToken, "plataforma");
+  if (platform.ok === false || !platform.value) return null;
   return {
     ...base,
     phoneNumberId,
-    accessToken: decryptField(rawToken) ?? rawToken,
+    accessToken: platform.value,
     wabaId: process.env.BARBER_WA_PLATFORM_WABA_ID ?? null,
   };
 }
@@ -327,8 +395,27 @@ export async function getBarberWaConnection(barbershopId: string): Promise<Barbe
       : "UNVERIFIED"
     : "DISCONNECTED";
   let problem: string | null = null;
+  let problemCode: BarberWaConnectionDTO["problemCode"] = null;
   let displayPhone: string | null = null;
   let webhookSubscribed: boolean | null = null;
+
+  // El token guardado no se puede descifrar (llave rotada, otro entorno):
+  // la conexión queda en «hay que volver a conectar» y el resto de la
+  // pantalla se pinta igual. Ni se consulta a Meta: no hay con qué.
+  if (connected && barberWaTokenUnreadable(shop)) {
+    return {
+      state: "ERROR",
+      senderMode: shop.whatsappSenderMode,
+      displayPhone: null,
+      wabaId: shop.wabaId,
+      phoneNumberId: shop.phoneNumberId,
+      verifiedAt: shop.whatsappVerifiedAt ? shop.whatsappVerifiedAt.toISOString() : null,
+      problem: "No pudimos leer la llave de tu conexión con WhatsApp. Vuelve a conectar tu número.",
+      problemCode: "TOKEN_UNREADABLE",
+      canConnect,
+      webhookSubscribed: null,
+    };
+  }
 
   if (connected) {
     // Último fallo REAL de Meta (excluye los recordatorios que invalidamos
@@ -393,6 +480,7 @@ export async function getBarberWaConnection(barbershopId: string): Promise<Barbe
     phoneNumberId: shop.phoneNumberId,
     verifiedAt: shop.whatsappVerifiedAt ? shop.whatsappVerifiedAt.toISOString() : null,
     problem,
+    problemCode,
     canConnect,
     webhookSubscribed,
   };
@@ -451,6 +539,57 @@ export async function barberWabaOwnsPhone(
     return false;
   }
   return false;
+}
+
+/**
+ * Los números que `GET /{wabaId}/phone_numbers` lista con ESE token (hasta
+ * 5 páginas). null = Meta no contestó bien (no es lo mismo que «ninguno»).
+ */
+export async function listBarberWabaPhones(wabaId: string, accessToken: string): Promise<string[] | null> {
+  let url: string | null = `${GRAPH}/${encodeURIComponent(wabaId)}/phone_numbers?fields=id&limit=100`;
+  const out: string[] = [];
+  try {
+    for (let page = 0; url && page < 5; page++) {
+      const res: Response = await fetch(url, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        signal: AbortSignal.timeout(15000),
+      });
+      if (!res.ok) return null;
+      const json: any = await res.json().catch(() => null);
+      for (const n of Array.isArray(json?.data) ? json.data : []) {
+        const id = String(n?.id ?? "");
+        if (id && !out.includes(id)) out.push(id);
+      }
+      const next = json?.paging?.next;
+      url = typeof next === "string" && next.startsWith(`${GRAPH}/`) ? next : null;
+    }
+  } catch {
+    return null;
+  }
+  return out;
+}
+
+/**
+ * Las cuentas de WhatsApp Business que la persona compartió con la app al
+ * terminar el Embedded Signup, leídas del propio token (`GET /debug_token`,
+ * `granular_scopes`). Es la vía que Meta documenta para cuando el navegador
+ * no recibió el evento FINISH con el waba_id. [] si Meta no contesta.
+ */
+export async function sharedBarberWabaIds(
+  accessToken: string,
+  app: { id: string; secret: string },
+): Promise<string[]> {
+  try {
+    const res = await fetch(
+      `${GRAPH}/debug_token?input_token=${encodeURIComponent(accessToken)}` +
+        `&access_token=${encodeURIComponent(`${app.id}|${app.secret}`)}`,
+      { signal: AbortSignal.timeout(15000) },
+    );
+    if (!res.ok) return [];
+    return wabaIdsFromDebugToken(await res.json().catch(() => null));
+  } catch {
+    return [];
+  }
 }
 
 /**
@@ -692,8 +831,55 @@ export interface BarberTemplateStatus {
   category: string;
   /** APPROVED | PENDING | REJECTED | MISSING */
   status: string;
+  /**
+   * Código de rechazo de Meta (INVALID_FORMAT…), SOLO si está rechazada y
+   * hay un motivo real. Nunca «NONE». La pantalla lo traduce.
+   */
   reason: string | null;
   optional: boolean;
+  /** Idioma en el que Meta la tiene (null si falta). */
+  language?: string | null;
+  /** true = Meta solo la tiene en OTRO idioma: con ésa no se puede mandar. */
+  otherLanguage?: boolean;
+}
+
+/**
+ * TODAS las plantillas de la WABA, siguiendo la paginación de Meta (hasta 10
+ * páginas). Antes se leía una sola página: si la nuestra caía en la segunda,
+ * la pantalla decía «Sin dar de alta» aunque Meta la tuviera. Lanza
+ * WhatsAppApiError si Meta contesta mal.
+ */
+async function fetchBarberTemplateRows(
+  creds: BarberWaCredentials,
+  opts: { name?: string } = {},
+): Promise<MetaTemplateRow[]> {
+  const rows: MetaTemplateRow[] = [];
+  let url: string | null =
+    `${GRAPH}/${encodeURIComponent(creds.wabaId!)}/message_templates?limit=200` +
+    `&fields=name,status,category,language,rejected_reason` +
+    (opts.name ? `&name=${encodeURIComponent(opts.name)}` : "");
+  for (let page = 0; url && page < 10; page++) {
+    const res: Response = await fetch(url, {
+      headers: { Authorization: `Bearer ${creds.accessToken}` },
+      signal: AbortSignal.timeout(15000),
+    });
+    const json: any = await res.json().catch(() => ({}));
+    if (!res.ok) throw parseWaError(json, res.status);
+    for (const row of Array.isArray(json?.data) ? json.data : []) {
+      if (typeof row?.name !== "string") continue;
+      // Con `name=` Meta busca por PARECIDO: solo cuenta el nombre exacto.
+      if (opts.name && row.name !== opts.name) continue;
+      rows.push({
+        name: row.name,
+        status: String(row.status ?? "PENDING"),
+        language: typeof row.language === "string" ? row.language : null,
+        rejectedReason: typeof row.rejected_reason === "string" ? row.rejected_reason : null,
+      });
+    }
+    const next = json?.paging?.next;
+    url = typeof next === "string" && next.startsWith(`${GRAPH}/`) ? next : null;
+  }
+  return rows;
 }
 
 /**
@@ -752,7 +938,9 @@ export async function listBarberTemplates(barbershopId: string): Promise<{
   if (!creds || !creds.wabaId) {
     return {
       ok: false,
-      reason: "Conecta el WhatsApp de la barbería para poder dar de alta las plantillas.",
+      reason: barberWaTokenUnreadable(shop)
+        ? "No pudimos leer la llave de tu conexión con WhatsApp. Vuelve a conectar tu número para ver y dar de alta las plantillas."
+        : "Conecta el WhatsApp de la barbería para poder dar de alta las plantillas.",
       templates: BARBER_WA_TEMPLATES.map((t) => ({
         kind: t.kind,
         name: t.name,
@@ -764,21 +952,9 @@ export async function listBarberTemplates(barbershopId: string): Promise<{
     };
   }
 
-  const byName = new Map<string, { status: string; reason: string | null }>();
+  let rows: MetaTemplateRow[] = [];
   try {
-    const res = await fetch(
-      `${GRAPH}/${encodeURIComponent(creds.wabaId)}/message_templates?limit=200&fields=name,status,category,rejected_reason`,
-      { headers: { Authorization: `Bearer ${creds.accessToken}` }, signal: AbortSignal.timeout(15000) },
-    );
-    const json: any = await res.json().catch(() => ({}));
-    if (!res.ok) throw parseWaError(json, res.status);
-    for (const row of Array.isArray(json?.data) ? json.data : []) {
-      if (typeof row?.name !== "string") continue;
-      byName.set(row.name, {
-        status: String(row.status ?? "PENDING").toUpperCase(),
-        reason: typeof row.rejected_reason === "string" ? row.rejected_reason : null,
-      });
-    }
+    rows = await fetchBarberTemplateRows(creds);
   } catch (err) {
     return {
       ok: false,
@@ -790,7 +966,9 @@ export async function listBarberTemplates(barbershopId: string): Promise<{
   return {
     ok: true,
     templates: BARBER_WA_TEMPLATES.map((t) => {
-      const found = byName.get(t.name);
+      // La del idioma con el que mandamos; si solo hay otra, marcada. El
+      // motivo de rechazo nunca es «NONE» (pickBarberTemplateRow lo filtra).
+      const found = pickBarberTemplateRow(rows, t.name, t.lang);
       return {
         kind: t.kind,
         name: t.name,
@@ -798,6 +976,8 @@ export async function listBarberTemplates(barbershopId: string): Promise<{
         status: found?.status ?? "MISSING",
         reason: found?.reason ?? null,
         optional: t.optional,
+        language: found?.language ?? null,
+        otherLanguage: found?.otherLanguage ?? false,
       };
     }),
   };
@@ -817,7 +997,16 @@ export async function listBarberTemplates(barbershopId: string): Promise<{
 export async function provisionBarberTemplates(
   barbershopId: string,
   opts: { includeMarketing?: boolean } = {},
-): Promise<{ ok: boolean; reason?: string; created: string[]; failed: { name: string; error: string }[] }> {
+): Promise<{
+  ok: boolean;
+  reason?: string;
+  created: string[];
+  /**
+   * Las que Meta no aceptó, con TODO lo que dijo (código, subcódigo,
+   * error_user_title, error_user_msg). `error` es el texto de siempre.
+   */
+  failed: Array<BarberTemplateFailure & { error: string; kind: BarberWaKind }>;
+}> {
   const shop = await loadShop(barbershopId);
   if (!shop) return { ok: false, reason: "No se encontró la barbería.", created: [], failed: [] };
   const creds = resolveSenderCredentials(shop);
@@ -833,12 +1022,17 @@ export async function provisionBarberTemplates(
   }
 
   const current = await listBarberTemplates(barbershopId);
+  // Existe = Meta la tiene EN NUESTRO IDIOMA (con el estado que sea). Si solo
+  // la tiene en otro, se pide la versión es_MX: Meta deja varios idiomas con
+  // el mismo nombre.
   const existing = new Set(
-    current.ok ? current.templates.filter((t) => t.status !== "MISSING").map((t) => t.name) : [],
+    current.ok
+      ? current.templates.filter((t) => t.status !== "MISSING" && !t.otherLanguage).map((t) => t.name)
+      : [],
   );
 
   const created: string[] = [];
-  const failed: { name: string; error: string }[] = [];
+  const failed: Array<BarberTemplateFailure & { error: string; kind: BarberWaKind }> = [];
 
   for (const tpl of BARBER_WA_TEMPLATES) {
     if (tpl.optional && !opts.includeMarketing) continue;
@@ -859,13 +1053,46 @@ export async function provisionBarberTemplates(
         continue;
       }
       const err = parseWaError(json, res.status);
-      // 2388023 / "already exists": el nombre ya está en la WABA. No es fallo.
-      if (/already exists/i.test(err.message) || err.code === 2388023) {
+      // Lo útil de Meta suele venir en error_user_msg, no en message.
+      const detail = readBarberTemplateFailure(tpl.name, tpl.category, json);
+      // «Ya existe»: NUNCA en silencio. Se busca POR NOMBRE para ver cómo
+      // la tiene Meta. Si está y sirve, no hay nada que avisar (la lista la
+      // enseña con su estado real); si no la lista (se está borrando) o está
+      // en un estado/idioma que no sirve, se avisa como fallo.
+      if (isBarberTemplateNameTaken(detail)) {
+        let found: ReturnType<typeof pickBarberTemplateRow> = null;
+        try {
+          found = pickBarberTemplateRow(await fetchBarberTemplateRows(creds, { name: tpl.name }), tpl.name, tpl.lang);
+        } catch {
+          found = null;
+        }
+        const verdict = decideBarberTemplateNameTaken(found);
+        if (verdict === "ok") continue;
+        failed.push({
+          ...detail,
+          kind: tpl.kind,
+          taken: verdict,
+          foundStatus: found?.status ?? null,
+          foundLanguage: found?.language ?? null,
+          error: detail.userMsg ?? err.message,
+        });
         continue;
       }
-      failed.push({ name: tpl.name, error: err.message });
+      failed.push({
+        ...detail,
+        kind: tpl.kind,
+        error: detail.userMsg ?? err.message,
+        code: detail.code ?? (res.status === 401 ? 190 : null),
+      });
     } catch (e) {
-      failed.push({ name: tpl.name, error: e instanceof Error ? e.message : "Error de red" });
+      failed.push({
+        name: tpl.name,
+        kind: tpl.kind,
+        category: tpl.category,
+        network: true,
+        message: e instanceof Error ? e.name : null,
+        error: e instanceof Error ? e.message : "Error de red",
+      });
     }
   }
 
@@ -2428,8 +2655,16 @@ export async function ingestBarberInbound(value: any, msg: any): Promise<boolean
   // El BOT es el último en la fila, a propósito: primero manda lo que el
   // cliente respondió a un recordatorio nuestro (eso ya tiene dueño y no
   // se le consulta a ninguna IA). Solo lo que nadie atendió llega al bot.
+  let botAttended = false;
   if (!handled) {
-    await runBotIfEnabled(shop, creds, phone, rawText, { deadlineAt, inboundId: stored.id });
+    botAttended = await runBotIfEnabled(shop, creds, phone, rawText, { deadlineAt, inboundId: stored.id });
+  }
+
+  // ACUSE AUTOMÁTICO (opcional, apagado por defecto): una frase escrita en
+  // respuesta al recordatorio que NADIE atendió recibe «Recibimos tu
+  // mensaje…». Las reglas viven en decideBarberWaAck (wa-acuse-core.ts).
+  if (!handled && !botAttended && !fromVoice && !tappedId) {
+    await maybeSendBarberWaAck(shop, creds, phone, client?.id ?? null);
   }
   return true;
 }
@@ -2705,7 +2940,10 @@ async function runBotIfEnabled(
   phone: string,
   text: string,
   opts: { deadlineAt: number; inboundId: string },
-): Promise<void> {
+): Promise<boolean> {
+  // Devuelve true si el BOT atendió este mensaje (contestó, o lo contesta
+  // otro turno suyo). false = nadie del bot lo atendió: apagado, pausado sin
+  // respuesta, o falló. Lo usa el acuse automático para no hablar encima.
   let seenUpTo: Date | null = null;
   let claimed = false;
   let answered = false;
@@ -2713,10 +2951,11 @@ async function runBotIfEnabled(
     const { runBarberBotTurn, barberBotIsOn } = await import("@/lib/barber/bot");
     // Con el bot apagado no hay turno que ordenar: ni candado ni marcas (la
     // enorme mayoría de los mensajes de una barbería sin bot pasan por aquí).
-    if (!(await barberBotIsOn(shop.id))) return;
+    if (!(await barberBotIsOn(shop.id))) return false;
 
     const claim = await claimBotTurn(shop.id, phone, opts.inboundId, opts.deadlineAt);
-    if (claim.decision !== "run") return;
+    // Otro turno del bot contesta por éste (o ya no da tiempo): el bot lo tiene.
+    if (claim.decision !== "run") return true;
     claimed = true;
     seenUpTo = claim.seenUpTo;
 
@@ -2731,7 +2970,7 @@ async function runBotIfEnabled(
       unanswered: true,
     });
     answered = true;
-    if (!turn.reply) return;
+    if (!turn.reply) return false;
 
     // Lo que el turno YA HIZO (agendó, canceló, movió, pasó con una persona)
     // o un aviso fijo (fuera de horario, tope) se dice siempre. Solo una
@@ -2748,15 +2987,132 @@ async function runBotIfEnabled(
         select: { id: true, createdAt: true, errorMessage: true },
       });
       if (barberBotReplyIsStale(seenUpTo, others, new Date())) {
+        // La respuesta nació vieja: el turno del mensaje más nuevo contesta
+        // por todos. El bot lo tiene.
         answered = false;
-        return;
+        return true;
       }
     }
     await replyInline(shop, creds, phone, turn.reply, { options: turn.options });
+    return true;
   } catch (err) {
     console.error(`[barber/wa] el bot no pudo atender (${shop.id}):`, err);
+    return false;
   } finally {
     if (claimed) await releaseBotTurn(shop.id, phone, opts.inboundId, answered ? seenUpTo : null);
+  }
+}
+
+/**
+ * ACUSE AUTOMÁTICO (opcional): «Recibimos tu mensaje. En un momento te
+ * contestamos.» — o el texto que escribió la barbería.
+ *
+ * Solo se llama con una frase ESCRITA que nadie atendió (ni el recordatorio,
+ * ni la baja, ni el bot). Lo demás lo decide decideBarberWaAck: ajuste
+ * encendido, que lo último que le dijimos sea el recordatorio (y reciente),
+ * que haya cupo y conexión.
+ *
+ * UNA vez por conversación y por día: «¿ya salió un acuse desde el
+ * recordatorio o desde que empezó el día de la barbería?» y «guárdalo» van
+ * dentro de una transacción con candado por (barbería, teléfono). Dos
+ * mensajes seguidos del cliente no sacan dos acuses.
+ *
+ * Texto libre: el cliente acaba de escribir, la ventana de 24 h está
+ * abierta. Gasta del cupo como cualquier mensaje. Nunca lanza: un acuse que
+ * no sale no puede tumbar la ingesta.
+ */
+async function maybeSendBarberWaAck(
+  shop: ShopWaRow,
+  creds: BarberWaCredentials | null,
+  phone: string,
+  clientId: string | null,
+): Promise<BarberWaAckDecision> {
+  try {
+    const { settings } = await getBarberWaAck(shop.id);
+    // La enorme mayoría de las barberías lo tienen apagado: una sola lectura.
+    if (!settings.enabled) return "off";
+
+    const now = new Date();
+    const reminder = barberWaTemplate("reminder");
+    const last = await lastWordTo(shop.id, phone, reminder.name);
+    const quota = await getBarberWaQuota(shop.id);
+    const decision = decideBarberWaAck({
+      settings,
+      connected: !!creds,
+      writtenText: true,
+      handled: false,
+      botAttended: false,
+      lastWord: last ? { templateName: last.templateName, createdAt: last.createdAt } : null,
+      reminderTemplate: reminder.name,
+      alreadyAcked: false,
+      quotaFits: barberWaFits(quota.limit, quota.used),
+      now,
+    });
+    if (decision !== "send" || !creds || !last) return decision;
+
+    // «Una vez por conversación y por día»: desde el recordatorio que abrió
+    // esta conversación, o desde el inicio del día de la barbería, lo que
+    // sea ANTES.
+    const dayStart = barberTzLocalToUtc(barberTodayISO(shop.timezone, now), 0, 0, shop.timezone);
+    const since = last.createdAt.getTime() < dayStart.getTime() ? last.createdAt : dayStart;
+    const body = barberWaAckText(settings);
+
+    const [lockA, lockB] = advisoryLockKey(`barber:wa:acuse:${shop.id}:${phone}`);
+    const row = await prisma.$transaction(
+      async (tx) => {
+        await tx.$executeRawUnsafe(
+          `SELECT pg_advisory_xact_lock(${Math.trunc(lockA)}, ${Math.trunc(lockB)})`,
+        );
+        const already = await tx.barberMessage.count({
+          where: {
+            barbershopId: shop.id,
+            phone,
+            direction: "OUTBOUND",
+            templateName: BARBER_WA_ACK_MARK,
+            // Uno que Meta rechazó no cuenta: el siguiente mensaje lo reintenta.
+            status: { not: "FAILED" },
+            createdAt: { gte: since },
+          },
+        });
+        if (already > 0) return null;
+        return tx.barberMessage.create({
+          data: {
+            barbershopId: shop.id,
+            direction: "OUTBOUND",
+            phone,
+            body,
+            status: "PENDING",
+            // Nace RECLAMADA, como las respuestas en línea: el drenado de la
+            // cola no puede mandarla una segunda vez.
+            errorMessage: barberWaClaimMark(),
+            templateName: BARBER_WA_ACK_MARK,
+            clientId,
+          },
+          select: { id: true },
+        });
+      },
+      { maxWait: 10_000, timeout: 15_000 },
+    );
+    if (!row) return "alreadyAcked";
+
+    try {
+      const { wamid } = await sendText(creds, phone, body);
+      await prisma.barberMessage.update({
+        where: { id: row.id },
+        data: { status: "SENT", waMessageId: wamid, errorMessage: null },
+      });
+      await consumeQuota(shop);
+      return "send";
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "No se pudo enviar el acuse";
+      await prisma.barberMessage
+        .update({ where: { id: row.id }, data: { status: "FAILED", errorMessage: message } })
+        .catch(() => {});
+      return "notConnected";
+    }
+  } catch (err) {
+    console.error(`[barber/wa] no se pudo resolver el acuse automático (${shop.id}):`, err);
+    return "off";
   }
 }
 
@@ -2784,7 +3140,17 @@ function deliveredOutboundWhere(barbershopId: string, phone: string) {
     status: { in: ["SENT", "DELIVERED", "READ"] as ("SENT" | "DELIVERED" | "READ")[] },
     // OR explícito: en SQL `NOT (NULL LIKE 'sys:%')` es NULL y dejaría
     // fuera justo las filas sin templateName, que son las respuestas.
-    OR: [{ templateName: null }, { NOT: { templateName: { startsWith: BARBER_WA_SYS_PREFIX } } }],
+    // El ACUSE automático tampoco cuenta como «lo último que le dijimos»: un
+    // CONFIRMAR escrito después del acuse sigue siendo para el recordatorio.
+    OR: [
+      { templateName: null },
+      {
+        AND: [
+          { NOT: { templateName: { startsWith: BARBER_WA_SYS_PREFIX } } },
+          { NOT: { templateName: BARBER_WA_ACK_MARK } },
+        ],
+      },
+    ],
   };
 }
 
@@ -2799,6 +3165,8 @@ async function lastWordTo(
 ): Promise<{
   templateName: string | null;
   appointmentId: string | null;
+  /** Cuándo se le dijo (lo usa el acuse automático). */
+  createdAt: Date;
   /** Visitas distintas en la racha de recordatorios que cierra el hilo. */
   reminderStreak: string[];
 } | null> {
@@ -2806,7 +3174,7 @@ async function lastWordTo(
     where: deliveredOutboundWhere(barbershopId, phone),
     orderBy: { createdAt: "desc" },
     take: 6,
-    select: { templateName: true, appointmentId: true },
+    select: { templateName: true, appointmentId: true, createdAt: true },
   });
   if (rows.length === 0) return null;
   const streak: string[] = [];
@@ -2817,6 +3185,7 @@ async function lastWordTo(
   return {
     templateName: rows[0].templateName,
     appointmentId: rows[0].appointmentId,
+    createdAt: rows[0].createdAt,
     reminderStreak: streak,
   };
 }
@@ -3338,7 +3707,10 @@ function toMessageDTO(row: {
         : row.errorMessage,
     // Los adjuntos y las marcas de sistema no son "una plantilla".
     templateName:
-      attachment || isBarberWaSysRow(row.templateName) || isBarberWaAskRow(row.templateName)
+      attachment ||
+      isBarberWaSysRow(row.templateName) ||
+      isBarberWaAskRow(row.templateName) ||
+      isBarberWaAckRow(row.templateName)
         ? null
         : row.templateName,
     attachment,

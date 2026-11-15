@@ -6,6 +6,7 @@ import { getBarberDict, getBarberT } from "@/i18n/dictionaries/barber";
 import type { Dictionary } from "@/i18n/t";
 import { StarsCard, StarsDetails, starsT } from "@/components/barber/stars/stars-card";
 import type { PortalPayload, PortalShopDTO } from "@/lib/barber/client-portal";
+import { formatBarberPhone } from "@/lib/barber/phone-format";
 
 /* ═══════════════════════════════════════════════════════════════════════
    El portal del cliente ya identificado.
@@ -442,7 +443,7 @@ export function PortalClient({
 
       <p className="dcb-foot">
         {shop.address ? `${shop.address} · ` : ""}
-        {data.client.phone}
+        {formatBarberPhone(data.client.phone)}
       </p>
     </div>
   );

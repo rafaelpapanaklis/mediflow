@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { persistentRateLimit } from "@/lib/failban";
 import { normalizeBarberPhone } from "@/lib/barber/booking";
+import { checkBarberCaptcha } from "@/lib/barber/captcha";
+import { BARBER_CAPTCHA_ACTIONS } from "@/lib/barber/captcha-core";
 import {
   PORTAL_CODE_SENT_MESSAGE,
   requestPortalCode,
@@ -45,6 +47,12 @@ export async function POST(req: NextRequest, props: { params: Promise<{ slug: st
         { status: 400 },
       );
     }
+
+    // Captcha (Cloudflare Turnstile) antes de generar y mandar un código:
+    // cada código es un WhatsApp que paga la barbería. La respuesta de un
+    // captcha que no pasó es la misma exista o no el cliente.
+    const captcha = await checkBarberCaptcha(req, body?.captchaToken, BARBER_CAPTCHA_ACTIONS.portalCode);
+    if (captcha.response) return captcha.response;
 
     await requestPortalCode({ barbershopId: shop.id, phone });
 

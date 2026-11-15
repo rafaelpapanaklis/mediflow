@@ -1,11 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { Scissors } from "lucide-react";
 import { FormField } from "@/components/public/auth/form-field";
 import { PasswordInput } from "@/components/public/auth/password-input";
 import { PhoneCountryInput } from "@/components/barber/phone-country-input";
+import { BarberCaptcha, type BarberCaptchaHandle } from "@/components/barber/captcha/barber-captcha";
+import { BARBER_CAPTCHA_ACTIONS } from "@/lib/barber/captcha-core";
 import {
   BARBER_DEFAULT_PHONE_COUNTRY,
   normalizeBarberPhone,
@@ -78,13 +80,17 @@ export function BarberRegistroForm({
   loginHref,
   forgotHref,
   planName = null,
+  captchaSiteKey = null,
 }: {
   /** /barber/entrar (con ?plan= si se eligió plan en la portada). */
   loginHref: string;
   forgotHref: string;
   /** Nombre del plan elegido en la portada (sale de la tabla), o null. */
   planName?: string | null;
+  /** Llave del SITIO de Turnstile (servidor). null = sin captcha, como antes. */
+  captchaSiteKey?: string | null;
 }) {
+  const captcha = useRef<BarberCaptchaHandle>(null);
   const [shopName, setShopName] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -132,6 +138,14 @@ export function BarberRegistroForm({
     if (!tel.ok) return setPhoneError(tel.error);
 
     setLoading(true);
+    // Captcha (casi nunca se ve). Sin token listo no se manda nada.
+    const check = await captcha.current?.getToken();
+    // Sin token: el aviso con «Reintentar» lo pinta el propio captcha.
+    if (check && !check.ok) {
+      setLoading(false);
+      return;
+    }
+    const captchaToken = check?.ok ? check.token : null;
     try {
       const res = await fetch("/api/barber/auth/register", {
         method: "POST",
@@ -148,10 +162,13 @@ export function BarberRegistroForm({
           city: city.trim() || undefined,
           state: state.trim() || undefined,
           teamSize,
+          captchaToken,
         }),
       });
 
       const data = await res.json().catch(() => ({}));
+      // Token de un solo uso: si hay que reintentar, uno nuevo.
+      if (captchaToken) captcha.current?.reset();
       if (!res.ok) {
         setEmailTaken(data?.code === "EMAIL_TAKEN");
         setError(data?.error ?? "No se pudo completar el registro. Intenta de nuevo.");
@@ -165,6 +182,7 @@ export function BarberRegistroForm({
         window.location.href = loginHref;
       }, 1800);
     } catch (err: unknown) {
+      if (captchaToken) captcha.current?.reset();
       setError(
         err instanceof Error ? err.message : "No se pudo completar el registro. Intenta de nuevo.",
       );
@@ -367,6 +385,17 @@ export function BarberRegistroForm({
         </div>
       </FormField>
 
+      <BarberCaptcha
+        ref={captcha}
+        siteKey={captchaSiteKey}
+        action={BARBER_CAPTCHA_ACTIONS.register}
+        locale="es"
+        labels={{ error: CAPTCHA_TEXTOS.error, retry: CAPTCHA_TEXTOS.reintentar }}
+        textClassName=""
+        buttonClassName=""
+        buttonStyle={SALIDA_SECUNDARIA}
+      />
+
       <button
         type="submit"
         disabled={loading}
@@ -395,6 +424,16 @@ export function BarberRegistroForm({
     </form>
   );
 }
+
+/**
+ * Textos del captcha en el alta. Este formulario está escrito solo en
+ * español (como el resto de sus textos); son los mismos de
+ * barber.reserva.captcha.* sin cargar el diccionario completo en el bundle.
+ */
+const CAPTCHA_TEXTOS = {
+  error: "No pudimos comprobar que eres una persona.",
+  reintentar: "Reintentar",
+} as const;
 
 /** Las dos salidas del error «ese correo ya tiene cuenta». */
 const SALIDA_BASE = {

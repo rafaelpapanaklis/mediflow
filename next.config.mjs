@@ -150,7 +150,10 @@ const nextConfig = {
               // pide <TiktokPixel/> solo en páginas de DaleControl. Sus peticiones (analytics.tiktok.com,
               // analytics-ipv6.tiktokw.com) e imágenes caben ya en connect-src / img-src (https:). Fuente: el
               // snippet oficial de TikTok Pixel (events.js desde analytics.tiktok.com) y su guía de CSP.
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://www.paypal.com https://www.paypalobjects.com https://www.googletagmanager.com https://www.googleadservices.com https://googleads.g.doubleclick.net https://connect.facebook.net https://analytics.tiktok.com",
+              // challenges.cloudflare.com = script del captcha Cloudflare Turnstile de las puertas públicas de
+              // barber (reserva, fila, código de «mi cuenta», alta). Solo se pide si NEXT_PUBLIC_TURNSTILE_SITE_KEY
+              // y TURNSTILE_SECRET_KEY están puestas (src/lib/barber/captcha.ts); el dental no lo carga.
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://www.paypal.com https://www.paypalobjects.com https://www.googletagmanager.com https://www.googleadservices.com https://googleads.g.doubleclick.net https://connect.facebook.net https://analytics.tiktok.com https://challenges.cloudflare.com",
               "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
               "font-src 'self' https://fonts.gstatic.com data:",
               "img-src 'self' data: blob: https: http:",
@@ -164,12 +167,13 @@ const nextConfig = {
               "connect-src 'self' https: wss:",
               // td.doubleclick / googleads.g.doubleclick = iframes del tag de conversiones de Google Ads.
               // www.facebook.com / staticxx.facebook.com = iframe de comunicación del SDK de Meta (xd_arbiter); sin esto el popup del Embedded Signup no puede devolver el resultado.
+              // challenges.cloudflare.com = el iframe del captcha Turnstile de barber (ver script-src).
               // REALTY_TOUR_FRAME_SRC = recorridos 3D/360/video del vertical de
               // inmuebles (Matterport, Kuula, CloudPano, EyeSpy360, GoIGuide, Luma,
               // Scaniverse, YouTube, Vimeo). Se arma arriba desde
               // src/lib/realty/tour-hosts.json: para dar de alta un proveedor nuevo
               // se edita ESE archivo y nada más — aquí no se escribe ningún dominio.
-              `frame-src 'self' https://js.stripe.com https://www.paypal.com https://www.google.com https://td.doubleclick.net https://googleads.g.doubleclick.net https://daily.co https://*.daily.co https://www.facebook.com https://staticxx.facebook.com ${REALTY_TOUR_FRAME_SRC}`,
+              `frame-src 'self' https://js.stripe.com https://www.paypal.com https://www.google.com https://td.doubleclick.net https://googleads.g.doubleclick.net https://daily.co https://*.daily.co https://www.facebook.com https://staticxx.facebook.com https://challenges.cloudflare.com ${REALTY_TOUR_FRAME_SRC}`,
               // 'self' (antes 'none'): equivalente moderno de X-Frame-Options SAMEORIGIN.
               // Habilita el iframe same-origin del visor de heatmap; terceros siguen sin poder enmarcar.
               "frame-ancestors 'self'",

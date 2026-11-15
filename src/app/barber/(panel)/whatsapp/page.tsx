@@ -10,6 +10,7 @@ import {
   listBarberTemplates,
 } from "@/lib/barber/whatsapp";
 import { BARBER_WA_TEMPLATES } from "@/lib/barber/whatsapp-core";
+import { getBarberWaAck } from "@/lib/barber/wa-acuse";
 import {
   BarberWhatsAppScreen,
   type WaStatusPayload,
@@ -61,9 +62,10 @@ export default async function Page(props: { searchParams: Promise<{ tab?: string
     return <Notice text={t("barber.whatsapp.errors.planLocked")} />;
   }
 
-  const [connection, quota] = await Promise.all([
+  const [connection, quota, ack] = await Promise.all([
     getBarberWaConnection(ctx.barbershopId),
     getBarberWaQuota(ctx.barbershopId),
+    getBarberWaAck(ctx.barbershopId),
   ]);
 
   // Las plantillas se leen de Meta EN VIVO, y solo si hay conexión: sin token
@@ -89,6 +91,7 @@ export default async function Page(props: { searchParams: Promise<{ tab?: string
       dict={dict}
       locale={locale}
       initial={{ connection, quota, templates }}
+      ack={ack}
       hasInbox={barberPlanHasFeature(plan, "whatsappInbox")}
       canEdit={hasBarberPermission(permUser, "settings.edit")}
       canSend={hasBarberPermission(permUser, "whatsapp.send")}

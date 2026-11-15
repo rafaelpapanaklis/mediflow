@@ -455,9 +455,10 @@ test("una solicitud sin aceptar es la reserva PENDIENTE de la web o del bot (lo 
   const booking = readFileSync("src/lib/barber/booking.ts", "utf8");
   const usos = booking.split("source: { in: [...BARBER_REQUEST_SOURCES] }").length - 1;
   assert.equal(usos, 3, "listBookingRequests + findFirst y updateMany de resolveBookingRequest");
-  // El único `source: "PUBLIC"` que queda es el del tope diario: es SOLO de la web.
+  // El único `source: "PUBLIC"` que queda es el del tope diario (sin
+  // captcha): es SOLO de la web.
   assert.equal(booking.split('source: "PUBLIC",').length - 1, 1);
-  assert.match(booking, /async function countNewPhoneRequestsToday[\s\S]{0,400}source: "PUBLIC",/);
+  assert.match(booking, /async function countNewPhoneRequestsToday[\s\S]{0,600}source: "PUBLIC",/);
   // Y la alerta de Inicio cuenta con la MISMA constante, no con un literal.
   const stats = sinComentarios(readFileSync("src/lib/barber/stats.ts", "utf8"));
   assert.ok(stats.includes('a."source"::text IN (${Prisma.join([...BARBER_REQUEST_SOURCES])})'));

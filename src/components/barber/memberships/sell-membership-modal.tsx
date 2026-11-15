@@ -11,6 +11,7 @@ import {
 } from "@/lib/barber/memberships-core";
 import { membershipSaleMethods } from "@/lib/barber/payments-core";
 import { CheckCard, Field, Modal, apiCall } from "./ui";
+import { formatBarberPhone } from "@/lib/barber/phone-format";
 
 interface ClientHit {
   id: string;
@@ -168,7 +169,7 @@ export function SellMembershipModal({
                 >
                   <span className="bmem-result-name">{c.name}</span>
                   <span className="bmem-result-sub">
-                    {c.phone}
+                    {formatBarberPhone(c.phone)}
                     {c.activeMembership
                       ? ` · ${t("barber.membresias.clientes.sellModal.alreadyHas", {
                           plan: c.activeMembership.name,

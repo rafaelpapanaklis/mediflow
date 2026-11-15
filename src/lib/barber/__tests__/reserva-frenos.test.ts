@@ -4,13 +4,13 @@
  * Correr:
  *   npx tsx --test src/lib/barber/__tests__/reserva-frenos.test.ts
  *
- * La parte con Postgres (tope diario, candados, avisos de WhatsApp) está en
+ * La parte con Postgres (candados, avisos de WhatsApp, sin tope diario) está en
  * reserva-frenos-integration.test.ts.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import * as core from "../booking-core";
 import {
-  BARBER_PUBLIC_NEW_PHONE_DAILY_CAP,
   bookingRejectedText,
   cleanBarberClientName,
   realMxPhone,
@@ -18,8 +18,16 @@ import {
   shouldConfirmOnBooking,
 } from "../booking-core";
 
-test("el tope diario es el que decidió Rafael (50) y vive en UNA constante", () => {
-  assert.equal(BARBER_PUBLIC_NEW_PHONE_DAILY_CAP, 50);
+test("el tope diario (50) vuelve SOLO para la reserva sin captcha (ronda 15, M3)", () => {
+  assert.equal(core.BARBER_PUBLIC_NEW_PHONE_DAILY_CAP, 50);
+  const aplica = core.newPhoneDailyCapApplies;
+  // Web, teléfono nuevo, sin captcha (sin variables o Cloudflare caído): tope.
+  assert.equal(aplica({ fromWeb: true, hasHistory: false, humanVerified: false }), true);
+  // Con captcha verificado: sin tope (Rafael, 15-nov).
+  assert.equal(aplica({ fromWeb: true, hasHistory: false, humanVerified: true }), false);
+  // El cliente de siempre nunca choca; el bot tampoco.
+  assert.equal(aplica({ fromWeb: true, hasHistory: true, humanVerified: false }), false);
+  assert.equal(aplica({ fromWeb: false, hasHistory: false, humanVerified: false }), false);
 });
 
 test("nombre: letras con acentos, ñ, diéresis, espacios, apóstrofo y guion", () => {
@@ -108,11 +116,17 @@ test("teléfono: el de la auditoría (1000000008) y otros imposibles no pasan", 
   assert.equal(realMxPhone(5512345678 as unknown), null);
 });
 
-test("confirmación al reservar: manual nunca; automática solo con historial", () => {
+test("confirmación al reservar: manual nunca; automática con historial, o con captcha", () => {
   assert.equal(shouldConfirmOnBooking({ policy: "manual", hasHistory: true }), false);
   assert.equal(shouldConfirmOnBooking({ policy: "manual", hasHistory: false }), false);
+  // Manual: ni con captcha. La confirmación sale al ACEPTAR.
+  assert.equal(shouldConfirmOnBooking({ policy: "manual", hasHistory: false, humanVerified: true }), false);
   assert.equal(shouldConfirmOnBooking({ policy: "auto", hasHistory: true }), true);
+  // Sin captcha (variables sin poner): a un teléfono nuevo no se le escribe.
   assert.equal(shouldConfirmOnBooking({ policy: "auto", hasHistory: false }), false);
+  assert.equal(shouldConfirmOnBooking({ policy: "auto", hasHistory: false, humanVerified: false }), false);
+  // Con captcha puesto y pasado: sí.
+  assert.equal(shouldConfirmOnBooking({ policy: "auto", hasHistory: false, humanVerified: true }), true);
 });
 
 test("misma persona en el doble envío: sin acentos, mayúsculas ni espacios de más", () => {

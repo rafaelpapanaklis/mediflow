@@ -15,6 +15,8 @@ import { type Dictionary } from "@/i18n/t";
 import { makeBarberT } from "@/lib/barber/i18n";
 import { Field, agendaCss } from "@/components/barber/agenda/agenda-ui";
 import css from "./walkin.module.css";
+import { BarberCaptcha, type BarberCaptchaHandle } from "@/components/barber/captcha/barber-captcha";
+import { BARBER_CAPTCHA_ACTIONS } from "@/lib/barber/captcha-core";
 
 interface PublicBarber {
   id: string;
@@ -49,12 +51,17 @@ export interface WalkinPublicProps {
   slug: string;
   shopName: string;
   logoUrl: string | null;
+  /** Idioma de la barbería (para el widget del captcha). */
+  locale?: string | null;
+  /** Llave del SITIO de Turnstile (servidor). null = sin captcha, como antes. */
+  captchaSiteKey?: string | null;
 }
 
 const POLL_MS = 15_000;
 
 export function WalkinPublic(props: WalkinPublicProps) {
   const t = useMemo(() => makeBarberT(props.dict), [props.dict]);
+  const captcha = useRef<BarberCaptchaHandle>(null);
   const storageKey = `dc:barber:fila:${props.slug}`;
 
   const [ticketId, setTicketId] = useState<string | null>(null);
@@ -149,7 +156,13 @@ export function WalkinPublic(props: WalkinPublicProps) {
       return setError(t("barber.agenda.public.errors.phone"));
     }
     setBusy(true);
+    let sentToken = false;
     try {
+      const check = await captcha.current?.getToken();
+      // Sin token: el aviso con «Reintentar» lo pinta el propio captcha.
+      if (check && !check.ok) return;
+      const captchaToken = check?.ok ? check.token : null;
+      sentToken = !!captchaToken;
       const res = await fetch("/api/barber/walkins/public", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -158,6 +171,7 @@ export function WalkinPublic(props: WalkinPublicProps) {
           name: name.trim(),
           phone: phone.trim(),
           barberId: barberId || null,
+          captchaToken,
         }),
       });
       const body = await res.json().catch(() => ({}));
@@ -170,6 +184,8 @@ export function WalkinPublic(props: WalkinPublicProps) {
     } catch {
       setError(t("barber.agenda.public.errors.generic"));
     } finally {
+      // Token de un solo uso: para el siguiente intento, uno nuevo.
+      if (sentToken) captcha.current?.reset();
       setBusy(false);
     }
   };
@@ -315,6 +331,20 @@ export function WalkinPublic(props: WalkinPublicProps) {
                   </select>
                 </Field>
               ) : null}
+
+              <BarberCaptcha
+                ref={captcha}
+                siteKey={props.captchaSiteKey ?? null}
+                action={BARBER_CAPTCHA_ACTIONS.walkin}
+                locale={props.locale}
+                labels={{
+                  error: t("barber.reserva.captcha.error"),
+                  retry: t("barber.reserva.captcha.reintentar"),
+                }}
+                textClassName={agendaCss.hint}
+                buttonClassName={agendaCss.btn}
+                fallback={<div className={agendaCss.errorBox}>{t("barber.reserva.captcha.ayudaFila")}</div>}
+              />
 
               <button
                 type="button"

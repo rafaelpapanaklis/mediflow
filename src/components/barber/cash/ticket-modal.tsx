@@ -13,6 +13,7 @@ import { loyaltyRedeemText } from "./loyalty-redeem-text";
 import { BarberModal } from "./modal";
 import { useBarberT } from "./use-barber-t";
 import { fmtMoney, fmtTime, fromCents, parseAmountText, toCents, PAYMENT_METHOD_KEYS } from "./money";
+import { formatBarberPhone } from "@/lib/barber/phone-format";
 
 interface Line {
   key: string;
@@ -419,7 +420,7 @@ export function TicketModal({
                 <div style={{ minWidth: 0 }}>
                   <div className="bcaja-client__name">{client.name}</div>
                   <div className="bcaja-client__meta">
-                    {client.phone}
+                    {formatBarberPhone(client.phone)}
                     {/* Sellos y premio: los de ESTA barbería (umbral, premio y encendido). */}
                     {checkout.loyaltyEnabled ? ` · ${st("caja.starsShort", { count: client.loyaltyCount })}` : ""}
                     {readyBonuses.length > 0 ? ` · ${t("ticket.loyaltyEligible", { reward: readyBonuses.map((b) => b.name).join(", ") })}` : ""}
@@ -440,7 +441,7 @@ export function TicketModal({
                     {suggestions.map((c) => (
                       <button key={c.id} type="button" className="bcaja-suggest__item" onClick={() => { setClient(c); setQuery(""); setSuggestions([]); }}>
                         <div className="bcaja-client__name">{c.name}</div>
-                        <div className="bcaja-client__meta">{c.phone}{checkout.loyaltyEnabled ? ` · ${st("caja.starsShort", { count: c.loyaltyCount })}` : ""}</div>
+                        <div className="bcaja-client__meta">{formatBarberPhone(c.phone)}{checkout.loyaltyEnabled ? ` · ${st("caja.starsShort", { count: c.loyaltyCount })}` : ""}</div>
                       </button>
                     ))}
                   </div>

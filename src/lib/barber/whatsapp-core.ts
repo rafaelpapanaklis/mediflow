@@ -95,6 +95,12 @@ export interface BarberWaConnectionDTO {
   verifiedAt: string | null;
   /** Motivo legible cuando `state` es ERROR o NO_PAYMENT_METHOD. */
   problem: string | null;
+  /**
+   * TOKEN_UNREADABLE = el token guardado no se pudo descifrar (llave
+   * rotada, otro entorno con otra DATA_ENCRYPTION_KEY, dato dañado): hay
+   * que volver a conectar. La pantalla lo dice con su propio texto.
+   */
+  problemCode?: "TOKEN_UNREADABLE" | null;
   /** ¿Está disponible el Embedded Signup en este despliegue? */
   canConnect: boolean;
   /**
@@ -1043,8 +1049,7 @@ export function decideBarberReminderReply(
  * recordatorios y el «CONFIRMAR» del cliente. Con la automática nacen
  * CONFIRMED y no son solicitudes.
  *
- * Ojo: el tope diario de teléfonos nuevos y la validación de nombre y
- * teléfono son SOLO de la web (`fromWeb` en createPublicBooking); esto no
+ * Ojo: la validación de nombre y teléfono (y el captcha) son SOLO de la web (`fromWeb` en createPublicBooking); esto no
  * los extiende al bot.
  */
 export const BARBER_REQUEST_SOURCES: readonly ("PUBLIC" | "WHATSAPP")[] = ["PUBLIC", "WHATSAPP"];

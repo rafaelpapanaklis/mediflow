@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { AuthShell } from "@/components/public/auth/auth-shell";
 import { BarberRegistroVisual } from "@/components/barber/barber-registro-visual";
 import { BarberRegistroForm } from "@/components/barber/barber-registro-form";
+import { barberCaptchaSiteKey } from "@/lib/barber/captcha";
 import { getBarberContext } from "@/lib/barber-auth";
 import { getBarberPlan } from "@/lib/barber/plans";
 import { isBarberPlanId } from "@/lib/barber/plan-shared";
@@ -53,6 +54,7 @@ export default async function BarberRegistroPage(props: {
           loginHref={barberPathWithPlan(BARBER_LOGIN_PATH, plan)}
           forgotHref={BARBER_FORGOT_PASSWORD_PATH}
           planName={planName}
+          captchaSiteKey={barberCaptchaSiteKey()}
         />
       }
     />

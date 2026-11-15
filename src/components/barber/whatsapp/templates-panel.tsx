@@ -5,6 +5,21 @@ import { AlertTriangle, RefreshCw } from "lucide-react";
 import { apiCall, Banner, Btn, Chip, ErrorText, useSaving } from "../team/admin-ui";
 import type { BarberWaKind } from "@/lib/barber/whatsapp-core";
 import { useWaT } from "./ui";
+import {
+  BARBER_TEMPLATE_KNOWN_STATUSES,
+  barberTemplateRejection,
+  barberTemplateRejectionKey,
+  barberTemplateUsable,
+  explainBarberTemplateFailure,
+  type BarberTemplateFailure,
+} from "@/lib/barber/wa-plantillas-core";
+
+/** Lo que se enseña de una plantilla que Meta no dejó dar de alta. */
+interface ShownFailure {
+  kind: BarberWaKind;
+  key: string;
+  raw: string;
+}
 import s from "./whatsapp.module.css";
 
 export interface TemplateRow {
@@ -14,6 +29,8 @@ export interface TemplateRow {
   status: string;
   reason: string | null;
   optional: boolean;
+  language?: string | null;
+  otherLanguage?: boolean;
 }
 
 /**
@@ -41,6 +58,8 @@ export function TemplatesPanel({
   const { saving, error, run } = useSaving();
   const [includeMarketing, setIncludeMarketing] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+  // Por nombre de plantilla: por qué no se pudo dar de alta en el último intento.
+  const [failures, setFailures] = useState<Record<string, ShownFailure>>({});
 
   function provision() {
     setNote(null);
@@ -49,13 +68,25 @@ export function TemplatesPanel({
         ok: boolean;
         reason?: string;
         created: string[];
-        failed: { name: string; error: string }[];
+        failed: Array<BarberTemplateFailure & { error: string; kind: BarberWaKind }>;
       }>("/api/barber/whatsapp/templates", {
         method: "POST",
         json: { includeMarketing },
       });
-      if (result.failed.length > 0) {
-        setNote(t("templates.failed", { names: result.failed.map((f) => f.name).join(", ") }));
+      const next: Record<string, ShownFailure> = {};
+      for (const f of result.failed) {
+        const ex = explainBarberTemplateFailure(f);
+        next[f.name] = { kind: f.kind, key: `templates.failure.${ex.key}`, raw: ex.raw || f.error };
+      }
+      setFailures(next);
+      if (!result.ok && result.reason) {
+        setNote(result.reason);
+      } else if (result.failed.length > 0) {
+        setNote(
+          t("templates.failed", {
+            names: result.failed.map((f) => t(`templates.kind.${f.kind}`)).join(", "),
+          }),
+        );
       } else {
         setNote(
           result.created.length > 0
@@ -87,7 +118,32 @@ export function TemplatesPanel({
                 <div className={s.tplMeta}>
                   {row.name} · {t(`templates.category.${row.category}`)}
                 </div>
-                {row.reason ? <p className={s.tplReason}>{row.reason}</p> : null}
+                {(() => {
+                  // Solo un rechazo real, traducido (nunca «NONE» en crudo).
+                  const code = barberTemplateRejection(row.status, row.reason);
+                  return code ? (
+                    <p className={s.tplReason}>{t(barberTemplateRejectionKey(code), { code })}</p>
+                  ) : null;
+                })()}
+                {/* Meta la tiene, pero así no sirve para mandar: se dice por qué. */}
+                {row.status !== "MISSING" && row.otherLanguage ? (
+                  <p className={s.tplReason}>{t("templates.otherLanguage", { lang: row.language ?? "?" })}</p>
+                ) : row.status !== "MISSING" && row.status !== "REJECTED" && !barberTemplateUsable(row) ? (
+                  <p className={s.tplReason}>{t("templates.notUsable")}</p>
+                ) : null}
+                {/* No se pudo dar de alta: por qué, entendible, y lo que dijo Meta en pequeño. */}
+                {failures[row.name] && (row.status === "MISSING" || !barberTemplateUsable(row)) ? (
+                  <>
+                    <p className={s.tplReason} role="alert">
+                      {t(failures[row.name].key)}
+                    </p>
+                    {failures[row.name].raw ? (
+                      <p className={s.tplMeta} style={{ margin: "2px 0 0", overflowWrap: "anywhere" }}>
+                        {t("templates.failure.metaSaid")}: {failures[row.name].raw}
+                      </p>
+                    ) : null}
+                  </>
+                ) : null}
               </div>
               <Chip
                 tone={
@@ -100,7 +156,9 @@ export function TemplatesPanel({
                         : "muted"
                 }
               >
-                {t(`templates.status.${row.status}`) || row.status}
+                {(BARBER_TEMPLATE_KNOWN_STATUSES as readonly string[]).includes(row.status)
+                  ? t(`templates.status.${row.status}`)
+                  : row.status}
               </Chip>
             </div>
           ))}
@@ -130,8 +188,23 @@ export function TemplatesPanel({
                 <RefreshCw size={15} />
                 {saving ? t("templates.provisioning") : t("templates.provision")}
               </Btn>
-              {note ? <span className={s.tplMeta}>{note}</span> : null}
+              {note && Object.keys(failures).length === 0 ? <span className={s.tplMeta}>{note}</span> : null}
             </div>
+            {/* El aviso queda JUNTO al botón, a la vista, con el motivo de cada una. */}
+            {Object.keys(failures).length > 0 ? (
+              <Banner tone="danger" icon={<AlertTriangle size={16} />}>
+                <div>
+                  <strong>{note}</strong>
+                  <ul style={{ margin: "6px 0 0", paddingInlineStart: 18 }}>
+                    {Object.entries(failures).map(([name, f]) => (
+                      <li key={name}>
+                        {t(`templates.kind.${f.kind}`)}: {t(f.key)}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </Banner>
+            ) : null}
           </>
         ) : null}
 

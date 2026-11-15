@@ -21,11 +21,17 @@ import { NextResponse } from "next/server";
 import {
   barberWabaOwnsPhone,
   disconnectBarberWa,
+  listBarberWabaPhones,
+  sharedBarberWabaIds,
   provisionBarberTemplates,
   saveBarberWaConnection,
   subscribeBarberWaba,
 } from "@/lib/barber/whatsapp";
 import { asString, jsonError, openWaGate, readJson } from "../_server";
+import { pickBarberSignupNumber, type WabaListing } from "@/lib/barber/wa-signup-core";
+
+/** Cuántas cuentas compartidas se revisan como mucho al buscar el número. */
+const MAX_WABAS_TO_SEARCH = 5;
 
 export const dynamic = "force-dynamic";
 
@@ -41,10 +47,12 @@ export async function POST(req: Request) {
   const { shopId } = gate.gate;
 
   const code = asString(body?.code);
-  const wabaId = asString(body?.wabaId);
-  const phoneNumberId = asString(body?.phoneNumberId);
-  if (!code || !wabaId || !phoneNumberId) {
-    return jsonError("Faltan datos del onboarding de Meta.", 400);
+  // El navegador los manda si Meta le avisó (evento FINISH). Si no llegaron,
+  // se buscan abajo con el token: ya no es motivo para rendirse.
+  let wabaId = asString(body?.wabaId);
+  let phoneNumberId = asString(body?.phoneNumberId);
+  if (!code) {
+    return jsonError("Faltan datos del onboarding de Meta.", 400, { code: "NO_CODE" });
   }
 
   const appId = process.env.META_APP_ID ?? process.env.NEXT_PUBLIC_META_APP_ID;
@@ -69,6 +77,38 @@ export async function POST(req: Request) {
     }
     const token: string = tokenJson.access_token;
     const auth = { Authorization: `Bearer ${token}` };
+
+    // 1a) Llegó el código pero NO el número del evento FINISH: se busca con
+    //     el token. Las cuentas compartidas salen de debug_token (más la que
+    //     mandó el navegador, si mandó una) y sus números de
+    //     /{waba}/phone_numbers. Todo lo que se lee con el token es de quien
+    //     autorizó: es la misma prueba de propiedad de 1b. Con varios números
+    //     y nada que los distinga NO se adivina.
+    if (!wabaId || !phoneNumberId) {
+      const wabas = await sharedBarberWabaIds(token, { id: appId, secret: appSecret });
+      if (wabaId && !wabas.includes(wabaId)) wabas.unshift(wabaId);
+      const listings: WabaListing[] = [];
+      for (const w of wabas.slice(0, MAX_WABAS_TO_SEARCH)) {
+        const phones = await listBarberWabaPhones(w, token);
+        if (phones) listings.push({ wabaId: w, phoneNumberIds: phones });
+      }
+      const pick = pickBarberSignupNumber({ clientWabaId: wabaId, clientPhoneNumberId: phoneNumberId, listings });
+      console.warn(
+        `[barber/whatsapp/connect] faltó ${!wabaId && !phoneNumberId ? "la cuenta y el número" : !wabaId ? "la cuenta" : "el número"} del navegador; ` +
+          `cuentas compartidas: ${wabas.length}, revisadas: ${listings.length}, resultado: ${pick.ok === false ? pick.code : "encontrado"}`,
+      );
+      if (pick.ok === false) {
+        return jsonError(
+          pick.code === "NUMBER_AMBIGUOUS"
+            ? "Tu cuenta de WhatsApp Business tiene varios números y Meta no nos dijo cuál elegiste. Vuelve a conectar y elige tu número al final."
+            : "Meta no nos dijo qué número conectaste y no lo encontramos en tu cuenta. Vuelve a conectar y termina eligiendo tu número.",
+          409,
+          { code: pick.code },
+        );
+      }
+      wabaId = pick.wabaId;
+      phoneNumberId = pick.phoneNumberId;
+    }
 
     // 1b) 🔴 El número tiene que ser de ESA cuenta, leído con el token que
     //     Meta acaba de dar. `wabaId` y `phoneNumberId` llegan del navegador
@@ -152,9 +192,22 @@ export async function POST(req: Request) {
     // 5) Plantillas del catálogo dentro de la WABA recién conectada, en
     //    segundo plano: son varias llamadas a Meta y el onboarding no puede
     //    demorarse ni fallar por esto. El botón de la pantalla lo repite.
-    void provisionBarberTemplates(shopId).catch((e) => {
-      console.error(`[barber/whatsapp/connect] alta de plantillas (${shopId}):`, e);
-    });
+    void provisionBarberTemplates(shopId)
+      .then((r) => {
+        // Antes la lista `failed` se ignoraba: una plantilla rechazada por
+        // Meta (la de código de acceso, 15-nov) no dejaba rastro. Sin token.
+        for (const f of r.failed) {
+          console.error(
+            `[barber/whatsapp/connect] Meta no aceptó la plantilla ${f.name} (${shopId}): ` +
+              `${[f.userTitle, f.userMsg, f.message].filter(Boolean).join(" — ") || f.error}` +
+              `${f.code != null ? ` (#${f.code}${f.subcode != null ? `/${f.subcode}` : ""})` : ""}`,
+          );
+        }
+        if (!r.ok && r.reason) console.error(`[barber/whatsapp/connect] alta de plantillas (${shopId}): ${r.reason}`);
+      })
+      .catch((e) => {
+        console.error(`[barber/whatsapp/connect] alta de plantillas (${shopId}):`, e);
+      });
 
     return NextResponse.json({ ok: true, displayName, verified, subscribed });
   } catch (err) {

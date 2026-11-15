@@ -10,6 +10,7 @@ import {
 import { barberiaTieneWhatsApp } from "@/lib/barber/wa-conectado";
 import { getBarberT } from "@/i18n/dictionaries/barber";
 import { BookingFlow } from "@/components/barber/booking/booking-flow";
+import { barberCaptchaSiteKey } from "@/lib/barber/captcha";
 import "@/app/barber/barber-theme.css";
 import "@/components/barber/booking/barber-public.css";
 
@@ -143,6 +144,7 @@ export default async function BarberBookingPage(props: PageProps) {
         whatsappConnected={whatsappConnected}
         pinnedBarberId={pinnedBarberId}
         pinnedServiceId={pinnedServiceId}
+        captchaSiteKey={barberCaptchaSiteKey()}
       />
     </Shell>
   );

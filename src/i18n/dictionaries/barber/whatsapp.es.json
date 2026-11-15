@@ -10,6 +10,7 @@
     "botHint": "El bot que contesta tu WhatsApp y agenda por ti"
   },
   "connection": {
+    "tokenUnreadable": "No pudimos leer la llave de tu conexión con WhatsApp (pasa si se cambió la configuración de seguridad). Vuelve a conectar tu número con el botón de abajo: tus conversaciones no se pierden y los avisos pendientes salen en cuanto conectes.",
     "title": "Tu número de WhatsApp",
     "lead": "Los mensajes salen con el nombre de tu barbería, desde tu propio número. El cliente te responde a ti.",
     "connect": "Conectar mi WhatsApp",
@@ -58,8 +59,17 @@
       "APPROVED": "Aprobada",
       "PENDING": "En revisión",
       "REJECTED": "Rechazada",
-      "MISSING": "Sin dar de alta"
+      "MISSING": "Sin dar de alta",
+      "PAUSED": "En pausa",
+      "DISABLED": "Desactivada",
+      "IN_APPEAL": "En apelación",
+      "PENDING_DELETION": "Se está borrando",
+      "DELETED": "Borrada",
+      "ARCHIVED": "Archivada",
+      "LIMIT_EXCEEDED": "Límite de plantillas"
     },
+    "otherLanguage": "Meta la tiene en otro idioma ({lang}); para mandarla necesitamos español de México (es_MX). Toca «Dar de alta las que falten».",
+    "notUsable": "Meta la tiene así y con ese estado no deja mandarla.",
     "category": {
       "UTILITY": "Utilidad",
       "AUTHENTICATION": "Código de acceso",
@@ -76,7 +86,31 @@
     },
     "created": "Se dieron de alta {count}. Meta las revisa y suelen aprobarse en minutos.",
     "noneNeeded": "No falta ninguna.",
-    "failed": "No se pudieron dar de alta: {names}"
+    "failed": "No se pudieron dar de alta: {names}",
+    "failure": {
+      "token": "La conexión con Meta venció. Vuelve a conectar tu WhatsApp y después da de alta las plantillas.",
+      "permission": "Meta no nos dio permiso para crear plantillas en tu cuenta. Vuelve a conectar y acepta todos los permisos.",
+      "rateLimit": "Meta pidió esperar: hubo demasiados intentos seguidos. Vuelve a intentarlo en unos minutos.",
+      "deleting": "Meta todavía está borrando una plantilla anterior con ese nombre. Puede tardar varias semanas; avísanos y la damos de alta con otro nombre.",
+      "authNotAccepted": "Meta no aceptó la plantilla de código de acceso para tu cuenta. Abajo va lo que dijo Meta; mándanos una captura y lo revisamos.",
+      "invalid": "Meta dice que a la plantilla le falta o le sobra un dato. Mándanos una captura de este aviso y lo corregimos.",
+      "network": "Meta no respondió a tiempo. Vuelve a intentarlo en un momento.",
+      "other": "Meta no aceptó esta plantilla. Abajo va lo que dijo Meta.",
+      "nameHidden": "Meta dice que ya existe una plantilla con ese nombre, pero no aparece en tu cuenta: casi siempre es porque se está borrando, y Meta bloquea el nombre varias semanas. Avísanos y la damos de alta con otro nombre.",
+      "notUsable": "Meta dice que ya existe, pero la tiene en un estado o idioma con el que no se puede mandar. Abajo va cómo la tiene Meta.",
+      "metaSaid": "Lo que dijo Meta"
+    },
+    "rejected": {
+      "ABUSIVE_CONTENT": "Meta considera que el contenido incumple sus políticas.",
+      "CATEGORY_NOT_AVAILABLE": "Meta no permite esta categoría de plantilla en tu cuenta.",
+      "INCORRECT_CATEGORY": "Meta dice que la categoría no corresponde al contenido del mensaje.",
+      "INVALID_FORMAT": "Meta dice que el formato de la plantilla no es válido.",
+      "PROMOTIONAL": "Meta la considera promocional y no de utilidad.",
+      "SCAM": "Meta la marcó como posible fraude.",
+      "TAG_CONTENT_MISMATCH": "Meta dice que el contenido no corresponde a la categoría elegida.",
+      "NONE_OF_THE_ABOVE": "Meta la rechazó sin dar un motivo concreto.",
+      "other": "Meta la rechazó (motivo: {code})."
+    }
   },
   "inbox": {
     "title": "Conversaciones",
@@ -135,6 +169,34 @@
     "noPermission": "No tienes permiso para ver el WhatsApp de la barbería.",
     "planLocked": "Tu plan no incluye la bandeja de entrada de WhatsApp. Los recordatorios sí están incluidos.",
     "generic": "Algo salió mal. Intenta de nuevo."
+  },
+  "acuse": {
+    "title": "Respuesta automática",
+    "lead": "Cuando un cliente contesta a un recordatorio con un mensaje que nadie atiende, le avisamos que ya lo recibiste. Así no se queda esperando sin saber.",
+    "switch": "Contestar en automático cuando un cliente responde a un recordatorio",
+    "switchOn": "Encendido: se manda el texto de abajo.",
+    "switchOff": "Apagado: no se manda nada en automático.",
+    "textLabel": "Texto que recibe el cliente",
+    "textHint": "Hasta {max} caracteres. Si lo dejas vacío, se manda el de ejemplo.",
+    "rules": {
+      "onlyUnanswered": "Solo sale si ni tú ni el bot contestaron ese mensaje.",
+      "oncePerDay": "Sale una sola vez por conversación al día.",
+      "quota": "Cuenta como un mensaje de tu cupo. Sin cupo, no sale."
+    },
+    "preview": "Así le llega",
+    "save": "Guardar",
+    "saving": "Guardando…",
+    "saved": "Guardado",
+    "readOnly": "Solo quien puede cambiar la configuración edita este ajuste.",
+    "storageMissing": "Este ajuste todavía no se puede guardar: falta un paso de nuestro lado. Ya estamos en ello."
+  },
+  "signup": {
+    "canceled": "Cerraste la ventana de Meta antes de terminar: vuelve a intentarlo y termina con el botón azul.",
+    "metaError": "Meta no pudo terminar la conexión. Espera unos minutos y vuelve a intentarlo.",
+    "noNumber": "Meta no nos dijo qué número conectaste y no lo encontramos en tu cuenta. Vuelve a intentarlo y, al final, elige tu número.",
+    "manyNumbers": "Tu cuenta de WhatsApp Business tiene varios números y Meta no nos dijo cuál elegiste. Vuelve a intentarlo y elige tu número al final.",
+    "server": "No pudimos terminar la conexión con Meta. Intenta de nuevo en un momento; si se repite, escríbenos a soporte.",
+    "network": "Se cortó la conexión mientras terminábamos. Revisa tu internet e intenta de nuevo."
   },
   "common": {
     "cancel": "Cancelar"

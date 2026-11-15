@@ -201,6 +201,15 @@
     "avisaTuSinTelefono": "No dejó teléfono.",
     "avisaTuCerrar": "Entendido"
   },
+  "captcha": {
+    "error": "No pudimos comprobar que eres una persona.",
+    "reintentar": "Reintentar",
+    "ayudaTitulo": "Si no puedes reservar aquí, escríbenos",
+    "ayudaCuerpo": "Por WhatsApp o por teléfono te apartamos tu lugar.",
+    "ayudaPortal": "Si no puedes entrar aquí, llámanos al",
+    "ayudaPortalSinTelefono": "Si no puedes entrar aquí, pídele ayuda a la barbería.",
+    "ayudaFila": "Si no puedes anotarte aquí, pide en el mostrador que te anoten."
+  },
   "tope": {
     "titulo": "Por hoy ya no hay reservas en línea",
     "cuerpo": "Escríbenos por WhatsApp o llámanos y te buscamos lugar.",

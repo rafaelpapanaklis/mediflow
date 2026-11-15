@@ -15,8 +15,9 @@ import {
   BARBER_BUSY_STATUSES,
   BARBER_MAX_DAYS_AHEAD,
   BARBER_MAX_OPEN_PER_PHONE,
-  BARBER_MIN_LEAD_MIN,
   BARBER_PUBLIC_NEW_PHONE_DAILY_CAP,
+  newPhoneDailyCapApplies,
+  BARBER_MIN_LEAD_MIN,
   advisoryLockKey,
   addIsoDays,
   bookingRejectedText,
@@ -594,10 +595,10 @@ export type BookingErrorCode =
   | "clientBlocked"
   /** Ya hay una cita viva de ese teléfono a esa hora, con OTRO nombre. */
   | "phoneConflict"
-  /** La barbería llegó a BARBER_PUBLIC_NEW_PHONE_DAILY_CAP por hoy. */
+  /** Sin captcha verificado, la barbería llegó a BARBER_PUBLIC_NEW_PHONE_DAILY_CAP hoy. */
   | "dailyCap";
 
-// ── Historial del teléfono y tope diario ────────────────────────────────
+// ── Historial del teléfono ──────────────────────────────────────────────
 
 /**
  * Un cliente SIN historial en la barbería: nada de lo que tiene lo hizo la
@@ -609,9 +610,10 @@ export type BookingErrorCode =
  * es ver una solicitud, no conocer al cliente.
  *
  * Es la MISMA condición para decidir si un teléfono tiene historial
- * (clientHasHistory) y para contar el tope del día
- * (countNewPhoneRequestsToday): si se separaran, una cita podría no contar
- * en el tope y aun así ser tratada como de un cliente nuevo.
+ * (clientHasHistory: confirmación en automático sin captcha) y para contar
+ * el tope del día sin captcha (countNewPhoneRequestsToday): si se separaran,
+ * una cita podría no contar en el tope y aun así ser tratada como de un
+ * cliente nuevo.
  */
 function noHistoryClientWhere(barbershopId: string): Prisma.BarberClientWhereInput {
   return {
@@ -641,6 +643,8 @@ async function clientHasHistory(db: Db, barbershopId: string, clientId: string):
  * Solicitudes de la página pública que nacieron HOY (día de la barbería),
  * siguen vivas y son de teléfonos sin historial. Con la política manual
  * vivas = PENDING; con la automática nacen CONFIRMED y cuentan las dos.
+ * (Cuentan todas, también las que pasaron el captcha: el tope mide cuántas
+ * hay, y solo se APLICA a la que llega sin captcha.)
  */
 async function countNewPhoneRequestsToday(
   db: Db,
@@ -712,6 +716,12 @@ export interface CreateBookingInput {
    * decirle dos veces lo mismo.
    */
   skipNotify?: boolean;
+  /**
+   * true = quien reservó pasó el captcha EN EL SERVIDOR (la ruta lo pone con
+   * lo que dijo verifyBarberCaptcha). Con la política automática, eso basta
+   * para mandarle la confirmación a un teléfono nuevo.
+   */
+  humanVerified?: boolean;
 }
 
 /**
@@ -816,10 +826,10 @@ export async function createPublicBooking(
 
   // ── La transacción: candado + re-verificación + escritura ────────────
   const [lockA, lockB] = advisoryLockKey(`barber:booking:${shop.id}:${dateISO}`);
-  // Segundo candado, SOLO para el tope diario: la llave es el día de HOY
-  // (cuándo se pide), no el de la cita. Dos peticiones para días distintos
-  // toman candados de día distintos y sin esto las dos verían "49" y
-  // pasarían. Siempre se toma ANTES que el del día de la cita y el del día
+  // Segundo candado, SOLO para el tope diario (sin captcha): la llave es el
+  // día de HOY (cuándo se pide), no el de la cita. Dos peticiones para días
+  // distintos toman candados de día distintos y sin esto las dos verían "49"
+  // y pasarían. Siempre se toma ANTES que el del día de la cita y el del día
   // nunca espera por éste, así que no hay ciclo posible (no hay interbloqueo).
   const [capA, capB] = advisoryLockKey(`barber:booking-cap:${shop.id}:${todayISO}`);
   const capDayStart = barberTzLocalToUtc(todayISO, 0, 0, shop.timezone);
@@ -833,8 +843,8 @@ export async function createPublicBooking(
       });
       const hasHistory = client ? await clientHasHistory(tx, shop.id, client.id) : false;
 
-      // ── Tope diario de la barbería (solo la página pública) ──────────
-      if (fromWeb && !hasHistory) {
+      // ── Tope diario de la barbería: solo la web y solo SIN captcha ────
+      if (newPhoneDailyCapApplies({ fromWeb, hasHistory, humanVerified: input.humanVerified === true })) {
         await tx.$executeRawUnsafe(
           `SELECT pg_advisory_xact_lock(${Math.trunc(capA)}, ${Math.trunc(capB)})`,
         );
@@ -1003,7 +1013,14 @@ export async function createPublicBooking(
     if ("blocked" in created) return { ok: false, code: "clientBlocked" };
     if (created.taken) return { ok: false, code: "slotTaken" };
 
-    if (!input.skipNotify && shouldConfirmOnBooking({ policy, hasHistory: created.hasHistory })) {
+    if (
+      !input.skipNotify &&
+      shouldConfirmOnBooking({
+        policy,
+        hasHistory: created.hasHistory,
+        humanVerified: input.humanVerified === true,
+      })
+    ) {
       await notifyBookingCreated({ barbershopId: shop.id, appointmentId: created.id, policy });
     }
 

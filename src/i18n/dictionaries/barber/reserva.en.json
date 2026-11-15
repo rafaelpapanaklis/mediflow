@@ -201,6 +201,15 @@
     "avisaTuSinTelefono": "They didn't leave a phone number.",
     "avisaTuCerrar": "Got it"
   },
+  "captcha": {
+    "error": "We couldn’t verify that you’re a person.",
+    "reintentar": "Try again",
+    "ayudaTitulo": "If you can’t book here, message us",
+    "ayudaCuerpo": "We’ll save your spot over WhatsApp or by phone.",
+    "ayudaPortal": "If you can’t sign in here, call us at",
+    "ayudaPortalSinTelefono": "If you can’t sign in here, ask the barbershop for help.",
+    "ayudaFila": "If you can’t join here, ask at the front desk and they’ll add you."
+  },
   "tope": {
     "titulo": "No more online bookings for today",
     "cuerpo": "Message us on WhatsApp or give us a call and we'll find you a spot.",

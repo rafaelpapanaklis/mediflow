@@ -5,6 +5,8 @@ import { failbanGuard, persistentRateLimit, recordAuthFailure } from "@/lib/fail
 import { esCorreoYaRegistrado, traducirErrorDeAuth } from "@/lib/auth/errores-contrasena";
 import { BARBER_DEFAULT_SERVICES, makeBarberSlug } from "@/lib/barber/types";
 import { normalizeBarberPhone } from "@/lib/barber/phone-countries";
+import { checkBarberCaptcha } from "@/lib/barber/captcha";
+import { BARBER_CAPTCHA_ACTIONS } from "@/lib/barber/captcha-core";
 
 // Alta pública de barbería (DaleControl Barber) — espejo de
 // /api/laboratorios/auth/register. Crea el usuario en Supabase Auth y, en UNA
@@ -56,6 +58,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Cuerpo de la solicitud inválido." }, { status: 400 });
   }
   const b = (body ?? {}) as Record<string, unknown>;
+
+  // Captcha (Cloudflare Turnstile) antes de validar o crear nada: es lo que
+  // frena a un bot que da de alta miles de barberías en segundos. Sin sus
+  // dos variables el alta sigue como antes y queda en el log.
+  const captcha = await checkBarberCaptcha(req, b.captchaToken, BARBER_CAPTCHA_ACTIONS.register);
+  if (captcha.response) return captcha.response;
 
   const shopName = typeof b.shopName === "string" ? b.shopName.trim() : "";
   const firstName = typeof b.firstName === "string" ? b.firstName.trim() : "";

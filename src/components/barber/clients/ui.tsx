@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { type Dictionary, type TVars } from "@/i18n/t";
 import { makeBarberT } from "@/lib/barber/i18n";
+import { formatBarberPhone } from "@/lib/barber/phone-format";
 import s from "./clients.module.css";
 
 /**
@@ -210,10 +211,9 @@ export function initials(name: string): string {
 // ── Formato de teléfono y fechas ───────────────────────────────────────
 
 /** 5512345678 → 55 1234 5678. Solo presentación; en BD van los 10 dígitos. */
+/** Teléfono legible (999 260 2093 · 55 1234 5678): el formateador ÚNICO del vertical. */
 export function prettyPhone(phone: string): string {
-  const d = phone.replace(/\D/g, "");
-  if (d.length !== 10) return phone;
-  return `${d.slice(0, 2)} ${d.slice(2, 6)} ${d.slice(6)}`;
+  return formatBarberPhone(phone);
 }
 
 export function formatDate(iso: string | null, locale: string): string {

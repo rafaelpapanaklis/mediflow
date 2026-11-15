@@ -8,6 +8,7 @@ import {
 import { getBarberT } from "@/i18n/dictionaries/barber";
 import { PortalClient } from "@/components/barber/portal/portal-client";
 import { PortalLogin } from "@/components/barber/portal/portal-login";
+import { barberCaptchaSiteKey } from "@/lib/barber/captcha";
 import "@/app/barber/barber-theme.css";
 import "@/components/barber/booking/barber-public.css";
 
@@ -76,7 +77,12 @@ export default async function BarberPortalPage(props: PageProps) {
       ) : (
         <>
           <Head shop={shop} />
-          <PortalLogin slug={shop.slug} shop={shop} codeTtlMin={PORTAL_CODE_TTL_MIN} />
+          <PortalLogin
+            slug={shop.slug}
+            shop={shop}
+            codeTtlMin={PORTAL_CODE_TTL_MIN}
+            captchaSiteKey={barberCaptchaSiteKey()}
+          />
         </>
       )}
     </Shell>

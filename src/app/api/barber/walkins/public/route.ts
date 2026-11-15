@@ -13,9 +13,10 @@
 //   · NO se devuelve NADA de los demás en la fila: ni nombres, ni
 //     teléfonos, ni ids. Solo CUÁNTOS hay. Lo único personal que sale es lo
 //     de quien trae su propio ticket (un cuid no adivinable).
-//   · Rate-limit PERSISTENTE por IP (el de failban, el del dental) y un
-//     tope de gente en espera para anotarse desde la calle, para que nadie
-//     llene la fila de fantasmas.
+//   · Rate-limit PERSISTENTE por IP (el de failban, el del dental), captcha
+//     (Cloudflare Turnstile, src/lib/barber/captcha.ts) y un tope de gente
+//     en espera para anotarse desde la calle, para que nadie llene la fila
+//     de fantasmas.
 //   · Quien manda un teléfono que YA está formado recibe «ya estás en la
 //     fila» y NADA más: ni el ticket ni el nombre de quien se anotó (el
 //     ticket ya vive en el navegador de esa persona).
@@ -23,6 +24,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { mxTenDigits } from "@/lib/phone-mx";
+import { checkBarberCaptcha } from "@/lib/barber/captcha";
+import { BARBER_CAPTCHA_ACTIONS } from "@/lib/barber/captcha-core";
 import {
   estimateWaitMinutes,
   formatWaitMinutes,
@@ -163,6 +166,11 @@ export async function POST(req: Request) {
       { status: 429 },
     );
   }
+
+  // Captcha (Cloudflare Turnstile), antes de tocar la fila. Sin sus dos
+  // variables se anota como antes y queda en el log.
+  const captcha = await checkBarberCaptcha(req, body.captchaToken, BARBER_CAPTCHA_ACTIONS.walkin);
+  if (captcha.response) return captcha.response;
 
   const resolved = await resolvePublicShop(slug);
   if (resolved.error) return shopError(resolved.error);

@@ -17,6 +17,7 @@ import { prisma } from "@/lib/prisma";
 import { getBarberDict } from "@/i18n/dictionaries/barber";
 import { isBarbershopSubscriptionActive } from "@/lib/barber/plan-shared";
 import { WalkinPublic } from "@/components/barber/walkin/walkin-public";
+import { barberCaptchaSiteKey } from "@/lib/barber/captcha";
 import "../../barber-theme.css";
 
 export const dynamic = "force-dynamic";
@@ -72,6 +73,8 @@ export default async function BarberPublicQueuePage(props: PageProps) {
         slug={params.slug.toLowerCase()}
         shopName={open && shop ? shop.name : ""}
         logoUrl={open && shop ? shop.logoUrl : null}
+        locale={open ? shop?.locale : "es"}
+        captchaSiteKey={open ? barberCaptchaSiteKey() : null}
       />
     </div>
   );

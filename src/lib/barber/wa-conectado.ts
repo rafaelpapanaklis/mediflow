@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { decryptField } from "@/lib/crypto/envelope";
 
 /* ═══════════════════════════════════════════════════════════════════════
    ¿La barbería tiene WhatsApp conectado? — un sí/no, y nada más.
@@ -19,7 +20,12 @@ export async function barberiaTieneWhatsApp(barbershopId: string): Promise<boole
       where: { id: barbershopId },
       select: { phoneNumberId: true, whatsappToken: true },
     });
-    return Boolean(row?.phoneNumberId && row?.whatsappToken);
+    if (!row?.phoneNumberId || !row?.whatsappToken) return false;
+    // Un token que no se puede descifrar (llave rotada, otro entorno) no
+    // manda nada: no se promete. decryptField (compartido con el dental, no
+    // se toca) LANZA en ese caso; el catch de abajo lo vuelve un «no».
+    decryptField(row.whatsappToken);
+    return true;
   } catch {
     return false;
   }
