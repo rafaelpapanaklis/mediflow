@@ -28,7 +28,7 @@ import {
 import type { BarberClientDTO } from "@/lib/barber/types";
 // La marca con la que la caja señala la línea que se llevó el canje (y
 // cuántos sellos costó) vive en el núcleo compartido.
-import { isLoyaltyLine } from "@/lib/barber/loyalty-core";
+import { isLoyaltyLine, liveStars, manualStarsNet } from "@/lib/barber/loyalty-core";
 // El sello interno de los tickets de mostrador nunca se enseña.
 import { stripSaleTag } from "@/lib/barber/memberships-core";
 
@@ -179,8 +179,16 @@ export async function syncBarberClientLoyalty(
   // huella en la línea de venta). Los dos consumen sellos, así que los dos
   // se restan. Si solo se contara la bitácora, el recálculo le devolvería
   // al cliente los sellos que la caja ya le descontó: corte gratis infinito.
-  const redeemedVisits = ledger.redeemedVisits + tally.cashRedeemedStamps;
-  const count = Math.max(0, tally.visits - redeemedVisits);
+  // Las estrellas dadas o quitadas a mano (bitácora __stars) también cuentan:
+  // se restan como «canje negativo» para que buildLoyaltyState dé lo mismo
+  // que liveStars(), la fórmula única de loyalty-core.ts.
+  const redeemedVisits =
+    ledger.redeemedVisits + tally.cashRedeemedStamps - manualStarsNet(client.preferences);
+  const count = liveStars({
+    visits: tally.visits,
+    preferences: client.preferences,
+    cashRedeemedStamps: tally.cashRedeemedStamps,
+  });
   const lastMs = (d: Date | null) => (d ? d.getTime() : null);
 
   let row = client;

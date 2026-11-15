@@ -8,6 +8,7 @@ import { sumMoneyBy } from "@/lib/barber/money";
 import { isBarbershopSubscriptionActive } from "@/lib/barber/plan-shared";
 import { BARBER_FILES_BUCKET, canTransition } from "@/lib/barber/types";
 import { getLoyaltyRule, refreshLoyalty } from "@/lib/barber/loyalty-core";
+import { loadStarsView, type StarsView } from "@/lib/barber/stars-core";
 import {
   BARBER_CANCEL_WINDOW_HOURS,
   BARBER_PORTAL_COOKIE,
@@ -374,6 +375,12 @@ export interface PortalPayload {
   gallery: PortalPhotoDTO[];
   membership: PortalMembershipDTO | null;
   policy: { cancelWindowHours: number };
+  /**
+   * «Mis estrellas»: la tarjeta, el siguiente bono, los disponibles y el
+   * historial (sin motivos ni nombres del personal). null si no se pudo leer:
+   * el portal sigue mostrando el resto.
+   */
+  stars: StarsView | null;
 }
 
 
@@ -413,6 +420,14 @@ export async function loadPortalData(args: {
     loyalty = (await refreshLoyalty(prisma, barbershopId, [clientId])).get(clientId) ?? loyalty;
   } catch (e) {
     console.warn("[barber/portal] no se pudo recontar la lealtad:", (e as Error).message);
+  }
+
+  // Estrellas (después del recuento: lee el número ya fresco).
+  let stars: StarsView | null = null;
+  try {
+    stars = await loadStarsView(prisma, { barbershopId, clientId, audience: "client", now });
+  } catch (e) {
+    console.warn("[barber/portal] no se pudo armar la tarjeta de estrellas:", (e as Error).message);
   }
 
   const [appointments, sales, photos, membership] = await Promise.all([
@@ -555,6 +570,7 @@ export async function loadPortalData(args: {
     })),
     gallery,
     policy: { cancelWindowHours: BARBER_CANCEL_WINDOW_HOURS },
+    stars,
     membership: membership
       ? {
           name: membership.membership.name,

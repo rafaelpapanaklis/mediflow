@@ -10,6 +10,7 @@ import {
   LOYALTY_THRESHOLD_MAX,
   LOYALTY_THRESHOLD_MIN,
   NOT_CANCELLED,
+  liveStars,
   tallyVisits,
   type BarberVisitTally,
 } from "@/lib/barber/loyalty-core";
@@ -733,11 +734,12 @@ export async function listBarberClients(
       lastVisitAt: null,
       cashRedeemedStamps: 0,
     };
-    const ledger = readLoyaltyLedger(row.preferences);
-    const count = Math.max(
-      0,
-      tally.visits - ledger.redeemedVisits - tally.cashRedeemedStamps,
-    );
+    // Misma fórmula que la caja y «mi cuenta» (incluye las estrellas a mano).
+    const count = liveStars({
+      visits: tally.visits,
+      preferences: row.preferences,
+      cashRedeemedStamps: tally.cashRedeemedStamps,
+    });
     derived.set(row.id, { count, visits: tally.visits, lastVisitAt: tally.lastVisitAt });
     const sameDate =
       (row.lastVisitAt ? row.lastVisitAt.getTime() : null) ===

@@ -74,7 +74,14 @@ export function toLoyaltyRule(row: {
 /** Clientes mínimos de Prisma que necesita este módulo (prisma o un tx). */
 export type LoyaltyDb = Pick<
   Prisma.TransactionClient,
-  "barbershop" | "barberClient" | "barberAppointment" | "barberSale" | "barberSaleItem"
+  | "barbershop"
+  | "barberClient"
+  | "barberAppointment"
+  | "barberSale"
+  | "barberSaleItem"
+  | "barberService"
+  | "$queryRaw"
+  | "$executeRaw"
 >;
 
 /**
@@ -108,10 +115,23 @@ export async function getLoyaltyRule(db: LoyaltyDb, barbershopId: string): Promi
 /** Sufijo histórico: los canjes anteriores a esta ola costaron 10 sellos. */
 export const LOYALTY_SUFFIX = " · Gratis (lealtad)";
 export const LOYALTY_LEGACY_STAMPS = 10;
-/** Lo que comparten el sufijo histórico y el nuevo (para buscar en la base). */
-export const LOYALTY_LINE_MARK = " · Gratis (lealtad";
+/**
+ * Lo que comparten TODAS las marcas de canje (para buscar en la base): el
+ * servicio gratis de siempre (« · Gratis (lealtad…») y los bonos nuevos de
+ * descuento o regalo (« · Descuento (lealtad · 8 estrellas)»). La expresión
+ * de abajo es la que decide de verdad; esto solo acota la búsqueda.
+ */
+export const LOYALTY_LINE_MARK = " (lealtad";
 
-const LOYALTY_LINE_RE = / · Gratis \(lealtad(?: · (\d{1,3}) sellos?)?\)$/;
+/**
+ * Qué se llevó la línea:
+ *   · "free"     → un servicio del ticket en $0 (el premio de siempre).
+ *   · "discount" → línea de ajuste negativa (bono en pesos o en %).
+ *   · "gift"     → línea de $0 que deja constancia de un regalo («otro»).
+ */
+export type LoyaltyLineKind = "free" | "discount" | "gift";
+
+const LOYALTY_LINE_RE = / · (Gratis|Descuento|Regalo) \(lealtad(?: · (\d{1,3}) (?:sellos?|estrellas?))?\)$/;
 
 /** Sufijo de la línea canjeada. Con 10 sellos es el de siempre. */
 export function loyaltyLineSuffix(stamps: number): string {
@@ -120,16 +140,127 @@ export function loyaltyLineSuffix(stamps: number): string {
   return ` · Gratis (lealtad · ${n} ${n === 1 ? "sello" : "sellos"})`;
 }
 
-/** Sellos que consumió esa línea, o null si no es una línea de canje. */
-export function loyaltyStampsOfLine(description: string | null | undefined): number | null {
+/**
+ * Descripción de la línea de un bono que NO es un servicio gratis: la de un
+ * descuento («Bono: 20% en tu corte · Descuento (lealtad · 8 estrellas)») o
+ * la de un regalo. Lleva el nombre del bono (para el historial del cliente)
+ * y cuántas estrellas costó (para recontar).
+ */
+export function loyaltyBonusLineDescription(kind: "discount" | "gift", bonusName: string, stars: number): string {
+  const n = clampLoyaltyThreshold(stars);
+  const name = cleanBonusName(bonusName) || LOYALTY_DEFAULT_REWARD;
+  const word = kind === "discount" ? "Descuento" : "Regalo";
+  return `Bono: ${name} · ${word} (lealtad · ${n} ${n === 1 ? "estrella" : "estrellas"})`;
+}
+
+/** Nombre de bono apto para viajar dentro de una descripción de ticket. */
+export function cleanBonusName(raw: unknown): string {
+  return typeof raw === "string" ? raw.replace(/\s+/g, " ").trim().slice(0, 60) : "";
+}
+
+/** Lo que dice la marca de esa línea, o null si no es una línea de canje. */
+export function parseLoyaltyLine(
+  description: string | null | undefined,
+): { kind: LoyaltyLineKind; stars: number; bonusName: string | null; head: string } | null {
   if (typeof description !== "string") return null;
   const m = LOYALTY_LINE_RE.exec(description);
   if (!m) return null;
-  return m[1] ? clampLoyaltyThreshold(Number(m[1])) : LOYALTY_LEGACY_STAMPS;
+  const kind: LoyaltyLineKind = m[1] === "Gratis" ? "free" : m[1] === "Descuento" ? "discount" : "gift";
+  const stars = m[2] ? clampLoyaltyThreshold(Number(m[2])) : LOYALTY_LEGACY_STAMPS;
+  // Lo que va antes de la marca: el servicio (gratis) o «Bono: <nombre>».
+  const head = description.slice(0, m.index);
+  let bonusName: string | null = null;
+  if (kind !== "free") {
+    bonusName = head.startsWith("Bono: ") ? head.slice("Bono: ".length) || null : head || null;
+  }
+  return { kind, stars, bonusName, head };
+}
+
+/** Sellos que consumió esa línea, o null si no es una línea de canje. */
+export function loyaltyStampsOfLine(description: string | null | undefined): number | null {
+  const parsed = parseLoyaltyLine(description);
+  return parsed ? parsed.stars : null;
 }
 
 export function isLoyaltyLine(description: string | null | undefined): boolean {
   return loyaltyStampsOfLine(description) !== null;
+}
+
+/** Solo el servicio que quedó en $0 por lealtad (no un descuento ni un regalo). */
+export function isLoyaltyFreeLine(description: string | null | undefined): boolean {
+  return parseLoyaltyLine(description)?.kind === "free";
+}
+
+// ── Estrellas a mano (bitácora __stars) ─────────────────────────────────
+//
+// «Dar estrella» y «Quitar estrella» desde la ficha. No hay columna nueva:
+// viven en la llave reservada __stars de barber_clients.preferences, que el
+// navegador no puede escribir (mergeClientPreferences conserva las llaves
+// «__»). `net` es la suma de todos los ajustes; `entries` el historial con
+// motivo, quién y cuándo (recortado a los más recientes, sin tocar `net`).
+
+export const STARS_LEDGER_KEY = "__stars";
+export const STARS_LEDGER_MAX = 100;
+
+export interface StarAdjustment {
+  id: string;
+  at: string;
+  /** +1 da, −1 quita. */
+  delta: number;
+  reason: string;
+  byUserId: string;
+  /** Nombre de quien lo hizo, congelado en el momento (para el historial). */
+  byName: string;
+}
+
+export interface StarsLedger {
+  net: number;
+  entries: StarAdjustment[];
+}
+
+function asObj(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+}
+
+export function readStarsLedger(preferences: unknown): StarsLedger {
+  const node = asObj(asObj(preferences)[STARS_LEDGER_KEY]);
+  const net = Number(node.net);
+  const list = Array.isArray(node.entries) ? node.entries : [];
+  return {
+    net: Number.isFinite(net) ? Math.trunc(net) : 0,
+    entries: list
+      .map((e) => {
+        const r = asObj(e);
+        const delta = Number(r.delta);
+        return {
+          id: typeof r.id === "string" ? r.id : "",
+          at: typeof r.at === "string" ? r.at : "",
+          delta: Number.isFinite(delta) ? Math.trunc(delta) : 0,
+          reason: typeof r.reason === "string" ? r.reason : "",
+          byUserId: typeof r.byUserId === "string" ? r.byUserId : "",
+          byName: typeof r.byName === "string" ? r.byName : "",
+        };
+      })
+      .filter((e) => e.at && e.delta !== 0),
+  };
+}
+
+/** Estrellas sumadas (o restadas) a mano. */
+export function manualStarsNet(preferences: unknown): number {
+  return readStarsLedger(preferences).net;
+}
+
+/**
+ * LA fórmula de las estrellas vivas. Una sola para la ficha, la lista, la
+ * caja, «mi cuenta» y la tarjeta por enlace.
+ *
+ *   estrellas = visitas + ajustes a mano − canjes de la ficha − canjes de caja
+ */
+export function liveStars(parts: { visits: number; preferences: unknown; cashRedeemedStamps: number }): number {
+  return Math.max(
+    0,
+    parts.visits + manualStarsNet(parts.preferences) - ledgerRedeemedVisits(parts.preferences) - parts.cashRedeemedStamps,
+  );
 }
 
 // ── El recuento ─────────────────────────────────────────────────────────
@@ -141,6 +272,18 @@ export function isLoyaltyLine(description: string | null | undefined): boolean {
  */
 export const NOT_CANCELLED: Prisma.BarberSaleWhereInput = {
   OR: [{ notes: null }, { NOT: { notes: { startsWith: CANCELLED_MARK } } }],
+};
+
+/**
+ * Qué cita da estrella: la COMPLETADA, salvo que todos sus tickets estén
+ * cancelados. «Cancelar un ticket quita su estrella» (Rafael, 15-nov-2026):
+ * una cita sin ticket todavía cuenta —hay barberías que no usan la caja—,
+ * pero la que se cobró y luego se canceló deja de contar hasta que se vuelva
+ * a cobrar. Es la misma regla en el recuento y en el historial.
+ */
+export const APPOINTMENT_GIVES_STAR: Prisma.BarberAppointmentWhereInput = {
+  status: "DONE",
+  OR: [{ sales: { none: {} } }, { sales: { some: NOT_CANCELLED } }],
 };
 
 export interface BarberVisitTally {
@@ -172,7 +315,7 @@ export async function tallyVisits(
   const [appts, sales, redeemedLines] = await Promise.all([
     db.barberAppointment.groupBy({
       by: ["clientId"],
-      where: { barbershopId, clientId: { in: clientIds }, status: "DONE" },
+      where: { barbershopId, clientId: { in: clientIds }, ...APPOINTMENT_GIVES_STAR },
       _count: { _all: true },
       _max: { startAt: true },
     }),
@@ -269,7 +412,11 @@ export async function refreshLoyalty(
 
   for (const row of rows) {
     const tally = tallies.get(row.id) ?? { visits: 0, lastVisitAt: null, cashRedeemedStamps: 0 };
-    const count = Math.max(0, tally.visits - ledgerRedeemedVisits(row.preferences) - tally.cashRedeemedStamps);
+    const count = liveStars({
+      visits: tally.visits,
+      preferences: row.preferences,
+      cashRedeemedStamps: tally.cashRedeemedStamps,
+    });
     out.set(row.id, { count, visits: tally.visits, lastVisitAt: tally.lastVisitAt });
 
     const sameDate =
