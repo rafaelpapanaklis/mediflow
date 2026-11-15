@@ -25,6 +25,7 @@ export function ConnectionPanel({
   connection,
   quota,
   locale,
+  timezone = null,
   canEdit,
   canSend,
   onChanged,
@@ -32,6 +33,8 @@ export function ConnectionPanel({
   connection: BarberWaConnectionDTO;
   quota: BarberWaQuotaDTO;
   locale: string;
+  /** Zona de la barbería: las fechas salen igual en servidor y navegador. */
+  timezone?: string | null;
   canEdit: boolean;
   canSend: boolean;
   onChanged: () => void;
@@ -128,7 +131,7 @@ export function ConnectionPanel({
               {connection.verifiedAt ? (
                 <>
                   {t("connection.verifiedAt")}:
-                  <span className={s.metaValue}>{formatWhen(connection.verifiedAt, locale)}</span>
+                  <span className={s.metaValue}>{formatWhen(connection.verifiedAt, locale, timezone)}</span>
                 </>
               ) : (
                 <span className={s.metaValue}>{t("connection.notVerified")}</span>
@@ -191,7 +194,7 @@ export function ConnectionPanel({
         )}
 
         {quota.periodStart ? (
-          <p className={s.tplMeta}>{t("quota.since", { date: formatWhen(quota.periodStart, locale) })}</p>
+          <p className={s.tplMeta}>{t("quota.since", { date: formatWhen(quota.periodStart, locale, timezone) })}</p>
         ) : null}
 
         {quota.exhausted ? (

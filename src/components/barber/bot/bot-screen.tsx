@@ -29,6 +29,7 @@ import {
 import s from "./bot.module.css";
 import { botEmptyKey } from "./bot-empty";
 import { formatBarberPhone } from "@/lib/barber/phone-format";
+import { formatBarberShortWhen } from "@/lib/barber/fecha-corta";
 
 /* ═══════════════════════════════════════════════════════════════════════
    /barber/whatsapp/bot — encender el bot y confiar en él.
@@ -55,6 +56,8 @@ function useBotT(): BotT {
 export interface BarberBotScreenProps {
   dict: Dictionary;
   locale: string;
+  /** Zona de la barbería: las fechas salen igual en servidor y navegador. */
+  timezone?: string | null;
   initial: BarberBotPanelState;
   connected: boolean;
   canEdit: boolean;
@@ -69,7 +72,7 @@ export function BarberBotScreen(props: BarberBotScreenProps) {
   );
 }
 
-function Screen({ locale, initial, connected, canEdit, canAttend }: BarberBotScreenProps) {
+function Screen({ locale, timezone, initial, connected, canEdit, canAttend }: BarberBotScreenProps) {
   const t = useBotT();
   const [settings, setSettings] = useState<BarberBotSettings>(initial.settings);
   const [pauses, setPauses] = useState(initial.pauses);
@@ -373,7 +376,7 @@ function Screen({ locale, initial, connected, canEdit, canAttend }: BarberBotScr
                     <span className={s.rowTitle}>{prettyPhone(p.phone)}</span>
                     <span className={s.rowSub}>
                       {p.reason ? `${p.reason} · ` : ""}
-                      {t("pauses.pausedAt", { when: shortWhen(p.pausedAt, locale) })}
+                      {t("pauses.pausedAt", { when: shortWhen(p.pausedAt, locale, timezone) })}
                     </span>
                   </div>
                   <div className={s.rowActions}>
@@ -412,7 +415,7 @@ function Screen({ locale, initial, connected, canEdit, canAttend }: BarberBotScr
                       <span className={s.ref}>#{b.reference}</span>
                     </span>
                     <span className={s.rowSub}>
-                      {t("history.when", { when: shortWhen(b.startAt, locale) })}
+                      {t("history.when", { when: shortWhen(b.startAt, locale, timezone) })}
                       {b.barberName ? ` · ${b.barberName}` : ""}
                       {b.services.length > 0 ? ` · ${b.services.join(", ")}` : ""}
                     </span>
@@ -490,15 +493,7 @@ function prettyPhone(phone: string): string {
   return phone ? formatBarberPhone(phone) : "—";
 }
 
-function shortWhen(iso: string, locale: string): string {
-  try {
-    return new Intl.DateTimeFormat(locale === "en" ? "en-US" : "es-MX", {
-      day: "2-digit",
-      month: "short",
-      hour: "2-digit",
-      minute: "2-digit",
-    }).format(new Date(iso));
-  } catch {
-    return iso.slice(0, 16).replace("T", " ");
-  }
+/** Igual que formatWhen: con la zona de la barbería, servidor y navegador coinciden (#418). */
+function shortWhen(iso: string, locale: string, timeZone?: string | null): string {
+  return formatBarberShortWhen(iso, locale, timeZone);
 }

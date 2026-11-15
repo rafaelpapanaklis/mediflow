@@ -193,6 +193,7 @@ export function SupportClient({
   canWrite,
   limits,
   locale,
+  timezone = null,
   branches,
   activeBranchId,
   isConsolidated,
@@ -202,6 +203,8 @@ export function SupportClient({
   canWrite: boolean;
   limits: SupportLimits;
   locale: string;
+  /** Zona de la barbería: las fechas salen igual en servidor y navegador. */
+  timezone?: string | null;
   branches: AdminBranchOption[];
   activeBranchId: string | null;
   isConsolidated: boolean;
@@ -362,7 +365,7 @@ export function SupportClient({
                       <Chip tone="danger">{t("ticketPriority.HIGH")}</Chip>
                     ) : null}
                     {isConsolidated ? <Chip tone="muted">{ticket.branchLabel}</Chip> : null}
-                    <span>{formatWhen(ticket.lastMessageAt, locale)}</span>
+                    <span>{formatWhen(ticket.lastMessageAt, locale, timezone)}</span>
                   </span>
                 </button>
               ))}
@@ -387,7 +390,7 @@ export function SupportClient({
                 </div>
                 <p className={s.hint} style={{ marginTop: 6 }}>
                   {t("support.openedBy", { name: detail.ticket.createdByName ?? "" })} ·{" "}
-                  {t("support.openedAt", { date: formatWhen(detail.ticket.createdAt, locale) })}
+                  {t("support.openedAt", { date: formatWhen(detail.ticket.createdAt, locale, timezone) })}
                 </p>
               </div>
 
@@ -432,7 +435,7 @@ export function SupportClient({
                       {m.authorType === "SHOP"
                         ? m.authorName ?? t("support.authorShop")
                         : t("support.authorAdmin")}{" "}
-                      · {formatWhen(m.createdAt, locale)}
+                      · {formatWhen(m.createdAt, locale, timezone)}
                     </span>
                   </div>
                 ))}
