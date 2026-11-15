@@ -13,6 +13,7 @@ import {
 } from "@/lib/barber/marketing";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
+import { BARBER_PASSWORD_READY_PARAM } from "@/lib/barber/contrasena";
 import { BarberEntrarForm } from "./entrar-form";
 
 // La página lee la sesión (cookies): nunca se prerenderiza.
@@ -41,10 +42,13 @@ export const metadata: Metadata = {
  * cae en Suscripción con ese plan a la vista en vez de en el índice.
  */
 export default async function BarberEntrarPage(props: {
-  searchParams?: Promise<{ plan?: string | string[] }>;
+  searchParams?: Promise<{ plan?: string | string[]; contrasena?: string | string[] }>;
 }) {
   const sp = (await props.searchParams) ?? {};
   const plan = isBarberPlanId(sp.plan) ? sp.plan : null;
+  // Llega de /barber/restablecer: se compara contra el valor fijo y se pinta
+  // un texto fijo; de la URL no se enseña nada.
+  const contrasenaLista = sp[BARBER_PASSWORD_READY_PARAM.name] === BARBER_PASSWORD_READY_PARAM.value;
   const destino = plan ? barberPathWithPlan(BARBER_BILLING_PATH, plan) : "/barber";
 
   // Con sesión de barbería no hay nada que pedir: adentro.
@@ -63,7 +67,7 @@ export default async function BarberEntrarPage(props: {
           destino={destino}
           registerHref={barberPathWithPlan(BARBER_REGISTER_PATH, plan)}
           forgotHref={BARBER_FORGOT_PASSWORD_PATH}
-          aviso={aviso?.texto ?? null}
+          aviso={aviso?.texto ?? (contrasenaLista ? "Listo, ya puedes entrar con tu contraseña nueva." : null)}
           // Solo para la cuenta que NO es de barbería: su puerta es la otra.
           otraEntradaHref={aviso?.cuentaAjena ? DALECONTROL_CLINIC_LOGIN_PATH : null}
         />
