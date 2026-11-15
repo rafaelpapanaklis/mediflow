@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
+import { DIALOGO_CERRAR, useDialogo } from "../dialogo";
 
 /**
  * Piezas compartidas de la pantalla de membresías. Nada de librerías nuevas:
@@ -32,27 +33,8 @@ export function Modal({
 
   useEffect(() => setMounted(true), []);
 
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKey);
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    // El foco entra al modal para que el teclado no se quede detrás.
-    const timer = window.setTimeout(() => {
-      const first = boxRef.current?.querySelector<HTMLElement>(
-        "input, select, textarea, button:not(.bmem-modal-close)",
-      );
-      first?.focus();
-    }, 30);
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = prev;
-      window.clearTimeout(timer);
-    };
-  }, [open, onClose]);
+  // Esc, scroll y foco inicial (primer campo) UNA vez al abrir (ver ../dialogo.ts).
+  useDialogo({ panel: boxRef, onClose, abierta: open && mounted });
 
   if (!mounted || !open) return null;
 
@@ -73,7 +55,7 @@ export function Modal({
       >
         <div className="bmem-modal-head">
           <h2 className="bmem-modal-title">{title}</h2>
-          <button type="button" className="bmem-modal-close" onClick={onClose} aria-label="Cerrar">
+          <button type="button" className="bmem-modal-close" onClick={onClose} aria-label="Cerrar" {...{ [DIALOGO_CERRAR]: "" }}>
             <X size={18} />
           </button>
         </div>

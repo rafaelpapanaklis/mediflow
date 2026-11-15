@@ -5,6 +5,7 @@ import { X } from "lucide-react";
 import { type Dictionary, type TVars } from "@/i18n/t";
 import { makeBarberT } from "@/lib/barber/i18n";
 import { formatBarberPhone } from "@/lib/barber/phone-format";
+import { DIALOGO_CERRAR, useDialogo } from "../dialogo";
 import s from "./clients.module.css";
 
 /**
@@ -128,24 +129,9 @@ export function Modal({
 }) {
   const panelRef = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKey);
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    // El foco entra al panel para que el lector de pantalla y el teclado
-    // no se queden atrás en la página.
-    const first = panelRef.current?.querySelector<HTMLElement>(
-      "input, textarea, select, button",
-    );
-    first?.focus();
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = prev;
-    };
-  }, [onClose]);
+  // Esc, scroll y foco inicial UNA vez al abrir; el foco va al primer campo,
+  // no a la X (antes se re-hacía en cada tecla: ver ../dialogo.ts).
+  useDialogo({ panel: panelRef, onClose });
 
   return (
     <div
@@ -163,7 +149,7 @@ export function Modal({
       >
         <div className={s.modalHead}>
           <h2 className={s.modalTitle}>{title}</h2>
-          <button type="button" className={s.iconBtn} onClick={onClose} aria-label={closeLabel}>
+          <button type="button" className={s.iconBtn} onClick={onClose} aria-label={closeLabel} {...{ [DIALOGO_CERRAR]: "" }}>
             <X size={16} />
           </button>
         </div>
