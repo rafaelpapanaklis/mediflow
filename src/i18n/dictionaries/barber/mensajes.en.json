@@ -56,6 +56,8 @@
     "nextAppt": "Next appointment",
     "with": "with {barber}",
     "noAppt": "No appointment in the next 14 days",
+    "openAppt": "Open this appointment in the schedule",
+    "book": "Book",
     "archive": "Archive",
     "unarchive": "Unarchive",
     "archived": "Chat archived.",

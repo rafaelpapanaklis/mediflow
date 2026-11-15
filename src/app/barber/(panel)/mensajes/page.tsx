@@ -81,6 +81,11 @@ export default async function Page(props: { searchParams: Promise<{ tel?: string
         clients:
           barberPlanHasFeature(plan, "clients") && hasBarberPermission(permUser, "clients.view"),
         agenda: barberPlanHasFeature(plan, "agenda") && hasBarberPermission(permUser, "agenda.view"),
+        book:
+          barberPlanHasFeature(plan, "agenda") &&
+          hasBarberPermission(permUser, "agenda.edit") &&
+          barberPlanHasFeature(plan, "clients") &&
+          hasBarberPermission(permUser, "clients.view"),
       }}
       initialPhone={telefono.length === 10 ? telefono : null}
     />
