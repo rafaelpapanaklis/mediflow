@@ -784,3 +784,22 @@ body:has(.barber-shell) {
      sola con un hueco al lado (Caja: 4 cifras). Esa se estira. */
   :root .barber-panel .bd-band > .kpi--hero:first-child ~ .kpi:last-child:nth-child(even) { grid-column: 1 / -1; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   PANTALLAS GRANDES (ws6-t8, 15-nov). En 2560, 3440 y 4K las pantallas sin
+   tope (Inicio, Caja, Fila, Productos, Reportes, Comisiones…) se estiraban
+   a 3 000 px: tablas con columnas a un metro y renglones de 500 letras.
+   Tope = el lienzo del rediseño D (mockup v2/d: `.page { max-width: 1320px }`),
+   centrado como ya lo hacen Clientes, Equipo o Configuración (1180, margin auto).
+   A 1440 no cambia nada: ahí el <main> mide ~1200 px, menos que el tope.
+   La agenda (la que tiene rejilla con [data-scroller]) NO lleva tope: sus
+   columnas por barbero ganan con el ancho.
+   Especificidad CERO (:where): si la pantalla ya trae su propio ancho
+   (Clientes 1180, Configuración 1100, Ticket 720…) manda el suyo; sin eso,
+   el #main-content le ganaba y a 1440 las ensanchaba. Membresías (.bmem)
+   va pegada a la izquierda en el diseño aprobado: no se centra.
+   ═══════════════════════════════════════════════════════════════════════ */
+:where(.barber-shell #main-content) > :where(:not(:has([data-scroller])):not(.bmem)) {
+  max-width: 1320px;
+  margin-inline: auto;
+}
