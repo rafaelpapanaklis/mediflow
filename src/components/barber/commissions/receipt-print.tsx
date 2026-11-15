@@ -48,7 +48,7 @@ export function ReceiptPrint({
         <div className="bcaja-print__row"><span>{t("print.receiptPeriod")}</span><span style={{ textTransform: "capitalize" }}>{fmtPeriod(periodKey, locale)}</span></div>
         <div className="bcaja-print__row"><span>{t("print.receiptScheme")}</span><span>{scheme}</span></div>
         <div className="bcaja-print__row"><span>{t("comisiones.policy")}</span><span>{policyLabel}</span></div>
-        <div className="bcaja-print__row"><span>{t("print.receiptStatus")}</span><span>{row.paidStatus === "PAID" && row.lastPaidAt ? t("print.receiptPaidAt", { date: fmtDate(row.lastPaidAt, tz) }) : t("print.receiptPending")}</span></div>
+        <div className="bcaja-print__row"><span>{t("print.receiptStatus")}</span><span>{row.paidStatus === "PAID" && row.lastPaidAt ? t("print.receiptPaidAt", { date: fmtDate(row.lastPaidAt, tz) }) : row.paidStatus === "PARTIAL" && row.lastPaidAt ? t("print.receiptPartial", { date: fmtDate(row.lastPaidAt, tz) }) : t("print.receiptPending")}</span></div>
 
         <hr className="bcaja-print__rule" />
         <div className="bcaja-print__section">{t("print.receiptProduced")}</div>
@@ -63,6 +63,10 @@ export function ReceiptPrint({
         <div className="bcaja-print__row"><span>{t("print.receiptTips")}</span><span>{fmtMoney(row.tips)}</span></div>
         {row.chairRent !== null && <div className="bcaja-print__row"><span>{t("print.receiptRent")}</span><span>−{fmtMoney(row.chairRent)}</span></div>}
         {row.commissionType === "SALARY" && <div className="bcaja-print__meta" style={{ padding: "4px 0" }}>{t("print.receiptSalaryNote")}</div>}
+        {/* Tres renglones que suman: lo del periodo = ya pagado + a pagar.
+            «A pagar» es la misma cifra de la tabla y del diálogo de pagar. */}
+        <div className="bcaja-print__row"><span>{t("print.receiptPeriodTotal")}</span><span>{fmtSigned(row.periodTotal)}</span></div>
+        <div className="bcaja-print__row"><span>{t("print.receiptAlreadyPaid")}</span><span>{fmtSigned(row.paidTotal)}</span></div>
         <div className="bcaja-print__row bcaja-print__row--total"><span>{t("print.receiptTotal")}</span><span>{fmtSigned(row.totalToPay)}</span></div>
 
         <div className="bcaja-print__section">{t("print.receiptEntries")}</div>
@@ -75,11 +79,12 @@ export function ReceiptPrint({
               <th style={{ textAlign: "right" }}>{t("comisiones.entryPct")}</th>
               <th style={{ textAlign: "right" }}>{t("comisiones.entryAmount")}</th>
               <th style={{ textAlign: "right" }}>{t("comisiones.entryTip")}</th>
+              <th>{t("comisiones.entryPaid")}</th>
             </tr>
           </thead>
           <tbody>
             {live.length === 0 ? (
-              <tr><td colSpan={6}>{t("comisiones.entriesEmpty")}</td></tr>
+              <tr><td colSpan={7}>{t("comisiones.entriesEmpty")}</td></tr>
             ) : (
               live.map((e) => (
                 <tr key={e.id}>
@@ -89,6 +94,7 @@ export function ReceiptPrint({
                   <td style={{ textAlign: "right" }}>{fmtPct(e.pct)}</td>
                   <td style={{ textAlign: "right" }}>{fmtMoney(e.amount)}</td>
                   <td style={{ textAlign: "right" }}>{fmtMoney(e.saleTip)}</td>
+                  <td>{e.paidAt ? fmtDate(e.paidAt, tz) : t("comisiones.statusPENDING")}</td>
                 </tr>
               ))
             )}
