@@ -216,7 +216,13 @@ export function prettyPhone(phone: string): string {
   return formatBarberPhone(phone);
 }
 
-export function formatDate(iso: string | null, locale: string): string {
+/**
+ * Fechas de la ficha. `timeZone` = la zona de la BARBERÍA: sin ella, el
+ * servidor (UTC en Vercel) y el navegador (México) escriben horas distintas
+ * —«5:15 p. m.» contra «11:15 a. m.»—, React marca el desajuste de
+ * hidratación (#418) y la ficha parpadea (QA A, 15-nov-2026).
+ */
+export function formatDate(iso: string | null, locale: string, timeZone?: string): string {
   if (!iso) return "";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
@@ -224,10 +230,11 @@ export function formatDate(iso: string | null, locale: string): string {
     day: "numeric",
     month: "short",
     year: "numeric",
+    ...(timeZone ? { timeZone } : {}),
   });
 }
 
-export function formatDateTime(iso: string | null, locale: string): string {
+export function formatDateTime(iso: string | null, locale: string, timeZone?: string): string {
   if (!iso) return "";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
@@ -237,6 +244,7 @@ export function formatDateTime(iso: string | null, locale: string): string {
     year: "numeric",
     hour: "numeric",
     minute: "2-digit",
+    ...(timeZone ? { timeZone } : {}),
   });
 }
 
