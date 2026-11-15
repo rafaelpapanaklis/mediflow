@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getBarberContext } from "@/lib/barber-auth";
 import { hasBarberPermission, type BarberPermissionKey } from "@/lib/barber/permissions";
@@ -7,12 +8,20 @@ import { getBarberPlan } from "@/lib/barber/plans";
 import { hasBarberPaidAccess } from "@/lib/barber/paid-access";
 import { barberNavItemsWhileUnpaid } from "@/lib/barber/plan-shared";
 import { BARBER_NAV_ITEMS, type BarberNavItem } from "@/lib/barber/types";
-import { BARBER_LOGIN_PATH } from "@/lib/barber/marketing";
+import { BARBER_LOGIN_PATH, BARBER_PRODUCT_NAME } from "@/lib/barber/marketing";
 import { getBarberT } from "@/i18n/dictionaries/barber";
 import { BarberSidebar } from "@/components/barber/barber-sidebar";
 import { BarberTopbar } from "@/components/barber/barber-topbar";
 import "@/app/panel-chrome-va.css";
 import "../barber-theme.css";
+
+// Título de la pestaña en TODO el panel. Sin esto se heredaba el del sitio,
+// «DaleControl — Software para clínicas en México» (auditoría 14-nov, M12).
+// `absolute` para que la plantilla del layout raíz no le cuelgue «| DaleControl».
+export const metadata: Metadata = {
+  title: { absolute: BARBER_PRODUCT_NAME },
+  robots: { index: false, follow: false },
+};
 
 /**
  * Shell del panel BARBER. Guard de sesión: sin contexto → /barber/entrar,
