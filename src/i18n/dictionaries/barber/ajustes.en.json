@@ -178,6 +178,8 @@
       "sub": "The stamp card: every completed visit adds one and, at the goal, the client earns the reward.",
       "enabled": "Loyalty program on",
       "enabledHint": "Off: the card disappears from the client's profile and portal, and the register doesn't offer the redemption. Accumulated stamps aren't lost.",
+      "subStars": "Stars: 1 per visit (completed appointment or service charged) and the client trades them for rewards.",
+      "enabledHintStars": "Off: stars disappear from the client's profile and portal, and the register doesn't offer the redemption. Collected stars aren't lost.",
       "threshold": "Visits to earn the reward",
       "thresholdHint": "With 10, the client earns the reward once they have 10 stamps. With an appointment, the stamp lands when the visit is completed: the tenth appointment can already be free. Without one, the stamp lands when they pay: the reward is used on the next visit. Completed appointments and service sales at the register count.",
       "thresholdBad": "Enter a whole number from {min} to {max} stamps.",

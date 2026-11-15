@@ -178,6 +178,8 @@
       "sub": "La tarjeta de sellos: cada visita completada suma uno y, al llegar a la meta, el cliente gana el premio.",
       "enabled": "Programa de fidelidad encendido",
       "enabledHint": "Apagado: la tarjeta deja de verse en la ficha y en el portal del cliente, y la caja no ofrece el canje. Los sellos acumulados no se pierden.",
+      "subStars": "Las estrellas: 1 por cada visita (cita completada o servicio cobrado) y el cliente las cambia por bonos.",
+      "enabledHintStars": "Apagado: las estrellas dejan de verse en la ficha y en el portal del cliente, y la caja no ofrece el canje. Las estrellas juntadas no se pierden.",
       "threshold": "Visitas para ganar el premio",
       "thresholdHint": "Con 10, el cliente gana el premio al juntar 10 sellos. Con cita, el sello cae al completar la visita: la décima cita ya puede salir gratis. Sin cita, el sello cae al cobrar: el premio se usa en la visita siguiente. Cuentan las citas completadas y las ventas de servicio en caja.",
       "thresholdBad": "Escribe un número entero de {min} a {max} sellos.",

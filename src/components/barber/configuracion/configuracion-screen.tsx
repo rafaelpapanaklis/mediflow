@@ -591,7 +591,7 @@ function LoyaltyCard({
     <Card
       icon={<Award size={18} />}
       title={t("configuracion.loyalty.title")}
-      sub={t("configuracion.loyalty.sub")}
+      sub={t(bonos ? "configuracion.loyalty.subStars" : "configuracion.loyalty.sub")}
       foot={
         <>
           <ErrorText>{error}</ErrorText>
@@ -606,7 +606,7 @@ function LoyaltyCard({
       <div className={s.numRow} style={{ justifyContent: "space-between" }}>
         <div style={{ minWidth: 0, flex: "1 1 200px" }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>{t("configuracion.loyalty.enabled")}</div>
-          <p className={s.hint} style={{ marginTop: 2 }}>{t("configuracion.loyalty.enabledHint")}</p>
+          <p className={s.hint} style={{ marginTop: 2 }}>{t(bonos ? "configuracion.loyalty.enabledHintStars" : "configuracion.loyalty.enabledHint")}</p>
         </div>
         <Switch checked={enabled} onChange={setEnabled} label={t("configuracion.loyalty.enabled")} disabled={!value.persisted} />
       </div>
