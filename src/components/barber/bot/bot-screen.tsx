@@ -28,6 +28,7 @@ import {
 } from "@/lib/barber/bot-core";
 import s from "./bot.module.css";
 import { botEmptyKey } from "./bot-empty";
+import { formatBarberPhone } from "@/lib/barber/phone-format";
 
 /* ═══════════════════════════════════════════════════════════════════════
    /barber/whatsapp/bot — encender el bot y confiar en él.
@@ -477,9 +478,7 @@ function fromHHMM(value: string): number {
 }
 
 function prettyPhone(phone: string): string {
-  const d = (phone ?? "").replace(/\D/g, "");
-  if (d.length !== 10) return phone || "—";
-  return `${d.slice(0, 2)} ${d.slice(2, 6)} ${d.slice(6)}`;
+  return phone ? formatBarberPhone(phone) : "—";
 }
 
 function shortWhen(iso: string, locale: string): string {

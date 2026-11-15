@@ -4,6 +4,7 @@ import { useCallback, useMemo, useState } from "react";
 import { CalendarPlus, LogOut, MessageCircle } from "lucide-react";
 import { getBarberT } from "@/i18n/dictionaries/barber";
 import type { PortalPayload, PortalShopDTO } from "@/lib/barber/client-portal";
+import { formatBarberPhone } from "@/lib/barber/phone-format";
 
 /* ═══════════════════════════════════════════════════════════════════════
    El portal del cliente ya identificado.
@@ -416,7 +417,7 @@ export function PortalClient({
 
       <p className="dcb-foot">
         {shop.address ? `${shop.address} · ` : ""}
-        {data.client.phone}
+        {formatBarberPhone(data.client.phone)}
       </p>
     </div>
   );
