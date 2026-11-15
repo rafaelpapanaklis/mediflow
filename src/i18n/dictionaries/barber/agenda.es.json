@@ -32,6 +32,7 @@
     "noSchedule": "Sin horario cargado",
     "closed": "Fuera de horario",
     "readOnly": "Solo puedes ver la agenda. Pide permiso para editarla.",
+    "readOnlyOwnBarber": "Puedes iniciar y completar tus visitas confirmadas; lo demás lo ve recepción.",
     "noScheduleAction": "Cargar su horario"
   },
   "summary": {

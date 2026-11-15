@@ -504,7 +504,11 @@ export function AgendaClient(props: AgendaClientProps) {
 
         {!canEdit && data ? (
           <p className={css.hint} style={{ marginTop: 10 }}>
-            {t("barber.agenda.state.readOnly")}
+            {/* El barbero que puede iniciar y completar SUS visitas
+                (advanceOwnBarberId) no está en «solo lectura»: su aviso lo dice. */}
+            {data.can.advanceOwnBarberId
+              ? t("barber.agenda.state.readOnlyOwnBarber")
+              : t("barber.agenda.state.readOnly")}
           </p>
         ) : null}
       </div>
