@@ -692,6 +692,13 @@ body:has(.barber-shell) {
   .barber-shell .barber-menu__cerrar { display: grid; }
   .barber-shell .barber-menu__ent { height: 44px; }
 }
+/* Tableta en horizontal (≥1024 px con dedo: iPad 1024/1180/1366): el menú
+   va fijo a la izquierda con las entradas de escritorio, de 30 px. Con dedo
+   suben a 40 (ws6-t8); la lista ya desplaza dentro de su <nav> si no cabe.
+   Con ratón, el menú de 1440 no cambia. */
+@media (min-width: 1024px) and (pointer: coarse) {
+  .barber-shell .barber-menu__ent { height: 40px; }
+}
 
 @media (prefers-reduced-motion: reduce) {
   .barber-shell .barber-menu__poste > span,
