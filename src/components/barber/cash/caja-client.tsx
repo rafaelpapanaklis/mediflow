@@ -17,7 +17,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { Dictionary } from "@/i18n/t";
-import type { CashState, CheckoutContext, PendingAppointment, SaleRow } from "@/lib/barber/cash";
+import type { CashSessionRow, CashState, CheckoutContext, PendingAppointment, SaleRow } from "@/lib/barber/cash";
 import { sumMoneyBy } from "@/lib/barber/money";
 import type { BarberPaymentMethod } from "@/lib/barber/types";
 import { CardNew } from "@/components/ui/design-system/card-new";
@@ -30,13 +30,15 @@ import type { SaleDraftList, SaleDraftRow } from "@/lib/barber/sale-drafts";
 import { SaleDraftsList } from "@/components/barber/clients/sale-drafts-list";
 import { ClientChargeBridge } from "@/components/barber/clients/client-charge-bridge";
 import { CancelSaleModal, CloseSessionModal, OpenSessionModal } from "./session-modals";
+import { SessionDetailModal } from "./session-detail";
 
 type ModalState =
   | { kind: "none" }
   | { kind: "ticket"; appointment: PendingAppointment | null }
   | { kind: "open" }
   | { kind: "close" }
-  | { kind: "cancel"; sale: SaleRow };
+  | { kind: "cancel"; sale: SaleRow }
+  | { kind: "history"; row: CashSessionRow };
 
 const METHOD_ICON: Record<BarberPaymentMethod, LucideIcon> = {
   CASH: Banknote,
@@ -283,6 +285,7 @@ export function CajaClient({
                   <th className="bcaja-num">{t("caja.colExpected")}</th>
                   <th className="bcaja-num">{t("caja.colCounted")}</th>
                   <th className="bcaja-num">{t("caja.colDifference")}</th>
+                  <th />
                 </tr>
               </thead>
               <tbody>
@@ -299,6 +302,13 @@ export function CajaClient({
                       {h.difference === null ? "—" : (
                         <BadgeNew tone={h.difference === 0 ? "success" : h.difference > 0 ? "info" : "danger"}>{fmtSigned(h.difference)}</BadgeNew>
                       )}
+                    </td>
+                    <td>
+                      <span className="bcaja-row-actions">
+                        <button type="button" className="icon-btn-new" title={t("caja.historyView")} aria-label={t("caja.historyView")} onClick={() => setModal({ kind: "history", row: h })}>
+                          <Receipt size={13} />
+                        </button>
+                      </span>
                     </td>
                   </tr>
                 ))}
@@ -365,6 +375,9 @@ export function CajaClient({
             refresh();
           }}
         />
+      )}
+      {modal.kind === "history" && (
+        <SessionDetailModal dict={dict} row={modal.row} tz={tz} onClose={closeModal} />
       )}
       {modal.kind === "cancel" && (
         <CancelSaleModal
