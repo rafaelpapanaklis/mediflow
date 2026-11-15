@@ -554,7 +554,7 @@ test("5 · Caja aplica cada tipo de bono en la misma transacción; cancelar lo d
   const cat = await starsCore.loadBonusCatalog(prisma, A.id);
   const byName = (n: string) => cat.bonuses.find((b) => b.name === n)!.id;
   const ana = await withStars(A, "Ana Bono", 20);
-  const sell = (extra: Record<string, unknown>, items = [{ kind: "service", id: A.serviceId }]) =>
+  const sell = (extra: Record<string, unknown>, items: Array<{ kind: "service" | "product"; id: string }> = [{ kind: "service", id: A.serviceId }]) =>
     cash.createSale(A.ctx, { barberId: A.barberId, clientId: ana, items, paymentMethod: "CASH", ...extra }, FEATURES);
 
   const hit = (await cash.lookupClients(A.ctx, `Ana Bono ${RUN}`))[0];
