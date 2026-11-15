@@ -22,6 +22,7 @@ const INTEGRATION = [
   "cobro-cita-no-completada-integration",
   "comision-corte-cubierto-integration",
   "barbero-sus-visitas-integration",
+  "producido-igual-integration",
 ];
 
 test("solo 127.0.0.1 y localhost cuentan como base local", () => {

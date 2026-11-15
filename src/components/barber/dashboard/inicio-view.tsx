@@ -217,7 +217,7 @@ export function InicioView({
         <div className="bdash-kpis">
           <KpiCard
             label={k(s.scope.selfOnly ? "kpi.revenueSelf" : "kpi.revenue")}
-            value={fmtMoney(s.today.revenue)}
+            value={fmtMoney(s.scope.selfOnly ? s.today.produced : s.today.revenue)}
             icon={Wallet}
             hero
             hint={revenueHint}
