@@ -35,7 +35,8 @@
     "branch": "Sede",
     "branchAria": "Sede que estás operando",
     "branchAll": "Toda la cadena",
-    "branchClosed": "cerrada"
+    "branchClosed": "cerrada",
+    "branchChanged": "Cambiaste de sede en otra pestaña. Recarga esta página para seguir en la sede que ves; no se guardó nada."
   },
   "logout": "Cerrar sesión",
   "placeholder": {

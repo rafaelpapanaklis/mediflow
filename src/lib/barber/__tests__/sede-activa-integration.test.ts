@@ -34,6 +34,7 @@ import { BARBER_BRANCH_ALL, BARBER_BRANCH_COOKIE, isConsolidatedPath } from "../
 
 let sesion: string | null = null; // supabaseId "logueado"
 let cookieSede: string | null = null; // valor de dcb_branch
+let pinSede: string | null = null; // encabezado x-dcb-sede (sede de la pantalla en una escritura)
 
 const SRC = path.resolve(__dirname, "../../..");
 const dobles = new Map<string, unknown>([
@@ -56,7 +57,7 @@ const headersDoble = {
   cookies: async () => ({
     get: (name: string) => (name === BARBER_BRANCH_COOKIE && cookieSede ? { name, value: cookieSede } : undefined),
   }),
-  headers: async () => new Headers(),
+  headers: async () => new Headers(pinSede ? { "x-dcb-sede": pinSede } : {}),
 };
 
 const M = Module as unknown as {
@@ -110,6 +111,7 @@ let auth: typeof import("@/lib/barber-auth");
 let paid: typeof import("@/lib/barber/paid-access");
 let gating: typeof import("@/lib/barber/gating");
 let servicesRoute: typeof import("@/app/api/barber/services/route");
+let currentRoute: typeof import("@/app/api/barber/branches/current/route");
 let clientsRoute: typeof import("@/app/api/barber/clients/route");
 let productsRoute: typeof import("@/app/api/barber/products/route");
 let cashRoute: typeof import("@/app/api/barber/cash-sessions/current/route");
@@ -145,6 +147,7 @@ before(async () => {
   paid = await import("@/lib/barber/paid-access");
   gating = await import("@/lib/barber/gating");
   servicesRoute = await import("@/app/api/barber/services/route");
+  currentRoute = await import("@/app/api/barber/branches/current/route");
   clientsRoute = await import("@/app/api/barber/clients/route");
   productsRoute = await import("@/app/api/barber/products/route");
   cashRoute = await import("@/app/api/barber/cash-sessions/current/route");
@@ -337,6 +340,46 @@ test("encargado de una sucursal CERRADA: sigue sin poder trabajar (su sede está
   const ctx = await como("encargado-sur", null);
   assert.equal(ctx.barbershopId, tercera);
   assert.equal(await paid.hasBarberPaidAccess(ctx), false);
+});
+
+/* ═══════════════ Dos pestañas (ronda 2, M3) ═══════════════ */
+
+test("🔴 RONDA 2 · M3: una escritura desde una pantalla de la matriz, con la cookie ya en Norte, NO cae en ninguna sede", { skip }, async () => {
+  const nombre = `Servicio pestaña vieja ${RUN}`;
+  const post = () =>
+    servicesRoute.POST(new Request("http://localhost/api/barber/services", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: nombre, durationMin: 30, price: 200 }),
+    }));
+  try {
+    // Pestaña 1 pintada en la matriz; en la pestaña 2 se cambió a Norte.
+    await como("dueno", sucursal);
+    pinSede = matriz;
+    const r = await texto(await post());
+    assert.equal(r.status, 401, `la escritura no se atiende: ${r.text}`);
+    assert.equal(await prisma.barberService.count({ where: { name: nombre } }), 0, "ni en Norte ni en la matriz");
+
+    // El panel pregunta (SIN encabezado) cuál es la sede de la sesión: Norte ≠ matriz → aviso.
+    pinSede = null;
+    const cur = await texto(await currentRoute.GET());
+    assert.equal(cur.status, 200);
+    assert.equal(JSON.parse(cur.text).branchId, sucursal);
+
+    // Pantalla y sesión en la misma sede: se guarda, en esa sede.
+    pinSede = sucursal;
+    const ok = await texto(await post());
+    assert.equal(ok.status, 201, ok.text);
+    const creado = await prisma.barberService.findFirstOrThrow({ where: { name: nombre } });
+    assert.equal(creado.barbershopId, sucursal);
+
+    // Las lecturas no llevan sede de pantalla: siguen funcionando igual.
+    pinSede = null;
+    assert.equal((await servicesRoute.GET()).status, 200);
+  } finally {
+    pinSede = null;
+    await prisma.barberService.deleteMany({ where: { name: nombre } });
+  }
 });
 
 /* ═══════════════ Dueño de una sucursal (ronda 2, M2) ═══════════════ */

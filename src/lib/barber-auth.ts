@@ -1,4 +1,4 @@
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import type { Barber, Barbershop, BarberRole, BarberUser } from "@prisma/client";
@@ -8,7 +8,7 @@ import {
   type BarberPermissionKey,
 } from "@/lib/barber/permissions";
 import { barberDebeCambiarContrasena, ultimoAccesoPorEscribir } from "@/lib/barber/contrasena";
-import { BARBER_BRANCH_ALL, BARBER_BRANCH_COOKIE } from "@/lib/barber/branch-cookie";
+import { BARBER_BRANCH_ALL, BARBER_BRANCH_COOKIE, BARBER_BRANCH_PIN_HEADER } from "@/lib/barber/branch-cookie";
 
 export { BarberForbiddenError, hasBarberPermission };
 export type { BarberPermissionKey };
@@ -86,14 +86,25 @@ export async function getBarberContext(): Promise<BarberContext | null> {
       role: bu.role,
       mustChangePassword: barberDebeCambiarContrasena(user.app_metadata),
     };
+    let ctx: BarberContext;
     try {
-      return await withActiveBranch(home, await readSelectedBranch());
+      ctx = await withActiveBranch(home, await readSelectedBranch());
     } catch (e) {
       // Si falla resolver la sede elegida, se opera la propia (como antes de
       // las sucursales) en vez de dejar a la persona fuera del panel.
       console.error("[barber-auth] no se pudo resolver la sede elegida:", e instanceof Error ? e.message : e);
-      return home;
+      ctx = home;
     }
+    // Escritura hecha desde una pantalla de OTRA sede (ronda 2, M3): dos
+    // pestañas, y en la otra se cambió de sede. La petición no se atiende:
+    // ni en la sede de la cookie ni en la de la pantalla. El panel lo traduce
+    // a «cambiaste de sede en otra pestaña» (sede-pin.ts).
+    const pinned = await readPinnedBranch();
+    if (pinned && pinned !== ctx.barbershopId) {
+      console.warn("[barber-auth] escritura rechazada: la pantalla es de otra sede que la de la sesión");
+      return null;
+    }
+    return ctx;
   } catch {
     // Tabla barber_users aún sin migrar / DB caída → sesión "no es de
     // barbería". Jamás propagar: este helper corre en páginas públicas de
@@ -124,6 +135,19 @@ export async function getBarberContext(): Promise<BarberContext | null> {
 //     la fila BarberUser. La ficha de barbero (ctx.barber) solo acompaña a la
 //     sede a la que pertenece: en otra sede vale null, así que un Barbero con
 //     acceso a dos sedes no ve en la ajena nada como «suyo».
+
+/**
+ * Sede de la PANTALLA desde la que se hizo una escritura (encabezado que
+ * pone sede-pin.ts en los POST/PUT/PATCH/DELETE del panel). Fuera de una
+ * petición, o en una lectura, null.
+ */
+async function readPinnedBranch(): Promise<string | null> {
+  try {
+    return (await headers()).get(BARBER_BRANCH_PIN_HEADER) || null;
+  } catch {
+    return null;
+  }
+}
 
 /** Lee la cookie del selector (sin validar). Fuera de una petición, null. */
 async function readSelectedBranch(): Promise<string | null> {

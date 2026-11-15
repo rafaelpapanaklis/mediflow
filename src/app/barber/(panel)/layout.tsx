@@ -14,6 +14,7 @@ import { getBarberT } from "@/i18n/dictionaries/barber";
 import { BarberSidebar } from "@/components/barber/barber-sidebar";
 import { BarberTopbar } from "@/components/barber/barber-topbar";
 import { BarberBranchBadge } from "@/components/barber/barber-branch-badge";
+import { BarberSedePin } from "@/components/barber/barber-sede-pin";
 import { listBranchOptions, readBranchCookie } from "@/lib/barber/branches";
 import { BARBER_BRANCH_ALL } from "@/lib/barber/branch-cookie";
 import "@/app/panel-chrome-va.css";
@@ -114,6 +115,8 @@ export default async function BarberPanelLayout({
 
   return (
     <div className="barber-shell mf-extpanel flex min-h-screen font-sans">
+      {/* Cada escritura lleva la sede de ESTA pantalla (ronda 2, M3). */}
+      <BarberSedePin branchId={ctx.barbershopId} message={t("barber.shell.topbar.branchChanged")} />
       <BarberSidebar
         shopName={ctx.barbershop.name}
         items={items}
