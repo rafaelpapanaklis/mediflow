@@ -127,6 +127,9 @@ async function subirLogo() {
 }
 
 before(async () => {
+  // Fuera del `if`: la prueba pura de barberiaNuncaPagada corre siempre,
+  // con base y sin base. Cargar el módulo no toca la base.
+  ({ cargarBarberWeb, barberiaNuncaPagada } = await import("@/app/b/[slug]/_shared/shop-data"));
   if (!BASE_LOCAL) return;
   png = await sharp({
     create: { width: 32, height: 32, channels: 3, background: { r: 200, g: 30, b: 30 } },
@@ -136,7 +139,6 @@ before(async () => {
   ({ POST: logoPOST } = await import("@/app/api/barber/settings/logo/route"));
   ({ PATCH: slugPATCH } = await import("@/app/api/barber/settings/slug/route"));
   ({ POST: adjuntoPOST } = await import("@/app/api/barber/support/attachments/route"));
-  ({ cargarBarberWeb, barberiaNuncaPagada } = await import("@/app/b/[slug]/_shared/shop-data"));
 });
 
 after(async () => {
