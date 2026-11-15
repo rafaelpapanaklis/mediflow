@@ -49,7 +49,7 @@ export function TarjetaIngresosPorLinea({
           tono="success"
           pie={
             barberias
-              ? `${plural(barberias.pagan, "paga", "pagan")} por Stripe · ${plural(barberias.cortesia, "cortesía", "cortesías")} y ${barberias.sinPagar} sin pagar no suman · cobrado este mes: sin registro`
+              ? `${plural(barberias.pagan, "paga", "pagan")} por Stripe · ${plural(barberias.cortesia, "cortesía", "cortesías")} y ${barberias.sinPagar} sin pagar no suman · cobrado este mes: ${barberias.cobradoMes == null ? "sin registro" : formatCurrency(Number(barberias.cobradoMes))}${barberias.fuente === "cobros" ? "" : " · a precio de lista"}`
               : "no se pudieron leer las barberías"
           }
         />

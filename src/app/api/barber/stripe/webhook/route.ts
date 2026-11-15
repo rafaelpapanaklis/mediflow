@@ -28,11 +28,16 @@ export const dynamic = "force-dynamic";
  *   checkout.session.async_payment_failed · checkout.session.expired ·
  *   customer.subscription.created · customer.subscription.updated ·
  *   customer.subscription.deleted · customer.subscription.paused ·
- *   customer.subscription.resumed
+ *   customer.subscription.resumed ·
+ *   invoice.paid · invoice.payment_failed            ← NUEVOS (15-nov-2026)
+ * Los dos de factura registran cada COBRO en barber_subscription_payments
+ * (sql/barber_cobros.sql). invoice.payment_succeeded también se acepta (es
+ * el mismo cobro, idempotente) pero no hace falta marcarlo.
  * T4 escucha payment_intent.* (y los de sus membresías): sin solape.
  *
- * Idempotente por construcción: no cobra, no inserta; relee la suscripción
- * viva y escribe su estado absoluto (ver handleBarberStripeEvent). Un evento
+ * Idempotente por construcción: no cobra; relee la suscripción (o la
+ * factura) viva y escribe su estado absoluto; un cobro se guarda una sola vez
+ * por id de factura (ver handleBarberStripeEvent). Un evento
  * ajeno (dental, T4, otro kind) responde 200 sin tocar nada; un fallo
  * transitorio responde 500 para que Stripe reintente.
  */

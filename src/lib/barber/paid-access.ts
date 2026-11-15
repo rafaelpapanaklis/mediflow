@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import type { BarberContext } from "@/lib/barber-auth";
 import { isBarbershopSubscriptionActive } from "@/lib/barber/plan-shared";
+import { vencerSiTocaBarber } from "@/lib/barber/cobros";
 
 /**
  * DaleControl BARBER — CANDADO DE ACCESO AL PANEL. Una sola regla, un solo
@@ -33,15 +34,22 @@ import { isBarbershopSubscriptionActive } from "@/lib/barber/plan-shared";
  * suscripción lo propaga a la familia, pero la fila que manda es la raíz.
  * El `isActive` en cambio se mira sobre la sede de la SESIÓN: una sucursal
  * apagada no trabaja aunque su matriz esté al corriente.
+ *
+ * SIN DÍAS DE GRACIA (decisión #10 de Rafael, 15-nov-2026): además del
+ * estado, al entrar se mira la FECHA. Si la matriz sigue «al corriente» pero
+ * su último periodo pagado terminó antes de hoy (día de México), se suspende
+ * en ese momento (past_due en la matriz y sus sucursales, para que lo público
+ * se apague también) y el panel se cierra. No espera a Stripe ni al cron.
+ * Ver src/lib/barber/cobros-core.ts (barberiaVencida).
  */
 
 /** A dónde va quien no ha pagado. Es también la ÚNICA página exenta por bucle. */
 export const BARBER_PAID_REDIRECT = "/barber/suscripcion";
 
 /** Estado de suscripción de la fila que paga (la matriz de la cadena). */
-async function rootSubscriptionStatus(ctx: BarberContext): Promise<string> {
+async function rootSubscriptionStatus(ctx: BarberContext): Promise<{ rootId: string; status: string }> {
   const rootId = ctx.barbershop.parentId ?? ctx.barbershopId;
-  if (rootId === ctx.barbershopId) return ctx.barbershop.subscriptionStatus;
+  if (rootId === ctx.barbershopId) return { rootId, status: ctx.barbershop.subscriptionStatus };
 
   const root = await prisma.barbershop.findUnique({
     where: { id: rootId },
@@ -49,7 +57,21 @@ async function rootSubscriptionStatus(ctx: BarberContext): Promise<string> {
   });
   // Matriz borrada/inexistente: la sucursal se evalúa con su propia fila
   // (que el webhook mantiene sincronizada) antes que abrir la puerta.
-  return root?.subscriptionStatus ?? ctx.barbershop.subscriptionStatus;
+  return { rootId, status: root?.subscriptionStatus ?? ctx.barbershop.subscriptionStatus };
+}
+
+/**
+ * ¿El periodo pagado de la matriz ya venció? Si sí, la deja suspendida. Un
+ * fallo al leer el registro NO cierra el panel (lo deja en el log): el cron de
+ * barber vuelve a pasar cada 5 minutos y corta lo vencido.
+ */
+async function vencidaAlEntrar(rootId: string, status: string): Promise<boolean> {
+  try {
+    return await vencerSiTocaBarber(rootId, status);
+  } catch (e) {
+    console.error("[barber paid-access] no se pudo revisar el periodo pagado:", e);
+    return false;
+  }
 }
 
 /**
@@ -62,7 +84,9 @@ export async function hasBarberPaidAccess(ctx: BarberContext): Promise<boolean> 
   // elige una sucursal cerrada no la opera (withActiveBranch no la adopta,
   // ronda 2 M1): se queda en su sede, sin quedar encerrado en Suscripción.
   if (!(ctx.homeBarbershop ?? ctx.barbershop).isActive) return false;
-  return isBarbershopSubscriptionActive({ subscriptionStatus: await rootSubscriptionStatus(ctx) });
+  const { rootId, status } = await rootSubscriptionStatus(ctx);
+  if (!isBarbershopSubscriptionActive({ subscriptionStatus: status })) return false;
+  return !(await vencidaAlEntrar(rootId, status));
 }
 
 /**

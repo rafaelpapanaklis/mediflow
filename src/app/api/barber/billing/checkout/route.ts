@@ -6,7 +6,13 @@ import {
   isBarberBillingInterval,
   resolveBarberBaseUrl,
 } from "@/lib/barber/billing";
-import { billingErrorResponse, readJsonBody, requireBarberBilling, requireBarberStripe } from "../_lib";
+import {
+  assertReactivacionPermitida,
+  billingErrorResponse,
+  readJsonBody,
+  requireBarberBilling,
+  requireBarberStripe,
+} from "../_lib";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,6 +26,8 @@ export const dynamic = "force-dynamic";
  * firstMonthPrice se aplica como cupón "once" solo en la primera contratación
  * mensual. La activación real la hace el webhook (y confirm al volver).
  * Con una suscripción viva responde 409 ALREADY_SUBSCRIBED (jamás dos).
+ * Suspendida después de haber pagado: solo su plan o uno mayor (409
+ * REACTIVATE_SAME_PLAN; decisión #10 de Rafael, 15-nov-2026).
  */
 export async function POST(req: NextRequest) {
   const auth = await requireBarberBilling();
@@ -37,6 +45,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    await assertReactivacionPermitida(auth, body.plan);
     const plan = await getBarberPlan(body.plan);
     const { url } = await createBarberCheckoutSession({
       stripe,

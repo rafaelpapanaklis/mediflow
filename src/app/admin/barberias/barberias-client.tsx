@@ -233,7 +233,11 @@ export function AdminBarberiasClient() {
           label="Pagan"
           value={metrics ? formatInt(metrics.payingAccounts) : "—"}
           icon={CreditCard}
-          hint="Con suscripción de Stripe cobrando."
+          hint={
+            metrics?.ingresoFuente === "cobros"
+              ? "Con un cobro de Stripe vigente (su periodo pagado no ha vencido)."
+              : "Con suscripción de Stripe cobrando."
+          }
         />
         <KpiCard
           label="Cortesía"
@@ -256,13 +260,21 @@ export function AdminBarberiasClient() {
           label="Ingreso mensual (MRR)"
           value={metrics ? formatMoney(metrics.mrrMonthly) : "—"}
           icon={DollarSign}
-          hint="Sólo las que pagan por Stripe, a precio de barber_plan_configs. Las cortesías no suman."
+          hint={
+            metrics?.ingresoFuente === "cobros"
+              ? "Sólo las que pagan por Stripe, con lo que Stripe les cobra (anual ÷ 12). Las cortesías no suman."
+              : "Sólo las que pagan por Stripe, a precio de lista (barber_plan_configs): falta pegar sql/barber_cobros.sql. Las cortesías no suman."
+          }
         />
         <KpiCard
           label="Cobrado este mes"
-          value="—"
+          value={metrics && metrics.cobradoMes !== null ? formatMoney(metrics.cobradoMes) : "—"}
           icon={ReceiptText}
-          hint="Sin registro de cobros: el webhook de Stripe guarda el estado de la suscripción, no el importe cobrado."
+          hint={
+            metrics && metrics.cobradoMes !== null
+              ? "Lo que Stripe cobró este mes (hora de México), factura por factura."
+              : "Sin registro de cobros todavía: falta pegar sql/barber_cobros.sql."
+          }
         />
         <KpiCard
           label="Altas del mes"
@@ -532,6 +544,9 @@ export function AdminBarberiasClient() {
                                 </span>
                                 <div className="dcba-note">
                                   {row.cobro === "stripe" ? "por Stripe" : "no es ingreso"}
+                                  {row.cobradoMes !== null && Number(row.cobradoMes) > 0
+                                    ? ` · cobrado este mes ${formatMoney(row.cobradoMes)}`
+                                    : ""}
                                 </div>
                               </>
                             )}

@@ -2,7 +2,13 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getBarberPlan, getBarberPlans } from "@/lib/barber/plans";
 import { isBarberPlanId } from "@/lib/barber/plan-shared";
 import { changeBarberPlan, prismaBillingDb } from "@/lib/barber/billing";
-import { billingErrorResponse, readJsonBody, requireBarberBilling, requireBarberStripe } from "../_lib";
+import {
+  assertReactivacionPermitida,
+  billingErrorResponse,
+  readJsonBody,
+  requireBarberBilling,
+  requireBarberStripe,
+} from "../_lib";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,6 +24,8 @@ export const dynamic = "force-dynamic";
  *    Si la barbería queda por encima de los límites del plan nuevo NO se
  *    borra nada: el gate bloquea nuevas altas y la pantalla avisa.
  * Sin suscripción viva → 409 (hay que contratar, no cambiar).
+ * Suspendida (pago vencido) → solo su plan o uno MAYOR: bajar de plan para
+ * reactivar responde 409 REACTIVATE_SAME_PLAN. Al corriente, baja como hoy.
  */
 export async function POST(req: NextRequest) {
   const auth = await requireBarberBilling();
@@ -34,6 +42,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    await assertReactivacionPermitida(auth, body.plan);
     const [plans, targetPlan, currentPlan] = await Promise.all([
       getBarberPlans(),
       getBarberPlan(body.plan),

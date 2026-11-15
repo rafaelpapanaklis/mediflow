@@ -50,8 +50,12 @@ const DOUBLES = new Map<string, unknown>([
       getBarberStripe: () => null,
       isBarberStripeConfigured: () => false,
       toCents: () => 0,
+      // Reactivar = pagar el mismo plan (ws6-t6): aquí ninguna está suspendida tras pagar.
+      resolverReactivacionBarber: async () => null,
     },
   ],
+  // El corte por fecha del candado (ws6-t6) lee el registro de cobros: sin base, nada vencido.
+  [abs("src/lib/barber/cobros.ts"), { __esModule: true, vencerSiTocaBarber: async () => false }],
   [abs("src/components/barber/billing/billing-screen.tsx"), { __esModule: true, BillingScreen: SCREEN }],
 ]);
 

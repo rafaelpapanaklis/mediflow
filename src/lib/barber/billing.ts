@@ -7,9 +7,32 @@ import { clearBarberPlanConfigCache, getBarberPlans } from "@/lib/barber/plans";
 import {
   barberPlanRank,
   isBarberPlanId,
+  isBarbershopSubscriptionActive,
   type BarberPlanId,
   type BarberResolvedPlan,
 } from "@/lib/barber/plan-shared";
+import {
+  barberiaVencida,
+  esFacturaBarber,
+  estadoEfectivo,
+  planPermitidoParaReactivar,
+  suspendidaTrasPagar,
+  facturaCustomerId,
+  facturaShopIdDeclarado,
+  facturaSubscriptionId,
+  leerCobroDeFactura,
+  terminosDeSuscripcion,
+  type BarberCobro,
+  type BarberLedger,
+  type BarberSuscripcionTerminos,
+  type InvoiceLike,
+} from "@/lib/barber/cobros-core";
+import {
+  guardarCobroBarber,
+  guardarTerminosBarber,
+  leerRegistroBarber,
+  type ResultadoCobro,
+} from "@/lib/barber/cobros";
 
 /**
  * DaleControl BARBER — cobro de la suscripción de la BARBERÍA a DaleControl.
@@ -54,12 +77,22 @@ import {
  * DINERO: la tabla guarda Decimal; a Stripe van CENTAVOS enteros calculados
  * con Prisma.Decimal (toCents). Nunca se multiplica un float.
  *
- * IDEMPOTENCIA DEL WEBHOOK (sin tabla de eventos — el contrato no crea
- * tablas): los handlers NO cobran nada y no insertan filas. Cada evento de
- * suscripción se resuelve RELEYENDO la suscripción viva en Stripe y
- * escribiendo su estado ABSOLUTO sobre Barbershop (matriz + sucursales).
- * Un evento repetido o fuera de orden converge al mismo estado; una
- * suscripción vieja que ya no es la vigente se ignora (stale-subscription).
+ * IDEMPOTENCIA DEL WEBHOOK (sin tabla de eventos): los handlers NO cobran
+ * nada. Cada evento de suscripción se resuelve RELEYENDO la suscripción viva
+ * en Stripe y escribiendo su estado ABSOLUTO sobre Barbershop (matriz +
+ * sucursales). Un evento repetido o fuera de orden converge al mismo estado;
+ * una suscripción vieja que ya no es la vigente se ignora (stale-subscription).
+ *
+ * COBROS (15-nov-2026, decisión #5 de Rafael): el webhook escucha además
+ * invoice.paid / invoice.payment_failed y guarda cada factura en
+ * barber_subscription_payments (idempotente por id de factura), y en cada
+ * evento de la suscripción guarda lo que Stripe cobra HOY (importe y ciclo)
+ * en barber_subscriptions. Ver cobros-core.ts / cobros.ts.
+ *
+ * CORTE SIN DÍAS DE GRACIA (decisión #10): el estado que se escribe en la
+ * barbería es el de Stripe, salvo que Stripe siga «al corriente» con el
+ * periodo pagado ya vencido: entonces past_due (estadoEfectivo). Así ni un
+ * evento tardío de Stripe reabre una barbería que dejó de pagar.
  */
 
 // ── Constantes del contrato ──────────────────────────────────────────────
@@ -68,7 +101,9 @@ export const BARBER_STRIPE_VERTICAL = "barber";
 /** metadata.dc_kind de las sesiones de Checkout de ESTA suscripción. */
 export const BARBER_STRIPE_KIND = "barber-subscription";
 /** Familias de evento que procesa el webhook de barber (disjuntas de T4). */
-export const BARBER_WEBHOOK_EVENT_PREFIXES = ["checkout.session.", "customer.subscription."] as const;
+export const BARBER_WEBHOOK_EVENT_PREFIXES = ["checkout.session.", "customer.subscription.", "invoice."] as const;
+/** Eventos de factura que se registran como cobro (los demás invoice.* se ignoran). */
+export const BARBER_INVOICE_EVENTS = ["invoice.paid", "invoice.payment_succeeded", "invoice.payment_failed"] as const;
 export const BARBER_LIVE_SUBSCRIPTION_STATUSES = ["active", "trialing", "past_due", "unpaid"] as const;
 /** Misma versión pineada que el resto del repo (lo verificado en LIVE). */
 export const BARBER_STRIPE_API_VERSION = "2024-06-20";
@@ -525,6 +560,13 @@ export interface BarberShopRef {
   stripeSubscriptionId: string | null;
 }
 
+/** El registro de cobros (cobros.ts), inyectable para probarlo sin BD. */
+export interface BarberCobrosPort {
+  leerRegistro(barbershopId: string): Promise<BarberLedger | null>;
+  guardarCobro(barbershopId: string, cobro: BarberCobro): Promise<ResultadoCobro>;
+  guardarTerminos(barbershopId: string, terminos: BarberSuscripcionTerminos): Promise<ResultadoCobro>;
+}
+
 /** Subconjunto de Prisma que usa el webhook; inyectable para probarlo sin BD. */
 export interface BarberBillingDb {
   barbershop: {
@@ -532,10 +574,21 @@ export interface BarberBillingDb {
     update(args: unknown): Promise<unknown>;
     updateMany(args: unknown): Promise<unknown>;
   };
+  /** Sin él (pruebas viejas) no se registra nada y no hay corte por fecha. */
+  cobros?: BarberCobrosPort;
 }
 
+export const prismaCobrosPort: BarberCobrosPort = {
+  leerRegistro: leerRegistroBarber,
+  guardarCobro: guardarCobroBarber,
+  guardarTerminos: guardarTerminosBarber,
+};
+
 export function prismaBillingDb(): BarberBillingDb {
-  return prisma as unknown as BarberBillingDb;
+  return {
+    barbershop: prisma.barbershop as unknown as BarberBillingDb["barbershop"],
+    cobros: prismaCobrosPort,
+  };
 }
 
 const SHOP_REF_SELECT = { id: true, stripeCustomerId: true, stripeSubscriptionId: true } as const;
@@ -579,7 +632,11 @@ export interface ApplyBarberSubscriptionResult {
 export async function applyBarberSubscription(
   db: BarberBillingDb,
   sub: SubscriptionLike,
-  opts?: { plans?: ReadonlyArray<Pick<BarberResolvedPlan, "id" | "stripePriceIdMonthly" | "stripePriceIdYearly">> },
+  opts?: {
+    plans?: ReadonlyArray<Pick<BarberResolvedPlan, "id" | "stripePriceIdMonthly" | "stripePriceIdYearly">>;
+    /** Reloj del corte por fecha (pruebas). */
+    now?: Date;
+  },
 ): Promise<ApplyBarberSubscriptionResult> {
   if (!isBarberSubscription(sub)) return { applied: false, reason: "not-barber" };
   const shop = await resolveBarbershopForSubscription(db, sub);
@@ -598,10 +655,17 @@ export async function applyBarberSubscription(
 
   const patch = subscriptionPatchFromStripe(sub, opts?.plans);
   const customerId = subscriptionCustomerId(sub);
+  // Lo que Stripe le cobra HOY (importe y ciclo reales) para el MRR del admin.
+  if (db.cobros) await db.cobros.guardarTerminos(shop.id, terminosDeSuscripcion(sub));
+  // Corte sin días de gracia (decisión #10): si Stripe sigue «al corriente»
+  // pero el periodo PAGADO ya venció, se escribe past_due. Sin registro de
+  // cobros no se corta nada (estadoEfectivo devuelve el de Stripe).
+  const ledger = db.cobros ? await db.cobros.leerRegistro(shop.id) : null;
+  const status = estadoEfectivo(patch.subscriptionStatus, ledger, opts?.now ?? new Date());
   await db.barbershop.update({
     where: { id: shop.id },
     data: {
-      subscriptionStatus: patch.subscriptionStatus,
+      subscriptionStatus: status,
       stripeSubscriptionId: patch.stripeSubscriptionId,
       ...(patch.plan ? { plan: patch.plan } : {}),
       ...(!shop.stripeCustomerId && customerId ? { stripeCustomerId: customerId } : {}),
@@ -610,11 +674,11 @@ export async function applyBarberSubscription(
   await db.barbershop.updateMany({
     where: { parentId: shop.id },
     data: {
-      subscriptionStatus: patch.subscriptionStatus,
+      subscriptionStatus: status,
       ...(patch.plan ? { plan: patch.plan } : {}),
     },
   });
-  return { applied: true, reason: "ok", shopId: shop.id, patch };
+  return { applied: true, reason: "ok", shopId: shop.id, patch: { ...patch, subscriptionStatus: status } };
 }
 
 // ── Webhook: despacho de eventos (solo checkout.session.* y customer.subscription.*) ──
@@ -622,6 +686,10 @@ export async function applyBarberSubscription(
 /** Lo mínimo de Stripe que usa el despachador (inyectable en pruebas). */
 export interface BarberStripeReader {
   subscriptions: {
+    retrieve(id: string, params?: Record<string, unknown>): Promise<unknown>;
+  };
+  /** Para releer la factura viva; sin él se usa el payload del evento. */
+  invoices?: {
     retrieve(id: string, params?: Record<string, unknown>): Promise<unknown>;
   };
 }
@@ -665,6 +733,10 @@ export async function handleBarberStripeEvent(
 ): Promise<BarberWebhookOutcome> {
   if (!isBarberWebhookEventType(event.type)) return { handled: false, action: "ignored-type" };
 
+  if (event.type.startsWith("invoice.")) {
+    return handleBarberInvoiceEvent(stripe, db, event, opts);
+  }
+
   if (event.type.startsWith("checkout.session.")) {
     const session = event.data.object as {
       id: string;
@@ -692,6 +764,115 @@ export async function handleBarberStripeEvent(
   const live = (await retrieveLiveSubscription(stripe, payload.id, payload)) ?? payload;
   const result = await applyBarberSubscription(db, live, { plans: opts?.plans });
   return { handled: result.applied, action: `subscription:${result.reason}`, shopId: result.shopId };
+}
+
+async function retrieveLiveInvoice(stripe: BarberStripeReader, id: string): Promise<InvoiceLike | null> {
+  if (!stripe.invoices) return null;
+  try {
+    return (await stripe.invoices.retrieve(id, { expand: ["payment_intent"] })) as InvoiceLike;
+  } catch (err) {
+    console.warn("[barber webhook] no se pudo releer la factura; se usa el payload:", (err as Error)?.message);
+    return null;
+  }
+}
+
+/**
+ * invoice.paid / invoice.payment_succeeded / invoice.payment_failed de la
+ * suscripción de la barbería: guarda el COBRO (idempotente por id de factura)
+ * y vuelve a aplicar la suscripción, porque el pago es justo lo que reabre
+ * una barbería suspendida (y el rechazo, lo que la deja past_due). Las
+ * facturas del dental y de las membresías de T4 se ignoran por su marca.
+ */
+async function handleBarberInvoiceEvent(
+  stripe: BarberStripeReader,
+  db: BarberBillingDb,
+  event: { id: string; type: string; data: { object: unknown } },
+  opts?: { plans?: ReadonlyArray<Pick<BarberResolvedPlan, "id" | "stripePriceIdMonthly" | "stripePriceIdYearly">> },
+): Promise<BarberWebhookOutcome> {
+  if (!(BARBER_INVOICE_EVENTS as readonly string[]).includes(event.type)) {
+    return { handled: false, action: "ignored-type" };
+  }
+  const payload = event.data.object as InvoiceLike;
+  if (!payload?.id || !esFacturaBarber(payload)) return { handled: false, action: "not-barber" };
+
+  // La factura VIVA manda (un rechazo que llega después del pago no lo deshace).
+  const invoice = (await retrieveLiveInvoice(stripe, payload.id)) ?? payload;
+  const shop = await resolveBarbershopForSubscription(db, {
+    id: facturaSubscriptionId(invoice) ?? "",
+    status: "",
+    customer: facturaCustomerId(invoice),
+    metadata: facturaShopIdDeclarado(invoice) ? { barbershopId: facturaShopIdDeclarado(invoice) as string } : null,
+  });
+  if (!shop) {
+    // Es NUESTRA (lleva la marca de barber) y no sabemos de quién: no se
+    // contesta 200 en silencio (ronda 2 de la revisión). Se lanza → la ruta
+    // responde 500, queda en el log con el id de la factura y Stripe
+    // reintenta (hasta ~3 días): si la barbería aparece (orden de eventos,
+    // customer recién guardado), el cobro se registra solo.
+    throw new Error(
+      `Factura de barber sin barbería: invoice=${invoice.id} customer=${facturaCustomerId(invoice) ?? "—"} ` +
+        `barbershopId=${facturaShopIdDeclarado(invoice) ?? "—"}`,
+    );
+  }
+
+  const cobro = leerCobroDeFactura(invoice, event.type);
+  const saved = cobro && db.cobros ? await db.cobros.guardarCobro(shop.id, cobro) : "sin-registro";
+
+  const subId = facturaSubscriptionId(invoice);
+  if (subId) {
+    const sub = await retrieveLiveSubscription(stripe, subId, null);
+    if (sub) await applyBarberSubscription(db, sub, { plans: opts?.plans });
+  }
+  return { handled: true, action: `invoice:${cobro?.status ?? "noop"}:${saved}`, shopId: shop.id };
+}
+
+// ── Reactivar = pagar el MISMO plan (o uno mayor) ────────────────────────
+
+/**
+ * Decisión #10 de Rafael (15-nov-2026): una barbería SUSPENDIDA después de
+ * haber pagado solo se reactiva pagando el plan que tenía o uno mayor; no
+ * puede bajar de plan para volver a abrir. null = no aplica (al corriente, o
+ * alta nueva que nunca pagó): elige el plan que quiera, como hoy.
+ */
+export interface BarberReactivacion {
+  /** El plan que tenía: el mínimo para reactivar. */
+  planId: BarberPlanId;
+  /** Fin de su último periodo pagado (ISO), si hay registro de cobros. */
+  paidThroughAt: string | null;
+}
+
+export async function resolverReactivacionBarber(
+  shop: Pick<BarberBillingShop, "id" | "plan" | "subscriptionStatus" | "stripeSubscriptionId">,
+  now: Date = new Date(),
+): Promise<BarberReactivacion | null> {
+  let ledger: Awaited<ReturnType<typeof leerRegistroBarber>> = null;
+  try {
+    ledger = await leerRegistroBarber(shop.id);
+  } catch (err) {
+    // Sin registro se decide por la suscripción de Stripe (ver suspendidaTrasPagar).
+    console.error("[barber billing] registro de cobros no disponible:", (err as Error)?.message ?? err);
+  }
+  const tieneAcceso = isBarbershopSubscriptionActive(shop) && !barberiaVencida(ledger, now);
+  if (!suspendidaTrasPagar({ tieneAcceso, subscriptionStatus: shop.subscriptionStatus, stripeSubscriptionId: shop.stripeSubscriptionId, ledger })) {
+    return null;
+  }
+  if (!isBarberPlanId(shop.plan)) return null;
+  return { planId: shop.plan, paidThroughAt: ledger?.paidThroughAt ? ledger.paidThroughAt.toISOString() : null };
+}
+
+/**
+ * Candado del SERVIDOR (checkout y cambio de plan): con la barbería
+ * suspendida, un plan menor que el que tenía responde 409
+ * REACTIVATE_SAME_PLAN con `requiredPlan`. `message` llega ya traducido.
+ */
+export function assertPlanParaReactivar(
+  reactivacion: BarberReactivacion | null,
+  targetPlanId: BarberPlanId,
+  message: string,
+): void {
+  if (!reactivacion) return;
+  if (planPermitidoParaReactivar(reactivacion.planId, targetPlanId)) return;
+  throw new BarberBillingError("REACTIVATE_SAME_PLAN", 409, message, { requiredPlan: reactivacion.planId });
 }
 
 // ── Checkout ─────────────────────────────────────────────────────────────

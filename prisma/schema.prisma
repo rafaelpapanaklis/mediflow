@@ -9938,6 +9938,10 @@ model Barbershop {
   paymentSettings   BarberPaymentSettings?
   adminActions      BarberAdminAction[]
   botSettings       BarberBotSettings?
+  // Cobros de la suscripción (sql/barber_cobros.sql). Se leen/escriben con
+  // SQL crudo en src/lib/barber/cobros.ts: funcionan sin regenerar el cliente.
+  subscriptionPayments BarberSubscriptionPayment[]
+  subscriptionTerms    BarberSubscriptionTerms?
   botUsage          BarberBotUsage[]
   botPauses         BarberBotPause[]
   loyaltyRewards    BarberLoyaltyReward[]
@@ -10941,6 +10945,59 @@ model BarberAdminAction {
   @@index([barbershopId, createdAt(sort: Desc)], map: "barber_admin_actions_shop_idx")
   @@index([createdAt(sort: Desc)], map: "barber_admin_actions_created_idx")
   @@map("barber_admin_actions")
+}
+
+/// Cada factura de Stripe de la suscripción de una barbería, pagada o
+/// rechazada (sql/barber_cobros.sql). Idempotente por stripeInvoiceId; una
+/// rechazada que luego se paga es la MISMA fila. La escribe el webhook de
+/// barber vía src/lib/barber/cobros.ts (SQL parametrizado).
+model BarberSubscriptionPayment {
+  id                   String    @id @default(dbgenerated("(gen_random_uuid())::text"))
+  barbershopId         String    @map("barbershop_id")
+  stripeInvoiceId      String    @map("stripe_invoice_id")
+  stripeSubscriptionId String?   @map("stripe_subscription_id")
+  /// paid | failed
+  status               String
+  amountCents          Int       @map("amount_cents")
+  currency             String    @default("mxn")
+  planId               String?   @map("plan_id")
+  /// month | year
+  billingInterval      String?   @map("billing_interval")
+  periodStart          DateTime? @map("period_start") @db.Timestamptz(6)
+  periodEnd            DateTime? @map("period_end") @db.Timestamptz(6)
+  paidAt               DateTime? @map("paid_at") @db.Timestamptz(6)
+  failureCode          String?   @map("failure_code")
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  barbershop Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([stripeInvoiceId], map: "barber_subscription_payments_invoice_key")
+  @@index([barbershopId, status, periodEnd(sort: Desc)], map: "barber_subscription_payments_shop_idx")
+  @@index([paidAt(sort: Desc)], map: "barber_subscription_payments_paid_at_idx")
+  @@map("barber_subscription_payments")
+}
+
+/// Lo que Stripe le cobra HOY a cada barbería (matriz): importe, ciclo y
+/// plan reales, más la marca de reactivación manual desde el admin
+/// (sql/barber_cobros.sql). La escriben el webhook y admin.ts vía cobros.ts.
+model BarberSubscriptionTerms {
+  barbershopId         String    @id @map("barbershop_id")
+  stripeSubscriptionId String?   @map("stripe_subscription_id")
+  stripeStatus         String?   @map("stripe_status")
+  priceCents           Int?      @map("price_cents")
+  currency             String?
+  /// month | year
+  billingInterval      String?   @map("billing_interval")
+  planId               String?   @map("plan_id")
+  currentPeriodEnd     DateTime? @map("current_period_end") @db.Timestamptz(6)
+  cancelAtPeriodEnd    Boolean   @default(false) @map("cancel_at_period_end")
+  manualAccessAt       DateTime? @map("manual_access_at") @db.Timestamptz(6)
+  updatedAt            DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  barbershop Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("barber_subscriptions")
 }
 
 /// Configuración del bot de WhatsApp por barbería (sql/barber_bot.sql).

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Loader2 } from "lucide-react";
 import type { TFunction } from "@/i18n/t";
-import { isBarberUnlimited } from "@/lib/barber/plan-shared";
+import { barberPlanRank, isBarberUnlimited } from "@/lib/barber/plan-shared";
 import {
   formatBarberCents,
   yearlyToMonthlyCents,
@@ -18,6 +18,9 @@ import {
  *  · Sin suscripción viva → "Contratar" (mensual o anual, si el plan lo tiene).
  *  · Con suscripción viva → "Cambiar a este plan" en el ciclo de la suscripción
  *    (el cambio conserva el ciclo; el selector se bloquea en ese ciclo).
+ *  · Suspendida después de pagar (`minPlan`) → los planes MENORES al que
+ *    tenía salen deshabilitados con el porqué: reactivar = pagar ese plan o
+ *    uno mayor (decisión #10 de Rafael; el servidor también lo exige).
  */
 export function PlanCards({
   t,
@@ -30,6 +33,7 @@ export function PlanCards({
   subscribed,
   lockedInterval,
   busyPlan,
+  minPlan = null,
   onContract,
   onChange,
 }: {
@@ -48,6 +52,8 @@ export function PlanCards({
   subscribed: boolean;
   lockedInterval: BarberBillingIntervalUI | null;
   busyPlan: string | null;
+  /** Plan mínimo para reactivar una barbería suspendida; null = sin mínimo. */
+  minPlan?: { id: BarberPlanCardDTO["id"]; name: string } | null;
   onContract: (planId: BarberPlanCardDTO["id"], interval: BarberBillingIntervalUI) => void;
   onChange: (plan: BarberPlanCardDTO) => void;
 }) {
@@ -118,7 +124,9 @@ export function PlanCards({
           const showPromo =
             !yearly && !hasLiveSubscription && plan.firstMonthCents !== null && plan.firstMonthCents < plan.priceMonthlyCents;
           const busy = busyPlan === plan.id;
-          const disabled = !canManage || !configured || !plan.isActive || !hasPrice || busy || (isCurrent && hasLiveSubscription);
+          const belowMin = minPlan !== null && barberPlanRank(plan.id) < barberPlanRank(minPlan.id);
+          const disabled =
+            !canManage || !configured || !plan.isActive || !hasPrice || busy || belowMin || (isCurrent && hasLiveSubscription);
           const cta = isCurrent && hasLiveSubscription
             ? t("barber.suscripcion.plans.current")
             : hasLiveSubscription
@@ -189,6 +197,11 @@ export function PlanCards({
                   {busy ? <Loader2 size={15} className="dcbb-spin" aria-hidden /> : null}
                   {busy ? t("barber.suscripcion.plans.working") : cta}
                 </button>
+                {belowMin && (
+                  <p className="dcbb-fact__hint" style={{ marginTop: 6 }}>
+                    {t("barber.suscripcion.reactivar.lowerBlocked", { plan: minPlan!.name })}
+                  </p>
+                )}
               </div>
             </article>
           );

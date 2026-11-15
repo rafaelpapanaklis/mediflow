@@ -4,11 +4,14 @@ import { createClient as createSupabaseAdmin } from "@supabase/supabase-js";
 import { prisma } from "@/lib/prisma";
 import { isMissingTableError } from "@/lib/barber/db-errors";
 import { getBarberPlans } from "@/lib/barber/plans";
+import { cargarCobrosAdmin, marcarReactivacionManualBarber } from "@/lib/barber/cobros";
 import {
   clasificarCobro,
   pagoMensual,
   resumirIngresosBarber,
   type CobroBarberia,
+  type FuenteIngresoBarber,
+  type RegistroCobros,
   type ResumenIngresosBarber,
 } from "@/lib/barber/admin-ingresos";
 import {
@@ -162,6 +165,20 @@ async function loadPlanPrices(): Promise<{
   return { prices, plans };
 }
 
+/**
+ * Registro de cobros de Stripe (sql/barber_cobros.sql) para las cifras de
+ * dinero. null = tablas sin pegar o no se pudo leer: las cifras caen al
+ * cálculo de antes y la pantalla lo rotula «a precio de lista». Nunca lanza.
+ */
+async function cargarCobrosSeguro(now: Date): Promise<RegistroCobros | null> {
+  try {
+    return await cargarCobrosAdmin(now);
+  } catch (e) {
+    console.error("[barber/admin] registro de cobros no disponible:", e);
+    return null;
+  }
+}
+
 function coercePlan(plan: string | null | undefined): BarberPlanId {
   return isBarberPlanId(plan) ? plan : "BASICO";
 }
@@ -186,8 +203,14 @@ export interface AdminBarbershopRow {
    * Stripe en trialing · "sin_pagar". Una sucursal → "sucursal" (paga su matriz).
    */
   cobro: CobroBarberia | "sucursal";
-  /** Lo que paga HOY al mes, string decimal. "0.00" en cortesías, sin pagar y sucursales. */
+  /**
+   * Lo que paga HOY al mes, string decimal: el importe REAL de Stripe (anual
+   * ÷ 12) con el registro de cobros; a precio de lista sin él. "0.00" en
+   * cortesías, sin pagar y sucursales.
+   */
   pagoMensual: string;
+  /** Lo que Stripe le cobró este mes (México). null = sin registro o sucursal. */
+  cobradoMes: string | null;
   isActive: boolean;
   createdAt: string;
   /** true = sucursal (la suscripción la paga su matriz). */
@@ -287,6 +310,7 @@ export async function listBarbershopsForAdmin(
   const ids = shops.map((s) => s.id);
   const { plans, prices } = await loadPlanPrices();
   const planById = new Map(plans.map((p) => [p.id, p]));
+  const cobros = await cargarCobrosSeguro(new Date());
 
   const [barberCounts, ticketCounts, lastAppt, lastSale, lastLogin, branchCounts] =
     await Promise.all([
@@ -345,8 +369,10 @@ export async function listBarbershopsForAdmin(
       planPriceMonthly: new Prisma.Decimal(String(plan?.priceMonthly ?? 0)).toFixed(2),
       subscriptionStatus: s.subscriptionStatus,
       subscriptionActive: isBarbershopSubscriptionActive(s),
-      cobro: s.parentId !== null ? "sucursal" : clasificarCobro(s),
-      pagoMensual: s.parentId !== null ? "0.00" : pagoMensual(s, prices).toFixed(2),
+      cobro: s.parentId !== null ? "sucursal" : clasificarCobro(s, cobros),
+      pagoMensual: s.parentId !== null ? "0.00" : pagoMensual(s, prices, cobros).toFixed(2),
+      cobradoMes:
+        s.parentId !== null || !cobros ? null : (cobros.porBarberia.get(s.id)?.cobradoMes.toFixed(2) ?? "0.00"),
       isActive: s.isActive,
       createdAt: s.createdAt.toISOString(),
       isBranch: s.parentId !== null,
@@ -413,11 +439,16 @@ export interface BarberVerticalMetrics {
   unpaidAccounts: number;
   branches: number;
   /**
-   * Ingreso mensual recurrente: suma Decimal de los planes de las matrices
-   * que PAGAN por Stripe. Hasta el 15-nov-2026 sumaba toda matriz con
-   * acceso, cortesías incluidas.
+   * Ingreso mensual recurrente: suma Decimal de lo que pagan las matrices
+   * que PAGAN por Stripe (con el registro de cobros: importe real, anual ÷
+   * 12; sin él: precio de lista). Hasta el 15-nov-2026 sumaba toda matriz
+   * con acceso, cortesías incluidas.
    */
   mrrMonthly: string;
+  /** «cobros» = importes reales de Stripe; «lista» = sin registro, a precio de lista. */
+  ingresoFuente: FuenteIngresoBarber;
+  /** Lo que Stripe cobró en el mes en curso (México). null = sin registro. */
+  cobradoMes: string | null;
   signupsThisMonth: number;
   /** Aproximado — ver `churnIsApproximate`. */
   churnThisMonth: number;
@@ -437,6 +468,8 @@ const EMPTY_METRICS: BarberVerticalMetrics = {
   unpaidAccounts: 0,
   branches: 0,
   mrrMonthly: "0.00",
+  ingresoFuente: "lista",
+  cobradoMes: null,
   signupsThisMonth: 0,
   churnThisMonth: 0,
   churnIsApproximate: true,
@@ -464,7 +497,7 @@ export async function getBarberVerticalMetrics(now: Date = new Date()): Promise<
     const [parents, branches, signups, lapsed, openTickets] = await Promise.all([
       prisma.barbershop.findMany({
         where: { parentId: null },
-        select: { plan: true, subscriptionStatus: true, stripeSubscriptionId: true },
+        select: { id: true, plan: true, subscriptionStatus: true, stripeSubscriptionId: true },
       }),
       prisma.barbershop.count({ where: { parentId: { not: null }, isActive: true } }),
       prisma.barbershop.count({
@@ -499,7 +532,8 @@ export async function getBarberVerticalMetrics(now: Date = new Date()): Promise<
 
     // El DINERO sale de un solo sitio (admin-ingresos.ts): sólo las que pagan
     // por Stripe. La misma función arma el bloque «Barberías» de la portada.
-    const ingresos = resumirIngresosBarber(parents, prices);
+    const cobros = await cargarCobrosSeguro(now);
+    const ingresos = resumirIngresosBarber(parents, prices, cobros);
     const ingresosPorPlan = new Map(ingresos.porPlan.map((p) => [p.planId, p]));
 
     const byPlan: BarberPlanBreakdown[] = plans.map((p) => {
@@ -528,6 +562,8 @@ export async function getBarberVerticalMetrics(now: Date = new Date()): Promise<
       unpaidAccounts: ingresos.sinPagar,
       branches,
       mrrMonthly: ingresos.mrr,
+      ingresoFuente: ingresos.fuente ?? "lista",
+      cobradoMes: ingresos.cobradoMes ?? null,
       signupsThisMonth: signups,
       churnThisMonth: lapsed,
       churnIsApproximate: true,
@@ -557,17 +593,18 @@ export async function contarBarberiasMatriz(): Promise<number> {
 
 /**
  * Bloque «Barberías» de la portada de /admin (junto al MRR del dental, sin
- * mezclarse con él). Mismo cálculo que /admin/barberias. 3 consultas en fila
- * de 2 (precios) + 1. `null` = no se pudo medir: la portada pinta «—».
+ * mezclarse con él). Mismo cálculo que /admin/barberias. 4 consultas en fila:
+ * 2 (precios) + 1 (matrices) + 1 (registro de cobros). `null` = no se pudo medir: la portada pinta «—».
  */
 export async function cargarResumenIngresosBarber(): Promise<ResumenIngresosBarber | null> {
   try {
     const { prices } = await loadPlanPrices();
     const matrices = await prisma.barbershop.findMany({
       where: { parentId: null },
-      select: { plan: true, subscriptionStatus: true, stripeSubscriptionId: true },
+      select: { id: true, plan: true, subscriptionStatus: true, stripeSubscriptionId: true },
     });
-    return resumirIngresosBarber(matrices, prices);
+    const cobros = await cargarCobrosSeguro(new Date());
+    return resumirIngresosBarber(matrices, prices, cobros);
   } catch (e) {
     console.error("[barber/admin] ingresos del vertical no disponibles:", e);
     return null;
@@ -849,6 +886,8 @@ export async function getBarbershopDetailForAdmin(
       shop.parentId !== null
         ? "0.00"
         : pagoMensual(shop, { [planId]: new Prisma.Decimal(String(plan?.priceMonthly ?? 0)) }).toFixed(2),
+    // Respaldo (la fila no salió de la lista): sin registro de cobros.
+    cobradoMes: null,
     isActive: shop.isActive,
     createdAt: shop.createdAt.toISOString(),
     isBranch: shop.parentId !== null,
@@ -1019,6 +1058,11 @@ async function loadShopForAction(id: string) {
  * Stripe, el siguiente evento de esa suscripción vuelve a escribir el estado
  * real y deshace la suspensión manual. Es una palanca de operación, no un
  * corte de cobro.
+ *
+ * REACTIVAR deja además la marca `manual_access_at` (cobros.ts): sin ella el
+ * corte por fecha (sin días de gracia) la volvería a cerrar en ≤ 5 min por su
+ * periodo pagado vencido. Con la marca es CORTESÍA (no cuenta como «paga»)
+ * hasta que entre un cobro nuevo de Stripe.
  */
 export async function setBarbershopSuspension(
   id: string,
@@ -1048,6 +1092,8 @@ export async function setBarbershopSuspension(
       data: { subscriptionStatus: nextStatus },
     }),
   ]);
+
+  if (!input.suspend) await marcarReactivacionManualBarber(shop.id);
 
   const audited = await recordBarberAdminAction({
     barbershopId: shop.id,
