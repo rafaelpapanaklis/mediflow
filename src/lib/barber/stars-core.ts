@@ -32,6 +32,7 @@ import {
   LOYALTY_THRESHOLD_MAX,
   LOYALTY_THRESHOLD_MIN,
   NOT_CANCELLED,
+  cancelledBeforeStarRule,
   clampLoyaltyThreshold,
   getLoyaltyRule,
   parseLoyaltyLine,
@@ -508,7 +509,8 @@ export async function loadStarsView(
     const at = a.startAt.toISOString();
     if (a.status === "DONE") {
       const live = a.sales.filter((s) => !isCancelled(s.notes));
-      const gives = a.sales.length === 0 || live.length > 0;
+      // Misma regla que el recuento (APPOINTMENT_GIVES_STAR), con su fecha de inicio.
+      const gives = a.sales.length === 0 || live.length > 0 || a.sales.some((x) => cancelledBeforeStarRule(x.notes));
       events.push({
         id: `a-${a.id}`,
         at,

@@ -281,9 +281,29 @@ export const NOT_CANCELLED: Prisma.BarberSaleWhereInput = {
  * pero la que se cobró y luego se canceló deja de contar hasta que se vuelva
  * a cobrar. Es la misma regla en el recuento y en el historial.
  */
+/**
+ * Desde cuándo aplica esa regla (ronda 2, M2). NO es retroactiva: una cita
+ * cuyo ticket se canceló ANTES contaba como visita y sigue contando, así que
+ * a nadie le baja el número el día que esto se despliega. La fecha es la de
+ * la decisión de Rafael. La marca de cancelación empieza con la fecha ISO
+ * («[CANCELADA] 2026-11-15T…»), así que se compara como texto.
+ * DECISIÓN PARA RAFAEL (reporte ws6-t5, ronda 2): una constante.
+ */
+export const STAR_CANCEL_RULE_SINCE = "2026-11-15T00:00:00.000Z";
+const CANCEL_RULE_MARK = `${CANCELLED_MARK} ${STAR_CANCEL_RULE_SINCE}`;
+
+/** ¿Ese ticket se canceló antes de que existiera la regla? (sigue dando estrella) */
+export function cancelledBeforeStarRule(notes: string | null | undefined): boolean {
+  return typeof notes === "string" && notes.startsWith(CANCELLED_MARK) && notes < CANCEL_RULE_MARK;
+}
+
 export const APPOINTMENT_GIVES_STAR: Prisma.BarberAppointmentWhereInput = {
   status: "DONE",
-  OR: [{ sales: { none: {} } }, { sales: { some: NOT_CANCELLED } }],
+  OR: [
+    { sales: { none: {} } },
+    { sales: { some: NOT_CANCELLED } },
+    { sales: { some: { AND: [{ notes: { startsWith: CANCELLED_MARK } }, { notes: { lt: CANCEL_RULE_MARK } }] } } },
+  ],
 };
 
 export interface BarberVisitTally {

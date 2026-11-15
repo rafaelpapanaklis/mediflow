@@ -358,6 +358,23 @@ test("1 · cobrar la cita y cancelar su ticket le quita la estrella (y volver a 
   assert.equal((await view(A, leo))?.stars, 1, "cobrada otra vez: la estrella vuelve");
 });
 
+test("RONDA 2 · M2: la regla no es retroactiva — un ticket cancelado ANTES del 15-nov no le quita la estrella a nadie", { skip }, async () => {
+  const viejo = await newClient(A, "Viejo");
+  const a = await appt(A, viejo, "DONE", 60);
+  await prisma.barberSale.create({
+    data: {
+      barbershopId: A.id, appointmentId: a.id, clientId: viejo, subtotal: 0, tip: 0, total: 0, paymentMethod: "CASH",
+      soldByUserId: A.ctx.barberUserId,
+      notes: "[CANCELADA] 2026-10-01T15:00:00.000Z · Dueña A · error · Original: Corte · subtotal 200.00 · propina 0.00 · total 200.00 (CASH)",
+    },
+  });
+  const v = await view(A, viejo);
+  assert.equal(v?.stars, 1, "contaba ayer y sigue contando hoy");
+  assert.equal(v?.history.find((e) => e.id === `a-${a.id}`)?.delta, 1, "y el historial dice lo mismo");
+  const hit = (await cash.lookupClients(A.ctx, `Viejo ${RUN}`))[0];
+  assert.equal(hit.loyaltyCount, 1, "Caja recuenta igual");
+});
+
 // ── Piezas que se cargan solo cuando hacen falta (puntos 2–6) ───────────
 
 const load = async () => ({
