@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRef, useState, type FormEvent } from "react";
 import { Scissors } from "lucide-react";
 import { FormField } from "@/components/public/auth/form-field";
+import { BARBER_PASSWORD_WEAK_MESSAGE, problemaContrasenaNueva } from "@/lib/barber/contrasena";
 import { PasswordInput } from "@/components/public/auth/password-input";
 import { PhoneCountryInput } from "@/components/barber/phone-country-input";
 import { BarberCaptcha, type BarberCaptchaHandle } from "@/components/barber/captcha/barber-captcha";
@@ -130,7 +131,8 @@ export function BarberRegistroForm({
     if (!firstName.trim()) return setError("Tu nombre es requerido.");
     if (!lastName.trim()) return setError("Tu apellido es requerido.");
     if (!email.trim()) return setError("El correo electrónico es requerido.");
-    if (password.length < 8) return setError("La contraseña debe tener al menos 8 caracteres.");
+    if (problemaContrasenaNueva(password) === "debil") return setError(BARBER_PASSWORD_WEAK_MESSAGE);
+    if (problemaContrasenaNueva(password) === "larga") return setError("Usa 72 caracteres o menos.");
 
     // Sin número válido NO se envía nada, y el error se pinta bajo el campo.
     // La misma función corre en el servidor: si aquí pasa, allá pasa.
@@ -333,7 +335,7 @@ export function BarberRegistroForm({
         label="Contraseña"
         value={password}
         onChange={(e) => setPassword(e.target.value)}
-        placeholder="Mínimo 8 caracteres"
+        placeholder="8+ con mayúsculas, minúsculas y números"
         autoComplete="new-password"
         required
       />
