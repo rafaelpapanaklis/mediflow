@@ -1,5 +1,7 @@
 import "server-only";
 import { revalidatePath } from "next/cache";
+import { NextResponse } from "next/server";
+import { moneyErrorResponse } from "@/lib/barber/cash";
 import { prisma } from "@/lib/prisma";
 import { assertBarberPermission, hasBarberPermission, type BarberContext } from "@/lib/barber-auth";
 import { getBarberPlan } from "@/lib/barber/plans";
@@ -337,6 +339,7 @@ const TIENDA_SHOP_SELECT = {
   logoUrl: true,
   branchName: true,
   locale: true,
+  timezone: true,
   plan: true,
   isActive: true,
   subscriptionStatus: true,
@@ -357,6 +360,7 @@ export interface TiendaShop extends TiendaBranch {
   phone: string | null;
   logoUrl: string | null;
   locale: string;
+  timezone: string;
 }
 
 export interface TiendaProduct {
@@ -419,7 +423,7 @@ export async function resolveTienda(slug: string): Promise<TiendaGate> {
   });
   return {
     ok: true,
-    shop: { ...branchOf(row), phone: row.phone, logoUrl: row.logoUrl, locale: row.locale },
+    shop: { ...branchOf(row), phone: row.phone, logoUrl: row.logoUrl, locale: row.locale, timezone: row.timezone || "America/Mexico_City" },
     branches: sedes.map(branchOf),
     ordersReady: ready.orders,
   };
@@ -492,7 +496,8 @@ export async function loadTiendaProduct(gate: TiendaGateOk, productId: string): 
 export async function loadFeaturedProducts(shop: { id: string; plan?: string | null }): Promise<TiendaProduct[]> {
   try {
     if (!(await tiendaReady(prisma)).columns) return [];
-    const plan = await getBarberPlan(shop.plan ?? null);
+    const planId = shop.plan !== undefined ? shop.plan : (await prisma.barbershop.findUnique({ where: { id: shop.id }, select: { plan: true } }))?.plan;
+    const plan = await getBarberPlan(planId ?? null);
     if (plan.features.products !== true) return [];
     const all = await webProducts([shop.id], false);
     return all.slice(0, TIENDA_FEATURED_MAX);
@@ -532,6 +537,8 @@ export async function createTiendaOrder(args: {
   phone: string;
   /** Cliente del portal («mi cuenta») de ESA sede, si entró. */
   portalClient: { barbershopId: string; clientId: string } | null;
+  /** Eligió «Pagar ahora en línea» (pay_method MERCADOPAGO; el pago lo marca ws6-t5). */
+  payOnline?: boolean;
 }): Promise<CreatedOrder> {
   const { gate, lines } = args;
   if (!gate.ordersReady) throw new TiendaError(409, "ORDERS_SQL_PENDING", "Esta tienda todavía no recibe pedidos en línea.");
@@ -589,6 +596,7 @@ export async function createTiendaOrder(args: {
       const totalCents = orderTotalCents(items);
       const total = (totalCents / 100).toFixed(2);
       const clientId = args.portalClient && args.portalClient.barbershopId === barbershopId ? args.portalClient.clientId : null;
+      const payMethod: ProductOrderPayMethod = args.payOnline === true ? "MERCADOPAGO" : "STORE";
 
       for (let intento = 0; intento < 8; intento++) {
         const folio = makeFolio();
@@ -596,7 +604,7 @@ export async function createTiendaOrder(args: {
           INSERT INTO "barber_product_orders"
             ("id", "barbershop_id", "branch_id", "folio", "client_id", "client_name", "client_phone", "items", "total", "status", "pay_method")
           VALUES (gen_random_uuid()::text, ${barbershopId}, ${barbershopId}, ${folio}, ${clientId}, ${args.name}, ${args.phone},
-                  ${JSON.stringify(items)}::jsonb, ${total}::numeric, 'PENDING', 'STORE')
+                  ${JSON.stringify(items)}::jsonb, ${total}::numeric, 'PENDING', ${payMethod})
           ON CONFLICT ("barbershop_id", "folio") DO NOTHING
           RETURNING "id", "created_at"
         `;
@@ -617,16 +625,61 @@ export async function createTiendaOrder(args: {
   );
 }
 
+/**
+ * Nombre y teléfono del cliente que ya entró a «mi cuenta» de alguna sede de
+ * esta cadena (la cookie del portal vale solo para la sede que la emitió).
+ */
+export async function portalPrefill(
+  gate: TiendaGateOk,
+  getSession: (barbershopId: string) => Promise<{ clientId: string } | null>,
+): Promise<{ name: string; phone: string } | null> {
+  for (const b of gate.branches) {
+    const s = await getSession(b.id);
+    if (!s) continue;
+    const c = await prisma.barberClient.findFirst({ where: { id: s.clientId, barbershopId: b.id }, select: { name: true, phone: true } });
+    return c ? { name: c.name, phone: c.phone ?? "" } : null;
+  }
+  return null;
+}
+
 /** Para el «mi cuenta» del cliente y la pantalla del folio: el pedido por id. */
-export async function getPublicOrder(gate: TiendaGateOk, orderId: string): Promise<{ folio: string; status: ProductOrderStatus; paidOnline: boolean; total: number } | null> {
+export interface PublicOrderView {
+  id: string;
+  folio: string;
+  status: ProductOrderStatus;
+  paidOnline: boolean;
+  total: number;
+  items: OrderItem[];
+  branch: TiendaBranch | null;
+  /** Hasta cuándo se aparta (null si ya se pagó o ya no está vivo). */
+  expiresAt: string | null;
+}
+
+/**
+ * La página del folio (/b/<slug>/tienda/pedido/<id>). El id es un UUID que
+ * solo conoce quien apartó; aun así no sale ni el teléfono ni el nombre.
+ */
+export async function getPublicOrder(gate: TiendaGateOk, orderId: string): Promise<PublicOrderView | null> {
   if (!gate.ordersReady || typeof orderId !== "string" || !orderId || orderId.length > 64) return null;
-  const rows = await prisma.$queryRaw<Array<{ folio: string; status: string; paid_at: Date | null; total: unknown }>>`
-    SELECT "folio", "status", "paid_at", "total" FROM "barber_product_orders"
-    WHERE "id" = ${orderId} AND "barbershop_id" = ANY(${gate.branches.map((b) => b.id)}::text[])
+  const ids = gate.branches.map((b) => b.id);
+  await sweepExpiredOrders(prisma, ids);
+  const rows = await prisma.$queryRaw<Array<{ id: string; folio: string; status: string; paid_at: Date | null; total: unknown; items: unknown; created_at: Date; branch_id: string }>>`
+    SELECT "id", "folio", "status", "paid_at", "total", "items", "created_at", "branch_id" FROM "barber_product_orders"
+    WHERE "id" = ${orderId} AND "barbershop_id" = ANY(${ids}::text[])
   `;
   const r = rows[0];
   if (!r) return null;
-  return { folio: r.folio, status: r.status as ProductOrderStatus, paidOnline: r.paid_at !== null, total: Number(r.total) };
+  const status = r.status as ProductOrderStatus;
+  return {
+    id: r.id,
+    folio: r.folio,
+    status,
+    paidOnline: r.paid_at !== null,
+    total: Number(r.total),
+    items: parseOrderItems(r.items),
+    branch: gate.branches.find((b) => b.id === r.branch_id) ?? null,
+    expiresAt: isOpenOrderStatus(status) && !r.paid_at ? orderExpiresAt(r.created_at).toISOString() : null,
+  };
 }
 
 /** Respuesta HTTP uniforme para TiendaError (y 500 para lo demás). */
@@ -635,4 +688,11 @@ export function tiendaErrorBody(e: unknown): { status: number; body: Record<stri
     return { status: e.status, body: { error: e.message, code: e.code, ...(e.details ?? {}) } };
   }
   return null;
+}
+
+/** Para las rutas del panel: TiendaError → su status; lo demás, como Caja. */
+export function tiendaPanelError(e: unknown): NextResponse {
+  const t = tiendaErrorBody(e);
+  if (t) return NextResponse.json(t.body, { status: t.status });
+  return moneyErrorResponse(e);
 }

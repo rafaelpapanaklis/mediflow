@@ -188,6 +188,17 @@ export function isOrderExpired(o: { status: string; createdAt: Date; paidAt: Dat
   return orderExpiresAt(o.createdAt).getTime() <= now.getTime();
 }
 
+// ── Foto del producto ───────────────────────────────────────────────────
+
+/**
+ * Carpeta de las fotos de UN producto en el bucket PÚBLICO (la foto sale en
+ * la tienda y como og:image, así que no puede ser una liga firmada que
+ * caduca). El shopId sale de la FILA del producto, nunca del body.
+ */
+export function carpetaFotoProducto(barbershopId: string, productId: string): string {
+  return `barber/${barbershopId}/productos/${productId}`;
+}
+
 // ── Ligas ───────────────────────────────────────────────────────────────
 
 export function rutaTienda(slug: string): string {
