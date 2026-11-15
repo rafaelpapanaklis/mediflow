@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Ban,
   CalendarHeart,
@@ -92,6 +92,17 @@ export function BarberClientsScreen({
   const [config, setConfig] = useState<BarberClientsConfig>(initial.config);
 
   const [showNew, setShowNew] = useState(false);
+  // «Es otra persona» en la ficha regresa aquí con el nombre ya escrito.
+  const [prefillName, setPrefillName] = useState("");
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    if (searchParams.get("alta") === "1") {
+      setPrefillName((searchParams.get("nombre") ?? "").slice(0, 80));
+      setShowNew(true);
+      router.replace("/barber/clientes");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [showSettings, setShowSettings] = useState(false);
   const [showBonos, setShowBonos] = useState(false);
   const st = useMemo(() => starsT(starsDict ?? {}), [starsDict]);
@@ -367,11 +378,18 @@ export function BarberClientsScreen({
       {showNew ? (
         <NewClientModal
           t={t}
+          initialName={prefillName}
           onClose={() => setShowNew(false)}
-          onDone={(clientId, created) => {
+          onDone={(clientId, created, typedName) => {
             setShowNew(false);
-            toast.show(created ? t("new.created") : t("new.linked"));
-            router.push(`/barber/clientes/${clientId}`);
+            // Alta nueva: tostada aquí. Teléfono ya existente: el aviso viaja a la FICHA
+            // (la tostada se perdía al cambiar de pantalla) con lo que se escribió.
+            if (created) {
+              toast.show(t("new.created"));
+              router.push(`/barber/clientes/${clientId}`);
+            } else {
+              router.push(`/barber/clientes/${clientId}?ya=1&intento=${encodeURIComponent(typedName.trim().slice(0, 80))}`);
+            }
           }}
           onMessage={toast.show}
         />
@@ -488,14 +506,16 @@ function NewClientModal({
   onClose,
   onDone,
   onMessage,
+  initialName = "",
 }: {
   t: ReturnType<typeof useBarberT>;
   onClose: () => void;
-  onDone: (clientId: string, created: boolean) => void;
+  onDone: (clientId: string, created: boolean, typedName: string) => void;
+  initialName?: string;
   onMessage: (text: string) => void;
 }) {
   const [form, setForm] = useState({
-    name: "",
+    name: initialName,
     phone: "",
     email: "",
     birthday: "",
@@ -518,7 +538,7 @@ function NewClientModal({
         setError({ field: data?.field, message: data?.error || t("errors.generic") });
         return;
       }
-      onDone(data.client.id, Boolean(data.created));
+      onDone(data.client.id, Boolean(data.created), form.name);
     } catch {
       onMessage(t("errors.generic"));
     } finally {

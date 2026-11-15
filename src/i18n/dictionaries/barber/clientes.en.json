@@ -78,6 +78,10 @@
     "title": "New client",
     "save": "Save client",
     "linked": "That phone already had a profile. Taking you there.",
+    "existing": "That phone already had a profile under {name}.",
+    "existingDiff": "That phone already had a profile under {name}. You typed “{typed}”.",
+    "notSame": "It's someone else",
+    "sameOk": "Got it",
     "created": "Client added."
   },
   "form": {
