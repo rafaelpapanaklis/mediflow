@@ -156,13 +156,14 @@ const STATE_AS_CURRENT: Record<BarberAppointmentStatus, string> = {
   NO_SHOW: "marcada como «no llegó»",
   CANCELLED: "cancelada",
 };
+/** El estado al que se quería llegar, siempre entre comillas: «en silla». */
 const STATE_AS_TARGET: Record<BarberAppointmentStatus, string> = {
-  PENDING: "pendiente",
-  CONFIRMED: "confirmada",
-  IN_PROGRESS: "en silla",
-  DONE: "completada",
+  PENDING: "«pendiente»",
+  CONFIRMED: "«confirmada»",
+  IN_PROGRESS: "«en silla»",
+  DONE: "«completada»",
   NO_SHOW: "«no llegó»",
-  CANCELLED: "cancelada",
+  CANCELLED: "«cancelada»",
 };
 
 /** «No se puede regresar una visita completada a pendiente». En español, sin códigos. */
@@ -176,13 +177,17 @@ export function transitionErrorMessage(
   if (to === "NO_SHOW" && from === "IN_PROGRESS") {
     return "Una visita que ya está en silla no puede marcarse como «no llegó».";
   }
-  // Marcha atrás: desde un estado final, o a un paso anterior del flujo.
-  if (isTerminalAppointmentStatus(from) || (fromIdx >= 0 && toIdx >= 0 && toIdx < fromIdx)) {
+  // Desde un estado final ya no hay a dónde ir (ni «hacia atrás» ni de lado):
+  // «Esta visita ya está completada: no se puede cambiar.»
+  if (isTerminalAppointmentStatus(from)) {
+    return `Esta visita ya está ${STATE_AS_CURRENT[from]}: no se puede cambiar.`;
+  }
+  // Marcha atrás dentro del flujo (en silla → confirmada).
+  if (fromIdx >= 0 && toIdx >= 0 && toIdx < fromIdx) {
     return `No se puede regresar una visita ${STATE_AS_CURRENT[from]} a ${STATE_AS_TARGET[to]}.`;
   }
   // Salto hacia delante: faltan pasos en medio.
-  return `No se puede pasar una visita de ${STATE_AS_TARGET[from]} a ${STATE_AS_TARGET[to]} sin los pasos de en medio.`;
-}
+  return `No se puede pasar una visita de ${STATE_AS_TARGET[from]} a ${STATE_AS_TARGET[to]} sin los pasos de en medio.`;}
 
 /** Estados alcanzables desde `from` (incluye CANCELLED / NO_SHOW). */
 export function nextStatuses(from: BarberAppointmentStatus): BarberAppointmentStatus[] {

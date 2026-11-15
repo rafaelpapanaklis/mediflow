@@ -16,7 +16,27 @@ const ALL: BarberAppointmentStatus[] = ["PENDING", "CONFIRMED", "IN_PROGRESS", "
 test("el ejemplo del hallazgo: completada → pendiente", () => {
   assert.equal(
     transitionErrorMessage("DONE", "PENDING"),
-    "No se puede regresar una visita completada a pendiente.",
+    "Esta visita ya está completada: no se puede cambiar.",
+  );
+});
+
+test("desde un estado final, siempre «ya está …: no se puede cambiar» (a donde sea)", () => {
+  assert.equal(transitionErrorMessage("CANCELLED", "PENDING"), "Esta visita ya está cancelada: no se puede cambiar.");
+  assert.equal(
+    transitionErrorMessage("NO_SHOW", "DONE"),
+    "Esta visita ya está marcada como «no llegó»: no se puede cambiar.",
+  );
+  assert.equal(transitionErrorMessage("DONE", "IN_PROGRESS"), "Esta visita ya está completada: no se puede cambiar.");
+});
+
+test("el destino sale entre comillas", () => {
+  assert.equal(
+    transitionErrorMessage("IN_PROGRESS", "CONFIRMED"),
+    "No se puede regresar una visita en silla a «confirmada».",
+  );
+  assert.equal(
+    transitionErrorMessage("PENDING", "IN_PROGRESS"),
+    "No se puede pasar una visita de «pendiente» a «en silla» sin los pasos de en medio.",
   );
 });
 
@@ -32,9 +52,9 @@ test("ningún par de estados filtra un nombre interno", () => {
 });
 
 test("marcha atrás, salto y «no llegó» tras sentarse dicen cosas distintas", () => {
-  assert.match(transitionErrorMessage("CANCELLED", "PENDING"), /regresar una visita cancelada a pendiente/);
-  assert.match(transitionErrorMessage("IN_PROGRESS", "CONFIRMED"), /regresar una visita en silla a confirmada/);
-  assert.match(transitionErrorMessage("PENDING", "DONE"), /pasar una visita de pendiente a completada sin los pasos de en medio/);
+  assert.match(transitionErrorMessage("CANCELLED", "PENDING"), /ya está cancelada: no se puede cambiar/);
+  assert.match(transitionErrorMessage("IN_PROGRESS", "CONFIRMED"), /regresar una visita en silla a «confirmada»/);
+  assert.match(transitionErrorMessage("PENDING", "DONE"), /pasar una visita de «pendiente» a «completada» sin los pasos de en medio/);
   assert.match(transitionErrorMessage("IN_PROGRESS", "NO_SHOW"), /ya está en silla/);
 });
 
