@@ -238,7 +238,7 @@ export function InicioView({
             label={k("kpi.avgTicket")}
             value={s.today.avgTicket === null ? "—" : fmtMoney(s.today.avgTicket)}
             icon={BarChart3}
-            hint={k("kpi.avgTicketHint")}
+            hint={k(s.scope.selfOnly ? "kpi.avgTicketHintSelf" : "kpi.avgTicketHint")}
           />
         </div>
       )}

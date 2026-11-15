@@ -24,6 +24,7 @@
       "ticketsHint": "Cobros registrados en caja",
       "avgTicket": "Ticket promedio",
       "avgTicketHint": "Ingreso ÷ tickets",
+      "avgTicketHintSelf": "Tu producción ÷ tus tickets",
       "tips": "Propinas de hoy",
       "tipsHint": "Íntegras para los barberos",
       "visits": "Visitas de hoy",

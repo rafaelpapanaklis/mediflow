@@ -638,7 +638,10 @@ export async function getInicioSummary(ctx: BarberContext, opts: InicioOptions =
   const today = dayMoneyOf(byDay.get(todayKey));
   const yesterday = dayMoneyOf(byDay.get(yesterdayKey));
   const lastWeek = dayMoneyOf(byDay.get(weekAgoKey));
-  const avgTicket = today.tickets > 0 ? toNum(today.revenueDec.div(today.tickets)) : null;
+  // El promedio se saca de la cifra que la persona tiene delante: la barbería
+  // ve su ingreso; el rol Barbero ve su producción (ver producedSum).
+  const avgBase = selfOnly ? today.producedDec : today.revenueDec;
+  const avgTicket = today.tickets > 0 ? toNum(avgBase.div(today.tickets)) : null;
 
   // Visitas de hoy: conteos (no dinero) sobre las filas del día.
   let visits: InicioSummary["visits"] = null;

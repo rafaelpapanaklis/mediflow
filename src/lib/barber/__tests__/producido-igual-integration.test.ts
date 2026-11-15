@@ -153,6 +153,7 @@ test("Inicio del barbero: «Tu producción de hoy» $360, igual que Comisiones",
   assert.equal(s.today.produced, 360);
   assert.equal(s.today.tickets, 3);
   assert.equal(s.today.tips, 10);
+  assert.equal(s.today.avgTicket, 120, "su ticket promedio sale de la cifra que ve: 360 / 3 (igual que su fila de Reportes)");
   const comisiones = (await getCommissionSummary(asCuatro, PERIOD)).rows.find((r) => r.barberId === cuatro)!;
   assert.equal(s.today.produced, comisiones.produced);
 });
