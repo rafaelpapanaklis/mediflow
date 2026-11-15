@@ -53,11 +53,11 @@
     "noDays": "Elige al menos un día o el bot no contestará nunca."
   },
   "spend": {
-    "title": "Tope de gasto de IA",
-    "hint": "Por día y por barbería. Al llegar al tope el bot deja de usar IA y te pasa los chats, para que un cliente insistente no dispare la cuenta. Las notas de voz que el bot transcribe también cuentan aquí.",
-    "capLabel": "Tope diario",
+    "title": "Gasto máximo del bot por día",
+    "hint": "Lo máximo que dejas que gaste el bot en un día contestando. Al llegar a ese monto el bot deja de contestar y te pasa los chats, para que un cliente insistente no dispare la cuenta. Las notas de voz que escucha también cuentan.",
+    "capLabel": "Máximo por día",
     "today": "Hoy llevas {spent} de {cap}",
-    "reached": "Ya se alcanzó el tope de hoy. Los chats están pasando a tu bandeja.",
+    "reached": "Hoy el bot ya llegó a su máximo. Los chats están pasando a tu bandeja.",
     "model": "Modelo: {model}"
   },
   "quota": {
@@ -70,6 +70,9 @@
   "pauses": {
     "title": "Conversaciones que atiendes tú",
     "empty": "Ninguna. El bot está atendiendo todos los chats.",
+    "emptyOff": "Ninguna. El bot está apagado: los chats te llegan a ti.",
+    "emptyNotConnected": "Ninguna. Sin WhatsApp conectado no llegan chats.",
+    "emptyBlocked": "Ninguna por ahora. El bot no puede atender mientras no se resuelva el aviso de arriba.",
     "hint": "Aquí caen los chats en los que el cliente pidió una persona, contestaste tú (desde aquí o desde tu celular) o el bot prefirió no arriesgarse. El bot vuelve solo a las 12 horas de la última respuesta de una persona; con «Devolver al bot» vuelve antes.",
     "resume": "Devolver al bot",
     "pausedAt": "Desde {when}",
