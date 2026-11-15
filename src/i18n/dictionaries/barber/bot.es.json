@@ -15,6 +15,7 @@
     "off": "Apagado",
     "hintOn": "Está contestando los mensajes que llegan a tu WhatsApp.",
     "hintOff": "Los mensajes llegan a tu bandeja y los contestas tú.",
+    "hintBlocked": "Encendido, pero por ahora no contesta: mira el aviso de arriba.",
     "notConnected": "Primero conecta tu número de WhatsApp para que el bot pueda contestar."
   },
   "tone": {

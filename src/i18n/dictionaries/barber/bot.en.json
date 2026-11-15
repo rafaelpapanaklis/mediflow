@@ -15,6 +15,7 @@
     "off": "Off",
     "hintOn": "It's answering the messages coming into your WhatsApp.",
     "hintOff": "Messages land in your inbox and you answer them.",
+    "hintBlocked": "On, but not answering for now: see the notice above.",
     "notConnected": "Connect your WhatsApp number first so the bot can reply."
   },
   "tone": {

@@ -66,3 +66,10 @@ test("WhatsApp › Conexión: el aviso de llave ilegible no promete un botón qu
   assert.doesNotMatch(panel, /connection\.displayPhone \?\? connection\.phoneNumberId/);
   assert.match(panel, /connection\.metaId/);
 });
+
+test("Bot: el motivo por el que no contesta sale UNA vez (aviso), no también en la pista del interruptor", () => {
+  const ui = readFileSync("src/components/barber/bot/bot-screen.tsx", "utf8");
+  assert.doesNotMatch(ui, /blocked \?\? t\("power\.hintOn"\)/);
+  assert.match(ui, /power\.hintBlocked/);
+  for (const l of ["es", "en"] as const) assert.ok(dict("bot", l).power.hintBlocked);
+});

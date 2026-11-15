@@ -45,5 +45,6 @@ test("la pantalla no enseña el nombre del modelo y escoge el texto del vacío c
   assert.doesNotMatch(src, /initial\.aiModel/);
   assert.match(src, /botEmptyKey\(\{ connected, enabled: settings\.enabled/);
   // Encendido pero bloqueado: el interruptor no dice «está contestando».
-  assert.match(src, /settings\.enabled \? \(blocked \?\? t\("power\.hintOn"\)\)/);
+  // (Y el motivo no se repite: ya está en el aviso de arriba; QA C, 15-nov.)
+  assert.match(src, /settings\.enabled \? \(blocked \? t\("power\.hintBlocked"\) : t\("power\.hintOn"\)\)/);
 });

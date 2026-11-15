@@ -148,7 +148,8 @@ function Screen({ locale, timezone, initial, connected, canEdit, canAttend }: Ba
             title={settings.enabled ? t("power.on") : t("power.off")}
             // Encendido pero sin con qué contestar (sin WhatsApp, sin IA…): no se
             // dice que está contestando.
-            hint={settings.enabled ? (blocked ?? t("power.hintOn")) : t("power.hintOff")}
+            // El motivo ya está en el aviso de arriba: aquí no se repite (QA C, 15-nov).
+            hint={settings.enabled ? (blocked ? t("power.hintBlocked") : t("power.hintOn")) : t("power.hintOff")}
             checked={settings.enabled}
             disabled={!canEdit || saving || (!settings.enabled && blocked !== null)}
             onChange={(next) => {
