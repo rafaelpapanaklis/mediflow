@@ -80,6 +80,7 @@ import {
   refreshLoyalty,
   type LoyaltyRule,
 } from "@/lib/barber/loyalty-core";
+import { markSaleDraftChargedTx, reopenSaleDraftOfCancelledSaleTx, saleDraftsReady } from "@/lib/barber/sale-drafts-core";
 import {
   activeBonuses,
   availableBonuses,
@@ -331,6 +332,8 @@ export interface CheckoutContext {
   loyaltyReward: string;
   /** Bonos ACTIVOS de la barbería (el premio de siempre si no ha creado otros). */
   bonuses: StarBonus[];
+  /** Existe la tabla de notas «Por cobrar» (sql/barber_por_cobrar.sql). */
+  draftsReady: boolean;
   features: { products: boolean; tips: boolean; commissions: boolean };
 }
 
@@ -728,6 +731,28 @@ export async function lookupClients(ctx: BarberContext, q: string, now: Date = n
   return rows.map((c) => toClientLookup(c, now, catalog.rule, fresh.get(c.id)?.count, bonuses));
 }
 
+/**
+ * UN cliente para el cobro, por id (el «Nuevo cobro» de su ficha). Mismo
+ * recorte que la búsqueda de Caja: de esta barbería/sede, no bloqueado y, para
+ * el rol Barbero con caja por permiso personal, solo un cliente suyo. Sellos
+ * y bonos frescos. null = no se puede cobrar a ese cliente desde aquí.
+ */
+export async function getClientLookup(ctx: BarberContext, clientId: string, now: Date = new Date()): Promise<ClientLookup | null> {
+  assertBarberPermission(ctx, "cash.view");
+  if (typeof clientId !== "string" || !clientId || clientId.length > 64) return null;
+  const scope = scopeClientsWhere(clientsViewScope(scopeUserFromCtx(ctx))) as Prisma.BarberClientWhereInput | null;
+  const row = await prisma.barberClient.findFirst({
+    where: { id: clientId, barbershopId: ctx.barbershopId, blockedAt: null, ...(scope ? { AND: [scope] } : {}) },
+    select: clientLookupSelect,
+  });
+  if (!row) return null;
+  const [catalog, fresh] = await Promise.all([
+    loadBonusCatalog(prisma, ctx.barbershopId),
+    refreshLoyalty(prisma, ctx.barbershopId, [row.id]),
+  ]);
+  return toClientLookup(row, now, catalog.rule, fresh.get(row.id)?.count, activeBonuses(catalog.bonuses));
+}
+
 export async function getCheckoutContext(
   ctx: BarberContext,
   features: Record<string, boolean>,
@@ -811,6 +836,7 @@ export async function getCheckoutContext(
     loyaltyEnabled: rule.enabled,
     loyaltyReward: rule.reward,
     bonuses,
+    draftsReady: await saleDraftsReady(prisma),
     features: {
       products: features.products === true,
       tips: features.tips === true,
@@ -955,6 +981,13 @@ export interface CreateSaleInput {
   barberId?: string | null;
   items?: SaleLineInput[];
   discount?: unknown;
+  /**
+   * Descuento en PORCENTAJE (0 < % ≤ 100, hasta dos decimales). Excluye a
+   * `discount`: es uno u otro. Se calcula sobre lo que queda del ticket tras
+   * los canjes y el bono, y termina en la MISMA línea «Descuento» que el de
+   * pesos (mismo tope, misma comisión, mismo corte).
+   */
+  discountPct?: unknown;
   tip?: unknown;
   paymentMethod?: unknown;
   /** Índice (en `items`) de la línea de servicio que se canjea por lealtad. */
@@ -968,6 +1001,11 @@ export interface CreateSaleInput {
   redeemBonusId?: string | null;
   /** Índice (en `items`) de la línea de servicio cubierta por la membresía. */
   membershipItemIndex?: number | null;
+  /**
+   * Nota «Por cobrar» que este cobro salda. Se marca COBRADA en esta misma
+   * transacción, una sola vez: si ya se cobró o descartó, el ticket no se crea.
+   */
+  draftId?: string | null;
   notes?: unknown;
 }
 
@@ -1020,6 +1058,20 @@ function optionalIndex(v: unknown, field: string): number | null {
   return v as number;
 }
 
+/** % de descuento: null si no viene; 400 si no es un número de (0, 100] con hasta 2 decimales. */
+export function parseDiscountPct(raw: unknown): Money | null {
+  if (raw === undefined || raw === null || raw === "") return null;
+  const text = typeof raw === "number" ? String(raw) : typeof raw === "string" ? raw.trim() : "";
+  if (!/^\d{1,3}(\.\d{1,2})?$/.test(text)) {
+    throw new BarberCajaError(400, "INVALID_INPUT", "discountPct: porcentaje inválido");
+  }
+  const pct = D(text);
+  if (pct.lte(0) || pct.gt(100)) {
+    throw new BarberCajaError(400, "INVALID_INPUT", "El descuento en % va de 0.01 a 100");
+  }
+  return pct;
+}
+
 /**
  * Cobra un ticket. Ver cabecera del módulo para las reglas. `features` es el
  * mapa del plan (assertBarberFeature/resolveBarberFeatures): los productos
@@ -1053,11 +1105,16 @@ export async function createSale(
   if (!POS_PAYMENT_METHODS.includes(paymentMethod)) {
     throw new BarberCajaError(400, "INVALID_PAYMENT_METHOD", "Método de pago inválido (efectivo, tarjeta o SPEI)");
   }
-  const discount = parseMoneyInput(input.discount, { field: "discount" });
+  const discountAmount = parseMoneyInput(input.discount, { field: "discount" });
+  const discountPct = parseDiscountPct(input.discountPct);
+  if (discountPct !== null && !discountAmount.isZero()) {
+    throw new BarberCajaError(400, "DISCOUNT_BOTH", "El descuento va en pesos o en porcentaje, no los dos");
+  }
   const tip = parseMoneyInput(input.tip, { field: "tip" });
   const notes = cleanNotes(input.notes);
   let loyaltyIdx = optionalIndex(input.redeemLoyaltyItemIndex, "redeemLoyaltyItemIndex");
   const bonusId = optionalId(input.redeemBonusId, "redeemBonusId");
+  const draftId = optionalId(input.draftId, "draftId");
   const membershipIdx = optionalIndex(input.membershipItemIndex, "membershipItemIndex");
   if (loyaltyIdx !== null && membershipIdx !== null && loyaltyIdx === membershipIdx) {
     throw new BarberCajaError(400, "INVALID_INPUT", "Una misma línea no puede canjearse por lealtad y membresía");
@@ -1272,8 +1329,10 @@ export async function createSale(
         });
       }
 
-      // 6. Descuento del ticket como línea de ajuste (negativa).
+      // 6. Descuento del ticket como línea de ajuste (negativa). En % se
+      //    convierte a pesos AQUÍ, con el mismo redondeo único del módulo.
       const gross = sumMoney(built.map(lineTotal));
+      const discount = discountPct !== null ? money(gross.times(discountPct).dividedBy(100)) : discountAmount;
       if (discount.gt(gross)) {
         throw new BarberCajaError(400, "DISCOUNT_TOO_BIG", "El descuento no puede superar el total de las líneas");
       }
@@ -1386,6 +1445,23 @@ export async function createSale(
           where: { id: membershipUsed.id, barbershopId },
           data: { cutsUsed: { increment: 1 } },
         });
+      }
+
+      // 11b. Nota «Por cobrar»: queda cobrada por ESTE ticket, en la misma
+      //      transacción. Dos cobros de la misma nota: el segundo espera la
+      //      fila, ya no la ve abierta y se deshace entero (ticket incluido).
+      if (draftId) {
+        if (!(await saleDraftsReady(tx))) {
+          throw new BarberCajaError(409, "DRAFTS_SQL_PENDING", "Falta aplicar sql/barber_por_cobrar.sql");
+        }
+        const marked = await markSaleDraftChargedTx(tx, {
+          draftId,
+          barbershopId,
+          clientId: client?.id ?? null,
+          saleId: created.id,
+          userId: ctx.barberUserId,
+        });
+        if (!marked) throw new BarberCajaError(409, "DRAFT_NOT_OPEN", "Esa nota ya se cobró o se descartó");
       }
 
       // 12. Lealtad: se RECUENTAN los sellos del cliente con este ticket ya
@@ -1635,6 +1711,11 @@ export async function cancelSaleTx(
       notes: s.notes ? `${marker}\n${s.notes}` : marker,
     },
   });
+
+  // Nota «Por cobrar» (ronda 2, M1): si este ticket la saldó, vuelve a quedar
+  // pendiente —para cobrarse otra vez o descartarse—, como todo lo demás que
+  // el ticket se llevó. Misma transacción que la cancelación.
+  await reopenSaleDraftOfCancelledSaleTx(tx, { saleId: s.id, barbershopId, userId: actor.userId });
 
   // Lealtad: con el ticket ya cancelado se recuentan los sellos del cliente
   // (deja de contar la visita de mostrador y vuelve lo que se había canjeado).

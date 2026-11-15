@@ -1,3 +1,4 @@
+import "@/components/barber/cash/money.css";
 import { notFound, redirect } from "next/navigation";
 import { getBarberContext, hasBarberPermission } from "@/lib/barber-auth";
 import { requireBarberPaidAccess } from "@/lib/barber/paid-access";
@@ -6,6 +7,7 @@ import { getBarberDict, getBarberT, resolveBarberLocale } from "@/i18n/dictionar
 import type { Dictionary } from "@/i18n/t";
 import { getBarberClientDetail } from "@/lib/barber/loyalty";
 import { getStaffStarsView } from "@/lib/barber/stars";
+import { listClientSales } from "@/lib/barber/client-sales";
 import { barberCanSeeClient, barberClientScopeWhere } from "@/lib/barber/clients";
 import { clientsViewScope, scopeUserFromCtx } from "@/lib/barber/own-visits";
 import { BarberClientDetailScreen } from "@/components/barber/clients/client-detail";
@@ -71,6 +73,12 @@ export default async function Page(props: { params: Promise<{ id: string }> }) {
     return null;
   });
   const starsDict = ((getBarberDict(locale).barber as Dictionary).estrellas ?? {}) as Dictionary;
+  // Cobros del cliente (sus tickets de Caja). Sin permiso, la sección no sale.
+  const sales = await listClientSales(ctx, params.id).catch((e) => {
+    console.warn("[barber/clientes] no se pudieron leer los cobros:", (e as Error).message);
+    return null;
+  });
+  const cobrosDict = ((getBarberDict(locale).barber as Dictionary).cobros ?? {}) as Dictionary;
 
   return (
     <BarberClientDetailScreen
@@ -83,6 +91,11 @@ export default async function Page(props: { params: Promise<{ id: string }> }) {
       starsDict={starsDict}
       canHandleStars={hasBarberPermission(permUser, "cash.manage")}
       timezone={ctx.barbershop.timezone || "America/Mexico_City"}
+      sales={sales?.allowed ? sales : null}
+      cobrosDict={cobrosDict}
+      canPrintSales={hasBarberPermission(permUser, "cash.view")}
+      canCharge={plan.features.cash === true && hasBarberPermission(permUser, "cash.manage")}
+      cajaDict={((getBarberDict(locale).barber as Dictionary).caja ?? {}) as Dictionary}
     />
   );
 }

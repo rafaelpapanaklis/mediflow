@@ -18,6 +18,7 @@ import {
   Trash2,
   TriangleAlert,
   UserRound,
+  Wallet,
 } from "lucide-react";
 import type { Dictionary } from "@/i18n/t";
 import type { BarberClientPreferences, BarberVisitPhotoView } from "@/lib/barber/clients";
@@ -25,6 +26,11 @@ import type { BarberClientDetail, BarberLoyaltyState } from "@/lib/barber/loyalt
 import type { BarberClientDTO } from "@/lib/barber/types";
 import { LoyaltyCard } from "./loyalty-card";
 import { StarsPanel } from "./stars-panel";
+import { ClientSales } from "./client-sales";
+import { ClientChargeBridge } from "./client-charge-bridge";
+import { ClientDrafts } from "./sale-drafts-list";
+import type { SaleDraftRow } from "@/lib/barber/sale-drafts";
+import type { ClientSalesPage } from "@/lib/barber/client-sales";
 import type { StarsView } from "@/lib/barber/stars-core";
 import { PhotoUploader, type UploadedPhoto } from "./photo-uploader";
 import { PreferencesPanel } from "./preferences-panel";
@@ -64,6 +70,16 @@ export interface ClientDetailProps {
   /** cash.manage — dar/quitar estrella, entregar bono, enlace de la tarjeta. */
   canHandleStars?: boolean;
   timezone?: string;
+  /** Cobros del cliente (null = sin permiso para ver importes: no se pinta). */
+  sales?: ClientSalesPage | null;
+  /** Sub-árbol barber.cobros. */
+  cobrosDict?: Dictionary;
+  /** cash.view: enlace al ticket imprimible. */
+  canPrintSales?: boolean;
+  /** Plan con caja + cash.manage: «Nuevo cobro» desde la ficha. */
+  canCharge?: boolean;
+  /** Sub-árbol barber.caja (el TicketModal de Caja). */
+  cajaDict?: Dictionary;
 }
 
 function sortPhotos(list: BarberVisitPhotoView[]): BarberVisitPhotoView[] {
@@ -80,6 +96,11 @@ export function BarberClientDetailScreen({
   starsDict,
   canHandleStars = false,
   timezone = "America/Mexico_City",
+  sales = null,
+  cobrosDict,
+  canPrintSales = false,
+  canCharge = false,
+  cajaDict,
 }: ClientDetailProps) {
   const t = useBarberT(dict);
   const toast = useToast();
@@ -98,6 +119,10 @@ export function BarberClientDetailScreen({
   );
 
   const [showEdit, setShowEdit] = useState(false);
+  const [charging, setCharging] = useState(false);
+  const [chargeDraft, setChargeDraft] = useState<SaleDraftRow | null>(null);
+  const [salesReload, setSalesReload] = useState(0);
+  const chargeEnabled = canCharge && Boolean(cajaDict && cobrosDict) && !client.blockedAt;
   const [showBlock, setShowBlock] = useState(false);
   const [lightbox, setLightbox] = useState<BarberVisitPhotoView | null>(null);
 
@@ -452,12 +477,80 @@ export function BarberClientDetailScreen({
                   onOpenPhoto={setLightbox}
                 />
               </section>
+
+              {sales && cobrosDict ? (
+                <ClientSales
+                  clientId={client.id}
+                  initial={sales}
+                  dict={cobrosDict}
+                  locale={locale}
+                  timezone={timezone}
+                  canPrint={canPrintSales}
+                  reloadKey={salesReload}
+                  beforeList={
+                    chargeEnabled && cobrosDict ? (
+                      <ClientDrafts
+                        clientId={client.id}
+                        dict={cobrosDict}
+                        locale={locale}
+                        timezone={timezone}
+                        canManage={chargeEnabled}
+                        reloadKey={salesReload}
+                        onCharge={(d) => {
+                          setChargeDraft(d);
+                          setCharging(true);
+                        }}
+                      />
+                    ) : null
+                  }
+                  headerAction={
+                    chargeEnabled ? (
+                      <button
+                        type="button"
+                        className={`${s.btn} barber-btn-primary`}
+                        onClick={() => {
+                          setChargeDraft(null);
+                          setCharging(true);
+                        }}
+                        data-accion="nuevo-cobro"
+                      >
+                        <Wallet size={14} />
+                        {(cobrosDict as Record<string, unknown>).newCharge as string}
+                      </button>
+                    ) : null
+                  }
+                />
+              ) : null}
             </div>
           </div>
         </div>
       </div>
 
       {/* Diálogos: hermanos de la página, jamás dentro de un container-type. */}
+      {charging && cajaDict && cobrosDict ? (
+        <ClientChargeBridge
+          clientId={client.id}
+          clientName={client.name}
+          cajaDict={cajaDict}
+          starsDict={starsDict}
+          cobrosDict={cobrosDict}
+          locale={locale}
+          timezone={timezone}
+          canOpenSession={canCharge}
+          draft={chargeDraft}
+          onDraftSaved={() => setSalesReload((n) => n + 1)}
+          onClose={() => {
+            setCharging(false);
+            setChargeDraft(null);
+            setSalesReload((n) => n + 1);
+            router.refresh();
+          }}
+          onCharged={() => {
+            setSalesReload((n) => n + 1);
+            router.refresh();
+          }}
+        />
+      ) : null}
       {showEdit ? (
         <EditClientModal
           client={client}

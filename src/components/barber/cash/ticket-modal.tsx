@@ -7,6 +7,7 @@ import { QRCodeSVG } from "qrcode.react";
 import type { Dictionary } from "@/i18n/t";
 import type { CheckoutContext, ClientLookup, PendingAppointment, SaleRow } from "@/lib/barber/cash";
 import type { BonusPublic, SaleStarsOutcome, StarBonus, StarsView } from "@/lib/barber/stars-core";
+import type { SaleDraftRow } from "@/lib/barber/sale-drafts";
 import { StarsCard, bonusWhatText, starsT } from "@/components/barber/stars/stars-card";
 import type { BarberPaymentMethod } from "@/lib/barber/types";
 import { loyaltyRedeemText } from "./loyalty-redeem-text";
@@ -29,6 +30,21 @@ interface Line {
 
 let lineSeq = 0;
 const nextKey = () => `l${++lineSeq}`;
+
+/** Las líneas de una nota «Por cobrar» con los precios de HOY del catálogo. */
+function draftLines(draft: SaleDraftRow, checkout: CheckoutContext): Line[] {
+  const out: Line[] = [];
+  for (const l of draft.lines) {
+    if (l.kind === "service") {
+      const svc = checkout.services.find((x) => x.id === l.id);
+      if (svc) out.push({ key: nextKey(), kind: "service", id: svc.id, name: svc.name, qty: l.qty, unitPrice: svc.price, frozen: false, stock: null });
+    } else {
+      const p = checkout.products.find((x) => x.id === l.id);
+      if (p && p.stock > 0) out.push({ key: nextKey(), kind: "product", id: p.id, name: p.name, qty: Math.min(l.qty, p.stock), unitPrice: p.price, frozen: false, stock: p.stock });
+    }
+  }
+  return out;
+}
 
 const METHODS: Array<{ value: BarberPaymentMethod; Icon: LucideIcon }> = [
   { value: "CASH", Icon: Banknote },
@@ -66,6 +82,9 @@ export function TicketModal({
   locale = "es",
   checkout,
   appointment,
+  initialClient = null,
+  draft = null,
+  onDraftSaved,
   tz,
   onClose,
   onCharged,
@@ -76,6 +95,12 @@ export function TicketModal({
   locale?: string;
   checkout: CheckoutContext;
   appointment: PendingAppointment | null;
+  /** Cliente ya puesto (el «Nuevo cobro» de su ficha). */
+  initialClient?: ClientLookup | null;
+  /** Nota «Por cobrar» que se abre para editarla o cobrarla. */
+  draft?: SaleDraftRow | null;
+  /** Se guardó como «Por cobrar» (el modal se cierra). */
+  onDraftSaved?: () => void;
   tz: string;
   onClose: () => void;
   onCharged: (sale: SaleRow) => void;
@@ -85,13 +110,15 @@ export function TicketModal({
   const [bonusId, setBonusId] = useState<string | null>(null);
   const [linkCopied, setLinkCopied] = useState(false);
   const [barberId, setBarberId] = useState<string>(
-    appointment?.barberId ?? (checkout.barbers.length === 1 ? checkout.barbers[0].id : ""),
+    appointment?.barberId ?? draft?.barberId ?? (checkout.barbers.length === 1 ? checkout.barbers[0].id : ""),
   );
-  const [client, setClient] = useState<ClientLookup | null>(appointment?.client ?? null);
+  const [client, setClient] = useState<ClientLookup | null>(appointment?.client ?? initialClient);
   const [query, setQuery] = useState("");
   const [suggestions, setSuggestions] = useState<ClientLookup[]>([]);
   const [lines, setLines] = useState<Line[]>(() =>
-    (appointment?.services ?? []).map((s) => ({
+    draft && !appointment
+      ? draftLines(draft, checkout)
+      : (appointment?.services ?? []).map((s) => ({
       key: nextKey(),
       kind: "service",
       id: s.serviceId,
@@ -104,11 +131,14 @@ export function TicketModal({
   );
   const [addServiceId, setAddServiceId] = useState("");
   const [addProductId, setAddProductId] = useState("");
-  const [discountText, setDiscountText] = useState("");
+  const [discountText, setDiscountText] = useState(draft?.payload.discountPct ?? draft?.payload.discount ?? "");
+  // Descuento en pesos o en %: el servidor hace la MISMA cuenta (createSale).
+  const [discountMode, setDiscountMode] = useState<"amount" | "pct">(draft?.payload.discountPct ? "pct" : "amount");
   const [tipMode, setTipMode] = useState<TipMode>({ kind: "none" });
   const [tipText, setTipText] = useState("");
   const [method, setMethod] = useState<BarberPaymentMethod>("CASH");
-  const [notes, setNotes] = useState("");
+  const [notes, setNotes] = useState(draft?.payload.notes ?? "");
+  const [savingDraft, setSavingDraft] = useState(false);
   const [loyaltyKey, setLoyaltyKey] = useState<string | null>(null);
   const [membershipKey, setMembershipKey] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -184,7 +214,10 @@ export function TicketModal({
     else if (bonus?.kind === "percent") bonusOff = Math.round((gross * (bonus.percent ?? 0)) / 100);
     const grossAfterBonus = gross - bonusOff;
     const discountParsed = parseAmountText(discountText);
-    const discount = Math.min(discountParsed === null ? 0 : toCents(discountParsed), grossAfterBonus);
+    const pctInvalid = discountMode === "pct" && discountParsed !== null && discountParsed > 100;
+    const discount = discountMode === "pct"
+      ? Math.round((grossAfterBonus * (discountParsed ?? 0)) / 100)
+      : Math.min(discountParsed === null ? 0 : toCents(discountParsed), grossAfterBonus);
     // Lo que vale el servicio ya con descuento: base de la propina en %.
     const due = grossAfterBonus - discount;
     const deposit = Math.min(depositPaidCents, due);
@@ -196,8 +229,8 @@ export function TicketModal({
       const p = parseAmountText(tipText);
       tip = p === null ? 0 : toCents(p);
     }
-    return { gross, bonusOff, discount, deposit, depositRest: depositPaidCents - deposit, subtotal, tip, total: subtotal + tip, discountInvalid: discountParsed === null };
-  }, [lines, loyaltyKey, membershipKey, discountText, tipMode, tipText, depositPaidCents, bonus]);
+    return { gross, bonusOff, discount, deposit, depositRest: depositPaidCents - deposit, subtotal, tip, total: subtotal + tip, discountInvalid: discountParsed === null || pctInvalid };
+  }, [lines, loyaltyKey, membershipKey, discountText, discountMode, tipMode, tipText, depositPaidCents, bonus]);
 
   function addService() {
     const s = checkout.services.find((x) => x.id === addServiceId);
@@ -243,12 +276,16 @@ export function TicketModal({
         clientId: client?.id ?? null,
         barberId: barberId || null,
         items: lines.map((l) => ({ kind: l.kind, id: l.id, qty: l.qty })),
-        discount: fromCents(totals.discount),
+        // En % viaja el porcentaje: el servidor lo convierte con su redondeo.
+        discount: discountMode === "amount" ? fromCents(totals.discount) : null,
+        discountPct: discountMode === "pct" && totals.discount > 0 ? discountText.trim() : null,
         tip: fromCents(totals.tip),
         paymentMethod: method,
         redeemBonusId: bonus ? bonus.id : null,
         redeemLoyaltyItemIndex: bonus?.kind === "service" && loyaltyKey ? lines.findIndex((l) => l.key === loyaltyKey) : null,
         membershipItemIndex: membershipKey ? lines.findIndex((l) => l.key === membershipKey) : null,
+        // La nota «Por cobrar» que este ticket salda (se marca en la misma transacción).
+        draftId: draft?.id ?? null,
         notes: notes.trim() || null,
       };
       const res = await fetch("/api/barber/sales", {
@@ -269,6 +306,43 @@ export function TicketModal({
       setError(t("common.error"));
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  // «Guardar sin cobrar»: la nota guarda QUÉ se cobrará, no importes. No
+  // toca el corte, ingresos, comisiones ni estrellas (eso lo hace el cobro).
+  const canSaveDraft = checkout.draftsReady === true && Boolean(client) && !appointment && Boolean(onDraftSaved);
+  async function saveDraft() {
+    if (!client || lines.length === 0 || totals.discountInvalid || savingDraft) return;
+    setSavingDraft(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/barber/sales/drafts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: draft?.id ?? null,
+          clientId: client.id,
+          payload: {
+            items: lines.map((l) => ({ kind: l.kind, id: l.id, qty: l.qty })),
+            barberId: barberId || null,
+            discount: discountMode === "amount" && totals.discount > 0 ? fromCents(totals.discount).toFixed(2) : null,
+            discountPct: discountMode === "pct" && totals.discount > 0 ? discountText.trim() : null,
+            notes: notes.trim() || null,
+          },
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        setError(data.error ?? t("common.error"));
+        return;
+      }
+      onDraftSaved?.();
+      onClose();
+    } catch {
+      setError(t("common.error"));
+    } finally {
+      setSavingDraft(false);
     }
   }
 
@@ -385,6 +459,17 @@ export function TicketModal({
       footer={
         <>
           <button type="button" className="btn-new btn-new--ghost" onClick={onClose} disabled={submitting}>{t("common.cancel")}</button>
+          {canSaveDraft && (
+            <button
+              type="button"
+              className="btn-new btn-new--secondary"
+              onClick={saveDraft}
+              disabled={savingDraft || submitting || lines.length === 0 || totals.discountInvalid}
+              data-accion="guardar-sin-cobrar"
+            >
+              {savingDraft ? t("ticket.savingDraft") : t("ticket.saveDraft")}
+            </button>
+          )}
           <button type="button" className="btn-new barber-btn-primary" onClick={submit} disabled={!canSubmit}>
             {submitting ? t("ticket.charging") : t("ticket.confirm", { amount: fmtMoney(fromCents(totals.total)) })}
           </button>
@@ -577,9 +662,33 @@ export function TicketModal({
         <div className="bcaja-form__grid">
           {/* Descuento */}
           <div className="field-new">
-            <label className="field-new__label">{t("ticket.discount")}</label>
-            <input className="input-new" inputMode="decimal" value={discountText} onChange={(e) => setDiscountText(e.target.value)} placeholder="0.00" />
-            <div className="bcaja-hint">{t("ticket.discountHint")}</div>
+            <label className="field-new__label" htmlFor="ticket-discount">{t("ticket.discount")}</label>
+            <div style={{ display: "flex", gap: 6 }}>
+              <div className="bcaja-seg" role="radiogroup" aria-label={t("ticket.discountMode")} style={{ flex: "0 0 auto", display: "inline-flex", width: "auto", gap: 2 }}>
+                {(["amount", "pct"] as const).map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    role="radio"
+                    aria-checked={discountMode === m}
+                    className={`bcaja-seg__btn ${discountMode === m ? "bcaja-seg__btn--on" : ""}`}
+                    style={{ minWidth: 38, flex: "0 0 auto" }}
+                    onClick={() => setDiscountMode(m)}
+                    data-descuento={m}
+                  >
+                    {m === "amount" ? "$" : "%"}
+                  </button>
+                ))}
+              </div>
+              <input id="ticket-discount" className="input-new" inputMode="decimal" value={discountText} onChange={(e) => setDiscountText(e.target.value)} placeholder={discountMode === "pct" ? "10" : "0.00"} />
+            </div>
+            <div className="bcaja-hint">
+              {discountMode === "pct" && totals.discount > 0
+                ? t("ticket.discountPctEquals", { amount: fmtMoney(fromCents(totals.discount)) })
+                : discountMode === "pct"
+                  ? t("ticket.discountPctHint")
+                  : t("ticket.discountHint")}
+            </div>
           </div>
 
           {/* Propina */}
