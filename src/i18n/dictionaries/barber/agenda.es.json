@@ -151,6 +151,13 @@
     "saveError": "No se pudo guardar el horario.",
     "noBarber": "Elige un barbero para editar su horario.",
     "unsaved": "Tienes cambios sin guardar.",
+    "switchGuard": {
+      "title": "Tienes cambios sin guardar",
+      "body": "Cambiaste el horario de {name} y no lo has guardado. Si cambias de barbero ahora, esos cambios se pierden.",
+      "save": "Guardar y cambiar",
+      "discard": "Descartar cambios",
+      "cancel": "Seguir editando"
+    },
     "timeOff": {
       "title": "Bloqueos de agenda",
       "subtitle": "Comidas, vacaciones y días festivos. Mientras un bloqueo esté puesto, esos huecos no se ofrecen.",

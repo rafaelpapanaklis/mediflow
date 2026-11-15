@@ -9,7 +9,7 @@
 // la SEMANA COMPLETA del barbero y el servidor la reemplaza de un jalón:
 // editar fila por fila deja estados intermedios raros a medio guardar.
 // ═══════════════════════════════════════════════════════════════════════
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Copy, Plus, Trash2 } from "lucide-react";
 import { type Dictionary } from "@/i18n/t";
@@ -29,17 +29,12 @@ import {
   shopLocalToUtc,
   shopMinuteOfDay,
 } from "@/lib/barber/agenda";
-import { Field, agendaCss as css } from "./agenda-ui";
-
-interface Shift {
-  start: number;
-  end: number;
-}
+import { Field, Modal, agendaCss as css } from "./agenda-ui";
+import { withNextShift, type Shift } from "./shift-proposal";
 
 type WeekShifts = Record<number, Shift[]>;
 
 const DAYS = [1, 2, 3, 4, 5, 6, 0];
-const DEFAULT_SHIFT: Shift = { start: 10 * 60, end: 20 * 60 };
 const TIME_OFF_TYPES: BarberTimeOffType[] = ["BREAK", "VACATION", "HOLIDAY", "OTHER"];
 
 export interface ScheduleManagerProps {
@@ -65,6 +60,12 @@ export function ScheduleManager(props: ScheduleManagerProps) {
   const [barberId, setBarberId] = useState("");
   const [week, setWeek] = useState<WeekShifts>({});
   const [dirty, setDirty] = useState(false);
+  // Espejo de `dirty` para leerlo dentro de efectos sin volverlos a disparar.
+  const dirtyRef = useRef(false);
+  /** Barbero cuya semana está pintada ahora mismo en el editor. */
+  const shownBarberRef = useRef("");
+  /** Barbero al que se quiso cambiar con cambios sin guardar (abre el aviso). */
+  const [pendingBarberId, setPendingBarberId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -99,9 +100,19 @@ export function ScheduleManager(props: ScheduleManagerProps) {
     void load();
   }, [load]);
 
+  const markDirty = useCallback((value: boolean) => {
+    dirtyRef.current = value;
+    setDirty(value);
+  }, []);
+
   // La semana en edición se rearma cada vez que cambia el barbero elegido.
+  // Si el barbero es el MISMO y hay cambios sin guardar, no se toca: una
+  // recarga de fondo (p. ej. al crear un bloqueo en la otra pestaña) no debe
+  // borrar lo que se estaba capturando.
   useEffect(() => {
     if (!barberId) return;
+    if (shownBarberRef.current === barberId && dirtyRef.current) return;
+    shownBarberRef.current = barberId;
     const next: WeekShifts = {};
     for (const day of DAYS) next[day] = [];
     for (const row of schedules) {
@@ -110,8 +121,8 @@ export function ScheduleManager(props: ScheduleManagerProps) {
     }
     for (const day of DAYS) next[day].sort((a, b) => a.start - b.start);
     setWeek(next);
-    setDirty(false);
-  }, [barberId, schedules]);
+    markDirty(false);
+  }, [barberId, schedules, markDirty]);
 
   const updateShift = (day: number, index: number, patch: Partial<Shift>) => {
     setWeek((prev) => {
@@ -119,22 +130,17 @@ export function ScheduleManager(props: ScheduleManagerProps) {
       list[index] = { ...list[index], ...patch };
       return { ...prev, [day]: list };
     });
-    setDirty(true);
+    markDirty(true);
   };
 
   const addShift = (day: number) => {
-    setWeek((prev) => {
-      const list = [...(prev[day] ?? [])];
-      const last = list[list.length - 1];
-      list.push(last ? { start: Math.min(last.end + 60, 1380), end: Math.min(last.end + 300, 1440) } : DEFAULT_SHIFT);
-      return { ...prev, [day]: list };
-    });
-    setDirty(true);
+    setWeek((prev) => ({ ...prev, [day]: withNextShift(prev[day] ?? []) }));
+    markDirty(true);
   };
 
   const removeShift = (day: number, index: number) => {
     setWeek((prev) => ({ ...prev, [day]: (prev[day] ?? []).filter((_, i) => i !== index) }));
-    setDirty(true);
+    markDirty(true);
   };
 
   const copyToWeek = (day: number) => {
@@ -144,10 +150,11 @@ export function ScheduleManager(props: ScheduleManagerProps) {
       for (const d of [1, 2, 3, 4, 5, 6]) next[d] = source.map((s) => ({ ...s }));
       return next;
     });
-    setDirty(true);
+    markDirty(true);
   };
 
-  const save = async () => {
+  /** Guarda la semana del barbero en pantalla. Devuelve si se guardó. */
+  const save = async (): Promise<boolean> => {
     setSaving(true);
     setError(null);
     setNotice(null);
@@ -157,7 +164,7 @@ export function ScheduleManager(props: ScheduleManagerProps) {
         for (const shift of week[day] ?? []) {
           if (shift.end <= shift.start) {
             setError(t("barber.agenda.schedule.saveError"));
-            return;
+            return false;
           }
           rows.push({ dayOfWeek: day, startMinute: shift.start, endMinute: shift.end });
         }
@@ -170,17 +177,65 @@ export function ScheduleManager(props: ScheduleManagerProps) {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setError(typeof data.error === "string" ? data.error : t("barber.agenda.schedule.saveError"));
-        return;
+        return false;
       }
+      markDirty(false);
       setSchedules(data.schedules ?? []);
-      setDirty(false);
       setNotice(t("barber.agenda.schedule.saved"));
+      return true;
     } catch {
       setError(t("barber.agenda.schedule.saveError"));
+      return false;
     } finally {
       setSaving(false);
     }
   };
+
+  // ── Cambiar de barbero sin perder lo capturado ───────────────────────
+  // Con cambios sin guardar el selector NO cambia: abre un aviso con tres
+  // salidas (guardar y cambiar / descartar / quedarse).
+  const askSwitchBarber = (nextId: string) => {
+    if (nextId === barberId) return;
+    if (dirtyRef.current) {
+      setPendingBarberId(nextId);
+      return;
+    }
+    setNotice(null);
+    setBarberId(nextId);
+  };
+
+  const cancelSwitch = useCallback(() => setPendingBarberId(null), []);
+
+  const discardAndSwitch = () => {
+    if (!pendingBarberId) return;
+    markDirty(false);
+    setNotice(null);
+    setError(null);
+    setBarberId(pendingBarberId);
+    setPendingBarberId(null);
+  };
+
+  const saveAndSwitch = async () => {
+    const target = pendingBarberId;
+    if (!target) return;
+    const ok = await save();
+    setPendingBarberId(null);
+    // Si no se pudo guardar, se queda en el mismo barbero con el error a la vista.
+    if (ok) setBarberId(target);
+  };
+
+  // Cerrar o recargar la pestaña con cambios sin guardar: aviso del navegador.
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
+
+  const shownBarber = barbers.find((b) => b.id === barberId);
 
   return (
     <div>
@@ -223,7 +278,7 @@ export function ScheduleManager(props: ScheduleManagerProps) {
               <select
                 className={css.select}
                 value={barberId}
-                onChange={(e) => setBarberId(e.target.value)}
+                onChange={(e) => askSwitchBarber(e.target.value)}
               >
                 {barbers.map((b) => (
                   <option key={b.id} value={b.id}>
@@ -333,7 +388,7 @@ export function ScheduleManager(props: ScheduleManagerProps) {
                   <button
                     type="button"
                     className={`${css.btn} ${css.btnPrimary}`}
-                    onClick={save}
+                    onClick={() => void save()}
                     disabled={saving}
                   >
                     {t("barber.agenda.schedule.save")}
@@ -355,6 +410,43 @@ export function ScheduleManager(props: ScheduleManagerProps) {
           onChanged={load}
         />
       )}
+
+      {pendingBarberId ? (
+        <Modal
+          title={t("barber.agenda.schedule.switchGuard.title")}
+          onClose={cancelSwitch}
+          closeLabel={t("barber.agenda.schedule.switchGuard.cancel")}
+          footer={
+            <>
+              <button type="button" className={css.btn} onClick={cancelSwitch} disabled={saving}>
+                {t("barber.agenda.schedule.switchGuard.cancel")}
+              </button>
+              <button
+                type="button"
+                className={`${css.btn} ${css.btnDanger}`}
+                onClick={discardAndSwitch}
+                disabled={saving}
+              >
+                {t("barber.agenda.schedule.switchGuard.discard")}
+              </button>
+              <button
+                type="button"
+                className={`${css.btn} ${css.btnPrimary}`}
+                onClick={() => void saveAndSwitch()}
+                disabled={saving}
+              >
+                {t("barber.agenda.schedule.switchGuard.save")}
+              </button>
+            </>
+          }
+        >
+          <p style={{ margin: 0, fontSize: 13.5, color: "var(--text-2)", lineHeight: 1.5 }}>
+            {t("barber.agenda.schedule.switchGuard.body", {
+              name: shownBarber?.nickname || shownBarber?.name || "",
+            })}
+          </p>
+        </Modal>
+      ) : null}
     </div>
   );
 }

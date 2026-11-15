@@ -151,6 +151,13 @@
     "saveError": "We couldn't save the hours.",
     "noBarber": "Pick a barber to edit their hours.",
     "unsaved": "You have unsaved changes.",
+    "switchGuard": {
+      "title": "You have unsaved changes",
+      "body": "You changed {name}'s schedule and haven't saved it. If you switch barbers now, those changes are lost.",
+      "save": "Save and switch",
+      "discard": "Discard changes",
+      "cancel": "Keep editing"
+    },
     "timeOff": {
       "title": "Schedule blocks",
       "subtitle": "Lunch breaks, vacations and holidays. While a block is on, those slots are never offered.",
