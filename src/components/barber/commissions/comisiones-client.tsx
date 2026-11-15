@@ -118,7 +118,7 @@ export function ComisionesClient({
     r.commissionType === "COMMISSION" ? t("comisiones.schemeCOMMISSION", { pct: r.commissionPct ?? 0 }) : t(`comisiones.scheme${r.commissionType}`);
 
   return (
-    <div className="bcaja-page">
+    <div className="bcaja-page bd-page">
       <div className="bcaja-head">
         <div>
           <h1 className="bcaja-head__title">{t("comisiones.title")}</h1>
@@ -134,7 +134,7 @@ export function ComisionesClient({
       {/* El Barbero (selfOnly) ve SU pantalla: «A pagarte» y «Debes de renta»
           (C-M1). Para él, la renta pendiente la debe ÉL, no «te deben»; y si
           no debe renta, esa tarjeta no sale. */}
-      <div className={showRentCard ? "bcaja-kpis bcaja-kpis--5" : "bcaja-kpis"}>
+      <div className={showRentCard ? "bcaja-kpis bcaja-kpis--5 bd-band" : "bcaja-kpis bd-band"}>
         <KpiCard label={t("comisiones.kpiProduced")} value={fmtMoney(summary.totals.produced)} icon={Scissors} hero />
         <KpiCard label={t("comisiones.kpiCommission")} value={fmtMoney(summary.totals.commissionTotal)} icon={Percent} />
         <KpiCard label={t("comisiones.kpiTips")} value={fmtMoney(summary.totals.tips)} />
