@@ -156,8 +156,6 @@ export function BookingFlow({
   const [website, setWebsite] = useState(""); // campo trampa
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // La barbería llegó al tope de reservas en línea de hoy (dailyCap).
-  const [capReached, setCapReached] = useState(false);
   const [done, setDone] = useState<BookingConfirmation | null>(null);
 
   const topRef = useRef<HTMLDivElement | null>(null);
@@ -327,12 +325,6 @@ export function BookingFlow({
       });
       const data = await res.json().catch(() => null);
       if (!res.ok || !data?.ok) {
-        // Tope del día: no es un error que se corrija reintentando; se pinta
-        // el aviso con WhatsApp y teléfono de la barbería.
-        if (data?.code === "dailyCap") {
-          setCapReached(true);
-          return;
-        }
         setError(data?.error ?? t("barber.reserva.errores.generico"));
         // El horario se lo llevó alguien más: de vuelta a elegir hora, con
         // la lista ya refrescada.
@@ -371,24 +363,6 @@ export function BookingFlow({
           shop={shop}
           confirmation={done}
           whatsappConnected={whatsappConnected}
-        />
-      </div>
-    );
-  }
-
-  if (capReached) {
-    return (
-      <div ref={topRef}>
-        <NoScheduleNotice
-          title={t("barber.reserva.tope.titulo")}
-          body={
-            contact.phone
-              ? t("barber.reserva.tope.cuerpoConTelefono", { phone: contact.phone })
-              : t("barber.reserva.tope.cuerpo")
-          }
-          waHref={waHref}
-          telHref={telHref}
-          {...contactLabels}
         />
       </div>
     );

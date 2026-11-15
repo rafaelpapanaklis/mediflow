@@ -22,22 +22,32 @@ import {
  * teléfono. Según la política de la barbería nace PENDING (va a la bandeja
  * de /barber/solicitudes) o CONFIRMED.
  *
- * Anti-abuso SIN captcha (un captcha en móvil mata la conversión):
- *   · límite por IP con el freno persistente del dental (persistentRateLimit,
- *     Upstash; sin sus variables cae a memoria — ver @/lib/failban),
- *   · tope DIARIO por barbería de solicitudes de teléfonos sin historial
- *     (BARBER_PUBLIC_NEW_PHONE_DAILY_CAP, dentro de la transacción de
- *     createPublicBooking: no depende de Redis),
- *   · tope de citas futuras vivas por teléfono (también dentro),
+ * Anti-abuso (decisión de Rafael, 15-nov-2026: «que dejen reservar a
+ * cualquiera sin ningún problema» + captcha contra los bots):
+ *   · captcha Cloudflare Turnstile (src/lib/barber/captcha.ts), casi
+ *     invisible para una persona y verificado AQUÍ antes de crear nada;
+ *     sin sus dos variables la reserva sigue como antes;
+ *   · solo un freno MUY alto por IP y barbería, para ráfagas (el
+ *     persistente del dental: persistentRateLimit, Upstash; sin sus
+ *     variables cae a memoria — ver @/lib/failban). Ya NO hay tope diario
+ *     por barbería;
+ *   · tope de citas futuras vivas por teléfono (dentro de la transacción),
  *   · nombre solo con letras y teléfono mexicano real,
- *   · la confirmación por WhatsApp NO sale al reservar a un teléfono nuevo,
+ *   · con la política automática, la confirmación por WhatsApp a un
+ *     teléfono NUEVO sale solo si pasó el captcha (con la manual, al aceptar),
  *   · campo trampa `website` — invisible para una persona.
  */
 
 export const dynamic = "force-dynamic";
 
-/** Una familia reserva 2-3 veces seguidas; 8 en 10 minutos es holgado. */
-const RL = { limit: 8, windowSec: 600 };
+/**
+ * FRENO DE EMERGENCIA, no una traba: solo para ráfagas. Una familia reserva
+ * 2-3 veces seguidas; 30 en 10 minutos desde la MISMA IP para la MISMA
+ * barbería no lo hace ninguna persona, y deja pasar a todos los que comparten
+ * IP de celular (CGNAT) con el de al lado. Antes eran 8 por IP para todo el
+ * vertical. Contra los bots está el captcha.
+ */
+const RL = { limit: 30, windowSec: 600 };
 
 /**
  * Lo que se contesta cuando el NÚMERO no puede agendar en línea. Es UNA sola
@@ -68,24 +78,15 @@ const ERROR_UI: Record<BookingErrorCode, { status: number; message: string; code
   tooManyOpen: PHONE_UNAVAILABLE,
   clientBlocked: PHONE_UNAVAILABLE,
   phoneConflict: PHONE_UNAVAILABLE,
-  dailyCap: {
-    status: 429,
-    message: "Por hoy ya no recibimos más reservas en línea. Escríbenos por WhatsApp o llámanos.",
-  },
 };
-
-/** El mensaje del tope lleva el teléfono de la barbería cuando lo hay. */
-function dailyCapMessage(shopPhone: string | null): string {
-  const phone = (shopPhone ?? "").trim();
-  return phone
-    ? `Por hoy ya no recibimos más reservas en línea. Escríbenos por WhatsApp o llámanos al ${phone}.`
-    : ERROR_UI.dailyCap.message;
-}
 
 export async function POST(req: NextRequest, props: { params: Promise<{ slug: string }> }) {
   const params = await props.params;
   try {
-    const limited = await persistentRateLimit(req, { ...RL, scope: "barber-public-booking" });
+    const limited = await persistentRateLimit(req, {
+      ...RL,
+      scope: `barber-public-booking:${String(params.slug ?? "").toLowerCase()}`,
+    });
     if (limited) return limited;
 
     const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
@@ -129,13 +130,15 @@ export async function POST(req: NextRequest, props: { params: Promise<{ slug: st
         typeof body.notes === "string" && body.notes.trim()
           ? body.notes.trim().slice(0, 500)
           : null,
+      // Pasó el captcha aquí arriba: con la política automática, el teléfono
+      // nuevo también recibe su confirmación.
+      humanVerified: captcha.verified,
     });
 
     if (isBookingError(result)) {
       const ui = ERROR_UI[result.code];
-      const message = result.code === "dailyCap" ? dailyCapMessage(gate.shop.phone) : ui.message;
       return NextResponse.json(
-        { error: message, code: ui.code ?? result.code },
+        { error: ui.message, code: ui.code ?? result.code },
         { status: ui.status },
       );
     }

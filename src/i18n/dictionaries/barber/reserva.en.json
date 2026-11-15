@@ -204,10 +204,5 @@
   "captcha": {
     "error": "We couldn’t verify that you’re a person.",
     "reintentar": "Try again"
-  },
-  "tope": {
-    "titulo": "No more online bookings for today",
-    "cuerpo": "Message us on WhatsApp or give us a call and we'll find you a spot.",
-    "cuerpoConTelefono": "Message us on WhatsApp or call {phone} and we'll find you a spot."
   }
 }

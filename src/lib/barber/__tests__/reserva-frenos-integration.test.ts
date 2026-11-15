@@ -7,13 +7,13 @@
 //     npx tsx --test src/lib/barber/__tests__/reserva-frenos-integration.test.ts
 //
 // Lo que se demuestra:
-//   · el tope diario por barbería de solicitudes de teléfonos sin historial,
-//     también con peticiones A LA VEZ para días distintos (carrera forzada);
-//   · el cliente con historial no choca con el tope;
+//   · SIN tope diario por barbería (Rafael, 15-nov): con 60 solicitudes
+//     nuevas de hoy la web sigue reservando; el tope por teléfono se queda;
 //   · la cita repetida se comprueba DENTRO del candado (carrera forzada);
 //   · nombre solo letras y teléfono mexicano real (1000000008 no pasa);
 //   · la confirmación por WhatsApp: manual → al aceptar; rechazar avisa solo
-//     dentro de la ventana de 24 h; automática → solo al cliente con historial;
+//     dentro de la ventana de 24 h; automática → al cliente con historial
+//     y, si pasó el captcha, también al teléfono nuevo;
 //   · la ruta contesta IGUAL a bloqueado, tope por teléfono y conflicto (M4).
 import {
   borrarTodo,
@@ -36,7 +36,6 @@ import {
   type BookingResult,
 } from "../booking";
 import {
-  BARBER_PUBLIC_NEW_PHONE_DAILY_CAP,
   addIsoDays,
   barberTodayISO,
 } from "../booking-core";
@@ -56,7 +55,15 @@ async function shopRow(t: Tienda) {
 
 async function reservar(
   t: Tienda,
-  args: { phone: string; dateISO: string; time: string; name?: string; barberId?: string | null },
+  args: {
+    phone: string;
+    dateISO: string;
+    time: string;
+    name?: string;
+    barberId?: string | null;
+    /** Pasó el captcha (lo pone la ruta con lo que dijo Cloudflare). */
+    humanVerified?: boolean;
+  },
 ): Promise<BookingResult> {
   return createPublicBooking({
     shop: await shopRow(t),
@@ -67,6 +74,7 @@ async function reservar(
     clientName: args.name ?? "Luis Pérez",
     phone: args.phone,
     notes: null,
+    humanVerified: args.humanVerified,
   });
 }
 
@@ -255,7 +263,7 @@ test("rechazar avisa por texto SOLO si el cliente escribió en las últimas 24 h
   assert.deepEqual(r3, { ok: true, status: "CANCELLED", notified: false }, "fuera de las 24 h no llegó nada");
 });
 
-test("automática: confirma al reservar SOLO al cliente con historial", { skip }, async () => {
+test("automática SIN captcha: confirma al reservar solo al cliente con historial", { skip }, async () => {
   const B = await crearTienda();
   await prisma.barbershop.update({ where: { id: B.id }, data: { bookingPolicy: "auto" } });
 
@@ -357,22 +365,14 @@ test("sin WhatsApp conectado: aceptar y rechazar dicen notified=false (el dueño
   );
 });
 
-test("el bot NO entra al tope diario ni a la regla de nombre y teléfono de la web", { skip }, async () => {
+test("el bot NO entra a la regla de nombre y teléfono de la web", { skip }, async () => {
   const J = await crearTienda();
-  await sembrarSolicitudes(J, BARBER_PUBLIC_NEW_PHONE_DAILY_CAP);
-  assert.deepEqual(
-    await reservar(J, { phone: telefono(), dateISO: dia(2), time: "10:00" }),
-    { ok: false, code: "dailyCap" },
-    "la web ya llegó al tope",
-  );
   const bot = await reservarBot(J, { phone: telefono(), dateISO: dia(2), time: "11:00", name: "Memo 💈 R." });
-  assert.ok(bot.ok && bot.status === "PENDING", "el bot agenda aunque la web esté topada y con un nombre que la web no deja");
-
-  // Y la solicitud del bot no gasta lugar del tope de la web.
-  const K = await crearTienda();
-  await sembrarSolicitudes(K, BARBER_PUBLIC_NEW_PHONE_DAILY_CAP - 1);
-  assert.ok((await reservarBot(K, { phone: telefono(), dateISO: dia(2), time: "10:00" })).ok);
-  assert.ok((await reservar(K, { phone: telefono(), dateISO: dia(2), time: "11:00" })).ok, "la 50.ª de la web sigue cabiendo");
+  assert.ok(bot.ok && bot.status === "PENDING", "el bot agenda con un nombre que la web no deja");
+  assert.deepEqual(
+    await reservar(J, { phone: telefono(), dateISO: dia(2), time: "12:00", name: "Memo 💈 R." }),
+    { ok: false, code: "badName" },
+  );
 });
 
 test("bot en automático: confirma al momento y no es una solicitud", { skip }, async () => {
@@ -385,63 +385,36 @@ test("bot en automático: confirma al momento y no es una solicitud", { skip }, 
   assert.deepEqual(await listBookingRequests({ barbershopIds: [L.id], scope: "pendientes" }), []);
 });
 
-/* ═══════════════ Tope diario por barbería ═══════════════ */
+/* ═══════════════ Sin tope diario (Rafael, 15-nov) ═══════════════ */
 
-test("tope diario: la solicitud 50 entra, la 51 no; el cliente de siempre sí", { skip }, async () => {
+test("SIN tope diario: con 60 solicitudes nuevas de hoy, la siguiente entra (manual)", { skip }, async () => {
   const C = await crearTienda();
-  await sembrarSolicitudes(C, BARBER_PUBLIC_NEW_PHONE_DAILY_CAP - 1);
-
-  const r50 = await reservar(C, { phone: telefono(), dateISO: dia(2), time: "10:00" });
-  assert.ok(r50.ok, "la 50.ª todavía cabe");
-  const r51 = await reservar(C, { phone: telefono(), dateISO: dia(2), time: "11:00" });
-  assert.deepEqual(r51, { ok: false, code: "dailyCap" });
-
-  // Un cliente que la barbería ya atendió no cuenta ni choca.
-  const deSiempre = telefono();
-  await prisma.barberClient.create({
-    data: { barbershopId: C.id, name: "Luis Pérez", phone: deSiempre, totalVisits: 1, lastVisitAt: new Date() },
-  });
-  const rSiempre = await reservar(C, { phone: deSiempre, dateISO: dia(2), time: "12:00" });
-  assert.ok(rSiempre.ok, "el cliente con historial reserva aunque el tope esté lleno");
-
-  // Rechazar una solicitud libera un lugar (solo cuentan las vivas).
-  const una = await prisma.barberAppointment.findFirst({
-    where: { barbershopId: C.id, status: "PENDING", clientName: "Fantasma" },
-  });
-  await resolveBookingRequest({ barbershopIds: [C.id], appointmentId: una!.id, action: "rechazar" });
-  const otra = await reservar(C, { phone: telefono(), dateISO: dia(2), time: "13:00" });
-  assert.ok(otra.ok);
+  await sembrarSolicitudes(C, 60);
+  const nuevo = telefono();
+  const r = await reservar(C, { phone: nuevo, dateISO: dia(2), time: "10:00", humanVerified: true });
+  assert.ok(r.ok && r.status === "PENDING", JSON.stringify(r));
+  assert.equal(await confirmacionesDe(C, nuevo), 0, "manual: la confirmación sale al ACEPTAR, no al reservar");
 });
 
-test("tope diario con política automática: cuentan también las CONFIRMED", { skip }, async () => {
+test("automática CON captcha: el teléfono nuevo queda agendado directo, no pasa por Solicitudes y SÍ recibe confirmación", { skip }, async () => {
   const D = await crearTienda();
   await prisma.barbershop.update({ where: { id: D.id }, data: { bookingPolicy: "auto" } });
-  await sembrarSolicitudes(D, BARBER_PUBLIC_NEW_PHONE_DAILY_CAP, "CONFIRMED");
-  const r = await reservar(D, { phone: telefono(), dateISO: dia(2), time: "10:00" });
-  assert.deepEqual(r, { ok: false, code: "dailyCap" });
+  await sembrarSolicitudes(D, 60, "CONFIRMED");
+  const nuevo = telefono();
+  const r = await reservar(D, { phone: nuevo, dateISO: dia(2), time: "10:00", humanVerified: true });
+  assert.ok(r.ok && r.status === "CONFIRMED", JSON.stringify(r));
+  assert.equal(await confirmacionesDe(D, nuevo), 1);
+  const solicitudes = await listBookingRequests({ barbershopIds: [D.id], scope: "pendientes" });
+  assert.equal(solicitudes.length, 0, "en automático no hay nada que aceptar");
 });
 
-test("tope diario A LA VEZ y para días distintos: no se salta", { skip }, async () => {
-  const E = await crearTienda();
-  await sembrarSolicitudes(E, BARBER_PUBLIC_NEW_PHONE_DAILY_CAP - 2);
-
-  // Mientras la tabla de citas no deja insertar, las 5 leen el conteo a la
-  // vez. Sin el candado del tope, las 5 ven "48" y las 5 entran.
-  const { soltado, tomado } = await retenerInserts(700);
-  await tomado;
-  const results = await Promise.all(
-    [1, 2, 3, 4, 5].map((n) => reservar(E, { phone: telefono(), dateISO: dia(n), time: "15:00" })),
-  );
-  await soltado;
-
-  const entraron = results.filter((r) => r.ok).length;
-  const topadas = results.filter((r) => !r.ok && (r as { code: string }).code === "dailyCap").length;
-  assert.equal(entraron, 2, "solo caben 2 hasta llegar a 50");
-  assert.equal(topadas, 3);
-  const vivas = await prisma.barberAppointment.count({
-    where: { barbershopId: E.id, source: "PUBLIC", status: "PENDING" },
-  });
-  assert.equal(vivas, BARBER_PUBLIC_NEW_PHONE_DAILY_CAP);
+test("tope por teléfono SÍ se queda: la cuarta cita viva del mismo número no entra", { skip }, async () => {
+  const P = await crearTienda();
+  const phone = telefono();
+  for (const [n, h] of [[2, "10:00"], [3, "10:00"], [4, "10:00"]] as const) {
+    assert.ok((await reservar(P, { phone, dateISO: dia(n), time: h })).ok);
+  }
+  assert.deepEqual(await reservar(P, { phone, dateISO: dia(5), time: "10:00" }), { ok: false, code: "tooManyOpen" });
 });
 
 /* ═══════════════ Cita repetida, dentro del candado ═══════════════ */
@@ -520,10 +493,9 @@ test("ruta: bloqueado, tope por teléfono y otro nombre contestan IGUAL", { skip
   assert.ok(!("reference" in rC.json), "no sale el folio de la cita ajena");
 });
 
-test("ruta: el tope del día lleva el teléfono de la barbería", { skip }, async () => {
+test("ruta: con 60 solicitudes nuevas de hoy la web sigue reservando (nada de 429)", { skip }, async () => {
   const G = await crearTienda();
-  await prisma.barbershop.update({ where: { id: G.id }, data: { phone: "55 1111 2222" } });
-  await sembrarSolicitudes(G, BARBER_PUBLIC_NEW_PHONE_DAILY_CAP);
+  await sembrarSolicitudes(G, 60);
   const slug = (await prisma.barbershop.findUnique({ where: { id: G.id }, select: { slug: true } }))!.slug;
   const r = await postRuta(slug, {
     serviceIds: [G.corteId],
@@ -533,7 +505,6 @@ test("ruta: el tope del día lleva el teléfono de la barbería", { skip }, asyn
     name: "Luis Pérez",
     phone: telefono(),
   });
-  assert.equal(r.status, 429);
-  assert.equal(r.json.code, "dailyCap");
-  assert.match(String(r.json.error), /WhatsApp o llámanos al 55 1111 2222/);
+  assert.equal(r.status, 200, JSON.stringify(r.json));
+  assert.equal(r.json.ok, true);
 });

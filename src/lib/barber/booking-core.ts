@@ -24,18 +24,13 @@ export const BARBER_MAX_DAYS_AHEAD = 60;
 export const BARBER_MIN_LEAD_MIN = 30;
 /** Tope de citas futuras vivas por teléfono y barbería (anti-abuso). */
 export const BARBER_MAX_OPEN_PER_PHONE = 3;
-/**
- * TOPE DIARIO DE LA RESERVA EN LÍNEA (decisión de Rafael, 14-nov-2026).
- *
- * Cuántas solicitudes vivas puede recibir UNA barbería en UN día (el día de
- * la barbería, no el de la cita) desde teléfonos SIN historial en ella.
- * Pasado el tope, la página manda a escribir por WhatsApp o a llamar. El
- * cliente de siempre no cuenta ni choca con él.
- *
- * "Vivas" = PENDING con la política manual (lo que espera en Solicitudes);
- * con la política automática nacen CONFIRMED, así que ahí cuentan las dos.
+/*
+ * Ya NO hay tope diario de reservas por barbería (lo hubo del 14 al 15-nov,
+ * BARBER_PUBLIC_NEW_PHONE_DAILY_CAP = 50). Decisión de Rafael, 15-nov-2026:
+ * «que dejen reservar a cualquiera sin ningún problema». Contra los bots
+ * está el captcha (src/lib/barber/captcha.ts) y, para ráfagas, el freno por
+ * IP de la ruta.
  */
-export const BARBER_PUBLIC_NEW_PHONE_DAILY_CAP = 50;
 
 /**
  * Nombre de quien reserva en la página pública: SOLO letras (con acentos,
@@ -83,16 +78,20 @@ export function realMxPhone(raw: unknown): string | null {
  *    cuando la barbería la ACEPTA en Solicitudes (resolveBookingRequest).
  *    Mandar «quedó agendada» antes era mentirle al cliente si luego se
  *    rechazaba.
- *  · Política automática: solo al cliente CON historial en la barbería. A un
- *    teléfono nuevo no se le escribe por una reserva hecha en una página
- *    pública: así nadie usa el WhatsApp de la barbería para escribirle a
- *    terceros (decisión de Rafael, 14-nov-2026).
+ *  · Política automática: al cliente CON historial en la barbería, siempre.
+ *    A un teléfono NUEVO, solo si quien reservó pasó el captcha
+ *    (`humanVerified`): sin captcha, nadie debe poder usar el WhatsApp de la
+ *    barbería para escribirle a terceros (decisión de Rafael, 14-nov-2026);
+ *    con captcha puesto, el cliente nuevo sí recibe su confirmación
+ *    (decisión de Rafael, 15-nov-2026).
  */
 export function shouldConfirmOnBooking(args: {
   policy: "auto" | "manual";
   hasHistory: boolean;
+  /** true = pasó el captcha en el servidor. false/ausente = sin captcha. */
+  humanVerified?: boolean;
 }): boolean {
-  return args.policy === "auto" && args.hasHistory;
+  return args.policy === "auto" && (args.hasHistory || args.humanVerified === true);
 }
 
 /**

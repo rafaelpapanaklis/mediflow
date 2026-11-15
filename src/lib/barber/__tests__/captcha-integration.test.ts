@@ -29,6 +29,7 @@ import assert from "node:assert/strict";
 import { NextRequest } from "next/server";
 import { addIsoDays, barberTodayISO } from "../booking-core";
 import { TURNSTILE_SITEVERIFY_URL } from "../captcha-core";
+import { barberWaTemplate } from "../whatsapp-core";
 import { POST as bookingPOST } from "@/app/api/barber/public/booking/[slug]/route";
 import { POST as walkinPOST } from "@/app/api/barber/walkins/public/route";
 import { POST as portalCodePOST } from "@/app/api/barber/portal/[slug]/code/route";
@@ -188,4 +189,58 @@ test("SIN llaves todo sigue como hoy: se reserva sin token y no se pregunta a Cl
   );
   assert.equal(res.status, 200, JSON.stringify(await res.clone().json()));
   assert.equal(cfCalls, 0);
+});
+
+/* ═══════ Punto 2: en automático, el teléfono nuevo con captcha SÍ recibe su confirmación ═══════ */
+
+const CONFIRMACION = barberWaTemplate("bookingConfirmed").name;
+
+async function reservarPorRuta(t: Tienda, phone: string, time: string, captchaToken?: string) {
+  const slug = await slugDe(t);
+  const res = await bookingPOST(
+    req(`http://x/api/barber/public/booking/${slug}`, {
+      serviceIds: [t.corteId], barberId: "any", date: DIA, time, name: "Ana López", phone,
+      ...(captchaToken ? { captchaToken } : {}),
+    }),
+    { params: Promise.resolve({ slug }) },
+  );
+  return { status: res.status, json: (await res.json()) as any };
+}
+
+async function confirmaciones(t: Tienda, phone: string) {
+  return prisma.barberMessage.count({ where: { barbershopId: t.id, phone, templateName: CONFIRMACION } });
+}
+
+test("automática + captcha pasado: el teléfono NUEVO queda CONFIRMADO y se le manda la confirmación", { skip }, async () => {
+  const A = await crearTienda();
+  await prisma.barbershop.update({ where: { id: A.id }, data: { bookingPolicy: "auto" } });
+  llaves(true);
+  cf = { success: true, action: "barber-booking" };
+  const nuevo = telefono();
+  const r = await reservarPorRuta(A, nuevo, "15:00", "tok");
+  assert.equal(r.status, 200, JSON.stringify(r.json));
+  assert.equal(r.json.status, "CONFIRMED");
+  assert.equal(await confirmaciones(A, nuevo), 1);
+});
+
+test("automática SIN llaves (como hoy): el teléfono nuevo queda CONFIRMADO pero NO se le escribe", { skip }, async () => {
+  const B = await crearTienda();
+  await prisma.barbershop.update({ where: { id: B.id }, data: { bookingPolicy: "auto" } });
+  llaves(false);
+  const nuevo = telefono();
+  const r = await reservarPorRuta(B, nuevo, "16:00");
+  assert.equal(r.status, 200, JSON.stringify(r.json));
+  assert.equal(r.json.status, "CONFIRMED");
+  assert.equal(await confirmaciones(B, nuevo), 0);
+});
+
+test("manual + captcha pasado: nace PENDIENTE y la confirmación espera a que la barbería acepte", { skip }, async () => {
+  const M = await crearTienda();
+  llaves(true);
+  cf = { success: true, action: "barber-booking" };
+  const nuevo = telefono();
+  const r = await reservarPorRuta(M, nuevo, "17:00", "tok");
+  assert.equal(r.status, 200, JSON.stringify(r.json));
+  assert.equal(r.json.status, "PENDING");
+  assert.equal(await confirmaciones(M, nuevo), 0);
 });

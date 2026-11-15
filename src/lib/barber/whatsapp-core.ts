@@ -1043,8 +1043,7 @@ export function decideBarberReminderReply(
  * recordatorios y el «CONFIRMAR» del cliente. Con la automática nacen
  * CONFIRMED y no son solicitudes.
  *
- * Ojo: el tope diario de teléfonos nuevos y la validación de nombre y
- * teléfono son SOLO de la web (`fromWeb` en createPublicBooking); esto no
+ * Ojo: la validación de nombre y teléfono (y el captcha) son SOLO de la web (`fromWeb` en createPublicBooking); esto no
  * los extiende al bot.
  */
 export const BARBER_REQUEST_SOURCES: readonly ("PUBLIC" | "WHATSAPP")[] = ["PUBLIC", "WHATSAPP"];
