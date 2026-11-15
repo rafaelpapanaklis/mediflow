@@ -78,6 +78,8 @@ export function AdminSidebar({
 }: {
   counts?: {
     clinics?: number;
+    /** Barberías dadas de alta (matrices; una sucursal no suma). */
+    barberias?: number;
     atRisk?: number;
     supportPending?: number;
     affiliateSupportPending?: number;
@@ -127,6 +129,8 @@ export function AdminSidebar({
       item.href === "/admin/paginas-socio" ||
       item.href === "/admin/crm";
     if (item.href === "/admin/clinics") count = counts?.clinics;
+    // Mismo badge neutro que Clínicas: cuántas hay, no una alerta.
+    if (item.href === "/admin/barberias") count = counts?.barberias;
     if (item.href === "/admin/churn")   count = counts?.atRisk;
     if (item.href === "/admin/soporte") count = counts?.supportPending;
     if (item.href === "/admin/soporte-afiliados") count = counts?.affiliateSupportPending;
