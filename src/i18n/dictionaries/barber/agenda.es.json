@@ -133,7 +133,10 @@
     "completeAndCharge": "Completar y cobrar",
     "alreadyCharged": "Ya se cobró: {amount}.",
     "viewTicket": "Ver el ticket",
-    "chargeSkipHint": "¿Va a pagar después? Puedes cerrar sin cobrar; la visita queda en “Citas por cobrar” de la caja."
+    "chargeSkipHint": "¿Va a pagar después? Puedes cerrar sin cobrar; la visita queda en “Citas por cobrar” de la caja.",
+    "cancelConfirm": "¿Cancelar la visita de {name}?",
+    "cancelYes": "Sí, cancelar",
+    "cancelNo": "No, volver"
   },
   "schedule": {
     "title": "Horarios y bloqueos",
