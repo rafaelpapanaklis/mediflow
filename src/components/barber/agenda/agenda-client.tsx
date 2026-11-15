@@ -111,6 +111,12 @@ export interface AgendaClientProps {
   initialDateISO: string;
   /** Visita a resaltar al abrir (viene de Inicio: ?visita=<id>). */
   highlightId?: string | null;
+  /**
+   * «Agendar» desde la ficha del cliente o desde Mensajes (?nueva=<id>):
+   * abre «Nueva visita» con el cliente ya puesto. El servidor ya comprobó
+   * que se puede crear citas y ver a ese cliente.
+   */
+  newFor?: { clientId: string; clientName: string; clientPhone: string | null; barberId: string | null } | null;
   /** El plan incluye caja. Sin esto no se ofrece cobrar (el server igual lo niega). */
   cashEnabled: boolean;
 }
@@ -206,9 +212,55 @@ export function AgendaClient(props: AgendaClientProps) {
       el.scrollIntoView({ block: "center", inline: "center", behavior: "smooth" });
       el.setAttribute("data-resaltada", "");
       window.setTimeout(() => el.removeAttribute("data-resaltada"), 4000);
+      // «Ver la visita de X» abre la visita, no solo la señala: quien la
+      // tocó en Inicio quiere confirmarla, sentarlo o cobrarla.
+      const appt = data?.appointments.find((a) => a.id === id);
+      if (appt) setDetail(appt);
     }, 350);
     return () => window.clearTimeout(t1);
   }, [data, props.highlightId]);
+
+  // Desde la ficha / Mensajes (?nueva=<clientId>): «Nueva visita» con el
+  // cliente puesto, su barbero de siempre (si sigue activo) y la próxima
+  // hora libre. Una sola vez, en cuanto hay catálogo y barberos.
+  const nuevaAbierta = useRef(false);
+  useEffect(() => {
+    const nf = props.newFor;
+    if (!nf || nuevaAbierta.current || !data || !data.can.edit) return;
+    nuevaAbierta.current = true;
+    const ahora = new Date().toISOString();
+    const barberActivo = nf.barberId && data.barbers.some((b) => b.id === nf.barberId && b.isActive) ? nf.barberId : null;
+    setCreating({
+      barberId: barberActivo ?? chair ?? null,
+      startAt: nextSlotStart(new Date(), timezone),
+      prefill: {
+        id: "",
+        clientId: nf.clientId,
+        clientName: nf.clientName,
+        clientPhone: nf.clientPhone,
+        barberId: barberActivo,
+        barberName: null,
+        startAt: ahora,
+        endAt: ahora,
+        status: "PENDING",
+        source: "PANEL",
+        depositAmount: null,
+        depositStatus: null,
+        notes: null,
+        services: [],
+      },
+    });
+  }, [data, props.newFor, chair, timezone]);
+
+  // ?visita= y ?nueva= se cumplen UNA vez: se quitan de la barra para que
+  // recargar la página no vuelva a abrir el diálogo. ?fecha= se queda.
+  useEffect(() => {
+    if (!props.highlightId && !props.newFor) return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("visita");
+    url.searchParams.delete("nueva");
+    window.history.replaceState(window.history.state, "", url.toString());
+  }, [props.highlightId, props.newFor]);
 
   // El aviso flotante se va solo a los 9 segundos (da tiempo a "Deshacer").
   useEffect(() => {
