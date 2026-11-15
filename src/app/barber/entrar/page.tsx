@@ -8,6 +8,7 @@ import {
   BARBER_BILLING_PATH,
   BARBER_FORGOT_PASSWORD_PATH,
   BARBER_REGISTER_PATH,
+  DALECONTROL_CLINIC_LOGIN_PATH,
   barberPathWithPlan,
 } from "@/lib/barber/marketing";
 import { createClient } from "@/lib/supabase/server";
@@ -50,6 +51,8 @@ export default async function BarberEntrarPage(props: {
   const ctx = await getBarberContext();
   if (ctx) redirect(destino);
 
+  const aviso = await avisoDeSesion();
+
   return (
     <AuthShell
       split="60/40"
@@ -60,7 +63,9 @@ export default async function BarberEntrarPage(props: {
           destino={destino}
           registerHref={barberPathWithPlan(BARBER_REGISTER_PATH, plan)}
           forgotHref={BARBER_FORGOT_PASSWORD_PATH}
-          aviso={await avisoDeSesion()}
+          aviso={aviso?.texto ?? null}
+          // Solo para la cuenta que NO es de barbería: su puerta es la otra.
+          otraEntradaHref={aviso?.cuentaAjena ? DALECONTROL_CLINIC_LOGIN_PATH : null}
         />
       }
     />
@@ -73,7 +78,7 @@ export default async function BarberEntrarPage(props: {
  * a ver este mismo formulario, vacío y sin explicación: /barber lo regresa
  * aquí. Solo textos fijos; nunca se pinta nada que venga de la URL.
  */
-async function avisoDeSesion(): Promise<string | null> {
+async function avisoDeSesion(): Promise<{ texto: string; cuentaAjena: boolean } | null> {
   try {
     const supabase = await createClient();
     const {
@@ -87,8 +92,17 @@ async function avisoDeSesion(): Promise<string | null> {
       select: { id: true },
     });
     return fila
-      ? "Tu acceso a esta barbería está dado de baja. Pídele al dueño que lo reactive."
-      : "La cuenta con la que entraste no es de una barbería. Entra aquí con el correo de tu barbería.";
+      ? {
+          texto: "Tu acceso a esta barbería está dado de baja. Pídele al dueño que lo reactive.",
+          cuentaAjena: false,
+        }
+      : {
+          texto:
+            "La cuenta con la que entraste no es de una barbería. Entra aquí con el correo de tu barbería.",
+          // Sin una salida, quien es de otra parte de DaleControl se quedaba
+          // aquí dando vueltas: el formulario le ofrece su entrada.
+          cuentaAjena: true,
+        };
   } catch {
     // Base caída o sesión ilegible: el formulario se pinta sin aviso.
     return null;

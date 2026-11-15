@@ -51,6 +51,12 @@ export const BARBER_REGISTER_PATH = "/barber/registro" as const;
  * que se había equivocado de sitio (auditoría 14-nov, G5).
  */
 export const BARBER_LOGIN_PATH = "/barber/entrar" as const;
+/**
+ * El inicio de sesión de las CLÍNICAS. El vertical ya no manda ahí a nadie,
+ * con UNA excepción: quien entra por /barber/entrar con una cuenta que no es
+ * de barbería necesita saber por dónde sí entra (revisión 14-nov, M2).
+ */
+export const DALECONTROL_CLINIC_LOGIN_PATH = "/login" as const;
 /** Recuperar contraseña: la pantalla es la compartida (no hay una propia). */
 export const BARBER_FORGOT_PASSWORD_PATH = "/forgot-password" as const;
 /** Donde se contrata. Aquí aterriza quien llega con un plan ya elegido. */

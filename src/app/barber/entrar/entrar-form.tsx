@@ -26,6 +26,7 @@ export function BarberEntrarForm({
   registerHref,
   forgotHref,
   aviso = null,
+  otraEntradaHref = null,
 }: {
   /** A dónde ir al entrar: /barber, o Suscripción si se trae un plan elegido. */
   destino: string;
@@ -33,6 +34,11 @@ export function BarberEntrarForm({
   forgotHref: string;
   /** Aviso fijo que decide la página (cuenta dada de baja, cuenta que no es de barbería). */
   aviso?: string | null;
+  /**
+   * Solo cuando la cuenta abierta NO es de barbería: la entrada que sí le
+   * toca. Es el único enlace de todo el vertical que sale hacia allá.
+   */
+  otraEntradaHref?: string | null;
 }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -133,6 +139,14 @@ export function BarberEntrarForm({
           }}
         >
           {aviso}
+          {otraEntradaHref && (
+            <>
+              {" "}
+              <Link href={otraEntradaHref} style={{ color: CARAMELO, fontWeight: 600 }}>
+                ¿Tienes clínica? Entra aquí
+              </Link>
+            </>
+          )}
         </div>
       )}
 

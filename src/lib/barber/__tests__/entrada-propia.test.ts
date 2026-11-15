@@ -129,7 +129,10 @@ test("/barber/entrar NO es del panel: sin candado de pago y fuera de (panel)", (
 test("/barber/entrar no habla de clínicas y ofrece registro y recuperar contraseña", () => {
   const form = sinComentarios(leer(FORMULARIO));
   const pagina = sinComentarios(leer(PAGINA));
-  for (const [nombre, codigo] of [[FORMULARIO, form], [PAGINA, pagina]] as const) {
+  // La ÚNICA mención permitida: la salida para quien no es de barbería (M2).
+  const SALIDA = "¿Tienes clínica? Entra aquí";
+  assert.equal(form.split(SALIDA).length - 1, 1, "la salida a la otra entrada va una sola vez");
+  for (const [nombre, codigo] of [[FORMULARIO, form.replace(SALIDA, "")], [PAGINA, pagina]] as const) {
     const dental = /cl[ií]nica|dental|doctor|paciente|consultorio|NOM-024|CFDI/i.exec(codigo);
     assert.equal(dental, null, `${nombre} trae texto de clínicas: «${dental?.[0]}»`);
   }
@@ -138,6 +141,20 @@ test("/barber/entrar no habla de clínicas y ofrece registro y recuperar contras
   assert.match(form, /Olvidé mi contraseña/);
   assert.match(form, /href=\{registerHref\}/);
   assert.match(form, /href=\{forgotHref\}/);
+});
+
+test("la cuenta que no es de barbería tiene por dónde salir; la dada de baja no", () => {
+  const pagina = sinComentarios(leer(PAGINA));
+  // El enlace solo se arma para la cuenta ajena, y con la constante (nada de
+  // «/login» escrito a mano en el vertical: lo vigila la prueba de arriba).
+  assert.match(pagina, /otraEntradaHref=\{aviso\?\.cuentaAjena \? DALECONTROL_CLINIC_LOGIN_PATH : null\}/);
+  const baja = /dado de baja[\s\S]*?cuentaAjena: (true|false)/.exec(pagina);
+  assert.equal(baja?.[1], "false", "a quien está dado de baja no se le manda a otra entrada");
+  const ajena = /no es de una barbería[\s\S]*?cuentaAjena: (true|false)/.exec(pagina);
+  assert.equal(ajena?.[1], "true");
+
+  const form = sinComentarios(leer(FORMULARIO));
+  assert.match(form, /otraEntradaHref && \([\s\S]*?href=\{otraEntradaHref\}[\s\S]*?¿Tienes clínica\? Entra aquí/);
 });
 
 // ── 4. El registro ─────────────────────────────────────────────────────
