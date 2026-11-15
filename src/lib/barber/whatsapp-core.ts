@@ -60,6 +60,18 @@ export type BarberWaConnectionState =
   | "NO_PAYMENT_METHOD"
   | "ERROR";
 
+/**
+ * ¿Hay un número enlazado? Todo lo que no sea DISCONNECTED lo tiene: también
+ * UNVERIFIED («conectado, sin verificación de negocio», que NO es un
+ * problema), NO_PAYMENT_METHOD y ERROR, que son avisos sobre un número que
+ * sí está conectado. La pantalla del bot lo usa para dejar encenderlo; antes
+ * solo aceptaba CONNECTED y con UNVERIFIED el interruptor quedaba bloqueado
+ * aunque el servidor sí lo permitía.
+ */
+export function isBarberWaLinked(state: BarberWaConnectionState): boolean {
+  return state !== "DISCONNECTED";
+}
+
 export interface BarberWaConnectionDTO {
   state: BarberWaConnectionState;
   /** Modo de envío guardado en la barbería. */

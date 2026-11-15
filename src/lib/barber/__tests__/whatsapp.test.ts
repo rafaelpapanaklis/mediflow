@@ -54,6 +54,7 @@ import {
   isBarberWaClaim,
   isBarberWaSysRow,
   isBarberWaUnlimited,
+  isBarberWaLinked,
   isBarberYesReply,
   nextBarberWaStatus,
   normalizeBarberReply,
@@ -852,4 +853,15 @@ test("G4 — las marcas del turno se leen de vuelta y no se confunden con un err
     assert.equal(parseBarberBotTurnMark(raro), null, String(raro));
   }
   assert.equal(isBarberBotTurnMark("(#100) Invalid parameter"), false);
+});
+
+test("la pantalla del bot da por conectado todo lo que no sea «sin conectar» (también «sin verificación»)", () => {
+  assert.equal(isBarberWaLinked("DISCONNECTED"), false);
+  for (const s of ["CONNECTED", "UNVERIFIED", "NO_PAYMENT_METHOD", "ERROR"] as const) {
+    assert.equal(isBarberWaLinked(s), true, s);
+  }
+  // La página del bot usa este criterio y no el `=== "CONNECTED"` de antes.
+  const page = readFileSync("src/app/barber/(panel)/whatsapp/bot/page.tsx", "utf8");
+  assert.ok(page.includes("connected={isBarberWaLinked(connection.state)}"));
+  assert.ok(!page.includes('=== "CONNECTED"'));
 });
