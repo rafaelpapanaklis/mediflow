@@ -5,6 +5,7 @@ import { failbanGuard, persistentRateLimit, recordAuthFailure } from "@/lib/fail
 import { esCorreoYaRegistrado, traducirErrorDeAuth } from "@/lib/auth/errores-contrasena";
 import { BARBER_DEFAULT_SERVICES, makeBarberSlug } from "@/lib/barber/types";
 import { normalizeBarberPhone } from "@/lib/barber/phone-countries";
+import { BARBER_PASSWORD_WEAK_MESSAGE, problemaContrasenaNueva } from "@/lib/barber/contrasena";
 import { checkBarberCaptcha } from "@/lib/barber/captcha";
 import { BARBER_CAPTCHA_ACTIONS } from "@/lib/barber/captcha-core";
 
@@ -92,11 +93,12 @@ export async function POST(req: NextRequest) {
   if (!rawEmail) {
     return NextResponse.json({ error: "El correo electrónico es requerido." }, { status: 400 });
   }
-  if (!password || password.length < 8) {
-    return NextResponse.json(
-      { error: "La contraseña debe tener al menos 8 caracteres." },
-      { status: 400 }
-    );
+  const problemaPw = problemaContrasenaNueva(password);
+  if (!password || problemaPw === "debil") {
+    return NextResponse.json({ error: BARBER_PASSWORD_WEAK_MESSAGE }, { status: 400 });
+  }
+  if (problemaPw === "larga") {
+    return NextResponse.json({ error: "Usa 72 caracteres o menos." }, { status: 400 });
   }
   // WhatsApp de la barbería: OBLIGATORIO (mismo criterio que el registro
   // dental: es el canal de contacto si se registra y no paga).

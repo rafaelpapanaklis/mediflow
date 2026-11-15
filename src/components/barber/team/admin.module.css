@@ -977,3 +977,15 @@
 }
 .btnDanger:hover:not(:disabled),
 :global(.dark) .btnDanger:hover:not(:disabled) { background: var(--danger-soft); }
+
+/* ── Toques a 390 px: mínimo 40 px de alto (Servicios, Barberos, Equipo, Sedes) ──
+   Solo en pantallas angostas; el escritorio conserva sus medidas. */
+@media (max-width: 480px) {
+  .btn,
+  .btnSm,
+  .branchBtn { min-height: 40px; }
+  .btn, .btnSm { min-width: 40px; }
+  .btnIcon { width: 40px; min-width: 40px; height: 40px; }
+  .switch { position: relative; }
+  .switch::before { content: ""; position: absolute; inset: -10px -4px; }
+}

@@ -161,10 +161,12 @@
     "addShift": "Add shift",
     "removeShift": "Remove shift",
     "splitHint": "Closing for lunch? Add two shifts to the same day (say 9:00–14:00 and 16:00–20:00).",
+    "readOnlyHint": "Only the owner or manager can change the hours. You can see them here but not edit them.",
     "copyToWeek": "Copy this day to Monday-Saturday",
     "save": "Save hours",
     "saved": "Hours saved.",
     "saveError": "We couldn't save the hours.",
+    "saveRangeError": "A shift ends before it starts. Make sure the end time is after the start time.",
     "noBarber": "Pick a barber to edit their hours.",
     "unsaved": "You have unsaved changes.",
     "switchGuard": {
@@ -188,6 +190,9 @@
       "create": "Block",
       "creating": "Blocking…",
       "delete": "Remove block",
+      "confirmDelete": "Remove this block?",
+      "confirmYes": "Yes, remove",
+      "confirmNo": "No",
       "empty": "No upcoming blocks.",
       "createError": "We couldn't create the block.",
       "trapped": {

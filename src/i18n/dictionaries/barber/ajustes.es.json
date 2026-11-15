@@ -84,7 +84,14 @@
       "errors": {
         "name": "Ponle nombre al servicio.",
         "duration": "La duración va de {min} a {max} minutos, en pasos de 5.",
-        "price": "Escribe un precio válido (hasta 2 decimales)."
+        "price": "Escribe un precio válido (hasta 2 decimales).",
+        "priceEmpty": "Escribe el precio. Si va gratis, pon 0."
+      },
+      "free": {
+        "title": "¿Va gratis?",
+        "body": "El precio es $0: el cliente no pagará nada por este servicio y la caja lo cobrará en cero.",
+        "yes": "Sí, va gratis",
+        "no": "Cambiar el precio"
       }
     },
     "retire": {
@@ -115,6 +122,7 @@
       "sub": "Salen en tu página pública, en los recordatorios de WhatsApp y en el ticket.",
       "name": "Nombre",
       "nameHint": "Así te ve el cliente en todos lados.",
+      "nameEmpty": "Escribe el nombre de la barbería: no se puede dejar vacío.",
       "phone": "Teléfono",
       "phoneHint": "Para que te llamen. No es el número desde el que salen los WhatsApp.",
       "email": "Correo",
@@ -172,8 +180,10 @@
       "enabledHint": "Apagado: la tarjeta deja de verse en la ficha y en el portal del cliente, y la caja no ofrece el canje. Los sellos acumulados no se pierden.",
       "threshold": "Visitas para ganar el premio",
       "thresholdHint": "Con 10, el cliente gana el premio al juntar 10 sellos. Con cita, el sello cae al completar la visita: la décima cita ya puede salir gratis. Sin cita, el sello cae al cobrar: el premio se usa en la visita siguiente. Cuentan las citas completadas y las ventas de servicio en caja.",
+      "thresholdBad": "Escribe un número entero de {min} a {max} sellos.",
       "reward": "Nombre del premio",
       "rewardHint": "Así se le dice al cliente en su tarjeta y en las campañas: «Corte gratis», «Barba de cortesía»…",
+      "rewardEmpty": "Escribe cuál es el premio.",
       "summary": "Cada {count} visitas → {reward}",
       "saved": "Fidelidad guardada"
     },
@@ -182,6 +192,7 @@
       "sub": "Cuándo un cliente pasa a la lista de inactivos.",
       "days": "Días sin visita",
       "daysHint": "Pasado ese tiempo desde su última visita, el cliente aparece en Clientes › Inactivos y entra a la campaña «Te extrañamos».",
+      "daysBad": "Escribe un número entero de {min} a {max} días.",
       "saved": "Guardado"
     },
     "campaigns": {
@@ -189,6 +200,7 @@
       "sub": "El freno para no saturar a nadie.",
       "cooldown": "Días de descanso entre campañas",
       "cooldownHint": "Un mismo teléfono no recibe dos campañas —de cualquier tipo— con menos de estos días entre una y otra. Los recordatorios de cita no cuentan.",
+      "cooldownBad": "Escribe un número entero de {min} a {max} días.",
       "saved": "Guardado"
     },
     "booking": {

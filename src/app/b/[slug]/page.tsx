@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { PlantillaBarberWeb } from "@/components/barber/templates";
 import { rutaWebBarberia } from "@/lib/barber/landing";
-import { cargarBarberWeb, cargarSeoBarberWeb } from "./_shared/shop-data";
+import { cargarBarberWeb, cargarSeoBarberWeb, cargarSedeCerrada } from "./_shared/shop-data";
+import { SedeCerrada } from "./_shared/sede-cerrada";
 import { descripcionSeo, imagenSocial, jsonLdBarberia, serializarJsonLd, tituloSeo } from "./_shared/seo";
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -81,7 +82,11 @@ export async function generateMetadata(props: Props): Promise<Metadata> {
 export default async function PaginaBarberia(props: Props) {
   const params = await props.params;
   const carga = await cargarBarberWeb(params.slug);
-  if (!carga) notFound();
+  if (!carga) {
+    const cerrada = await cargarSedeCerrada(params.slug);
+    if (cerrada && cerrada.otras.length > 0) return <SedeCerrada nombre={cerrada.name} otras={cerrada.otras} />;
+    notFound();
+  }
   // Registrada y sin haber pagado nunca: no hay página. Sin esto, cualquiera
   // se registraba gratis y publicaba /b/<nombre-de-otra-barbería>.
   if (carga.nuncaPagada) notFound();

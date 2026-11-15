@@ -1,5 +1,6 @@
 "use client";
 
+import { soloTelefono } from "@/lib/barber/telefono-teclado";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import toast from "react-hot-toast";
 import {
@@ -235,13 +236,13 @@ function ProfileCard({
 
       <div className={s.formGrid}>
         <div className={s.full}>
-          <Field label={t("configuracion.profile.name")} hint={t("configuracion.profile.nameHint")}>
+          <Field label={t("configuracion.profile.name")} hint={form.name.trim() ? t("configuracion.profile.nameHint") : t("configuracion.profile.nameEmpty")}>
             {(id) => <TextInput id={id} value={form.name} maxLength={limits.name} onChange={set("name")} />}
           </Field>
         </div>
         <Field label={t("configuracion.profile.phone")} hint={t("configuracion.profile.phoneHint")}>
           {(id) => (
-            <TextInput id={id} type="tel" inputMode="tel" value={form.phone} maxLength={limits.phone} onChange={set("phone")} />
+            <TextInput id={id} type="tel" inputMode="tel" value={form.phone} maxLength={limits.phone} onChange={(e) => setForm((f) => ({ ...f, phone: soloTelefono(e.target.value) }))} />
           )}
         </Field>
         <Field label={t("configuracion.profile.email")} hint={t("configuracion.profile.emailHint")}>
@@ -610,7 +611,7 @@ function LoyaltyCard({
         </div>
       ) : (
       <>
-      <Field label={t("configuracion.loyalty.threshold")} hint={t("configuracion.loyalty.thresholdHint")}>
+      <Field label={t("configuracion.loyalty.threshold")} hint={thresholdOk ? t("configuracion.loyalty.thresholdHint") : t("configuracion.loyalty.thresholdBad", { min: value.min, max: value.max })}>
         {(id) => (
           <div className={s.numRow}>
             <input
@@ -628,7 +629,7 @@ function LoyaltyCard({
         )}
       </Field>
 
-      <Field label={t("configuracion.loyalty.reward")} hint={t("configuracion.loyalty.rewardHint")}>
+      <Field label={t("configuracion.loyalty.reward")} hint={reward.trim() ? t("configuracion.loyalty.rewardHint") : t("configuracion.loyalty.rewardEmpty")}>
         {(id) => (
           <TextInput
             id={id}
@@ -692,7 +693,7 @@ function InactivityCard({
       }
     >
       {!value.persisted ? <SqlPending t={t} file={SQL_FILES.inactivity} /> : null}
-      <Field label={t("configuracion.inactivity.days")} hint={t("configuracion.inactivity.daysHint")}>
+      <Field label={t("configuracion.inactivity.days")} hint={ok ? t("configuracion.inactivity.daysHint") : t("configuracion.inactivity.daysBad", { min: value.min, max: value.max })}>
         {(id) => (
           <div className={s.numRow}>
             <input
@@ -757,7 +758,7 @@ function CampaignsCard({
       }
     >
       {!value.persisted ? <SqlPending t={t} file={SQL_FILES.campaigns} /> : null}
-      <Field label={t("configuracion.campaigns.cooldown")} hint={t("configuracion.campaigns.cooldownHint")}>
+      <Field label={t("configuracion.campaigns.cooldown")} hint={ok ? t("configuracion.campaigns.cooldownHint") : t("configuracion.campaigns.cooldownBad", { min: value.min, max: value.max })}>
         {(id) => (
           <div className={s.numRow}>
             <input

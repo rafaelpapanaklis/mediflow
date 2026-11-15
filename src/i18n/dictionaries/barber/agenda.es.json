@@ -161,10 +161,12 @@
     "addShift": "Agregar turno",
     "removeShift": "Quitar turno",
     "splitHint": "¿Cierran a comer? Agrega dos turnos al mismo día (por ejemplo 9:00–14:00 y 16:00–20:00).",
+    "readOnlyHint": "Solo el dueño o el encargado puede cambiar los horarios. Aquí los ves, pero no se pueden editar.",
     "copyToWeek": "Copiar este día a lunes-sábado",
     "save": "Guardar horario",
     "saved": "Horario guardado.",
     "saveError": "No se pudo guardar el horario.",
+    "saveRangeError": "Un turno termina antes de empezar. Revisa que la hora de salida sea después de la de entrada.",
     "noBarber": "Elige un barbero para editar su horario.",
     "unsaved": "Tienes cambios sin guardar.",
     "switchGuard": {
@@ -188,6 +190,9 @@
       "create": "Bloquear",
       "creating": "Bloqueando…",
       "delete": "Quitar bloqueo",
+      "confirmDelete": "¿Quitar este bloqueo?",
+      "confirmYes": "Sí, quitar",
+      "confirmNo": "No",
       "empty": "No hay bloqueos próximos.",
       "createError": "No se pudo crear el bloqueo.",
       "trapped": {

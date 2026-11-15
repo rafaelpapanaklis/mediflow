@@ -29,6 +29,8 @@ import {
   normalizarTelefono,
   ordenDeSecciones,
   precioBarberWeb,
+  urlMapaEmbed,
+  turnosDesdeHorarioDelLocal,
   seccionesVisibles,
   validarConfigBarberWeb,
   type BarberWebConfig,
@@ -84,6 +86,14 @@ test("el mapa solo acepta google.com; cualquier otro dominio se cae", () => {
   assert.equal(esUrlDeMapa("javascript:alert(1)"), false);
   // El caso que engaña: un dominio que TERMINA en google.com pero no lo es.
   assert.equal(esUrlDeMapa("https://notgoogle.com/maps"), false);
+});
+
+test("urlMapaEmbed no entrega media palabra escrita en el editor como src del iframe", () => {
+  const base = { ...configBarberWebVacia(), mapaEmbed: "Prue" };
+  assert.equal(urlMapaEmbed(base, null), null);
+  assert.match(urlMapaEmbed(base, "Calle 60") as string, /^https:\/\/www\.google\.com\/maps\?q=/);
+  const bueno = { ...base, mapaEmbed: "https://www.google.com/maps/embed?pb=1" };
+  assert.equal(urlMapaEmbed(bueno, null), "https://www.google.com/maps/embed?pb=1");
 });
 
 test("el teléfono se guarda en dígitos con lada; lo imposible se descarta", () => {
@@ -379,4 +389,20 @@ test("un id de plantilla desconocido cae a la clásica, no a una pantalla en bla
   assert.equal(manifiestoBarberWeb("no-existe").id, "clasica");
   assert.equal(manifiestoBarberWeb(null).id, "clasica");
   assert.equal(manifiestoBarberWeb("vintage").id, "vintage");
+});
+
+test("el horario del local pasa a turnos del barbero: lunes=1, domingo=0, cerrados fuera", () => {
+  const t = turnosDesdeHorarioDelLocal({
+    horario: [
+      { dia: 0, abierto: true, desde: "10:00", hasta: "20:00" },
+      { dia: 5, abierto: true, desde: "09:30", hasta: "14:00" },
+      { dia: 6, abierto: false, desde: "09:00", hasta: "20:00" },
+      { dia: 2, abierto: true, desde: "20:00", hasta: "10:00" },
+    ],
+  });
+  assert.deepEqual(t, [
+    { dayOfWeek: 1, startMinute: 600, endMinute: 1200 },
+    { dayOfWeek: 6, startMinute: 570, endMinute: 840 },
+  ]);
+  assert.deepEqual(turnosDesdeHorarioDelLocal(null), []);
 });

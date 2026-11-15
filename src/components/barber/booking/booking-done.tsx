@@ -1,5 +1,6 @@
 "use client";
 
+import { formatoPrecioReserva } from "@/lib/barber/precio-reserva";
 import { useMemo } from "react";
 import { CalendarPlus, Check, MapPin, User } from "lucide-react";
 import { getBarberT } from "@/i18n/dictionaries/barber";
@@ -48,15 +49,7 @@ export function BookingDone({
   const t = useMemo(() => getBarberT(shop.locale), [shop.locale]);
   const locale = shop.locale === "en" ? "en-US" : "es-MX";
 
-  const money = useMemo(
-    () =>
-      new Intl.NumberFormat(locale, {
-        style: "currency",
-        currency: "MXN",
-        maximumFractionDigits: 0,
-      }),
-    [locale],
-  );
+  const money = useMemo(() => formatoPrecioReserva(locale), [locale]);
 
   const start = new Date(confirmation.startAt);
   const end = new Date(confirmation.endAt);

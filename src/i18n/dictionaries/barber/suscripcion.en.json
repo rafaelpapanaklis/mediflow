@@ -68,6 +68,7 @@
     "yearlyEquivalent": "≈ {amount} per month",
     "firstMonth": "First month {amount}",
     "current": "Current plan",
+    "yourPlan": "Your plan",
     "contract": "Subscribe",
     "change": "Switch to this plan",
     "lockedIntervalMonth": "Your subscription is monthly: switching plans keeps that cycle.",

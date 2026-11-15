@@ -64,6 +64,14 @@ export async function POST(req: Request) {
     if (!barber) return jsonError("Ese barbero no existe en tu barbería.", 404);
   }
 
+  // Dos bloqueos idénticos (mismo barbero o toda la barbería, mismo inicio y fin) no aportan nada
+  // y luego hay que quitarlos de uno en uno: se rechaza el segundo.
+  const repetido = await prisma.barberTimeOff.findFirst({
+    where: { barbershopId: shopId, barberId: barberId ?? null, startAt, endAt },
+    select: { id: true },
+  });
+  if (repetido) return jsonError("Ya hay un bloqueo igual en esas fechas y horas.", 409);
+
   const created = await prisma.barberTimeOff.create({
     data: {
       barbershopId: shopId,
