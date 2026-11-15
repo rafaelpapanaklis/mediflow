@@ -29,7 +29,8 @@
     "sub": "Si te da igual, elige el primero: te asignamos al que esté libre.",
     "cualquiera": "Cualquiera disponible",
     "cualquieraSub": "Más horarios para escoger",
-    "vacio": "Esta barbería todavía no publica su equipo."
+    "vacio": "Esta barbería todavía no publica su equipo.",
+    "sinHorarioCorto": "Sin horarios en línea por ahora"
   },
   "fecha": {
     "title": "¿Qué día?",

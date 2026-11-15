@@ -503,6 +503,10 @@ export function BookingFlow({
                   <span className="dcb-option__body">
                     <span className="dcb-option__name">{b.nickname || b.name}</span>
                     {b.bio ? <span className="dcb-option__meta">{b.bio}</span> : null}
+                    {/* Lógica L3: se avisa ANTES de elegirlo, no en el paso de la fecha. */}
+                    {!b.hasSchedule ? (
+                      <span className="dcb-option__meta">{t("barber.reserva.barbero.sinHorarioCorto")}</span>
+                    ) : null}
                   </span>
                   <span className="dcb-option__check" aria-hidden="true">
                     <Check size={14} strokeWidth={3} />
