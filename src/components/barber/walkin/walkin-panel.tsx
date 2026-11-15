@@ -199,7 +199,6 @@ export function WalkinPanel(props: WalkinPanelProps) {
           <div className={css.panel}>
             <div className={css.panelHead}>
               <div>
-                <h2 className={css.panelTitle}>{t("barber.agenda.queue.title")}</h2>
                 <p className={css.panelSub}>{t("barber.agenda.queue.subtitle")}</p>
               </div>
             </div>
@@ -262,15 +261,7 @@ export function WalkinPanel(props: WalkinPanelProps) {
                           >
                             <Volume2 size={14} /> {t("barber.agenda.queue.actions.call")}
                           </button>
-                        ) : (
-                          <button
-                            type="button"
-                            className={agendaCss.btn}
-                            onClick={() => void act(row, "wait")}
-                          >
-                            {t("barber.agenda.queue.actions.uncall")}
-                          </button>
-                        )}
+                        ) : null}
                         <button
                           type="button"
                           className={`${agendaCss.btn} ${agendaCss.btnPrimary}`}
@@ -278,6 +269,16 @@ export function WalkinPanel(props: WalkinPanelProps) {
                         >
                           <Scissors size={14} /> {t("barber.agenda.queue.actions.serve")}
                         </button>
+                        {row.status !== "WAITING" ? (
+                          // Ya se llamó: lo principal es sentarlo; volver a la fila es lo raro.
+                          <button
+                            type="button"
+                            className={agendaCss.btn}
+                            onClick={() => void act(row, "wait")}
+                          >
+                            {t("barber.agenda.queue.actions.uncall")}
+                          </button>
+                        ) : null}
                         {row.phone ? (
                           <button
                             type="button"

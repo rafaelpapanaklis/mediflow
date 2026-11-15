@@ -217,8 +217,8 @@
     "waitingSince": "Waiting for {wait}",
     "actions": {
       "call": "Call",
-      "uncall": "Back to the queue",
-      "serve": "Take the chair",
+      "uncall": "Not here yet · back to the queue",
+      "serve": "Seat in the chair",
       "left": "Left",
       "notify": "Ping on WhatsApp"
     },
