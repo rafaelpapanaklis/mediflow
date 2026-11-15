@@ -692,6 +692,13 @@ body:has(.barber-shell) {
   .barber-shell .barber-menu__cerrar { display: grid; }
   .barber-shell .barber-menu__ent { height: 44px; }
 }
+/* Tableta en horizontal (≥1024 px con dedo: iPad 1024/1180/1366): el menú
+   va fijo a la izquierda con las entradas de escritorio, de 30 px. Con dedo
+   suben a 40 (ws6-t8); la lista ya desplaza dentro de su <nav> si no cabe.
+   Con ratón, el menú de 1440 no cambia. */
+@media (min-width: 1024px) and (pointer: coarse) {
+  .barber-shell .barber-menu__ent { height: 40px; }
+}
 
 @media (prefers-reduced-motion: reduce) {
   .barber-shell .barber-menu__poste > span,
@@ -783,4 +790,45 @@ body:has(.barber-shell) {
   /* Con la hero a lo ancho y un número PAR de celdas, la última quedaba
      sola con un hueco al lado (Caja: 4 cifras). Esa se estira. */
   :root .barber-panel .bd-band > .kpi--hero:first-child ~ .kpi:last-child:nth-child(even) { grid-column: 1 / -1; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   PANTALLAS GRANDES (ws6-t8, 15-nov). En 2560, 3440 y 4K las pantallas sin
+   tope (Inicio, Caja, Fila, Productos, Reportes, Comisiones…) se estiraban
+   a 3 000 px: tablas con columnas a un metro y renglones de 500 letras.
+   Tope = el lienzo del rediseño D (mockup v2/d: `.page { max-width: 1320px }`),
+   centrado como ya lo hacen Clientes, Equipo o Configuración (1180, margin auto).
+   A 1440 no cambia nada: ahí el <main> mide ~1200 px, menos que el tope.
+   La agenda (la que tiene rejilla con [data-scroller]) NO lleva tope: sus
+   columnas por barbero ganan con el ancho.
+   Especificidad CERO (:where): si la pantalla ya trae su propio ancho
+   (Clientes 1180, Configuración 1100, Ticket 720…) manda el suyo; sin eso,
+   el #main-content le ganaba y a 1440 las ensanchaba. Membresías (.bmem)
+   va pegada a la izquierda en el diseño aprobado: no se centra.
+   ═══════════════════════════════════════════════════════════════════════ */
+:where(.barber-shell #main-content) > :where(:not(:has([data-scroller])):not(.bmem)) {
+  max-width: 1320px;
+  margin-inline: auto;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   TOQUES DE 40 PX EN PANTALLAS TÁCTILES (ws6-t8, 15-nov). La regla del
+   panel (C-126 en globals.css) sube con dedo los controles de `main` a
+   36 px; en Barber se pidió 40 px, y quedaban fuera los campos de texto y
+   el selector de sede de la barra (30 px). Es la MISMA regla, con 40 y
+   bajo .barber-shell: `pointer: coarse` mira el apuntador (dedo), no el
+   ancho — con ratón a 1440 nada cambia. min-height, no height: lo que ya
+   mide más se queda igual; los interruptores se excluyen como en C-126.
+   Especificidad (0,3,0) para ganarle a la de C-126 (0,2,1).
+   ═══════════════════════════════════════════════════════════════════════ */
+@media (pointer: coarse) {
+  .barber-shell :where(button, [role="button"], [role="tab"], select, summary, a[class*="boton"], a[class*="btn"], a[class*="enlace"], .input-new, input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="hidden"]):not([type="file"])):not([role="switch"]):not(.switch) {
+    min-height: 40px;
+  }
+  /* Botones de solo icono (llevan aria-label): también de ancho. */
+  .barber-shell :where(button[aria-label], a[aria-label]):not([role="switch"]):not(.switch) {
+    min-width: 40px;
+  }
+  /* Los chips de una sola letra («$» / «%» del descuento en el ticket). */
+  .barber-shell .bcaja-chip { min-width: 40px; }
 }
