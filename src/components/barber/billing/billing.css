@@ -311,3 +311,87 @@
 
 .dcbb-spin { animation: dcbb-spin 1s linear infinite; }
 @keyframes dcbb-spin { to { transform: rotate(360deg); } }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   REDISEÑO D · tanda 3 — SUSCRIPCIÓN (15-nov-2026). Mismos tamaños.
+   Semánticos del tema en vez de los hex del dental, radios 6/8/12, sin
+   MAYÚSCULAS espaciadas, el plan actual marcado en café. Prefijo
+   .barber-shell para ganar a las reglas de arriba sin editarlas.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.barber-shell .dcbb-card,
+.barber-shell .dcbb-plan,
+.barber-shell .dcbb-modal { border-radius: var(--radius-lg); }
+.barber-shell .dcbb-alert,
+.barber-shell .dcbb-btn { border-radius: var(--radius-md); }
+
+/* Plan actual y su pastilla en el café del tema (texto por token). */
+.barber-shell .dcbb-chip-plan,
+.dark .barber-shell .dcbb-chip-plan { background: var(--brand); color: var(--on-brand); }
+.barber-shell .dcbb-plan--current {
+  border: 2px solid var(--brand);
+  background: linear-gradient(var(--brand-softer), var(--brand-softer)), var(--bg-elev);
+}
+.barber-shell .dcbb-plan__current { color: var(--brand-ink); }
+.barber-shell .dcbb-plan__check { color: var(--brand-ink); }
+.barber-shell .dcbb-plan__promo { color: var(--brand-ink); }
+.barber-shell .dcbb-plan__amount { font-weight: 700; }
+
+/* Sin MAYÚSCULAS espaciadas (antetítulos, «Plan actual», tabla). */
+.barber-shell .dcbb-kicker,
+.barber-shell .dcbb-plan__current,
+.barber-shell .dcbb-table th {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 600;
+}
+.barber-shell .dcbb-table th,
+.barber-shell .dcbb-table td { border-bottom-color: var(--line); }
+.barber-shell .dcbb-link { color: var(--brand-ink); }
+
+/* Insignias por token (antes verde/ámbar/rojo del dental en hex). */
+.barber-shell .dcbb-badge--ok,
+.dark .barber-shell .dcbb-badge--ok { color: var(--success); background: var(--success-soft); }
+.barber-shell .dcbb-badge--warn,
+.dark .barber-shell .dcbb-badge--warn { color: var(--warning); background: var(--warning-soft); }
+.barber-shell .dcbb-badge--danger,
+.dark .barber-shell .dcbb-badge--danger { color: var(--danger); background: var(--danger-soft); }
+
+/* Avisos por token. */
+.barber-shell .dcbb-alert--danger {
+  background: var(--danger-soft);
+  border-color: color-mix(in srgb, var(--danger) 30%, transparent);
+}
+.barber-shell .dcbb-alert--warn {
+  background: var(--warning-soft);
+  border-color: color-mix(in srgb, var(--warning) 30%, transparent);
+}
+.barber-shell .dcbb-alert--ok {
+  background: var(--success-soft);
+  border-color: color-mix(in srgb, var(--success) 30%, transparent);
+}
+.barber-shell .dcbb-alert__icon { color: var(--brand-ink); }
+.barber-shell .dcbb-alert--danger .dcbb-alert__icon { color: var(--danger); }
+.barber-shell .dcbb-alert--warn .dcbb-alert__icon { color: var(--warning); }
+.barber-shell .dcbb-alert--ok .dcbb-alert__icon { color: var(--success); }
+
+.barber-shell .dcbb-btn--danger,
+.dark .barber-shell .dcbb-btn--danger {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 35%, transparent);
+}
+.barber-shell .dcbb-btn--danger:hover { background: var(--danger-soft); }
+
+/* Facturas en celular: la tabla traía min-width: 520px y se cortaba en la
+   orilla de su tarjeta (lo mismo que vio t4 en Caja). Son 5 columnas cortas:
+   en angosto se deja que bajen de renglón, con menos relleno. */
+@container dcbb (max-width: 560px) {
+  .barber-shell .dcbb-table { min-width: 0; }
+  .barber-shell .dcbb-table th,
+  .barber-shell .dcbb-table td { padding: 8px 5px; }
+  .barber-shell .dcbb-table th:first-child,
+  .barber-shell .dcbb-table td:first-child { padding-left: 0; }
+  .barber-shell .dcbb-table th:last-child,
+  .barber-shell .dcbb-table td:last-child { padding-right: 0; }
+  .barber-shell .dcbb-card { padding: 16px; }
+}
