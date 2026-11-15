@@ -220,6 +220,8 @@
     "closeBranch": "Close location",
     "openBranch": "Reopen location",
     "confirmClose": "Close {name}? It stops operating, but nothing is deleted.",
+    "closeTitle": "Close {name}",
+    "closeConfirmBtn": "Close location",
     "cannotCloseMain": "The main shop cannot be closed from here.",
     "consolidatedTitle": "Whole chain",
     "consolidatedBody": "{branches} locations · {barbers} barbers · {users} people in the panel",

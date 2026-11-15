@@ -100,6 +100,7 @@ export function BranchesClient({
   const [form, setForm] = useState<FormState | null>(null);
   const [listError, setListError] = useState<string | null>(null);
   const [switching, setSwitching] = useState(false);
+  const [confirmClose, setConfirmClose] = useState<BarberBranchRow | null>(null);
   const { saving, error, setError, run } = useSaving();
 
   const defaultTz = branches[0]?.timezone ?? TIMEZONES[0];
@@ -148,12 +149,15 @@ export function BranchesClient({
     if (ok) setForm(null);
   }
 
-  async function toggleOpen(branch: BarberBranchRow) {
+  async function toggleOpen(branch: BarberBranchRow, confirmed = false) {
     setListError(null);
     const next = !branch.isActive;
-    if (!next && !window.confirm(t("branches.confirmClose", { name: branch.branchName || branch.name }))) {
+    // Cerrar pide confirmación con el diálogo del panel (antes: window.confirm del navegador).
+    if (!next && !confirmed) {
+      setConfirmClose(branch);
       return;
     }
+    setConfirmClose(null);
     try {
       await apiCall(`/api/barber/branches/${branch.id}`, {
         method: "PATCH",
@@ -344,6 +348,25 @@ export function BranchesClient({
       >
         {t("branches.hoursBody")}
       </Banner>
+
+      {confirmClose ? (
+        <Modal
+          title={t("branches.closeTitle", { name: confirmClose.branchName || confirmClose.name })}
+          onClose={() => setConfirmClose(null)}
+          footer={
+            <>
+              <Btn variant="ghost" onClick={() => setConfirmClose(null)}>
+                {t("common.cancel")}
+              </Btn>
+              <Btn variant="danger" onClick={() => toggleOpen(confirmClose, true)}>
+                {t("branches.closeConfirmBtn")}
+              </Btn>
+            </>
+          }
+        >
+          <p>{t("branches.confirmClose", { name: confirmClose.branchName || confirmClose.name })}</p>
+        </Modal>
+      ) : null}
 
       {form ? (
         <Modal

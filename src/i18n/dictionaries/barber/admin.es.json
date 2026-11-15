@@ -220,6 +220,8 @@
     "closeBranch": "Cerrar sede",
     "openBranch": "Reabrir sede",
     "confirmClose": "¿Cerrar {name}? Deja de operar, pero no se borra nada.",
+    "closeTitle": "Cerrar {name}",
+    "closeConfirmBtn": "Cerrar sede",
     "cannotCloseMain": "La barbería principal no se cierra desde aquí.",
     "consolidatedTitle": "Toda la cadena",
     "consolidatedBody": "{branches} sedes · {barbers} barberos · {users} personas en el panel",
