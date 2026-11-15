@@ -63,6 +63,12 @@ export default async function BarberPanelLayout({
     if (item.permission && !hasBarberPermission(permUser, item.permission as BarberPermissionKey)) {
       return false;
     }
+    if (
+      item.anyPermission &&
+      !item.anyPermission.some((k) => hasBarberPermission(permUser, k as BarberPermissionKey))
+    ) {
+      return false;
+    }
     return true;
   }).map((item) => ({
     key: item.key,

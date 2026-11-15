@@ -4,11 +4,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import {
+  BarChart3,
   Calendar,
   Contact,
   CreditCard,
   Crown,
   Globe,
+  Handshake,
   Home,
   Inbox,
   LifeBuoy,
@@ -45,6 +47,8 @@ const ICONS: Record<string, React.ComponentType<{ size?: number | string }>> = {
   "credit-card": CreditCard,
   settings: Settings,
   "life-buoy": LifeBuoy,
+  "bar-chart": BarChart3,
+  handshake: Handshake,
 };
 
 const SECTION_ORDER: BarberNavItem["section"][] = [
