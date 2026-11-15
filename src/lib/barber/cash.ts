@@ -1020,7 +1020,7 @@ export async function createSale(
       });
       if (!session) throw new BarberCajaError(409, "NO_OPEN_SESSION", "Abre un turno antes de cobrar");
 
-      // 2. Cita (opcional): de esta barbería, no cancelada, sin ticket vivo.
+      // 2. Cita (opcional): de esta barbería, COMPLETADA y sin ticket vivo.
       //    Se BLOQUEA la fila: dos cobros simultáneos de la misma cita se
       //    ponen en fila y el segundo ya ve el ticket del primero (y el
       //    anticipo, si lo hay, se aplica una sola vez).
@@ -1037,6 +1037,18 @@ export async function createSale(
         if (!appt) throw new BarberCajaError(404, "APPOINTMENT_NOT_FOUND", "Cita no encontrada");
         if (appt.status === "CANCELLED" || appt.status === "NO_SHOW") {
           throw new BarberCajaError(409, "APPOINTMENT_NOT_CHARGEABLE", "Esa cita está cancelada o no llegó");
+        }
+        // Una cita solo se cobra cuando está COMPLETADA. Es lo que hace la
+        // pantalla (cobrar aparece al terminar, y «Completar y cobrar»
+        // primero la completa); sin esta guardia la API dejaba un ticket
+        // cobrado sobre una cita que seguía «Pendiente».
+        if (appt.status !== "DONE") {
+          throw new BarberCajaError(
+            409,
+            "APPOINTMENT_NOT_DONE",
+            "Marca la visita como completada antes de cobrarla",
+            { status: appt.status },
+          );
         }
         if (appt.sales.some((s) => !isSaleCancelled(s))) {
           throw new BarberCajaError(409, "ALREADY_CHARGED", "Esa cita ya tiene un ticket cobrado");

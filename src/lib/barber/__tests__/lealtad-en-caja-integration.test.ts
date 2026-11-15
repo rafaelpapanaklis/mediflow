@@ -83,6 +83,7 @@ const DOUBLES = new Map<string, unknown>([
   [
     abs("src/lib/barber-auth.ts"),
     {
+      __esModule: true,
       getBarberContext: async () => session,
       // El MISMO assert que el real (permissions.ts), sin Supabase detrás.
       assertBarberPermission: (ctx: Pick<BarberContext, "role" | "user">, key: Parameters<typeof hasBarberPermission>[1]) => {
@@ -95,7 +96,8 @@ const DOUBLES = new Map<string, unknown>([
       hasBarberPermission,
     },
   ],
-  [abs("src/lib/barber/plans.ts"), { getBarberPlan: async () => ({ id: "PROFESIONAL", name: "Profesional", features: FEATURES }) }],
+  // __esModule: cash.ts lo carga con import() dinámico y desestructura el export.
+  [abs("src/lib/barber/plans.ts"), { __esModule: true, getBarberPlan: async () => ({ id: "PROFESIONAL", name: "Profesional", features: FEATURES }) }],
 ]);
 
 const M = Module as unknown as {
