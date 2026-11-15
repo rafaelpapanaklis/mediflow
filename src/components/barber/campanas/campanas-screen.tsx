@@ -35,6 +35,8 @@ export function CampanasScreen(props: {
   canEditTemplates: boolean;
   canEditClients: boolean;
   waConnected: boolean;
+  /** Para el ejemplo de Plantillas («Hola Luis… en <tu barbería>»). */
+  shopName?: string;
 }) {
   return (
     <CampI18n dict={props.dict}>
@@ -52,6 +54,7 @@ function Screen({
   canEditTemplates,
   canEditClients,
   waConnected,
+  shopName,
 }: {
   locale: string;
   audiences: AudienceDef[];
@@ -61,6 +64,7 @@ function Screen({
   canEditTemplates: boolean;
   canEditClients: boolean;
   waConnected: boolean;
+  shopName?: string;
 }) {
   const t = useCampT();
   const [tab, setTab] = useState<Tab>("lists");
@@ -121,6 +125,7 @@ function Screen({
           config={config}
           limits={limits}
           canEdit={canEditTemplates}
+          shopName={shopName}
         />
       ) : null}
       {tab === "results" ? <ResultsPanel locale={locale} /> : null}

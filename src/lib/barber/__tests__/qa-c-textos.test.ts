@@ -39,3 +39,19 @@ test("Socios sin permiso: ya no dice el texto de Suscripción («contratar, camb
   assert.match(dict("afiliados", "es").blocker.onlyOwner, /programa de socios/);
   assert.ok(dict("afiliados", "en").blocker.onlyOwner);
 });
+
+test("Campañas › Plantillas: ya no dice «Plantilla aprobada por Meta» (nadie lo comprobó) ni enseña {{1}}/{{2}}/{premio}", () => {
+  const panel = readFileSync("src/components/barber/campanas/templates-panel.tsx", "utf8");
+  assert.doesNotMatch(panel, /templates\.approved/);
+  assert.match(panel, /templates\.sentWith/);
+  for (const l of ["es", "en"] as const) {
+    const d = dict("campanas", l).templates;
+    assert.equal(d.approved, undefined, "la llave engañosa se fue");
+    assert.doesNotMatch(d.sentWith, /aprobada por Meta\b(?! la)|approved by Meta$/);
+    for (const k of ["label", "name", "shop", "reward"]) assert.ok(d.sample[k], `${l} sample.${k}`);
+  }
+  // El ejemplo sustituye las tres variables y {premio}.
+  for (const v of ['"{{1}}"', '"{{2}}"', '"{{3}}"', '"{premio}"']) assert.ok(panel.includes(`.split(${v})`), v);
+  // y el nombre real de la barbería llega desde la página
+  assert.match(readFileSync("src/app/barber/(panel)/campanas/page.tsx", "utf8"), /shopName=\{ctx\.barbershop\.name\}/);
+});

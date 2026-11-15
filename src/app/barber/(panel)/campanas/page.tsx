@@ -86,6 +86,7 @@ export default async function Page() {
       canEditTemplates={hasBarberPermission(permUser, "settings.edit")}
       canEditClients={hasBarberPermission(permUser, "clients.edit")}
       waConnected={connection.state === "CONNECTED" || connection.state === "UNVERIFIED"}
+      shopName={ctx.barbershop.name}
     />
   );
 }

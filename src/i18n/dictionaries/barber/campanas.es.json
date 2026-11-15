@@ -123,7 +123,13 @@
     "cooldown": "Días de descanso entre campañas",
     "cooldownHelp": "Nadie recibirá dos campañas seguidas antes de esos días, aunque aparezca en varias listas.",
     "repeatAfter": "No se repite antes de {days} días",
-    "approved": "Plantilla aprobada por Meta",
+    "sentWith": "Se manda con una plantilla de WhatsApp. Si Meta ya la aprobó lo ves en WhatsApp › Plantillas.",
+    "sample": {
+      "label": "Así le llega a un cliente (ejemplo):",
+      "name": "Luis",
+      "shop": "tu barbería",
+      "reward": "tu premio"
+    },
     "sqlPending": "Todavía no se puede guardar: falta aplicar sql/barber_campanas.sql. Mientras tanto se usan los textos sugeridos y sí puedes mandar campañas."
   },
   "results": {
