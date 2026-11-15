@@ -296,6 +296,29 @@ body:has(.barber-panel) .barber-shell .barber-btn-primary:hover {
   background: var(--brand-soft);
 }
 
+/* Más morado del dental en clases compartidas que usan pantallas de barber
+   (globals.css trae violeta fijo): insignia «brand», foco de los campos y
+   el hover del primario base. En barber, todo al café del tema.
+   (0,4,0)+ para ganar a los `:root:not(.dark) .x` de globals.css. */
+:root .barber-panel.mf-extpanel.barber-shell .badge-new--brand,
+body:has(.barber-panel) .barber-shell.modal .badge-new--brand {
+  color: var(--brand-ink);
+  background: var(--brand-soft);
+  border-color: var(--border-brand);
+}
+:root .barber-panel.mf-extpanel.barber-shell .input-new:focus,
+body:has(.barber-panel) .barber-shell.modal .input-new:focus {
+  border-color: var(--border-brand);
+  box-shadow: var(--ring);
+}
+:root .barber-panel.mf-extpanel.barber-shell .btn-new--primary {
+  background: var(--brand);
+  color: var(--on-brand);
+}
+:root .barber-panel.mf-extpanel.barber-shell .btn-new--primary:hover {
+  background: var(--brand-hover);
+}
+
 /* ── Rampa Tailwind brand-* → caramel dentro del vertical ──────────────
    Vía <body> con :has() para que los portales de Radix (Dialog/Popover
    montan en <body>, FUERA del shell) hereden el caramelo. El panel barber
