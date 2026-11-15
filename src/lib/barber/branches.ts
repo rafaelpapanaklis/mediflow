@@ -11,6 +11,7 @@ import {
 import { getBarberPlan } from "@/lib/barber/plans";
 import { barberPlanHasFeature, isBarberUnlimited } from "@/lib/barber/plan-shared";
 import { makeBarberSlug } from "@/lib/barber/types";
+import { serviciosParaSedeNueva } from "@/lib/barber/branch-services";
 
 // ═══════════════════════════════════════════════════════════════════════
 // DaleControl BARBER — SUCURSALES (sedes de una cadena).
@@ -424,27 +425,52 @@ export async function createBranch(
   const displayName = cleanText(input.name, 120) || `${root.name} ${branchName}`;
   const slug = await uniqueSlug(displayName);
 
-  const created = await prisma.barbershop.create({
-    data: {
-      name: displayName,
-      slug,
-      branchName,
-      isMainBranch: false,
-      parentId: rootId,
-      address: cleanText(input.address, BARBER_BRANCH_ADDRESS_MAX) || null,
-      phone: cleanText(input.phone, 20) || null,
-      city: cleanText(input.city, 80) || null,
-      state: cleanText(input.state, 80) || null,
-      timezone: cleanText(input.timezone, 60) || root.timezone,
-      locale: root.locale,
-      logoUrl: root.logoUrl,
-      email: root.email,
-      // La suscripción es de la CADENA: la sede espeja plan y estado de la
-      // matriz y NO copia los ids de Stripe (los conserva la matriz).
-      plan: root.plan,
-      subscriptionStatus: root.subscriptionStatus,
-    },
-    select: BRANCH_SELECT,
+  // Sede + servicios heredados en UNA transacción: o nace con su catálogo o
+  // no nace (una sede sin servicios no puede reservar ni cobrar nada).
+  const created = await prisma.$transaction(async (tx) => {
+    const branch = await tx.barbershop.create({
+      data: {
+        name: displayName,
+        slug,
+        branchName,
+        isMainBranch: false,
+        parentId: rootId,
+        address: cleanText(input.address, BARBER_BRANCH_ADDRESS_MAX) || null,
+        phone: cleanText(input.phone, 20) || null,
+        city: cleanText(input.city, 80) || null,
+        state: cleanText(input.state, 80) || null,
+        timezone: cleanText(input.timezone, 60) || root.timezone,
+        locale: root.locale,
+        logoUrl: root.logoUrl,
+        email: root.email,
+        // La suscripción es de la CADENA: la sede espeja plan y estado de la
+        // matriz y NO copia los ids de Stripe (los conserva la matriz).
+        plan: root.plan,
+        subscriptionStatus: root.subscriptionStatus,
+      },
+      select: BRANCH_SELECT,
+    });
+
+    // Los servicios ACTIVOS de la matriz (filtrados por SU id, que sale de la
+    // sesión, nunca del request). Copia, no vínculo: cada sede ajusta lo suyo.
+    const matriz = await tx.barberService.findMany({
+      where: { barbershopId: rootId, isActive: true },
+      select: {
+        name: true,
+        description: true,
+        durationMin: true,
+        price: true,
+        category: true,
+        isActive: true,
+        sortOrder: true,
+      },
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+      take: 500,
+    });
+    const filas = serviciosParaSedeNueva(matriz, branch.id);
+    if (filas.length > 0) await tx.barberService.createMany({ data: filas });
+
+    return branch;
   });
 
   return {

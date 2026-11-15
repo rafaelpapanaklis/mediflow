@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowRightLeft, CalendarClock, Crown, Pencil, Plus, Store } from "lucide-react";
+import { ArrowRightLeft, CalendarClock, Crown, Pencil, Plus, Store, Users } from "lucide-react";
 import Link from "next/link";
 import type { BarberBranchLimit, BarberBranchRow } from "@/lib/barber/branches";
 import { switchBranchAndReload } from "../team/admin-nav";
@@ -211,6 +211,23 @@ export function BranchesClient({
 
       {limit.featureOn && !limit.canCreate ? (
         <Banner tone="danger">{t("branches.limitFull", { plan: limit.planName })}</Banner>
+      ) : null}
+
+      {/* Cada sede se opera con SU propio usuario: el selector de sede cambia
+          Inicio, Reportes, Barberos y Equipo, pero Agenda, Caja, Clientes y
+          Servicios siguen siendo los de la sede del usuario que entró. */}
+      {limit.featureOn ? (
+        <Banner
+          title={t("branches.ownUserTitle")}
+          icon={<Users size={16} />}
+          action={
+            <Link href="/barber/equipo" className={[s.btn, s.btnSm].join(" ")}>
+              {t("branches.ownUserCta")}
+            </Link>
+          }
+        >
+          {t("branches.ownUserBody")}
+        </Banner>
       ) : null}
 
       {listError ? <ErrorText>{listError}</ErrorText> : null}
