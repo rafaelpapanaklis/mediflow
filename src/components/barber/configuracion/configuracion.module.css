@@ -380,3 +380,9 @@
 }
 .warnIcon,
 :global(.dark) .warnIcon { color: var(--danger); }
+
+/* Toques a 390 px: el campo de la dirección de la página y el enlace «Abrir» a 40 px. */
+@media (max-width: 480px) {
+  .slugInput { min-height: 40px; }
+  a.check { min-height: 40px; padding: 0 6px; }
+}

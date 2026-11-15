@@ -347,6 +347,7 @@ export function BarbersClient({
                 <div className={s.memberPay}>
                   <Chip tone="brand">{payChip(b)}</Chip>
                   {!b.isActive ? <Chip tone="muted">{t("common.inactive")}</Chip> : null}
+                  {b.noSchedule ? <Chip tone="warn">{t("team.noScheduleWarn")}</Chip> : null}
                   {isConsolidated ? (
                     <Chip tone="muted">{branchLabelById.get(b.barbershopId) ?? ""}</Chip>
                   ) : null}
