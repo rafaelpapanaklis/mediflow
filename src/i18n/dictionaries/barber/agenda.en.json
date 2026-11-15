@@ -46,7 +46,7 @@
   "card": {
     "noServices": "No services",
     "noClient": "No client",
-    "dragHint": "Drag to move",
+    "dragHint": "Drag to move it · pull the bottom edge to lengthen it",
     "moreServices": "+{count} more",
     "aria": "{time}, {client}, {status}",
     "charged": "Paid",
@@ -58,7 +58,9 @@
     "undone": "Done, we put it back.",
     "undoFailed": "We couldn't undo the move.",
     "remindersCancelled": "We cancelled the old reminder; it gets rescheduled for the new time.",
-    "blocked": "It doesn't fit there"
+    "blocked": "It doesn't fit there",
+    "rejected": "Not moved to {time} — {reason}",
+    "movedDay": "Visit moved to {day}, {time}"
   },
   "modal": {
     "newTitle": "New visit",
@@ -313,5 +315,58 @@
     "errorLoad": "We couldn't open the charge.",
     "done": "Charged: {amount}.",
     "viewTicket": "View or print ticket"
+  },
+  "slot": {
+    "outside": "Outside their hours",
+    "timeOff": "Blocked",
+    "timeOffReason": "Blocked: {reason}",
+    "shopClosed": "Shop closed",
+    "shopClosedReason": "Shop closed: {reason}",
+    "busy": "Taken",
+    "busyAt": "Taken from {time}",
+    "busyWith": "Taken: {client}, {time}",
+    "tooLong": "Too long",
+    "tooShort": "Too short",
+    "noBarber": "Pick a barber",
+    "unavailable": "Not available",
+    "freeCount": {
+      "one": "{count} free",
+      "other": "{count} free"
+    },
+    "nobodyFree": "Nobody free"
+  },
+  "resize": {
+    "until": "Until {time} · {duration}",
+    "done": "Now lasts {duration}",
+    "undone": "Done, it's back to its length.",
+    "rejected": "Length not changed — {reason}"
+  },
+  "hover": {
+    "label": "Summary of {client}'s visit",
+    "time": "Time",
+    "deposit": "Deposit",
+    "open": "Open",
+    "done": "{client}: {status}",
+    "status": {
+      "PENDING": "Pending",
+      "CONFIRMED": "Confirmed",
+      "IN_PROGRESS": "In the chair",
+      "DONE": "Completed",
+      "NO_SHOW": "No-show",
+      "CANCELLED": "Cancelled"
+    },
+    "depositStatus": {
+      "PENDING": "Deposit not paid yet: {amount}",
+      "PAID": "Deposit paid: {amount}",
+      "REFUNDED": "Deposit refunded: {amount}",
+      "FORFEITED": "Deposit kept: {amount}"
+    },
+    "quickHint": "Shortcut on the visit: “{action}”",
+    "short": {
+      "CONFIRMED": "Confirm",
+      "IN_PROGRESS": "Start",
+      "DONE": "Complete",
+      "DONE_CHARGE": "Complete and charge"
+    }
   }
 }

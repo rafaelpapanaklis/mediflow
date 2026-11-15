@@ -46,7 +46,7 @@
   "card": {
     "noServices": "Sin servicios",
     "noClient": "Sin cliente",
-    "dragHint": "Arrastra para mover",
+    "dragHint": "Arrastra para moverla · jala el borde de abajo para alargarla",
     "moreServices": "+{count} más",
     "aria": "{time}, {client}, {status}",
     "charged": "Cobrada",
@@ -58,7 +58,9 @@
     "undone": "Listo, la regresamos a donde estaba.",
     "undoFailed": "No se pudo deshacer el movimiento.",
     "remindersCancelled": "Cancelamos el recordatorio anterior; se reprograma con la hora nueva.",
-    "blocked": "Ahí no cabe"
+    "blocked": "Ahí no cabe",
+    "rejected": "No se movió a las {time} — {reason}",
+    "movedDay": "Visita movida al {day}, {time}"
   },
   "modal": {
     "newTitle": "Nueva visita",
@@ -313,5 +315,58 @@
     "errorLoad": "No se pudo abrir el cobro.",
     "done": "Cobrado: {amount}.",
     "viewTicket": "Ver o imprimir ticket"
+  },
+  "slot": {
+    "outside": "Fuera de su horario",
+    "timeOff": "Bloqueado",
+    "timeOffReason": "Bloqueado: {reason}",
+    "shopClosed": "Barbería cerrada",
+    "shopClosedReason": "Barbería cerrada: {reason}",
+    "busy": "Ocupado",
+    "busyAt": "Ocupado desde las {time}",
+    "busyWith": "Ocupado: {client}, {time}",
+    "tooLong": "Demasiado larga",
+    "tooShort": "Demasiado corta",
+    "noBarber": "Elige barbero",
+    "unavailable": "No disponible",
+    "freeCount": {
+      "one": "{count} libre",
+      "other": "{count} libres"
+    },
+    "nobodyFree": "Nadie libre"
+  },
+  "resize": {
+    "until": "Hasta {time} · {duration}",
+    "done": "Ahora dura {duration}",
+    "undone": "Listo, regresó a su duración.",
+    "rejected": "No se cambió la duración — {reason}"
+  },
+  "hover": {
+    "label": "Resumen de la visita de {client}",
+    "time": "Hora",
+    "deposit": "Anticipo",
+    "open": "Abrir",
+    "done": "{client}: {status}",
+    "status": {
+      "PENDING": "Pendiente",
+      "CONFIRMED": "Confirmada",
+      "IN_PROGRESS": "En silla",
+      "DONE": "Completada",
+      "NO_SHOW": "No llegó",
+      "CANCELLED": "Cancelada"
+    },
+    "depositStatus": {
+      "PENDING": "Anticipo pendiente de pago: {amount}",
+      "PAID": "Anticipo pagado: {amount}",
+      "REFUNDED": "Anticipo devuelto: {amount}",
+      "FORFEITED": "Anticipo retenido: {amount}"
+    },
+    "quickHint": "Atajo en la visita: «{action}»",
+    "short": {
+      "CONFIRMED": "Confirmar",
+      "IN_PROGRESS": "Iniciar",
+      "DONE": "Completar",
+      "DONE_CHARGE": "Completar y cobrar"
+    }
   }
 }

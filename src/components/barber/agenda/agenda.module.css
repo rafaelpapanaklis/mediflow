@@ -455,66 +455,142 @@
   min-width: 0;
 }
 
-.columnClickable {
-  cursor: copy;
+/* ── El hueco bajo el mouse ────────────────────────────────────────────
+   Dice DÓNDE se va a agendar antes del clic: «+ 10:30 a. m. · Beto». Si
+   ahí no se puede, en rojo y con el motivo, y el cursor lo dice también.
+   Va debajo de las visitas y no captura el puntero (el clic es de la
+   columna). Rojo con los tokens globales --danger/--danger-soft: el tema
+   de barber no redefine «peligro» y así claro/oscuro salen solos. */
+.columnPick {
+  cursor: pointer;
 }
 
+.columnBlocked {
+  cursor: not-allowed;
+}
+
+.slotGuide {
+  position: absolute;
+  left: 3px;
+  right: 3px;
+  z-index: 0;
+  border-radius: 7px;
+  background: var(--brand-soft);
+  box-shadow: inset 0 0 0 1px var(--border-brand);
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  overflow: hidden;
+}
+
+.slotGuideText {
+  font-size: 11.5px;
+  font-weight: 700;
+  line-height: 14px;
+  font-variant-numeric: tabular-nums;
+  color: var(--caramel-700);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+:global(.dark) .slotGuideText {
+  color: var(--caramel-200);
+}
+
+.slotGuideBad {
+  background: var(--danger-soft);
+  box-shadow: inset 0 0 0 1px var(--danger);
+}
+
+.slotGuideBad .slotGuideText,
+:global(.dark) .slotGuideBad .slotGuideText {
+  color: var(--danger);
+}
+
+/* ── Separada por tiempos ──────────────────────────────────────────────
+   Hora en punto: línea marcada. Media hora: punteada y más suave. Así se
+   lee «10:30» de un vistazo sin contar rayitas (lo que hace el dental con
+   su gradiente de hora / media hora). Antes la media hora era una franja
+   gris alterna que se confundía con «fuera de horario». */
 .hourLine {
   position: absolute;
   left: 0;
   right: 0;
-  border-top: 1px solid var(--border-soft);
+  border-top: 1px solid var(--border-strong);
   pointer-events: none;
 }
 
-/* Franja de media hora: sombreado suave en vez de una línea punteada más.
-   Da referencia de "media hora" sin ensuciar el fondo. */
-.halfBand {
+.halfLine {
   position: absolute;
   left: 0;
   right: 0;
-  background: rgba(18, 16, 16, 0.028);
+  border-top: 1px dashed var(--border-soft);
   pointer-events: none;
 }
 
-:global(.dark) .halfBand {
-  background: rgba(250, 245, 238, 0.035);
+/* «10:30» chico en la regleta, debajo de la hora en punto en jerarquía. */
+.gutterHalf {
+  position: absolute;
+  right: 7px;
+  transform: translateY(-50%);
+  font-size: 10px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-4);
+  white-space: nowrap;
 }
 
-/* Fuera del horario del barbero: rayado y atenuado. */
+/* Fuera del horario del barbero: rayado sobre un fondo apagado. Más
+   marcado que antes (a 5 % de opacidad no se distinguía del hueco libre),
+   y con los tokens del tema: en oscuro --border-soft ya es claro. */
 .closedBand {
   position: absolute;
   left: 0;
   right: 0;
-  background: repeating-linear-gradient(
-    135deg,
-    rgba(18, 16, 16, 0.05),
-    rgba(18, 16, 16, 0.05) 6px,
-    transparent 6px,
-    transparent 12px
-  );
+  background:
+    repeating-linear-gradient(
+      135deg,
+      var(--border-soft) 0 6px,
+      transparent 6px 12px
+    ),
+    var(--bg-hover);
   pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-:global(.dark) .closedBand {
-  background: repeating-linear-gradient(
-    135deg,
-    rgba(250, 245, 238, 0.055),
-    rgba(250, 245, 238, 0.055) 6px,
-    transparent 6px,
-    transparent 12px
-  );
+/* «Descansa»: la columna entera está cerrada ese día. */
+.closedLabel {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  padding: 2px 9px;
 }
 
-/* Bloqueo puntual: comida, vacaciones, festivo. */
+/* Bloqueo de UN barbero: comida, vacaciones. Caramelo punteado. */
 .timeOffBand {
   position: absolute;
   left: 3px;
   right: 3px;
   border-radius: 8px;
-  background: rgba(190, 122, 60, 0.13);
+  background:
+    repeating-linear-gradient(
+      135deg,
+      var(--brand-soft) 0 5px,
+      transparent 5px 11px
+    ),
+    var(--brand-softer);
   border: 1px dashed var(--border-brand);
-  padding: 4px 7px;
+  box-shadow: inset 3px 0 0 var(--brand);
+  padding: 3px 7px 3px 9px;
   font-size: 11px;
   font-weight: 600;
   color: var(--caramel-700);
@@ -524,6 +600,32 @@
 
 :global(.dark) .timeOffBand {
   color: var(--caramel-300);
+}
+
+/* Bloqueo de TODA la barbería (festivo): cierra a todos, así que va más
+   marcado y en tinta, para que no se confunda con la comida de uno. */
+.timeOffShop {
+  background:
+    repeating-linear-gradient(
+      135deg,
+      var(--border-strong) 0 5px,
+      transparent 5px 11px
+    ),
+    var(--bg-hover);
+  border-color: var(--border-strong);
+  box-shadow: inset 3px 0 0 var(--text-2);
+  color: var(--text-2);
+}
+
+:global(.dark) .timeOffShop {
+  color: var(--text-2);
+}
+
+.timeOffText {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .nowLine {
@@ -565,11 +667,80 @@
 
 /* ── Tarjeta de visita ─────────────────────────────────────────────────
    El alto SIEMPRE es proporcional al tiempo (2 px por minuto en día):
-   30 min = 60 px, 90 min = 180 px. Nada de franjitas de alto fijo. */
+   30 min = 60 px, 90 min = 180 px. Nada de franjitas de alto fijo.
+   La POSICIÓN la lleva el marco (.cardSlot); dentro van la tarjeta, la
+   acción rápida y el asa de alargar (un botón no puede llevar otro). */
+.cardSlot {
+  position: absolute;
+  z-index: 1;
+}
+
+.cardSlot:hover,
+.cardSlot:focus-within {
+  z-index: 5;
+}
+
+.cardSlotDragging {
+  z-index: 1;
+}
+
+/* La acción rápida del estado siguiente: aparece al pasar el mouse o al
+   llegar con el teclado, abajo a la derecha (arriba están la hora y el
+   estado). Con el dedo no hay «pasar por encima»: ahí todo sigue en el
+   detalle, que se abre tocando la visita. La pinta appointment-card.tsx
+   solo con mouse encima o foco de teclado (aquí no hay @media hover). */
+.cardQuick {
+  position: absolute;
+  right: 6px;
+  bottom: 10px;
+  z-index: 7;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 9px;
+  border-radius: 999px;
+  border-width: 1px;
+  border-style: solid;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: var(--shadow-2);
+}
+
+.cardQuick:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.cardQuick:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.cardQuick:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+/* Tarjeta de una sola línea: el botón va centrado en vertical. */
+.cardQuickCompact {
+  bottom: auto;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 18px;
+  padding: 0 7px;
+  font-size: 10.5px;
+}
+
 .card {
   --st: #6F6459;
   box-sizing: border-box;
   position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   border-radius: 9px;
   border: 1px solid color-mix(in srgb, var(--st) 38%, transparent);
   border-left: 4px solid var(--st);
@@ -584,7 +755,12 @@
   gap: 1px;
   font: inherit;
   color: var(--text-1);
-  touch-action: none;
+  /* pan-y y no none: un dedo que cae sobre una visita tiene que poder
+     desplazar la agenda. Mover pide MANTENER apretado (use-card-drag). */
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
   z-index: 1;
   transition: box-shadow 140ms ease, transform 140ms ease;
 }
@@ -789,33 +965,94 @@
 .cardCompact .cardName { flex: 1 1 auto; }
 .cardCompact .cardDot { margin-left: 0; }
 
-/* Fantasma que sigue al dedo mientras se arrastra. */
+/* ── Fantasma de lo que se arrastra ────────────────────────────────────
+   Dónde caería, con la hora nueva y el barbero; en rojo y con el motivo si
+   no cabe. Encima de las visitas y sin capturar el puntero. Fondo opaco
+   (el tinte encima de --bg-elev) para que se lea aunque caiga sobre otra visita. */
 .ghost {
   position: absolute;
+  box-sizing: border-box;
   border-radius: 9px;
-  border: 2px dashed var(--caramel-600);
-  background: rgba(190, 122, 60, 0.18);
+  border: 2px dashed var(--brand);
+  background: linear-gradient(var(--brand-soft), var(--brand-soft)), var(--bg-elev);
+  box-shadow: var(--shadow-3);
   pointer-events: none;
   z-index: 7;
   padding: 4px 8px;
-  font-size: 11.5px;
-  font-weight: 700;
-  color: var(--caramel-800);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
   overflow: hidden;
+  color: var(--caramel-800);
 }
 
 :global(.dark) .ghost {
   color: var(--caramel-100);
 }
 
-.ghostBad {
-  border-color: #D93B3B;
-  background: rgba(217, 59, 59, 0.2);
-  color: #8E1F1F;
+.ghostTime {
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 15px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
+.ghostSub {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ghostCompact {
+  padding: 2px 5px;
+}
+
+.ghostCompact .ghostTime {
+  font-size: 11px;
+}
+
+.ghostBad,
 :global(.dark) .ghostBad {
-  color: #FFD9D6;
+  border-color: var(--danger);
+  background: linear-gradient(var(--danger-soft), var(--danger-soft)), var(--bg-elev);
+  color: var(--danger);
+}
+
+/* El asa del borde de abajo: alargar o acortar arrastrando. Invisible hasta
+   pasar el mouse por la visita; entonces una rayita centrada y cursor ↕. */
+.resizeHandle {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 6;
+  height: 9px;
+  cursor: ns-resize;
+  touch-action: pan-y;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.resizeHandle::after {
+  content: "";
+  width: 22px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--text-3);
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.cardSlot:hover .resizeHandle::after,
+.resizeHandle:hover::after {
+  opacity: 0.85;
 }
 
 /* ── Píldoras de estado ────────────────────────────────────────────── */
@@ -1281,6 +1518,96 @@
   font-weight: 700;
   color: var(--text-1);
   font-variant-numeric: tabular-nums;
+}
+
+/* ── Resumen al pasar el mouse por una visita ──────────────────────────
+   Fijo en la ventana, junto a la visita (posicionDeLaTarjeta del dental).
+   Debajo de los modales y del aviso flotante, encima de la rejilla. */
+.hoverCard {
+  position: fixed;
+  /* No captura el puntero: nunca tapa ni roba el clic de lo de abajo. */
+  pointer-events: none;
+  z-index: 60;
+  box-sizing: border-box;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  box-shadow: var(--shadow-3);
+  padding: 11px 12px 10px;
+  color: var(--text-1);
+  font-size: 12.5px;
+  animation: hoverIn 120ms ease-out;
+}
+
+@keyframes hoverIn {
+  from { opacity: 0; transform: translateY(2px); }
+  to { opacity: 1; transform: none; }
+}
+
+.hoverHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.hoverName {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hoverRows {
+  margin: 8px 0 0;
+  display: grid;
+  gap: 5px;
+}
+
+.hoverRow {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+}
+
+.hoverRow dt {
+  display: grid;
+  place-items: center;
+  color: var(--text-3);
+}
+
+.hoverRow dd {
+  margin: 0;
+  min-width: 0;
+  color: var(--text-1);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.hoverMuted {
+  color: var(--text-3);
+}
+
+.hoverFoot {
+  margin-top: 9px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-soft);
+  display: grid;
+  gap: 4px;
+}
+
+.hoverHint {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0;
+  font-size: 11px;
+  color: var(--text-3);
 }
 
 /* ── Aviso flotante (mover / deshacer) ─────────────────────────────── */

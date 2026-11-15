@@ -25,6 +25,7 @@ import { sumMoney } from "@/lib/barber/money";
 import type { SaleRow } from "@/lib/barber/cash";
 import {
   BARBER_APPOINTMENT_STATUS_UI,
+  isTerminalAppointmentStatus,
   type BarberAppointmentDTO,
   type BarberAppointmentStatus,
   type BarberDTO,
@@ -35,6 +36,7 @@ import {
 import {
   addDaysISO,
   formatMXN,
+  formatMinutes,
   minuteToLabel,
   shopDateISO,
   shopMinuteOfDay,
@@ -48,6 +50,9 @@ import { AppointmentDialog } from "./appointment-dialog";
 import { AppointmentDetail } from "./appointment-detail";
 import { ChargeBridge } from "./charge-bridge";
 import { nextSlotStart } from "./next-slot";
+import { HoverCard, useHoverCard } from "./hover-card";
+import { quickActions } from "./rejilla";
+import type { CardQuickAction } from "./appointment-card";
 
 interface AgendaPayload {
   branchId: string;
@@ -237,8 +242,28 @@ export function AgendaClient(props: AgendaClientProps) {
 
       replaceAppointment(payload.appointment);
       const label = minuteToLabel(shopMinuteOfDay(startAt, timezone));
+      const newBarber =
+        barberId !== previousBarber
+          ? data?.barbers.find((b) => b.id === barberId)
+          : null;
+      // Movida a OTRO día (vista Semana): el aviso dice a cuál.
+      const newDay =
+        shopDateISO(startAt, timezone) !== shopDateISO(new Date(previousStart), timezone)
+          ? new Intl.DateTimeFormat(props.locale === "en" ? "en-US" : "es-MX", {
+              timeZone: timezone,
+              weekday: "long",
+              day: "numeric",
+            }).format(startAt)
+          : null;
       setToast({
-        message: t("barber.agenda.move.moved", { time: label }),
+        message: newBarber
+          ? t("barber.agenda.move.movedBarber", {
+              barber: newBarber.nickname || newBarber.name,
+              time: label,
+            })
+          : newDay
+            ? t("barber.agenda.move.movedDay", { day: newDay, time: label })
+            : t("barber.agenda.move.moved", { time: label }),
         note: payload.remindersInvalidated ? t("barber.agenda.move.remindersCancelled") : null,
         actionLabel: t("barber.agenda.actions.undo"),
         onAction: async () => {
@@ -255,7 +280,45 @@ export function AgendaClient(props: AgendaClientProps) {
         },
       });
     },
-    [patchAppointment, replaceAppointment, t, timezone],
+    [patchAppointment, replaceAppointment, t, timezone, data?.barbers, props.locale],
+  );
+
+  // ── Alargar / acortar jalando el borde de abajo ──────────────────────
+  // Mismo PATCH que el +/- del detalle (`durationMin`): el servidor revalida
+  // el hueco y la constraint de la base manda. Optimista y con «Deshacer».
+  const handleResize = useCallback(
+    async (appt: BarberAppointmentDTO, durationMin: number) => {
+      const previousEnd = appt.endAt;
+      const previousDuration = Math.round(
+        (new Date(appt.endAt).getTime() - new Date(appt.startAt).getTime()) / 60_000,
+      );
+      replaceAppointment({
+        ...appt,
+        endAt: new Date(new Date(appt.startAt).getTime() + durationMin * 60_000).toISOString(),
+      });
+      const { ok, payload } = await patchAppointment(appt.id, { durationMin });
+      if (!ok || !payload.appointment) {
+        replaceAppointment({ ...appt, endAt: previousEnd });
+        setToast({ message: payload.error ?? t("barber.agenda.state.error"), tone: "bad" });
+        return;
+      }
+      replaceAppointment(payload.appointment);
+      setToast({
+        message: t("barber.agenda.resize.done", { duration: formatMinutes(durationMin) }),
+        note: payload.remindersInvalidated ? t("barber.agenda.move.remindersCancelled") : null,
+        actionLabel: t("barber.agenda.actions.undo"),
+        onAction: async () => {
+          const undo = await patchAppointment(appt.id, { durationMin: previousDuration });
+          if (undo.ok && undo.payload.appointment) {
+            replaceAppointment(undo.payload.appointment);
+            setToast({ message: t("barber.agenda.resize.undone") });
+          } else {
+            setToast({ message: t("barber.agenda.move.undoFailed"), tone: "bad" });
+          }
+        },
+      });
+    },
+    [patchAppointment, replaceAppointment, t],
   );
 
   // ── Encabezado ───────────────────────────────────────────────────────
@@ -321,12 +384,97 @@ export function AgendaClient(props: AgendaClientProps) {
   const canCharge = props.cashEnabled && (data?.can.cash ?? false);
   const charged = data?.charged ?? {};
 
+  // ── Resumen al pasar el mouse ────────────────────────────────────────
+  const hover = useHoverCard();
+  const closeHover = hover.close;
+  // Cambiar de día o de vista lo quita (la visita ya no está donde estaba).
+  useEffect(() => closeHover(), [view, dateISO, chair, closeHover]);
+  const hovered =
+    hover.anchor && data && !detail && !editing && !creating && !charging
+      ? data.appointments.find((a) => a.id === hover.anchor?.appointmentId) ?? null
+      : null;
+
+  const openDetail = (appt: BarberAppointmentDTO) => {
+    hover.close();
+    setDetail(appt);
+  };
+
   const openCharge = (appt: BarberAppointmentDTO) => {
+    hover.close();
     setDetail(null);
     setCharging({
       id: appt.id,
       clientLabel: appt.clientName || t("barber.agenda.card.noClient"),
     });
+  };
+
+  // ── Acción rápida del estado siguiente (en la visita) ────────────────
+  // Misma regla que el detalle (quickActions en rejilla.ts): quien edita
+  // avanza el flujo; el rol Barbero solo «Iniciar»/«Completar» en SUS
+  // visitas; cobrar pide caja. El servidor vuelve a revisarlo todo.
+  const ownBarberId = data?.can.advanceOwnBarberId ?? null;
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const quickFor = (appt: BarberAppointmentDTO) =>
+    quickActions({
+      status: appt.status,
+      barberId: appt.barberId,
+      canEdit,
+      ownBarberId,
+      canCharge,
+      charged: Boolean(charged[appt.id]),
+    });
+  const quickAction = (appt: BarberAppointmentDTO): CardQuickAction | null => {
+    const q = quickFor(appt);
+    if (q.advance) {
+      return q.chargeOnDone
+        ? { label: t("barber.agenda.hover.short.DONE_CHARGE"), tone: "money" }
+        : { label: t(`barber.agenda.hover.short.${q.advance}`), tone: "go" };
+    }
+    if (q.charge) return { label: t("barber.agenda.detail.charge"), tone: "money" };
+    return null;
+  };
+  const runQuickAction = async (appt: BarberAppointmentDTO) => {
+    hover.close();
+    const q = quickFor(appt);
+    if (!q.advance) {
+      if (q.charge) openCharge(appt);
+      return;
+    }
+    const to = q.advance;
+    setBusyId(appt.id);
+    try {
+      const res = await fetch(`/api/barber/appointments/${appt.id}/status`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ to, branchId: props.branchId }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok || !body.appointment) {
+        setToast({
+          message: typeof body.error === "string" ? body.error : t("barber.agenda.queue.errors.generic"),
+          tone: "bad",
+        });
+        return;
+      }
+      const updated = body.appointment as BarberAppointmentDTO;
+      replaceAppointment(updated);
+      // Completar y cobrar son UN movimiento del mostrador (igual que el detalle).
+      if (to === "DONE" && q.chargeOnDone) {
+        openCharge(updated);
+        return;
+      }
+      setToast({
+        message: t("barber.agenda.hover.done", {
+          client: updated.clientName || t("barber.agenda.card.noClient"),
+          status: t(`barber.agenda.hover.status.${to}`),
+        }),
+        note: body.remindersInvalidated > 0 ? t("barber.agenda.move.remindersCancelled") : null,
+      });
+    } catch {
+      setToast({ message: t("barber.agenda.queue.errors.generic"), tone: "bad" });
+    } finally {
+      setBusyId(null);
+    }
   };
 
   return (
@@ -471,8 +619,17 @@ export function AgendaClient(props: AgendaClientProps) {
             canSchedule={data.can.schedule}
             t={t}
             onSlotClick={(barberId, startAt) => setCreating({ barberId, startAt })}
-            onCardClick={setDetail}
+            onSlotRejected={(message) => setToast({ message, tone: "bad" })}
+            onCardClick={openDetail}
+            onCardHover={hover.show}
+            onCardHoverEnd={hover.close}
+            quickAction={quickAction}
+            onQuickAction={(appt) => void runQuickAction(appt)}
+            busyId={busyId}
+            onDragStart={hover.close}
             onMove={(appt, startAt, barberId) => void handleMove(appt, startAt, barberId)}
+            onResize={(appt, minutes) => void handleResize(appt, minutes)}
+            onDropRejected={(message) => setToast({ message, tone: "bad" })}
           />
         ) : data ? (
           <WeekBoard
@@ -481,12 +638,26 @@ export function AgendaClient(props: AgendaClientProps) {
             barbers={visibleBarbers}
             appointments={visibleAppointments}
             schedules={data.schedules}
+            timeOff={data.timeOff}
+            charged={charged}
+            canEdit={canEdit}
             t={t}
             onPickDay={(day) => {
               setDateISO(day);
               setView("day");
             }}
-            onCardClick={setDetail}
+            onCardClick={openDetail}
+            onSlotClick={(barberId, startAt) => setCreating({ barberId, startAt })}
+            onSlotRejected={(message) => setToast({ message, tone: "bad" })}
+            onMove={(appt, startAt, barberId) => void handleMove(appt, startAt, barberId)}
+            onResize={(appt, minutes) => void handleResize(appt, minutes)}
+            onDropRejected={(message) => setToast({ message, tone: "bad" })}
+            onDragStart={hover.close}
+            onCardHover={hover.show}
+            onCardHoverEnd={hover.close}
+            quickAction={quickAction}
+            onQuickAction={(appt) => void runQuickAction(appt)}
+            busyId={busyId}
           />
         ) : null}
 
@@ -599,6 +770,18 @@ export function AgendaClient(props: AgendaClientProps) {
             setEditing(null);
             void load(true);
           }}
+        />
+      ) : null}
+
+      {hovered && hover.anchor ? (
+        <HoverCard
+          anchor={hover.anchor}
+          appointment={hovered}
+          timezone={timezone}
+          sale={charged[hovered.id] ?? null}
+          quickLabel={quickAction(hovered)?.label ?? null}
+          draggable={canEdit && Boolean(hovered.barberId) && !isTerminalAppointmentStatus(hovered.status)}
+          t={t}
         />
       ) : null}
 
