@@ -30,6 +30,7 @@ import {
 } from "@/lib/barber/agenda";
 import { Field, Modal, Pill, agendaCss } from "@/components/barber/agenda/agenda-ui";
 import { formatBarberPhone } from "@/lib/barber/phone-format";
+import { mxTenDigits } from "@/lib/phone-mx";
 import { WalkinQr } from "./walkin-qr";
 import css from "./walkin.module.css";
 
@@ -385,6 +386,8 @@ function AddWalkInDialog(props: {
 
   const submit = async () => {
     if (!name.trim()) return setError(t("barber.agenda.queue.errors.name"));
+    // Un teléfono a medias no se descarta en silencio: se avisa (igual que en la agenda).
+    if (phone.trim() && !mxTenDigits(phone)) return setError(t("barber.agenda.modal.errors.phone"));
     setBusy(true);
     setError(null);
     try {
