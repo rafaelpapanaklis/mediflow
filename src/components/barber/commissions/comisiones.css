@@ -1,0 +1,95 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   /barber/comisiones — la tabla por barbero.
+
+   Solo PRESENTACIÓN (pulido, M6): los tres botones de cada fila llevan texto
+   y quedan a la vista.
+     · Ancho: la columna de acciones queda FIJA a la derecha mientras la tabla
+       se desliza, así «Marcar pagado» nunca queda escondido.
+     · Celular (el contenedor mide poco): cada barbero es una TARJETA, sin
+       scroll lateral y con los botones debajo.
+   Responsive con @container (regla del repo): el ancho útil depende del
+   menú lateral, no de la ventana.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.barber-shell .bcom-wrap { container-type: inline-size; container-name: bcom; }
+
+.barber-shell .bcom-acts { display: inline-flex; gap: 6px; flex-wrap: nowrap; }
+
+.barber-shell .bcom-act {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 11px;
+  border-radius: 8px;
+  border: 1px solid var(--border-soft);
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 150ms ease, color 150ms ease;
+}
+.barber-shell .bcom-act:hover { background: var(--bg-hover); color: var(--text-1); }
+.barber-shell .bcom-act:focus-visible { outline: none; box-shadow: var(--ring); }
+.barber-shell .bcom-act--primary {
+  background: var(--brand-soft);
+  border-color: var(--border-brand);
+  color: var(--brand);
+}
+
+/* Tabla ancha: la última columna se queda pegada a la derecha. */
+.barber-shell .bcom-table > thead > tr > th:last-child,
+.barber-shell .bcom-table > tbody > tr.bcom-row > td.bcom-actions {
+  position: sticky;
+  right: 0;
+  background: var(--bg-elev);
+  box-shadow: -10px 0 10px -10px rgba(0, 0, 0, 0.18);
+}
+
+/* Celular / contenedor angosto: una tarjeta por barbero. */
+@container bcom (max-width: 1180px) {
+  .barber-shell .bcom-table,
+  .barber-shell .bcom-table > tbody { display: block; }
+  .barber-shell .bcom-table > thead { display: none; }
+
+  .barber-shell .bcom-table > tbody > tr.bcom-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+    gap: 8px 16px;
+    padding: 14px 16px;
+    border-top: 1px solid var(--border-soft);
+  }
+  .barber-shell .bcom-table > tbody > tr.bcom-row > td {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1px;
+    padding: 0;
+    border: 0;
+    white-space: normal;
+    text-align: left;
+  }
+  .barber-shell .bcom-table > tbody > tr.bcom-row > td[data-label]::before {
+    content: attr(data-label);
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--text-3);
+  }
+  .barber-shell .bcom-table > tbody > tr.bcom-row > td.bcom-name { grid-column: 1 / -1; font-size: 15px; }
+  .barber-shell .bcom-table > tbody > tr.bcom-row > td.bcom-actions {
+    grid-column: 1 / -1;
+    position: static;
+    box-shadow: none;
+    background: transparent;
+    margin-top: 6px;
+  }
+  .barber-shell .bcom-table .bcom-acts { flex-wrap: wrap; }
+
+  /* El detalle desplegado ocupa todo el ancho de la tarjeta. */
+  .barber-shell .bcom-table > tbody > tr.bcom-detail { display: block; }
+  .barber-shell .bcom-table > tbody > tr.bcom-detail > td { display: block; overflow-x: auto; }
+}

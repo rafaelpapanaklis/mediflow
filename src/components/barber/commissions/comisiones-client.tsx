@@ -14,6 +14,8 @@ import { BarberModal } from "@/components/barber/cash/modal";
 import { PeriodNav } from "@/components/barber/cash/period-nav";
 import { useBarberT } from "@/components/barber/cash/use-barber-t";
 import { fmtDateTime, fmtMoney, fmtPct, fmtPeriod, fmtSigned } from "@/components/barber/cash/money";
+import { splitToPay } from "./split-to-pay";
+import "./comisiones.css";
 
 const STATUS_TONE: Record<CommissionSummaryRow["paidStatus"], "neutral" | "warning" | "info" | "success"> = {
   EMPTY: "neutral",
@@ -44,6 +46,12 @@ export function ComisionesClient({
   const [payRow, setPayRow] = useState<CommissionSummaryRow | null>(null);
   const [busy, setBusy] = useState(false);
   const tz = summary.timezone;
+
+  // Presentación de las dos cifras de arriba, con lo que YA trae la pantalla
+  // (cada fila ya trae su «A pagar»). No cambia ningún cálculo: solo separa lo
+  // que se le debe a los barberos de lo que los de renta de silla le deben al
+  // dueño. El «A pagar» por fila y el recibo siguen siendo los de siempre.
+  const { toPayBarbers, rentOwed } = splitToPay(summary.rows);
 
   function goPeriod(p: string) {
     router.push(`/barber/comisiones?period=${p}`);
@@ -120,11 +128,12 @@ export function ComisionesClient({
 
       {summary.selfOnly && <div className="bcaja-alert bcaja-alert--info">{noBarberLinked ? t("comisiones.noBarberLinked") : t("comisiones.selfOnly")}</div>}
 
-      <div className="bcaja-kpis">
+      <div className="bcaja-kpis bcaja-kpis--5">
         <KpiCard label={t("comisiones.kpiProduced")} value={fmtMoney(summary.totals.produced)} icon={Scissors} hero />
         <KpiCard label={t("comisiones.kpiCommission")} value={fmtMoney(summary.totals.commissionTotal)} icon={Percent} />
         <KpiCard label={t("comisiones.kpiTips")} value={fmtMoney(summary.totals.tips)} />
-        <KpiCard label={t("comisiones.kpiToPay")} value={fmtMoney(summary.totals.totalToPay)} icon={Wallet} hint={t("comisiones.kpiToPayHint", { paid: fmtMoney(summary.totals.paidTotal) })} />
+        <KpiCard label={t("comisiones.kpiToPayBarbers")} value={fmtMoney(toPayBarbers)} icon={Wallet} hint={t("comisiones.kpiToPayBarbersHint", { paid: fmtMoney(summary.totals.paidTotal) })} />
+        <KpiCard label={t("comisiones.kpiRentOwed")} value={fmtMoney(rentOwed)} hint={t("comisiones.kpiRentOwedHint")} />
       </div>
 
       <div className="bcaja-alert bcaja-alert--info">
@@ -135,8 +144,8 @@ export function ComisionesClient({
         {summary.rows.length === 0 ? (
           <p className="bcaja-hint" style={{ margin: 0, padding: 18 }}>{t("comisiones.empty")}</p>
         ) : (
-          <div className="bcaja-table-wrap">
-            <table className="table-new">
+          <div className="bcaja-table-wrap bcom-wrap">
+            <table className="table-new bcom-table">
               <thead>
                 <tr>
                   <th>{t("comisiones.colBarber")}</th>
@@ -159,39 +168,42 @@ export function ComisionesClient({
                   const rows = entries[r.barberId];
                   return (
                     <RowGroup key={r.barberId}>
-                      <tr>
-                        <td>
+                      <tr className="bcom-row">
+                        <td className="bcom-name">
                           <strong>{r.nickname || r.barberName}</strong>
                           {!r.isActive && <span className="bcaja-muted"> · {t("comisiones.inactive")}</span>}
                         </td>
-                        <td>{schemeLabel(r)}</td>
-                        <td className="bcaja-num">{r.ticketCount}</td>
-                        <td className="bcaja-num">{fmtMoney(r.produced)}</td>
-                        <td className="bcaja-num">{fmtMoney(r.commissionBase)}</td>
-                        <td className="bcaja-num">{fmtMoney(r.commissionTotal)}</td>
-                        <td className="bcaja-num">{fmtMoney(r.tips)}</td>
-                        <td className="bcaja-num">{r.chairRent === null ? "—" : `−${fmtMoney(r.chairRent)}`}</td>
-                        <td className="bcaja-num">{r.paidTotal === 0 ? <span className="bcaja-muted">{fmtMoney(0)}</span> : fmtSigned(r.paidTotal)}</td>
-                        <td className="bcaja-num"><strong style={{ color: r.totalToPay < 0 ? "var(--danger)" : undefined }}>{fmtSigned(r.totalToPay)}</strong></td>
-                        <td><BadgeNew tone={STATUS_TONE[r.paidStatus]} dot>{t(`comisiones.status${r.paidStatus}`)}</BadgeNew></td>
-                        <td>
-                          <span className="bcaja-row-actions">
-                            <button type="button" className="icon-btn-new" onClick={() => toggle(r)} aria-label={isOpen ? t("comisiones.hideDetail") : t("comisiones.detail")} title={isOpen ? t("comisiones.hideDetail") : t("comisiones.detail")}>
-                              {isOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                        <td data-label={t("comisiones.colScheme")}>{schemeLabel(r)}</td>
+                        <td className="bcaja-num" data-label={t("comisiones.colTickets")}>{r.ticketCount}</td>
+                        <td className="bcaja-num" data-label={t("comisiones.colProduced")}>{fmtMoney(r.produced)}</td>
+                        <td className="bcaja-num" data-label={t("comisiones.colBase")}>{fmtMoney(r.commissionBase)}</td>
+                        <td className="bcaja-num" data-label={t("comisiones.colCommission")}>{fmtMoney(r.commissionTotal)}</td>
+                        <td className="bcaja-num" data-label={t("comisiones.colTips")}>{fmtMoney(r.tips)}</td>
+                        <td className="bcaja-num" data-label={t("comisiones.colRent")}>{r.chairRent === null ? "—" : `−${fmtMoney(r.chairRent)}`}</td>
+                        <td className="bcaja-num" data-label={t("comisiones.colPaid")}>{r.paidTotal === 0 ? <span className="bcaja-muted">{fmtMoney(0)}</span> : fmtSigned(r.paidTotal)}</td>
+                        <td className="bcaja-num" data-label={t("comisiones.colToPay")}><strong style={{ color: r.totalToPay < 0 ? "var(--danger)" : undefined }}>{fmtSigned(r.totalToPay)}</strong></td>
+                        <td data-label={t("comisiones.colStatus")}><BadgeNew tone={STATUS_TONE[r.paidStatus]} dot>{t(`comisiones.status${r.paidStatus}`)}</BadgeNew></td>
+                        <td className="bcom-actions">
+                          <span className="bcom-acts">
+                            <button type="button" className="bcom-act" onClick={() => toggle(r)} aria-expanded={isOpen}>
+                              {isOpen ? <ChevronUp size={14} aria-hidden="true" /> : <ChevronDown size={14} aria-hidden="true" />}
+                              {isOpen ? t("comisiones.hideDetail") : t("comisiones.detail")}
                             </button>
-                            <Link href={`/barber/comisiones/recibo/${r.barberId}?period=${summary.periodKey}`} className="icon-btn-new" aria-label={t("comisiones.receipt")} title={t("comisiones.receipt")}>
-                              <FileText size={13} />
+                            <Link href={`/barber/comisiones/recibo/${r.barberId}?period=${summary.periodKey}`} className="bcom-act">
+                              <FileText size={14} aria-hidden="true" />
+                              {t("comisiones.receipt")}
                             </Link>
                             {canManage && r.paidStatus !== "PAID" && r.paidStatus !== "EMPTY" && (
-                              <button type="button" className="icon-btn-new" onClick={() => setPayRow(r)} aria-label={t("comisiones.markPaid")} title={t("comisiones.markPaid")}>
-                                <BadgeCheck size={13} />
+                              <button type="button" className="bcom-act bcom-act--primary" onClick={() => setPayRow(r)}>
+                                <BadgeCheck size={14} aria-hidden="true" />
+                                {t("comisiones.markPaid")}
                               </button>
                             )}
                           </span>
                         </td>
                       </tr>
                       {isOpen && (
-                        <tr>
+                        <tr className="bcom-detail">
                           <td colSpan={12} style={{ background: "var(--bg-elev-2)", whiteSpace: "normal" }}>
                             <div className="bcaja-hint" style={{ marginBottom: 8 }}>{t("comisiones.toPayExplain")}</div>
                             {r.commissionType === "CHAIR_RENT" && r.chairRentDiscounted && <div className="bcaja-hint" style={{ marginBottom: 8 }}>{t("comisiones.rentAlreadyDiscounted")}</div>}
