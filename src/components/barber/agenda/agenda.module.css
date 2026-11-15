@@ -459,12 +459,37 @@
   cursor: copy;
 }
 
+/* ── Separada por tiempos ──────────────────────────────────────────────
+   Hora en punto: línea marcada. Media hora: punteada y más suave. Así se
+   lee «10:30» de un vistazo sin contar rayitas (lo que hace el dental con
+   su gradiente de hora / media hora). Antes la media hora era una franja
+   gris alterna que se confundía con «fuera de horario». */
 .hourLine {
   position: absolute;
   left: 0;
   right: 0;
-  border-top: 1px solid var(--border-soft);
+  border-top: 1px solid var(--border-strong);
   pointer-events: none;
+}
+
+.halfLine {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 1px dashed var(--border-soft);
+  pointer-events: none;
+}
+
+/* «10:30» chico en la regleta, debajo de la hora en punto en jerarquía. */
+.gutterHalf {
+  position: absolute;
+  right: 7px;
+  transform: translateY(-50%);
+  font-size: 10px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-4);
+  white-space: nowrap;
 }
 
 /* Franja de media hora: sombreado suave en vez de una línea punteada más.
@@ -481,40 +506,55 @@
   background: rgba(250, 245, 238, 0.035);
 }
 
-/* Fuera del horario del barbero: rayado y atenuado. */
+/* Fuera del horario del barbero: rayado sobre un fondo apagado. Más
+   marcado que antes (a 5 % de opacidad no se distinguía del hueco libre),
+   y con los tokens del tema: en oscuro --border-soft ya es claro. */
 .closedBand {
   position: absolute;
   left: 0;
   right: 0;
-  background: repeating-linear-gradient(
-    135deg,
-    rgba(18, 16, 16, 0.05),
-    rgba(18, 16, 16, 0.05) 6px,
-    transparent 6px,
-    transparent 12px
-  );
+  background:
+    repeating-linear-gradient(
+      135deg,
+      var(--border-soft) 0 6px,
+      transparent 6px 12px
+    ),
+    var(--bg-hover);
   pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-:global(.dark) .closedBand {
-  background: repeating-linear-gradient(
-    135deg,
-    rgba(250, 245, 238, 0.055),
-    rgba(250, 245, 238, 0.055) 6px,
-    transparent 6px,
-    transparent 12px
-  );
+/* «Descansa»: la columna entera está cerrada ese día. */
+.closedLabel {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  padding: 2px 9px;
 }
 
-/* Bloqueo puntual: comida, vacaciones, festivo. */
+/* Bloqueo de UN barbero: comida, vacaciones. Caramelo punteado. */
 .timeOffBand {
   position: absolute;
   left: 3px;
   right: 3px;
   border-radius: 8px;
-  background: rgba(190, 122, 60, 0.13);
+  background:
+    repeating-linear-gradient(
+      135deg,
+      var(--brand-soft) 0 5px,
+      transparent 5px 11px
+    ),
+    var(--brand-softer);
   border: 1px dashed var(--border-brand);
-  padding: 4px 7px;
+  box-shadow: inset 3px 0 0 var(--brand);
+  padding: 3px 7px 3px 9px;
   font-size: 11px;
   font-weight: 600;
   color: var(--caramel-700);
@@ -524,6 +564,32 @@
 
 :global(.dark) .timeOffBand {
   color: var(--caramel-300);
+}
+
+/* Bloqueo de TODA la barbería (festivo): cierra a todos, así que va más
+   marcado y en tinta, para que no se confunda con la comida de uno. */
+.timeOffShop {
+  background:
+    repeating-linear-gradient(
+      135deg,
+      var(--border-strong) 0 5px,
+      transparent 5px 11px
+    ),
+    var(--bg-hover);
+  border-color: var(--border-strong);
+  box-shadow: inset 3px 0 0 var(--text-2);
+  color: var(--text-2);
+}
+
+:global(.dark) .timeOffShop {
+  color: var(--text-2);
+}
+
+.timeOffText {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .nowLine {

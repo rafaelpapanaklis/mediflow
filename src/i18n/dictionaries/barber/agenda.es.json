@@ -313,5 +313,19 @@
     "errorLoad": "No se pudo abrir el cobro.",
     "done": "Cobrado: {amount}.",
     "viewTicket": "Ver o imprimir ticket"
+  },
+  "slot": {
+    "outside": "Fuera de su horario",
+    "timeOff": "Bloqueado",
+    "timeOffReason": "Bloqueado: {reason}",
+    "shopClosed": "Barbería cerrada",
+    "shopClosedReason": "Barbería cerrada: {reason}",
+    "busy": "Ocupado",
+    "busyAt": "Ocupado desde las {time}",
+    "busyWith": "Ocupado: {client}, {time}",
+    "tooLong": "Demasiado larga",
+    "tooShort": "Demasiado corta",
+    "noBarber": "Elige barbero",
+    "unavailable": "No disponible"
   }
 }

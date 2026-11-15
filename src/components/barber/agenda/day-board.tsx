@@ -53,6 +53,8 @@ import {
   type MinuteWindow,
 } from "@/lib/barber/agenda";
 import { sumMoneyBy } from "@/lib/barber/money";
+import { complementWindows, rulerMarks } from "./rejilla";
+import { ClosedBands, GridLines, NowLine, TimeOffBand } from "./rejilla-piezas";
 import { agendaCss as css, barberColor, initials } from "./agenda-ui";
 
 export interface DayBoardProps {
@@ -265,8 +267,7 @@ export function DayBoard(props: DayBoardProps) {
     );
   }
 
-  const hourMarks: number[] = [];
-  for (let m = bounds.start; m <= bounds.end; m += 60) hourMarks.push(m);
+  const marks = rulerMarks(bounds, PX);
   const nowVisible = nowMinute !== null && nowMinute >= bounds.start && nowMinute <= bounds.end;
 
   return (
@@ -324,9 +325,13 @@ export function DayBoard(props: DayBoardProps) {
 
           {/* Regleta de horas */}
           <div className={css.gutter} style={{ height, position: "relative" }}>
-            {hourMarks.map((m) => (
-              <span key={m} className={css.gutterMark} style={{ top: Math.max(7, yOf(m)) }}>
-                {minuteToHourLabel(m)}
+            {marks.map(({ minute, kind }) => (
+              <span
+                key={minute}
+                className={kind === "hour" ? css.gutterMark : css.gutterHalf}
+                style={{ top: Math.max(7, yOf(minute)) }}
+              >
+                {kind === "hour" ? minuteToHourLabel(minute) : minuteToHHMM(minute)}
               </span>
             ))}
             {nowVisible ? (
@@ -342,7 +347,7 @@ export function DayBoard(props: DayBoardProps) {
           {columns.map((barber) => {
             const windows = windowsByBarber.get(barber.id) ?? [];
             const configured = hasAnySchedule(schedules, barber.id);
-            const closed = configured ? complement(windows, bounds) : [];
+            const closed = configured ? complementWindows(windows, bounds) : [];
             const blocks = timeOff.filter((off) => off.barberId === null || off.barberId === barber.id);
             const cards = appointments
               .filter((a) => a.barberId === barber.id)
@@ -365,39 +370,32 @@ export function DayBoard(props: DayBoardProps) {
                 style={{ height }}
                 onClick={(e) => onColumnClick(e, barber.id)}
               >
-                {hourMarks
-                  .filter((m) => m < bounds.end)
-                  .map((m) => (
-                    <div
-                      key={`hb-${m}`}
-                      className={css.halfBand}
-                      style={{ top: yOf(m + 30), height: 30 * PX }}
-                    />
-                  ))}
-                {hourMarks.map((m) => (
-                  <div key={`l-${m}`} className={css.hourLine} style={{ top: yOf(m) }} />
-                ))}
+                <GridLines marks={marks} yOf={yOf} end={bounds.end} />
 
-                {closed.map((band, i) => (
-                  <div
-                    key={`c-${i}`}
-                    className={css.closedBand}
-                    style={{ top: yOf(band.start), height: Math.max(0, (band.end - band.start) * PX) }}
-                  />
-                ))}
+                <ClosedBands
+                  bands={closed}
+                  yOf={yOf}
+                  pxPerMin={PX}
+                  label={configured && windows.length === 0 ? t("barber.agenda.schedule.closedDay") : null}
+                />
 
                 {blocks.map((off) => {
                   const start = Math.max(bounds.start, toMinutes(off.startAt));
                   const end = Math.min(bounds.end, toMinutes(off.endAt));
                   if (end <= start) return null;
+                  const reason = off.reason || BARBER_TIME_OFF_TYPE_LABELS[off.type];
                   return (
-                    <div
+                    <TimeOffBand
                       key={`t-${off.id}`}
-                      className={css.timeOffBand}
-                      style={{ top: yOf(start), height: Math.max(14, (end - start) * PX) }}
-                    >
-                      {off.reason || BARBER_TIME_OFF_TYPE_LABELS[off.type]}
-                    </div>
+                      top={yOf(start)}
+                      height={Math.max(14, (end - start) * PX)}
+                      wholeShop={off.barberId === null}
+                      text={
+                        off.barberId === null
+                          ? `${t("barber.agenda.slot.shopClosed")} · ${reason}`
+                          : reason
+                      }
+                    />
                   );
                 })}
 
@@ -447,11 +445,7 @@ export function DayBoard(props: DayBoardProps) {
                   </div>
                 ) : null}
 
-                {nowVisible ? (
-                  <div className={css.nowLine} style={{ top: yOf(nowMinute as number) }}>
-                    <span className={css.nowDot} />
-                  </div>
-                ) : null}
+                {nowVisible ? <NowLine top={yOf(nowMinute as number)} /> : null}
               </div>
             );
           })}
@@ -585,19 +579,4 @@ function AppointmentCard(props: CardProps) {
       ) : null}
     </button>
   );
-}
-
-/** Los huecos que NO cubre ninguna ventana de trabajo, dentro de la rejilla. */
-function complement(windows: MinuteWindow[], bounds: MinuteWindow): MinuteWindow[] {
-  const out: MinuteWindow[] = [];
-  let cursor = bounds.start;
-  for (const w of windows) {
-    const start = Math.max(bounds.start, w.start);
-    const end = Math.min(bounds.end, w.end);
-    if (end <= cursor) continue;
-    if (start > cursor) out.push({ start: cursor, end: start });
-    cursor = Math.max(cursor, end);
-  }
-  if (cursor < bounds.end) out.push({ start: cursor, end: bounds.end });
-  return out;
 }

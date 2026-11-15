@@ -313,5 +313,19 @@
     "errorLoad": "We couldn't open the charge.",
     "done": "Charged: {amount}.",
     "viewTicket": "View or print ticket"
+  },
+  "slot": {
+    "outside": "Outside their hours",
+    "timeOff": "Blocked",
+    "timeOffReason": "Blocked: {reason}",
+    "shopClosed": "Shop closed",
+    "shopClosedReason": "Shop closed: {reason}",
+    "busy": "Taken",
+    "busyAt": "Taken from {time}",
+    "busyWith": "Taken: {client}, {time}",
+    "tooLong": "Too long",
+    "tooShort": "Too short",
+    "noBarber": "Pick a barber",
+    "unavailable": "Not available"
   }
 }
