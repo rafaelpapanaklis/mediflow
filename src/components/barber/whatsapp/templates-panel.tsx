@@ -5,6 +5,7 @@ import { AlertTriangle, RefreshCw } from "lucide-react";
 import { apiCall, Banner, Btn, Chip, ErrorText, useSaving } from "../team/admin-ui";
 import type { BarberWaKind } from "@/lib/barber/whatsapp-core";
 import { useWaT } from "./ui";
+import { barberTemplateRejection, barberTemplateRejectionKey } from "@/lib/barber/wa-plantillas-core";
 import s from "./whatsapp.module.css";
 
 export interface TemplateRow {
@@ -87,7 +88,13 @@ export function TemplatesPanel({
                 <div className={s.tplMeta}>
                   {row.name} · {t(`templates.category.${row.category}`)}
                 </div>
-                {row.reason ? <p className={s.tplReason}>{row.reason}</p> : null}
+                {(() => {
+                  // Solo un rechazo real, traducido (nunca «NONE» en crudo).
+                  const code = barberTemplateRejection(row.status, row.reason);
+                  return code ? (
+                    <p className={s.tplReason}>{t(barberTemplateRejectionKey(code), { code })}</p>
+                  ) : null;
+                })()}
               </div>
               <Chip
                 tone={

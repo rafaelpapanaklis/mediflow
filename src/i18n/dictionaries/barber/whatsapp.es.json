@@ -76,7 +76,18 @@
     },
     "created": "Se dieron de alta {count}. Meta las revisa y suelen aprobarse en minutos.",
     "noneNeeded": "No falta ninguna.",
-    "failed": "No se pudieron dar de alta: {names}"
+    "failed": "No se pudieron dar de alta: {names}",
+    "rejected": {
+      "ABUSIVE_CONTENT": "Meta considera que el contenido incumple sus políticas.",
+      "CATEGORY_NOT_AVAILABLE": "Meta no permite esta categoría de plantilla en tu cuenta.",
+      "INCORRECT_CATEGORY": "Meta dice que la categoría no corresponde al contenido del mensaje.",
+      "INVALID_FORMAT": "Meta dice que el formato de la plantilla no es válido.",
+      "PROMOTIONAL": "Meta la considera promocional y no de utilidad.",
+      "SCAM": "Meta la marcó como posible fraude.",
+      "TAG_CONTENT_MISMATCH": "Meta dice que el contenido no corresponde a la categoría elegida.",
+      "NONE_OF_THE_ABOVE": "Meta la rechazó sin dar un motivo concreto.",
+      "other": "Meta la rechazó (motivo: {code})."
+    }
   },
   "inbox": {
     "title": "Conversaciones",

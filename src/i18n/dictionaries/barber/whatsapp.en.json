@@ -77,7 +77,18 @@
     },
     "created": "{count} registered. Meta reviews them, usually within minutes.",
     "noneNeeded": "None missing.",
-    "failed": "Could not register: {names}"
+    "failed": "Could not register: {names}",
+    "rejected": {
+      "ABUSIVE_CONTENT": "Meta considers the content against its policies.",
+      "CATEGORY_NOT_AVAILABLE": "Meta doesn’t allow this template category on your account.",
+      "INCORRECT_CATEGORY": "Meta says the category doesn’t match the message content.",
+      "INVALID_FORMAT": "Meta says the template format isn’t valid.",
+      "PROMOTIONAL": "Meta considers it promotional rather than a utility message.",
+      "SCAM": "Meta flagged it as possible fraud.",
+      "TAG_CONTENT_MISMATCH": "Meta says the content doesn’t match the chosen category.",
+      "NONE_OF_THE_ABOVE": "Meta rejected it without a specific reason.",
+      "other": "Meta rejected it (reason: {code})."
+    }
   },
   "inbox": {
     "title": "Conversations",

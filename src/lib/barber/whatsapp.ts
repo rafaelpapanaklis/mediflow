@@ -54,6 +54,7 @@ import {
 } from "@/lib/barber/wa-acuse-core";
 import { getBarberWaAck } from "@/lib/barber/wa-acuse";
 import { wabaIdsFromDebugToken } from "@/lib/barber/wa-signup-core";
+import { barberTemplateRejection } from "@/lib/barber/wa-plantillas-core";
 import {
   BARBER_WA_ARCHIVE_MARK,
   BARBER_WA_CLAIM_LOST_MESSAGE,
@@ -756,6 +757,10 @@ export interface BarberTemplateStatus {
   category: string;
   /** APPROVED | PENDING | REJECTED | MISSING */
   status: string;
+  /**
+   * Código de rechazo de Meta (INVALID_FORMAT…), SOLO si está rechazada y
+   * hay un motivo real. Nunca «NONE». La pantalla lo traduce.
+   */
   reason: string | null;
   optional: boolean;
 }
@@ -838,9 +843,11 @@ export async function listBarberTemplates(barbershopId: string): Promise<{
     if (!res.ok) throw parseWaError(json, res.status);
     for (const row of Array.isArray(json?.data) ? json.data : []) {
       if (typeof row?.name !== "string") continue;
+      const status = String(row.status ?? "PENDING").toUpperCase();
       byName.set(row.name, {
-        status: String(row.status ?? "PENDING").toUpperCase(),
-        reason: typeof row.rejected_reason === "string" ? row.rejected_reason : null,
+        status,
+        // Meta manda "NONE" cuando no hay rechazo: eso no se enseña.
+        reason: barberTemplateRejection(status, row.rejected_reason),
       });
     }
   } catch (err) {
