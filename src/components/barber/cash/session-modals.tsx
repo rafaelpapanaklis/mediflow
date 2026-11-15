@@ -264,7 +264,13 @@ export function CancelSaleModal({ dict, sale, onClose, onDone }: { dict: Diction
         <div className="bcaja-totals">
           <div className="bcaja-totals__row"><span>{sale.itemsSummary}</span><span>{fmtMoney(sale.total)}</span></div>
         </div>
-        <div className="bcaja-alert bcaja-alert--warning">{t("caja.cancelTicketBody")}</div>
+        <div className="bcaja-alert bcaja-alert--warning">
+          {sale.kind === "membership"
+            ? t("caja.cancelMembershipBody")
+            : sale.kind === "deposit"
+              ? t("caja.cancelDepositBody")
+              : t("caja.cancelTicketBody")}
+        </div>
         {error && <div className="bcaja-alert bcaja-alert--danger" role="alert">{error}</div>}
         <div className="field-new">
           <label className="field-new__label">{t("common.reason")}</label>

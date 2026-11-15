@@ -4,10 +4,18 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { isMissingTableError } from "@/lib/barber/db-errors";
 import {
+  cancelSaleTx,
+  createCounterTicketTx,
+  findLiveDepositTicketTx,
+  lockAppointmentTx,
+} from "@/lib/barber/cash";
+import { BarberCajaError, isSaleCancelled } from "@/lib/barber/commissions";
+import {
   BARBER_DEPOSIT_LINE_PREFIX,
   centsToMoney,
   centsToNumber,
   depositLineDescription,
+  depositReceivedLineDescription,
   formatCents,
   moneyToCents,
 } from "@/lib/barber/memberships-core";
@@ -21,6 +29,7 @@ import {
   buildDepositMetadata,
   buildMembershipMetadata,
   classifyPaymentIntent,
+  computeDepositCents,
   describeDepositPolicy,
   isChargeableAmount,
   isOurWebhookEvent,
@@ -516,29 +525,137 @@ function resolveBaseUrl(): string {
   return base.startsWith("http") ? base.replace(/\/+$/, "") : `https://${base.replace(/\/+$/, "")}`;
 }
 
+/** Mensaje único de «sin turno no se registra dinero» para los anticipos. */
+export const DEPOSIT_NEEDS_SESSION_MESSAGE =
+  "Abre un turno en Caja antes de registrar el anticipo: así entra al corte con su método de pago.";
+
+export interface CounterDepositResult {
+  /** Ticket del turno en el que quedó el dinero. */
+  saleId: string;
+  amount: number;
+  paymentMethod: string;
+}
+
 /**
- * Anticipo cobrado EN MOSTRADOR (efectivo o transferencia). No pasa por
- * Stripe: la barbería lo registra y queda igual de válido que uno en línea.
+ * Anticipo cobrado EN MOSTRADOR (efectivo, transferencia o tarjeta de
+ * mostrador). No pasa por Stripe, pero SÍ pasa por la caja: exige un turno
+ * abierto y crea un ticket «Anticipo recibido · …» con su método de pago,
+ * así que el dinero entra al corte el día que se recibe. Todo en una sola
+ * transacción con la cita bloqueada: o queda el anticipo PAGADO con su
+ * ticket, o no queda nada.
+ *
+ * Reglas:
+ *  · La cita es de esta barbería y no está cancelada ni marcada «no llegó».
+ *  · No tiene ya un anticipo pagado, devuelto o retenido (no se pisa).
+ *  · No está cobrada (ya no habría de qué descontarlo).
+ *  · El monto no pasa del total de los servicios de la cita (misma regla que
+ *    la política: cobrar de anticipo más que el servicio sería una trampa).
  */
 export async function markDepositPaidManually(args: {
   barbershopId: string;
   appointmentId: string;
   amount: number | string;
-}): Promise<void> {
+  /** CASH | SPEI | CARD. */
+  paymentMethod: unknown;
+  /** Quién lo cobró (BarberUser.id): es el «cobró» del ticket. */
+  soldByUserId: string;
+  now?: Date;
+}): Promise<CounterDepositResult> {
   const shopId = requireShop(args.barbershopId);
+  if (!args.soldByUserId || typeof args.soldByUserId !== "string") {
+    throw new BarberPaymentsError("NO_USER", "Falta quién registra el anticipo.", 401);
+  }
   const cents = moneyToCents(args.amount);
   if (cents <= 0) {
     throw new BarberPaymentsError("BAD_AMOUNT", "El monto del anticipo debe ser mayor a cero.");
   }
-  const res = await prisma.barberAppointment.updateMany({
-    where: { id: args.appointmentId, barbershopId: shopId },
-    data: {
-      depositAmount: new Prisma.Decimal(centsToMoney(cents)),
-      depositStatus: "PAID",
-    },
-  });
-  if (res.count === 0) {
-    throw new BarberPaymentsError("APPOINTMENT_NOT_FOUND", "No encontramos esa cita.", 404);
+  const now = args.now ?? new Date();
+
+  try {
+    return await prisma.$transaction(
+      async (tx) => {
+        if (!(await lockAppointmentTx(tx, shopId, args.appointmentId))) {
+          throw new BarberPaymentsError("APPOINTMENT_NOT_FOUND", "No encontramos esa cita.", 404);
+        }
+        const appt = await tx.barberAppointment.findFirst({
+          where: { id: args.appointmentId, barbershopId: shopId },
+          select: {
+            id: true,
+            clientId: true,
+            startAt: true,
+            status: true,
+            depositStatus: true,
+            services: { select: { priceAtBooking: true } },
+            sales: { select: { notes: true } },
+            barbershop: { select: { timezone: true } },
+          },
+        });
+        if (!appt) {
+          throw new BarberPaymentsError("APPOINTMENT_NOT_FOUND", "No encontramos esa cita.", 404);
+        }
+        if (appt.status === "CANCELLED" || appt.status === "NO_SHOW") {
+          throw new BarberPaymentsError(
+            "APPOINTMENT_CLOSED",
+            "Esa cita está cancelada o el cliente no llegó: no se le puede registrar un anticipo.",
+            409,
+          );
+        }
+        if (appt.depositStatus === "PAID") {
+          throw new BarberPaymentsError("ALREADY_PAID", "Esta cita ya tiene un anticipo pagado.", 409);
+        }
+        if (appt.depositStatus === "REFUNDED" || appt.depositStatus === "FORFEITED") {
+          throw new BarberPaymentsError(
+            "DEPOSIT_CLOSED",
+            "Esta cita ya tuvo un anticipo que se devolvió o se retuvo.",
+            409,
+          );
+        }
+        if (appt.sales.some((x) => !isSaleCancelled(x))) {
+          throw new BarberPaymentsError("ALREADY_CHARGED", "Esa cita ya está cobrada.", 409);
+        }
+        let totalCents = 0;
+        for (const sv of appt.services) totalCents += moneyToCents(sv.priceAtBooking.toString());
+        if (totalCents > 0 && cents > totalCents) {
+          throw new BarberPaymentsError(
+            "AMOUNT_TOO_HIGH",
+            `El anticipo no puede ser mayor que el total de la cita (${formatCents(totalCents)}).`,
+          );
+        }
+
+        const amount = new Prisma.Decimal(centsToMoney(cents));
+        const ticket = await createCounterTicketTx(tx, {
+          barbershopId: shopId,
+          soldByUserId: args.soldByUserId,
+          clientId: appt.clientId,
+          description: depositReceivedLineDescription(
+            `cita del ${formatDepositLabel(appt.startAt, appt.barbershop.timezone)}`,
+          ),
+          amount,
+          paymentMethod: args.paymentMethod,
+          tag: { k: "deposit", appt: appt.id },
+          now,
+          noSessionMessage: DEPOSIT_NEEDS_SESSION_MESSAGE,
+        });
+
+        await tx.barberAppointment.updateMany({
+          where: { id: appt.id, barbershopId: shopId },
+          data: { depositAmount: amount, depositStatus: "PAID" },
+        });
+
+        return {
+          saleId: ticket.id,
+          amount: centsToNumber(cents),
+          paymentMethod: String(args.paymentMethod),
+        };
+      },
+      { maxWait: 5000, timeout: 15000 },
+    );
+  } catch (err) {
+    // La caja habla con BarberCajaError; las APIs de esta ola, con el nuestro.
+    if (err instanceof BarberCajaError) {
+      throw new BarberPaymentsError(err.code, err.message, err.status);
+    }
+    throw err;
   }
 }
 
@@ -601,9 +718,13 @@ export async function previewDepositForSale(args: {
   };
 }
 
-function formatDepositLabel(startAt: Date): string {
+function formatDepositLabel(startAt: Date, timeZone?: string | null): string {
   try {
-    return new Intl.DateTimeFormat("es-MX", { day: "2-digit", month: "short" }).format(startAt);
+    return new Intl.DateTimeFormat("es-MX", {
+      day: "2-digit",
+      month: "short",
+      ...(timeZone ? { timeZone } : {}),
+    }).format(startAt);
   } catch {
     return startAt.toISOString().slice(0, 10);
   }
@@ -741,17 +862,51 @@ export interface DepositDecisionResult {
   amount: number;
   /** true si además se devolvió el dinero por Stripe. */
   refundedOnline: boolean;
+  /**
+   * true si el anticipo se había cobrado en mostrador con el turno todavía
+   * abierto: su ticket se canceló, así que la salida del dinero ya está en
+   * el corte.
+   */
+  ticketCancelled?: boolean;
+  /**
+   * true si se cobró en mostrador en un turno que YA se cerró: ese ticket no
+   * se puede tocar, así que la salida del dinero NO queda en ningún corte y
+   * hay que anotarla a mano (la pantalla lo avisa).
+   */
+  cashOutsideSession?: boolean;
 }
 
+/** ¿El anticipo de la cita ya se descontó en un ticket vivo? */
+async function isDepositApplied(barbershopId: string, appointmentId: string): Promise<boolean> {
+  const sales = await prisma.barberSale.findMany({
+    where: {
+      barbershopId,
+      appointmentId,
+      items: { some: { description: { startsWith: BARBER_DEPOSIT_LINE_PREFIX } } },
+    },
+    select: { notes: true },
+  });
+  return sales.some((x) => !isSaleCancelled(x));
+}
+
+const DEPOSIT_ALREADY_APPLIED_MESSAGE =
+  "Ese anticipo ya se descontó al cobrar la cita. Si hay que corregirlo, cancela primero el ticket de la cita.";
+
 /**
- * Devuelve el anticipo. Si se cobró con tarjeta busca su PaymentIntent por
- * metadata y ejecuta el reembolso en Stripe; si se cobró en mostrador solo
- * deja el registro (el dinero lo devuelve la barbería en caja).
+ * Devuelve el anticipo.
+ *  · Cobrado en mostrador con el turno aún abierto → se CANCELA su ticket en
+ *    la misma transacción: el dinero sale del corte igual que entró.
+ *  · Cobrado en mostrador en un turno ya cerrado → queda el registro y se
+ *    avisa (cashOutsideSession): un turno cerrado no se corrige.
+ *  · Cobrado con tarjeta en línea → busca su PaymentIntent por metadata y
+ *    ejecuta el reembolso en Stripe.
  */
 export async function refundDeposit(args: {
   barbershopId: string;
   appointmentId: string;
   actorName?: string;
+  /** BarberUser.id de quien devuelve (para la marca del ticket cancelado). */
+  actorUserId?: string;
 }): Promise<DepositDecisionResult> {
   const shopId = requireShop(args.barbershopId);
   const appt = await prisma.barberAppointment.findFirst({
@@ -766,8 +921,63 @@ export async function refundDeposit(args: {
       409,
     );
   }
+  if (await isDepositApplied(shopId, appt.id)) {
+    throw new BarberPaymentsError("DEPOSIT_APPLIED", DEPOSIT_ALREADY_APPLIED_MESSAGE, 409);
+  }
 
   const cents = appt.depositAmount ? moneyToCents(appt.depositAmount.toString()) : 0;
+  const stamp = `${new Date().toLocaleDateString("es-MX")}${args.actorName ? ` · ${args.actorName}` : ""}`;
+
+  // ── Cobrado en mostrador: el dinero entró por un ticket del turno ──
+  const counter = await prisma.$transaction(
+    async (tx) => {
+      const ticket = await findLiveDepositTicketTx(tx, shopId, appt.id);
+      if (!ticket) return null;
+      if (ticket.sessionClosed || !args.actorUserId) return { ticketCancelled: false };
+      try {
+        await cancelSaleTx(
+          tx,
+          { barbershopId: shopId, userId: args.actorUserId, userName: args.actorName ?? "" },
+          ticket.id,
+          "Devolución del anticipo",
+          new Date(),
+          { depositOutcome: "REFUNDED" },
+        );
+      } catch (err) {
+        if (err instanceof BarberCajaError) {
+          throw new BarberPaymentsError(err.code, err.message, err.status);
+        }
+        throw err;
+      }
+      return { ticketCancelled: true };
+    },
+    { maxWait: 5000, timeout: 15000 },
+  );
+
+  if (counter) {
+    if (!counter.ticketCancelled) {
+      await prisma.barberAppointment.updateMany({
+        where: { id: appt.id, barbershopId: shopId, depositStatus: "PAID" },
+        data: { depositStatus: "REFUNDED" },
+      });
+    }
+    await appendAppointmentNote(
+      shopId,
+      appt.id,
+      counter.ticketCancelled
+        ? `[Anticipo] Devuelto ${formatCents(cents)} (en mostrador; su ticket se canceló y salió del corte) — ${stamp}`
+        : `[Anticipo] Devuelto ${formatCents(cents)} (en mostrador; el turno donde se cobró ya estaba cerrado) — ${stamp}`,
+    );
+    return {
+      status: "REFUNDED",
+      amount: centsToNumber(cents),
+      refundedOnline: false,
+      ticketCancelled: counter.ticketCancelled,
+      cashOutsideSession: !counter.ticketCancelled,
+    };
+  }
+
+  // ── Cobrado en línea (o registrado antes de que existiera el ticket) ──
   let refundedOnline = false;
 
   const stripe = getBarberStripe();
@@ -796,13 +1006,16 @@ export async function refundDeposit(args: {
   await appendAppointmentNote(
     shopId,
     appt.id,
-    `[Anticipo] Devuelto ${formatCents(cents)}${refundedOnline ? " (reembolso en Stripe)" : " (en mostrador)"} — ${new Date().toLocaleDateString("es-MX")}${args.actorName ? ` · ${args.actorName}` : ""}`,
+    `[Anticipo] Devuelto ${formatCents(cents)}${refundedOnline ? " (reembolso en Stripe)" : " (en mostrador)"} — ${stamp}`,
   );
 
   return { status: "REFUNDED", amount: centsToNumber(cents), refundedOnline };
 }
 
-/** Retiene el anticipo (el cliente no llegó y la barbería se lo queda). */
+/**
+ * Retiene el anticipo (el cliente no llegó y la barbería se lo queda). El
+ * dinero ya está en el corte del día en que se cobró: aquí no se mueve nada.
+ */
 export async function forfeitDeposit(args: {
   barbershopId: string;
   appointmentId: string;
@@ -820,6 +1033,9 @@ export async function forfeitDeposit(args: {
       "Solo se puede retener un anticipo que ya está pagado.",
       409,
     );
+  }
+  if (await isDepositApplied(shopId, appt.id)) {
+    throw new BarberPaymentsError("DEPOSIT_APPLIED", DEPOSIT_ALREADY_APPLIED_MESSAGE, 409);
   }
 
   const cents = appt.depositAmount ? moneyToCents(appt.depositAmount.toString()) : 0;
@@ -901,6 +1117,65 @@ export async function listDeposits(
       s.items.some((i) => i.description.startsWith(BARBER_DEPOSIT_LINE_PREFIX)),
     ),
   }));
+}
+
+/** Cita a la que se le puede registrar un anticipo en mostrador. */
+export interface DepositCandidate {
+  appointmentId: string;
+  clientName: string;
+  startAt: string;
+  /** Total de los servicios de la cita (tope del anticipo), en pesos. */
+  total: number;
+  /** Lo que pediría la política de la barbería (0 si está apagada o no aplica). */
+  suggested: number;
+}
+
+/**
+ * Citas próximas (o de hoy) que todavía no tienen anticipo y siguen vivas:
+ * la lista con la que el mostrador elige «a qué cita le cobro el anticipo».
+ */
+export async function listDepositCandidates(
+  barbershopId: string,
+  opts: { now?: Date; take?: number } = {},
+): Promise<DepositCandidate[]> {
+  const shopId = requireShop(barbershopId);
+  const now = opts.now ?? new Date();
+  const from = new Date(now.getTime() - 12 * 3_600_000);
+  const [{ policy }, rows] = await Promise.all([
+    getBarberPaymentSettings(shopId),
+    prisma.barberAppointment.findMany({
+      where: {
+        barbershopId: shopId,
+        status: { in: ["PENDING", "CONFIRMED", "IN_PROGRESS"] },
+        startAt: { gte: from },
+        OR: [{ depositStatus: null }, { depositStatus: "PENDING" }],
+      },
+      select: {
+        id: true,
+        clientName: true,
+        startAt: true,
+        client: { select: { name: true } },
+        services: { select: { priceAtBooking: true } },
+        sales: { select: { notes: true } },
+      },
+      orderBy: { startAt: "asc" },
+      take: Math.min(200, Math.max(1, opts.take ?? 80)),
+    }),
+  ]);
+
+  return rows
+    .filter((r) => r.sales.every((x) => isSaleCancelled(x)))
+    .map((r) => {
+      let totalCents = 0;
+      for (const sv of r.services) totalCents += moneyToCents(sv.priceAtBooking.toString());
+      return {
+        appointmentId: r.id,
+        clientName: r.client?.name ?? r.clientName ?? "Cliente",
+        startAt: r.startAt.toISOString(),
+        total: centsToNumber(totalCents),
+        suggested: centsToNumber(computeDepositCents(policy, totalCents)),
+      };
+    });
 }
 
 /**

@@ -19,6 +19,16 @@
 //    restituidos. Solo con el turno abierto y con la comisión sin pagar.
 //  · Pago mixto (parte efectivo, parte tarjeta) NO cabe en el schema (un solo
 //    paymentMethod por ticket): se reporta, no se improvisa.
+//  · TODO el dinero del mostrador pasa por un ticket del turno abierto,
+//    también el que no es una visita: la venta o renovación de una membresía
+//    y el anticipo de una cita entran como «ticket de mostrador»
+//    (createCounterTicketTx): una línea sin servicio ni producto, sin barbero
+//    y sin comisión, con un sello en `notes` (memberships-core.ts) que dice
+//    de qué membresía o cita es. Cancelar ese ticket deshace lo que vendió.
+//  · El anticipo PAGADO de una cita se descuenta solo al cobrarla: línea de
+//    crédito negativa dentro de la MISMA transacción del cobro, con la cita
+//    bloqueada (FOR UPDATE) para que no se aplique dos veces. No toca la
+//    base de comisión: el barbero comisiona sobre el servicio completo.
 // ═══════════════════════════════════════════════════════════════════════
 import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
@@ -57,6 +67,19 @@ import {
   type Money,
 } from "@/lib/barber/commissions";
 import { applyStockDelta, listProducts, type ProductRow } from "@/lib/barber/inventory";
+import {
+  BARBER_DEPOSIT_LINE_PREFIX,
+  BARBER_SALE_TAG_PREFIX,
+  buildSaleTag,
+  depositLineDescription,
+  isCounterTicketLine,
+  isDepositLine,
+  parseSaleTag,
+  saleKindOf,
+  stripSaleTag,
+  type BarberSaleKind,
+  type BarberSaleTag,
+} from "@/lib/barber/memberships-core";
 
 type Tx = Prisma.TransactionClient;
 
@@ -159,8 +182,11 @@ export interface SaleRow {
   cashSessionId: string | null;
   soldByUserId: string;
   soldByName: string;
+  /** Nota escrita a mano. El sello interno del ticket nunca viaja aquí. */
   notes: string | null;
   cancelled: boolean;
+  /** "sale" = cobro normal; "membership" / "deposit" = ticket de mostrador. */
+  kind: BarberSaleKind;
   items: BarberSaleItemDTO[];
   itemsSummary: string;
 }
@@ -177,7 +203,10 @@ export interface SaleDetail extends SaleRow {
   };
   /** Σ líneas positivas (antes de descuentos), para mostrar el descuento. */
   grossItems: number;
+  /** Descuentos del ticket. El anticipo aplicado NO es un descuento. */
   discount: number;
+  /** Anticipo de la cita descontado en este ticket (0 si no hubo). */
+  depositApplied: number;
 }
 
 export interface MethodTotals {
@@ -248,6 +277,8 @@ export interface PendingAppointment {
   clientPhone: string | null;
   client: ClientLookup | null;
   services: Array<{ serviceId: string; name: string; priceAtBooking: number }>;
+  /** Anticipo PAGADO y todavía sin aplicar: se descuenta solo al cobrar. */
+  deposit: { amount: number } | null;
 }
 
 export interface CheckoutContext {
@@ -303,8 +334,9 @@ export function toSaleRow(s: SaleWithRelations): SaleRow {
     cashSessionId: s.cashSessionId,
     soldByUserId: s.soldByUserId,
     soldByName: fullName(s.soldBy),
-    notes: s.notes,
+    notes: stripSaleTag(s.notes),
     cancelled: isSaleCancelled(s),
+    kind: saleKindOf(s.notes),
     items: s.items.map((it) => ({
       id: it.id,
       serviceId: it.serviceId,
@@ -694,6 +726,8 @@ export async function getCheckoutContext(
         name: s.service.name,
         priceAtBooking: toNum(s.priceAtBooking),
       })),
+      // Sin ticket vivo (filtro de arriba) el anticipo pagado está sin aplicar.
+      deposit: paidDepositOf(a) ? { amount: toNum(paidDepositOf(a)) } : null,
     }));
 
   return {
@@ -714,6 +748,121 @@ export async function getCheckoutContext(
       commissions: features.commissions === true,
     },
   };
+}
+
+// ── Anticipo de la cita ─────────────────────────────────────────────────
+
+/** Monto del anticipo PAGADO de una cita (null si no hay o no está pagado). */
+function paidDepositOf(appt: {
+  depositAmount: Prisma.Decimal | string | number | null;
+  depositStatus: string | null;
+}): Money | null {
+  if (appt.depositStatus !== "PAID") return null;
+  const amount = money(appt.depositAmount);
+  return amount.gt(0) ? amount : null;
+}
+
+function depositLabel(startAt: Date, tz: string): string {
+  try {
+    return new Intl.DateTimeFormat("es-MX", { day: "2-digit", month: "short", timeZone: tz }).format(startAt);
+  } catch {
+    return startAt.toISOString().slice(0, 10);
+  }
+}
+
+/**
+ * Candado de fila sobre la cita. Serializa a todo el que cobre, registre un
+ * anticipo o cancele un ticket de ESA cita a la vez: el segundo espera y ve
+ * lo que dejó el primero. Devuelve false si la cita no es de esta barbería.
+ */
+export async function lockAppointmentTx(tx: Tx, barbershopId: string, appointmentId: string): Promise<boolean> {
+  const rows = await tx.$queryRaw<Array<{ id: string }>>`
+    SELECT "id" FROM "barber_appointments"
+    WHERE "id" = ${appointmentId} AND "barbershopId" = ${barbershopId}
+    FOR UPDATE
+  `;
+  return rows.length > 0;
+}
+
+// ── Ticket de mostrador (membresía vendida / anticipo recibido) ─────────
+
+export interface CounterTicketInput {
+  barbershopId: string;
+  soldByUserId: string;
+  clientId: string | null;
+  /** Descripción de la única línea (ver los prefijos de memberships-core.ts). */
+  description: string;
+  amount: Money;
+  paymentMethod: unknown;
+  tag: BarberSaleTag;
+  now: Date;
+  /** Qué decirle a la persona si no hay turno abierto. */
+  noSessionMessage: string;
+}
+
+/**
+ * Crea, DENTRO de la transacción de quien llama, el ticket de un cobro de
+ * mostrador que no es una visita. Exige turno abierto (si no, 409
+ * NO_OPEN_SESSION y la transacción entera se deshace: no queda membresía ni
+ * anticipo sin dinero en el corte). Sin barbero → sin comisión y sin propina.
+ */
+export async function createCounterTicketTx(tx: Tx, input: CounterTicketInput): Promise<{ id: string; cashSessionId: string }> {
+  const paymentMethod = input.paymentMethod as BarberPaymentMethod;
+  if (!POS_PAYMENT_METHODS.includes(paymentMethod)) {
+    throw new BarberCajaError(400, "INVALID_PAYMENT_METHOD", "Elige cómo pagó: efectivo, transferencia o tarjeta en mostrador");
+  }
+  const amount = money(input.amount);
+  if (!amount.gt(0)) throw new BarberCajaError(400, "INVALID_AMOUNT", "El monto debe ser mayor a cero");
+  if (!isCounterTicketLine(input.description)) {
+    throw new BarberCajaError(500, "INVALID_COUNTER_TICKET", "Línea de ticket de mostrador inválida");
+  }
+
+  const session = await tx.barberCashSession.findFirst({
+    where: { barbershopId: input.barbershopId, closedAt: null },
+    select: { id: true },
+  });
+  if (!session) throw new BarberCajaError(409, "NO_OPEN_SESSION", input.noSessionMessage);
+
+  const created = await tx.barberSale.create({
+    data: {
+      barbershopId: input.barbershopId,
+      appointmentId: null,
+      clientId: input.clientId,
+      barberId: null,
+      subtotal: amount,
+      tip: ZERO,
+      total: amount,
+      paymentMethod,
+      cashSessionId: session.id,
+      soldByUserId: input.soldByUserId,
+      notes: buildSaleTag(input.tag),
+      createdAt: input.now,
+      items: { create: [{ serviceId: null, productId: null, description: input.description, qty: 1, unitPrice: amount }] },
+    },
+    select: { id: true },
+  });
+  return { id: created.id, cashSessionId: session.id };
+}
+
+/** Ticket de anticipo VIVO de una cita (el que la caja cobró en mostrador). */
+export async function findLiveDepositTicketTx(
+  tx: Tx,
+  barbershopId: string,
+  appointmentId: string,
+): Promise<{ id: string; sessionClosed: boolean } | null> {
+  const rows = await tx.barberSale.findMany({
+    where: { barbershopId, notes: { contains: `"appt":"${appointmentId}"` } },
+    select: { id: true, notes: true, cashSession: { select: { closedAt: true } } },
+    orderBy: { createdAt: "desc" },
+  });
+  for (const r of rows) {
+    if (isSaleCancelled(r)) continue;
+    const tag = parseSaleTag(r.notes);
+    if (tag && tag.k === "deposit" && tag.appt === appointmentId) {
+      return { id: r.id, sessionClosed: Boolean(r.cashSession?.closedAt) };
+    }
+  }
+  return null;
 }
 
 // ── Cobro ───────────────────────────────────────────────────────────────
@@ -740,7 +889,8 @@ export interface CreateSaleInput {
 }
 
 interface BuiltLine {
-  kind: "service" | "product" | "adjustment";
+  /** "deposit" = crédito del anticipo: resta del total, NO de la base de comisión. */
+  kind: "service" | "product" | "adjustment" | "deposit";
   serviceId: string | null;
   productId: string | null;
   description: string;
@@ -756,6 +906,10 @@ function cleanNotes(raw: unknown, max = 500): string | null {
   if (s.length > max) throw new BarberCajaError(400, "INVALID_INPUT", "notes: demasiado largo");
   if (s.startsWith(CANCELLED_MARK)) {
     throw new BarberCajaError(400, "INVALID_INPUT", "La nota no puede empezar con la marca de cancelación");
+  }
+  // El sello interno de los tickets de mostrador solo lo escribe el servidor.
+  if (s.includes(BARBER_SALE_TAG_PREFIX)) {
+    throw new BarberCajaError(400, "INVALID_INPUT", `La nota no puede contener "${BARBER_SALE_TAG_PREFIX.trim()}"`);
   }
   return s;
 }
@@ -830,8 +984,15 @@ export async function createSale(
       if (!session) throw new BarberCajaError(409, "NO_OPEN_SESSION", "Abre un turno antes de cobrar");
 
       // 2. Cita (opcional): de esta barbería, no cancelada, sin ticket vivo.
+      //    Se BLOQUEA la fila: dos cobros simultáneos de la misma cita se
+      //    ponen en fila y el segundo ya ve el ticket del primero (y el
+      //    anticipo, si lo hay, se aplica una sola vez).
       let frozen = new Map<string, Money>();
+      let depositToApply: { amount: Money; label: string } | null = null;
       if (appointmentId) {
+        if (!(await lockAppointmentTx(tx, barbershopId, appointmentId))) {
+          throw new BarberCajaError(404, "APPOINTMENT_NOT_FOUND", "Cita no encontrada");
+        }
         const appt = await tx.barberAppointment.findFirst({
           where: { id: appointmentId, barbershopId },
           include: { services: true, sales: { select: { notes: true } } },
@@ -846,6 +1007,10 @@ export async function createSale(
         frozen = new Map(appt.services.map((s) => [s.serviceId, D(s.priceAtBooking)]));
         if (!barberId && appt.barberId) barberId = appt.barberId;
         if (!clientId && appt.clientId) clientId = appt.clientId;
+        // Anticipo PAGADO: sin ticket vivo (se acaba de comprobar) no está
+        // aplicado en ningún lado, así que le toca a este cobro.
+        const paid = paidDepositOf(appt);
+        if (paid) depositToApply = { amount: paid, label: depositLabel(appt.startAt, tz) };
       }
 
       // 3. Barbero y cliente de ESTA barbería.
@@ -937,6 +1102,26 @@ export async function createSale(
         built.push({ kind: "adjustment", serviceId: null, productId: null, description: DISCOUNT_DESCRIPTION, qty: 1, unitPrice: discount.negated() });
       }
 
+      // 6b. Anticipo de la cita: crédito por lo ya cobrado al apartarla. Va
+      //     DESPUÉS del descuento y nunca deja el ticket en negativo: si el
+      //     anticipo es mayor que lo que queda por cobrar, se aplica hasta
+      //     ese tope (y con $0 por cobrar no se aplica: sigue «sin aplicar»
+      //     para que la barbería lo devuelva o lo retenga desde Anticipos).
+      if (depositToApply) {
+        const due = money(sumMoney(built.map(lineTotal)));
+        const credit = Prisma.Decimal.min(depositToApply.amount, due);
+        if (credit.gt(0)) {
+          built.push({
+            kind: "deposit",
+            serviceId: null,
+            productId: null,
+            description: depositLineDescription(depositToApply.label),
+            qty: 1,
+            unitPrice: credit.negated(),
+          });
+        }
+      }
+
       // 7. Totales — redondeo ÚNICO al final.
       const subtotal = money(sumMoney(built.map(lineTotal)));
       if (subtotal.isNegative()) throw new BarberCajaError(400, "INVALID_INPUT", "El subtotal no puede ser negativo");
@@ -989,7 +1174,11 @@ export async function createSale(
       // 10. Comisión: una entrada por venta con barbero, base SIN propina.
       if (barber) {
         const policy = await getCommissionPolicy(barbershopId);
-        const commissionLines: CommissionLine[] = built.map((b) => ({ kind: b.kind, qty: b.qty, unitPrice: b.unitPrice }));
+        // El crédito del anticipo NO entra: el barbero hizo el servicio
+        // completo y comisiona sobre él, se haya apartado con anticipo o no.
+        const commissionLines: CommissionLine[] = built
+          .filter((b): b is BuiltLine & { kind: CommissionLine["kind"] } => b.kind !== "deposit")
+          .map((b) => ({ kind: b.kind, qty: b.qty, unitPrice: b.unitPrice }));
         const base = commissionBaseFor(commissionLines, policy);
         const result = computeCommission(barber, base);
         await tx.barberCommissionEntry.create({
@@ -1032,11 +1221,248 @@ export async function createSale(
 
 // ── Cancelación ─────────────────────────────────────────────────────────
 
+/** Quién cancela (para la marca del ticket y el movimiento de stock). */
+export interface CancelActor {
+  barbershopId: string;
+  userId: string;
+  userName: string;
+}
+
+export interface CancelSaleOptions {
+  /**
+   * Solo para el ticket de un ANTICIPO: en qué estado queda el anticipo de la
+   * cita. Por defecto vuelve a «sin anticipo» (se canceló el cobro); la
+   * devolución desde Anticipos pasa "REFUNDED" para dejar el rastro.
+   */
+  depositOutcome?: "NONE" | "REFUNDED";
+}
+
+/**
+ * Deshace lo que vendió un ticket de MEMBRESÍA. Solo si la membresía sigue
+ * exactamente como la dejó ese ticket: sin cortes usados y sin otra
+ * renovación encima. Si no, se niega con un mensaje que dice qué cancelar
+ * primero — jamás se deja una membresía activa sin su dinero en el corte.
+ */
+async function revertMembershipTicketTx(
+  tx: Tx,
+  barbershopId: string,
+  tag: Extract<BarberSaleTag, { k: "membership" }>,
+): Promise<void> {
+  // Candado de fila: nadie consume un corte ni renueva mientras se revierte.
+  await tx.$queryRaw`
+    SELECT "id" FROM "barber_client_memberships"
+    WHERE "id" = ${tag.cm} AND "barbershopId" = ${barbershopId}
+    FOR UPDATE
+  `;
+  const row = await tx.barberClientMembership.findFirst({
+    where: { id: tag.cm, barbershopId },
+    select: { id: true, endAt: true, cutsUsed: true, stripeSubscriptionId: true },
+  });
+  if (!row) return; // la membresía ya no existe: solo queda cancelar el dinero
+  if (row.stripeSubscriptionId) {
+    throw new BarberCajaError(
+      409,
+      "MEMBERSHIP_CHANGED",
+      "Esta membresía ya se cobra sola con tarjeta; este ticket ya no se puede cancelar.",
+    );
+  }
+  if (row.endAt.toISOString() !== tag.end) {
+    throw new BarberCajaError(
+      409,
+      "MEMBERSHIP_CHANGED",
+      "Esta membresía se renovó o cambió después de este ticket. Cancela primero el ticket más reciente de esa membresía.",
+    );
+  }
+  if (row.cutsUsed > 0) {
+    throw new BarberCajaError(
+      409,
+      "MEMBERSHIP_IN_USE",
+      `Con esta membresía ya se ${row.cutsUsed === 1 ? "cubrió 1 corte" : `cubrieron ${row.cutsUsed} cortes`}. Cancela primero ${row.cutsUsed === 1 ? "ese ticket" : "esos tickets"}.`,
+      { cutsUsed: row.cutsUsed },
+    );
+  }
+
+  if (tag.op === "sell") {
+    await tx.barberClientMembership.updateMany({
+      where: { id: row.id, barbershopId },
+      data: { status: "CANCELLED" },
+    });
+    return;
+  }
+  // Renovación: vuelve a como estaba antes de renovar.
+  const prev = tag.prev!;
+  await tx.barberClientMembership.updateMany({
+    where: { id: row.id, barbershopId },
+    data: {
+      startAt: new Date(prev.start),
+      endAt: new Date(prev.end),
+      cutsUsed: prev.cuts,
+      status: prev.status as Prisma.BarberClientMembershipUpdateManyMutationInput["status"],
+      paymentMethod: prev.method as BarberPaymentMethod,
+    },
+  });
+}
+
+/**
+ * Deshace el anticipo que cobró un ticket de ANTICIPO. Si ese anticipo ya
+ * se descontó en el ticket de la cita, se niega: primero hay que cancelar
+ * ese ticket (así el dinero nunca queda contado dos veces ni cero veces).
+ */
+async function revertDepositTicketTx(
+  tx: Tx,
+  barbershopId: string,
+  tag: Extract<BarberSaleTag, { k: "deposit" }>,
+  outcome: "NONE" | "REFUNDED",
+): Promise<void> {
+  if (!(await lockAppointmentTx(tx, barbershopId, tag.appt))) return; // la cita ya no existe
+  const appt = await tx.barberAppointment.findFirst({
+    where: { id: tag.appt, barbershopId },
+    select: {
+      id: true,
+      depositStatus: true,
+      sales: { select: { notes: true, items: { select: { description: true } } } },
+    },
+  });
+  if (!appt) return;
+  const applied = appt.sales.some(
+    (x) => !isSaleCancelled(x) && x.items.some((it) => it.description.startsWith(BARBER_DEPOSIT_LINE_PREFIX)),
+  );
+  if (applied) {
+    throw new BarberCajaError(
+      409,
+      "DEPOSIT_APPLIED",
+      "Ese anticipo ya se descontó al cobrar la cita. Cancela primero el ticket de la cita.",
+    );
+  }
+  if (appt.depositStatus === "FORFEITED" || appt.depositStatus === "REFUNDED") {
+    throw new BarberCajaError(
+      409,
+      "DEPOSIT_CLOSED",
+      appt.depositStatus === "FORFEITED"
+        ? "Ese anticipo ya se retuvo (el cliente no llegó): su ticket se queda como está."
+        : "Ese anticipo ya figura como devuelto: su ticket se queda como está.",
+    );
+  }
+  await tx.barberAppointment.updateMany({
+    where: { id: appt.id, barbershopId },
+    data:
+      outcome === "REFUNDED"
+        ? { depositStatus: "REFUNDED" }
+        : { depositAmount: null, depositStatus: null },
+  });
+}
+
+/**
+ * Cancelación DENTRO de una transacción ajena (la usa cancelSale y la
+ * devolución de un anticipo). No revisa permisos: eso es de quien llama.
+ */
+export async function cancelSaleTx(
+  tx: Tx,
+  actor: CancelActor,
+  saleId: string,
+  reason: string,
+  now: Date,
+  opts: CancelSaleOptions = {},
+): Promise<void> {
+  const barbershopId = actor.barbershopId;
+  // Candado del ticket: dos cancelaciones simultáneas no devuelven el stock
+  // (ni revierten la membresía) dos veces — la segunda ya lo ve cancelado.
+  await tx.$queryRaw`
+    SELECT "id" FROM "barber_sales"
+    WHERE "id" = ${saleId} AND "barbershopId" = ${barbershopId}
+    FOR UPDATE
+  `;
+  const s = await tx.barberSale.findFirst({
+    where: { id: saleId, barbershopId },
+    include: {
+      items: true,
+      cashSession: { select: { closedAt: true } },
+      commissionEntries: { select: { id: true, paidAt: true } },
+    },
+  });
+  if (!s) throw new BarberCajaError(404, "SALE_NOT_FOUND", "Ticket no encontrado");
+  if (isSaleCancelled(s)) throw new BarberCajaError(409, "ALREADY_CANCELLED", "Ese ticket ya está cancelado");
+  if (s.cashSession && s.cashSession.closedAt) {
+    throw new BarberCajaError(
+      409,
+      "SESSION_CLOSED",
+      "El turno de ese ticket ya se cerró. Registra la corrección en un turno nuevo con una nota.",
+    );
+  }
+  if (s.commissionEntries.some((e) => e.paidAt)) {
+    throw new BarberCajaError(409, "COMMISSION_PAID", "La comisión de ese ticket ya se pagó; ajústala en el siguiente periodo");
+  }
+
+  // Ticket de mostrador: deshace la membresía o el anticipo que vendió.
+  const tag = parseSaleTag(s.notes);
+  if (tag?.k === "membership") await revertMembershipTicketTx(tx, barbershopId, tag);
+  if (tag?.k === "deposit") await revertDepositTicketTx(tx, barbershopId, tag, opts.depositOutcome ?? "NONE");
+
+  // Ticket de una cita: se bloquea la cita para que el anticipo que este
+  // ticket traía aplicado no lo tome otro cobro a medias. Al borrarse las
+  // líneas, el anticipo vuelve solo a «sin aplicar».
+  if (s.appointmentId) await lockAppointmentTx(tx, barbershopId, s.appointmentId);
+
+  // Stock de vuelta, con su RETURN ligado al ticket.
+  for (const it of s.items) {
+    if (!it.productId) continue;
+    await applyStockDelta(tx, {
+      barbershopId,
+      productId: it.productId,
+      delta: it.qty,
+      type: "RETURN",
+      reason: "Cancelación de ticket",
+      saleId: s.id,
+      userId: actor.userId,
+    });
+  }
+
+  // Canjes restituidos (un ticket de mostrador nunca trae canjes).
+  if (s.clientId && !tag) {
+    if (s.items.some((it) => it.description.endsWith(LOYALTY_SUFFIX))) {
+      await tx.barberClient.updateMany({
+        where: { id: s.clientId, barbershopId },
+        data: { loyaltyCount: { increment: BARBER_LOYALTY_STAMPS_TARGET } },
+      });
+    }
+    if (s.items.some((it) => it.description.endsWith(MEMBERSHIP_SUFFIX))) {
+      const m = await tx.barberClientMembership.findFirst({
+        where: { clientId: s.clientId, barbershopId, cutsUsed: { gt: 0 } },
+        orderBy: { updatedAt: "desc" },
+        select: { id: true },
+      });
+      if (m) {
+        await tx.barberClientMembership.updateMany({ where: { id: m.id, barbershopId }, data: { cutsUsed: { decrement: 1 } } });
+      }
+    }
+  }
+
+  await tx.barberCommissionEntry.deleteMany({ where: { saleId: s.id, barbershopId } });
+  await tx.barberSaleItem.deleteMany({ where: { saleId: s.id } });
+
+  const original = `${itemsSummaryOf(s.items)} · subtotal ${money(s.subtotal).toFixed(2)} · propina ${money(s.tip).toFixed(2)} · total ${money(s.total).toFixed(2)} (${s.paymentMethod})`;
+  const marker = `${CANCELLED_MARK} ${now.toISOString()} · ${actor.userName} · ${reason} · Original: ${original}`;
+
+  await tx.barberSale.update({
+    where: { id: s.id },
+    data: {
+      subtotal: ZERO,
+      tip: ZERO,
+      total: ZERO,
+      notes: s.notes ? `${marker}\n${s.notes}` : marker,
+    },
+  });
+}
+
 /**
  * Soft-cancel del ticket (ver cabecera). Requisitos: cash.manage, ticket de
  * ESTA barbería, aún no cancelado, su turno sigue ABIERTO y ninguna entrada
  * de comisión del ticket está pagada. Devuelve stock (RETURN), borra líneas
  * y comisión, restituye sellos/cupo y deja la marca con quién/cuándo/motivo.
+ * Si es un ticket de mostrador, además revierte la membresía (venta →
+ * cancelada; renovación → como estaba) o el anticipo (vuelve a «sin
+ * anticipo»). Si es el ticket de una cita con anticipo aplicado, el anticipo
+ * vuelve a «sin aplicar».
  */
 export async function cancelSale(
   ctx: BarberContext,
@@ -1051,78 +1477,14 @@ export async function cancelSale(
 
   const sale = await prisma.$transaction(
     async (tx) => {
-      const s = await tx.barberSale.findFirst({
-        where: { id: saleId, barbershopId },
-        include: {
-          items: true,
-          cashSession: { select: { closedAt: true } },
-          commissionEntries: { select: { id: true, paidAt: true } },
-        },
-      });
-      if (!s) throw new BarberCajaError(404, "SALE_NOT_FOUND", "Ticket no encontrado");
-      if (isSaleCancelled(s)) throw new BarberCajaError(409, "ALREADY_CANCELLED", "Ese ticket ya está cancelado");
-      if (s.cashSession && s.cashSession.closedAt) {
-        throw new BarberCajaError(
-          409,
-          "SESSION_CLOSED",
-          "El turno de ese ticket ya se cerró. Registra la corrección en un turno nuevo con una nota.",
-        );
-      }
-      if (s.commissionEntries.some((e) => e.paidAt)) {
-        throw new BarberCajaError(409, "COMMISSION_PAID", "La comisión de ese ticket ya se pagó; ajústala en el siguiente periodo");
-      }
-
-      // Stock de vuelta, con su RETURN ligado al ticket.
-      for (const it of s.items) {
-        if (!it.productId) continue;
-        await applyStockDelta(tx, {
-          barbershopId,
-          productId: it.productId,
-          delta: it.qty,
-          type: "RETURN",
-          reason: "Cancelación de ticket",
-          saleId: s.id,
-          userId: ctx.barberUserId,
-        });
-      }
-
-      // Canjes restituidos.
-      if (s.clientId) {
-        if (s.items.some((it) => it.description.endsWith(LOYALTY_SUFFIX))) {
-          await tx.barberClient.updateMany({
-            where: { id: s.clientId, barbershopId },
-            data: { loyaltyCount: { increment: BARBER_LOYALTY_STAMPS_TARGET } },
-          });
-        }
-        if (s.items.some((it) => it.description.endsWith(MEMBERSHIP_SUFFIX))) {
-          const m = await tx.barberClientMembership.findFirst({
-            where: { clientId: s.clientId, barbershopId, cutsUsed: { gt: 0 } },
-            orderBy: { updatedAt: "desc" },
-            select: { id: true },
-          });
-          if (m) {
-            await tx.barberClientMembership.updateMany({ where: { id: m.id, barbershopId }, data: { cutsUsed: { decrement: 1 } } });
-          }
-        }
-      }
-
-      await tx.barberCommissionEntry.deleteMany({ where: { saleId: s.id, barbershopId } });
-      await tx.barberSaleItem.deleteMany({ where: { saleId: s.id } });
-
-      const who = `${ctx.user.firstName} ${ctx.user.lastName}`.trim();
-      const original = `${itemsSummaryOf(s.items)} · subtotal ${money(s.subtotal).toFixed(2)} · propina ${money(s.tip).toFixed(2)} · total ${money(s.total).toFixed(2)} (${s.paymentMethod})`;
-      const marker = `${CANCELLED_MARK} ${now.toISOString()} · ${who} · ${reason} · Original: ${original}`;
-
-      await tx.barberSale.update({
-        where: { id: s.id },
-        data: {
-          subtotal: ZERO,
-          tip: ZERO,
-          total: ZERO,
-          notes: s.notes ? `${marker}\n${s.notes}` : marker,
-        },
-      });
-      return tx.barberSale.findUniqueOrThrow({ where: { id: s.id }, include: saleInclude });
+      await cancelSaleTx(
+        tx,
+        { barbershopId, userId: ctx.barberUserId, userName: `${ctx.user.firstName} ${ctx.user.lastName}`.trim() },
+        saleId,
+        reason,
+        now,
+      );
+      return tx.barberSale.findUniqueOrThrow({ where: { id: saleId }, include: saleInclude });
     },
     { maxWait: 5000, timeout: 15000 },
   );
@@ -1137,7 +1499,9 @@ export async function getSaleDetail(ctx: BarberContext, saleId: string): Promise
   if (!s) return null;
   const row = toSaleRow(s);
   const gross = sumMoney(row.items.filter((it) => it.unitPrice >= 0).map((it) => D(it.unitPrice).times(it.qty)));
-  const discount = sumMoney(row.items.filter((it) => it.unitPrice < 0).map((it) => D(it.unitPrice).times(it.qty))).abs();
+  const negative = row.items.filter((it) => it.unitPrice < 0);
+  const discount = sumMoney(negative.filter((it) => !isDepositLine(it.description)).map((it) => D(it.unitPrice).times(it.qty))).abs();
+  const depositApplied = sumMoney(negative.filter((it) => isDepositLine(it.description)).map((it) => D(it.unitPrice).times(it.qty))).abs();
   const shop = ctx.barbershop;
   return {
     ...row,
@@ -1152,6 +1516,7 @@ export async function getSaleDetail(ctx: BarberContext, saleId: string): Promise
     },
     grossItems: toNum(gross),
     discount: toNum(discount),
+    depositApplied: toNum(depositApplied),
   };
 }
 

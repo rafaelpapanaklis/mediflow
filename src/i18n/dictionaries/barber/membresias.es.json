@@ -190,14 +190,32 @@
       "applied": "Aplicado al ticket",
       "refund": "Devolver",
       "forfeit": "Retener",
-      "refundConfirm": "¿Devolver el anticipo? Si se pagó con tarjeta, se reembolsa en Stripe.",
-      "forfeitConfirm": "¿Retener el anticipo? El cliente no lo recupera."
+      "refundConfirm": "¿Devolver el anticipo? Si se cobró en mostrador y el turno sigue abierto, su ticket se cancela y sale del corte.",
+      "forfeitConfirm": "¿Retener el anticipo? El cliente no lo recupera.",
+      "howItWorks": "El anticipo pagado se descuenta solo al cobrar la cita. Si lo cobras en mostrador, entra al corte del turno con su método de pago.",
+      "notApplied": "Se descuenta al cobrar la cita",
+      "refundedInSession": "Anticipo devuelto: su ticket se canceló y ya salió del corte del turno.",
+      "refundedOutsideSession": "Anticipo devuelto. El turno donde se cobró ya está cerrado, así que esta salida de dinero no aparece en ningún corte: anótala en la nota de tu corte de hoy."
     },
     "depositStatus": {
       "PENDING": "Por pagar",
       "PAID": "Pagado",
       "REFUNDED": "Devuelto",
       "FORFEITED": "Retenido"
+    },
+    "register": {
+      "open": "Registrar anticipo",
+      "title": "Registrar anticipo",
+      "intro": "Para un anticipo que el cliente paga en mostrador. Necesitas un turno abierto: el dinero entra al corte con su método de pago y se descuenta solo cuando cobres la cita.",
+      "loading": "Cargando citas…",
+      "noAppointments": "No hay citas próximas sin anticipo.",
+      "appointment": "¿De qué cita?",
+      "amount": "Monto del anticipo",
+      "amountHint": "Máximo {total}, el total de la cita.",
+      "tooHigh": "El anticipo no puede ser mayor que el total de la cita.",
+      "howPaid": "¿Cómo pagó?",
+      "confirm": "Registrar anticipo",
+      "done": "Anticipo registrado. Ya está en el corte del turno."
     }
   },
   "errors": {

@@ -89,6 +89,7 @@ export function AppointmentDetail(props: AppointmentDetailProps) {
   const terminal = isTerminalAppointmentStatus(appt.status);
 
   const total = sumMoneyBy(appt.services, (s) => s.priceAtBooking);
+  const depositPaid = appt.depositStatus === "PAID" && appt.depositAmount ? appt.depositAmount : 0;
   const startLabel = minuteToLabel(shopMinuteOfDay(new Date(appt.startAt), timezone));
   const endLabel = minuteToLabel(shopMinuteOfDay(new Date(appt.endAt), timezone));
   const dayLabel = new Intl.DateTimeFormat("es-MX", {
@@ -359,6 +360,22 @@ export function AppointmentDetail(props: AppointmentDetailProps) {
           <span>{t("barber.agenda.detail.total")}</span>
           <span className={css.totalsValue}>{formatMXN(total)}</span>
         </div>
+        {/* Anticipo PAGADO de la cita: la caja lo descuenta sola al cobrar.
+            (Textos del diccionario de caja: son los mismos del ticket.) */}
+        {depositPaid > 0 ? (
+          <>
+            <div className={css.serviceLine}>
+              <span className={css.serviceName}>{t("barber.caja.ticket.depositApplied")}</span>
+              <span className={css.servicePrice}>−{formatMXN(depositPaid)}</span>
+            </div>
+            {!props.sale ? (
+              <div className={css.totals}>
+                <span>{t("barber.caja.ticket.depositDue")}</span>
+                <span className={css.totalsValue}>{formatMXN(Math.max(0, total - depositPaid))}</span>
+              </div>
+            ) : null}
+          </>
+        ) : null}
       </Field>
 
       {appt.notes ? (

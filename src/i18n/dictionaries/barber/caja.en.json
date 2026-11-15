@@ -87,7 +87,10 @@
     "colTickets": "Tickets",
     "colWho": "Opened / closed",
     "needsSession": "Open a shift to charge.",
-    "noCashManage": "Your role can view the register but can't charge or close shifts."
+    "noCashManage": "Your role can view the register but can't charge or close shifts.",
+    "pendingDeposit": "deposit paid {amount}",
+    "cancelMembershipBody": "This ticket is a membership sale or renewal. Cancelling it cancels the membership (or puts it back as it was before the renewal) and the ticket stops counting in the cash count. This cannot be undone.",
+    "cancelDepositBody": "This ticket is the deposit for an appointment. Cancelling it leaves the appointment without a deposit and the ticket stops counting in the cash count. This cannot be undone."
   },
   "session": {
     "openTitle": "Open shift",
@@ -158,7 +161,11 @@
     "newTicket": "Another ticket",
     "done": "Done",
     "errorNoSession": "Open a shift before charging.",
-    "errorStock": "Not enough stock for a product. Adjust the quantity."
+    "errorStock": "Not enough stock for a product. Adjust the quantity.",
+    "depositNotice": "This appointment has a paid deposit of {amount}. It is taken off the total automatically.",
+    "depositApplied": "Deposit paid",
+    "depositRest": "The deposit is larger than what is left to charge: {amount} is not taken off on this ticket.",
+    "depositDue": "Left to charge"
   },
   "print": {
     "ticketTitle": "Ticket",

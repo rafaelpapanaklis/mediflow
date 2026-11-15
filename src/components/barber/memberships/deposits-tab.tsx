@@ -1,20 +1,31 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, ShieldCheck } from "lucide-react";
 import type { TFunction } from "@/i18n/t";
 import { formatCents, moneyToCents } from "@/lib/barber/memberships-core";
 import {
+  BARBER_COUNTER_PAYMENT_METHODS,
   BARBER_ONLINE_CARD_ENABLED,
   computeDepositCents,
   describeDepositPolicy,
   normalizeDepositPolicy,
+  type BarberCounterPaymentMethod,
   type BarberDepositAudience,
   type BarberDepositMode,
   type BarberDepositPolicy,
   type BarberDepositView,
 } from "@/lib/barber/payments-core";
-import { Badge, CheckCard, Chips, EmptyState, Field, MoneyInput, apiCall, type BadgeTone } from "./ui";
+import { Badge, CheckCard, Chips, EmptyState, Field, Modal, MoneyInput, apiCall, type BadgeTone } from "./ui";
+
+/** Cita a la que se le puede registrar un anticipo (GET …/actions?candidates=1). */
+interface DepositCandidate {
+  appointmentId: string;
+  clientName: string;
+  startAt: string;
+  total: number;
+  suggested: number;
+}
 
 export type DepositsFilter = "all" | "pending" | "paid" | "closed";
 
@@ -66,6 +77,10 @@ export function DepositsTab({
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [registering, setRegistering] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  /** Error de «Devolver» / «Retener» (aparte del error de guardar la política). */
+  const [listError, setListError] = useState<string | null>(null);
 
   /** La política "en vivo" con lo que hay escrito ahora en el formulario. */
   const live = useMemo(
@@ -108,14 +123,28 @@ export function DepositsTab({
         : "barber.membresias.anticipos.list.forfeitConfirm";
     if (!window.confirm(t(confirmKey))) return;
     setBusyId(appointmentId);
-    setError(null);
-    const res = await apiCall("/api/barber/deposits/actions", {
-      method: "POST",
-      body: JSON.stringify({ appointmentId, action }),
-    });
+    setListError(null);
+    setNotice(null);
+    const res = await apiCall<{ ticketCancelled?: boolean; cashOutsideSession?: boolean }>(
+      "/api/barber/deposits/actions",
+      {
+        method: "POST",
+        body: JSON.stringify({ appointmentId, action }),
+      },
+    );
     setBusyId(null);
-    if (!res.ok) setError(res.error);
-    else onRefresh();
+    if (!res.ok) {
+      setListError(res.error);
+      return;
+    }
+    // Devolución de un anticipo cobrado en mostrador: se dice qué pasó con
+    // el dinero en el corte, para que el cajón no amanezca descuadrado.
+    if (action === "refund" && res.data.ticketCancelled) {
+      setNotice(t("barber.membresias.anticipos.list.refundedInSession"));
+    } else if (action === "refund" && res.data.cashOutsideSession) {
+      setNotice(t("barber.membresias.anticipos.list.refundedOutsideSession"));
+    }
+    onRefresh();
   }
 
   function depositTone(status: BarberDepositView["status"]): BadgeTone {
@@ -343,6 +372,23 @@ export function DepositsTab({
       <section className="bmem-card">
         <div className="bmem-section-head">
           <h2 className="bmem-h2">{t("barber.membresias.anticipos.list.heading")}</h2>
+          {canManageDeposits ? (
+            <button type="button" className="bmem-btn bmem-btn-sm" onClick={() => setRegistering(true)}>
+              {t("barber.membresias.anticipos.register.open")}
+            </button>
+          ) : null}
+        </div>
+        <p className="bmem-hint" style={{ marginBottom: 12 }}>
+          {t("barber.membresias.anticipos.list.howItWorks")}
+        </p>
+        {listError ? <p className="bmem-error">{listError}</p> : null}
+        {notice ? (
+          <div className="bmem-note" style={{ marginBottom: 12 }}>
+            <ShieldCheck size={16} style={{ flexShrink: 0, marginTop: 1 }} />
+            <span>{notice}</span>
+          </div>
+        ) : null}
+        <div className="bmem-section-head">
           <Chips<DepositsFilter>
             value={depositsFilter}
             options={[
@@ -381,7 +427,11 @@ export function DepositsTab({
                     {formatCents(moneyToCents(d.amount), "MXN", locale)}
                   </span>
                   <span className="bmem-cell-sub">
-                    {d.applied ? t("barber.membresias.anticipos.list.applied") : ""}
+                    {d.applied
+                      ? t("barber.membresias.anticipos.list.applied")
+                      : d.status === "PAID"
+                        ? t("barber.membresias.anticipos.list.notApplied")
+                        : ""}
                   </span>
                 </div>
 
@@ -418,6 +468,188 @@ export function DepositsTab({
           </div>
         )}
       </section>
+
+      {registering ? (
+        <RegisterDepositModal
+          t={t}
+          locale={locale}
+          onClose={() => setRegistering(false)}
+          onDone={() => {
+            setRegistering(false);
+            setNotice(t("barber.membresias.anticipos.register.done"));
+            onRefresh();
+          }}
+        />
+      ) : null}
     </div>
+  );
+}
+
+/**
+ * Registrar un anticipo cobrado en mostrador: a qué cita, cuánto y cómo pagó.
+ * El servidor exige turno abierto y lo mete al corte como ticket; si no hay
+ * turno, su mensaje («abre un turno en Caja…») se muestra aquí tal cual.
+ */
+function RegisterDepositModal({
+  t,
+  locale,
+  onClose,
+  onDone,
+}: {
+  t: TFunction;
+  locale: string;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [candidates, setCandidates] = useState<DepositCandidate[] | null>(null);
+  const [appointmentId, setAppointmentId] = useState("");
+  const [amount, setAmount] = useState("");
+  const [method, setMethod] = useState<BarberCounterPaymentMethod>("CASH");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const res = await apiCall<{ candidates: DepositCandidate[] }>(
+        "/api/barber/deposits/actions?candidates=1",
+      );
+      if (cancelled) return;
+      if (!res.ok) {
+        setError(res.error);
+        setCandidates([]);
+        return;
+      }
+      const list = res.data.candidates ?? [];
+      setCandidates(list);
+      if (list.length > 0) {
+        setAppointmentId(list[0].appointmentId);
+        setAmount(list[0].suggested > 0 ? String(list[0].suggested) : "");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const chosen = candidates?.find((c) => c.appointmentId === appointmentId) ?? null;
+  const amountCents = moneyToCents(amount);
+  const tooHigh = chosen !== null && chosen.total > 0 && amountCents > moneyToCents(chosen.total);
+  const canSave = !saving && chosen !== null && amountCents > 0 && !tooHigh;
+
+  const when = (iso: string) =>
+    new Date(iso).toLocaleString(locale === "en" ? "en-US" : "es-MX", {
+      weekday: "short",
+      day: "2-digit",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+  async function submit() {
+    if (!canSave || !chosen) return;
+    setSaving(true);
+    setError(null);
+    const res = await apiCall("/api/barber/deposits/actions", {
+      method: "POST",
+      body: JSON.stringify({
+        appointmentId: chosen.appointmentId,
+        action: "mark-paid",
+        amount,
+        paymentMethod: method,
+      }),
+    });
+    setSaving(false);
+    if (!res.ok) {
+      setError(res.error);
+      return;
+    }
+    onDone();
+  }
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={t("barber.membresias.anticipos.register.title")}
+      footer={
+        <>
+          <button type="button" className="bmem-btn bmem-btn-ghost" onClick={onClose}>
+            {t("barber.membresias.planes.form.cancel")}
+          </button>
+          <button type="button" className="bmem-btn" onClick={submit} disabled={!canSave}>
+            {saving
+              ? t("barber.membresias.planes.form.saving")
+              : t("barber.membresias.anticipos.register.confirm")}
+          </button>
+        </>
+      }
+    >
+      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <p className="bmem-hint">{t("barber.membresias.anticipos.register.intro")}</p>
+
+        {candidates === null ? (
+          <p className="bmem-hint">{t("barber.membresias.anticipos.register.loading")}</p>
+        ) : candidates.length === 0 ? (
+          <p className="bmem-hint">{t("barber.membresias.anticipos.register.noAppointments")}</p>
+        ) : (
+          <>
+            <Field
+              label={t("barber.membresias.anticipos.register.appointment")}
+              htmlFor="bmem-dep-appt"
+            >
+              <select
+                id="bmem-dep-appt"
+                className="bmem-select"
+                value={appointmentId}
+                onChange={(e) => {
+                  const next = candidates.find((c) => c.appointmentId === e.target.value);
+                  setAppointmentId(e.target.value);
+                  setAmount(next && next.suggested > 0 ? String(next.suggested) : "");
+                }}
+              >
+                {candidates.map((c) => (
+                  <option key={c.appointmentId} value={c.appointmentId}>
+                    {c.clientName} — {when(c.startAt)} ·{" "}
+                    {formatCents(moneyToCents(c.total), "MXN", locale)}
+                  </option>
+                ))}
+              </select>
+            </Field>
+
+            <Field
+              label={t("barber.membresias.anticipos.register.amount")}
+              hint={
+                chosen
+                  ? t("barber.membresias.anticipos.register.amountHint", {
+                      total: formatCents(moneyToCents(chosen.total), "MXN", locale),
+                    })
+                  : undefined
+              }
+              htmlFor="bmem-dep-amount"
+            >
+              <MoneyInput id="bmem-dep-amount" value={amount} onChange={setAmount} />
+            </Field>
+            {tooHigh ? (
+              <p className="bmem-error">{t("barber.membresias.anticipos.register.tooHigh")}</p>
+            ) : null}
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <span className="bmem-label">{t("barber.membresias.anticipos.register.howPaid")}</span>
+              <Chips<BarberCounterPaymentMethod>
+                value={method}
+                options={BARBER_COUNTER_PAYMENT_METHODS.map((m) => ({
+                  value: m,
+                  label: t(`barber.membresias.payment.${m}`),
+                }))}
+                onChange={setMethod}
+              />
+            </div>
+          </>
+        )}
+
+        {error ? <p className="bmem-error">{error}</p> : null}
+      </div>
+    </Modal>
   );
 }

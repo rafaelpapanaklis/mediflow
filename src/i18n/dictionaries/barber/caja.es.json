@@ -87,7 +87,10 @@
     "colTickets": "Tickets",
     "colWho": "Abrió / cerró",
     "needsSession": "Abre un turno para poder cobrar.",
-    "noCashManage": "Tu rol puede ver la caja pero no cobrar ni hacer cortes."
+    "noCashManage": "Tu rol puede ver la caja pero no cobrar ni hacer cortes.",
+    "pendingDeposit": "anticipo pagado {amount}",
+    "cancelMembershipBody": "Este ticket es la venta o renovación de una membresía. Al cancelarlo, la membresía se cancela (o vuelve a como estaba antes de renovar) y el ticket deja de contar en el corte. Esta acción no se puede deshacer.",
+    "cancelDepositBody": "Este ticket es el anticipo de una cita. Al cancelarlo, la cita queda sin anticipo y el ticket deja de contar en el corte. Esta acción no se puede deshacer."
   },
   "session": {
     "openTitle": "Abrir turno",
@@ -158,7 +161,11 @@
     "newTicket": "Otro ticket",
     "done": "Listo",
     "errorNoSession": "Abre un turno antes de cobrar.",
-    "errorStock": "Ya no hay stock suficiente de un producto. Ajusta la cantidad."
+    "errorStock": "Ya no hay stock suficiente de un producto. Ajusta la cantidad.",
+    "depositNotice": "Esta cita tiene un anticipo pagado de {amount}. Se descuenta solo del total.",
+    "depositApplied": "Anticipo pagado",
+    "depositRest": "El anticipo es mayor que lo que queda por cobrar: {amount} no se descuentan en este ticket.",
+    "depositDue": "Por cobrar"
   },
   "print": {
     "ticketTitle": "Ticket",

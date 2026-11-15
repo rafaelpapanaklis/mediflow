@@ -155,6 +155,7 @@ export function CajaClient({
                         <div className="bcaja-appt__meta">
                           {a.services.map((s) => s.name).join(", ")}
                           {a.barberName ? ` · ${a.barberName}` : ""}
+                          {a.deposit ? ` · ${t("caja.pendingDeposit", { amount: fmtMoney(a.deposit.amount) })}` : ""}
                         </div>
                       </div>
                     </div>

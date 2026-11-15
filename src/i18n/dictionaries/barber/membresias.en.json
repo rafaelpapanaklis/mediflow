@@ -190,14 +190,32 @@
       "applied": "Applied to the ticket",
       "refund": "Refund",
       "forfeit": "Keep",
-      "refundConfirm": "Refund the deposit? If it was paid by card, it is refunded through Stripe.",
-      "forfeitConfirm": "Keep the deposit? The client does not get it back."
+      "refundConfirm": "Refund the deposit? If it was taken at the counter and the shift is still open, its ticket is cancelled and leaves the cash count.",
+      "forfeitConfirm": "Keep the deposit? The client does not get it back.",
+      "howItWorks": "A paid deposit is taken off automatically when you charge the appointment. If you take it at the counter, it goes into the shift's cash count with its payment method.",
+      "notApplied": "Taken off when the appointment is charged",
+      "refundedInSession": "Deposit refunded: its ticket was cancelled and it is out of the shift's cash count.",
+      "refundedOutsideSession": "Deposit refunded. The shift where it was taken is already closed, so this money going out is not in any cash count: write it down in the note of today's count."
     },
     "depositStatus": {
       "PENDING": "Unpaid",
       "PAID": "Paid",
       "REFUNDED": "Refunded",
       "FORFEITED": "Kept"
+    },
+    "register": {
+      "open": "Record a deposit",
+      "title": "Record a deposit",
+      "intro": "For a deposit the client pays at the counter. You need an open shift: the money goes into the cash count with its payment method and is taken off automatically when you charge the appointment.",
+      "loading": "Loading appointments…",
+      "noAppointments": "There are no upcoming appointments without a deposit.",
+      "appointment": "Which appointment?",
+      "amount": "Deposit amount",
+      "amountHint": "Up to {total}, the appointment total.",
+      "tooHigh": "The deposit cannot be more than the appointment total.",
+      "howPaid": "How did they pay?",
+      "confirm": "Record deposit",
+      "done": "Deposit recorded. It is now in the shift's cash count."
     }
   },
   "errors": {
