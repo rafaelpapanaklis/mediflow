@@ -31,7 +31,11 @@
     "cuenta": "Cuenta"
   },
   "topbar": {
-    "root": "Barbería"
+    "root": "Barbería",
+    "branch": "Sede",
+    "branchAria": "Sede que estás operando",
+    "branchAll": "Toda la cadena",
+    "branchClosed": "cerrada"
   },
   "logout": "Cerrar sesión",
   "placeholder": {

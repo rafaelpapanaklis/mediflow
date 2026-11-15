@@ -1,3 +1,4 @@
+import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import type { Barber, Barbershop, BarberRole, BarberUser } from "@prisma/client";
@@ -7,6 +8,7 @@ import {
   type BarberPermissionKey,
 } from "@/lib/barber/permissions";
 import { barberDebeCambiarContrasena, ultimoAccesoPorEscribir } from "@/lib/barber/contrasena";
+import { BARBER_BRANCH_ALL, BARBER_BRANCH_COOKIE } from "@/lib/barber/branch-cookie";
 
 export { BarberForbiddenError, hasBarberPermission };
 export type { BarberPermissionKey };
@@ -25,8 +27,26 @@ export type { BarberPermissionKey };
  */
 export interface BarberContext {
   barberUserId: string;
+  /**
+   * Sede que se está OPERANDO (sucursales de verdad, 15-nov): la que eligió
+   * el selector (cookie dcb_branch) si la sesión tiene acceso a ella
+   * (getAccessibleBranchIds); si no, la sede propia del usuario. Toda pantalla
+   * y API que filtra por `barbershopId` opera así sobre la sede elegida.
+   */
   barbershopId: string;
+  /**
+   * Fila de la sede activa. `plan` y `subscriptionStatus` vienen SIEMPRE de
+   * la MATRIZ (la que paga): en una sucursal se sobrescriben con los de la
+   * raíz, para que ningún gate por plan dependa de la copia de la sucursal.
+   */
   barbershop: Barbershop;
+  /**
+   * Sede PROPIA del usuario (la de su fila BarberUser). Es la que decide a
+   * qué sedes tiene acceso y si su sede está cerrada. Opcional para no romper
+   * los contextos armados a mano en las pruebas: sin ella vale barbershopId.
+   */
+  homeBarbershopId?: string;
+  homeBarbershop?: Barbershop;
   user: BarberUser;
   /** Fila Barber ligada al usuario (si el usuario ES un barbero operativo). */
   barber: Barber | null;
@@ -55,21 +75,122 @@ export async function getBarberContext(): Promise<BarberContext | null> {
 
     await anotarUltimoAcceso(user.id, bu, user.last_sign_in_at);
 
-    return {
+    const home: BarberContext = {
       barberUserId: bu.id,
       barbershopId: bu.barbershopId,
       barbershop: bu.barbershop,
+      homeBarbershopId: bu.barbershopId,
+      homeBarbershop: bu.barbershop,
       user: bu,
       barber: bu.barber,
       role: bu.role,
       mustChangePassword: barberDebeCambiarContrasena(user.app_metadata),
     };
+    try {
+      return await withActiveBranch(home, await readSelectedBranch());
+    } catch (e) {
+      // Si falla resolver la sede elegida, se opera la propia (como antes de
+      // las sucursales) en vez de dejar a la persona fuera del panel.
+      console.error("[barber-auth] no se pudo resolver la sede elegida:", e instanceof Error ? e.message : e);
+      return home;
+    }
   } catch {
     // Tabla barber_users aún sin migrar / DB caída → sesión "no es de
     // barbería". Jamás propagar: este helper corre en páginas públicas de
     // guard y no puede tumbar nada.
     return null;
   }
+}
+
+// ── Sede activa (sucursales de verdad, decisión #11 de Rafael, 15-nov) ──
+//
+// Antes, getBarberContext devolvía SIEMPRE la sede propia del usuario y la
+// cookie del selector solo la leían Inicio, Reportes y la barra de
+// administración: al cambiar de sede, Agenda, Caja, Servicios, Clientes,
+// Productos, Fila, Horarios, Mi web y Configuración seguían enseñando la
+// matriz, y el dueño no podía operar sus sucursales desde su cuenta.
+//
+// Ahora el contexto ya nace con la sede elegida. Reglas:
+//   · La cookie es solo una PETICIÓN: se valida contra getAccessibleBranchIds
+//     de la sede propia en cada lectura. Una sede fuera de ese conjunto (otra
+//     cadena, una sede a la que le retiraron el acceso, una cookie puesta a
+//     mano) se ignora y la sesión opera su sede propia.
+//   · «Toda la cadena» (BARBER_BRANCH_ALL) no es una sede: las pantallas que
+//     consolidan (Inicio, Reportes, Barberos y la barra de administración) la
+//     siguen leyendo con resolveBranchScope; todas las demás operan la sede
+//     propia.
+//   · Plan y suscripción: siempre los de la MATRIZ (ver BarberContext).
+//   · El rol, los permisos y la persona NO cambian con la sede: son los de
+//     la fila BarberUser. La ficha de barbero (ctx.barber) solo acompaña a la
+//     sede a la que pertenece: en otra sede vale null, así que un Barbero con
+//     acceso a dos sedes no ve en la ajena nada como «suyo».
+
+/** Lee la cookie del selector (sin validar). Fuera de una petición, null. */
+async function readSelectedBranch(): Promise<string | null> {
+  try {
+    return (await cookies()).get(BARBER_BRANCH_COOKIE)?.value ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Decisión PURA de qué sede opera la sesión. `accessible` es lo que devuelve
+ * getAccessibleBranchIds para la sede propia. Nunca devuelve una sede que no
+ * esté en `accessible` (salvo la propia, que siempre lo está).
+ */
+export function pickActiveBranchId(args: {
+  homeId: string;
+  requested: string | null | undefined;
+  accessible: readonly string[];
+}): string {
+  const { homeId, requested, accessible } = args;
+  if (!requested || requested === BARBER_BRANCH_ALL || requested === homeId) return homeId;
+  return accessible.includes(requested) ? requested : homeId;
+}
+
+/**
+ * Aplica la sede elegida a un contexto armado sobre la sede propia y le pone
+ * el plan y la suscripción de la matriz. Exportada para las pruebas.
+ */
+export async function withActiveBranch(
+  home: BarberContext,
+  requested: string | null | undefined,
+): Promise<BarberContext> {
+  const homeId = home.homeBarbershopId ?? home.barbershopId;
+  const homeShop = home.homeBarbershop ?? home.barbershop;
+  let active: Barbershop = homeShop;
+
+  const wantsOther = Boolean(requested) && requested !== BARBER_BRANCH_ALL && requested !== homeId;
+  if (wantsOther) {
+    const accessible = await getAccessibleBranchIds(home);
+    const pick = pickActiveBranchId({ homeId, requested, accessible });
+    if (pick !== homeId) {
+      const shop = await prisma.barbershop.findUnique({ where: { id: pick } });
+      if (shop) active = shop;
+    }
+  }
+
+  // Plan y suscripción de la MATRIZ (la que paga). Una sola consulta y solo
+  // cuando la sede activa es sucursal.
+  if (active.parentId) {
+    const root = await prisma.barbershop.findUnique({
+      where: { id: active.parentId },
+      select: { plan: true, subscriptionStatus: true },
+    });
+    if (root) active = { ...active, plan: root.plan, subscriptionStatus: root.subscriptionStatus };
+  }
+
+  const isHome = active.id === homeId;
+  return {
+    ...home,
+    barbershopId: active.id,
+    barbershop: active,
+    homeBarbershopId: homeId,
+    homeBarbershop: isHome ? active : homeShop,
+    // La ficha de barbero es de SU sede: en otra, no hay «lo suyo».
+    barber: home.barber && home.barber.barbershopId === active.id ? home.barber : null,
+  };
 }
 
 /**
@@ -134,7 +255,7 @@ export function assertBarberPermission(
  *  · Cualquier otro rol ve su propia sede + sus filas BarberUserBranchAccess,
  *    SIEMPRE recortadas a la familia (una fila que apunte a una cadena ajena
  *    se ignora — defensa en profundidad).
- *  · Siempre incluye ctx.barbershopId. Orden: matriz primero, luego
+ *  · Siempre incluye la sede PROPIA (homeBarbershopId). Orden: matriz primero, luego
  *    sucursales por createdAt. NO filtra isActive (eso lo decide el caller).
  *
  * Uso típico:
@@ -142,7 +263,12 @@ export function assertBarberPermission(
  * La lista sale SIEMPRE de aquí, jamás del request (body/query).
  */
 export async function getAccessibleBranchIds(ctx: BarberContext): Promise<string[]> {
-  const rootId = ctx.barbershop.parentId ?? ctx.barbershopId;
+  // SIEMPRE desde la sede PROPIA: la sede activa sale de aquí, así que usarla
+  // para calcular el acceso sería circular (y un encargado de sucursal con
+  // acceso a la matriz no puede «heredar» lo que la matriz alcance).
+  const homeId = ctx.homeBarbershopId ?? ctx.barbershopId;
+  const homeShop = ctx.homeBarbershop ?? ctx.barbershop;
+  const rootId = homeShop.parentId ?? homeId;
   const family = await prisma.barbershop.findMany({
     where: { OR: [{ id: rootId }, { parentId: rootId }] },
     select: { id: true },
@@ -156,6 +282,6 @@ export async function getAccessibleBranchIds(ctx: BarberContext): Promise<string
     where: { userId: ctx.barberUserId },
     select: { barbershopId: true },
   });
-  const allowed = new Set<string>([ctx.barbershopId, ...grants.map((g) => g.barbershopId)]);
+  const allowed = new Set<string>([homeId, ...grants.map((g) => g.barbershopId)]);
   return ordered.filter((id) => allowed.has(id));
 }

@@ -12,6 +12,7 @@ import { getBarberPlan } from "@/lib/barber/plans";
 import { barberPlanHasFeature, isBarberUnlimited } from "@/lib/barber/plan-shared";
 import { makeBarberSlug } from "@/lib/barber/types";
 import { serviciosParaSedeNueva } from "@/lib/barber/branch-services";
+import { BARBER_BRANCH_ALL, BARBER_BRANCH_COOKIE } from "@/lib/barber/branch-cookie";
 
 // ═══════════════════════════════════════════════════════════════════════
 // DaleControl BARBER — SUCURSALES (sedes de una cadena).
@@ -41,10 +42,10 @@ export class BarberAdminError extends Error {
   }
 }
 
-/** Cookie con la sede elegida en el selector. Se VALIDA en cada lectura. */
-export const BARBER_BRANCH_COOKIE = "dcb_branch";
-/** Valor especial de la cookie: vista consolidada de toda la cadena. */
-export const BARBER_BRANCH_ALL = "all";
+// La cookie del selector y el valor «toda la cadena» viven en branch-cookie
+// (el contexto de sesión ya opera la sede elegida); aquí se re-exportan para
+// no mover a quienes ya los importan de este módulo.
+export { BARBER_BRANCH_ALL, BARBER_BRANCH_COOKIE };
 
 export const BARBER_BRANCH_NAME_MAX = 60;
 export const BARBER_BRANCH_ADDRESS_MAX = 200;
@@ -284,7 +285,7 @@ export async function listBranches(ctx: BarberContext): Promise<BarberBranchRow[
     createdAt: s.createdAt.toISOString(),
     barbersCount: barbersBy.get(s.id) ?? 0,
     usersCount: usersBy.get(s.id) ?? 0,
-    isHome: s.id === ctx.barbershopId,
+    isHome: s.id === (ctx.homeBarbershopId ?? ctx.barbershopId),
   }));
 }
 
@@ -539,7 +540,7 @@ export async function updateBranch(
     createdAt: updated.createdAt.toISOString(),
     barbersCount,
     usersCount,
-    isHome: updated.id === ctx.barbershopId,
+    isHome: updated.id === (ctx.homeBarbershopId ?? ctx.barbershopId),
   };
 }
 

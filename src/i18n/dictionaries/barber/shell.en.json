@@ -31,7 +31,11 @@
     "cuenta": "Account"
   },
   "topbar": {
-    "root": "Barbershop"
+    "root": "Barbershop",
+    "branch": "Location",
+    "branchAria": "Location you are working in",
+    "branchAll": "Whole chain",
+    "branchClosed": "closed"
   },
   "logout": "Sign out",
   "placeholder": {
