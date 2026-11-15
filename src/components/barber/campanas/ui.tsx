@@ -3,6 +3,7 @@
 import { createContext, useContext, useMemo, type ReactNode } from "react";
 import { type Dictionary, type TVars } from "@/i18n/t";
 import { makeBarberT } from "@/lib/barber/i18n";
+import { formatBarberPhone } from "@/lib/barber/phone-format";
 
 // ═══════════════════════════════════════════════════════════════════════
 // i18n y formato de /barber/campanas.
@@ -75,8 +76,7 @@ export function formatDay(iso: string, locale: string): string {
 }
 
 /** Teléfono a 10 dígitos con formato legible: 55 1234 5678. */
+/** Teléfono legible (999 260 2093 · 55 1234 5678): el formateador ÚNICO del vertical. */
 export function prettyPhone(phone: string): string {
-  const d = (phone ?? "").replace(/\D/g, "");
-  if (d.length !== 10) return phone;
-  return `${d.slice(0, 2)} ${d.slice(2, 6)} ${d.slice(6)}`;
+  return formatBarberPhone(phone);
 }

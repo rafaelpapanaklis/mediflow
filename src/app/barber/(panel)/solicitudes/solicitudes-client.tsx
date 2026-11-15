@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Check, Copy, Link2, MessageCircle, Phone, X } from "lucide-react";
 import { getBarberT } from "@/i18n/dictionaries/barber";
 import { upperFirst } from "@/components/barber/upper-first";
+import { formatBarberPhone } from "@/lib/barber/phone-format";
 import type { BarberBookingRequestDTO } from "@/lib/barber/booking";
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -200,7 +201,7 @@ export function SolicitudesClient({
             {aviso.telefono ? (
               <>
                 <a href={`tel:+52${aviso.telefono}`} style={{ ...SMALL_BTN, ...GHOST_BTN }}>
-                  <Phone size={14} /> {t("barber.reserva.solicitudes.avisaTuLlamar")} · {aviso.telefono}
+                  <Phone size={14} /> {t("barber.reserva.solicitudes.avisaTuLlamar")} · {formatBarberPhone(aviso.telefono)}
                 </a>
                 <a
                   href={`https://wa.me/52${aviso.telefono}`}
@@ -313,9 +314,9 @@ export function SolicitudesClient({
                       <a
                         href={`tel:+52${r.clientPhone}`}
                         style={{ ...SMALL_BTN, ...GHOST_BTN }}
-                        aria-label={r.clientPhone}
+                        aria-label={formatBarberPhone(r.clientPhone)}
                       >
-                        <Phone size={14} /> {r.clientPhone}
+                        <Phone size={14} /> {formatBarberPhone(r.clientPhone)}
                       </a>
                       <a
                         href={`https://wa.me/52${r.clientPhone}`}

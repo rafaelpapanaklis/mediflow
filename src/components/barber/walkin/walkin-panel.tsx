@@ -29,6 +29,7 @@ import {
   shopMinuteOfDay,
 } from "@/lib/barber/agenda";
 import { Field, Modal, Pill, agendaCss } from "@/components/barber/agenda/agenda-ui";
+import { formatBarberPhone } from "@/lib/barber/phone-format";
 import { WalkinQr } from "./walkin-qr";
 import css from "./walkin.module.css";
 
@@ -241,7 +242,7 @@ export function WalkinPanel(props: WalkinPanelProps) {
                             wait: formatMinutes(waited),
                           })}
                           {barber ? ` · ${barber.nickname || barber.name}` : ""}
-                          {row.phone ? ` · ${row.phone}` : ""}
+                          {row.phone ? ` · ${formatBarberPhone(row.phone)}` : ""}
                         </div>
                       </div>
 

@@ -31,6 +31,7 @@ import {
   totalServicePrice,
 } from "@/lib/barber/agenda";
 import { mxTenDigits } from "@/lib/phone-mx";
+import { formatBarberPhone } from "@/lib/barber/phone-format";
 import { Field, Modal, agendaCss as css } from "./agenda-ui";
 
 interface ClientHit {
@@ -241,7 +242,7 @@ export function AppointmentDialog(props: AppointmentDialogProps) {
           <div className={css.chosen}>
             <span>
               <strong className={css.resultName}>{clientName}</strong>
-              {clientPhone ? <span className={css.resultMeta}> · {clientPhone}</span> : null}
+              {clientPhone ? <span className={css.resultMeta}> · {formatBarberPhone(clientPhone)}</span> : null}
             </span>
             <button type="button" className={css.btn} onClick={clearClient}>
               {t("barber.agenda.modal.changeClient")}
@@ -286,7 +287,7 @@ export function AppointmentDialog(props: AppointmentDialogProps) {
                     >
                       <span className={css.resultName}>{hit.name}</span>
                       <span className={css.resultMeta}>
-                        {hit.phone} ·{" "}
+                        {formatBarberPhone(hit.phone)} ·{" "}
                         {t("barber.agenda.modal.visits", { count: hit.totalVisits })}
                       </span>
                     </button>

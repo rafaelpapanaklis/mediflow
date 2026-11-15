@@ -19,7 +19,6 @@ import {
   iniciales,
   proximaCita,
   quienAtiende,
-  telefonoLegible,
   trozosConEnlaces,
   ventanaRestante,
   vistaPrevia,
@@ -70,12 +69,12 @@ test("/barber/mensajes tiene su página, con el candado de la bandeja", () => {
 
 const TZ = "America/Mexico_City";
 
-test("teléfono: México a 10 dígitos como se dicta; otro país con su lada", () => {
-  assert.equal(telefonoLegible("9992602093"), "999 260 2093");
-  assert.equal(telefonoLegible("529992602093"), "999 260 2093");
-  assert.equal(telefonoLegible("5219992602093"), "999 260 2093");
-  assert.equal(telefonoLegible("+1 (415) 555-0100"), "+1 415 555 0100");
-  assert.equal(telefonoLegible("447700900123"), "+44 770 090 0123");
+test("Mensajes escribe los teléfonos con el formateador único del vertical", () => {
+  const pantalla = leer("src/components/barber/mensajes/mensajes-screen.tsx");
+  assert.match(pantalla, /from "@\/lib\/barber\/phone-format"/);
+  assert.match(pantalla, /formatBarberPhone\(/);
+  assert.doesNotMatch(pantalla, /telefonoLegible/);
+  assert.doesNotMatch(leer("src/components/barber/mensajes/formato.ts"), /function telefonoLegible/);
 });
 
 test("iniciales: dos letras del nombre, null sin nombre", () => {
