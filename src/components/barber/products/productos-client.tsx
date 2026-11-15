@@ -47,7 +47,7 @@ export function ProductosClient({
   const visible = products.filter((p) => showInactive || p.isActive);
 
   return (
-    <div className="bcaja-page">
+    <div className="bcaja-page bd-page">
       <div className="bcaja-head">
         <div>
           <h1 className="bcaja-head__title">{t("productos.title")}</h1>
@@ -60,7 +60,7 @@ export function ProductosClient({
         </div>
       </div>
 
-      <div className="bcaja-kpis bcaja-kpis--5">
+      <div className="bcaja-kpis bcaja-kpis--5 bd-band">
         <KpiCard label={t("productos.kpiActive")} value={String(stats.activeCount)} icon={Package} hero />
         <KpiCard label={t("productos.kpiLow")} value={String(stats.lowStock.length)} icon={AlertTriangle} tone={stats.lowStock.length > 0 ? "warning" : undefined} />
         <KpiCard label={t("productos.kpiValueCost")} value={fmtMoney(stats.stockValueCost)} />
