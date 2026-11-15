@@ -222,9 +222,11 @@ test("el MRR del vertical no incluye ni una suscripción del dental", { skip }, 
   );
   assert.equal(despues.accounts, antes.accounts, "una cuenta del dental no es una cuenta barber");
 
-  // Y el número de barber sí es exactamente el de sus propios planes.
+  // Y el número de barber sí es exactamente el de sus propios planes, y SÓLO
+  // de las que pagan por Stripe: una matriz «active» activada a mano (sin
+  // stripeSubscriptionId) es cortesía y no suma (Rafael, 15-nov-2026).
   const matricesActivas = await db.barbershop.findMany({
-    where: { parentId: null, subscriptionStatus: { in: ["active", "trialing", "paid"] } },
+    where: { parentId: null, subscriptionStatus: "active", stripeSubscriptionId: { not: null } },
     select: { plan: true },
   });
   const precios = new Map(

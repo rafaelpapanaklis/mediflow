@@ -168,6 +168,16 @@
   cursor: pointer;
 }
 
+/* Sucursal anidada bajo su matriz (anidarSedes en shared.ts): sangría en la
+   primera columna y fondo apenas distinto, sólo con tokens del panel. */
+.dcba-row--sede > td {
+  background: var(--bg-elev-2);
+}
+
+.dcba-row--sede > td:first-child {
+  padding-left: 28px;
+}
+
 .dcba-nowrap {
   white-space: nowrap;
 }

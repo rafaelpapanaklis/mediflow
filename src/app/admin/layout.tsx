@@ -5,6 +5,7 @@ import { countAdminPendingReply } from "@/lib/support/service";
 import { countAffiliateSupportPendingReply } from "@/lib/affiliate-support/service";
 import { countPagesPendingReview } from "@/lib/affiliates/page-moderation";
 import { crmContarPendientes } from "@/lib/admin/crm/service";
+import { contarBarberiasMatriz } from "@/lib/barber/admin";
 import AdminLoginPage from "./login/page";
 import { AdminSessionError } from "./session-error";
 import { AdminSessionKeepalive } from "./session-keepalive";
@@ -65,9 +66,14 @@ async function getNavCounts() {
       // no puede tumbar el sidebar entero.
       crmContarPendientes(),
     ]);
-    return { clinics, atRisk, supportPending, affiliateSupportPending, affiliatePagesPending, crmPendientes };
+    // Barberías (matrices, no sucursales) para el contador del menú. En fila y
+    // no dentro del Promise.all de arriba: ya lleva 6 y el pooler se satura en
+    // 7. Ya trae su propio try/catch → 0 si falla.
+    const barberias = await contarBarberiasMatriz();
+    return { clinics, atRisk, supportPending, affiliateSupportPending, affiliatePagesPending, crmPendientes, barberias };
   } catch {
     return {
+      barberias: 0,
       clinics: 0,
       atRisk: 0,
       supportPending: 0,

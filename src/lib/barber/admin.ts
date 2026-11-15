@@ -5,6 +5,13 @@ import { prisma } from "@/lib/prisma";
 import { isMissingTableError } from "@/lib/barber/db-errors";
 import { getBarberPlans } from "@/lib/barber/plans";
 import {
+  clasificarCobro,
+  pagoMensual,
+  resumirIngresosBarber,
+  type CobroBarberia,
+  type ResumenIngresosBarber,
+} from "@/lib/barber/admin-ingresos";
+import {
   BARBER_PLAN_IDS,
   isBarberPlanId,
   isBarbershopSubscriptionActive,
@@ -173,10 +180,20 @@ export interface AdminBarbershopRow {
   planPriceMonthly: string;
   subscriptionStatus: string;
   subscriptionActive: boolean;
+  /**
+   * Cómo paga (src/lib/barber/admin-ingresos.ts): "stripe" = suscripción de
+   * Stripe cobrando · "cortesia" = activada a mano, no paga · "prueba" =
+   * Stripe en trialing · "sin_pagar". Una sucursal → "sucursal" (paga su matriz).
+   */
+  cobro: CobroBarberia | "sucursal";
+  /** Lo que paga HOY al mes, string decimal. "0.00" en cortesías, sin pagar y sucursales. */
+  pagoMensual: string;
   isActive: boolean;
   createdAt: string;
   /** true = sucursal (la suscripción la paga su matriz). */
   isBranch: boolean;
+  /** Matriz de la sucursal (null en una matriz): la lista anida las sedes bajo ella. */
+  parentId: string | null;
   branchName: string | null;
   parentName: string | null;
   /** Sedes hijas ACTIVAS (0 en una sucursal). */
@@ -250,6 +267,8 @@ export async function listBarbershopsForAdmin(
       state: true,
       plan: true,
       subscriptionStatus: true,
+      // Sólo para saber si PAGA (clasificarCobro); el id no sale al cliente.
+      stripeSubscriptionId: true,
       isActive: true,
       createdAt: true,
       parentId: true,
@@ -266,7 +285,7 @@ export async function listBarbershopsForAdmin(
   if (shops.length === 0) return [];
 
   const ids = shops.map((s) => s.id);
-  const { plans } = await loadPlanPrices();
+  const { plans, prices } = await loadPlanPrices();
   const planById = new Map(plans.map((p) => [p.id, p]));
 
   const [barberCounts, ticketCounts, lastAppt, lastSale, lastLogin, branchCounts] =
@@ -326,9 +345,12 @@ export async function listBarbershopsForAdmin(
       planPriceMonthly: new Prisma.Decimal(String(plan?.priceMonthly ?? 0)).toFixed(2),
       subscriptionStatus: s.subscriptionStatus,
       subscriptionActive: isBarbershopSubscriptionActive(s),
+      cobro: s.parentId !== null ? "sucursal" : clasificarCobro(s),
+      pagoMensual: s.parentId !== null ? "0.00" : pagoMensual(s, prices).toFixed(2),
       isActive: s.isActive,
       createdAt: s.createdAt.toISOString(),
       isBranch: s.parentId !== null,
+      parentId: s.parentId,
       branchName: s.branchName,
       parentName: s.parent?.name ?? null,
       branchCount: branchesBy.get(s.id) ?? 0,
@@ -368,17 +390,33 @@ export interface BarberPlanBreakdown {
   /** Precio de lista, string decimal. */
   priceMonthly: string;
   accounts: number;
+  /** Con acceso (pagan + cortesía + prueba). */
   activeAccounts: number;
-  /** activeAccounts × priceMonthly, string decimal. */
+  /** Las que pagan por Stripe. */
+  payingAccounts: number;
+  /** payingAccounts × priceMonthly, string decimal. Una cortesía no suma. */
   mrr: string;
 }
 
 export interface BarberVerticalMetrics {
   /** Matrices (parentId = null). Una sucursal NO es una cuenta. */
   accounts: number;
+  /** Matrices con acceso (pagan + cortesía + prueba). */
   activeAccounts: number;
+  /** Matrices con suscripción de Stripe cobrando (ver admin-ingresos.ts). */
+  payingAccounts: number;
+  /** Activadas a mano, sin cobro: tienen acceso y NO son ingreso. */
+  courtesyAccounts: number;
+  /** Stripe en trialing: suscripción real, todavía sin cobro. */
+  trialAccounts: number;
+  /** Sin acceso: pending_payment, past_due, canceled, suspendidas… */
+  unpaidAccounts: number;
   branches: number;
-  /** Suma Decimal de los planes de las matrices con suscripción activa. */
+  /**
+   * Ingreso mensual recurrente: suma Decimal de los planes de las matrices
+   * que PAGAN por Stripe. Hasta el 15-nov-2026 sumaba toda matriz con
+   * acceso, cortesías incluidas.
+   */
   mrrMonthly: string;
   signupsThisMonth: number;
   /** Aproximado — ver `churnIsApproximate`. */
@@ -393,6 +431,10 @@ export interface BarberVerticalMetrics {
 const EMPTY_METRICS: BarberVerticalMetrics = {
   accounts: 0,
   activeAccounts: 0,
+  payingAccounts: 0,
+  courtesyAccounts: 0,
+  trialAccounts: 0,
+  unpaidAccounts: 0,
   branches: 0,
   mrrMonthly: "0.00",
   signupsThisMonth: 0,
@@ -422,7 +464,7 @@ export async function getBarberVerticalMetrics(now: Date = new Date()): Promise<
     const [parents, branches, signups, lapsed, openTickets] = await Promise.all([
       prisma.barbershop.findMany({
         where: { parentId: null },
-        select: { plan: true, subscriptionStatus: true },
+        select: { plan: true, subscriptionStatus: true, stripeSubscriptionId: true },
       }),
       prisma.barbershop.count({ where: { parentId: { not: null }, isActive: true } }),
       prisma.barbershop.count({
@@ -445,29 +487,33 @@ export async function getBarberVerticalMetrics(now: Date = new Date()): Promise<
     const perPlan = new Map<BarberPlanId, { accounts: number; active: number }>();
     for (const id of BARBER_PLAN_IDS) perPlan.set(id, { accounts: 0, active: 0 });
 
-    let mrr = ZERO;
     let activeAccounts = 0;
     for (const shop of parents) {
-      const planId = coercePlan(shop.plan);
-      const bucket = perPlan.get(planId)!;
+      const bucket = perPlan.get(coercePlan(shop.plan))!;
       bucket.accounts += 1;
       if (isBarbershopSubscriptionActive(shop)) {
         bucket.active += 1;
         activeAccounts += 1;
-        mrr = mrr.add(prices[planId] ?? ZERO);
       }
     }
+
+    // El DINERO sale de un solo sitio (admin-ingresos.ts): sólo las que pagan
+    // por Stripe. La misma función arma el bloque «Barberías» de la portada.
+    const ingresos = resumirIngresosBarber(parents, prices);
+    const ingresosPorPlan = new Map(ingresos.porPlan.map((p) => [p.planId, p]));
 
     const byPlan: BarberPlanBreakdown[] = plans.map((p) => {
       const bucket = perPlan.get(p.id) ?? { accounts: 0, active: 0 };
       const price = prices[p.id] ?? ZERO;
+      const pagan = ingresosPorPlan.get(p.id);
       return {
         planId: p.id,
         name: p.name,
         priceMonthly: price.toFixed(2),
         accounts: bucket.accounts,
         activeAccounts: bucket.active,
-        mrr: price.mul(bucket.active).toFixed(2),
+        payingAccounts: pagan?.pagan ?? 0,
+        mrr: pagan?.mrr ?? "0.00",
       };
     });
 
@@ -476,8 +522,12 @@ export async function getBarberVerticalMetrics(now: Date = new Date()): Promise<
     return {
       accounts: parents.length,
       activeAccounts,
+      payingAccounts: ingresos.pagan,
+      courtesyAccounts: ingresos.cortesia,
+      trialAccounts: ingresos.prueba,
+      unpaidAccounts: ingresos.sinPagar,
       branches,
-      mrrMonthly: mrr.toFixed(2),
+      mrrMonthly: ingresos.mrr,
       signupsThisMonth: signups,
       churnThisMonth: lapsed,
       churnIsApproximate: true,
@@ -488,6 +538,39 @@ export async function getBarberVerticalMetrics(now: Date = new Date()): Promise<
   } catch (e) {
     console.error("[barber/admin] métricas del vertical no disponibles:", e);
     return EMPTY_METRICS;
+  }
+}
+
+/**
+ * Contador del menú del admin: cuántas BARBERÍAS hay (matrices, cualquier
+ * estado). Una sucursal no es una barbería más. Nunca lanza: un badge no
+ * puede tumbar el sidebar.
+ */
+export async function contarBarberiasMatriz(): Promise<number> {
+  try {
+    return await prisma.barbershop.count({ where: { parentId: null } });
+  } catch (e) {
+    console.error("[barber/admin] contador del menú:", e);
+    return 0;
+  }
+}
+
+/**
+ * Bloque «Barberías» de la portada de /admin (junto al MRR del dental, sin
+ * mezclarse con él). Mismo cálculo que /admin/barberias. 3 consultas en fila
+ * de 2 (precios) + 1. `null` = no se pudo medir: la portada pinta «—».
+ */
+export async function cargarResumenIngresosBarber(): Promise<ResumenIngresosBarber | null> {
+  try {
+    const { prices } = await loadPlanPrices();
+    const matrices = await prisma.barbershop.findMany({
+      where: { parentId: null },
+      select: { plan: true, subscriptionStatus: true, stripeSubscriptionId: true },
+    });
+    return resumirIngresosBarber(matrices, prices);
+  } catch (e) {
+    console.error("[barber/admin] ingresos del vertical no disponibles:", e);
+    return null;
   }
 }
 
@@ -761,9 +844,15 @@ export async function getBarbershopDetailForAdmin(
     planPriceMonthly: new Prisma.Decimal(String(plan?.priceMonthly ?? 0)).toFixed(2),
     subscriptionStatus: shop.subscriptionStatus,
     subscriptionActive: isBarbershopSubscriptionActive(shop),
+    cobro: shop.parentId !== null ? "sucursal" : clasificarCobro(shop),
+    pagoMensual:
+      shop.parentId !== null
+        ? "0.00"
+        : pagoMensual(shop, { [planId]: new Prisma.Decimal(String(plan?.priceMonthly ?? 0)) }).toFixed(2),
     isActive: shop.isActive,
     createdAt: shop.createdAt.toISOString(),
     isBranch: shop.parentId !== null,
+    parentId: shop.parentId,
     branchName: shop.branchName,
     parentName: shop.parent?.name ?? null,
     branchCount: branchRows.filter((b) => b.isActive).length,

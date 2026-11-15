@@ -55,6 +55,46 @@ export function subscriptionFace(status: string | null | undefined): Subscriptio
   }
 }
 
+/**
+ * Cómo PAGA una barbería (src/lib/barber/admin-ingresos.ts → `cobro` de la
+ * fila). Distinto del estado: una cortesía está «Activa» y no paga nada.
+ */
+export const COBRO_FACE: Record<string, SubscriptionFace> = {
+  stripe: { label: "Paga por Stripe", tone: "success" },
+  cortesia: { label: "Cortesía · no paga", tone: "info" },
+  prueba: { label: "Prueba de Stripe", tone: "info" },
+  sin_pagar: { label: "Sin pagar", tone: "warning" },
+  sucursal: { label: "La paga su matriz", tone: "neutral" },
+};
+
+/**
+ * Anida las sucursales bajo su matriz SIN perder el orden elegido: recibe las
+ * filas YA ordenadas, deja las matrices en ese orden y pone detrás de cada
+ * una sus sucursales (en el mismo orden relativo). Una sucursal cuya matriz
+ * no viene en la lista (la ocultó un filtro) se queda suelta en su sitio:
+ * nada desaparece por anidar. `sede` = va anidada bajo la fila de arriba.
+ */
+export function anidarSedes<T extends { id: string; parentId: string | null }>(
+  ordenadas: T[],
+): { fila: T; sede: boolean }[] {
+  const presentes = new Set(ordenadas.map((r) => r.id));
+  const hijas = new Map<string, T[]>();
+  for (const r of ordenadas) {
+    if (r.parentId && presentes.has(r.parentId)) {
+      const lista = hijas.get(r.parentId);
+      if (lista) lista.push(r);
+      else hijas.set(r.parentId, [r]);
+    }
+  }
+  const out: { fila: T; sede: boolean }[] = [];
+  for (const r of ordenadas) {
+    if (r.parentId && presentes.has(r.parentId)) continue;
+    out.push({ fila: r, sede: false });
+    for (const h of hijas.get(r.id) ?? []) out.push({ fila: h, sede: true });
+  }
+  return out;
+}
+
 /** Filtros de estado de la lista (el valor viaja tal cual al API). */
 export const SUBSCRIPTION_FILTERS: { value: string; label: string }[] = [
   { value: "", label: "Todas" },

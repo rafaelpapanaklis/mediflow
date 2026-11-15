@@ -22,6 +22,8 @@ import { GraficaNegocio } from "./grafica-negocio";
 import { TileEnLinea, type EnLineaInicial } from "./tile-en-linea";
 import { TONO_MOTIVO, type ConteosTiles, type Pendiente } from "./pendientes";
 import type { FilaActividad } from "./atencion-core";
+import type { ResumenIngresosBarber } from "@/lib/barber/admin-ingresos";
+import { TarjetaIngresosPorLinea } from "@/components/admin/barberias/tarjeta-ingresos-lineas";
 
 /** Cuántos pendientes se listan antes del enlace «ver todas». */
 export const PENDIENTES_VISIBLES = 10;
@@ -87,6 +89,11 @@ export interface DatosPortada {
    * actividad de arriba. `clinicas: null` = sin dato. Ausente = sin dato.
    */
   enLineaAhora?: EnLineaInicial;
+  /**
+   * Ingresos del vertical Barberías, APARTE del dental (no entran en `negocio`
+   * ni en `facturacion`). null = no se pudo medir. Ausente = no se pidió.
+   */
+  barberias?: ResumenIngresosBarber | null;
   /** Lo que no se pudo medir. */
   avisos: string[];
 }
@@ -259,6 +266,16 @@ export function PortadaVista({ datos: d, now }: { datos: DatosPortada; now: Date
           </div>
         </Tarjeta>
       </div>
+
+      {/* ── 4b. Ingreso mensual por línea: Dental · Barberías · Total ──
+          Las cifras del dental de arriba NO cambian: Barberías va aparte. */}
+      {d.barberias !== undefined && (
+        <TarjetaIngresosPorLinea
+          dentalMrr={d.negocio.mrr.total + (d.negocio.mrrModulos?.total ?? 0)}
+          dentalCobradoMes={d.facturacion.medido ? d.facturacion.mes : null}
+          barberias={d.barberias}
+        />
+      )}
 
       {/* ── 5. Pendientes y actividad ── */}
       <div className="dcp-grid-2">
