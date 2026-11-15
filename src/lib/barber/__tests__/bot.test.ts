@@ -29,12 +29,24 @@ import { join } from "node:path";
 import {
   BARBER_BOT_AI_CAP_DEFAULT,
   BARBER_BOT_AI_CAP_MAX,
+  BARBER_BOT_PAUSE_MS,
+  BARBER_BOT_DEFAULT_MODEL,
+  BARBER_BOT_MODEL_PRICES,
+  BARBER_BOT_OPTIONS_MAX,
+  BARBER_BOT_PAUSE_OFF_HOURS,
   DEFAULT_BARBER_BOT_SETTINGS,
   MICROS_PER_MXN,
   asksForHuman,
+  autoPauseReason,
   botAnswersNow,
   botModelPrice,
+  botModelRequestExtras,
+  botPauseExpired,
   botTurnCostMicros,
+  botVoiceCostMicros,
+  isAutoBotPause,
+  isBarberBotOptionId,
+  normalizeBotOptions,
   normalizeBotSettings,
   quotaIsTight,
 } from "../bot-core";
@@ -132,6 +144,11 @@ test("se detecta a quien pide una persona", () => {
     "Me pueden comunicar con un humano?",
     "pasame con alguien",
     "quiero hablar con el barbero",
+    "pásame con el barbero",
+    "comunícame con la barbería por favor",
+    "necesito hablar con mi barbero",
+    "quiero un humano",
+    "necesito al encargado, pásame con el encargado",
     "necesito una persona real",
     "no quiero hablar con un bot",
     "eres un robot?",
@@ -149,6 +166,12 @@ test("pedir una cita NO se confunde con pedir una persona", () => {
     "quiero corte el sábado en la tarde",
     "cuánto cuesta el corte con Pedro",
     "me agendas con Luis el barbero mañana",
+    // 🔴 M1 de la revisión: pedir un barbero es pedir CITA, no una persona.
+    "quiero con el barbero Luis mañana a las 5",
+    "necesito barbero para hoy",
+    "quiero mi barbero de siempre",
+    "quiero el barbero que me atendió la otra vez",
+    "necesito un barbero que sepa hacer fade",
     "hola buenas tardes",
     "a qué hora abren",
     "quiero cita para barba",
@@ -367,4 +390,153 @@ test("el bot habla de tú y nunca vosea", () => {
   }
   assert.ok(BOT_TS.includes("tuteando"), "el prompt lo dice explícitamente");
   assert.ok(/nada de voseo/i.test(BOT_TS), "y se lo prohíbe al modelo con ejemplos");
+});
+
+/* ═══════════════ 10. El modelo vigente y lo que se le manda ═══════════════ */
+
+test("🔴 el modelo por defecto es el Sonnet que usa hoy el bot del dental, con SU tarifa", () => {
+  const dental = readFileSync(join(ROOT, "src", "lib", "whatsapp", "bot", "ai.ts"), "utf8");
+  const m = dental.match(/export const CHAT_MODEL = "([^"]+)"/);
+  assert.ok(m, "el bot del dental declara CHAT_MODEL");
+  assert.equal(BARBER_BOT_DEFAULT_MODEL, m[1], "barber va con el mismo modelo que el dental");
+
+  // La tarifa tiene que existir en la tabla, o el tope lo cobraría con la más cara.
+  const precio = BARBER_BOT_MODEL_PRICES[BARBER_BOT_DEFAULT_MODEL];
+  assert.ok(precio, "el modelo por defecto está en la tabla de precios");
+
+  // …y ser la misma que la del dental (pricing-core.ts es la referencia de la casa).
+  const tabla = readFileSync(join(ROOT, "src", "lib", "ai-billing", "pricing-core.ts"), "utf8");
+  const fila = tabla.match(
+    new RegExp(`"${BARBER_BOT_DEFAULT_MODEL}":\\s*\\{\\s*inputUsdPerMtok:\\s*([\\d.]+),\\s*outputUsdPerMtok:\\s*([\\d.]+)`),
+  );
+  assert.ok(fila, "el modelo está en la tabla de precios del dental");
+  assert.equal(precio.inputPerMTokUsd, Number(fila[1]));
+  assert.equal(precio.outputPerMTokUsd, Number(fila[2]));
+
+  assert.ok(!BOT_TS.includes('"claude-sonnet-4-6"'), "bot.ts ya no lleva el modelo viejo escrito a mano");
+  assert.ok(BOT_TS.includes("BARBER_BOT_AI_MODEL"), "y sigue siendo configurable por env");
+});
+
+test("un modelo que no está en la tabla se cobra con la tarifa más cara (frena de más)", () => {
+  const caro = botModelPrice("claude-modelo-que-no-existe");
+  for (const precio of Object.values(BARBER_BOT_MODEL_PRICES)) {
+    assert.ok(caro.inputPerMTokUsd >= precio.inputPerMTokUsd);
+    assert.ok(caro.outputPerMTokUsd >= precio.outputPerMTokUsd);
+  }
+});
+
+test("a la familia 5 se le baja el razonamiento; a los 4.x no se les manda nada", () => {
+  assert.deepEqual(botModelRequestExtras("claude-sonnet-5"), {
+    thinking: { type: "adaptive" },
+    output_config: { effort: "low" },
+  });
+  assert.deepEqual(botModelRequestExtras("claude-sonnet-5-5"), {
+    thinking: { type: "adaptive" },
+    output_config: { effort: "low" },
+  });
+  assert.deepEqual(botModelRequestExtras("claude-sonnet-4-6"), {});
+  assert.deepEqual(botModelRequestExtras("claude-haiku-4-5"), {});
+  assert.deepEqual(botModelRequestExtras(""), {});
+
+  // Apagarlo del todo solo donde el modelo acepta `disabled`.
+  assert.deepEqual(botModelRequestExtras("claude-sonnet-5", "off"), { thinking: { type: "disabled" } });
+  assert.deepEqual(
+    botModelRequestExtras("claude-sonnet-5-5", "off"),
+    { thinking: { type: "adaptive" }, output_config: { effort: "low" } },
+    "Sonnet 5.5 rechaza `disabled` con un 400: se queda en adaptativo",
+  );
+  // Nunca se manda temperature / top_p: la familia 5 los rechaza.
+  for (const extra of [botModelRequestExtras("claude-sonnet-5"), botModelRequestExtras("claude-sonnet-5", "off")]) {
+    assert.ok(!("temperature" in extra) && !("top_p" in extra) && !("budget_tokens" in extra));
+  }
+  assert.ok(!/temperature|budget_tokens|top_p/.test(BOT_TS), "bot.ts tampoco los manda");
+});
+
+/* ═══════════════ 11. Pausas que caducan ═══════════════ */
+
+test("🔴 toda pausa dura 12 h: la del bot y también la de una persona (decisión de Rafael, igual que el dental)", () => {
+  const now = new Date("2026-11-14T18:00:00.000Z");
+  const hace = (h: number) => new Date(now.getTime() - h * 3_600_000);
+  const delBot = autoPauseReason("El cliente pidió hablar con una persona");
+  assert.equal(isAutoBotPause(delBot), true);
+  assert.equal(isAutoBotPause("La barbería tomó la conversación"), false);
+  assert.equal(isAutoBotPause(null), false);
+  assert.equal(BARBER_BOT_PAUSE_MS, 12 * 3_600_000);
+
+  const motivos = [
+    delBot,
+    "La barbería tomó la conversación",
+    "Alguien de la barbería respondió desde el panel",
+    "Alguien de la barbería respondió desde su celular",
+    null,
+  ];
+  for (const reason of motivos) {
+    assert.equal(botPauseExpired({ reason, pausedAt: hace(11.9) }, now, true), false, `${reason} a las 11.9 h`);
+    assert.equal(botPauseExpired({ reason, pausedAt: hace(12) }, now, true), true, `${reason} a las 12 h`);
+    // Antes las de una persona eran eternas: con el dueño contestando desde
+    // su celular, en dos semanas el bot quedaba apagado para casi todos.
+    assert.equal(botPauseExpired({ reason, pausedAt: hace(24 * 30) }, now, false), true, `${reason} al mes`);
+  }
+});
+
+test("la pausa por fuera de horario se acaba cuando vuelve el horario, no a las 12 h", () => {
+  const now = new Date("2026-11-14T18:00:00.000Z");
+  const pausa = { reason: BARBER_BOT_PAUSE_OFF_HOURS, pausedAt: new Date(now.getTime() - 60_000) };
+  assert.equal(botPauseExpired(pausa, now, false), false, "sigue fuera de horario");
+  assert.equal(botPauseExpired(pausa, now, true), true, "ya abrió: el bot vuelve");
+  // Y aunque pasen días, mientras siga fuera de horario no se reanuda.
+  const vieja = { ...pausa, pausedAt: new Date(now.getTime() - 72 * 3_600_000) };
+  assert.equal(botPauseExpired(vieja, now, false), false);
+});
+
+test("el motivo de una pausa del bot lleva la marca una sola vez", () => {
+  assert.equal(autoPauseReason(BARBER_BOT_PAUSE_OFF_HOURS), BARBER_BOT_PAUSE_OFF_HOURS);
+  assert.equal(autoPauseReason("  Se alcanzó   el tope "), "🤖 Se alcanzó el tope");
+  assert.equal(autoPauseReason(""), "🤖 El bot pasó la conversación");
+  assert.ok(autoPauseReason("x".repeat(500)).length <= 180, "cabe en la columna del motivo");
+});
+
+/* ═══════════════ 12. Opciones con botones y notas de voz ═══════════════ */
+
+test("las opciones del bot se limpian: sin vacías, sin repetidas, máximo 10 y mínimo 2", () => {
+  assert.deepEqual(
+    normalizeBotOptions([{ titulo: " Corte " }, { titulo: "corte" }, { titulo: "" }, { titulo: "Barba", descripcion: "$120" }]),
+    [{ title: "Corte" }, { title: "Barba", description: "$120" }],
+  );
+  assert.deepEqual(normalizeBotOptions(["4 pm", "5 pm"]), [{ title: "4 pm" }, { title: "5 pm" }]);
+  assert.deepEqual(normalizeBotOptions([{ titulo: "Solo una" }]), [], "con una sola no hay entre qué elegir");
+  assert.deepEqual(normalizeBotOptions("no es lista"), []);
+  assert.deepEqual(normalizeBotOptions(null), []);
+  const muchas = normalizeBotOptions(Array.from({ length: 25 }, (_, i) => ({ titulo: `Hora ${i}` })));
+  assert.equal(muchas.length, BARBER_BOT_OPTIONS_MAX);
+  assert.equal(BARBER_BOT_OPTIONS_MAX, 10, "el límite de filas de una lista de Meta");
+});
+
+test("el id de una opción del bot se reconoce por su prefijo", () => {
+  assert.equal(isBarberBotOptionId("bot:1"), true);
+  assert.equal(isBarberBotOptionId("rec.confirmar:abc"), false);
+  assert.equal(isBarberBotOptionId(undefined), false);
+  assert.equal(isBarberBotOptionId(7), false);
+});
+
+test("transcribir una nota de voz cuesta 0.006 USD por minuto, contra el mismo tope", () => {
+  // 60 s a 18 pesos por dólar = 0.108 pesos = 108,000 micros.
+  assert.equal(botVoiceCostMicros(60, 18), 108_000);
+  assert.equal(botVoiceCostMicros(6, 18), 10_800);
+  assert.equal(botVoiceCostMicros(0, 18), 1, "ningún audio sale gratis del contador");
+  assert.equal(botVoiceCostMicros(Number.NaN, 18), 1);
+  // Tres minutos (el máximo que se transcribe) no llegan ni a 35 centavos.
+  assert.ok(botVoiceCostMicros(180, 18) < 0.35 * MICROS_PER_MXN);
+});
+
+test("el transporte de la voz y de los botones NO vive en el bot: lo importa whatsapp.ts del dental sin editarlo", () => {
+  const wa = readFileSync(join(ROOT, "src", "lib", "barber", "whatsapp.ts"), "utf8");
+  assert.ok(wa.includes('from "@/lib/whatsapp/bot/nota-de-voz-core"'));
+  assert.ok(wa.includes('from "@/lib/whatsapp/interactivo"'));
+  // El costo de la voz va al contador del bot de barber, no a un saldo.
+  assert.ok(wa.includes("chargeBarberBotVoice"));
+  for (const prohibido of ["addAiTokens", "ai-billing", "canSpend", "aiTokenLimitError"]) {
+    assert.ok(!wa.includes(prohibido), `barber no toca el Saldo IA del dental (${prohibido})`);
+    assert.ok(!BOT_TS.includes(prohibido), `ni desde el bot (${prohibido})`);
+  }
 });

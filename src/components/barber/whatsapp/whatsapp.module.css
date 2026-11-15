@@ -83,6 +83,9 @@
 
 .tab:hover { background: var(--bg-hover); color: var(--text-1); }
 
+/* El acceso a la pantalla del bot: se ve como pestaña pero es un enlace. */
+.tabLink { text-decoration: none; }
+
 .tabActive {
   background: var(--brand-soft);
   border-color: var(--border-brand);

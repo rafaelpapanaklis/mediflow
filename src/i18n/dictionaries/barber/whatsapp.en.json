@@ -5,7 +5,9 @@
     "conexion": "Connection",
     "inbox": "Conversations",
     "plantillas": "Templates",
-    "campanas": "Campaigns"
+    "campanas": "Campaigns",
+    "bot": "Bot",
+    "botHint": "The bot that answers your WhatsApp and books for you"
   },
   "connection": {
     "title": "Your WhatsApp number",
@@ -32,6 +34,7 @@
     },
     "number": "Connected number",
     "verifiedAt": "Verified on",
+    "webhookOff": "Meta is not delivering your clients' messages to us yet, so confirmations, conversations and the bot receive nothing. Tap “Reconnect”; if it stays the same, write to us.",
     "notVerified": "Business not verified (optional)"
   },
   "quota": {
@@ -64,7 +67,8 @@
       "MARKETING": "Promotional"
     },
     "kind": {
-      "reminder": "Visit reminder",
+      "reminder": "Visit reminder (text, fallback)",
+      "reminderButtons": "Visit reminder with buttons",
       "portalCode": "Portal access code",
       "walkinTurn": "You're almost up",
       "bookingConfirmed": "Booking confirmed",

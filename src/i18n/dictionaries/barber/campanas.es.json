@@ -108,6 +108,7 @@
     "doneWithFailed": "Salieron {sent} mensajes. {failed} no se pudieron mandar.",
     "doneNone": "No salió ningún mensaje.",
     "costChanged": "La lista cambió desde que viste el costo. Revísala otra vez antes de mandar.",
+    "notConnected": "No salió ninguno: primero conecta el WhatsApp de la barbería.",
     "quotaStopped": "Se detuvo el envío: se acabó el cupo de mensajes de tu plan.",
     "needsTemplate": "Falta que Meta apruebe la plantilla {name}. Actívala en la pantalla de WhatsApp antes de mandar campañas.",
     "templatePending": "La plantilla {name} está en revisión de Meta. En cuanto la aprueben podrás mandar.",

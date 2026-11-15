@@ -85,6 +85,8 @@ export interface SendResult {
   detail: { clientId: string; name: string; ok: boolean; reason: string | null }[];
   cost: CampaignCost;
   quotaExhausted: boolean;
+  /** No salió nada porque la barbería no tiene su WhatsApp conectado. */
+  notConnected?: boolean;
 }
 
 export interface HistoryRow {

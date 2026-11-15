@@ -5,7 +5,9 @@
     "conexion": "Conexión",
     "inbox": "Conversaciones",
     "plantillas": "Plantillas",
-    "campanas": "Campañas"
+    "campanas": "Campañas",
+    "bot": "Bot",
+    "botHint": "El bot que contesta tu WhatsApp y agenda por ti"
   },
   "connection": {
     "title": "Tu número de WhatsApp",
@@ -32,6 +34,7 @@
     },
     "number": "Número conectado",
     "verifiedAt": "Verificado el",
+    "webhookOff": "Meta todavía no nos está entregando lo que te escriben tus clientes, así que las confirmaciones, las conversaciones y el bot no reciben nada. Toca «Volver a conectar»; si sigue igual, escríbenos.",
     "notVerified": "Sin verificación de negocio (opcional)"
   },
   "quota": {
@@ -63,7 +66,8 @@
       "MARKETING": "Promoción"
     },
     "kind": {
-      "reminder": "Recordatorio de visita",
+      "reminder": "Recordatorio de visita (texto, de respaldo)",
+      "reminderButtons": "Recordatorio de visita con botones",
       "portalCode": "Código de acceso al portal",
       "walkinTurn": "Ya casi es tu turno",
       "bookingConfirmed": "Reserva confirmada",

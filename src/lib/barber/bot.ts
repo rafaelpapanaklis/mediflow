@@ -9,6 +9,11 @@ import { barberPlanHasFeature, isBarbershopSubscriptionActive } from "@/lib/barb
 import { canTransition } from "@/lib/barber/types";
 import { getBarberWaQuota } from "@/lib/barber/whatsapp";
 import {
+  BARBER_WA_CHANGE_NOTICE_HOURS,
+  barberLateChangeReply,
+  barberTooLateToChange,
+} from "@/lib/barber/whatsapp-core";
+import {
   isBarberOverlapError,
   pendingReminderInvalidationWhere,
   reminderInvalidationData,
@@ -36,14 +41,24 @@ import {
 import {
   DEFAULT_BARBER_BOT_SETTINGS,
   asksForHuman,
+  autoPauseReason,
   botAnswersNow,
+  botModelRequestExtras,
+  botPauseExpired,
   botTurnCostMicros,
+  botVoiceCostMicros,
   microsToMxn,
+  normalizeBotOptions,
   normalizeBotSettings,
   quotaIsTight,
+  BARBER_BOT_DEFAULT_MODEL,
+  BARBER_BOT_OPTIONS_MAX,
+  BARBER_BOT_PAUSE_MS,
+  BARBER_BOT_PAUSE_OFF_HOURS,
   BARBER_BOT_USD_MXN_FALLBACK,
   MICROS_PER_MXN,
   type BarberBotBooking,
+  type BarberBotOption,
   type BarberBotPanelState,
   type BarberBotPause,
   type BarberBotSettings,
@@ -92,32 +107,45 @@ export * from "@/lib/barber/bot-core";
 /* ── Parámetros del turno ──────────────────────────────────────────── */
 
 /**
- * El webhook de Meta espera la respuesta y reintenta si tardamos. Todo el
- * turno del bot vive dentro de este presupuesto; al agotarse se contesta
- * con lo que haya y se marca el hilo.
+ * Presupuesto de UN turno del bot. El webhook compartido declara
+ * maxDuration = 60 s y la ingesta le pasa además SU propio límite
+ * (`deadlineAt`), porque antes del bot puede haber gastado tiempo en bajar y
+ * transcribir una nota de voz. Si Meta reintenta el webhook mientras tanto,
+ * la ingesta lo descarta por wamid (con candado), así que no hay doble
+ * respuesta.
+ *
+ * Antes eran 13 s para hasta cinco llamadas al modelo: un «agéndame el
+ * sábado» (catálogo → horarios → agendar → contestar) no cabía, y el
+ * cliente recibía «te paso con alguien» con la cita YA creada.
  */
-const TURN_BUDGET_MS = 13_000;
-/** Cada llamada al modelo, acotada aparte. */
-const AI_CALL_TIMEOUT_MS = 9_000;
+const TURN_BUDGET_MS = 28_000;
+/** Cada llamada al modelo, acotada aparte (lo mismo que el bot del dental). */
+const AI_CALL_TIMEOUT_MS = 12_000;
 /** Cuántas veces puede el modelo pedir herramientas antes de contestar. */
 const MAX_TOOL_ROUNDS = 4;
-/** Turnos previos del hilo que viajan como contexto. */
-const MAX_HISTORY = 12;
-const MAX_OUTPUT_TOKENS = 700;
+/** Filas del hilo que se leen para armar el contexto. */
+const MAX_HISTORY = 16;
+/**
+ * Techo de salida por llamada. Es un TECHO, no un gasto: se paga lo que el
+ * modelo escribe. En la familia 5 aquí caben también el razonamiento y los
+ * argumentos de las herramientas, y su tokenizador cuenta ~30 % más tokens
+ * por el mismo texto: con los 700 de antes una respuesta podía cortarse.
+ */
+const MAX_OUTPUT_TOKENS = 2000;
 /** Un WhatsApp largo no lo lee nadie. */
 const MAX_REPLY_CHARS = 900;
 
 /**
- * Modelo. El bot del dental usa sonnet-4-6 para exactamente este trabajo
- * (conversación corta, alto volumen) y aquí se mantiene el mismo criterio;
- * se cambia por env sin redeploy. Ver el reporte: la tarifa del modelo que
- * se ponga aquí debe existir en BARBER_BOT_MODEL_PRICES o el tope de gasto
- * lo cobrará con la tarifa más cara.
+ * Modelo: el Sonnet vigente del bot del dental (BARBER_BOT_DEFAULT_MODEL en
+ * bot-core.ts, junto a su tarifa). Se cambia por env sin redeploy.
  */
-const DEFAULT_AI_MODEL = "claude-sonnet-4-6";
-
 function aiModel(): string {
-  return (process.env.BARBER_BOT_AI_MODEL || "").trim() || DEFAULT_AI_MODEL;
+  return (process.env.BARBER_BOT_AI_MODEL || "").trim() || BARBER_BOT_DEFAULT_MODEL;
+}
+
+/** BARBER_BOT_AI_THINKING=off apaga el razonamiento donde el modelo lo permite. */
+function aiThinking(): "auto" | "off" {
+  return (process.env.BARBER_BOT_AI_THINKING || "").trim().toLowerCase() === "off" ? "off" : "auto";
 }
 
 /** Llave propia del vertical, con caída a la del dental (igual que Stripe). */
@@ -195,6 +223,17 @@ export async function getBarberBotSettings(
   }
 }
 
+/**
+ * ¿Esta barbería tiene el bot encendido? Pregunta barata (la configuración
+ * va en caché) para quien solo necesita saber si vale la pena ordenar un
+ * turno. NO sustituye a las puertas del turno (plan, pago, pausa, horario,
+ * tope): ésas las sigue decidiendo runBarberBotTurn.
+ */
+export async function barberBotIsOn(barbershopId: string): Promise<boolean> {
+  const { settings, storageReady } = await getBarberBotSettings(barbershopId);
+  return storageReady && settings.enabled;
+}
+
 export class BarberBotStorageError extends Error {
   constructor(message: string) {
     super(message);
@@ -232,38 +271,92 @@ export async function saveBarberBotSettings(
 
 /* ── Pausas por conversación ───────────────────────────────────────── */
 
-async function isThreadPaused(barbershopId: string, phone: string): Promise<boolean> {
+async function readPause(
+  barbershopId: string,
+  phone: string,
+): Promise<{ reason: string | null; pausedAt: Date } | null> {
   try {
-    const row = await prisma.barberBotPause.findUnique({
+    return await prisma.barberBotPause.findUnique({
       where: { barbershopId_phone: { barbershopId, phone } },
-      select: { phone: true },
+      select: { reason: true, pausedAt: true },
     });
-    return row !== null;
   } catch {
     // Sin tabla no hay pausas registradas. El bot ya está apagado por
     // defecto en ese escenario, así que esto no abre ninguna puerta.
-    return false;
+    return null;
   }
 }
 
+/**
+ * Pausa el bot en una conversación.
+ *
+ * `by: "staff"` (default) = la tomó una PERSONA: si ya había una pausa (del
+ * bot o suya) la sustituye y VUELVE A CONTAR el plazo desde ahora — mientras
+ * alguien siga atendiendo, el bot no entra. `by: "bot"` = la puso el propio
+ * bot (fuera de horario, tope de IA, el cliente pidió una persona): lleva la
+ * marca 🤖 y nunca pisa una pausa que ya exista. Las dos se quitan solas
+ * según botPauseExpired (bot-core.ts): 12 horas, o al volver el horario.
+ */
 export async function pauseBarberBotThread(args: {
   barbershopId: string;
   phone: string;
   reason: string | null;
+  by?: "staff" | "bot";
 }): Promise<void> {
   const shopId = requireShop(args.barbershopId);
   const phone = mxTenDigits(args.phone);
   if (!phone) return;
-  const reason = args.reason ? args.reason.trim().slice(0, 180) : null;
   try {
-    // skipDuplicates = ON CONFLICT DO NOTHING: si el hilo ya estaba en pausa,
-    // se conserva la primera pausa (y su motivo).
-    await prisma.barberBotPause.createMany({
-      data: [{ barbershopId: shopId, phone, reason }],
-      skipDuplicates: true,
+    if (args.by === "bot") {
+      const reason = autoPauseReason(args.reason ?? "");
+      // skipDuplicates = ON CONFLICT DO NOTHING: si el hilo ya estaba en
+      // pausa (del bot o de una persona), se conserva la primera.
+      await prisma.barberBotPause.createMany({
+        data: [{ barbershopId: shopId, phone, reason }],
+        skipDuplicates: true,
+      });
+      return;
+    }
+    const reason = args.reason ? args.reason.trim().slice(0, 180) : null;
+    await prisma.barberBotPause.upsert({
+      where: { barbershopId_phone: { barbershopId: shopId, phone } },
+      create: { barbershopId: shopId, phone, reason },
+      update: { reason, pausedAt: new Date() },
+      select: { phone: true },
     });
   } catch (err) {
     console.error("[barber/bot] no se pudo pausar la conversación:", err);
+  }
+}
+
+/**
+ * Alguien de la barbería contestó A MANO en este hilo: desde la bandeja del
+ * panel (`panel`) o desde la app de WhatsApp Business de su celular
+ * (`celular`, que llega como «eco» por el webhook). A partir de ahí la
+ * conversación es de esa persona: el bot se calla 12 horas desde su ÚLTIMA
+ * respuesta (o hasta que lo reanuden a mano), para no pisarle la respuesta
+ * al cliente. Solo hace algo si el bot de la barbería está encendido. Nunca
+ * lanza.
+ */
+export async function noteBarberStaffReply(
+  barbershopId: string,
+  phone: string,
+  from: "panel" | "celular" = "panel",
+): Promise<void> {
+  try {
+    const { settings, storageReady } = await getBarberBotSettings(requireShop(barbershopId));
+    if (!storageReady || !settings.enabled) return;
+    await pauseBarberBotThread({
+      barbershopId,
+      phone,
+      reason:
+        from === "celular"
+          ? "Alguien de la barbería respondió desde su celular"
+          : "Alguien de la barbería respondió desde el panel",
+      by: "staff",
+    });
+  } catch (err) {
+    console.error("[barber/bot] no se pudo anotar la respuesta del equipo:", err);
   }
 }
 
@@ -281,11 +374,24 @@ export async function resumeBarberBotThread(args: {
   }
 }
 
+/**
+ * Las conversaciones que HOY atiende una persona. Solo las pausas vigentes:
+ * una que ya caducó (más de 12 h) ya no frena al bot, y enseñarla llenaba la
+ * lista de chats viejos hasta dejar fuera a los que sí importan (la pantalla
+ * muestra 100). Las de «fuera de horario» se enseñan hasta que el cliente
+ * vuelva a escribir: son chats que alguien tiene que mirar al abrir.
+ */
 export async function listBarberBotPauses(barbershopId: string): Promise<BarberBotPause[]> {
   const shopId = requireShop(barbershopId);
   try {
     const rows = await prisma.barberBotPause.findMany({
-      where: { barbershopId: shopId },
+      where: {
+        barbershopId: shopId,
+        OR: [
+          { pausedAt: { gt: new Date(Date.now() - BARBER_BOT_PAUSE_MS) } },
+          { reason: BARBER_BOT_PAUSE_OFF_HOURS },
+        ],
+      },
       select: { phone: true, reason: true, pausedAt: true },
       orderBy: { pausedAt: "desc" },
       take: 100,
@@ -321,6 +427,8 @@ async function addSpend(
   barbershopId: string,
   day: string,
   micros: number,
+  /** 0 para lo que gasta IA sin ser un turno del bot (transcribir un audio). */
+  turns = 1,
 ): Promise<void> {
   if (!Number.isFinite(micros) || micros <= 0) return;
   const add = BigInt(Math.round(micros));
@@ -332,8 +440,8 @@ async function addSpend(
     // no se pisan el gasto.
     await prisma.barberBotUsage.upsert({
       where: { barbershopId_day: { barbershopId, day } },
-      create: { barbershopId, day, spentMicros: add, turns: 1 },
-      update: { spentMicros: { increment: add }, turns: { increment: 1 } },
+      create: { barbershopId, day, spentMicros: add, turns },
+      update: { spentMicros: { increment: add }, turns: { increment: turns } },
       select: { barbershopId: true },
     });
   } catch (err) {
@@ -562,7 +670,9 @@ async function loadUpcoming(
   const rows = await prisma.barberAppointment.findMany({
     where: {
       barbershopId,
-      clientPhone: phone,
+      // El teléfono de la cita O el de la ficha: una cita creada en el panel
+      // antes de que al cliente le corrigieran el número sigue siendo suya.
+      OR: [{ clientPhone: phone }, { client: { phone } }],
       startAt: { gte: new Date() },
       status: { in: ["PENDING", "CONFIRMED"] },
     },
@@ -669,6 +779,16 @@ export interface BotEffects {
   rescheduled: string[];
   handoff: boolean;
   handoffReason: string | null;
+  /**
+   * Lo que el turno HIZO, ya en frases para el cliente. Es la red de
+   * seguridad: si el modelo agenda y luego no alcanza a contestar (se acabó
+   * el tiempo, la IA falló), el cliente recibe esto y no un «te paso con
+   * alguien» con la cita ya creada.
+   */
+  summary: string[];
+  /** Respuesta que el modelo cerró con responder_con_opciones. */
+  finalText: string | null;
+  finalOptions: BarberBotOption[];
 }
 
 interface ToolDef {
@@ -681,12 +801,17 @@ function toolDefs(settings: BarberBotSettings): ToolDef[] {
   const defs: ToolDef[] = [];
   const a = settings.abilities;
 
-  if (a.precios) {
+  // Es la ÚNICA fuente de los ids de servicio que `agendar` exige: se declara
+  // también con «precios» apagado (si no, apagar ese interruptor dejaba al bot
+  // sin poder agendar a nadie). Con «precios» apagado NO trae el precio.
+  if (a.precios || a.agendar) {
     defs.push({
       name: "listar_servicios",
-      description:
-        "Servicios que ofrece la barbería con su precio real y su duración. " +
-        "Úsala SIEMPRE antes de decir un precio: nunca los inventes ni los recuerdes de otra conversación.",
+      description: a.precios
+        ? "Servicios que ofrece la barbería con su precio real y su duración. " +
+          "Úsala SIEMPRE antes de decir un precio: nunca los inventes ni los recuerdes de otra conversación."
+        : "Servicios que ofrece la barbería, con su id y su duración (sin precios: no los des). " +
+          "Úsala para saber qué servicio quiere el cliente antes de buscar horarios.",
       input_schema: { type: "object", properties: {}, required: [] },
     });
   }
@@ -775,6 +900,45 @@ function toolDefs(settings: BarberBotSettings): ToolDef[] {
   }
 
   defs.push({
+    name: "responder_con_opciones",
+    description:
+      "Tu respuesta al cliente CON botones para que toque en vez de escribir. " +
+      "Úsala cuando le des a elegir entre opciones concretas: qué servicio quiere, " +
+      "qué horario de los que dio buscar_horarios, o un sí/no antes de agendar o cancelar. " +
+      `Entre 2 y ${BARBER_BOT_OPTIONS_MAX} opciones. Lo que toque te llega como su siguiente mensaje, ` +
+      "con el título tal cual. Esta herramienta CIERRA tu turno: no escribas nada más después.",
+    input_schema: {
+      type: "object",
+      properties: {
+        texto: {
+          type: "string",
+          description:
+            "El mensaje completo, como lo escribirías normalmente (incluye el día si ofreces horarios).",
+        },
+        opciones: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              titulo: {
+                type: "string",
+                description:
+                  "Corto, hasta 20 caracteres: «Corte», «5:30 pm», «Sí, agéndala». Sin repetir títulos.",
+              },
+              descripcion: {
+                type: "string",
+                description: "Opcional. Detalle breve: precio y duración, o el día del horario.",
+              },
+            },
+            required: ["titulo"],
+          },
+        },
+      },
+      required: ["texto", "opciones"],
+    },
+  });
+
+  defs.push({
     name: "pasar_con_persona",
     description:
       "Pasa la conversación a alguien de la barbería. Úsala si el cliente lo pide, " +
@@ -816,7 +980,8 @@ async function runTool(
           servicios: ctx.services.map((s) => ({
             id: s.id,
             nombre: s.name,
-            precio: money(s.price),
+            // Con «precios» apagado el dueño no quiere que el bot los diga.
+            ...(ctx.settings.abilities.precios ? { precio: money(s.price) } : {}),
             duracionMin: s.durationMin,
           })),
           barberos: ctx.barbers.map((b) => ({ id: b.id, nombre: b.name })),
@@ -836,6 +1001,14 @@ async function runTool(
 
       case "reagendar":
         return await toolReagendar(ctx, input);
+
+      case "responder_con_opciones": {
+        const texto = typeof input.texto === "string" ? input.texto.trim() : "";
+        if (!texto) return { error: "Falta el texto del mensaje." };
+        ctx.effects.finalText = texto;
+        ctx.effects.finalOptions = normalizeBotOptions(input.opciones);
+        return { ok: true };
+      }
 
       case "pasar_con_persona": {
         const motivo =
@@ -975,22 +1148,38 @@ async function toolAgendar(ctx: ToolCtx, input: Record<string, unknown>): Promis
     });
   }
 
-  if (!result.duplicate) ctx.effects.booked.push(result.reference);
+  // 🔴 LA VERDAD SOBRE EL ESTADO. Con la política «manual» (la de fábrica)
+  // la cita nace PENDIENTE: es una SOLICITUD que la barbería todavía tiene
+  // que confirmar. Decirle «quedó agendada» o «te confirman en un momento»
+  // era prometer un aviso que no existe. Se le dice lo que hay: el horario
+  // quedó apartado y falta que la barbería lo confirme.
+  const firme = result.status === "CONFIRMED";
+  const cuando =
+    `${humanDate(dateISO)} a las ${humanTime(time)}` +
+    (result.barberName ? ` con ${result.barberName}` : "");
+  if (!result.duplicate) {
+    ctx.effects.booked.push(result.reference);
+    ctx.effects.summary.push(
+      firme
+        ? `✅ Tu cita quedó confirmada para el ${cuando}. Tu folio es ${result.reference}.`
+        : `📝 Tu solicitud quedó enviada para el ${cuando}. Falta que la barbería la confirme. Tu folio es ${result.reference}.`,
+    );
+  }
   return {
     ok: true,
     referencia: result.reference,
-    estado: result.status === "CONFIRMED" ? "confirmada" : "por confirmar",
-    // Cuando la barbería revisa a mano, la cita nace PENDING: decirle
-    // "confirmada" al cliente sería mentirle.
-    aclaracion:
-      result.status === "CONFIRMED"
-        ? "La cita quedó confirmada."
-        : "La cita quedó apartada y la barbería la confirma en un momento.",
+    estado: firme ? "confirmada" : "solicitud por confirmar",
+    aclaracion: firme
+      ? "La cita quedó confirmada."
+      : "Es una SOLICITUD: el horario quedó apartado, pero falta que la barbería la confirme. " +
+        "Díselo así («tu solicitud quedó enviada; falta que la barbería la confirme»). " +
+        "NO digas que la cita quedó agendada ni confirmada, y NO le prometas que le llegará un aviso ni cuándo.",
     fechaBonita: humanDate(dateISO),
     horaBonita: humanTime(time),
     barbero: result.barberName,
     servicios: result.services.map((s) => s.name),
-    total: money(result.total),
+    // Con «precios» apagado el bot tampoco dice el total.
+    ...(ctx.settings.abilities.precios ? { total: money(result.total) } : {}),
     duplicada: result.duplicate,
   };
 }
@@ -1061,7 +1250,11 @@ async function toolMisCitas(ctx: ToolCtx): Promise<unknown> {
 async function ownAppointment(ctx: ToolCtx, citaId: unknown) {
   if (typeof citaId !== "string" || !citaId) return null;
   return prisma.barberAppointment.findFirst({
-    where: { id: citaId, barbershopId: ctx.shop.id, clientPhone: ctx.phone },
+    where: {
+      id: citaId,
+      barbershopId: ctx.shop.id,
+      OR: [{ clientPhone: ctx.phone }, { client: { phone: ctx.phone } }],
+    },
     select: {
       id: true,
       status: true,
@@ -1070,6 +1263,28 @@ async function ownAppointment(ctx: ToolCtx, citaId: unknown) {
       services: { select: { serviceId: true, service: { select: { durationMin: true } } } },
     },
   });
+}
+
+/**
+ * 🔴 Cancelar o mover por WhatsApp exige 2 horas de anticipación, la misma
+ * regla que «mi cuenta» y que las respuestas al recordatorio. Dentro de esas
+ * dos horas la herramienta NO toca la cita y le devuelve al modelo, como
+ * dato, lo que tiene que decirle al cliente (con el teléfono de la
+ * barbería). La regla vive en el servidor: el modelo no puede saltársela.
+ */
+function tooLateToChange(ctx: ToolCtx, startAt: Date): Record<string, unknown> | null {
+  if (!barberTooLateToChange(startAt, ctx.now)) return null;
+  const decirle = barberLateChangeReply(ctx.shop.phone);
+  // La respuesta al cliente queda FIJADA aquí (cierra el turno, igual que
+  // responder_con_opciones): el aviso con el teléfono sale tal cual, no
+  // como lo quiera parafrasear el modelo.
+  ctx.effects.finalText = decirle;
+  ctx.effects.finalOptions = [];
+  return {
+    error: "ultimaHora",
+    mensaje: `Faltan menos de ${BARBER_WA_CHANGE_NOTICE_HOURS} horas para esa cita: por aquí ya no se puede cancelar ni mover.`,
+    decirle,
+  };
 }
 
 async function toolCancelar(ctx: ToolCtx, input: Record<string, unknown>): Promise<unknown> {
@@ -1085,6 +1300,8 @@ async function toolCancelar(ctx: ToolCtx, input: Record<string, unknown>): Promi
           : "Esa cita ya no se puede cancelar desde aquí. Pasa la conversación a una persona.",
     };
   }
+  const tarde = tooLateToChange(ctx, appt.startAt);
+  if (tarde) return tarde;
 
   await prisma.$transaction(async (tx) => {
     await tx.barberAppointment.update({
@@ -1100,6 +1317,7 @@ async function toolCancelar(ctx: ToolCtx, input: Record<string, unknown>): Promi
   });
 
   ctx.effects.cancelled.push(shortReference(appt.id));
+  ctx.effects.summary.push(`❌ Tu cita ${shortReference(appt.id)} quedó cancelada.`);
   return { ok: true, referencia: shortReference(appt.id) };
 }
 
@@ -1121,6 +1339,8 @@ async function toolReagendar(ctx: ToolCtx, input: Record<string, unknown>): Prom
   if (appt.status !== "PENDING" && appt.status !== "CONFIRMED") {
     return { error: "noSePuede", mensaje: "Esa cita ya no se puede mover." };
   }
+  const tarde = tooLateToChange(ctx, appt.startAt);
+  if (tarde) return tarde;
 
   const dateISO = typeof input.fecha === "string" ? input.fecha : "";
   const time = typeof input.hora === "string" ? input.hora : "";
@@ -1232,6 +1452,10 @@ async function toolReagendar(ctx: ToolCtx, input: Record<string, unknown>): Prom
   }
 
   ctx.effects.rescheduled.push(shortReference(appt.id));
+  ctx.effects.summary.push(
+    `🗓️ Tu cita se movió al ${humanDate(dateISO)} a las ${humanTime(time)}. ` +
+      `Tu folio sigue siendo ${shortReference(appt.id)}.`,
+  );
   return {
     ok: true,
     referencia: shortReference(appt.id),
@@ -1281,7 +1505,17 @@ function buildSystemPrompt(ctx: ToolCtx): string {
     "- Si te lo pide, aunque sea de mala manera.",
     "- Si se queja, reclama, o algo suena a problema.",
     "- Si preguntan algo que no está en tus datos y no lo puede resolver una herramienta.",
-    "- Ante la duda, pásala. Es mejor que inventar.",
+    "- Saludar, y todo lo de servicios, precios, horarios, ubicación y citas, lo atiendes tú con tus herramientas: eso no se pasa.",
+    "- Vale más pasarla que inventar un dato.",
+    "",
+    "BOTONES:",
+    "- Cuando le des a elegir entre opciones concretas (qué servicio, cuál de los horarios de buscar_horarios, un sí o no antes de agendar o cancelar), contesta con responder_con_opciones: el cliente toca un botón y no tiene que escribir.",
+    "- Para una pregunta abierta (su nombre, qué día le queda) escribe normal, sin botones.",
+    "- Lo que el cliente toca te llega como un mensaje con el título del botón.",
+    "",
+    "NOTAS DE VOZ:",
+    "- Un mensaje que empieza con «🎤 Nota de voz:» o «🎵 Audio:» es la transcripción de un audio que mandó el cliente. Atiéndelo igual que si lo hubiera escrito.",
+    "- Si la transcripción no se entiende, pídele que te lo repita o te lo escriba; no adivines.",
     "",
     `DATOS DE LA BARBERÍA (tu única fuente):`,
     `- Hoy es ${WEEKDAYS_ES[isoWeekday(todayISO)]} ${todayISO}, son las ${hhmm(parts.hour * 60 + parts.minute)} en la barbería.`,
@@ -1366,6 +1600,8 @@ async function callClaude(args: {
   system: string;
   messages: unknown[];
   tools: ToolDef[];
+  /** true = última vuelta: tiene que cerrar con palabras, sin herramientas. */
+  mustAnswer: boolean;
   signal: AbortSignal;
 }): Promise<AiTurn> {
   const empty: AiTurn = {
@@ -1386,9 +1622,15 @@ async function callClaude(args: {
       body: JSON.stringify({
         model: args.model,
         max_tokens: MAX_OUTPUT_TOKENS,
+        // Razonamiento y esfuerzo según el modelo (ver bot-core.ts).
+        ...botModelRequestExtras(args.model, aiThinking()),
         system: args.system,
         messages: args.messages,
         ...(args.tools.length > 0 ? { tools: args.tools } : {}),
+        // En la última vuelta las herramientas SIGUEN declaradas (el hilo ya
+        // lleva bloques tool_use / tool_result que las nombran) pero se le
+        // prohíbe pedir otra: `none` es la forma de decirlo sin quitarlas.
+        ...(args.tools.length > 0 && args.mustAnswer ? { tool_choice: { type: "none" } } : {}),
       }),
       signal: args.signal,
     });
@@ -1412,6 +1654,11 @@ async function callClaude(args: {
   }
 }
 
+/** ¿Vale la pena reintentar UNA vez? Solo saturación o caída del proveedor. */
+function isRetryableAiError(error: string | null): boolean {
+  return /^claude_(429|500|502|503|529)\b/.test(error ?? "");
+}
+
 /* ═══════════════════════════════════════════════════════════════════════
    EL TURNO
    ═══════════════════════════════════════════════════════════════════════ */
@@ -1421,11 +1668,30 @@ export interface BarberBotTurnInput {
   phone: string;
   text: string;
   now?: Date;
+  /**
+   * Límite duro (epoch ms) que impone quien llama. La ingesta del webhook lo
+   * usa para que turno + nota de voz quepan en el tiempo de la función.
+   */
+  deadlineAt?: number;
+  /**
+   * Quien llama GARANTIZA que este mensaje no ha sido contestado (la ingesta
+   * de WhatsApp lo sabe: tomó el turno de la conversación y ningún turno
+   * anterior lo vio). Importa cuando el cliente escribe mientras el bot
+   * contestaba lo anterior: esa respuesta se guarda DESPUÉS de su mensaje,
+   * así que lo último del hilo es nuestro y sin esto se quedaba sin atender.
+   */
+  unanswered?: boolean;
 }
 
 export interface BarberBotTurnResult {
   /** Lo que hay que mandarle al cliente. null = el bot no contesta. */
   reply: string | null;
+  /**
+   * Opciones para ofrecer con botones o lista junto a `reply`. [] = solo
+   * texto. Quien manda (whatsapp.ts) decide botones (≤3) o lista (≤10) y cae
+   * a texto si Meta lo rechaza.
+   */
+  options: BarberBotOption[];
   /** Por qué no contestó (o por qué pasó algo raro), para el panel. */
   skipped: BarberBotSkipReason | null;
   effects: BotEffects;
@@ -1436,12 +1702,143 @@ const NO_REPLY = (
   effects?: BotEffects,
 ): BarberBotTurnResult => ({
   reply: null,
+  options: [],
   skipped,
   effects: effects ?? emptyEffects(),
 });
 
 function emptyEffects(): BotEffects {
-  return { booked: [], cancelled: [], rescheduled: [], handoff: false, handoffReason: null };
+  return {
+    booked: [],
+    cancelled: [],
+    rescheduled: [],
+    handoff: false,
+    handoffReason: null,
+    summary: [],
+    finalText: null,
+    finalOptions: [],
+  };
+}
+
+/* ── ¿El bot atiende este hilo ahora? ──────────────────────────────── */
+
+interface BotGateState {
+  /** Por qué el bot NO atiende este hilo ahora; null = lo atiende. */
+  blocked: BarberBotSkipReason | null;
+  /** Aunque el hilo esté abierto, puede no haber IA con qué contestar. */
+  ai: "ok" | "aiUnavailable" | "aiCapReached";
+  shop: BotShopRow | null;
+  settings: BarberBotSettings;
+  todayISO: string;
+  /** Había una pausa del bot que ya caducó: hay que quitarla. */
+  stalePause: boolean;
+}
+
+/**
+ * Todas las puertas del bot, en orden y SIN efectos (no pausa, no contesta,
+ * no gasta). Las usa el turno y también la ingesta, para saber si vale la
+ * pena transcribir una nota de voz antes de pagarla.
+ */
+async function evaluateGate(shopId: string, phone: string, now: Date): Promise<BotGateState> {
+  const { settings, storageReady } = await getBarberBotSettings(shopId);
+  const state: BotGateState = {
+    blocked: null,
+    ai: "ok",
+    shop: null,
+    settings,
+    todayISO: "",
+    stalePause: false,
+  };
+  const block = (reason: BarberBotSkipReason): BotGateState => ({ ...state, blocked: reason });
+
+  if (!storageReady) return block("storageMissing");
+  if (!settings.enabled) return block("disabled");
+
+  const shop = await loadBotShop(shopId);
+  if (!shop || !shop.isActive) return block("disabled");
+  state.shop = shop;
+
+  // 🔴 EL CANDADO DEL PLAN, EN EL SERVIDOR. La pantalla puede mentir; esto
+  // no. El bot es del plan Profesional. Plan y suscripción se leen de la
+  // fila que PAGA (la matriz): una sucursal hereda los dos, igual que en
+  // gating.ts y en los recordatorios.
+  const payer = shop.parentId ? ((await loadBotShop(shop.parentId)) ?? shop) : shop;
+  const plan = await getBarberPlan(payer.plan);
+  if (!barberPlanHasFeature(plan, "whatsappBot")) return block("planLocked");
+  if (!isBarbershopSubscriptionActive(payer)) return block("subscriptionInactive");
+
+  const parts = getBarberTzParts(now, shop.timezone);
+  const todayISO = barberTodayISO(shop.timezone, now);
+  state.todayISO = todayISO;
+  const inHours = botAnswersNow(
+    settings.hours,
+    isoWeekday(todayISO),
+    parts.hour * 60 + parts.minute,
+  );
+
+  // ¿Este hilo lo atiende una persona? Una pausa que puso el bot caduca
+  // sola (botPauseExpired); la de una persona, nunca.
+  const pause = await readPause(shopId, phone);
+  if (pause) {
+    if (!botPauseExpired(pause, now, inHours)) return block("paused");
+    state.stalePause = true;
+  }
+
+  if (!inHours) return block("offHours");
+
+  // Cupo de mensajes del plan: si ya no hay, mandar la respuesta fallaría y
+  // el cliente vería un silencio idéntico al de un bot roto. El panel lo dice.
+  const quota = await getBarberWaQuota(shopId).catch(() => null);
+  if (quota && quota.exhausted) return block("quotaExhausted");
+
+  if (!aiApiKey()) return { ...state, ai: "aiUnavailable" };
+  const capMicros = Math.max(0, settings.aiDailyCapMxn) * MICROS_PER_MXN;
+  const spentMicros = await readSpendMicros(shopId, todayISO);
+  if (capMicros <= 0 || spentMicros >= capMicros) return { ...state, ai: "aiCapReached" };
+
+  return state;
+}
+
+/**
+ * ¿El bot atendería AHORA un mensaje de este hilo usando IA? Sin efectos y
+ * sin lanzar. `reason` dice por qué no.
+ */
+export async function barberBotGate(
+  barbershopId: string,
+  rawPhone: string,
+  now: Date = new Date(),
+): Promise<{ open: boolean; reason: BarberBotSkipReason | null }> {
+  try {
+    const phone = mxTenDigits(rawPhone);
+    if (!phone) return { open: false, reason: "error" };
+    const gate = await evaluateGate(requireShop(barbershopId), phone, now);
+    if (gate.blocked) return { open: false, reason: gate.blocked };
+    if (gate.ai !== "ok") return { open: false, reason: gate.ai };
+    return { open: true, reason: null };
+  } catch (err) {
+    console.error("[barber/bot] no se pudo evaluar si el bot atiende:", err);
+    return { open: false, reason: "error" };
+  }
+}
+
+/**
+ * Cobra la transcripción de una nota de voz contra el TOPE DIARIO de IA de
+ * la barbería (barber_bot_usage), el mismo contador que las respuestas del
+ * bot. En barber no hay saldo de IA aparte. Nunca lanza.
+ */
+export async function chargeBarberBotVoice(barbershopId: string, seconds: number): Promise<void> {
+  try {
+    const shop = await loadBotShop(requireShop(barbershopId));
+    if (!shop) return;
+    await addSpend(
+      shop.id,
+      barberTodayISO(shop.timezone),
+      botVoiceCostMicros(seconds, usdMxn()),
+      0,
+    );
+  } catch (err) {
+    console.error("[barber/bot] no se pudo registrar el gasto de la nota de voz:", err);
+  }
 }
 
 /**
@@ -1471,52 +1868,40 @@ async function runTurnInner(input: BarberBotTurnInput): Promise<BarberBotTurnRes
   if (!phone || !text) return NO_REPLY(null);
 
   const now = input.now ?? new Date();
-  const deadline = now.getTime() + TURN_BUDGET_MS;
+  // El presupuesto se mide con el reloj real aunque `now` venga inyectado.
+  const deadline = Math.min(
+    Date.now() + TURN_BUDGET_MS,
+    input.deadlineAt ?? Number.POSITIVE_INFINITY,
+  );
 
-  // ── 1. ¿Puede correr el bot de esta barbería? ─────────────────────
-  const { settings, storageReady } = await getBarberBotSettings(shopId);
-  if (!storageReady) return NO_REPLY("storageMissing");
-  if (!settings.enabled) return NO_REPLY("disabled");
-
-  const shop = await loadBotShop(shopId);
-  if (!shop || !shop.isActive) return NO_REPLY("disabled");
-
-  // 🔴 EL CANDADO DEL PLAN, EN EL SERVIDOR. La pantalla puede mentir; esto
-  // no. El bot es del plan Profesional.
-  const plan = await getBarberPlan(shop.plan);
-  if (!barberPlanHasFeature(plan, "whatsappBot")) return NO_REPLY("planLocked");
-  if (!isBarbershopSubscriptionActive(shop)) {
-    return NO_REPLY("subscriptionInactive");
+  // ── 1-4. Puertas: plan, suscripción, pausa, horario, cupo ─────────
+  const gate = await evaluateGate(shopId, phone, now);
+  if (gate.stalePause) {
+    // La pausa del bot ya caducó y nadie tomó la conversación: vuelve.
+    await resumeBarberBotThread({ barbershopId: shopId, phone });
   }
-
-  // ── 2. ¿Este hilo lo atiende una persona? ─────────────────────────
-  if (await isThreadPaused(shopId, phone)) return NO_REPLY("paused");
-
-  // ── 3. Horario en el que contesta ─────────────────────────────────
-  const parts = getBarberTzParts(now, shop.timezone);
-  const todayISO = barberTodayISO(shop.timezone, now);
-  if (!botAnswersNow(settings.hours, isoWeekday(todayISO), parts.hour * 60 + parts.minute)) {
-    // No se queda callado: avisa y deja el hilo marcado para la mañana.
+  if (gate.blocked === "offHours") {
+    // No se queda callado: avisa UNA vez y deja el hilo marcado. La pausa
+    // se quita sola en cuanto el bot vuelva a estar en horario.
     await pauseBarberBotThread({
       barbershopId: shopId,
       phone,
-      reason: "Escribió fuera del horario del bot",
+      reason: BARBER_BOT_PAUSE_OFF_HOURS,
+      by: "bot",
     });
     return {
       reply:
         "¡Hola! Ahorita no estamos en línea. En cuanto abramos te contestamos por aquí. 🙏",
+      options: [],
       skipped: "offHours",
       effects: emptyEffects(),
     };
   }
+  if (gate.blocked || !gate.shop) return NO_REPLY(gate.blocked);
 
-  // ── 4. Cupo de mensajes del plan ──────────────────────────────────
-  // Si ya no hay cupo, el bot NO contesta: mandar el mensaje fallaría y el
-  // cliente vería un silencio idéntico al de un bot roto. El panel lo dice.
-  const quota = await getBarberWaQuota(shopId).catch(() => null);
-  if (quota && quota.exhausted) {
-    return NO_REPLY("quotaExhausted");
-  }
+  const shop = gate.shop;
+  const settings = gate.settings;
+  const todayISO = gate.todayISO;
 
   // ── 5. "Quiero hablar con una persona" — antes de gastar en IA ────
   if (asksForHuman(text)) {
@@ -1524,6 +1909,7 @@ async function runTurnInner(input: BarberBotTurnInput): Promise<BarberBotTurnRes
       barbershopId: shopId,
       phone,
       reason: "El cliente pidió hablar con una persona",
+      by: "bot",
     });
     const effects = emptyEffects();
     effects.handoff = true;
@@ -1531,29 +1917,29 @@ async function runTurnInner(input: BarberBotTurnInput): Promise<BarberBotTurnRes
     return {
       reply:
         "Claro que sí. Ya le avisé a alguien de la barbería y te escribe en un momento por aquí. 🙌",
+      options: [],
       skipped: "handoff",
       effects,
     };
   }
 
-  // ── 6. Tope de gasto de IA del día ────────────────────────────────
+  // ── 6. ¿Hay IA con qué contestar? ─────────────────────────────────
   const apiKey = aiApiKey();
   const model = aiModel();
-  const capMicros = Math.max(0, settings.aiDailyCapMxn) * MICROS_PER_MXN;
-  const spentMicros = await readSpendMicros(shopId, todayISO);
-
-  if (!apiKey) return NO_REPLY("aiUnavailable");
-  if (capMicros <= 0 || spentMicros >= capMicros) {
+  if (gate.ai === "aiUnavailable" || !apiKey) return NO_REPLY("aiUnavailable");
+  if (gate.ai === "aiCapReached") {
     // El tope frena a la IA, no al servicio: se contesta con la verdad y se
     // marca el hilo para que una persona lo tome.
     await pauseBarberBotThread({
       barbershopId: shopId,
       phone,
       reason: "Se alcanzó el tope de gasto de IA del día",
+      by: "bot",
     });
     return {
       reply:
         "¡Hola! En un momento te atiende alguien de la barbería por aquí para agendarte. 🙏",
+      options: [],
       skipped: "aiCapReached",
       effects: emptyEffects(),
     };
@@ -1580,7 +1966,16 @@ async function runTurnInner(input: BarberBotTurnInput): Promise<BarberBotTurnRes
   };
 
   const history = await loadHistory(shopId, phone);
-  if (history.length === 0) return NO_REPLY(null);
+  // Sin nada del cliente, o con el equipo como último en hablar, no hay
+  // pregunta que contestar (y la API exige que el último turno sea suyo).
+  if (history.length > 0 && history[history.length - 1].role !== "user" && input.unanswered) {
+    // Escribió mientras se le contestaba lo anterior: su mensaje va al final,
+    // que es donde lo leyó el cliente (después de nuestra respuesta).
+    history.push({ role: "user", content: text });
+  }
+  if (history.length === 0 || history[history.length - 1].role !== "user") {
+    return NO_REPLY(null);
+  }
 
   // ── 8. La conversación con el modelo ──────────────────────────────
   const tools = toolDefs(settings);
@@ -1589,25 +1984,40 @@ async function runTurnInner(input: BarberBotTurnInput): Promise<BarberBotTurnRes
 
   let costMicros = 0;
   let reply: string | null = null;
+  let options: BarberBotOption[] = [];
   let aiFailed = false;
 
-  for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
+  const ask = async (mustAnswer: boolean): Promise<AiTurn> => {
     const left = deadline - Date.now();
-    if (left <= 1500) break;
-
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), Math.min(AI_CALL_TIMEOUT_MS, left));
-    const turn = await callClaude({
-      apiKey,
-      model,
-      system,
-      messages,
-      // En la última vuelta se quitan las herramientas: el modelo tiene que
-      // cerrar con palabras, no pedir otra consulta que ya no cabe.
-      tools: round === MAX_TOOL_ROUNDS ? [] : tools,
-      signal: controller.signal,
-    });
-    clearTimeout(timer);
+    try {
+      return await callClaude({
+        apiKey,
+        model,
+        system,
+        messages,
+        tools,
+        mustAnswer,
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+
+  for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
+    if (deadline - Date.now() <= 1500) break;
+
+    // En la última vuelta el modelo tiene que cerrar con palabras, no pedir
+    // otra consulta que ya no cabe.
+    const mustAnswer = round === MAX_TOOL_ROUNDS;
+    let turn = await ask(mustAnswer);
+    if (turn.error && isRetryableAiError(turn.error) && deadline - Date.now() > 5000) {
+      // Saturación o caída momentánea del proveedor: UN reintento.
+      await new Promise((resolve) => setTimeout(resolve, 700));
+      turn = await ask(mustAnswer);
+    }
 
     costMicros += botTurnCostMicros({
       model,
@@ -1636,17 +2046,26 @@ async function runTurnInner(input: BarberBotTurnInput): Promise<BarberBotTurnRes
       break;
     }
 
-    // El bloque del asistente vuelve TAL CUAL (con sus tool_use) o la API
-    // rechaza el tool_result que sigue.
+    // El bloque del asistente vuelve TAL CUAL (con sus tool_use y, si los
+    // hay, sus bloques de razonamiento) o la API rechaza el tool_result.
     messages.push({ role: "assistant", content: turn.blocks });
 
+    // responder_con_opciones cierra el turno con lo que el modelo escribió
+    // ANTES de ver nada. Si viene junto con otra herramienta (buscar_horarios,
+    // agendar…), esos botones salieron sin mirar el resultado: horarios sin
+    // consultar, o un «quedó agendada» de algo que falló. Se rechaza y el
+    // modelo la vuelve a pedir, sola, ya con el resultado delante.
+    const accompanied = toolUses.length > 1;
     const results: unknown[] = [];
     for (const use of toolUses) {
-      const out = await runTool(
-        ctx,
-        use.name ?? "",
-        (use.input ?? {}) as Record<string, unknown>,
-      );
+      const out =
+        accompanied && use.name === "responder_con_opciones"
+          ? {
+              error:
+                "No se envió. Primero mira el resultado de las otras herramientas de esta vuelta; " +
+                "después llama a responder_con_opciones SOLA, con datos que salgan de ese resultado.",
+            }
+          : await runTool(ctx, use.name ?? "", (use.input ?? {}) as Record<string, unknown>);
       results.push({
         type: "tool_result",
         tool_use_id: use.id,
@@ -1655,6 +2074,14 @@ async function runTurnInner(input: BarberBotTurnInput): Promise<BarberBotTurnRes
     }
     // TODOS los tool_result en UN SOLO mensaje de usuario.
     messages.push({ role: "user", content: results });
+
+    // responder_con_opciones ES la respuesta: el turno termina aquí, sin
+    // gastar otra llamada para que el modelo diga lo mismo con palabras.
+    if (ctx.effects.finalText) {
+      reply = ctx.effects.finalText;
+      options = ctx.effects.finalOptions;
+      break;
+    }
   }
 
   // ── 9. Cobrar el gasto y cerrar ───────────────────────────────────
@@ -1665,20 +2092,34 @@ async function runTurnInner(input: BarberBotTurnInput): Promise<BarberBotTurnRes
       barbershopId: shopId,
       phone,
       reason: ctx.effects.handoffReason || "El bot pasó la conversación",
+      by: "bot",
     });
   }
 
   if (!reply) {
+    // 🔴 El modelo hizo algo REAL (agendó, canceló, movió) y no alcanzó a
+    // decirlo: se le dice con las palabras que dejó la herramienta. Antes el
+    // cliente recibía «te paso con alguien» con la cita ya creada.
+    if (ctx.effects.summary.length > 0) {
+      return {
+        reply: ctx.effects.summary.join("\n"),
+        options: [],
+        skipped: null,
+        effects: ctx.effects,
+      };
+    }
     // Sin respuesta utilizable, el cliente NO se queda atrapado: se le dice
     // la verdad y el hilo pasa a una persona.
     await pauseBarberBotThread({
       barbershopId: shopId,
       phone,
       reason: aiFailed ? "El bot no pudo responder" : "El bot no supo qué contestar",
+      by: "bot",
     });
     return {
       reply:
         "Déjame paso esto con alguien de la barbería para no darte mal la información. Te escriben en un momento. 🙏",
+      options: [],
       skipped: aiFailed ? "aiUnavailable" : "handoff",
       effects: ctx.effects,
     };
@@ -1686,6 +2127,7 @@ async function runTurnInner(input: BarberBotTurnInput): Promise<BarberBotTurnRes
 
   return {
     reply: reply.length > MAX_REPLY_CHARS ? `${reply.slice(0, MAX_REPLY_CHARS - 1)}…` : reply,
+    options,
     skipped: ctx.effects.handoff ? "handoff" : null,
     effects: ctx.effects,
   };
@@ -1698,13 +2140,20 @@ async function runTurnInner(input: BarberBotTurnInput): Promise<BarberBotTurnRes
  * contestó una persona a mano: si el mostrador ya dijo algo, el bot no lo
  * contradice. El mensaje que dispara este turno ya está guardado por
  * ingestBarberInbound, así que la lista termina en él.
+ *
+ * Solo entra lo que el cliente de verdad LEYÓ: un saliente que Meta rechazó
+ * (FAILED) o que sigue en cola (PENDING — el recordatorio de mañana) no es
+ * algo que "dijimos", y metérselo al modelo como propio lo confunde.
  */
-async function loadHistory(barbershopId: string, phone: string): Promise<unknown[]> {
+async function loadHistory(
+  barbershopId: string,
+  phone: string,
+): Promise<{ role: string; content: string }[]> {
   const rows = await prisma.barberMessage.findMany({
     where: { barbershopId, phone },
     orderBy: { createdAt: "desc" },
     take: MAX_HISTORY,
-    select: { direction: true, body: true },
+    select: { direction: true, body: true, status: true },
   });
 
   const ordered = rows.reverse();
@@ -1712,6 +2161,7 @@ async function loadHistory(barbershopId: string, phone: string): Promise<unknown
   for (const r of ordered) {
     const body = (r.body ?? "").trim();
     if (!body) continue;
+    if (r.direction === "OUTBOUND" && (r.status === "FAILED" || r.status === "PENDING")) continue;
     const role = r.direction === "INBOUND" ? "user" : "assistant";
     const last = out[out.length - 1];
     // Turnos consecutivos del mismo lado se funden: la API pide alternancia.
@@ -1803,6 +2253,8 @@ export async function getBarberBotPanelState(
 export async function barbershopCanUseBot(barbershopId: string): Promise<boolean> {
   const shop = await loadBotShop(requireShop(barbershopId));
   if (!shop || !shop.isActive) return false;
-  const plan = await getBarberPlan(shop.plan);
+  // El plan es el de quien paga: una sucursal hereda el de su matriz.
+  const payer = shop.parentId ? ((await loadBotShop(shop.parentId)) ?? shop) : shop;
+  const plan = await getBarberPlan(payer.plan);
   return barberPlanHasFeature(plan, "whatsappBot");
 }

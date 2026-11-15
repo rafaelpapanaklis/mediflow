@@ -224,17 +224,19 @@ export function botAnswersNow(
 // "pásame con EL barbero" mucho más que "con UN barbero", y sin esto la
 // frase más común de todas se colaba al modelo como si fuera una cita.
 const DET = "(?:un[ao]?|el|la|los|las|mi|algun[ao]?)\\s+";
-// A quién pide: incluye `alguien` ("pásame con alguien") y `barber`, que
-// cubre "barbero" y "barbería" sin tocar "barba".
-const QUIEN = "(?:persona|humano|alguien|asesor|encargad|due[ñn]|barber|staff)";
+// A quién pide: incluye `alguien` ("pásame con alguien").
+const QUIEN = "(?:persona|humano|alguien|asesor|encargad|due[ñn]|staff)";
+// `barber` cubre "barbero" y "barbería" sin tocar "barba". 🔴 SOLO cuenta
+// detrás de «hablar con» / «pásame con»: «quiero con el barbero Luis mañana a
+// las 5», «necesito barbero para hoy» o «quiero mi barbero de siempre» son
+// alguien pidiendo CITA, y antes apagaban al bot 12 horas en ese chat.
+const QUIEN_O_BARBERO = "(?:persona|humano|alguien|asesor|encargad|due[ñn]|barber|staff)";
+const PASAME = "(?:p[aá]sa(?:r)?(?:me|nos)?|com[uú]n[ií]ca(?:r)?(?:me|nos)?|transfier[eo]|transfi[eé]re(?:me|nos)|transferir(?:me)?)";
 
 const HANDOFF_PATTERNS: RegExp[] = [
-  new RegExp(`\\bhablar\\s+con\\s+(?:${DET})?${QUIEN}`, "i"),
-  new RegExp(
-    `\\b(?:p[aá]sa(?:r)?(?:me|nos)?|com[uú]nica(?:r)?(?:me|nos)?|transfier[eo]|transferir(?:me)?|quiero|necesito)\\s+` +
-      `(?:con\\s+)?(?:${DET})?${QUIEN}`,
-    "i",
-  ),
+  new RegExp(`\\bhablar\\s+con\\s+(?:${DET})?${QUIEN_O_BARBERO}`, "i"),
+  new RegExp(`\\b${PASAME}\\s+con\\s+(?:${DET})?${QUIEN_O_BARBERO}`, "i"),
+  new RegExp(`\\b(?:${PASAME}|quiero|necesito)\\s+(?:con\\s+)?(?:${DET})?${QUIEN}`, "i"),
   /\bpersona\s+real\b/i,
   /\bno\s+(quiero|me\s+sirve)\s+(hablar\s+con\s+)?(un\s+)?(bot|robot|m[aá]quina)/i,
   /\b(eres|es)\s+un\s+(bot|robot)\b/i,
@@ -265,9 +267,47 @@ export interface BarberBotModelPrice {
 export const BARBER_BOT_MODEL_PRICES: Record<string, BarberBotModelPrice> = {
   "claude-haiku-4-5": { inputPerMTokUsd: 1, outputPerMTokUsd: 5 },
   "claude-sonnet-4-6": { inputPerMTokUsd: 3, outputPerMTokUsd: 15 },
-  "claude-sonnet-5": { inputPerMTokUsd: 3, outputPerMTokUsd: 15 },
+  // Sonnet 5: 2 / 10 USD por millón (la misma tarifa que tiene el bot del
+  // dental en src/lib/ai-billing/pricing-core.ts). Aquí decía 3 / 15, la de
+  // Sonnet 4.6: el tope diario se habría agotado un 50 % antes de tiempo.
+  "claude-sonnet-5": { inputPerMTokUsd: 2, outputPerMTokUsd: 10 },
+  "claude-sonnet-5-5": { inputPerMTokUsd: 2, outputPerMTokUsd: 10 },
   "claude-opus-5": { inputPerMTokUsd: 5, outputPerMTokUsd: 25 },
 };
+
+/**
+ * Modelo por defecto del bot: el Sonnet que usa HOY el bot del dental
+ * (CHAT_MODEL en src/lib/whatsapp/bot/ai.ts). Se cambia sin redeploy con
+ * BARBER_BOT_AI_MODEL; si el que se ponga no está en la tabla de arriba, el
+ * tope diario lo cobra con la tarifa más cara (frena de más, nunca de menos).
+ */
+export const BARBER_BOT_DEFAULT_MODEL = "claude-sonnet-5";
+
+/**
+ * Lo que hay que mandar ADEMÁS en la petición según el modelo.
+ *
+ * En la familia 5, si no se manda `thinking` el modelo razona en modo
+ * adaptativo con esfuerzo ALTO: más latencia y más tokens de los que pide
+ * una respuesta de WhatsApp de tres frases, dentro de un webhook que tiene
+ * los segundos contados. Se deja el razonamiento adaptativo (con
+ * herramientas el modelo decide mejor cuándo consultarlas que con el
+ * razonamiento apagado) pero con el esfuerzo al mínimo.
+ *
+ * `thinking: "off"` (env BARBER_BOT_AI_THINKING=off) lo apaga del todo en
+ * los modelos que lo permiten; Sonnet 5.5 no acepta `disabled`, así que ahí
+ * se queda en adaptativo. Los modelos 4.x no reciben nada: corren sin
+ * razonamiento, igual que hasta ahora.
+ */
+export function botModelRequestExtras(
+  model: string,
+  thinking: "auto" | "off" = "auto",
+): Record<string, unknown> {
+  const m = (model ?? "").trim();
+  if (!/^claude-(sonnet|opus|haiku)-5(-|$)/.test(m)) return {};
+  const canDisable = m === "claude-sonnet-5" || m === "claude-opus-5";
+  if (thinking === "off" && canDisable) return { thinking: { type: "disabled" } };
+  return { thinking: { type: "adaptive" }, output_config: { effort: "low" } };
+}
 
 const MOST_EXPENSIVE: BarberBotModelPrice = { inputPerMTokUsd: 5, outputPerMTokUsd: 25 };
 
@@ -307,6 +347,25 @@ export function botTurnCostMicros(args: {
   return Math.ceil(usd * rate * MICROS_PER_MXN);
 }
 
+/**
+ * Whisper cobra por MINUTO de audio (0.006 USD en whisper-1, la misma cifra
+ * que usa el dictado del dental en src/lib/integrations/whisper-tarifa.ts).
+ */
+export const BARBER_BOT_WHISPER_USD_PER_MIN = 0.006;
+
+/**
+ * Costo de transcribir una nota de voz, en micros de peso. Cuenta contra el
+ * MISMO tope diario de IA de la barbería que las respuestas del bot
+ * (barber_bot_usage): aquí no hay saldo aparte. Mínimo 1 micro: ningún audio
+ * sale gratis del contador.
+ */
+export function botVoiceCostMicros(seconds: number, usdMxn: number): number {
+  const secs = Number.isFinite(seconds) && seconds > 0 ? seconds : 0;
+  const rate = usdMxn > 0 ? usdMxn : BARBER_BOT_USD_MXN_FALLBACK;
+  const usd = (secs / 60) * BARBER_BOT_WHISPER_USD_PER_MIN;
+  return Math.max(1, Math.ceil(usd * rate * MICROS_PER_MXN));
+}
+
 /** Micros → pesos con 2 decimales, para enseñarlo en el panel. */
 export function microsToMxn(micros: number): number {
   return Math.round((micros / MICROS_PER_MXN) * 100) / 100;
@@ -324,6 +383,122 @@ export function quotaIsTight(used: number, limit: number): boolean {
   if (limit < 0) return false; // -1 = ilimitado
   if (limit === 0) return true;
   return used / limit >= BARBER_BOT_QUOTA_WARN_RATIO;
+}
+
+/* ── Pausas: cuáles se quitan solas ────────────────────────────────── */
+
+/**
+ * Marca de las pausas que puso EL BOT (no una persona). Va al principio del
+ * motivo, que es lo que el panel enseña: «🤖 Escribió fuera del horario».
+ */
+export const BARBER_BOT_AUTO_PAUSE_PREFIX = "🤖 ";
+
+/** Pausa por haber escrito fuera del horario del bot. */
+export const BARBER_BOT_PAUSE_OFF_HOURS = `${BARBER_BOT_AUTO_PAUSE_PREFIX}Escribió fuera del horario del bot`;
+
+/**
+ * Cuánto dura una pausa que puso el bot si nadie de la barbería toma la
+ * conversación. Mismo plazo que decidió Rafael para el bot del dental el
+ * 1-oct-2026 (HANDOFF_REACTIVAR_MS en src/lib/whatsapp/bot/handoff.ts).
+ */
+export const BARBER_BOT_PAUSE_MS = 12 * 60 * 60 * 1000;
+
+export function isAutoBotPause(reason: string | null | undefined): boolean {
+  return typeof reason === "string" && reason.startsWith(BARBER_BOT_AUTO_PAUSE_PREFIX);
+}
+
+/** Motivo de una pausa del bot, ya con su marca. */
+export function autoPauseReason(text: string): string {
+  let clean = (text ?? "").replace(/\s+/g, " ").trim();
+  // Idempotente: un motivo que ya trae la marca no la lleva dos veces.
+  while (clean.startsWith(BARBER_BOT_AUTO_PAUSE_PREFIX.trim())) {
+    clean = clean.slice(BARBER_BOT_AUTO_PAUSE_PREFIX.trim().length).trim();
+  }
+  return `${BARBER_BOT_AUTO_PAUSE_PREFIX}${clean.slice(0, 170) || "El bot pasó la conversación"}`;
+}
+
+/**
+ * ¿Esta pausa ya no cuenta y el bot puede volver a contestar?
+ *
+ * 🔴 Antes TODA pausa era para siempre: bastaba que un cliente escribiera
+ * una noche fuera de horario, o que la IA tardara una vez, para que el bot
+ * no le volviera a contestar jamás hasta que alguien lo reanudara a mano en
+ * el panel. En una semana el bot se habría apagado solo, cliente por
+ * cliente.
+ *
+ *   · Pausa del bot por FUERA DE HORARIO → se acaba cuando el bot vuelve a
+ *       estar en horario.
+ *   · CUALQUIER otra pausa → 12 horas desde que se puso (BARBER_BOT_PAUSE_MS),
+ *       sea del bot (pidió una persona, tope de IA, la IA no respondió) o de
+ *       una PERSONA (tomó el chat, contestó desde el panel o desde su
+ *       celular). Decisión de Rafael, la misma que en el dental: si cada
+ *       respuesta del dueño desde su teléfono pausara para siempre, en dos
+ *       semanas el bot estaría apagado para casi todos los clientes.
+ *
+ * Cada respuesta nueva de una persona VUELVE A CONTAR las 12 horas (la
+ * pausa se reescribe con la hora de esa respuesta), así que mientras alguien
+ * siga atendiendo el chat, el bot no entra. «Reanudar» a mano la quita antes.
+ */
+export function botPauseExpired(
+  pause: { reason: string | null; pausedAt: Date },
+  now: Date,
+  botInHoursNow: boolean,
+): boolean {
+  if (pause.reason === BARBER_BOT_PAUSE_OFF_HOURS) return botInHoursNow;
+  return now.getTime() - pause.pausedAt.getTime() >= BARBER_BOT_PAUSE_MS;
+}
+
+/* ── Opciones que el bot ofrece con botones o lista ────────────────── */
+
+/** Una opción que el cliente puede tocar en vez de escribir. */
+export interface BarberBotOption {
+  /** Lo que ve en el botón o en la fila (y lo que nos llega si la toca). */
+  title: string;
+  /** Solo listas: segunda línea gris de la fila. */
+  description?: string;
+}
+
+/** Tope de Meta: una lista admite 10 filas en total. */
+export const BARBER_BOT_OPTIONS_MAX = 10;
+
+/**
+ * Prefijo del id de cada opción. Es lo que le dice a la ingesta que ese
+ * toque es la respuesta a una pregunta DEL BOT (y no, por ejemplo, un
+ * «Sí» al recordatorio de una visita).
+ */
+export const BARBER_BOT_OPTION_ID_PREFIX = "bot:";
+
+export function isBarberBotOptionId(id: unknown): boolean {
+  return typeof id === "string" && id.startsWith(BARBER_BOT_OPTION_ID_PREFIX);
+}
+
+/**
+ * Lo que el modelo pidió ofrecer → opciones válidas. Quita vacías y
+ * repetidas (Meta rechaza dos títulos iguales) y corta en 10. Con menos de
+ * dos no hay nada entre qué elegir: devuelve [] y el mensaje sale como
+ * texto normal.
+ */
+export function normalizeBotOptions(raw: unknown): BarberBotOption[] {
+  if (!Array.isArray(raw)) return [];
+  const out: BarberBotOption[] = [];
+  const seen = new Set<string>();
+  for (const item of raw) {
+    const src: Record<string, unknown> =
+      typeof item === "string"
+        ? { titulo: item }
+        : item && typeof item === "object" && !Array.isArray(item)
+          ? (item as Record<string, unknown>)
+          : {};
+    const title = cleanText(src.titulo ?? src.title, 60);
+    if (!title) continue;
+    const key = title.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const description = cleanText(src.descripcion ?? src.description, 72);
+    out.push(description ? { title, description } : { title });
+    if (out.length >= BARBER_BOT_OPTIONS_MAX) break;
+  }
+  return out.length >= 2 ? out : [];
 }
 
 /* ── Lo que el panel recibe (client-safe, sin prisma) ───────────────── */

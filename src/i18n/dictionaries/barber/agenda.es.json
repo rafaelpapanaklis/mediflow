@@ -215,11 +215,11 @@
     "servedOk": "{name} ya está en la silla.",
     "recent": "Salieron de la fila",
     "notify": {
-      "queued": "Aviso registrado. Sale en cuanto WhatsApp esté conectado.",
-      "already": "Ya había un aviso encolado para esta persona.",
+      "queued": "Aviso enviado por WhatsApp.",
+      "already": "Ya se le avisó a esta persona hace unos minutos.",
       "noPhone": "Esa persona no dejó WhatsApp.",
       "pending": "Pendiente de envío",
-      "explain": "Esta versión REGISTRA el aviso; el envío por WhatsApp lo conecta la siguiente ola."
+      "explain": "Le manda un WhatsApp de «ya casi es tu turno» desde el número de la barbería."
     },
     "qr": {
       "title": "QR del mostrador",

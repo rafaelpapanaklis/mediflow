@@ -2,6 +2,8 @@
 
 import { createContext, useContext, useMemo, useState } from "react";
 import type { ReactNode } from "react";
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 import { type Dictionary, type TVars } from "@/i18n/t";
 import { makeBarberT } from "@/lib/barber/i18n";
 import {
@@ -116,6 +118,10 @@ function Screen({ locale, initial, connected, canEdit, canAttend }: BarberBotScr
     <div className={s.page}>
       <header className={s.header}>
         <div>
+          <Link href="/barber/whatsapp" className={s.back}>
+            <ArrowLeft size={13} aria-hidden />
+            {t("back")}
+          </Link>
           <h1 className={s.title}>{t("title")}</h1>
           <p className={s.subtitle}>{t("subtitle")}</p>
         </div>

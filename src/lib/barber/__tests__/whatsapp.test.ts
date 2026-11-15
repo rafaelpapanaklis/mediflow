@@ -28,10 +28,17 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import {
   BARBER_WA_ARCHIVE_MARK,
+  BARBER_WA_CLAIM_STALE_MS,
+  BARBER_WA_PARAM_MAX,
   BARBER_WA_PRICE_USD,
   BARBER_WA_TEMPLATES,
   BARBER_WA_UNARCHIVE_MARK,
+  BARBER_WALKIN_NOTICE_TTL_MS,
+  barberClientOptedOut,
+  barberOutboxStaleReason,
+  barberWaClaimMark,
   barberWaFits,
+  barberWaOptionsAsText,
   barberWaTemplate,
   barberWaTemplateByName,
   barberWaWindowOpen,
@@ -40,20 +47,52 @@ import {
   classifyBarberReply,
   countBarberWaVariables,
   encodeBarberWaAttachment,
+  isBarberNoReply,
+  isBarberOptOutText,
+  isBarberUnacceptedRequest,
+  isBarberWaAskRow,
+  isBarberWaClaim,
   isBarberWaSysRow,
   isBarberWaUnlimited,
+  isBarberYesReply,
   nextBarberWaStatus,
+  normalizeBarberReply,
+  parseBarberReminderButton,
   parseBarberWaAttachment,
+  parseBarberWaClaim,
   reminderAlreadyHandled,
+  sanitizeBarberWaParam,
+  walkInTemplateNotice,
+  BARBER_REMINDER_TEMPLATE_BUTTONS,
+  BARBER_REQUEST_SOURCES,
+  BARBER_WA_CANCEL_ASK,
+  BARBER_WA_CHANGE_NOTICE_HOURS,
+  barberCancelAskButtons,
+  barberLateChangeReply,
+  barberReminderButtons,
+  barberTooLateToChange,
+  decideBarberReminderReply,
+  decideBarberBotTurn,
+  barberBotReplyIsStale,
+  barberBotTurnMark,
+  parseBarberBotTurnMark,
+  isBarberBotTurnMark,
+  BARBER_WA_TURN_PREFIX,
   type BarberWaAttachment,
 } from "@/lib/barber/whatsapp-core";
-import { isInvalidatedReminder, BARBER_REMINDER_INVALIDATED_MARK } from "@/lib/barber/agenda";
+import { BARBER_CANCEL_WINDOW_HOURS } from "@/lib/barber/portal-core";
+import {
+  isInvalidatedReminder,
+  BARBER_REMINDER_INVALIDATED_MARK,
+  walkInNotifyBody,
+} from "@/lib/barber/agenda";
 
 /* ═══════════════ 1. CATEGORÍAS: la factura de la barbería ═════════════ */
 
 test("todo lo transaccional es `utility` — nada se cuela como marketing", () => {
   const esperado: Record<string, string> = {
     reminder: "UTILITY",
+    reminderButtons: "UTILITY",
     walkinTurn: "UTILITY",
     bookingConfirmed: "UTILITY",
     // Meta EXIGE authentication para un código de un solo uso; mandarlo como
@@ -150,6 +189,8 @@ test("🔴 CONTRATO: la cantidad de variables es la que pasa el emisor (132000)"
   //   birthday/winback  → [cliente, barbería, promo]    son 3
   const contrato: Record<string, number> = {
     reminder: 6,
+    // La de botones lleva los MISMOS seis parámetros (reminderParamsFrom).
+    reminderButtons: 6,
     bookingConfirmed: 4,
     walkinTurn: 2,
     portalCode: 1,
@@ -238,47 +279,176 @@ test("un estado desconocido de Meta no toca nada (lado seguro)", () => {
 });
 
 /* ═══════════ 5. LA RESPUESTA DEL CLIENTE AL RECORDATORIO ═════════════ */
+//
+// 🔴 G1 de la revisión (ronda 2). Hasta entonces estas respuestas se buscaban
+// por «contiene»: «no puedo», «no voy», «cancelar» dentro de CUALQUIER frase
+// cancelaban la cita. Esta sección fijaba «no puedo → cancela» como lo
+// esperado; ahora fija lo contrario.
 
-test("confirmar reconoce lo que la gente escribe de verdad", () => {
-  for (const text of ["CONFIRMAR", "confirmo", "Confirmado", "sí", "si", "ok", "va", "1", "Ahí estaré"]) {
+const REMINDER = barberWaTemplate("reminder").name;
+const trasElRecordatorio = { templateName: REMINDER };
+
+test("confirmar: solo cuando el mensaje ES la respuesta", () => {
+  for (const text of ["CONFIRMAR", "confirmo", "Sí", "si", "ok", "va", "1", "¡Confirmar!", "Sí 👍", "sí confirmo"]) {
     assert.equal(classifyBarberReply(text), "confirm", text);
   }
 });
 
-test("cancelar reconoce lo que la gente escribe de verdad", () => {
-  for (const text of ["CANCELAR", "cancélalo", "no puedo", "No podré ir", "2"]) {
+test("cancelar y cambiar: solo la palabra, sola", () => {
+  for (const text of ["CANCELAR", "cancelar.", "cancélala", "Cancelo", "2"]) {
     assert.equal(classifyBarberReply(text), "cancel", text);
   }
-});
-
-test("cambiar de horario es una TERCERA salida, no un cancelar", () => {
-  for (const text of ["CAMBIAR", "reagendar", "¿lo movemos a otro día?", "otra hora", "3"]) {
+  for (const text of ["CAMBIAR", "reagendar", "Cambiar hora", "3"]) {
     assert.equal(classifyBarberReply(text), "reschedule", text);
   }
 });
 
-test("🔴 'sí, pero otro día' NO confirma: lleva un sí dentro y no es un sí", () => {
-  assert.equal(classifyBarberReply("sí, pero otro día"), "reschedule");
-});
-
-test("🔴 'mejor no, sí cancélala' cancela: ante la duda gana lo que el cliente quiso", () => {
-  assert.equal(classifyBarberReply("mejor no, sí cancélala"), "cancel");
-});
-
-test("un dígito suelto dentro de una frase NO cancela la cita de nadie", () => {
-  assert.equal(classifyBarberReply("somos 2"), "unclear");
-  assert.equal(classifyBarberReply("llegamos 3 personas"), "unclear");
-});
-
-test("lo que no se entiende se marca unclear y no toca la agenda", () => {
-  for (const text of ["", "   ", "gracias", "¿cuánto cuesta el corte?", "👍"]) {
-    assert.equal(classifyBarberReply(text), "unclear", JSON.stringify(text));
+test("🔴 LA TABLA DE LA REVISORA: ninguna frase normal cancela, confirma ni «mueve» la visita", () => {
+  const frases = [
+    // Antes: CANCELABAN (contenían «no voy» / «no puedo» / «cancelar»).
+    "Sí confirmo, no voy a faltar",
+    "ahí estaré, no voy a fallar",
+    "voy a llegar 10 min tarde, no puedo salir antes",
+    "no puedo estacionarme, ahorita llego",
+    "¿puedo cancelar si llueve?",
+    "oye no puedo a las 5, ¿me la pasas a las 6?",
+    "quiero cancelar la del domingo",
+    // Antes: contestaba «con gusto te movemos la visita» (contenía «cambio»).
+    "¿tienen cambio de 500?",
+    // Antes: CONFIRMABA (contenía «confirmo»).
+    "no confirmo todavía, te aviso",
+    // Las que la prueba vieja daba por buenas como cancelación o cambio.
+    "no puedo",
+    "No podré ir",
+    "no voy",
+    "mejor no, sí cancélala",
+    "sí, pero otro día",
+    "¿lo movemos a otro día?",
+    "otra hora",
+    "ahí estaré",
+    "somos 2",
+    "llegamos 3 personas",
+    "gracias",
+    "👍",
+    "",
+  ];
+  for (const frase of frases) {
+    assert.equal(classifyBarberReply(frase), "unclear", JSON.stringify(frase));
+    // …y por tanto no hay NINGUNA acción sobre la visita, ni siquiera justo
+    // después del recordatorio: el mensaje sigue al bot o a la bandeja.
+    assert.equal(decideBarberReminderReply(frase, trasElRecordatorio, REMINDER), null, JSON.stringify(frase));
   }
 });
 
-test("los acentos y las mayúsculas no cambian la respuesta", () => {
-  assert.equal(classifyBarberReply("CONFÍRMALO"), classifyBarberReply("confirmalo"));
-  assert.equal(classifyBarberReply("Cancélala"), "cancel");
+test("normalizar quita acentos, mayúsculas y signos — nunca palabras", () => {
+  assert.equal(normalizeBarberReply("  ¡CONFIRMAR!  "), "confirmar");
+  assert.equal(normalizeBarberReply("Sí 👍"), "si");
+  assert.equal(normalizeBarberReply("Cancélala."), "cancelala");
+  assert.equal(normalizeBarberReply("Sí confirmo, no voy a faltar"), "si confirmo no voy a faltar");
+});
+
+test("🔴 la palabra exacta solo cuenta si el recordatorio fue lo último que se le dijo", () => {
+  // Justo después del recordatorio.
+  assert.equal(decideBarberReminderReply("CONFIRMAR", trasElRecordatorio, REMINDER), "confirm");
+  assert.equal(decideBarberReminderReply("sí", trasElRecordatorio, REMINDER), "confirm");
+  assert.equal(decideBarberReminderReply("3", trasElRecordatorio, REMINDER), "reschedule");
+
+  // Después de cualquier otra cosa (el bot preguntó algo, alguien escribió,
+  // la confirmación de la reserva): ni siquiera «CANCELAR» escrito tal cual.
+  for (const ultimo of [{ templateName: null }, { templateName: "dc_barber_reserva_confirmada" }, null]) {
+    for (const text of ["CONFIRMAR", "CANCELAR", "CAMBIAR", "sí", "1", "2", "3"]) {
+      assert.equal(decideBarberReminderReply(text, ultimo, REMINDER), null, `${text} tras ${JSON.stringify(ultimo)}`);
+    }
+  }
+});
+
+test("🔴 CANCELAR no cancela: PREGUNTA. Solo el «sí» a esa pregunta cancela", () => {
+  assert.equal(decideBarberReminderReply("CANCELAR", trasElRecordatorio, REMINDER), "ask-cancel");
+  assert.equal(decideBarberReminderReply("2", trasElRecordatorio, REMINDER), "ask-cancel");
+
+  const trasLaPregunta = { templateName: BARBER_WA_CANCEL_ASK };
+  for (const text of ["SÍ", "si", "Sí, cancelar", "ok", "va"]) {
+    assert.equal(decideBarberReminderReply(text, trasLaPregunta, REMINDER), "do-cancel", text);
+  }
+  for (const text of ["no", "No.", "mejor no", "No, gracias"]) {
+    assert.equal(decideBarberReminderReply(text, trasLaPregunta, REMINDER), "keep", text);
+  }
+  // Cualquier otra cosa tras la pregunta no decide nada (y «cancelar»
+  // repetido tampoco cancela: tiene que ser el sí).
+  for (const text of ["no sé, déjame ver", "sí pero mejor el jueves", "cancelar", "1", "gracias"]) {
+    assert.equal(decideBarberReminderReply(text, trasLaPregunta, REMINDER), null, text);
+  }
+  assert.equal(isBarberYesReply("no"), false);
+  assert.equal(isBarberNoReply("sí"), false);
+  assert.equal(isBarberWaAskRow(BARBER_WA_CANCEL_ASK), true);
+  assert.equal(isBarberWaSysRow(BARBER_WA_CANCEL_ASK), false, "la pregunta es un mensaje real: se ve en la bandeja");
+});
+
+test("los botones del recordatorio dicen la acción Y la visita exacta", () => {
+  const botones = barberReminderButtons("cita_123");
+  assert.deepEqual(
+    botones.map((b) => b.id),
+    ["rec.confirmar:cita_123", "rec.reagendar:cita_123", "rec.cancelar:cita_123"],
+  );
+  for (const b of [...botones, ...barberCancelAskButtons("cita_123")]) {
+    assert.ok(Array.from(b.title).length <= 20, `«${b.title}» cabe en un botón de respuesta (20)`);
+  }
+  assert.deepEqual(parseBarberReminderButton("rec.confirmar:cita_123"), { action: "confirm", appointmentId: "cita_123" });
+  assert.deepEqual(parseBarberReminderButton("rec.reagendar:cita_123"), { action: "reschedule", appointmentId: "cita_123" });
+  // El botón «Cancelar» tampoco cancela: pregunta.
+  assert.deepEqual(parseBarberReminderButton("rec.cancelar:cita_123"), { action: "ask-cancel", appointmentId: "cita_123" });
+  const [si, no] = barberCancelAskButtons("cita_123");
+  assert.deepEqual(parseBarberReminderButton(si.id), { action: "do-cancel", appointmentId: "cita_123" });
+  assert.deepEqual(parseBarberReminderButton(no.id), { action: "keep", appointmentId: "cita_123" });
+  // Lo que no es de estos botones no se interpreta.
+  for (const id of ["bot:1", "rec.confirmar", "rec.confirmar:", "otra.cosa:1", "", null, 7]) {
+    assert.equal(parseBarberReminderButton(id), null, String(id));
+  }
+});
+
+test("la plantilla del recordatorio con botones: tres, sin emojis, mismas variables que la de texto", () => {
+  const conBotones = barberWaTemplate("reminderButtons");
+  const deTexto = barberWaTemplate("reminder");
+  assert.deepEqual(conBotones.buttons, ["Confirmar", "Cambiar", "Cancelar"]);
+  assert.deepEqual([...BARBER_REMINDER_TEMPLATE_BUTTONS], conBotones.buttons);
+  assert.deepEqual(conBotones.variables, deTexto.variables, "los mismos seis parámetros, en el mismo orden");
+  assert.equal(conBotones.category, "UTILITY");
+  assert.notEqual(conBotones.name, deTexto.name, "son dos plantillas: la de texto queda de respaldo");
+  assert.equal(deTexto.buttons, undefined);
+  // El payload de cada botón sale de barberReminderButtons, en el mismo orden.
+  assert.equal(barberReminderButtons("x").length, conBotones.buttons!.length);
+
+  // Lo que Meta rechazaría en un botón de plantilla.
+  const con = (buttons: string[]) => checkBarberWaTemplate({ ...conBotones, buttons });
+  assert.equal(con(["Confirmar", "Cambiar", "Cancelar"]), null);
+  assert.ok(con(["✅ Confirmar"]), "emojis");
+  assert.ok(con(["Confirmar\nya"]), "saltos de línea");
+  assert.ok(con(["x".repeat(26)]), "más de 25 caracteres");
+  assert.ok(con(["Sí", "Sí"]), "dos iguales");
+  assert.ok(con(["A", "B", "C", "D"]), "más de tres");
+});
+
+test("🔴 cancelar o mover exige 2 horas de anticipación — la misma regla que «mi cuenta»", () => {
+  assert.equal(BARBER_WA_CHANGE_NOTICE_HOURS, BARBER_CANCEL_WINDOW_HOURS, "un solo número para los dos caminos");
+  const now = new Date("2026-11-17T15:00:00.000Z");
+  const en = (min: number) => new Date(now.getTime() + min * 60_000);
+  assert.equal(barberTooLateToChange(en(121), now), false);
+  assert.equal(barberTooLateToChange(en(120), now), false);
+  assert.equal(barberTooLateToChange(en(119), now), true);
+  assert.equal(barberTooLateToChange(en(-10), now), true);
+  assert.match(barberLateChangeReply("55 1234 5678"), /Para cambios de última hora llama a la barbería: 55 1234 5678\./);
+  assert.match(barberLateChangeReply(null), /llama a la barbería\.$/);
+});
+
+test("una solicitud sin aceptar es la reserva en línea PENDIENTE (lo que lista Solicitudes)", () => {
+  assert.equal(isBarberUnacceptedRequest({ status: "PENDING", source: "PUBLIC" }), true);
+  assert.equal(isBarberUnacceptedRequest({ status: "CONFIRMED", source: "PUBLIC" }), false, "ya aceptada");
+  assert.equal(isBarberUnacceptedRequest({ status: "PENDING", source: "PANEL" }), false, "la creó la barbería");
+  assert.equal(isBarberUnacceptedRequest({ status: "PENDING", source: "WALKIN" }), false);
+  assert.deepEqual([...BARBER_REQUEST_SOURCES], ["PUBLIC"]);
+  // booking.ts (de otra pantalla) define Solicitudes con este mismo filtro.
+  const booking = readFileSync("src/lib/barber/booking.ts", "utf8");
+  assert.ok(booking.includes('source: "PUBLIC"'), "si Solicitudes cambia de filtro, BARBER_REQUEST_SOURCES tiene que seguirlo");
 });
 
 /* ═════════════════ 6. ADJUNTOS Y MARCAS DE SISTEMA ═══════════════════ */
@@ -347,6 +517,136 @@ test("la ventana de 24 h abre con el mensaje del cliente y cierra sola", () => {
   // Justo en el filo: 24 h exactas ya está CERRADA (Meta responde 131047).
   assert.equal(barberWaWindowOpen(new Date("2026-08-23T12:00:00.000Z"), ahora), false);
   assert.equal(barberWaWindowOpen(new Date("2026-08-23T12:00:01.000Z"), ahora), true);
+});
+
+/* ═══════ 8b. PARÁMETROS: lo que hace que Meta rechace el mensaje ══════ */
+
+test("🔴 un parámetro nunca lleva saltos, tabulaciones ni espacios dobles (132018)", () => {
+  assert.equal(sanitizeBarberWaParam("Av. Juárez 120\nLocal 4"), "Av. Juárez 120 Local 4");
+  assert.equal(sanitizeBarberWaParam("uno\r\n\tdos      tres"), "uno dos tres");
+  assert.equal(sanitizeBarberWaParam("línea" + String.fromCharCode(0x2028) + "otra"), "línea otra");
+  assert.equal(sanitizeBarberWaParam("  Luis  "), "Luis");
+});
+
+test("un parámetro vacío se cambia por un relleno (131008) y uno enorme se recorta", () => {
+  assert.equal(sanitizeBarberWaParam(""), "—");
+  assert.equal(sanitizeBarberWaParam(" \n "), "—");
+  assert.equal(sanitizeBarberWaParam(null), "—");
+  assert.equal(sanitizeBarberWaParam("", "Tu servicio"), "Tu servicio");
+  const largo = sanitizeBarberWaParam("x".repeat(BARBER_WA_PARAM_MAX + 50));
+  assert.equal(Array.from(largo).length, BARBER_WA_PARAM_MAX);
+});
+
+/* ════════════ 8c. LA COLA: reclamar antes de mandar ═══════════════════ */
+
+test("el reclamo de una fila se reconoce, trae su hora y caduca", () => {
+  const ahora = new Date("2026-11-14T18:00:00.000Z");
+  const marca = barberWaClaimMark(ahora);
+  assert.equal(isBarberWaClaim(marca), true);
+  assert.equal(parseBarberWaClaim(marca)?.toISOString(), ahora.toISOString());
+  assert.equal(isBarberWaClaim(null), false);
+  assert.equal(isBarberWaClaim("(#131026) Message undeliverable"), false);
+  assert.equal(parseBarberWaClaim("(#131026) Message undeliverable"), null);
+  // Una marca ilegible cuenta como viejísima: no puede atorar la fila.
+  const rara = parseBarberWaClaim("[enviando] no-es-fecha");
+  assert.ok(rara && ahora.getTime() - rara.getTime() > BARBER_WA_CLAIM_STALE_MS);
+  // Un reclamo NO es un recordatorio invalidado (son marcas distintas).
+  assert.equal(isInvalidatedReminder(marca), false);
+});
+
+test("🔴 lo que ya no tiene sentido NO se manda: visita pasada, cancelada o aviso viejo", () => {
+  const now = new Date("2026-11-14T18:00:00.000Z");
+  const enDosHoras = new Date("2026-11-14T20:00:00.000Z");
+  const haceUnaHora = new Date("2026-11-14T17:00:00.000Z");
+  const viva = { status: "CONFIRMED", startAt: enDosHoras };
+  const base = { createdAt: now, now };
+
+  for (const kind of ["reminder", "bookingConfirmed"] as const) {
+    assert.equal(barberOutboxStaleReason({ ...base, kind, appointment: viva }), null);
+    assert.equal(
+      barberOutboxStaleReason({ ...base, kind, appointment: { ...viva, status: "PENDING" } }),
+      null,
+    );
+    assert.ok(barberOutboxStaleReason({ ...base, kind, appointment: { ...viva, startAt: haceUnaHora } }));
+    assert.ok(barberOutboxStaleReason({ ...base, kind, appointment: { ...viva, startAt: now } }));
+    for (const status of ["CANCELLED", "NO_SHOW", "DONE", "IN_PROGRESS"]) {
+      assert.ok(barberOutboxStaleReason({ ...base, kind, appointment: { ...viva, status } }), status);
+    }
+    assert.ok(barberOutboxStaleReason({ ...base, kind, appointment: null }), "la visita ya no existe");
+  }
+
+  // Aviso de la fila: vale media hora.
+  const reciente = new Date(now.getTime() - BARBER_WALKIN_NOTICE_TTL_MS + 60_000);
+  const viejo = new Date(now.getTime() - BARBER_WALKIN_NOTICE_TTL_MS - 60_000);
+  assert.equal(barberOutboxStaleReason({ kind: "walkinTurn", createdAt: reciente, now, appointment: null }), null);
+  assert.ok(barberOutboxStaleReason({ kind: "walkinTurn", createdAt: viejo, now, appointment: null }));
+
+  // Un texto suelto que alguien encoló no caduca solo.
+  assert.equal(barberOutboxStaleReason({ kind: "other", createdAt: viejo, now, appointment: null }), null);
+});
+
+test("el aviso de la fila no repite en la plantilla lo que la plantilla ya dice", () => {
+  const shop = "Barbería El Corte";
+  const tpl = barberWaTemplate("walkinTurn");
+  const armar = (aviso: string) => tpl.body.replace("{{1}}", shop).replace("{{2}}", aviso);
+
+  const yaEs = walkInNotifyBody({ shopName: shop, clientName: "Luis Pérez", ahead: 0, etaMinutes: 0 });
+  assert.equal(walkInTemplateNotice(shop, yaEs), "Luis, ya es tu turno.");
+  const final1 = armar(walkInTemplateNotice(shop, yaEs));
+  assert.equal(final1.split("Te esperamos en la silla").length - 1, 1, "una sola vez");
+  assert.equal(final1.split(shop).length - 1, 1, "el nombre de la barbería una sola vez");
+
+  const faltan = walkInNotifyBody({ shopName: shop, clientName: "Luis", ahead: 2, etaMinutes: 20 });
+  assert.equal(
+    walkInTemplateNotice(shop, faltan),
+    "Luis, faltan 2 personas para tu turno. Vente en unos 20 min.",
+  );
+  assert.equal(walkInTemplateNotice(shop, "   "), "Ya casi es tu turno.");
+});
+
+/* ═══════ 8d. RESPUESTAS SUELTAS Y BAJA DE PROMOCIONES ═════════════════ */
+
+test("la baja se reconoce por lo que la gente escribe, y no por accidente", () => {
+  for (const t of ["BAJA", "baja.", "Stop", "darme de baja", "ya no me manden mensajes", "No quiero promociones!"]) {
+    assert.equal(isBarberOptOutText(t), true, t);
+  }
+  for (const t of [
+    "¿a qué hora baja la cortina?",
+    "stop, mejor el jueves",
+    "me doy de baja de la fila",
+    "quiero un corte bajo",
+    "",
+  ]) {
+    assert.equal(isBarberOptOutText(t), false, t);
+  }
+});
+
+test("la baja se lee de las preferencias sin tronar con datos raros", () => {
+  assert.equal(barberClientOptedOut({ __optout: { at: "2026-11-14T00:00:00.000Z" } }), true);
+  assert.equal(barberClientOptedOut({ __optout: null }), false);
+  assert.equal(barberClientOptedOut({ __optout: { at: "" } }), false);
+  assert.equal(barberClientOptedOut({ otra: 1 }), false);
+  assert.equal(barberClientOptedOut(null), false);
+  assert.equal(barberClientOptedOut("texto"), false);
+  assert.equal(barberClientOptedOut([]), false);
+});
+
+test("el respaldo de los botones es el mismo mensaje con las opciones numeradas", () => {
+  assert.equal(
+    barberWaOptionsAsText("¿Qué te vas a hacer? ", [
+      { title: "Corte" },
+      { title: "Barba", description: "$120 · 20 min" },
+    ]),
+    "¿Qué te vas a hacer?\n\n1. Corte\n2. Barba — $120 · 20 min",
+  );
+});
+
+test("🔴 el cron del despacho solo entra con CRON_SECRET, no con una cabecera que cualquiera puede escribir", () => {
+  const src = readFileSync("src/app/api/barber/whatsapp/_server.ts", "utf8");
+  const sinComentarios = src.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:])\/\/[^\n]*/g, "$1");
+  assert.ok(!sinComentarios.includes("x-vercel-cron"), "la cabecera x-vercel-cron no autoriza nada");
+  assert.ok(sinComentarios.includes("Bearer ${secret}"), "se exige el secreto");
+  assert.ok(/if \(!secret\)[\s\S]{0,200}status: 503/.test(sinComentarios), "sin secreto configurado: 503");
 });
 
 /* ══════════ 9. TERMINOLOGÍA: es una barbería, no una clínica ═════════ */
@@ -431,4 +731,125 @@ test("los diccionarios del vertical hablan de cliente/barbero/barbería", () => 
   assert.match(es, /cliente/);
   assert.match(es, /barber[íi]a/);
   for (const re of PROHIBIDAS) assert.equal(re.test(es), false, String(re));
+});
+
+/* ═══════ G4 — un solo turno del bot por conversación ═══════ */
+
+test("🔴 G4 — quién corre: uno a la vez, y el mensaje más nuevo contesta por todos", () => {
+  const t0 = new Date("2026-11-14T18:00:00.000Z");
+  const en = (ms: number) => new Date(t0.getTime() + ms);
+  const fila = (id: string, llego: number, marca: string | null) => ({
+    id,
+    createdAt: en(llego),
+    errorMessage: marca,
+  });
+  const ahora = en(5_000);
+  const vigente = en(50_000);
+  const caducada = en(1_000);
+  const yo = { id: "m2", createdAt: en(2_000) };
+
+  // Nadie más: corro.
+  assert.equal(decideBarberBotTurn(yo, [], ahora), "run");
+  // Un entrante sin marca (un «CONFIRMAR», una foto) no pinta nada.
+  assert.equal(decideBarberBotTurn(yo, [fila("m1", 1_000, null)], ahora), "run");
+
+  // Otro turno está corriendo: espero (da igual si es anterior o posterior).
+  assert.equal(
+    decideBarberBotTurn(yo, [fila("m1", 1_000, barberBotTurnMark("atendiendo", vigente))], ahora),
+    "wait",
+  );
+  // …aunque además haya uno más nuevo esperando: primero que acabe el que corre.
+  assert.equal(
+    decideBarberBotTurn(
+      yo,
+      [fila("m1", 1_000, barberBotTurnMark("atendiendo", vigente)), fila("m3", 3_000, barberBotTurnMark("espera", vigente))],
+      ahora,
+    ),
+    "wait",
+  );
+  // Nadie corre y hay uno MÁS NUEVO esperando: cedo, él contesta por los dos.
+  assert.equal(
+    decideBarberBotTurn(yo, [fila("m3", 3_000, barberBotTurnMark("espera", vigente))], ahora),
+    "yield",
+  );
+  // El que espera es más VIEJO que yo: corro yo (él cederá).
+  assert.equal(
+    decideBarberBotTurn(yo, [fila("m1", 1_000, barberBotTurnMark("espera", vigente))], ahora),
+    "run",
+  );
+  // Misma hora exacta: desempata el id, y solo uno de los dos corre.
+  const gemelo = { id: "m9", createdAt: yo.createdAt };
+  assert.equal(
+    decideBarberBotTurn(yo, [{ ...gemelo, errorMessage: barberBotTurnMark("espera", vigente) }], ahora),
+    "yield",
+  );
+  assert.equal(
+    decideBarberBotTurn(gemelo, [{ ...yo, errorMessage: barberBotTurnMark("espera", vigente) }], ahora),
+    "run",
+  );
+
+  // Un turno ya contestó habiendo visto mi mensaje: cedo, no contesto dos veces.
+  assert.equal(
+    decideBarberBotTurn(yo, [fila("m3", 3_000, barberBotTurnMark("listo", en(3_000)))], ahora),
+    "yield",
+  );
+  assert.equal(
+    decideBarberBotTurn(yo, [fila("m3", 3_000, barberBotTurnMark("listo", yo.createdAt))], ahora),
+    "yield",
+  );
+  // …pero un «listo» de ANTES de que yo llegara no me vio: corro.
+  assert.equal(
+    decideBarberBotTurn(yo, [fila("m1", 1_000, barberBotTurnMark("listo", en(1_000)))], ahora),
+    "run",
+  );
+
+  // 🔴 Una marca caducada es de un proceso que murió: no puede dejar mudo el hilo.
+  assert.equal(
+    decideBarberBotTurn(yo, [fila("m1", 1_000, barberBotTurnMark("atendiendo", caducada))], ahora),
+    "run",
+  );
+  assert.equal(
+    decideBarberBotTurn(yo, [fila("m3", 3_000, barberBotTurnMark("espera", caducada))], ahora),
+    "run",
+  );
+  // Mi propia fila no cuenta, y un error de verdad en esa columna tampoco.
+  assert.equal(
+    decideBarberBotTurn(yo, [{ ...yo, errorMessage: barberBotTurnMark("atendiendo", vigente) }], ahora),
+    "run",
+  );
+  assert.equal(decideBarberBotTurn(yo, [fila("m1", 1_000, "(#131047) Re-engagement message")], ahora), "run");
+});
+
+test("G4 — la respuesta nace vieja solo si llegó algo DESPUÉS de lo que vio el turno y sigue esperando", () => {
+  const t0 = new Date("2026-11-14T18:00:00.000Z");
+  const en = (ms: number) => new Date(t0.getTime() + ms);
+  const ahora = en(5_000);
+  const visto = en(1_000);
+  const fila = (llego: number, marca: string | null) => ({ id: `m${llego}`, createdAt: en(llego), errorMessage: marca });
+
+  assert.equal(barberBotReplyIsStale(visto, [], ahora), false);
+  assert.equal(barberBotReplyIsStale(visto, [fila(2_000, barberBotTurnMark("espera", en(50_000)))], ahora), true);
+  // Lo que ya había visto no la vuelve vieja.
+  assert.equal(barberBotReplyIsStale(visto, [fila(1_000, barberBotTurnMark("espera", en(50_000)))], ahora), false);
+  // Un mensaje nuevo que NO va al bot (sin marca) no se la traga: nadie más contestaría.
+  assert.equal(barberBotReplyIsStale(visto, [fila(2_000, null)], ahora), false);
+  // El que esperaba ya se rindió (marca caducada): contesto yo.
+  assert.equal(barberBotReplyIsStale(visto, [fila(2_000, barberBotTurnMark("espera", en(4_000)))], ahora), false);
+  assert.equal(barberBotReplyIsStale(visto, [fila(2_000, barberBotTurnMark("listo", en(2_000)))], ahora), false);
+});
+
+test("G4 — las marcas del turno se leen de vuelta y no se confunden con un error ni con la cola", () => {
+  const cuando = new Date("2026-11-14T18:00:00.000Z");
+  for (const kind of ["atendiendo", "espera", "listo"] as const) {
+    const marca = barberBotTurnMark(kind, cuando);
+    assert.ok(marca.startsWith(BARBER_WA_TURN_PREFIX));
+    assert.ok(isBarberBotTurnMark(marca));
+    assert.deepEqual(parseBarberBotTurnMark(marca), { kind, at: cuando });
+    assert.equal(isBarberWaClaim(marca), false, "no es el reclamo «[enviando]» de la cola");
+    assert.equal(isInvalidatedReminder(marca), false);
+  }
+  for (const raro of [null, undefined, "", "(#100) Invalid parameter", "[bot:otra] 2026-11-14T18:00:00.000Z", "[bot:listo] ayer"]) {
+    assert.equal(parseBarberBotTurnMark(raro), null, String(raro));
+  }
+  assert.equal(isBarberBotTurnMark("(#100) Invalid parameter"), false);
 });

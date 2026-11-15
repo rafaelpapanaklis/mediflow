@@ -1,49 +1,40 @@
 // ═══════════════════════════════════════════════════════════════════════
 // POST /api/barber/walkins/[id]/notify
-//   → PUNTO DE EXTENSIÓN del aviso de fila por WhatsApp. T7 lo conecta.
+//   → le avisa por WhatsApp a quien espera en la fila: "ya casi es tu turno".
 //
-// ESTA OLA NO MANDA NADA. Aquí solo se REGISTRA el evento: se encola una
-// fila BarberMessage (direction OUTBOUND, status PENDING) con el cuerpo ya
-// redactado y templateName = BARBER_WALKIN_NOTIFY_TEMPLATE. El envío real
-// —WABA de la barbería, cuota de mensajes del plan, reintentos, paso a
-// SENT/DELIVERED/FAILED— es trabajo de la ola de WhatsApp (T7).
+// MANDA DE VERDAD. Antes este punto solo dejaba una fila PENDING en
+// BarberMessage que nadie enviaba (el cron del despacho no estaba dado de
+// alta). Ahora el aviso sale en el momento por el MISMO camino que el
+// drenado de la cola (src/lib/barber/whatsapp.ts → notifyBarberWalkIn):
+//   · con la ventana de 24 h abierta va como texto; si no, con la plantilla
+//     de utilidad `dc_barber_turno_fila`;
+//   · respeta el cupo de mensajes del plan;
+//   · queda en la bandeja con su estado real (SENT → DELIVERED/READ, o
+//     FAILED con el motivo de Meta);
+//   · no se le avisa dos veces al mismo número en menos de 10 minutos.
 //
-// CONTRATO PARA T7 (todo lo que necesita saber):
-//   · Qué leer:  BarberMessage donde direction = OUTBOUND, status = PENDING
-//                y templateName = "walkin_casi_es_tu_turno".
-//   · Qué mandar: el campo `body`, ya redactado en es-MX por
-//                walkInNotifyBody() (src/lib/barber/agenda.ts). Si T7 usa
-//                una plantilla aprobada de Meta, ese texto es el fallback y
-//                la referencia de las variables.
-//   · A quién:   el campo `phone` (10 dígitos MX ya normalizados).
-//   · Al acabar: status = SENT (+ waMessageId) o FAILED (+ errorMessage).
-//   · Qué NO tomar: cualquier fila cuyo errorMessage empiece con
-//                "[recordatorio-invalidado]" — ésa la matamos nosotros a
-//                propósito (ver isInvalidatedReminder).
-//   · No hay tabla nueva ni cola aparte: BarberMessage YA es la cola.
+// Si NO salió, el mostrador lo tiene que saber en el acto (la persona está
+// esperando): la ruta responde con error y el motivo, no con un "encolado".
 //
 // La entrada de fila no se referencia con una FK porque BarberMessage no
-// tiene columna para walk-ins y el schema NO se toca en esta ola: el
-// vínculo es (phone, templateName) dentro de la misma barbería.
+// tiene columna para walk-ins y el schema NO se toca: el vínculo es
+// (phone, templateName) dentro de la misma barbería.
 // ═══════════════════════════════════════════════════════════════════════
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { mxTenDigits } from "@/lib/phone-mx";
 import { hasBarberPermission } from "@/lib/barber/permissions";
 import {
-  BARBER_WALKIN_NOTIFY_TEMPLATE,
   estimateWaitMinutes,
   toWalkInDTO,
   walkInNotifyBody,
   walkInsAhead,
 } from "@/lib/barber/agenda";
+import { notifyBarberWalkIn } from "@/lib/barber/whatsapp";
 import { asString, jsonError, openAgendaGate, readJson } from "../../../appointments/_server";
 import { loadQueueSnapshot, WALKIN_FEATURE } from "../../_server";
 
 export const dynamic = "force-dynamic";
-
-/** Ventana anti-spam: no se encola dos veces al mismo número tan seguido. */
-const DEDUPE_MINUTES = 10;
 
 export async function POST(req: Request, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -72,25 +63,16 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
     where: { id: params.id, barbershopId: shopId },
   });
   if (!entry) return jsonError("Esa persona ya no está en la fila.", 404);
+  // Solo se avisa a quien sigue esperando. A quien ya pasó a la silla, ya fue
+  // atendido o se fue, un «ya casi es tu turno» le llegaba igual (la pantalla
+  // del mostrador puede ir unos segundos atrás de la fila real).
+  if (entry.status !== "WAITING" && entry.status !== "CALLED") {
+    return jsonError("Esa persona ya no está esperando en la fila.", 409, { code: "NOT_WAITING" });
+  }
 
   const phone = mxTenDigits(entry.phone ?? "");
   if (!phone) {
     return jsonError("Esa persona no dejó un WhatsApp a 10 dígitos.", 400, { code: "NO_PHONE" });
-  }
-
-  const since = new Date(Date.now() - DEDUPE_MINUTES * 60_000);
-  const already = await prisma.barberMessage.findFirst({
-    where: {
-      barbershopId: shopId,
-      phone,
-      templateName: BARBER_WALKIN_NOTIFY_TEMPLATE,
-      status: "PENDING",
-      createdAt: { gt: since },
-    },
-    select: { id: true },
-  });
-  if (already) {
-    return NextResponse.json({ queued: false, messageId: already.id, reason: "ALREADY_QUEUED" });
   }
 
   const snapshot = await loadQueueSnapshot(shopId);
@@ -101,28 +83,49 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
     chairs: snapshot.chairs,
     avgServiceMin: snapshot.avgServiceMin,
   });
-
-  const message = await prisma.barberMessage.create({
-    data: {
-      barbershopId: shopId,
-      direction: "OUTBOUND",
-      phone,
-      body: walkInNotifyBody({
-        shopName,
-        clientName: entry.clientName,
-        ahead,
-        etaMinutes,
-      }),
-      templateName: BARBER_WALKIN_NOTIFY_TEMPLATE,
-      status: "PENDING",
-    },
-    select: { id: true, body: true },
+  const preview = walkInNotifyBody({
+    shopName,
+    clientName: entry.clientName,
+    ahead,
+    etaMinutes,
   });
 
+  let result;
+  try {
+    result = await notifyBarberWalkIn({ barbershopId: shopId, phone, body: preview });
+  } catch (err) {
+    console.error("[POST barber/walkins/notify]", err);
+    return jsonError("No se pudo mandar el aviso. Intenta de nuevo.", 500);
+  }
+
+  if (result.outcome === "already") {
+    // Mismo contrato que antes: el mostrador enseña "ya se le avisó".
+    return NextResponse.json({
+      queued: false,
+      sent: false,
+      messageId: result.messageId,
+      reason: "ALREADY_QUEUED",
+    });
+  }
+  if (result.outcome === "failed") {
+    // 409 = algo que la barbería puede resolver (conectar, cupo); 502 = Meta
+    // lo rechazó. En los dos casos viaja el motivo real.
+    const fixable =
+      result.code === "NOT_CONNECTED" ||
+      result.code === "QUOTA" ||
+      result.code === "NO_PHONE" ||
+      result.code === "TEMPLATE_PENDING";
+    return jsonError(result.error ?? "No se pudo mandar el aviso.", fixable ? 409 : 502, {
+      code: result.code ?? "SEND_FAILED",
+    });
+  }
+
   return NextResponse.json({
+    // `queued` se conserva porque es lo que lee el panel de la fila.
     queued: true,
-    messageId: message.id,
-    preview: message.body,
+    sent: result.outcome === "sent",
+    messageId: result.messageId,
+    preview,
     ahead,
     etaMinutes,
   });

@@ -34,6 +34,19 @@
   gap: 12px;
 }
 
+.back {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-2);
+  text-decoration: none;
+}
+
+.back:hover { color: var(--brand); }
+
 .title {
   margin: 0;
   font-size: clamp(19px, 2.2vw, 23px);
