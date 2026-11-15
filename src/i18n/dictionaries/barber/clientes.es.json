@@ -78,6 +78,10 @@
     "title": "Nuevo cliente",
     "save": "Guardar cliente",
     "linked": "Ese teléfono ya tenía ficha. Te llevamos a la suya.",
+    "existing": "Ese teléfono ya tenía ficha a nombre de {name}.",
+    "existingDiff": "Ese teléfono ya tenía ficha a nombre de {name}. Tú escribiste «{typed}».",
+    "notSame": "Es otra persona",
+    "sameOk": "Entendido",
     "created": "Cliente dado de alta."
   },
   "form": {
@@ -212,6 +216,7 @@
   },
   "history": {
     "title": "Historial de cortes",
+    "cancelReason": "Motivo de la cancelación: {reason}",
     "empty": "Todavía no hay visitas registradas.",
     "noBarber": "Sin barbero asignado",
     "estimate": "estimado",

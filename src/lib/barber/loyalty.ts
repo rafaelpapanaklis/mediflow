@@ -32,6 +32,7 @@ import { loadBonusCatalog } from "@/lib/barber/stars-core";
 // El sello interno de los tickets de mostrador nunca se enseña.
 import { pickCurrentPeriod, saleKindOf, stripSaleTag, upcomingPeriods, type BarberSaleKind } from "@/lib/barber/memberships-core";
 import { clientsViewScope, scopeUserFromCtx } from "@/lib/barber/own-visits";
+import { readAppointmentExtras } from "@/lib/barber/appointment-extras";
 
 /**
  * ═══════════════════════════════════════════════════════════════════════
@@ -407,6 +408,11 @@ export interface BarberVisitEntry {
    */
   loyaltyRedeemed: boolean;
   /**
+   * Solo en una cita CANCELADA: por qué se canceló (cita «B», ws6-t5). Sale de
+   * la columna cancelReason (sql/barber_cita_b.sql); sin el SQL, null.
+   */
+  cancelReason?: string | null;
+  /**
    * Solo en kind = "sale": qué movimiento de mostrador es (D2, 15-nov). El
    * anticipo cobrado y su devolución salen como DOS movimientos, cada uno con
    * su importe (+ y −), igual que en Caja y Reportes.
@@ -565,6 +571,15 @@ export async function getBarberVisitHistory(
       loyaltyRedeemed: true,
     });
   });
+
+  // Motivo de cancelación de las citas canceladas, en UNA lectura.
+  const cancelled = entries.filter((e) => e.kind === "appointment" && e.status === "CANCELLED").map((e) => e.id);
+  if (cancelled.length > 0) {
+    const extras = await readAppointmentExtras(prisma, barbershopId, cancelled);
+    for (const e of entries) {
+      if (e.kind === "appointment" && e.status === "CANCELLED") e.cancelReason = extras.get(e.id)?.cancelReason ?? null;
+    }
+  }
 
   entries.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
 

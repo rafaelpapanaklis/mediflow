@@ -55,8 +55,8 @@ export default async function Page() {
     return (
       <GateCard
         icon={<Lock size={26} />}
-        title={t("barber.shell.nav.membresias")}
-        body={t("barber.membresias.subtitle")}
+        title={t("barber.caja.common.noPermissionTitle")}
+        body={t("barber.caja.common.noPermissionBody")}
       />
     );
   }

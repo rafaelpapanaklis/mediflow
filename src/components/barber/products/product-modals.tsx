@@ -1,9 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
+import { ImagePlus, Package, Trash2 } from "lucide-react";
 import type { Dictionary } from "@/i18n/t";
 import type { MovementRow, ProductRow } from "@/lib/barber/inventory";
+import type { ProductExtras } from "@/lib/barber/tienda";
+import { PRODUCT_CATEGORY_MAX, PRODUCT_DESCRIPTION_MAX } from "@/lib/barber/tienda-core";
+import { comprimirFotoDeCorte, FotoDemasiadoGrande } from "@/components/barber/clients/photo-uploader";
 import type { BarberStockMovementType } from "@/lib/barber/types";
 import { BadgeNew } from "@/components/ui/design-system/badge-new";
 import { BarberModal } from "@/components/barber/cash/modal";
@@ -29,9 +33,59 @@ async function sendJson<T>(url: string, method: "POST" | "PATCH", body: unknown)
   }
 }
 
-export function ProductFormModal({ dict, product, onClose, onDone }: { dict: Dictionary; product: ProductRow | null; onClose: () => void; onDone: () => void }) {
+export function ProductFormModal({
+  dict,
+  product,
+  tiendaReady = false,
+  extras = null,
+  categories = [],
+  onClose,
+  onDone,
+}: {
+  dict: Dictionary;
+  product: ProductRow | null;
+  /** sql/barber_tienda.sql pegado: foto, categoría, descripción y tienda. */
+  tiendaReady?: boolean;
+  extras?: ProductExtras | null;
+  /** Categorías que ya usa la barbería (sugerencias). */
+  categories?: string[];
+  onClose: () => void;
+  onDone: () => void;
+}) {
   const t = useBarberT(dict);
   const editing = Boolean(product);
+  const [category, setCategory] = useState(extras?.category ?? "");
+  const [description, setDescription] = useState(extras?.description ?? "");
+  const [showOnWeb, setShowOnWeb] = useState(extras?.showOnWeb ?? false);
+  const [onlineOrder, setOnlineOrder] = useState(extras?.onlineOrder ?? false);
+  // Foto: la que ya tiene, una nueva elegida (aún sin subir) o «quitar».
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(extras?.photoUrl ?? null);
+  const [removePhoto, setRemovePhoto] = useState(false);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const fileRef = useRef<HTMLInputElement | null>(null);
+  useEffect(() => () => {
+    if (photoPreview && photoPreview.startsWith("blob:")) URL.revokeObjectURL(photoPreview);
+  }, [photoPreview]);
+
+  async function pickPhoto(files: FileList | null) {
+    const raw = files?.[0];
+    if (!raw) return;
+    setPhotoBusy(true);
+    setError(null);
+    try {
+      // Se reduce en el navegador (1600 px, WebP), como las fotos de clientes.
+      const ready = await comprimirFotoDeCorte(raw);
+      setPhotoFile(ready.file);
+      setPhotoPreview(URL.createObjectURL(ready.file));
+      setRemovePhoto(false);
+    } catch (e) {
+      setError(e instanceof FotoDemasiadoGrande ? t("productos.photoTooBig") : t("productos.photoUnreadable"));
+    } finally {
+      setPhotoBusy(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  }
   const [name, setName] = useState(product?.name ?? "");
   const [sku, setSku] = useState(product?.sku ?? "");
   const [price, setPrice] = useState(product ? String(product.price) : "");
@@ -46,7 +100,7 @@ export function ProductFormModal({ dict, product, onClose, onDone }: { dict: Dic
   const priceOk = parseAmountText(price) !== null && price.trim() !== "";
   const costOk = cost.trim() === "" || parseAmountText(cost) !== null;
   const intOk = (v: string) => v.trim() === "" || /^\d+$/.test(v.trim());
-  const canSave = name.trim().length > 0 && priceOk && costOk && intOk(minStock) && intOk(initialStock) && !busy;
+  const canSave = name.trim().length > 0 && priceOk && costOk && intOk(minStock) && intOk(initialStock) && !busy && !photoBusy;
 
   // Motivo de «Guardar apagado», junto a cada campo, solo en lo que la persona ya tocó.
   const [touched, setTouched] = useState<Record<string, boolean>>({});
@@ -74,14 +128,45 @@ export function ProductFormModal({ dict, product, onClose, onDone }: { dict: Dic
     if (editing) body.isActive = isActive;
     else body.initialStock = Number(initialStock || "0");
     const r = editing
-      ? await sendJson(`/api/barber/products/${product!.id}`, "PATCH", body)
-      : await sendJson("/api/barber/products", "POST", body);
-    setBusy(false);
+      ? await sendJson<ProductRow>(`/api/barber/products/${product!.id}`, "PATCH", body)
+      : await sendJson<ProductRow>("/api/barber/products", "POST", body);
     if (!r.ok) {
+      setBusy(false);
       setError(r.error === "network" || !r.error ? t("common.error") : r.error);
       return;
     }
-    toast.success(t("productos.saved"));
+    // Lo de la tienda va aparte (otra tabla de columnas y otra ruta). Si
+    // falla, el producto YA quedó guardado: se avisa sin perderlo.
+    const id = editing ? product!.id : r.data?.id;
+    let warn: string | null = null;
+    if (tiendaReady && id) {
+      const ex = await sendJson(`/api/barber/products/${id}/tienda`, "PATCH", {
+        category: category.trim() || null,
+        description: description.trim() || null,
+        showOnWeb,
+        onlineOrder: showOnWeb && onlineOrder,
+      });
+      if (!ex.ok) warn = ex.error;
+      if (photoFile) {
+        const fd = new FormData();
+        fd.append("file", photoFile);
+        try {
+          const up = await fetch(`/api/barber/products/${id}/photo`, { method: "POST", body: fd });
+          if (!up.ok) warn = ((await up.json().catch(() => ({}))) as { error?: string }).error ?? t("productos.photoFailed");
+        } catch {
+          warn = t("productos.photoFailed");
+        }
+      } else if (removePhoto && extras?.photoUrl) {
+        try {
+          await fetch(`/api/barber/products/${id}/photo`, { method: "DELETE" });
+        } catch {
+          warn = t("productos.photoFailed");
+        }
+      }
+    }
+    setBusy(false);
+    if (warn) toast.error(`${t("productos.savedWithWarning")} ${warn}`);
+    else toast.success(t("productos.saved"));
     onDone();
   }
 
@@ -132,6 +217,7 @@ export function ProductFormModal({ dict, product, onClose, onDone }: { dict: Dic
             <label className="field-new__label">{t("productos.fCost")}</label>
             <input className="input-new" inputMode="decimal" value={cost} onChange={(e) => { setCost(e.target.value); touch("cost"); }} onBlur={() => touch("cost")} placeholder="0.00" />
             {bad("cost", !costOk, "productos.errCost")}
+            {costOk && priceOk && cost.trim() !== "" && (parseAmountText(cost) ?? 0) > (parseAmountText(price) ?? 0) ? <div className="bcaja-hint" style={{ color: "var(--warning)" }}>{t("productos.costAbovePrice")}</div> : null}
           </div>
           <div className="field-new">
             <label className="field-new__label">{t("productos.fMin")}</label>
@@ -154,6 +240,59 @@ export function ProductFormModal({ dict, product, onClose, onDone }: { dict: Dic
             </div>
           )}
         </div>
+        {tiendaReady ? (
+          <>
+            <div className="field-new">
+              <span className="field-new__label">{t("productos.fPhoto")}</span>
+              <div className="btienda-photo-field">
+                <div className="btienda-photo-thumb">
+                  {photoPreview && !removePhoto ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={photoPreview} alt="" />
+                  ) : (
+                    <Package size={22} aria-hidden="true" />
+                  )}
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 0 }}>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                    <button type="button" className="btn-new btn-new--secondary" onClick={() => fileRef.current?.click()} disabled={photoBusy || busy} data-accion="elegir-foto">
+                      <ImagePlus size={14} /> {photoBusy ? t("productos.photoPreparing") : photoPreview && !removePhoto ? t("productos.photoChange") : t("productos.photoAdd")}
+                    </button>
+                    {photoPreview && !removePhoto ? (
+                      <button type="button" className="btn-new btn-new--ghost" onClick={() => { setPhotoFile(null); setRemovePhoto(true); }} disabled={busy}>
+                        <Trash2 size={14} /> {t("productos.photoRemove")}
+                      </button>
+                    ) : null}
+                  </div>
+                  <span className="bcaja-hint">{t("productos.photoHint")}</span>
+                  <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" hidden onChange={(e) => void pickPhoto(e.target.files)} data-foto-producto />
+                </div>
+              </div>
+            </div>
+            <div className="bcaja-form__grid">
+              <div className="field-new">
+                <label className="field-new__label" htmlFor="prod-categoria">{t("productos.fCategory")}</label>
+                <input id="prod-categoria" className="input-new" list="prod-categorias" value={category} onChange={(e) => setCategory(e.target.value)} maxLength={PRODUCT_CATEGORY_MAX} placeholder={t("productos.fCategoryPlaceholder")} />
+                <datalist id="prod-categorias">
+                  {categories.map((c) => <option key={c} value={c} />)}
+                </datalist>
+              </div>
+              <div className="field-new" style={{ gridColumn: "1 / -1" }}>
+                <label className="field-new__label" htmlFor="prod-descripcion">{t("productos.fDescription")}</label>
+                <textarea id="prod-descripcion" className="input-new" rows={2} value={description} onChange={(e) => setDescription(e.target.value)} maxLength={PRODUCT_DESCRIPTION_MAX} placeholder={t("productos.fDescriptionPlaceholder")} style={{ resize: "vertical", minHeight: 60 }} />
+                <div className="bcaja-hint" style={{ textAlign: "right" }}>{description.length}/{PRODUCT_DESCRIPTION_MAX}</div>
+              </div>
+            </div>
+            <label className="btienda-switch">
+              <input type="checkbox" checked={showOnWeb} onChange={(e) => setShowOnWeb(e.target.checked)} data-mostrar-en-web />
+              <span>{t("productos.fShowOnWeb")}<small>{t("productos.fShowOnWebHint")}</small></span>
+            </label>
+            <label className={showOnWeb ? "btienda-switch" : "btienda-switch btienda-switch--off"}>
+              <input type="checkbox" checked={showOnWeb && onlineOrder} disabled={!showOnWeb} onChange={(e) => setOnlineOrder(e.target.checked)} data-apartar-en-linea />
+              <span>{t("productos.fOnlineOrder")}<small>{t("productos.fOnlineOrderHint")}</small></span>
+            </label>
+          </>
+        ) : null}
       </div>
     </BarberModal>
   );

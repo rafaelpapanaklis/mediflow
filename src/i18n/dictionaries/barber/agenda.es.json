@@ -18,6 +18,7 @@
     "schedules": "Horarios y bloqueos",
     "backToAgenda": "Volver a la agenda",
     "retry": "Reintentar",
+    "refresh": "Actualizar",
     "close": "Cerrar",
     "cancel": "Cancelar",
     "undo": "Deshacer"
@@ -83,6 +84,7 @@
       "other": "{count} visitas"
     },
     "changeClient": "Cambiar",
+    "searchExisting": "Buscar en mis clientes",
     "services": "Servicios",
     "servicesEmpty": "Todavía no tienes servicios en el catálogo.",
     "barber": "Barbero",
@@ -135,10 +137,11 @@
     "durationSaved": "Duración actualizada a {duration}.",
     "minutes": "min",
     "charge": "Cobrar",
+    "chargeNow": "Cobrar ahora",
     "completeAndCharge": "Completar y cobrar",
     "alreadyCharged": "Ya se cobró: {amount}.",
     "viewTicket": "Ver el ticket",
-    "chargeSkipHint": "¿Va a pagar después? Puedes cerrar sin cobrar; la visita queda en “Citas por cobrar” de la caja.",
+    "chargeSkipHint": "Si paga después, solo cierra: queda en «Citas por cobrar» de la caja.",
     "cancelConfirm": "¿Cancelar la visita de {name}?",
     "cancelYes": "Sí, cancelar",
     "cancelNo": "No, volver"
@@ -221,8 +224,8 @@
     "waitingSince": "Lleva {wait} esperando",
     "actions": {
       "call": "Llamar",
-      "uncall": "Regresar a la fila",
-      "serve": "Pasar a la silla",
+      "uncall": "Aún no llega · regresar a la fila",
+      "serve": "Sentar en la silla",
       "left": "Se fue",
       "notify": "Avisar por WhatsApp"
     },
@@ -248,6 +251,7 @@
     },
     "errors": {
       "name": "Escribe el nombre.",
+      "serveService": "Elige al menos un servicio: sin él la visita queda en $0 y no hay qué cobrar.",
       "generic": "No se pudo actualizar la fila."
     }
   },
@@ -390,5 +394,177 @@
     "accepted": "Aceptaste la solicitud de {client}.",
     "notified": "Le avisamos que quedó agendada.",
     "notNotified": "Avísale tú: a este cliente no le llegó mensaje."
+  },
+  "cita": {
+    "title": "Visita de {name}",
+    "titleNoClient": "Visita",
+    "more": "Más",
+    "moreGroupVisit": "Esta visita",
+    "moreGroupStatus": "Cambiar el estado",
+    "grab": "Arrastra hacia abajo para cerrar",
+    "steps": {
+      "PENDING": "Pendiente",
+      "CONFIRMED": "Confirmada",
+      "IN_PROGRESS": "En silla",
+      "DONE": "Completada",
+      "NO_SHOW": "No llegó",
+      "CANCELLED": "Cancelada"
+    },
+    "stepNow": "Ahora",
+    "cancelled": "Se canceló esta visita.",
+    "cancelledWith": "Se canceló esta visita · {reason}",
+    "noShow": "El cliente no llegó.",
+    "arrivedAt": "Llegó a las {time}: ya está esperando.",
+    "tabs": {
+      "visit": "Visita",
+      "client": "Cliente"
+    },
+    "client": {
+      "new": "Cliente nuevo",
+      "visits": {
+        "one": "{count} visita",
+        "other": "{count} visitas"
+      },
+      "whatsapp": "WhatsApp",
+      "call": "Llamar",
+      "file": "Ver ficha",
+      "none": "Esta visita no está ligada a un cliente.",
+      "loading": "Cargando su ficha…",
+      "loadError": "No se pudo cargar su ficha. Lo demás de la visita sí funciona."
+    },
+    "stars": {
+      "title": "Estrellas",
+      "count": "{stars} de {slots}",
+      "next": "{remaining} más y gana: {bonus}",
+      "ready": "Ya puede pedir: {bonus}",
+      "first": "Hoy gana su primera estrella al cobrar.",
+      "stamps": "Sellos",
+      "stampsCount": "{count} de {threshold}",
+      "stampsReady": "Ya ganó: {reward}"
+    },
+    "likes": {
+      "title": "Cómo le gusta el corte",
+      "emptyNew": "Primera vez aquí. Anótalo al terminar y la próxima vez lo verá quien lo atienda.",
+      "empty": "Todavía no se anota cómo le gusta.",
+      "edit": "Anotar en su ficha"
+    },
+    "history": {
+      "title": "Sus visitas",
+      "none": "Ninguna todavía.",
+      "last": "Última: {date} con {barber}",
+      "lastNoBarber": "Última: {date}",
+      "usual": "Suele volver cada {weeks} semanas.",
+      "usualOne": "Suele volver cada semana."
+    },
+    "facts": {
+      "barber": "Barbero",
+      "time": "Hora",
+      "source": "Origen",
+      "changeBarber": "Cambiar barbero",
+      "moveTime": "Mover de hora",
+      "plus15": "+15 min",
+      "plus15Title": "Alargar la visita 15 minutos",
+      "plus15Saved": "Ahora dura {duration}."
+    },
+    "money": {
+      "title": "Servicios y cobro",
+      "change": "Cambiar servicios",
+      "addProduct": "Agregar producto",
+      "deposit": "Anticipo pagado",
+      "depositPending": "Anticipo por pagar",
+      "due": "Por cobrar",
+      "paidBanner": "Ya se cobró: {amount}."
+    },
+    "product": {
+      "title": "Agregar un producto al cobro",
+      "search": "Buscar producto",
+      "qty": "Cantidad",
+      "add": "Agregar",
+      "added": "{product} quedó en la nota por cobrar de esta visita.",
+      "empty": "No hay productos a la venta.",
+      "noMatch": "Ningún producto se llama así.",
+      "stock": "{stock} en existencia"
+    },
+    "note": {
+      "title": "Nota de esta visita",
+      "hint": "Solo la ve el equipo",
+      "placeholder": "Escribe algo para el barbero: qué pidió, si viene con alguien…",
+      "save": "Guardar nota",
+      "saved": "Nota guardada.",
+      "empty": "Sin nota."
+    },
+    "photos": {
+      "title": "Fotos de esta visita",
+      "empty": "Sin fotos todavía.",
+      "kinds": {
+        "BEFORE": "Antes",
+        "AFTER": "Después",
+        "REFERENCE": "Referencia"
+      }
+    },
+    "next": {
+      "title": "Agendar su próxima",
+      "weeks": "{weeks} sem",
+      "weeksLabel": "En {weeks} semanas",
+      "usual": "suele volver cada {weeks} sem",
+      "searching": "Buscando lugar…",
+      "exact": "{day} a las {time} con {barber}",
+      "nearby": "El {day} a esa hora {barber} no tiene lugar. Lo más cercano:",
+      "none": "El {day} {barber} no tiene lugar. Prueba otra semana o usa «Repetir esta cita».",
+      "confirm": "Agendar",
+      "created": "Quedó agendada su próxima: {day} a las {time}",
+      "noBarber": "Esta visita no tiene barbero: usa «Repetir esta cita» para elegir día y barbero.",
+      "error": "No se pudo buscar lugar. Inténtalo otra vez."
+    },
+    "actions": {
+      "repeat": "Repetir esta cita",
+      "remind": "Mandar recordatorio ahora",
+      "remindSent": "Recordatorio enviado.",
+      "remindQueued": "Recordatorio en camino: sale en unos minutos.",
+      "remindNot": "No se mandó: {reason}",
+      "arrived": "Ya llegó",
+      "arrivedUndo": "Quitar «Ya llegó»",
+      "arrivedSaved": "Marcado: ya está esperando.",
+      "noShow": "No llegó",
+      "deposit": "Registrar anticipo",
+      "cancel": "Cancelar cita…",
+      "nextVisit": "Agendar su próxima",
+      "charge": "Cobrar {amount}",
+      "completeAndCharge": "Completar y cobrar {amount}"
+    },
+    "cancel": {
+      "title": "¿Cancelar la visita de {name}?",
+      "reason": "Motivo (opcional)",
+      "reasons": {
+        "client": "El cliente canceló",
+        "noAnswer": "No contestó",
+        "shop": "La barbería canceló"
+      },
+      "other": "Otro motivo…",
+      "confirm": "Sí, cancelar la visita",
+      "back": "No, volver"
+    },
+    "deposit": {
+      "title": "Registrar anticipo",
+      "amount": "Monto",
+      "method": "Cómo pagó",
+      "methods": {
+        "CASH": "Efectivo",
+        "CARD": "Tarjeta",
+        "SPEI": "Transferencia"
+      },
+      "save": "Registrar anticipo",
+      "saved": "Anticipo de {amount} registrado.",
+      "bad": "Escribe un monto válido, mayor que cero y no mayor que el total."
+    },
+    "foot": {
+      "waiting": "¿Ya está aquí? Márcalo con «Ya llegó» y {barber} lo ve en la agenda.",
+      "waitingNoBarber": "¿Ya está aquí? Márcalo con «Ya llegó» y se ve en la agenda."
+    },
+    "go": {
+      "CONFIRMED": "Confirmar cita",
+      "IN_PROGRESS": "Iniciar servicio",
+      "DONE": "Completar visita"
+    }
   }
 }

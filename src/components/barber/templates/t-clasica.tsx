@@ -36,6 +36,7 @@ import {
   IcoWhatsApp,
   Mapa,
   Pie,
+  SeccionProductos,
   Poste,
   Precio,
   Ranura,
@@ -315,6 +316,7 @@ export function PlantillaClasica({ data }: { data: BarberWebData }) {
         </Fragment>
       ))}
 
+      <SeccionProductos data={data} />
       <Pie nombre={shop.name} />
     </div>
   );

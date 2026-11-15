@@ -124,7 +124,10 @@
   gap: 6px;
 }
 .barber-shell .bcaja-seg__btn {
-  height: 40px;
+  min-height: 40px;
+  padding: 4px 6px;
+  line-height: 1.15;
+  text-align: center;
   border-radius: 10px;
   border: 1px solid var(--border-soft);
   background: var(--bg-elev);

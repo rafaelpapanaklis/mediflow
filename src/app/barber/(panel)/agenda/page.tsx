@@ -59,6 +59,7 @@ export default async function BarberAgendaPage(props: {
     <AgendaClient
       dict={dict}
       cajaDict={(dict.barber as Dictionary).caja as Dictionary}
+      starsDict={((dict.barber as Dictionary).estrellas ?? {}) as Dictionary}
       locale={ctx.barbershop.locale}
       timezone={ctx.barbershop.timezone}
       branchId={ctx.barbershopId}

@@ -130,6 +130,16 @@
       "shop": "tu barbería",
       "reward": "tu premio"
     },
+    "tokens": {
+      "label": "Variables (toca para insertar):",
+      "nombre": { "example": "Luis", "hint": "el nombre del cliente" },
+      "barberia": { "example": "tu barbería", "hint": "el nombre de tu barbería" },
+      "servicio": { "example": "corte", "hint": "su servicio habitual" },
+      "barbero": { "example": "Uno", "hint": "su barbero" },
+      "dias": { "example": "45", "hint": "días desde su última visita" },
+      "premio": { "example": "tu premio", "hint": "el premio de lealtad que ganó" },
+      "vence": { "example": "30 nov", "hint": "la fecha en que vence su membresía" }
+    },
     "sqlPending": "Todavía no se puede guardar: falta aplicar sql/barber_campanas.sql. Mientras tanto se usan los textos sugeridos y sí puedes mandar campañas."
   },
   "results": {

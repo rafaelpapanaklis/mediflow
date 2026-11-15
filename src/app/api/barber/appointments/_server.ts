@@ -26,6 +26,7 @@ import { hasBarberPermission } from "@/lib/barber/permissions";
 import { isSaleCancelled } from "@/lib/barber/commissions";
 import { scopeAppointmentsWhere, type BarberViewScope } from "@/lib/barber/own-visits";
 import { mxTenDigits } from "@/lib/phone-mx";
+import { readAppointmentExtras } from "@/lib/barber/appointment-extras";
 import { getBarberPlan } from "@/lib/barber/plans";
 import { barberPlanHasFeature, type BarberResolvedPlan } from "@/lib/barber/plan-shared";
 import {
@@ -143,6 +144,62 @@ function deny(response: NextResponse): GateResult {
   return { gate: null, response };
 }
 
+/**
+ * ¿Puede actuar sobre ESTA visita? Quien tiene agenda.edit, sobre cualquiera;
+ * el rol Barbero (sin agenda.edit), solo sobre las suyas. Lo usan las
+ * acciones de la cita «B» (Ya llegó, productos al cobro, recordatorio).
+ */
+export function canActOnOwnVisit(
+  ctx: Pick<BarberContext, "role" | "user" | "barber">,
+  appt: { barberId: string | null },
+): boolean {
+  const perm = { role: ctx.role, permissionsOverride: ctx.user.permissionsOverride };
+  if (hasBarberPermission(perm, "agenda.edit")) return true;
+  const own = ctx.role === "BARBER" ? ctx.barber?.id ?? null : null;
+  return Boolean(own && appt.barberId && appt.barberId === own);
+}
+
+// ── Lo nuevo de la cita «B» en el DTO, en LOTE ─────────────────────────
+//
+// arrivedAt y cancelReason (columnas de sql/barber_cita_b.sql, leídas con SQL
+// crudo y degradando si no existen) y, del cliente, visitas y estrellas (las
+// columnas caché de su ficha: totalVisits y loyaltyCount, que los ganchos de
+// lealtad mantienen al día). DOS lecturas para toda la pantalla, nunca una por
+// cita. El anticipo ya viene en toAppointmentDTO.
+
+export async function enrichAppointmentDTOs(
+  shopId: string,
+  dtos: BarberAppointmentDTO[],
+): Promise<BarberAppointmentDTO[]> {
+  if (!shopId || dtos.length === 0) return dtos;
+  const clientIds = Array.from(new Set(dtos.map((d) => d.clientId).filter((x): x is string => !!x)));
+  const [extras, clients] = await Promise.all([
+    readAppointmentExtras(prisma, shopId, dtos.map((d) => d.id)),
+    clientIds.length
+      ? prisma.barberClient.findMany({
+          where: { barbershopId: shopId, id: { in: clientIds } },
+          select: { id: true, totalVisits: true, loyaltyCount: true },
+        })
+      : Promise.resolve([] as Array<{ id: string; totalVisits: number; loyaltyCount: number }>),
+  ]);
+  const byClient = new Map(clients.map((c) => [c.id, c]));
+  return dtos.map((d) => {
+    const x = extras.get(d.id);
+    const c = d.clientId ? byClient.get(d.clientId) : undefined;
+    return {
+      ...d,
+      arrivedAt: x?.arrivedAt ?? null,
+      cancelReason: x?.cancelReason ?? null,
+      client: c ? { totalVisits: c.totalVisits, stars: c.loyaltyCount } : null,
+    };
+  });
+}
+
+/** Lo mismo para UNA cita (las rutas de detalle y de cambio de estado). */
+export async function enrichAppointmentDTO(shopId: string, dto: BarberAppointmentDTO): Promise<BarberAppointmentDTO> {
+  return (await enrichAppointmentDTOs(shopId, [dto]))[0];
+}
+
 // ── Lectura del rango de agenda ────────────────────────────────────────
 
 export interface AgendaWindow {
@@ -229,7 +286,7 @@ export async function loadAgendaWindow(
     services: services.map(toServiceDTO),
     schedules: schedules.map(toScheduleDTO),
     timeOff: timeOff.map(toTimeOffDTO),
-    appointments: appointments.map(toAppointmentDTO),
+    appointments: await enrichAppointmentDTOs(shopId, appointments.map(toAppointmentDTO)),
   };
 }
 

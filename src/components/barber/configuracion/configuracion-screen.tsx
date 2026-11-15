@@ -35,6 +35,7 @@ import {
 } from "@/components/barber/team/admin-ui";
 import { prepararFoto } from "@/components/barber/landing/imagen";
 import { MiContrasenaCard } from "./mi-contrasena-card";
+import { PagosEnLineaCard, type EstadoPagosEnLinea } from "./pagos-en-linea-card";
 import s from "./configuracion.module.css";
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -62,6 +63,7 @@ export function ConfiguracionScreen({
   initial,
   publicBookingInPlan,
   starsDict,
+  payments,
 }: {
   dict: Dictionary;
   /** Sub-árbol barber.estrellas: con él, el umbral y el premio pasan a «Estrellas y bonos». */
@@ -69,6 +71,8 @@ export function ConfiguracionScreen({
   initial: BarberSettingsView;
   /** El plan trae `publicBooking` (si no, el ajuste se guarda pero se avisa). */
   publicBookingInPlan: boolean;
+  /** Tarjeta «Pagos en línea» (Mercado Pago): solo llega para el DUEÑO de la cadena. */
+  payments?: { initial: EstadoPagosEnLinea; locale: string; timeZone: string } | null;
 }) {
   const t = useBarberT(dict);
   const st = useBarberT(starsDict ?? {});
@@ -118,6 +122,9 @@ export function ConfiguracionScreen({
           inPlan={publicBookingInPlan}
           onSaved={(booking) => setSettings((v) => ({ ...v, booking }))}
         />
+        {payments ? (
+          <PagosEnLineaCard t={t} initial={payments.initial} locale={payments.locale} timeZone={payments.timeZone} />
+        ) : null}
         {/* Lo único de la pantalla que es de la PERSONA y no de la barbería. */}
         <MiContrasenaCard dict={dict} />
       </div>

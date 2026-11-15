@@ -32,6 +32,8 @@ import { Modal, agendaCss as css } from "./agenda-ui";
 export interface ChargeBridgeProps {
   /** Sub-diccionario `barber.caja`: es el que hablan los modales de dinero. */
   cajaDict: Dictionary;
+  /** Sub-diccionario `barber.estrellas`: el ticket muestra estrellas y bonos con él. */
+  starsDict?: Dictionary;
   appointmentId: string;
   /** Nombre del cliente, solo para el título mientras carga. */
   clientLabel: string;
@@ -98,6 +100,7 @@ export function ChargeBridge(props: ChargeBridgeProps) {
     return (
       <TicketModal
         dict={props.cajaDict}
+        starsDict={props.starsDict}
         checkout={checkout}
         appointment={pending}
         tz={props.timezone}

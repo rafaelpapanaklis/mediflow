@@ -91,12 +91,12 @@ export async function listSaleDrafts(ctx: BarberContext, opts: { clientId?: stri
     ? await prisma.$queryRaw<DraftRaw[]>`
         SELECT "id", "clientId", "barberId", "payload", "createdAt", "updatedAt", "createdByUserId"
         FROM "barber_sale_drafts"
-        WHERE "barbershopId" = ${barbershopId} AND "status" = 'OPEN' AND "clientId" = ${clientId}
+        WHERE "barbershopId" = ${barbershopId} AND "status" = 'OPEN' AND ("payload"->>'appointmentId') IS NULL AND "clientId" = ${clientId}
         ORDER BY "createdAt" DESC LIMIT ${LIST_MAX}`
     : await prisma.$queryRaw<DraftRaw[]>`
         SELECT "id", "clientId", "barberId", "payload", "createdAt", "updatedAt", "createdByUserId"
         FROM "barber_sale_drafts"
-        WHERE "barbershopId" = ${barbershopId} AND "status" = 'OPEN'
+        WHERE "barbershopId" = ${barbershopId} AND "status" = 'OPEN' AND ("payload"->>'appointmentId') IS NULL
         ORDER BY "createdAt" DESC LIMIT ${LIST_MAX}`;
   if (rows.length === 0) return { ready: true, drafts: [], openCount: 0 };
 
@@ -175,8 +175,8 @@ export async function listSaleDrafts(ctx: BarberContext, opts: { clientId?: stri
 
 async function countOpenDrafts(barbershopId: string, clientId: string | null): Promise<number> {
   const rows = clientId
-    ? await prisma.$queryRaw<Array<{ n: number }>>`SELECT count(*)::int AS "n" FROM "barber_sale_drafts" WHERE "barbershopId" = ${barbershopId} AND "status" = 'OPEN' AND "clientId" = ${clientId}`
-    : await prisma.$queryRaw<Array<{ n: number }>>`SELECT count(*)::int AS "n" FROM "barber_sale_drafts" WHERE "barbershopId" = ${barbershopId} AND "status" = 'OPEN'`;
+    ? await prisma.$queryRaw<Array<{ n: number }>>`SELECT count(*)::int AS "n" FROM "barber_sale_drafts" WHERE "barbershopId" = ${barbershopId} AND "status" = 'OPEN' AND ("payload"->>'appointmentId') IS NULL AND "clientId" = ${clientId}`
+    : await prisma.$queryRaw<Array<{ n: number }>>`SELECT count(*)::int AS "n" FROM "barber_sale_drafts" WHERE "barbershopId" = ${barbershopId} AND "status" = 'OPEN' AND ("payload"->>'appointmentId') IS NULL`;
   return Number(rows[0]?.n ?? 0);
 }
 
@@ -204,6 +204,8 @@ export async function saveSaleDraft(
   let payload: SaleDraftPayload;
   try {
     payload = normalizeSaleDraftPayload(input.payload);
+    // Una nota suelta: las de una cita se arman SOLO desde la cita (appointment-draft.ts).
+    payload.appointmentId = null;
     if (payload.discountPct) parseDiscountPct(payload.discountPct);
   } catch (e) {
     inputError(e);
@@ -238,7 +240,7 @@ export async function saveSaleDraft(
       UPDATE "barber_sale_drafts"
       SET "payload" = ${json}::jsonb, "clientId" = ${clientId}::text, "barberId" = ${payload.barberId}::text,
           "updatedByUserId" = ${ctx.barberUserId}, "updatedAt" = NOW()
-      WHERE "id" = ${id} AND "barbershopId" = ${barbershopId} AND "status" = 'OPEN'`;
+      WHERE "id" = ${id} AND "barbershopId" = ${barbershopId} AND "status" = 'OPEN' AND ("payload"->>'appointmentId') IS NULL`;
     if (n !== 1) throw new BarberCajaError(409, "DRAFT_NOT_OPEN", "Esa nota ya se cobró o se descartó");
     return { id };
   }
@@ -261,6 +263,6 @@ export async function discardSaleDraft(ctx: BarberContext, id: unknown): Promise
   const n = await prisma.$executeRaw`
     UPDATE "barber_sale_drafts"
     SET "status" = 'DISCARDED', "closedAt" = NOW(), "closedByUserId" = ${ctx.barberUserId}, "updatedAt" = NOW()
-    WHERE "id" = ${id} AND "barbershopId" = ${ctx.barbershopId} AND "status" = 'OPEN'`;
+    WHERE "id" = ${id} AND "barbershopId" = ${ctx.barbershopId} AND "status" = 'OPEN' AND ("payload"->>'appointmentId') IS NULL`;
   if (n !== 1) throw new BarberCajaError(409, "DRAFT_NOT_OPEN", "Esa nota ya se cobró o se descartó");
 }

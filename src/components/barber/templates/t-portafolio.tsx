@@ -36,6 +36,7 @@ import {
   IcoMapa,
   IcoWhatsApp,
   Pie,
+  SeccionProductos,
   Precio,
   Ranura,
   Redes,
@@ -205,6 +206,7 @@ export function PlantillaPortafolio({ data }: { data: BarberWebData }) {
         </Fragment>
       ))}
 
+      <SeccionProductos data={data} />
       <Pie nombre={shop.name} />
 
       {/* ── Barra de reserva pegada abajo ─────────────────────── */}

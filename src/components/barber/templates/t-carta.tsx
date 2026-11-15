@@ -35,6 +35,7 @@ import {
   IcoWhatsApp,
   Mapa,
   Pie,
+  SeccionProductos,
   Precio,
   Ranura,
   Redes,
@@ -344,6 +345,7 @@ export function PlantillaCarta({ data }: { data: BarberWebData }) {
         </div>
       </div>
 
+      <SeccionProductos data={data} />
       <Pie nombre={shop.name} />
     </div>
   );
