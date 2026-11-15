@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import {
+  assertOnlineCardEnabled,
   createMembershipCheckoutSession,
   isBarberStripeConfigured,
   syncMembershipCheckout,
@@ -16,11 +17,19 @@ export const dynamic = "force-dynamic";
  * La membresía del cliente NO se crea aquí: nace cuando Stripe confirma el
  * cobro (webhook payment_intent.succeeded o el PUT de retorno). Así nunca
  * queda una membresía activa sin dinero detrás.
+ *
+ * ⚠️ Hoy responde 503 ONLINE_CARD_DISABLED: el cobro en línea está apagado
+ * hasta que la barbería pueda conectar su propia cuenta de Stripe.
  */
 export async function POST(req: Request) {
   const g = await requireBarberApi({ permission: "memberships.manage", feature: "memberships" });
   if (!g.ok) return g.res;
   try {
+    // «Tarjeta en línea» está APAGADA (BARBER_ONLINE_CARD_ENABLED): se
+    // responde «por ahora no disponible» antes de leer el body y sin tocar
+    // Stripe. El PUT de abajo (retorno de un pago ya hecho) sigue vivo.
+    assertOnlineCardEnabled();
+
     if (!isBarberStripeConfigured()) {
       return NextResponse.json(
         {

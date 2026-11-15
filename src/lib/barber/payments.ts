@@ -12,6 +12,9 @@ import {
   moneyToCents,
 } from "@/lib/barber/memberships-core";
 import {
+  BARBER_ONLINE_CARD_DISABLED_CODE,
+  BARBER_ONLINE_CARD_DISABLED_MESSAGE,
+  BARBER_ONLINE_CARD_ENABLED,
   BARBER_PAYMENTS_WEBHOOK_EVENTS,
   DCB_KIND_MEMBERSHIP,
   DEFAULT_BARBER_DEPOSIT_POLICY,
@@ -105,6 +108,22 @@ export function getBarberStripe(): Stripe | null {
 
 export function isBarberStripeConfigured(): boolean {
   return getBarberStripe() !== null;
+}
+
+/**
+ * Candado de «Tarjeta en línea» (ver BARBER_ONLINE_CARD_ENABLED en
+ * payments-core.ts). Va ANTES de cualquier lectura o llamada a Stripe en
+ * todo camino que INICIA un cobro en línea: con el interruptor apagado no se
+ * crea ni un cliente, ni una sesión, ni un PaymentIntent.
+ */
+export function assertOnlineCardEnabled(): void {
+  if (!BARBER_ONLINE_CARD_ENABLED) {
+    throw new BarberPaymentsError(
+      BARBER_ONLINE_CARD_DISABLED_CODE,
+      BARBER_ONLINE_CARD_DISABLED_MESSAGE,
+      503,
+    );
+  }
 }
 
 function requireStripe(): Stripe {
@@ -312,7 +331,8 @@ export async function quoteDepositForBooking(args: {
       currency: BARBER_CURRENCY,
       locale: args.locale,
     }),
-    onlineAvailable: policy.onlineEnabled && isBarberStripeConfigured(),
+    onlineAvailable:
+      BARBER_ONLINE_CARD_ENABLED && policy.onlineEnabled && isBarberStripeConfigured(),
     currency: BARBER_CURRENCY,
     refundWindowHours: policy.refundWindowHours,
   };
@@ -376,6 +396,7 @@ export async function startDepositPayment(args: {
   locale?: string;
 }): Promise<StartDepositResult> {
   const shopId = requireShop(args.barbershopId);
+  assertOnlineCardEnabled();
   const stripe = requireStripe();
   const { policy } = await getBarberPaymentSettings(shopId);
 
@@ -951,6 +972,7 @@ export async function createMembershipCheckoutSession(args: {
   cancelUrl?: string;
 }): Promise<MembershipCheckoutResult> {
   const shopId = requireShop(args.barbershopId);
+  assertOnlineCardEnabled();
   const stripe = requireStripe();
 
   const [client, plan, shop] = await Promise.all([

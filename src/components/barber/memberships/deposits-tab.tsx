@@ -5,6 +5,7 @@ import { AlertTriangle, ShieldCheck } from "lucide-react";
 import type { TFunction } from "@/i18n/t";
 import { formatCents, moneyToCents } from "@/lib/barber/memberships-core";
 import {
+  BARBER_ONLINE_CARD_ENABLED,
   computeDepositCents,
   describeDepositPolicy,
   normalizeDepositPolicy,
@@ -252,21 +253,26 @@ export function DepositsTab({
               </div>
             </Field>
 
-            <CheckCard
-              checked={live.onlineEnabled}
-              onChange={(v) => set("onlineEnabled", v)}
-              title={t("barber.membresias.anticipos.online")}
-              hint={t("barber.membresias.anticipos.onlineHint")}
-            />
+            {/* «Cobrar en línea con tarjeta» y la cuenta acct_… están
+                escondidos mientras BARBER_ONLINE_CARD_ENABLED siga apagado:
+                la barbería todavía no puede conectar su propia cuenta. */}
+            {BARBER_ONLINE_CARD_ENABLED ? (
+              <CheckCard
+                checked={live.onlineEnabled}
+                onChange={(v) => set("onlineEnabled", v)}
+                title={t("barber.membresias.anticipos.online")}
+                hint={t("barber.membresias.anticipos.onlineHint")}
+              />
+            ) : null}
 
-            {!stripeConfigured && live.onlineEnabled ? (
+            {BARBER_ONLINE_CARD_ENABLED && !stripeConfigured && live.onlineEnabled ? (
               <div className="bmem-note t-bad">
                 <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: 1 }} />
                 <span>{t("barber.membresias.anticipos.stripeMissing")}</span>
               </div>
             ) : null}
 
-            {live.onlineEnabled ? (
+            {BARBER_ONLINE_CARD_ENABLED && live.onlineEnabled ? (
               <Field
                 label={t("barber.membresias.anticipos.stripeAccount")}
                 hint={t("barber.membresias.anticipos.stripeAccountHint")}

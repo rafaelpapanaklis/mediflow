@@ -9,6 +9,7 @@ import {
   moneyToCents,
   type BarberMembershipPlanView,
 } from "@/lib/barber/memberships-core";
+import { membershipSaleMethods } from "@/lib/barber/payments-core";
 import { CheckCard, Field, Modal, apiCall } from "./ui";
 
 interface ClientHit {
@@ -18,16 +19,20 @@ interface ClientHit {
   activeMembership: { name: string; endAt: string } | null;
 }
 
-/** Los tres métodos que de verdad se usan en México + el cobro en línea. */
-const METHODS: BarberPaymentMethod[] = ["CASH", "SPEI", "CARD", "STRIPE"];
+/**
+ * Los tres métodos de mostrador. «Tarjeta en línea» (STRIPE) solo entra en
+ * la lista si BARBER_ONLINE_CARD_ENABLED está encendido: hoy está APAGADO,
+ * así que ese botón no se dibuja (ver payments-core.ts).
+ */
+const METHODS: BarberPaymentMethod[] = membershipSaleMethods();
 
 /**
  * Venta de una membresía en tres pasos: a quién, cuál y cómo paga.
  *
  * Efectivo, transferencia y tarjeta de mostrador se registran a mano y el
  * sistema calcula la vigencia — esa es la mitad del mercado que los demás
- * dejan fuera. "Tarjeta en línea" abre el cobro seguro de Stripe y, si se
- * marca la suscripción, se renueva sola.
+ * dejan fuera. "Tarjeta en línea" (apagada por ahora) abre el cobro seguro
+ * de Stripe y, si se marca la suscripción, se renueva sola.
  */
 export function SellMembershipModal({
   t,
