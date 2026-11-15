@@ -143,6 +143,21 @@ function deny(response: NextResponse): GateResult {
   return { gate: null, response };
 }
 
+/**
+ * ¿Puede actuar sobre ESTA visita? Quien tiene agenda.edit, sobre cualquiera;
+ * el rol Barbero (sin agenda.edit), solo sobre las suyas. Lo usan las
+ * acciones de la cita «B» (Ya llegó, productos al cobro, recordatorio).
+ */
+export function canActOnOwnVisit(
+  ctx: Pick<BarberContext, "role" | "user" | "barber">,
+  appt: { barberId: string | null },
+): boolean {
+  const perm = { role: ctx.role, permissionsOverride: ctx.user.permissionsOverride };
+  if (hasBarberPermission(perm, "agenda.edit")) return true;
+  const own = ctx.role === "BARBER" ? ctx.barber?.id ?? null : null;
+  return Boolean(own && appt.barberId && appt.barberId === own);
+}
+
 // ── Lectura del rango de agenda ────────────────────────────────────────
 
 export interface AgendaWindow {

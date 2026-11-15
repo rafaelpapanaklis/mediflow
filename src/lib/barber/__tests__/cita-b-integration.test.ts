@@ -260,3 +260,50 @@ test("1 · cancelar con motivo: sin el SQL cancela igual; con el SQL lo guarda; 
   assert.equal(history.entries.find((e) => e.id === a3.id)?.cancelReason, null);
   session = null;
 });
+
+// ── 2. Ya llegó ────────────────────────────────────────────────────────
+
+test("2 · «Ya llegó»: solo pendiente/confirmada de hoy; se quita; Barbero solo en lo suyo; sin el SQL, 409", { skip }, async () => {
+  const arrived = await import("@/app/api/barber/appointments/[id]/arrived/route");
+  const { startOfDayInTz } = await import("@/lib/barber/commissions");
+  const todayStart = startOfDayInTz(new Date(), "America/Mexico_City").getTime();
+  const todayMs = todayStart + 60 * MIN - Date.now(); // hoy a la 1:00, en la zona de la sede
+  const readArrived = async (id: string) =>
+    (await prisma.$queryRaw<Array<{ arrivedAt: Date | null }>>`SELECT "arrivedAt" FROM "barber_appointments" WHERE "id" = ${id}`)[0]?.arrivedAt ?? null;
+  const leo = await newClient(A, "Leo");
+  const hoy = await appt(A, leo, "CONFIRMED", todayMs);
+  session = A.ctx;
+
+  // Sin la columna: 409 y no toca nada.
+  await prisma.$executeRawUnsafe(`ALTER TABLE "barber_appointments" DROP COLUMN IF EXISTS "arrivedAt"`);
+  const sinSql = await arrived.POST(req("/x", "POST"), params(hoy.id));
+  assert.equal(sinSql.status, 409);
+  assert.equal(((await sinSql.json()) as { code: string }).code, "SQL_PENDING");
+  await applySql();
+
+  const ok = await arrived.POST(req("/x", "POST"), params(hoy.id));
+  assert.equal(ok.status, 200);
+  assert.ok(((await ok.json()) as { arrivedAt: string }).arrivedAt);
+  assert.ok(await readArrived(hoy.id));
+  assert.equal((await prisma.barberAppointment.findUniqueOrThrow({ where: { id: hoy.id } })).status, "CONFIRMED", "no cambia el estado");
+
+  assert.equal((await arrived.DELETE(req("/x", "DELETE"), params(hoy.id))).status, 200);
+  assert.equal(await readArrived(hoy.id), null, "se quita");
+
+  const manana = await appt(A, leo, "CONFIRMED", 2 * DAY);
+  assert.equal(((await (await arrived.POST(req("/x", "POST"), params(manana.id))).json()) as { code: string }).code, "NOT_TODAY");
+  const enSilla = await appt(A, leo, "IN_PROGRESS", todayMs);
+  assert.equal(((await (await arrived.POST(req("/x", "POST"), params(enSilla.id))).json()) as { code: string }).code, "BAD_STATUS");
+
+  // Barbero: en su visita sí; en la de otro barbero, no.
+  session = await staff(A, "BARBER", A.barberId);
+  assert.equal((await arrived.POST(req("/x", "POST"), params(hoy.id))).status, 200);
+  const otro = await prisma.barber.create({ data: { barbershopId: A.id, name: `Otro ${RUN}`, commissionType: "COMMISSION", commissionPct: new Prisma.Decimal(40) } });
+  const ajena = await appt(A, leo, "PENDING", todayMs, { barberId: otro.id });
+  assert.equal((await arrived.POST(req("/x", "POST"), params(ajena.id))).status, 403);
+
+  // Otra barbería: 404.
+  session = B.ctx;
+  assert.equal((await arrived.POST(req("/x", "POST"), params(hoy.id))).status, 404);
+  session = null;
+});

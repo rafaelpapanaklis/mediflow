@@ -24,3 +24,4 @@
 -- ═══════════════════════════════════════════════════════════════════════
 
 ALTER TABLE "barber_appointments" ADD COLUMN IF NOT EXISTS "cancelReason" TEXT;
+ALTER TABLE "barber_appointments" ADD COLUMN IF NOT EXISTS "arrivedAt" TIMESTAMP(3);
