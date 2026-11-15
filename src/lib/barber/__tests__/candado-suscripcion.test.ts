@@ -93,9 +93,41 @@ test("el candado vive en un módulo APARTE de gating.ts y manda a /barber/suscri
     /redirect\((BARBER_PAID_REDIRECT|"\/barber\/suscripcion")\)/,
     `${HELPER} tiene que redirigir a /barber/suscripcion`,
   );
+  // La decisión «al corriente» vive en UN solo sitio desde el 15-nov-2026
+  // (ws6-t6): matrizAlCorriente en cobros.ts, que comparten el panel y lo
+  // público (web, reserva, fila, «mi cuenta»). El candado tiene que delegar
+  // en ella con la MATRIZ; y ella, usar la fuente ÚNICA de estados de
+  // plan-shared (nunca su propia lista) y además mirar la fecha pagada.
+  assert.match(
+    fuente,
+    /import\s*\{[^}]*\bmatrizAlCorriente\b[^}]*\}\s*from\s*"@\/lib\/barber\/cobros"/,
+    `${HELPER} tiene que importar matrizAlCorriente de @/lib/barber/cobros (el criterio único de «al corriente»)`,
+  );
+  assert.match(
+    fuente,
+    /return\s+matrizAlCorriente\(\s*rootId\s*,\s*status\s*\)/,
+    `${HELPER}: hasBarberPaidAccess tiene que devolver matrizAlCorriente(rootId, status) — con el id y el estado de la MATRIZ`,
+  );
   assert.ok(
-    fuente.includes("isBarbershopSubscriptionActive"),
-    `${HELPER} tiene que usar isBarbershopSubscriptionActive (la fuente ÚNICA del estado), no su propia lista de estados`,
+    !/["']trialing["']|["']past_due["']/.test(fuente),
+    `${HELPER} no puede tener su propia lista de estados`,
+  );
+  const cobros = sinComentarios(leer("src/lib/barber/cobros.ts"));
+  const i = cobros.indexOf("export async function matrizAlCorriente");
+  assert.ok(i !== -1, "cobros.ts ya no exporta matrizAlCorriente");
+  const cuerpo = cobros.slice(i, cobros.indexOf("\n}\n", i));
+  assert.ok(
+    /BARBER_ACTIVE_SUBSCRIPTION_STATUSES\.has\(|isBarbershopSubscriptionActive\(/.test(cuerpo),
+    "matrizAlCorriente tiene que usar la fuente ÚNICA del estado (BARBER_ACTIVE_SUBSCRIPTION_STATUSES / isBarbershopSubscriptionActive de plan-shared)",
+  );
+  assert.match(cobros, /import\s*\{[^}]*\bBARBER_ACTIVE_SUBSCRIPTION_STATUSES\b[^}]*\}\s*from\s*"@\/lib\/barber\/plan-shared"/);
+  assert.ok(
+    !/["']trialing["']|["']past_due["']/.test(cuerpo),
+    "matrizAlCorriente no puede tener su propia lista de estados",
+  );
+  assert.ok(
+    /vencerSiTocaBarber\(/.test(cuerpo),
+    "matrizAlCorriente tiene que mirar también la FECHA pagada (sin días de gracia)",
   );
   assert.ok(
     fuente.includes("parentId"),
@@ -153,7 +185,13 @@ test("el candado corre ANTES de cargar datos, no después", () => {
   // Comprobar sólo "la llamada existe" deja pasar el bug de verdad: llamarla
   // al final, cuando la pantalla ya leyó la agenda, la caja y los clientes
   // de una barbería que no ha pagado. Dentro del componente, los dos
-  // primeros await tienen que ser la sesión y el candado.
+  // primeros await que CARGAN algo tienen que ser la sesión y el candado.
+  //
+  // Única excepción, exacta: en Next 15+ `params` y `searchParams` llegan
+  // como promesas y se esperan antes que nada (`await props.params`). Eso
+  // solo lee la URL: no toca la base. Cualquier otro await antes del candado
+  // sigue fallando.
+  const SOLO_URL = new Set(["props.params", "props.searchParams"]);
   const tarde: string[] = [];
   for (const rel of paginasDelPanel()) {
     if (RUTAS_EXENTAS.has(rel)) continue;
@@ -161,9 +199,12 @@ test("el candado corre ANTES de cargar datos, no después", () => {
     const i = fuente.indexOf("export default async function");
     const cuerpo = i === -1 ? fuente : fuente.slice(i);
     // Array.from y no spread: el tsconfig del repo no fija `target` (TS2802).
-    const awaits = Array.from(cuerpo.matchAll(/await\s+([A-Za-z_$][\w$.]*)/g)).map((m) => m[1]);
+    const todos = Array.from(cuerpo.matchAll(/await\s+([A-Za-z_$][\w$.]*)/g)).map((m) => m[1]);
+    let n = 0;
+    while (n < todos.length && SOLO_URL.has(todos[n])) n++;
+    const awaits = todos.slice(n);
     if (awaits[0] !== "getBarberContext" || awaits[1] !== CANDADO) {
-      tarde.push(`${rel} (await: ${awaits.slice(0, 3).join(" → ") || "ninguno"})`);
+      tarde.push(`${rel} (await: ${todos.slice(0, n + 3).join(" → ") || "ninguno"})`);
     }
   }
   assert.deepEqual(
