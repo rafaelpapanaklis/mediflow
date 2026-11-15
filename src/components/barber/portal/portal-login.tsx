@@ -1,6 +1,6 @@
 "use client";
 
-import { soloTelefono } from "@/lib/barber/telefono-teclado";
+import { soloDigitosTelefono } from "@/lib/barber/phone-format";
 import { useMemo, useRef, useState } from "react";
 import { MessageCircle } from "lucide-react";
 import { getBarberT } from "@/i18n/dictionaries/barber";
@@ -147,7 +147,7 @@ export function PortalLogin({
               maxLength={20}
               placeholder={t("barber.reserva.portal.login.telefonoPlaceholder")}
               value={phone}
-              onChange={(e) => setPhone(soloTelefono(e.target.value))}
+              onChange={(e) => setPhone(soloDigitosTelefono(e.target.value))}
               required
             />
           </label>
