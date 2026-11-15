@@ -48,8 +48,19 @@ export function ProductFormModal({ dict, product, onClose, onDone }: { dict: Dic
   const intOk = (v: string) => v.trim() === "" || /^\d+$/.test(v.trim());
   const canSave = name.trim().length > 0 && priceOk && costOk && intOk(minStock) && intOk(initialStock) && !busy;
 
-  async function submit() {
+  // Motivo de «Guardar apagado», junto a cada campo, solo en lo que la persona ya tocó.
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const touch = (k: string) => setTouched((v) => (v[k] ? v : { ...v, [k]: true }));
+  const [askFree, setAskFree] = useState(false);
+  const bad = (k: string, cond: boolean, key: string) => (touched[k] && cond ? <div className="bcaja-hint" role="alert" style={{ color: "var(--danger, #B02A1C)" }}>{t(key)}</div> : null);
+
+  async function submit(freeConfirmed = false) {
     if (!canSave) return;
+    if (parseAmountText(price) === 0 && !freeConfirmed) {
+      setAskFree(true);
+      return;
+    }
+    setAskFree(false);
     setBusy(true);
     setError(null);
     const body: Record<string, unknown> = {
@@ -83,15 +94,25 @@ export function ProductFormModal({ dict, product, onClose, onDone }: { dict: Dic
       footer={
         <>
           <button type="button" className="btn-new btn-new--ghost" onClick={onClose} disabled={busy}>{t("common.cancel")}</button>
-          <button type="button" className="btn-new barber-btn-primary" onClick={submit} disabled={!canSave}>{busy ? t("common.saving") : t("common.save")}</button>
+          <button type="button" className="btn-new barber-btn-primary" onClick={() => submit()} disabled={!canSave}>{busy ? t("common.saving") : t("common.save")}</button>
         </>
       }
     >
       <div className="bcaja-form">
         {error && <div className="bcaja-alert bcaja-alert--danger" role="alert">{error}</div>}
+        {askFree && (
+          <div className="bcaja-alert" role="alertdialog" aria-label={t("productos.freeTitle")}>
+            <strong>{t("productos.freeTitle")}</strong> {t("productos.freeBody")}
+            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+              <button type="button" className="btn-new barber-btn-primary" onClick={() => submit(true)} disabled={busy}>{t("productos.freeYes")}</button>
+              <button type="button" className="btn-new btn-new--ghost" onClick={() => setAskFree(false)} disabled={busy}>{t("productos.freeNo")}</button>
+            </div>
+          </div>
+        )}
         <div className="field-new">
           <label className="field-new__label">{t("productos.fName")}</label>
-          <input className="input-new" autoFocus value={name} onChange={(e) => setName(e.target.value)} maxLength={120} />
+          <input className="input-new" autoFocus value={name} onChange={(e) => { setName(e.target.value); touch("name"); }} onBlur={() => touch("name")} maxLength={120} />
+          {bad("name", name.trim().length === 0, "productos.errName")}
         </div>
         <div className="bcaja-form__grid">
           <div className="field-new">
@@ -104,15 +125,18 @@ export function ProductFormModal({ dict, product, onClose, onDone }: { dict: Dic
           </div>
           <div className="field-new">
             <label className="field-new__label">{t("productos.fPrice")}</label>
-            <input className="input-new" inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="0.00" />
+            <input className="input-new" inputMode="decimal" value={price} onChange={(e) => { setPrice(e.target.value); setAskFree(false); touch("price"); }} onBlur={() => touch("price")} placeholder="0.00" />
+            {bad("price", !priceOk, "productos.errPrice")}
           </div>
           <div className="field-new">
             <label className="field-new__label">{t("productos.fCost")}</label>
-            <input className="input-new" inputMode="decimal" value={cost} onChange={(e) => setCost(e.target.value)} placeholder="0.00" />
+            <input className="input-new" inputMode="decimal" value={cost} onChange={(e) => { setCost(e.target.value); touch("cost"); }} onBlur={() => touch("cost")} placeholder="0.00" />
+            {bad("cost", !costOk, "productos.errCost")}
           </div>
           <div className="field-new">
             <label className="field-new__label">{t("productos.fMin")}</label>
-            <input className="input-new" inputMode="numeric" value={minStock} onChange={(e) => setMinStock(e.target.value)} />
+            <input className="input-new" inputMode="numeric" value={minStock} onChange={(e) => { setMinStock(e.target.value); touch("min"); }} onBlur={() => touch("min")} />
+            {bad("min", !intOk(minStock), "productos.errInt")}
           </div>
           {editing ? (
             <div className="field-new">
@@ -124,7 +148,8 @@ export function ProductFormModal({ dict, product, onClose, onDone }: { dict: Dic
           ) : (
             <div className="field-new">
               <label className="field-new__label">{t("productos.fInitialStock")}</label>
-              <input className="input-new" inputMode="numeric" value={initialStock} onChange={(e) => setInitialStock(e.target.value)} />
+              <input className="input-new" inputMode="numeric" value={initialStock} onChange={(e) => { setInitialStock(e.target.value); touch("init"); }} onBlur={() => touch("init")} />
+              {bad("init", !intOk(initialStock), "productos.errInt")}
               <div className="bcaja-hint">{t("productos.fInitialStockHint")}</div>
             </div>
           )}

@@ -84,7 +84,14 @@
       "errors": {
         "name": "Give the service a name.",
         "duration": "Duration goes from {min} to {max} minutes, in steps of 5.",
-        "price": "Enter a valid price (up to 2 decimals)."
+        "price": "Enter a valid price (up to 2 decimals).",
+        "priceEmpty": "Enter the price. If it is free, enter 0."
+      },
+      "free": {
+        "title": "Is it free?",
+        "body": "The price is $0: the client will pay nothing for this service and the register will charge zero.",
+        "yes": "Yes, it is free",
+        "no": "Change the price"
       }
     },
     "retire": {

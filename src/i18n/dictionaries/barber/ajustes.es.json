@@ -84,7 +84,14 @@
       "errors": {
         "name": "Ponle nombre al servicio.",
         "duration": "La duración va de {min} a {max} minutos, en pasos de 5.",
-        "price": "Escribe un precio válido (hasta 2 decimales)."
+        "price": "Escribe un precio válido (hasta 2 decimales).",
+        "priceEmpty": "Escribe el precio. Si va gratis, pon 0."
+      },
+      "free": {
+        "title": "¿Va gratis?",
+        "body": "El precio es $0: el cliente no pagará nada por este servicio y la caja lo cobrará en cero.",
+        "yes": "Sí, va gratis",
+        "no": "Cambiar el precio"
       }
     },
     "retire": {
