@@ -236,6 +236,34 @@ test("las facturas del dental no se registran (misma cuenta de Stripe)", { skip 
   assert.equal(despues[0].n, antes[0].n);
 });
 
+test("factura de barber que no encuentra su barbería → 500 (Stripe reintenta) y, cuando aparece, se registra", { skip }, async () => {
+  const shop = await barberia();
+  // La barbería todavía no tiene guardado su customer (ni la metadata cuadra): no se encuentra.
+  const customer = shop.stripeCustomerId!;
+  await prisma.barbershop.update({ where: { id: shop.id }, data: { stripeCustomerId: null } });
+  const sub = suscripcion(`sub_${RUN}_huerfana`, "otra-barberia-inexistente", customer);
+  const inv = factura(`in_${RUN}_huerfana`, sub);
+
+  const errores: unknown[] = [];
+  const original = console.error;
+  console.error = (...a: unknown[]) => void errores.push(a);
+  let r: { status: number; body: any };
+  try {
+    r = await enviar("invoice.paid", inv);
+  } finally {
+    console.error = original;
+  }
+  assert.equal(r.status, 500, "no puede contestar 200 en silencio");
+  assert.match(JSON.stringify(errores), new RegExp(`in_${RUN}_huerfana`), "queda en el log con el id de la factura");
+  assert.equal((await filas(shop.id)).length, 0);
+
+  // Reintento de Stripe con la barbería ya encontrable: el cobro entra.
+  await prisma.barbershop.update({ where: { id: shop.id }, data: { stripeCustomerId: customer } });
+  const r2 = await enviar("invoice.paid", inv);
+  assert.equal(r2.status, 200);
+  assert.equal((await filas(shop.id)).length, 1);
+});
+
 test("suscripción ANUAL: se guarda el importe y el ciclo reales y el admin suma ÷ 12", { skip }, async () => {
   const shop = await barberia();
   const sub = suscripcion(`sub_${RUN}_anual`, shop.id, shop.stripeCustomerId!, {

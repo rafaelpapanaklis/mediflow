@@ -803,7 +803,17 @@ async function handleBarberInvoiceEvent(
     customer: facturaCustomerId(invoice),
     metadata: facturaShopIdDeclarado(invoice) ? { barbershopId: facturaShopIdDeclarado(invoice) as string } : null,
   });
-  if (!shop) return { handled: false, action: "invoice:shop-not-found" };
+  if (!shop) {
+    // Es NUESTRA (lleva la marca de barber) y no sabemos de quién: no se
+    // contesta 200 en silencio (ronda 2 de la revisión). Se lanza → la ruta
+    // responde 500, queda en el log con el id de la factura y Stripe
+    // reintenta (hasta ~3 días): si la barbería aparece (orden de eventos,
+    // customer recién guardado), el cobro se registra solo.
+    throw new Error(
+      `Factura de barber sin barbería: invoice=${invoice.id} customer=${facturaCustomerId(invoice) ?? "—"} ` +
+        `barbershopId=${facturaShopIdDeclarado(invoice) ?? "—"}`,
+    );
+  }
 
   const cobro = leerCobroDeFactura(invoice, event.type);
   const saved = cobro && db.cobros ? await db.cobros.guardarCobro(shop.id, cobro) : "sin-registro";
