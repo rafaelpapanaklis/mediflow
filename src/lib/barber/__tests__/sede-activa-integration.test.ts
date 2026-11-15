@@ -382,24 +382,41 @@ test("🔴 RONDA 2 · M3: una escritura desde una pantalla de la matriz, con la 
   }
 });
 
-/* ═══════════════ Dueño de una sucursal (ronda 2, M2) ═══════════════ */
+/* ═══════════ Dueño dado de alta en una sucursal (decisión #6 de Rafael) ═══════════ */
 
-test("🔴 RONDA 2 · M2: un DUEÑO cuya sede es una sucursal no opera la matriz ni las demás", { skip }, async () => {
-  const ctx = await como("dueno-norte", matriz);
-  assert.equal(ctx.barbershopId, sucursal, "la cookie de la matriz no lo saca de su sede");
-  assert.deepEqual(await auth.getAccessibleBranchIds(ctx), [sucursal]);
+// Rafael, 15-nov (#6): «Dueño dado de alta en una sucursal → manda sobre todas
+// las sedes de la cadena». Deshace el efecto de 77c84f42b (ronda 2, M2), que lo
+// limitaba a su sede: para alguien de una sola sede está el rol Encargado.
+test("🔴 un DUEÑO dado de alta en una sucursal opera la matriz y las sucursales de SU cadena, y ninguna de otra", { skip }, async () => {
+  // Alcanza la cadena entera, sin filas de acceso.
+  const enCasa = await como("dueno-norte", null);
+  assert.equal(enCasa.barbershopId, sucursal, "sin cookie, su sede propia");
+  assert.deepEqual(await auth.getAccessibleBranchIds(enCasa), [matriz, sucursal, tercera]);
+
+  // Elige la MATRIZ: el contexto ES la matriz y sus APIs enseñan la matriz.
+  const enMatriz = await como("dueno-norte", matriz);
+  assert.equal(enMatriz.barbershopId, matriz, "opera la matriz");
+  assert.equal(enMatriz.homeBarbershopId, sucursal, "su sede propia sigue siendo la sucursal");
   const servicios = await texto(await servicesRoute.GET());
-  assert.ok(servicios.text.includes("Corte Norte") && !servicios.text.includes("Corte Matriz"), servicios.text);
-  // Con un acceso concedido, sí (como cualquier otro rol).
-  const id = (await prisma.barberUser.findFirstOrThrow({ where: { supabaseId: sb["dueno-norte"] } })).id;
-  const grant = await prisma.barberUserBranchAccess.create({ data: { userId: id, barbershopId: matriz } });
-  try {
-    assert.equal((await como("dueno-norte", matriz)).barbershopId, matriz);
-  } finally {
-    await prisma.barberUserBranchAccess.delete({ where: { id: grant.id } });
-  }
-  // El dueño de la matriz sigue alcanzando toda la cadena.
+  assert.ok(servicios.text.includes("Corte Matriz") && !servicios.text.includes("Corte Norte"), servicios.text);
+
+  // De vuelta en su sucursal.
+  assert.equal((await como("dueno-norte", sucursal)).barbershopId, sucursal);
+
+  // Lo que ya estaba cerrado sigue cerrado:
+  //  · la sede CERRADA no se opera (b021e179b), ni siendo dueño;
+  assert.equal((await como("dueno-norte", tercera)).barbershopId, sucursal, "la sucursal cerrada no se opera");
+  //  · otra cadena, nunca (aunque ponga la cookie a mano).
+  const otra = await como("dueno-norte", ajena);
+  assert.equal(otra.barbershopId, sucursal, "una sede de otra cadena no se opera");
+  assert.ok(!(await auth.getAccessibleBranchIds(otra)).includes(ajena));
+  const sinAjena = await texto(await servicesRoute.GET());
+  assert.ok(!sinAjena.text.includes("Corte Ajena"), sinAjena.text);
+
+  // El dueño de la matriz, igual que siempre; el ENCARGADO de la sucursal sigue
+  // sin entrar a la matriz.
   assert.deepEqual(await auth.getAccessibleBranchIds(await como("dueno", null)), [matriz, sucursal, tercera]);
+  assert.equal((await como("encargado-norte", matriz)).barbershopId, sucursal);
 });
 
 /* ═══════════════ Usuario con acceso a dos sedes ═══════════════ */
