@@ -306,12 +306,60 @@
 .bcaja-print__sign div { border-top: 1px solid #333; padding-top: 6px; font-size: 11.5px; text-align: center; color: #4A4138; }
 .bcaja-print-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin: 0 auto 16px; max-width: 720px; }
 
+.bcaja-print-setup { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-2); }
+.bcaja-print-setup .input-new { height: 34px; padding: 0 8px; }
+
+/* ── Impresora térmica 80 / 58 mm (QA B ronda 2) ───────────────────────
+   Se ve igual en pantalla (vista previa) y en el papel. Blanco y negro, sin
+   adornos, letra sans legible, renglones que no se parten a la mitad. El
+   ancho útil de un rollo de 80 mm es ~72 mm; el de 58 mm, ~48 mm. */
+.bcaja-print--thermal {
+  border-radius: 0;
+  font-family: "Helvetica Neue", Arial, system-ui, sans-serif;
+  line-height: 1.3;
+}
+.bcaja-print--t80 { width: 80mm; max-width: 80mm; padding: 4mm; }
+.bcaja-print--t58 { width: 58mm; max-width: 58mm; padding: 3mm 5mm; }
+.bcaja-print--thermal { color: #000; background: #fff; }
+.bcaja-print--thermal * { color: #000 !important; background: transparent !important; box-shadow: none !important; }
+.bcaja-print--thermal .bcaja-print__head { margin-bottom: 2mm; }
+.bcaja-print--thermal .bcaja-print__shop { font-size: 15px; }
+.bcaja-print--thermal .bcaja-print__meta,
+.bcaja-print--thermal .bcaja-print__thanks { font-size: 10.5px; }
+.bcaja-print--thermal .bcaja-print__section { font-size: 10px; margin: 2mm 0 1mm; }
+.bcaja-print--thermal .bcaja-print__rule { border-top: 1px dashed #000; margin: 2mm 0; }
+.bcaja-print--thermal .bcaja-print__row { font-size: 12px; gap: 2mm; padding: 0.6mm 0; break-inside: avoid; page-break-inside: avoid; }
+/* Ninguna palabra se parte («Clie/nte»): las dos columnas se acomodan en
+   renglones por espacios; un importe no tiene espacios, así que no se corta. */
+.bcaja-print--thermal .bcaja-print__row span:first-child { overflow-wrap: break-word; }
+.bcaja-print--thermal .bcaja-print__row span:last-child { white-space: normal; text-align: right; overflow-wrap: break-word; }
+.bcaja-print--thermal .bcaja-print__row--total { font-size: 14px; padding-top: 1.5mm; }
+.bcaja-print--t58 .bcaja-print__row { font-size: 11px; }
+.bcaja-print--t58 .bcaja-print__row--total { font-size: 13px; }
+.bcaja-print--thermal .bcaja-print__stamp { border-color: #000; transform: none; margin: 2mm auto; }
+.bcaja-print--thermal .bcaja-print__logo { width: 40px !important; height: 40px !important; border-radius: 0 !important; filter: grayscale(1) contrast(1.4); }
+/* Recibo de comisiones: la tabla se vuelve renglones apilados (no caben 7 columnas). */
+.bcaja-print--thermal .bcaja-print__table thead { display: none; }
+.bcaja-print--thermal .bcaja-print__table,
+.bcaja-print--thermal .bcaja-print__table tbody { display: block; width: 100%; }
+.bcaja-print--thermal .bcaja-print__table tr { display: block; padding: 1mm 0; border-bottom: 1px dashed #000; break-inside: avoid; page-break-inside: avoid; }
+.bcaja-print--thermal .bcaja-print__table td { display: inline; padding: 0; border: 0; font-size: 10.5px; text-align: left !important; overflow-wrap: anywhere; }
+.bcaja-print--thermal .bcaja-print__table td + td::before { content: " · "; }
+.bcaja-print--thermal .bcaja-print__sign { grid-template-columns: 1fr; gap: 10mm; margin-top: 10mm; }
+.bcaja-print--thermal .bcaja-print__sign div { border-top-color: #000; }
+
 @media print {
   .barber-shell .sidebar-new,
   .barber-shell .topbar-new,
   .barber-shell .icon-btn-new,
+  .barber-shell .barber-menu-btn,
   .bcaja-print-actions { display: none !important; }
   .barber-shell main { padding: 0 !important; }
   .bcaja-print { border: 0; border-radius: 0; max-width: none; padding: 0; }
   body { background: #fff !important; }
+  /* Rollo: la página ya mide 80/58 mm (regla @page que pone print-setup);
+     el ticket la llena sin márgenes externos y conserva su relleno interno. */
+  .bcaja-print.bcaja-print--thermal { width: 100% !important; max-width: none !important; margin: 0 !important; }
+  .bcaja-print.bcaja-print--t80 { padding: 2mm 4mm !important; }
+  .bcaja-print.bcaja-print--t58 { padding: 2mm 5mm !important; }
 }

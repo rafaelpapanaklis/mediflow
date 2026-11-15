@@ -1,7 +1,9 @@
 "use client";
 
+import { useRef } from "react";
 import Link from "next/link";
-import { ArrowLeft, Printer } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
+import { PrintSetupControls, printWithWidth, usePrintSetup } from "@/components/barber/cash/print-setup";
 import type { Dictionary } from "@/i18n/t";
 import type { CommissionEntryRow, CommissionSummaryRow } from "@/lib/barber/commissions";
 import { useBarberT } from "@/components/barber/cash/use-barber-t";
@@ -31,15 +33,26 @@ export function ReceiptPrint({
   const scheme =
     row.commissionType === "COMMISSION" ? t("comisiones.schemeCOMMISSION", { pct: row.commissionPct ?? 0 }) : t(`comisiones.scheme${row.commissionType}`);
   const live = entries.filter((e) => !e.saleCancelled);
+  // Hoja carta o impresora térmica de 80/58 mm (recordado en este navegador).
+  const printSetup = usePrintSetup();
+  const receiptRef = useRef<HTMLDivElement | null>(null);
 
   return (
     <>
       <div className="bcaja-print-actions">
         <Link href={`/barber/comisiones?period=${periodKey}`} className="btn-new btn-new--ghost"><ArrowLeft size={14} /> {t("common.back")}</Link>
-        <button type="button" className="btn-new barber-btn-primary" onClick={() => window.print()}><Printer size={14} /> {t("common.print")}</button>
+        <PrintSetupControls
+          t={t}
+          width={printSetup.width}
+          setWidth={printSetup.setWidth}
+          logo={printSetup.logo}
+          setLogo={printSetup.setLogo}
+          withLogo={false}
+          onPrint={() => printWithWidth(printSetup.width, receiptRef)}
+        />
       </div>
 
-      <div className="bcaja-print bcaja-print--wide">
+      <div className={`bcaja-print ${printSetup.width === "letter" ? "bcaja-print--wide" : printSetup.className}`} ref={receiptRef} data-ancho-impresion={printSetup.width}>
         <div className="bcaja-print__head">
           <div className="bcaja-print__shop">{shopName}</div>
           <div className="bcaja-print__meta">{t("print.receiptTitle")}</div>
@@ -107,7 +120,9 @@ export function ReceiptPrint({
           <div>{t("print.receiptSignBarber")}</div>
           <div>{t("print.receiptSignShop")}</div>
         </div>
-        <div className="bcaja-print__thanks">{t("print.generated", { date: fmtDateTime(new Date().toISOString(), tz) })}</div>
+        {/* La hora se calcula al pintar en el servidor Y en el navegador: si cambia
+            el minuto entre los dos, React avisaba (#418, QA B). Es solo un sello. */}
+        <div className="bcaja-print__thanks" suppressHydrationWarning>{t("print.generated", { date: fmtDateTime(new Date().toISOString(), tz) })}</div>
       </div>
     </>
   );

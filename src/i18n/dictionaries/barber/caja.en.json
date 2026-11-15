@@ -183,6 +183,11 @@
     "loyaltyRedeemEffect": "“{service}” is free on this ticket. This shop's reward is “{reward}”."
   },
   "print": {
+    "printer": "Printer",
+    "widthLetter": "Letter paper",
+    "width80": "Thermal 80 mm",
+    "width58": "Thermal 58 mm",
+    "withLogo": "Print logo",
     "ticketTitle": "Ticket",
     "ticketNumber": "Ticket",
     "date": "Date",

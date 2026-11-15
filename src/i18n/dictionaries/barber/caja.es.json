@@ -183,6 +183,11 @@
     "loyaltyRedeemEffect": "«{service}» queda gratis en este ticket. El premio de la barbería es «{reward}»."
   },
   "print": {
+    "printer": "Impresora",
+    "widthLetter": "Hoja carta",
+    "width80": "Térmica 80 mm",
+    "width58": "Térmica 58 mm",
+    "withLogo": "Imprimir logo",
     "ticketTitle": "Ticket",
     "ticketNumber": "Ticket",
     "date": "Fecha",

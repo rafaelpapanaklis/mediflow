@@ -1,19 +1,24 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import toast from "react-hot-toast";
-import { ArrowLeft, Link2, MessageCircle, Printer } from "lucide-react";
+import { ArrowLeft, Link2, MessageCircle } from "lucide-react";
 import type { Dictionary } from "@/i18n/t";
 import type { SaleDetail } from "@/lib/barber/cash";
 import { useBarberT } from "./use-barber-t";
 import { fmtDateTime, fmtMoney, PAYMENT_METHOD_KEYS } from "./money";
 import { ticketPrintLines } from "./print-lines";
+import { PrintSetupControls, printWithWidth, usePrintSetup } from "./print-setup";
 
 /** Ticket imprimible / compartible. Todo el dinero viene ya calculado del server. */
 export function TicketPrint({ sale, dict }: { sale: SaleDetail; dict: Dictionary }) {
   const t = useBarberT(dict);
   const [shareBusy, setShareBusy] = useState(false);
+  // Hoja carta o impresora térmica de 80/58 mm (recordado en este navegador).
+  const printSetup = usePrintSetup();
+  const ticketRef = useRef<HTMLDivElement | null>(null);
+  const thermal = printSetup.width !== "letter";
   const tz = sale.shop.timezone;
   const shortId = sale.id.slice(-6).toUpperCase();
   const shareText = t("print.shareText", { shop: sale.shop.name, total: fmtMoney(sale.total) });
@@ -46,16 +51,24 @@ export function TicketPrint({ sale, dict }: { sale: SaleDetail; dict: Dictionary
     <>
       <div className="bcaja-print-actions">
         <Link href="/barber/caja" className="btn-new btn-new--ghost"><ArrowLeft size={14} /> {t("common.back")}</Link>
-        <button type="button" className="btn-new barber-btn-primary" onClick={() => window.print()}><Printer size={14} /> {t("common.print")}</button>
+        <PrintSetupControls
+          t={t}
+          width={printSetup.width}
+          setWidth={printSetup.setWidth}
+          logo={printSetup.logo}
+          setLogo={printSetup.setLogo}
+          withLogo={Boolean(sale.shop.logoUrl)}
+          onPrint={() => printWithWidth(printSetup.width, ticketRef)}
+        />
         <a className="btn-new btn-new--secondary" href={waHref} target="_blank" rel="noopener noreferrer"><MessageCircle size={14} /> {t("print.shareWhatsapp")}</a>
         <button type="button" className="btn-new btn-new--secondary" onClick={copyLink} disabled={shareBusy}><Link2 size={14} /> {t("print.copyLink")}</button>
       </div>
 
-      <div className="bcaja-print">
+      <div className={`bcaja-print ${printSetup.className}`.trim()} ref={ticketRef} data-ancho-impresion={printSetup.width}>
         <div className="bcaja-print__head">
-          {sale.shop.logoUrl && (
+          {sale.shop.logoUrl && (!thermal || printSetup.logo) && (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={sale.shop.logoUrl} alt="" style={{ width: 56, height: 56, borderRadius: 12, objectFit: "cover", margin: "0 auto 8px" }} />
+            <img className="bcaja-print__logo" src={sale.shop.logoUrl} alt="" style={{ width: 56, height: 56, borderRadius: 12, objectFit: "cover", margin: "0 auto 8px" }} />
           )}
           <div className="bcaja-print__shop">{sale.shop.name}</div>
           {address && <div className="bcaja-print__meta">{address}</div>}
