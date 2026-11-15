@@ -98,6 +98,7 @@
     "openBody": "Cuenta el efectivo con el que empiezas. Ese será el fondo inicial del turno.",
     "openingAmount": "Fondo inicial",
     "openingRequired": "Escribe cuánto hay en el cajón. Si empiezas sin fondo, escribe 0.",
+    "amountInvalid": "Escribe solo el número: 200 o 200.50 (sin signos ni letras).",
     "openNotes": "Nota (opcional)",
     "openConfirm": "Abrir turno",
     "closeTitle": "Cerrar turno",

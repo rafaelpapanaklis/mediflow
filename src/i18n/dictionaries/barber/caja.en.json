@@ -98,6 +98,7 @@
     "openBody": "Count the cash you start with. That will be the shift's starting cash.",
     "openingAmount": "Starting cash",
     "openingRequired": "Type how much is in the drawer. If you start with no cash, type 0.",
+    "amountInvalid": "Type just the number: 200 or 200.50 (no signs or letters).",
     "openNotes": "Note (optional)",
     "openConfirm": "Open shift",
     "closeTitle": "Close shift",
