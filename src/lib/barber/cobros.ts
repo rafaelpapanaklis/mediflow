@@ -53,7 +53,13 @@ export async function leerRegistroBarber(barbershopId: string): Promise<BarberLe
   if (!barbershopId) return null;
   try {
     const rows = await prisma.$queryRaw<
-      Array<{ paid_through: Date | null; last_paid: Date | null; manual: Date | null }>
+      Array<{
+        paid_through: Date | null;
+        last_paid: Date | null;
+        manual: Date | null;
+        stripe_status: string | null;
+        stripe_period_end: Date | null;
+      }>
     >(Prisma.sql`
       SELECT
         (SELECT max(p.period_end) FROM barber_subscription_payments p
@@ -61,13 +67,20 @@ export async function leerRegistroBarber(barbershopId: string): Promise<BarberLe
         (SELECT max(p.paid_at) FROM barber_subscription_payments p
           WHERE p.barbershop_id = ${barbershopId} AND p.status = 'paid') AS last_paid,
         (SELECT s.manual_access_at FROM barber_subscriptions s
-          WHERE s.barbershop_id = ${barbershopId}) AS manual
+          WHERE s.barbershop_id = ${barbershopId}) AS manual,
+        (SELECT s.stripe_status FROM barber_subscriptions s
+          WHERE s.barbershop_id = ${barbershopId}) AS stripe_status,
+        (SELECT s.current_period_end FROM barber_subscriptions s
+          WHERE s.barbershop_id = ${barbershopId}) AS stripe_period_end
     `);
     const r = rows[0];
     return {
       paidThroughAt: fecha(r?.paid_through),
       lastPaidAt: fecha(r?.last_paid),
       manualAccessAt: fecha(r?.manual),
+      // Lo último que Stripe dijo (G1, ronda 2): si ya renovó, no se corta.
+      stripeStatus: r?.stripe_status ?? null,
+      stripePeriodEnd: fecha(r?.stripe_period_end),
     };
   } catch (e) {
     if (sinTabla(e)) return null;
@@ -214,10 +227,18 @@ export async function vencerSiTocaBarber(rootId: string, status: string, now: Da
  * recordatorios). Idempotente: lo ya suspendido no se vuelve a tocar.
  */
 export async function vencerSuscripcionesBarber(now: Date = new Date()): Promise<{ suspendidas: string[] }> {
-  let rows: Array<{ id: string; paid_through: Date | null; last_paid: Date | null; manual: Date | null }>;
+  let rows: Array<{
+    id: string;
+    paid_through: Date | null;
+    last_paid: Date | null;
+    manual: Date | null;
+    stripe_status: string | null;
+    stripe_period_end: Date | null;
+  }>;
   try {
     rows = await prisma.$queryRaw(Prisma.sql`
-      SELECT s.id, agg.paid_through, agg.last_paid, bs.manual_access_at AS manual
+      SELECT s.id, agg.paid_through, agg.last_paid, bs.manual_access_at AS manual,
+             bs.stripe_status, bs.current_period_end AS stripe_period_end
         FROM barber_shops s
         JOIN (
           SELECT barbershop_id, max(period_end) AS paid_through, max(paid_at) AS last_paid
@@ -238,7 +259,13 @@ export async function vencerSuscripcionesBarber(now: Date = new Date()): Promise
   const vencidas = rows
     .filter((r) =>
       barberiaVencida(
-        { paidThroughAt: fecha(r.paid_through), lastPaidAt: fecha(r.last_paid), manualAccessAt: fecha(r.manual) },
+        {
+          paidThroughAt: fecha(r.paid_through),
+          lastPaidAt: fecha(r.last_paid),
+          manualAccessAt: fecha(r.manual),
+          stripeStatus: r.stripe_status,
+          stripePeriodEnd: fecha(r.stripe_period_end),
+        },
         now,
       ),
     )

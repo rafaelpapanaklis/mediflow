@@ -32,6 +32,11 @@ import {
  *   Sin ningún cobro registrado (tabla sin pegar, barbería de cortesía, o
  *   la que pagó antes de que existiera el registro) el corte NO aplica y
  *   manda el estado de siempre: nada se cierra por falta de datos.
+ *
+ *   Tampoco se corta si Stripe ya RENOVÓ el periodo y sigue «active»
+ *   (stripeYaRenovo, ronda 2): un invoice.paid que se perdió o que llega una
+ *   hora tarde no puede cerrar a quien sí paga. Si el cobro falla, Stripe
+ *   manda past_due y eso cierra por sí solo.
  * ═══════════════════════════════════════════════════════════════════════
  */
 
@@ -77,6 +82,14 @@ export interface BarberLedger {
   lastPaidAt: Date | null;
   /** Reactivación manual desde el admin (barber_subscriptions.manual_access_at). */
   manualAccessAt: Date | null;
+  /**
+   * Lo último que Stripe dijo de la suscripción (barber_subscriptions, lo
+   * escribe el webhook en cada evento de la suscripción): su estado y el fin
+   * del periodo EN CURSO. Opcional: sin la fila, el corte se decide solo con
+   * los cobros registrados.
+   */
+  stripeStatus?: string | null;
+  stripePeriodEnd?: Date | null;
 }
 
 /**
@@ -91,9 +104,41 @@ export function corteAplica(ledger: BarberLedger | null | undefined): boolean {
   return true;
 }
 
-/** ¿Terminó su periodo pagado sin cobro nuevo? (el corte sin días de gracia) */
+/**
+ * Estado de Stripe con el que una renovación todavía no ha fallado. Solo
+ * «active»: si el cobro de la renovación rechaza, Stripe la pasa a past_due
+ * (y eso cierra el panel por sí solo, sin mirar fechas).
+ */
+export const BARBER_STRIPE_RENOVADA_STATUS = "active";
+
+/**
+ * ¿Stripe ya RENOVÓ el periodo y no ha dicho que el cobro falló? (ronda 2,
+ * G1 de la revisión). Es decir: su suscripción sigue «active» y el fin del
+ * periodo en curso es POSTERIOR a «pagado hasta». Pasa cuando el invoice.paid
+ * de la renovación todavía no llega o no se guardó (evento sin marcar en el
+ * endpoint, endpoint caído, Stripe cobrando ~1 h después de renovar a las
+ * 23:30): esa barbería pagó o está a punto de pagar, y cortarla sería cerrar
+ * a quien sí paga sin que pueda salir sola. Si el cobro falla, Stripe manda
+ * past_due y se cierra igual.
+ *
+ * Con tope: la excepción vale solo hasta que termine el día (México) del
+ * periodo que Stripe renovó. Si se perdieran TAMBIÉN los eventos del rechazo,
+ * el corte llega a más tardar al fin de ese periodo, no nunca.
+ */
+export function stripeYaRenovo(ledger: BarberLedger | null | undefined, now: Date): boolean {
+  if (!ledger?.paidThroughAt || !ledger.stripePeriodEnd) return false;
+  if (ledger.stripeStatus !== BARBER_STRIPE_RENOVADA_STATUS) return false;
+  if (ledger.stripePeriodEnd.getTime() <= ledger.paidThroughAt.getTime()) return false;
+  return !periodoPagadoVencido(ledger.stripePeriodEnd, now);
+}
+
+/**
+ * ¿Terminó su periodo pagado sin cobro nuevo? (el corte sin días de gracia)
+ * No, si Stripe ya renovó y no ha dicho que el cobro falló (stripeYaRenovo).
+ */
 export function barberiaVencida(ledger: BarberLedger | null | undefined, now: Date): boolean {
-  return corteAplica(ledger) && periodoPagadoVencido(ledger!.paidThroughAt, now);
+  if (!corteAplica(ledger) || !periodoPagadoVencido(ledger!.paidThroughAt, now)) return false;
+  return !stripeYaRenovo(ledger, now);
 }
 
 /**

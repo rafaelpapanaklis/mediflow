@@ -204,9 +204,10 @@ async function evento(type: string, object: any) {
   return { status: res.status, body: await res.json() };
 }
 
-test("Stripe todavía dice «active» con el periodo vencido: no reabre; el PAGO sí", { skip }, async () => {
+test("Stripe dice «active» pero NO renovó (su periodo es el vencido): no reabre; el PAGO sí", { skip }, async () => {
   const { matriz, sede } = await familia();
   await cobro(matriz.id, ayer());
+  // Sin current_period_end posterior al pagado: Stripe no ha renovado nada.
   const sub = {
     id: matriz.stripeSubscriptionId,
     status: "active",
@@ -235,4 +236,67 @@ test("Stripe todavía dice «active» con el periodo vencido: no reabre; el PAGO
   assert.equal(r.status, 200);
   assert.deepEqual(await estados(matriz.id, sede.id), ["active", "active"]);
   assert.equal(await hasBarberPaidAccess(ctxDe({ ...matriz, subscriptionStatus: "active" })), true);
+});
+
+// ── RONDA 2 (G1): una barbería que SÍ pagó no se corta si Stripe ya renovó ──
+
+/** Suscripción «viva» de Stripe con su periodo en curso terminando en `fin`. */
+function subViva(shop: { id: string; stripeCustomerId: string | null }, id: string, status: string, fin: Date) {
+  const sub = {
+    id,
+    status,
+    customer: shop.stripeCustomerId,
+    metadata: { dc_vertical: "barber", dc_kind: "barber-subscription", barbershopId: shop.id, dc_plan: "PROFESIONAL" },
+    items: {
+      data: [
+        {
+          id: `si_${id}`,
+          quantity: 1,
+          current_period_end: Math.floor(fin.getTime() / 1000),
+          price: { unit_amount: 74900, currency: "mxn", recurring: { interval: "month" }, metadata: { dc_vertical: "barber", dc_plan: "PROFESIONAL" } },
+        },
+      ],
+    },
+  };
+  subs.set(id, sub);
+  return sub;
+}
+
+test("evento perdido: Stripe renovó (active, periodo nuevo) y el invoice.paid nunca llegó → ni el webhook, ni el candado, ni el cron la cortan", { skip }, async () => {
+  const { matriz, sede } = await familia();
+  await cobro(matriz.id, ayer());
+  const sub = subViva(matriz, matriz.stripeSubscriptionId!, "active", proxima());
+
+  await evento("customer.subscription.updated", sub);
+  assert.deepEqual(await estados(matriz.id, sede.id), ["active", "active"]);
+  assert.equal(await hasBarberPaidAccess(ctxDe(matriz)), true);
+  await cronGET(
+    new Request("http://localhost/api/barber/whatsapp/dispatch", { headers: { authorization: "Bearer cron-de-prueba" } }),
+  );
+  assert.deepEqual(await estados(matriz.id, sede.id), ["active", "active"]);
+
+  // El cobro de la renovación falla: Stripe manda past_due y se cierra igual.
+  subViva(matriz, sub.id, "past_due", proxima());
+  await evento("customer.subscription.updated", subs.get(sub.id));
+  assert.deepEqual(await estados(matriz.id, sede.id), ["past_due", "past_due"]);
+  assert.equal(await hasBarberPaidAccess(ctxDe({ ...matriz, subscriptionStatus: "past_due" })), false);
+});
+
+test("checkout de reactivación: la suscripción NUEVA abre al confirmarse, sin esperar su invoice.paid", { skip }, async () => {
+  const { matriz, sede } = await familia("canceled");
+  // Su último cobro es de hace dos meses (la suscripción vieja).
+  await cobro(matriz.id, new Date(Date.now() - 60 * DIA));
+  const nueva = subViva(matriz, `sub_${RUN}_reactiva`, "active", new Date(Date.now() + 30 * DIA));
+
+  const r = await evento("checkout.session.completed", {
+    id: `cs_${randomUUID()}`,
+    mode: "subscription",
+    metadata: { dc_kind: "barber-subscription", barbershopId: matriz.id },
+    subscription: nueva.id,
+  });
+  assert.equal(r.status, 200);
+  assert.deepEqual(await estados(matriz.id, sede.id), ["active", "active"]);
+  assert.equal(await hasBarberPaidAccess(ctxDe({ ...matriz, subscriptionStatus: "active" })), true);
+  const fila = await prisma.barbershop.findUnique({ where: { id: matriz.id }, select: { stripeSubscriptionId: true } });
+  assert.equal(fila?.stripeSubscriptionId, nueva.id);
 });

@@ -117,3 +117,50 @@ test("un customer.subscription.updated «active» con el periodo pagado vencido 
   await applyBarberSubscription(sinRegistro, sub, { now: d("2030-01-01T00:00:00Z") });
   assert.deepEqual(writes, [["matriz", "active"], ["sedes", "active"]]);
 });
+
+// ── RONDA 2 (G1 de la revisión): Stripe ya renovó → no se corta ─────────
+
+test("evento perdido: Stripe renovó y sigue «active» → NO se corta aunque falte el invoice.paid", () => {
+  const renovada = ledger({ stripeStatus: "active", stripePeriodEnd: d("2027-01-14T16:00:00Z") });
+  const despues = d("2026-12-15T06:00:00Z");
+  assert.equal(barberiaVencida(renovada, despues), false);
+  assert.equal(estadoEfectivo("active", renovada, despues), "active");
+  // Si el cobro de la renovación falla, Stripe dice past_due: ahí sí se corta.
+  assert.equal(barberiaVencida(ledger({ stripeStatus: "past_due", stripePeriodEnd: d("2027-01-14T16:00:00Z") }), despues), true);
+  // Stripe todavía no renovó (su periodo es el mismo que el pagado): se corta.
+  assert.equal(barberiaVencida(ledger({ stripeStatus: "active", stripePeriodEnd: PAGADO_HASTA }), despues), true);
+  // Sin la fila de Stripe (semilla sin términos, o tabla vieja): manda la fecha.
+  assert.equal(barberiaVencida(ledger({ stripeStatus: null, stripePeriodEnd: null }), despues), true);
+  // Solo «active»: trialing o cualquier otro no exime.
+  assert.equal(barberiaVencida(ledger({ stripeStatus: "trialing", stripePeriodEnd: d("2027-01-14T16:00:00Z") }), despues), true);
+});
+
+test("con tope: si TAMBIÉN se pierden los eventos del rechazo, se corta al terminar el periodo que Stripe renovó", () => {
+  const renovada = ledger({ stripeStatus: "active", stripePeriodEnd: d("2027-01-14T16:00:00Z") });
+  assert.equal(barberiaVencida(renovada, d("2027-01-15T05:59:00Z")), false); // 14-ene 23:59 México
+  assert.equal(barberiaVencida(renovada, d("2027-01-15T06:00:00Z")), true); // 15-ene 00:00 México
+});
+
+test("alta de noche (M1): contratada a las 23:30, Stripe renueva a las 23:30 y cobra ~1 h después → no se cierra a las 00:00", () => {
+  const tarde = ledger({
+    paidThroughAt: d("2026-12-15T05:30:00Z"), // 14-dic 23:30 México
+    stripeStatus: "active",
+    stripePeriodEnd: d("2027-01-15T05:30:00Z"), // Stripe ya renovó a las 23:30
+  });
+  assert.equal(barberiaVencida(tarde, d("2026-12-15T06:10:00Z")), false); // 15-dic 00:10 México
+  // Si a las 00:00 Stripe todavía no avisó la renovación, se corta y se reabre con el pago.
+  assert.equal(
+    barberiaVencida({ ...tarde, stripePeriodEnd: d("2026-12-15T05:30:00Z") }, d("2026-12-15T06:10:00Z")),
+    true,
+  );
+});
+
+test("checkout de reactivación antes del invoice.paid: la suscripción nueva «active» abre aunque el último cobro sea viejo", () => {
+  const reactivada = ledger({
+    paidThroughAt: d("2026-09-14T16:00:00Z"),
+    lastPaidAt: d("2026-08-14T16:00:00Z"),
+    stripeStatus: "active",
+    stripePeriodEnd: d("2027-01-10T18:00:00Z"),
+  });
+  assert.equal(estadoEfectivo("active", reactivada, d("2026-12-10T18:05:00Z")), "active");
+});
