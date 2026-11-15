@@ -1,0 +1,122 @@
+{
+  "title": "Messages",
+  "subtitle": "Your WhatsApp chats with clients, with the real status of every message.",
+  "search": {
+    "label": "Search chats",
+    "placeholder": "Search by name, phone or message",
+    "clear": "Clear search"
+  },
+  "filters": {
+    "label": "Filter chats",
+    "todos": "All",
+    "sinLeer": "Unread",
+    "bot": "Handled by the bot",
+    "pausados": "Paused",
+    "archivados": "Archived"
+  },
+  "list": {
+    "label": "Chats",
+    "loading": "Loading chats…",
+    "error": "The chats could not be loaded.",
+    "retry": "Try again",
+    "empty": "No chats yet. As soon as a client writes to you, it shows up here.",
+    "emptySinLeer": "You have no unread chats.",
+    "emptyBot": "The bot is not handling any chat.",
+    "emptyPausados": "No chat is paused.",
+    "emptyArchivados": "No archived chats. Archiving deletes nothing: if the client writes again, the chat comes back on its own.",
+    "noMatch": "No chat matches “{q}”.",
+    "showAll": "Show all chats",
+    "you": "You",
+    "unread": "{count} unread",
+    "unreadOne": "1 unread"
+  },
+  "who": {
+    "bot": "Bot",
+    "persona": "Paused",
+    "nadie": "Awaiting reply",
+    "label": "Handled by",
+    "optionBot": "The bot",
+    "optionPersona": "A person",
+    "botHint": "The bot answers this chat. If you reply, it pauses on its own.",
+    "personaHint": "The bot is paused in this chat: someone from the shop answers.",
+    "pausedSince": "Paused since {when}",
+    "noBot": "No bot: your team answers this chat.",
+    "botOff": "The bot is off: your team answers this chat.",
+    "take": "I’ll handle it",
+    "giveBack": "Give back to the bot",
+    "taken": "Done: the bot won’t answer this chat.",
+    "givenBack": "Done: the bot answers this chat again."
+  },
+  "chat": {
+    "pick": "Pick a chat to read it",
+    "pickHint": "Here you see the whole conversation, who handles it and the client’s next appointment.",
+    "back": "Back to chats",
+    "viewClient": "View profile",
+    "noClient": "No client profile",
+    "nextAppt": "Next appointment",
+    "with": "with {barber}",
+    "noAppt": "No appointment in the next 14 days",
+    "archive": "Archive",
+    "unarchive": "Unarchive",
+    "archived": "Chat archived.",
+    "unarchived": "The chat is back in the inbox.",
+    "undo": "Undo",
+    "empty": "This chat has no messages yet.",
+    "loading": "Loading messages…",
+    "error": "The chat could not be opened.",
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "now": "Now",
+    "messages": "Messages with {name}"
+  },
+  "msg": {
+    "automatic": "Automatic",
+    "template": "Template",
+    "voice": "Voice note",
+    "transcript": "Transcript",
+    "image": "Photo",
+    "openImage": "Open the photo full size",
+    "video": "Video",
+    "audio": "Audio",
+    "document": "File",
+    "sticker": "Sticker",
+    "open": "Open",
+    "expired": "This file is no longer available: WhatsApp deletes them after 30 days.",
+    "options": "Offered",
+    "failed": "Not delivered",
+    "sending": "Sending…",
+    "fromClient": "{name} wrote",
+    "fromYou": "Sent"
+  },
+  "status": {
+    "PENDING": "Queued",
+    "SENT": "Sent",
+    "DELIVERED": "Delivered",
+    "READ": "Read",
+    "FAILED": "Not delivered"
+  },
+  "composer": {
+    "label": "Your reply",
+    "placeholder": "Write your reply…",
+    "send": "Send",
+    "sending": "Sending…",
+    "windowLeft": "You have {time} left to write without a template.",
+    "windowClosedTitle": "More than 24 hours since their last message",
+    "windowClosed": "WhatsApp only lets you write first with an approved template. As soon as the client writes to you, you can reply here.",
+    "windowClosedLink": "See templates",
+    "quota": "The messages included this period are used up. Queued ones go out as soon as the next period starts; upgrade your plan if you need more now.",
+    "noSend": "Your role can read the chats, but not reply.",
+    "tooLong": "4,000 characters max ({count} now).",
+    "disconnected": "Connect your WhatsApp to reply."
+  },
+  "connect": {
+    "title": "Your WhatsApp is not connected",
+    "body": "Connect it to receive and answer your clients’ messages here.",
+    "cta": "Connect WhatsApp",
+    "banner": "WhatsApp is disconnected: you can read the chats, but no new messages arrive and you can’t reply.",
+    "bannerCta": "Go to Connection"
+  },
+  "errors": {
+    "generic": "Something went wrong. Please try again."
+  }
+}

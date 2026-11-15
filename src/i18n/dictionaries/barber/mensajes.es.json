@@ -1,0 +1,122 @@
+{
+  "title": "Mensajes",
+  "subtitle": "Los chats de WhatsApp con tus clientes, con el estado real de cada mensaje.",
+  "search": {
+    "label": "Buscar chat",
+    "placeholder": "Buscar por nombre, teléfono o mensaje",
+    "clear": "Borrar búsqueda"
+  },
+  "filters": {
+    "label": "Filtrar chats",
+    "todos": "Todos",
+    "sinLeer": "Sin leer",
+    "bot": "Los atiende el bot",
+    "pausados": "Pausados",
+    "archivados": "Archivados"
+  },
+  "list": {
+    "label": "Chats",
+    "loading": "Cargando chats…",
+    "error": "No se pudieron cargar los chats.",
+    "retry": "Reintentar",
+    "empty": "Todavía no hay chats. En cuanto un cliente te escriba, aparece aquí.",
+    "emptySinLeer": "No tienes chats sin leer.",
+    "emptyBot": "El bot no está atendiendo ningún chat.",
+    "emptyPausados": "Ningún chat está en pausa.",
+    "emptyArchivados": "No hay chats archivados. Archivar no borra nada: si el cliente vuelve a escribir, el chat regresa solo.",
+    "noMatch": "Ningún chat coincide con «{q}».",
+    "showAll": "Ver todos los chats",
+    "you": "Tú",
+    "unread": "{count} sin leer",
+    "unreadOne": "1 sin leer"
+  },
+  "who": {
+    "bot": "Bot",
+    "persona": "Pausado",
+    "nadie": "Sin responder",
+    "label": "Lo atiende",
+    "optionBot": "El bot",
+    "optionPersona": "Una persona",
+    "botHint": "El bot contesta este chat. Si respondes tú, se pausa solo.",
+    "personaHint": "El bot está en pausa en este chat: contesta alguien de la barbería.",
+    "pausedSince": "En pausa desde {when}",
+    "noBot": "Sin bot: este chat lo contesta tu equipo.",
+    "botOff": "El bot está apagado: este chat lo contesta tu equipo.",
+    "take": "Atender yo",
+    "giveBack": "Devolver al bot",
+    "taken": "Listo: el bot no contestará este chat.",
+    "givenBack": "Listo: el bot vuelve a contestar este chat."
+  },
+  "chat": {
+    "pick": "Elige un chat para leerlo",
+    "pickHint": "Aquí ves la conversación completa, quién la atiende y la próxima cita del cliente.",
+    "back": "Volver a los chats",
+    "viewClient": "Ver ficha",
+    "noClient": "Sin ficha de cliente",
+    "nextAppt": "Próxima cita",
+    "with": "con {barber}",
+    "noAppt": "Sin cita en los próximos 14 días",
+    "archive": "Archivar",
+    "unarchive": "Sacar del archivo",
+    "archived": "Chat archivado.",
+    "unarchived": "El chat volvió a la bandeja.",
+    "undo": "Deshacer",
+    "empty": "Este chat todavía no tiene mensajes.",
+    "loading": "Cargando mensajes…",
+    "error": "No se pudo abrir el chat.",
+    "today": "Hoy",
+    "yesterday": "Ayer",
+    "now": "Ahora",
+    "messages": "Mensajes con {name}"
+  },
+  "msg": {
+    "automatic": "Automático",
+    "template": "Plantilla",
+    "voice": "Nota de voz",
+    "transcript": "Transcripción",
+    "image": "Foto",
+    "openImage": "Abrir la foto en grande",
+    "video": "Video",
+    "audio": "Audio",
+    "document": "Archivo",
+    "sticker": "Calcomanía",
+    "open": "Abrir",
+    "expired": "Este archivo ya no está disponible: WhatsApp los borra a los 30 días.",
+    "options": "Se le ofreció",
+    "failed": "No se entregó",
+    "sending": "Enviando…",
+    "fromClient": "{name} escribió",
+    "fromYou": "Enviado"
+  },
+  "status": {
+    "PENDING": "En cola",
+    "SENT": "Enviado",
+    "DELIVERED": "Entregado",
+    "READ": "Leído",
+    "FAILED": "No se entregó"
+  },
+  "composer": {
+    "label": "Tu respuesta",
+    "placeholder": "Escribe tu respuesta…",
+    "send": "Enviar",
+    "sending": "Enviando…",
+    "windowLeft": "Te quedan {time} para escribirle sin plantilla.",
+    "windowClosedTitle": "Pasaron más de 24 horas desde su último mensaje",
+    "windowClosed": "WhatsApp solo deja escribir primero con una plantilla aprobada. En cuanto el cliente te escriba, puedes contestarle aquí.",
+    "windowClosedLink": "Ver plantillas",
+    "quota": "Se acabaron los mensajes incluidos de este periodo. Los que estén en cola salen en cuanto empiece el siguiente; sube de plan si necesitas más ahora.",
+    "noSend": "Tu rol puede leer los chats, pero no contestarlos.",
+    "tooLong": "Máximo 4,000 caracteres ({count} ahora).",
+    "disconnected": "Conecta tu WhatsApp para poder contestar."
+  },
+  "connect": {
+    "title": "Tu WhatsApp no está conectado",
+    "body": "Conéctalo para recibir y contestar aquí los mensajes de tus clientes.",
+    "cta": "Conectar WhatsApp",
+    "banner": "WhatsApp está desconectado: puedes leer los chats, pero no llegan mensajes nuevos ni puedes contestar.",
+    "bannerCta": "Ir a Conexión"
+  },
+  "errors": {
+    "generic": "Algo salió mal. Intenta de nuevo."
+  }
+}

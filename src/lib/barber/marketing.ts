@@ -392,7 +392,7 @@ export const BARBER_LANDING_WA_POINTS: BarberLandingClaim[] = [
     key: "inbox",
     feature: "whatsappInbox",
     icon: "inbox",
-    verifiedIn: ["src/components/barber/whatsapp/inbox-panel.tsx"],
+    verifiedIn: ["src/components/barber/mensajes/mensajes-screen.tsx"],
   },
   {
     key: "campanas",

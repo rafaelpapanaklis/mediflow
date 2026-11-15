@@ -9,6 +9,7 @@
     "fila": "Fila virtual",
     "solicitudes": "Solicitudes",
     "clientes": "Clientes",
+    "mensajes": "Mensajes",
     "servicios": "Servicios",
     "barberos": "Barberos",
     "caja": "Caja",
@@ -35,6 +36,8 @@
   },
   "logout": "Cerrar sesión",
   "navLabel": "Menú principal",
+  "unreadChats": "{count} chats sin leer",
+  "unreadChat": "1 chat sin leer",
   "placeholder": {
     "soon": "Próximamente",
     "body": "Esta sección está en construcción. Muy pronto vas a poder administrarla desde aquí.",
@@ -53,7 +56,8 @@
     "membresias": "Los planes que le vendes a tus clientes: cortes ilimitados, paquetes y más.",
     "productos": "Inventario simple de ceras, shampoos y todo lo que vendes en mostrador.",
     "mi-web": "Tu página pública con reservas en línea, editable sin saber de diseño.",
-    "whatsapp": "Recordatorios y conversaciones de WhatsApp con tus clientes.",
+    "mensajes": "Los chats de WhatsApp con tus clientes: lee, contesta y decide quién atiende cada uno.",
+    "whatsapp": "Conexión, plantillas y campañas de tu WhatsApp; el bot que agenda.",
     "campanas": "Traer de vuelta a los que ya no vienen, felicitar cumpleaños y avisar membresías por vencer.",
     "suscripcion": "Tu plan de DaleControl Barber: lo que incluye y cómo pagarlo.",
     "configuracion": "Datos de tu barbería: horario, dirección, logo y equipo con acceso."

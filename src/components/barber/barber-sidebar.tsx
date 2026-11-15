@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import type { BarberNavItem } from "@/lib/barber/types";
 import { BARBER_NAV_ICON, BarberIcon } from "./barber-icons";
+import { useMensajesSinLeer } from "./mensajes/sin-leer";
 
 /**
  * Menú lateral del panel BARBER — rediseño 15-nov-2026 (el menú de la
@@ -34,6 +35,8 @@ export function BarberSidebar({
   brandSub,
   logoutLabel,
   navLabel,
+  unreadLabel,
+  unreadLabelOne,
   loginHref,
 }: {
   shopName: string;
@@ -44,11 +47,16 @@ export function BarberSidebar({
   logoutLabel: string;
   /** Nombre accesible del menú («Menú principal» / «Main menu»). */
   navLabel: string;
+  /** «{count} chats sin leer» / «1 chat sin leer», para el contador de Mensajes. */
+  unreadLabel: string;
+  unreadLabelOne: string;
   /** A dónde ir al cerrar sesión: la entrada del vertical (/barber/entrar). */
   loginHref: string;
 }) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  // Chats sin leer, solo si «Mensajes» está en el menú (ya pasó su candado).
+  const sinLeer = useMensajesSinLeer(items.some((i) => i.key === "mensajes"));
 
   async function handleLogout() {
     try {
@@ -154,6 +162,19 @@ export function BarberSidebar({
                       >
                         <BarberIcon name={BARBER_NAV_ICON[item.key] ?? "poste"} size={18} />
                         <span>{item.label}</span>
+                        {item.key === "mensajes" && sinLeer > 0 ? (
+                          <>
+                            <span className="barber-menu__cuenta" aria-hidden="true">
+                              {sinLeer > 99 ? "99+" : sinLeer}
+                            </span>
+                            <span className="sr-only">
+                              {", "}
+                              {sinLeer === 1
+                                ? unreadLabelOne
+                                : unreadLabel.replace("{count}", String(sinLeer))}
+                            </span>
+                          </>
+                        ) : null}
                       </Link>
                     </li>
                   );

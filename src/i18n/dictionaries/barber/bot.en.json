@@ -75,6 +75,7 @@
     "emptyBlocked": "None for now. The bot can't handle chats until the notice above is sorted out.",
     "hint": "Chats where the client asked for a person, you replied yourself (from here or from your phone), or the bot chose not to risk it. The bot comes back on its own 12 hours after a person's last reply; “Hand back to the bot” brings it back sooner.",
     "resume": "Give back to the bot",
+    "openChat": "Open chat",
     "pausedAt": "Since {when}",
     "reasonLabel": "Reason"
   },

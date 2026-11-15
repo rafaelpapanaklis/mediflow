@@ -384,6 +384,11 @@ export const BARBER_NAV_ITEMS: BarberNavItemDef[] = [
   { key: "fila", href: "/barber/fila", icon: "timer", section: "operacion", permission: "walkin.manage", featureKey: "walkinQueue" },
   { key: "solicitudes", href: "/barber/solicitudes", icon: "inbox", section: "operacion", permission: "requests.manage", featureKey: "publicBooking" },
   { key: "clientes", href: "/barber/clientes", icon: "users", section: "operacion", permission: "clients.view", featureKey: "clients" },
+  // Mensajes (15-nov, pedido de Rafael): la bandeja de WhatsApp sale de la
+  // pestaña «Conversaciones» y tiene entrada propia, justo bajo Clientes.
+  // MISMO candado que sus APIs (/api/barber/whatsapp/threads y messages):
+  // permiso whatsapp.view + feature whatsappInbox (Avanzado y Profesional).
+  { key: "mensajes", href: "/barber/mensajes", icon: "message-circle", section: "operacion", permission: "whatsapp.view", featureKey: "whatsappInbox" },
   { key: "servicios", href: "/barber/servicios", icon: "scissors", section: "negocio", permission: "services.manage", featureKey: null },
   { key: "barberos", href: "/barber/barberos", icon: "contact", section: "negocio", permission: "barbers.manage", featureKey: null },
   { key: "caja", href: "/barber/caja", icon: "wallet", section: "negocio", permission: "cash.view", featureKey: "cash" },

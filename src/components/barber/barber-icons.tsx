@@ -109,6 +109,14 @@ const PATHS = {
       <path d="M8 9h8M8 12h5" />
     </>
   ),
+  // Dos globos que se responden: la bandeja de Mensajes (WhatsApp, que es
+  // el canal, lleva el globo solo).
+  charla: (
+    <>
+      <path d="M2.5 3.5h13v9H8l-4 3.5v-3.5H2.5z" />
+      <path d="M15.5 8h6v9.5H19.5V21L16 17.5H9.5v-5" />
+    </>
+  ),
   megafono: (
     <>
       <path d="M4 9.5v5h4l9 5V4.5l-9 5z" />
@@ -174,6 +182,67 @@ const PATHS = {
       <path d="M13.4 7 17 10.6" />
     </>
   ),
+  // ── De la bandeja de Mensajes ──────────────────────────────────────
+  lupa: (
+    <>
+      <circle cx="10.5" cy="10.5" r="6.5" />
+      <path d="M15.3 15.3 21 21" />
+    </>
+  ),
+  atras: <path d="M20.5 12h-17M10 5.5 3.5 12l6.5 6.5" />,
+  enviar: (
+    <>
+      <path d="M3 3.5 21.5 12 3 20.5 5.5 12z" />
+      <path d="M5.5 12H12" />
+    </>
+  ),
+  archivo: (
+    <>
+      <rect x="2.5" y="4" width="19" height="5" />
+      <path d="M4.5 9v11h15V9M10 13h4" />
+    </>
+  ),
+  clip: <path d="M8.5 12V6.5a3.5 3.5 0 0 1 7 0V17a2 2 0 0 1-4 0V8.5" />,
+  foto: (
+    <>
+      <rect x="3" y="6" width="18" height="14" />
+      <circle cx="12" cy="13" r="3.5" />
+      <path d="M8.5 6 10 3.5h4L15.5 6" />
+    </>
+  ),
+  micro: (
+    <>
+      <path d="M9 3h6v10H9z" />
+      <path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7" />
+    </>
+  ),
+  dobles: <path d="M1.5 12.5l5 5L17 7M11.5 16.5l1 1L23 7" />,
+  reloj: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5.5l3.5 2" />
+    </>
+  ),
+  alerta: (
+    <>
+      <path d="M12 3 22 20.5H2z" />
+      <path d="M12 9.5v5M12 16.5v2.2" />
+    </>
+  ),
+  robot: (
+    <>
+      <rect x="4" y="8" width="16" height="12" />
+      <path d="M12 3.5V8M2 13v3M22 13v3M9 16.5h6" />
+      <rect x="8" y="11.5" width="2.5" height="2.5" {...F} />
+      <rect x="13.5" y="11.5" width="2.5" height="2.5" {...F} />
+    </>
+  ),
+  persona: (
+    <>
+      <circle cx="12" cy="8" r="4" />
+      <path d="M4.5 21v-1.5c0-3.3 3.4-5.5 7.5-5.5s7.5 2.2 7.5 5.5V21" />
+    </>
+  ),
 } satisfies Record<string, ReactNode>;
 
 export type BarberIconName = keyof typeof PATHS;
@@ -218,6 +287,7 @@ export const BARBER_NAV_ICON: Record<string, BarberIconName> = {
   fila: "silla",
   solicitudes: "bandeja",
   clientes: "clientes",
+  mensajes: "charla",
   servicios: "tijeras",
   barberos: "navaja",
   caja: "caja",

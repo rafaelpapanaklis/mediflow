@@ -623,6 +623,23 @@ body:has(.barber-shell) {
 }
 .barber-shell .barber-menu__ent[aria-current="page"] > svg { color: var(--menu-active-text); }
 
+/* Contador de chats sin leer de «Mensajes»: pastilla café al final del
+   renglón. Letra 11 (la de las etiquetas chicas del panel), nunca mayor. */
+.barber-shell .barber-menu__cuenta {
+  margin-left: auto;
+  min-width: 20px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--brand);
+  color: var(--on-brand);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 18px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
 .barber-shell .barber-menu__pie {
   margin-top: auto;
   padding-top: var(--sp-2);

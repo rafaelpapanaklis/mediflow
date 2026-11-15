@@ -75,6 +75,7 @@
     "emptyBlocked": "Ninguna por ahora. El bot no puede atender mientras no se resuelva el aviso de arriba.",
     "hint": "Aquí caen los chats en los que el cliente pidió una persona, contestaste tú (desde aquí o desde tu celular) o el bot prefirió no arriesgarse. El bot vuelve solo a las 12 horas de la última respuesta de una persona; con «Devolver al bot» vuelve antes.",
     "resume": "Devolver al bot",
+    "openChat": "Abrir chat",
     "pausedAt": "Desde {when}",
     "reasonLabel": "Motivo"
   },

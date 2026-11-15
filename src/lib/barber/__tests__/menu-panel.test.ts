@@ -39,6 +39,23 @@ test("Socios, Soporte y Reportes tienen entrada propia, con el candado de su pan
   assert.deepEqual(reportes.anyPermission, ["cash.view", "commissions.view"]);
 });
 
+test("Mensajes: en Operación justo bajo Clientes, con el candado de la bandeja", () => {
+  const mensajes = item("mensajes");
+  assert.ok(mensajes, "falta Mensajes");
+  assert.equal(mensajes.href, "/barber/mensajes");
+  assert.equal(mensajes.section, "operacion");
+  // El de sus APIs (threads/messages): whatsapp.view + whatsappInbox.
+  assert.equal(mensajes.permission, "whatsapp.view");
+  assert.equal(mensajes.featureKey, "whatsappInbox");
+  const llaves = BARBER_NAV_ITEMS.map((i) => i.key);
+  assert.equal(llaves.indexOf("mensajes"), llaves.indexOf("clientes") + 1, "Mensajes va justo debajo de Clientes");
+  const api = leer("src/app/api/barber/whatsapp/threads/route.ts");
+  assert.match(api, /permission: "whatsapp\.view"/);
+  assert.match(api, /feature: WA_INBOX_FEATURE/);
+  assert.equal(getBarberT("es")("barber.shell.nav.mensajes"), "Mensajes");
+  assert.equal(getBarberT("en")("barber.shell.nav.mensajes"), "Messages");
+});
+
 test("cada entrada del menú tiene etiqueta en es y en en", () => {
   for (const locale of ["es", "en"]) {
     const t = getBarberT(locale);

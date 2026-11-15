@@ -50,6 +50,7 @@ function recorrer(dir: string, out: string[] = []): string[] {
 const PREFIJADORES = [
   { hook: "src/components/barber/campanas/ui.tsx", monta: "src/components/barber/campanas/campanas-screen.tsx", pagina: "src/app/barber/(panel)/campanas/page.tsx", prefijo: "barber.campanas" },
   { hook: "src/components/barber/whatsapp/ui.tsx", monta: "src/components/barber/whatsapp/whatsapp-screen.tsx", pagina: "src/app/barber/(panel)/whatsapp/page.tsx", prefijo: "barber.whatsapp" },
+  { hook: "src/components/barber/mensajes/ui.tsx", monta: "src/components/barber/mensajes/mensajes-screen.tsx", pagina: "src/app/barber/(panel)/mensajes/page.tsx", prefijo: "barber.mensajes" },
   { hook: "src/components/barber/bot/bot-screen.tsx", monta: "src/components/barber/bot/bot-screen.tsx", pagina: "src/app/barber/(panel)/whatsapp/bot/page.tsx", prefijo: "barber.bot" },
   { hook: "src/components/barber/team/admin-ui.tsx", monta: "src/components/barber/team/admin-frame.tsx", pagina: "src/components/barber/team/admin-frame.tsx", prefijo: "barber.admin" },
 ];
