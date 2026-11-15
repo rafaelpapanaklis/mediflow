@@ -2739,6 +2739,114 @@ async function replyInline(
   }
 }
 
+/* ─────────── ecos: lo que la barbería contesta desde SU celular ────────── */
+
+/** Cómo queda en la bandeja un eco que no es texto. */
+const ECHO_NON_TEXT: Record<string, string> = {
+  image: "📷 Foto enviada desde el celular de la barbería",
+  video: "🎥 Video enviado desde el celular de la barbería",
+  audio: "🎤 Audio enviado desde el celular de la barbería",
+  document: "📄 Archivo enviado desde el celular de la barbería",
+  sticker: "Calcomanía enviada desde el celular de la barbería",
+  location: "📍 Ubicación enviada desde el celular de la barbería",
+  contacts: "👤 Contacto enviado desde el celular de la barbería",
+};
+
+/**
+ * ECOS DE COEXISTENCE. Barber conecta el número en modo «coexistence»: el
+ * dueño lo sigue usando en la app de WhatsApp Business de su celular. Lo que
+ * conteste DESDE AHÍ no pasa por nosotros; Meta nos lo avisa después como un
+ * «eco» (`message_echoes`). Hasta la ronda 2 esos ecos solo los leía el
+ * dental, así que en barber:
+ *   · la respuesta del dueño no aparecía en la bandeja (el hilo se veía sin
+ *     contestar y los «sin leer» no bajaban);
+ *   · el bot, que no la vio, contestaba ENCIMA del dueño.
+ *
+ * Aquí cada eco se guarda como un saliente ENVIADO (sin duplicar por wamid)
+ * y el bot de ese hilo se pausa, igual que cuando alguien responde desde el
+ * panel: 12 horas desde la última respuesta de una persona.
+ *
+ * La llama el webhook compartido SOLO cuando el phone_number_id no es de
+ * ninguna clínica, dentro de try/catch y con import dinámico. Devuelve true
+ * si el número era de una barbería.
+ */
+export async function ingestBarberEchoes(value: any): Promise<boolean> {
+  const shop = await shopByPhoneNumberId(value?.metadata?.phone_number_id);
+  if (!shop) return false;
+
+  const echoes: any[] = Array.isArray(value?.message_echoes) ? value.message_echoes : [];
+  const touched = new Set<string>();
+
+  for (const echo of echoes) {
+    try {
+      const phone = mxTenDigits(typeof echo?.to === "string" ? echo.to : "");
+      if (!phone) continue;
+      const wamid = typeof echo?.id === "string" && echo.id ? echo.id : null;
+      const text = typeof echo?.text?.body === "string" ? echo.text.body.trim() : "";
+      // Solo lo que ES un mensaje: los ecos de "editar" o "borrar para todos"
+      // no traen contenido y no se inventa una fila para ellos.
+      const body = text || ECHO_NON_TEXT[String(echo?.type ?? "")] || "";
+      if (!body) continue;
+
+      const client = await prisma.barberClient.findUnique({
+        where: { barbershopId_phone: { barbershopId: shop.id, phone } },
+        select: { id: true },
+      });
+
+      // Mismo candado por wamid que la entrada: Meta reintenta el webhook, y
+      // un mensaje que mandamos NOSOTROS por la API ya tiene su fila con ese
+      // wamid — tampoco se duplica ni cuenta como «respondió una persona».
+      const created = await prisma.$transaction(
+        async (tx) => {
+          if (wamid) {
+            const [lockA, lockB] = advisoryLockKey(`barber:wa:out:${wamid}`);
+            await tx.$executeRawUnsafe(
+              `SELECT pg_advisory_xact_lock(${Math.trunc(lockA)}, ${Math.trunc(lockB)})`,
+            );
+            const duplicate = await tx.barberMessage.findFirst({
+              where: { barbershopId: shop.id, waMessageId: wamid, direction: "OUTBOUND" },
+              select: { id: true },
+            });
+            if (duplicate) return false;
+          }
+          await tx.barberMessage.create({
+            data: {
+              barbershopId: shop.id,
+              direction: "OUTBOUND",
+              phone,
+              body,
+              waMessageId: wamid,
+              // Ya salió (lo mandó el dueño desde su teléfono): nace ENVIADO,
+              // y los estados de entrega de Meta lo siguen moviendo por wamid.
+              status: "SENT",
+              clientId: client?.id ?? null,
+            },
+          });
+          return true;
+        },
+        { maxWait: 10_000, timeout: 15_000 },
+      );
+      if (created) touched.add(phone);
+    } catch (err) {
+      // Un eco ilegible no puede llevarse por delante a los demás.
+      console.error(`[barber/wa] eco no guardado (${shop.id}):`, err);
+    }
+  }
+
+  // Una persona tomó la conversación: el bot se calla en esos hilos.
+  if (touched.size > 0) {
+    try {
+      const { noteBarberStaffReply } = await import("@/lib/barber/bot");
+      for (const phone of Array.from(touched)) {
+        await noteBarberStaffReply(shop.id, phone, "celular");
+      }
+    } catch (err) {
+      console.error(`[barber/wa] no se pudo pausar el bot tras el eco (${shop.id}):`, err);
+    }
+  }
+  return true;
+}
+
 /* ───────────────── estados de entrega REALES (webhook) ───────────────── */
 
 /**

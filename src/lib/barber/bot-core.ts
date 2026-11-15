@@ -399,7 +399,7 @@ export const BARBER_BOT_PAUSE_OFF_HOURS = `${BARBER_BOT_AUTO_PAUSE_PREFIX}Escrib
  * conversación. Mismo plazo que decidió Rafael para el bot del dental el
  * 1-oct-2026 (HANDOFF_REACTIVAR_MS en src/lib/whatsapp/bot/handoff.ts).
  */
-export const BARBER_BOT_AUTO_PAUSE_MS = 12 * 60 * 60 * 1000;
+export const BARBER_BOT_PAUSE_MS = 12 * 60 * 60 * 1000;
 
 export function isAutoBotPause(reason: string | null | undefined): boolean {
   return typeof reason === "string" && reason.startsWith(BARBER_BOT_AUTO_PAUSE_PREFIX);
@@ -424,22 +424,26 @@ export function autoPauseReason(text: string): string {
  * el panel. En una semana el bot se habría apagado solo, cliente por
  * cliente.
  *
- *   · Pausa de una PERSONA (tomó la conversación, respondió desde el panel)
- *       → nunca caduca sola: la quita quien la puso.
  *   · Pausa del bot por FUERA DE HORARIO → se acaba cuando el bot vuelve a
  *       estar en horario.
- *   · Cualquier otra pausa del bot (pidió una persona, tope de IA, la IA no
- *       respondió) → 12 horas. Si para entonces nadie la tomó, el siguiente
- *       mensaje del cliente lo vuelve a atender el bot.
+ *   · CUALQUIER otra pausa → 12 horas desde que se puso (BARBER_BOT_PAUSE_MS),
+ *       sea del bot (pidió una persona, tope de IA, la IA no respondió) o de
+ *       una PERSONA (tomó el chat, contestó desde el panel o desde su
+ *       celular). Decisión de Rafael, la misma que en el dental: si cada
+ *       respuesta del dueño desde su teléfono pausara para siempre, en dos
+ *       semanas el bot estaría apagado para casi todos los clientes.
+ *
+ * Cada respuesta nueva de una persona VUELVE A CONTAR las 12 horas (la
+ * pausa se reescribe con la hora de esa respuesta), así que mientras alguien
+ * siga atendiendo el chat, el bot no entra. «Reanudar» a mano la quita antes.
  */
 export function botPauseExpired(
   pause: { reason: string | null; pausedAt: Date },
   now: Date,
   botInHoursNow: boolean,
 ): boolean {
-  if (!isAutoBotPause(pause.reason)) return false;
   if (pause.reason === BARBER_BOT_PAUSE_OFF_HOURS) return botInHoursNow;
-  return now.getTime() - pause.pausedAt.getTime() >= BARBER_BOT_AUTO_PAUSE_MS;
+  return now.getTime() - pause.pausedAt.getTime() >= BARBER_BOT_PAUSE_MS;
 }
 
 /* ── Opciones que el bot ofrece con botones o lista ────────────────── */

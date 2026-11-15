@@ -69,7 +69,7 @@
   "pauses": {
     "title": "Chats you're handling",
     "empty": "None. The bot is handling every chat.",
-    "hint": "Chats where the client asked for a person, you replied yourself, or the bot chose not to risk it. The ones the bot flagged (🤖) go back to it on their own after 12 hours if nobody takes them; the ones you took stay with you until you hand them back.",
+    "hint": "Chats where the client asked for a person, you replied yourself (from here or from your phone), or the bot chose not to risk it. The bot comes back on its own 12 hours after a person's last reply; “Hand back to the bot” brings it back sooner.",
     "resume": "Give back to the bot",
     "pausedAt": "Since {when}",
     "reasonLabel": "Reason"

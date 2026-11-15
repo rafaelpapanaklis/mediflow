@@ -29,7 +29,7 @@ import { join } from "node:path";
 import {
   BARBER_BOT_AI_CAP_DEFAULT,
   BARBER_BOT_AI_CAP_MAX,
-  BARBER_BOT_AUTO_PAUSE_MS,
+  BARBER_BOT_PAUSE_MS,
   BARBER_BOT_DEFAULT_MODEL,
   BARBER_BOT_MODEL_PRICES,
   BARBER_BOT_OPTIONS_MAX,
@@ -443,20 +443,28 @@ test("a la familia 5 se le baja el razonamiento; a los 4.x no se les manda nada"
 
 /* ═══════════════ 11. Pausas que caducan ═══════════════ */
 
-test("🔴 la pausa de una persona nunca caduca; la del bot, a las 12 h", () => {
+test("🔴 toda pausa dura 12 h: la del bot y también la de una persona (decisión de Rafael, igual que el dental)", () => {
   const now = new Date("2026-11-14T18:00:00.000Z");
   const hace = (h: number) => new Date(now.getTime() - h * 3_600_000);
   const delBot = autoPauseReason("El cliente pidió hablar con una persona");
   assert.equal(isAutoBotPause(delBot), true);
   assert.equal(isAutoBotPause("La barbería tomó la conversación"), false);
   assert.equal(isAutoBotPause(null), false);
+  assert.equal(BARBER_BOT_PAUSE_MS, 12 * 3_600_000);
 
-  assert.equal(botPauseExpired({ reason: delBot, pausedAt: hace(11.9) }, now, true), false);
-  assert.equal(botPauseExpired({ reason: delBot, pausedAt: hace(12) }, now, true), true);
-  assert.equal(BARBER_BOT_AUTO_PAUSE_MS, 12 * 3_600_000);
-
-  for (const reason of ["La barbería tomó la conversación", "Alguien respondió desde el panel", null]) {
-    assert.equal(botPauseExpired({ reason, pausedAt: hace(24 * 30) }, now, true), false, String(reason));
+  const motivos = [
+    delBot,
+    "La barbería tomó la conversación",
+    "Alguien de la barbería respondió desde el panel",
+    "Alguien de la barbería respondió desde su celular",
+    null,
+  ];
+  for (const reason of motivos) {
+    assert.equal(botPauseExpired({ reason, pausedAt: hace(11.9) }, now, true), false, `${reason} a las 11.9 h`);
+    assert.equal(botPauseExpired({ reason, pausedAt: hace(12) }, now, true), true, `${reason} a las 12 h`);
+    // Antes las de una persona eran eternas: con el dueño contestando desde
+    // su celular, en dos semanas el bot quedaba apagado para casi todos.
+    assert.equal(botPauseExpired({ reason, pausedAt: hace(24 * 30) }, now, false), true, `${reason} al mes`);
   }
 });
 

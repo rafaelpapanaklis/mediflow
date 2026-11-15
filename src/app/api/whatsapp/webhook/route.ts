@@ -1345,7 +1345,22 @@ async function ingestBusinessAppEchoes(value: any) {
     where: { waPhoneNumberId: phoneNumberId },
     select: { id: true },
   });
-  if (!clinic) return;
+  if (!clinic) {
+    // ── DaleControl Barber (producto SEPARADO) ─────────────────────────
+    // Mismo criterio que en los mensajes y en los estados: esto SOLO corre
+    // cuando el phone_number_id no es de ninguna clínica, con import()
+    // dinámico dentro de try/catch. El camino dental (todo lo de abajo) no
+    // cambia: antes aquí había un `return` a secas y sigue terminando aquí.
+    // Sin esto, lo que una barbería contesta desde su celular no llegaba a
+    // su bandeja y su bot contestaba encima.
+    try {
+      const { ingestBarberEchoes } = await import("@/lib/barber/whatsapp");
+      await ingestBarberEchoes(value);
+    } catch (e) {
+      console.error("[whatsapp/webhook] ecos de barber no aplicados:", e);
+    }
+    return;
+  }
 
   for (let i = 0; i < echoes.length; i++) {
     const echo = echoes[i];

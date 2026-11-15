@@ -53,6 +53,7 @@ import {
   quotaIsTight,
   BARBER_BOT_DEFAULT_MODEL,
   BARBER_BOT_OPTIONS_MAX,
+  BARBER_BOT_PAUSE_MS,
   BARBER_BOT_PAUSE_OFF_HOURS,
   BARBER_BOT_USD_MXN_FALLBACK,
   MICROS_PER_MXN,
@@ -278,11 +279,12 @@ async function readPause(
 /**
  * Pausa el bot en una conversación.
  *
- * `by: "staff"` (default) = la tomó una PERSONA: no caduca sola y, si ya
- * había una pausa del bot, la sustituye — a partir de ahí la conversación es
- * suya. `by: "bot"` = la puso el propio bot (fuera de horario, tope de IA,
- * el cliente pidió una persona): lleva la marca 🤖 y se quita sola según
- * botPauseExpired (bot-core.ts). Una pausa del bot nunca pisa una de persona.
+ * `by: "staff"` (default) = la tomó una PERSONA: si ya había una pausa (del
+ * bot o suya) la sustituye y VUELVE A CONTAR el plazo desde ahora — mientras
+ * alguien siga atendiendo, el bot no entra. `by: "bot"` = la puso el propio
+ * bot (fuera de horario, tope de IA, el cliente pidió una persona): lleva la
+ * marca 🤖 y nunca pisa una pausa que ya exista. Las dos se quitan solas
+ * según botPauseExpired (bot-core.ts): 12 horas, o al volver el horario.
  */
 export async function pauseBarberBotThread(args: {
   barbershopId: string;
@@ -317,19 +319,29 @@ export async function pauseBarberBotThread(args: {
 }
 
 /**
- * Alguien de la barbería contestó A MANO en este hilo (desde la bandeja del
- * panel). A partir de ahí la conversación es de esa persona: el bot se calla
- * hasta que la reanuden, para no pisarle la respuesta al cliente. Solo hace
- * algo si el bot de la barbería está encendido. Nunca lanza.
+ * Alguien de la barbería contestó A MANO en este hilo: desde la bandeja del
+ * panel (`panel`) o desde la app de WhatsApp Business de su celular
+ * (`celular`, que llega como «eco» por el webhook). A partir de ahí la
+ * conversación es de esa persona: el bot se calla 12 horas desde su ÚLTIMA
+ * respuesta (o hasta que lo reanuden a mano), para no pisarle la respuesta
+ * al cliente. Solo hace algo si el bot de la barbería está encendido. Nunca
+ * lanza.
  */
-export async function noteBarberStaffReply(barbershopId: string, phone: string): Promise<void> {
+export async function noteBarberStaffReply(
+  barbershopId: string,
+  phone: string,
+  from: "panel" | "celular" = "panel",
+): Promise<void> {
   try {
     const { settings, storageReady } = await getBarberBotSettings(requireShop(barbershopId));
     if (!storageReady || !settings.enabled) return;
     await pauseBarberBotThread({
       barbershopId,
       phone,
-      reason: "Alguien de la barbería respondió desde el panel",
+      reason:
+        from === "celular"
+          ? "Alguien de la barbería respondió desde su celular"
+          : "Alguien de la barbería respondió desde el panel",
       by: "staff",
     });
   } catch (err) {
@@ -351,11 +363,24 @@ export async function resumeBarberBotThread(args: {
   }
 }
 
+/**
+ * Las conversaciones que HOY atiende una persona. Solo las pausas vigentes:
+ * una que ya caducó (más de 12 h) ya no frena al bot, y enseñarla llenaba la
+ * lista de chats viejos hasta dejar fuera a los que sí importan (la pantalla
+ * muestra 100). Las de «fuera de horario» se enseñan hasta que el cliente
+ * vuelva a escribir: son chats que alguien tiene que mirar al abrir.
+ */
 export async function listBarberBotPauses(barbershopId: string): Promise<BarberBotPause[]> {
   const shopId = requireShop(barbershopId);
   try {
     const rows = await prisma.barberBotPause.findMany({
-      where: { barbershopId: shopId },
+      where: {
+        barbershopId: shopId,
+        OR: [
+          { pausedAt: { gt: new Date(Date.now() - BARBER_BOT_PAUSE_MS) } },
+          { reason: BARBER_BOT_PAUSE_OFF_HOURS },
+        ],
+      },
       select: { phone: true, reason: true, pausedAt: true },
       orderBy: { pausedAt: "desc" },
       take: 100,

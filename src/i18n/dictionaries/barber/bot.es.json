@@ -69,7 +69,7 @@
   "pauses": {
     "title": "Conversaciones que atiendes tú",
     "empty": "Ninguna. El bot está atendiendo todos los chats.",
-    "hint": "Aquí caen los chats en los que el cliente pidió una persona, contestaste tú o el bot prefirió no arriesgarse. Los que marcó el bot (🤖) vuelven a él solos a las 12 horas si nadie los toma; los que tomaste tú se quedan contigo hasta que los devuelvas.",
+    "hint": "Aquí caen los chats en los que el cliente pidió una persona, contestaste tú (desde aquí o desde tu celular) o el bot prefirió no arriesgarse. El bot vuelve solo a las 12 horas de la última respuesta de una persona; con «Devolver al bot» vuelve antes.",
     "resume": "Devolver al bot",
     "pausedAt": "Desde {when}",
     "reasonLabel": "Motivo"

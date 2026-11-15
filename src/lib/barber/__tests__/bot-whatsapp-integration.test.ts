@@ -17,6 +17,7 @@ import {
   crearTienda,
   entrante,
   entranteToque,
+  ecoDelCelular,
   entranteVoz,
   enviados,
   instalarFetch,
@@ -43,7 +44,16 @@ import {
 } from "./_wa-arnes";
 import { test, before, after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { ingestBarberInbound, sendBarberManualMessage } from "../whatsapp";
+import {
+  applyBarberDeliveryStatuses,
+  ingestBarberEchoes,
+  ingestBarberInbound,
+  listBarberThreadMessages,
+  listBarberThreads,
+  sendBarberManualMessage,
+} from "../whatsapp";
+import { extraerEventosDelWebhook } from "@/lib/whatsapp/webhook-eventos";
+import { readFileSync } from "node:fs";
 import {
   BARBER_WA_VOICE_FAILED_REPLY,
   BARBER_WA_VOICE_TOO_LONG_REPLY,
@@ -394,29 +404,43 @@ test("🔴 fuera de horario avisa UNA vez, y al volver el horario el bot vuelve 
   assert.equal((await listBarberBotPauses(P.id)).some((p) => p.phone === phone), false);
 });
 
-test("🔴 una pausa del bot caduca a las 12 h; la de una persona, nunca", { skip }, async () => {
+test("🔴 toda pausa caduca a las 12 h —del bot o de una persona— y la lista solo enseña las vigentes", { skip }, async () => {
   const horas = (n: number) => new Date(Date.now() - n * 3_600_000);
   const reciente = telefono();
   const vieja = telefono();
-  const dePersona = telefono();
+  const dePersonaReciente = telefono();
+  const dePersonaVieja = telefono();
   await prisma.barberBotPause.createMany({
     data: [
       { barbershopId: P.id, phone: reciente, reason: "🤖 El cliente pidió hablar con una persona", pausedAt: horas(2) },
       { barbershopId: P.id, phone: vieja, reason: "🤖 El bot no pudo responder", pausedAt: horas(13) },
-      { barbershopId: P.id, phone: dePersona, reason: "La barbería tomó la conversación", pausedAt: horas(72) },
+      { barbershopId: P.id, phone: dePersonaReciente, reason: "La barbería tomó la conversación", pausedAt: horas(3) },
+      { barbershopId: P.id, phone: dePersonaVieja, reason: "Alguien de la barbería respondió desde su celular", pausedAt: horas(72) },
     ],
   });
 
   assert.deepEqual(await barberBotGate(P.id, reciente), { open: false, reason: "paused" });
   assert.deepEqual(await barberBotGate(P.id, vieja), { open: true, reason: null });
-  assert.deepEqual(await barberBotGate(P.id, dePersona), { open: false, reason: "paused" });
+  assert.deepEqual(await barberBotGate(P.id, dePersonaReciente), { open: false, reason: "paused" });
+  assert.deepEqual(
+    await barberBotGate(P.id, dePersonaVieja),
+    { open: true, reason: null },
+    "una persona lo tomó hace 3 días y no volvió a escribir: el bot regresa solo",
+  );
+
+  // La pantalla «Conversaciones que atiendes tú» no arrastra las caducadas.
+  const lista = (await listBarberBotPauses(P.id)).map((p) => p.phone);
+  assert.ok(lista.includes(reciente) && lista.includes(dePersonaReciente));
+  assert.ok(!lista.includes(vieja) && !lista.includes(dePersonaVieja), "las de más de 12 h ya no se listan");
 
   modelQueue.push(say("Aquí sigo, ¿qué necesitas?"));
+  modelQueue.push(say("¡Hola de nuevo!"));
   await escribe(P, vieja, "oigan");
-  assert.equal(modelRequests.length, 1, "nadie tomó la conversación en 12 h: el bot vuelve");
+  await escribe(P, dePersonaVieja, "oigan");
+  assert.equal(modelRequests.length, 2, "nadie atendió en 12 h: el bot vuelve en los dos");
   await escribe(P, reciente, "oigan");
-  await escribe(P, dePersona, "oigan");
-  assert.equal(modelRequests.length, 1, "las otras dos siguen en manos de una persona");
+  await escribe(P, dePersonaReciente, "oigan");
+  assert.equal(modelRequests.length, 2, "las recientes siguen en manos de una persona");
 });
 
 test("🔴 si alguien de la barbería contesta a mano, el bot se calla en ese hilo", { skip }, async () => {
@@ -429,7 +453,7 @@ test("🔴 si alguien de la barbería contesta a mano, el bot se calla en ese hi
   assert.equal(r.ok, true);
   const [pausa] = (await listBarberBotPauses(P.id)).filter((p) => p.phone === phone);
   assert.ok(pausa, "el hilo queda en pausa");
-  assert.equal(isAutoBotPause(pausa.reason), false, "es una pausa de PERSONA: no caduca sola");
+  assert.equal(isAutoBotPause(pausa.reason), false, "es una pausa de PERSONA (dura 12 h desde su última respuesta)");
 
   limpiar();
   await escribe(P, phone, "va, ¿a qué hora?");
@@ -699,4 +723,168 @@ test("una sucursal hereda el plan de su matriz: el bot contesta", { skip }, asyn
   const sinPago = await runBarberBotTurn({ barbershopId: sucursal.id, phone, text: "hola" });
   assert.equal(sinPago.reply, null);
   assert.equal(sinPago.skipped, "subscriptionInactive");
+});
+
+/* ═══════ G2 — lo que el dueño contesta desde SU celular (coexistence) ═══════ */
+
+/** Pasa el webhook de Meta por el mismo extractor que usa la ruta y lo ingiere. */
+async function llegaEco(body: unknown): Promise<boolean[]> {
+  const out: boolean[] = [];
+  for (const evento of extraerEventosDelWebhook(body)) {
+    assert.equal(evento.tipo, "ecos", "Meta lo manda en el campo smb_message_echoes");
+    out.push(await ingestBarberEchoes((evento as any).value));
+  }
+  return out;
+}
+
+test("🔴 G2 — la respuesta del dueño desde su celular entra a la bandeja, baja los «sin leer» y pausa el bot", { skip }, async () => {
+  const phone = telefono();
+  // El mensaje del cliente ya está en la bandeja, sin contestar («sin leer»):
+  // así lo ve el dueño cuando decide responder desde su celular.
+  await prisma.barberMessage.create({
+    data: { barbershopId: P.id, direction: "INBOUND", phone, body: "¿tienes lugar hoy?", status: "DELIVERED" },
+  });
+  let hilo = (await listBarberThreads(P.id)).find((t) => t.phone === phone);
+  assert.equal(hilo?.unread, 1);
+
+  // El barbero contesta desde la app de WhatsApp Business de su celular.
+  const eco = ecoDelCelular(P, phone, { texto: "sí, vente a las 5" });
+  assert.deepEqual(await llegaEco(eco), [true]);
+
+  const filas = await mensajes(P, phone);
+  const saliente = filas.find((r) => r.direction === "OUTBOUND");
+  assert.ok(saliente, "el eco quedó guardado");
+  assert.equal(saliente.body, "sí, vente a las 5");
+  assert.equal(saliente.status, "SENT", "nace ENVIADO: no entra a la cola ni se reenvía");
+  assert.ok(saliente.waMessageId?.startsWith("wamid.ECO"));
+  assert.equal(enviados().length, 0, "nosotros no mandamos nada: ya lo mandó él");
+
+  // Aparece en la conversación del panel y el hilo deja de estar «sin leer».
+  const conversacion = await listBarberThreadMessages(P.id, phone);
+  assert.deepEqual(
+    conversacion.messages.map((m) => [m.direction, m.body]),
+    [
+      ["INBOUND", "¿tienes lugar hoy?"],
+      ["OUTBOUND", "sí, vente a las 5"],
+    ],
+  );
+  hilo = (await listBarberThreads(P.id)).find((t) => t.phone === phone);
+  assert.equal(hilo?.unread, 0);
+  assert.equal(hilo?.lastDirection, "OUTBOUND");
+
+  // El bot de ese hilo queda en pausa, a nombre de una persona.
+  const [pausa] = (await listBarberBotPauses(P.id)).filter((p) => p.phone === phone);
+  assert.equal(pausa?.reason, "Alguien de la barbería respondió desde su celular");
+  assert.equal(isAutoBotPause(pausa.reason), false);
+
+  // 🔴 El cliente sigue la plática: el bot NO contesta encima del barbero.
+  await escribe(P, phone, "va, a las 5");
+  assert.equal(modelRequests.length, 0, "el bot no se mete");
+  assert.equal(enviados().length, 0);
+
+  // Y el estado de entrega de Meta le llega a ese mensaje, como a cualquiera.
+  await applyBarberDeliveryStatuses(P.phoneNumberId, [{ id: saliente.waMessageId, status: "read" }]);
+  assert.equal((await mensajes(P, phone)).find((r) => r.id === saliente.id)?.status, "READ");
+});
+
+test("🔴 G2 — sin el eco, el bot SÍ habría contestado encima (control)", { skip }, async () => {
+  const phone = telefono();
+  await prisma.barberMessage.create({
+    data: { barbershopId: P.id, direction: "INBOUND", phone, body: "¿tienes lugar hoy?", status: "DELIVERED" },
+  });
+  modelQueue.push(say("¡Claro! ¿Qué servicio quieres?"));
+  await escribe(P, phone, "va, a las 5");
+  assert.equal(modelRequests.length, 1, "esto es lo que pasaba antes de G2");
+});
+
+test("G2 — el eco no se duplica (reintentos de Meta), ni cuenta como «persona» un mensaje que mandamos nosotros", { skip }, async () => {
+  const phone = telefono();
+  const eco = ecoDelCelular(P, phone, { texto: "ahorita te atiendo", id: `wamid.ECO.DUP.${phone}` });
+  await Promise.all([llegaEco(eco), llegaEco(eco), llegaEco(eco)]);
+  assert.equal(
+    (await mensajes(P, phone)).filter((r) => r.direction === "OUTBOUND").length,
+    1,
+    "tres entregas del mismo eco, una sola fila",
+  );
+
+  // Un mensaje que salió por NUESTRA API (el bot) y que Meta devolviera como
+  // eco: ya tiene su fila con ese wamid. No se duplica y NO pausa al bot.
+  const p2 = telefono();
+  modelQueue.push(say("¡Hola! ¿En qué te ayudo?"));
+  await escribe(P, p2, "hola");
+  const delBot = (await mensajes(P, p2)).find((r) => r.direction === "OUTBOUND");
+  assert.ok(delBot?.waMessageId);
+  await llegaEco(ecoDelCelular(P, p2, { texto: "¡Hola! ¿En qué te ayudo?", id: delBot.waMessageId }));
+  assert.equal((await mensajes(P, p2)).filter((r) => r.direction === "OUTBOUND").length, 1);
+  assert.equal((await listBarberBotPauses(P.id)).some((p) => p.phone === p2), false, "el bot no se pausa a sí mismo");
+});
+
+test("G2 — una foto desde el celular también cuenta; un eco sin contenido o de otro número, no", { skip }, async () => {
+  const phone = telefono();
+  await llegaEco(ecoDelCelular(P, phone, { tipo: "image" }));
+  const [foto] = await mensajes(P, phone);
+  assert.equal(foto.body, "📷 Foto enviada desde el celular de la barbería");
+  assert.equal((await listBarberBotPauses(P.id)).some((p) => p.phone === phone), true);
+
+  // «Borrar para todos» / editar: no trae contenido. No se inventa una fila.
+  const p2 = telefono();
+  await llegaEco(ecoDelCelular(P, p2, { tipo: "revoke" }));
+  await llegaEco(ecoDelCelular(P, p2, { texto: "   " }));
+  assert.equal((await mensajes(P, p2)).length, 0);
+  assert.equal((await listBarberBotPauses(P.id)).some((p) => p.phone === p2), false);
+
+  // Un número que no es de ninguna barbería: no es nuestro.
+  const ajeno = ecoDelCelular({ ...P, phoneNumberId: "numero-de-nadie" }, telefono(), { texto: "hola" });
+  assert.deepEqual(await llegaEco(ajeno), [false]);
+  assert.equal(await ingestBarberEchoes({}), false);
+  assert.equal(await ingestBarberEchoes(null), false);
+});
+
+test("🔴 G2 — la pausa «la tomó una persona» dura 12 h desde su ÚLTIMA respuesta, y luego el bot vuelve solo", { skip }, async () => {
+  const phone = telefono();
+  await llegaEco(ecoDelCelular(P, phone, { texto: "te veo a las 5" }));
+
+  // 11 horas después sigue en pausa…
+  await prisma.barberBotPause.updateMany({
+    where: { barbershopId: P.id, phone },
+    data: { pausedAt: new Date(Date.now() - 11 * 3_600_000) },
+  });
+  assert.deepEqual(await barberBotGate(P.id, phone), { open: false, reason: "paused" });
+
+  // …el barbero vuelve a contestar desde el celular: las 12 h cuentan de nuevo.
+  await llegaEco(ecoDelCelular(P, phone, { texto: "ya voy saliendo" }));
+  const [pausa] = (await listBarberBotPauses(P.id)).filter((p) => p.phone === phone);
+  assert.ok(Date.now() - new Date(pausa.pausedAt).getTime() < 60_000, "la pausa se renovó con la respuesta nueva");
+
+  // 13 horas sin que nadie de la barbería escriba: el bot atiende otra vez.
+  await prisma.barberBotPause.updateMany({
+    where: { barbershopId: P.id, phone },
+    data: { pausedAt: new Date(Date.now() - 13 * 3_600_000) },
+  });
+  modelQueue.push(say("¡Hola! ¿Te agendo algo?"));
+  await escribe(P, phone, "buenas");
+  assert.equal(modelRequests.length, 1, "pasadas las 12 h el bot vuelve solo");
+  assert.equal((await listBarberBotPauses(P.id)).some((p) => p.phone === phone), false);
+});
+
+test("G2 — con el bot apagado el eco igual entra a la bandeja (y no deja pausas sueltas)", { skip }, async () => {
+  const sinBot = await crearTienda({ plan: "AVANZADO" });
+  const phone = telefono();
+  await llegaEco(ecoDelCelular(sinBot, phone, { texto: "sí hay lugar" }));
+  assert.equal((await mensajes(sinBot, phone))[0].body, "sí hay lugar");
+  assert.equal((await listBarberBotPauses(sinBot.id)).length, 0);
+});
+
+test("G2 — el webhook compartido deriva los ecos a barber SOLO cuando el número no es de una clínica", () => {
+  const ruta = readFileSync("src/app/api/whatsapp/webhook/route.ts", "utf8");
+  const inicio = ruta.indexOf("async function ingestBusinessAppEchoes");
+  assert.ok(inicio > 0);
+  const funcion = ruta.slice(inicio, ruta.indexOf("\nasync function ", inicio + 10) > 0 ? ruta.indexOf("\nasync function ", inicio + 10) : undefined);
+  const rama = funcion.slice(funcion.indexOf("if (!clinic) {"), funcion.indexOf("for (let i = 0; i < echoes.length; i++)"));
+  assert.ok(rama.includes('await import("@/lib/barber/whatsapp")'), "import dinámico");
+  assert.ok(rama.includes("ingestBarberEchoes(value)"));
+  assert.ok(rama.includes("try {") && rama.includes("} catch (e) {"), "dentro de try/catch");
+  assert.ok(rama.trimEnd().endsWith("return;\n  }"), "y la rama termina en return, como antes");
+  // Nada de barber fuera de esa rama dentro de la función de ecos.
+  assert.equal(funcion.split("barber").length - 1, rama.split("barber").length - 1);
 });

@@ -402,6 +402,46 @@ export function entranteToque(
   };
 }
 
+/**
+ * El webhook COMPLETO que Meta manda cuando la barbería contesta desde la app
+ * de WhatsApp Business de su celular (coexistence): campo
+ * `smb_message_echoes`, con el cliente en `to`.
+ */
+export function ecoDelCelular(
+  t: Tienda,
+  phone: string,
+  eco: { texto?: string; tipo?: string; id?: string },
+) {
+  const type = eco.tipo ?? "text";
+  return {
+    object: "whatsapp_business_account",
+    entry: [
+      {
+        id: t.wabaId,
+        changes: [
+          {
+            field: "smb_message_echoes",
+            value: {
+              messaging_product: "whatsapp",
+              metadata: { phone_number_id: t.phoneNumberId },
+              message_echoes: [
+                {
+                  from: "5215500000000",
+                  to: `521${phone}`,
+                  id: eco.id ?? `wamid.ECO.${RUN}.${++inSeq}`,
+                  timestamp: String(Math.floor(Date.now() / 1000)),
+                  type,
+                  ...(type === "text" ? { text: { body: eco.texto ?? "" } } : {}),
+                },
+              ],
+            },
+          },
+        ],
+      },
+    ],
+  };
+}
+
 /** Lo que Meta manda cuando el cliente toca un botón de una PLANTILLA. */
 export function entranteBotonDePlantilla(
   t: Tienda,
