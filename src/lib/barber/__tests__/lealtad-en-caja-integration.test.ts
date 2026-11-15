@@ -35,8 +35,8 @@ import {
   toLoyaltyRule,
 } from "../loyalty-core";
 
-const HAS_DB = Boolean(process.env.DATABASE_URL);
-const skip = HAS_DB ? false : "DATABASE_URL no definido: se salta la integración";
+// Solo contra una base LOCAL: ver _base-local.ts (crean y borran barberías).
+import { BASE_LOCAL as HAS_DB, skip } from "./_base-local";
 
 // ═══════════════════════════════════════════════════════════════════════
 // 0. Puro: la regla y la marca del canje

@@ -25,8 +25,8 @@ import { BarberForbiddenError, hasBarberPermission } from "@/lib/barber/permissi
 import { FALLBACK_BARBER_PLAN_CONFIG } from "@/lib/barber/plan-shared";
 import { BARBER_OWN_VISIT_STATUSES, canAdvanceOwnVisit, ownVisitsBarberId } from "../own-visits";
 
-const HAS_DB = Boolean(process.env.DATABASE_URL);
-const skip = HAS_DB ? false : "DATABASE_URL no definido: se salta la integración";
+// Solo contra una base LOCAL: ver _base-local.ts (crean y borran barberías).
+import { BASE_LOCAL as HAS_DB, skip } from "./_base-local";
 
 // ═══════════════════════════════════════════════════════════════════════
 // 0. La regla, pura

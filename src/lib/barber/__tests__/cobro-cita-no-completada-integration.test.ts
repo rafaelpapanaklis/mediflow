@@ -20,8 +20,8 @@ import type { BarberContext } from "@/lib/barber-auth";
 import { BarberForbiddenError, hasBarberPermission } from "@/lib/barber/permissions";
 import { FALLBACK_BARBER_PLAN_CONFIG } from "@/lib/barber/plan-shared";
 
-const HAS_DB = Boolean(process.env.DATABASE_URL);
-const skip = HAS_DB ? false : "DATABASE_URL no definido: se salta la integración";
+// Solo contra una base LOCAL: ver _base-local.ts (crean y borran barberías).
+import { BASE_LOCAL as HAS_DB, skip } from "./_base-local";
 
 const ROOT = path.resolve(__dirname, "../../../..");
 const abs = (rel: string) => path.join(ROOT, rel);
