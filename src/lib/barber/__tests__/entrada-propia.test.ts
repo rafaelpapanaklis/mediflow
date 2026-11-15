@@ -181,6 +181,29 @@ test("correo repetido: el servidor lo marca y el formulario da las dos salidas",
   assert.match(form, /emailTaken && \([\s\S]*?href=\{loginHref\}[\s\S]*?Iniciar sesión[\s\S]*?href=\{forgotHref\}[\s\S]*?Recuperar contraseña/);
 });
 
+test("el alta usa el freno PERSISTENTE y no devuelve errores crudos de Supabase", () => {
+  const ruta = sinComentarios(leer("src/app/api/barber/auth/register/route.ts"));
+  // El Map en memoria no frenaba nada en Vercel (auditoría de seguridad, G3/M5).
+  assert.ok(!/new Map</.test(ruta), "volvió un freno en memoria al alta");
+  assert.match(ruta, /from "@\/lib\/failban"/, "el freno se reutiliza por import, no se copia");
+  // Los dos van ANTES de leer el cuerpo y de tocar Supabase.
+  const iFlood = ruta.indexOf("await persistentRateLimit(req,");
+  const iLock = ruta.indexOf("await failbanGuard(req,");
+  const iCuerpo = ruta.indexOf("await req.json()");
+  const iSupabase = ruta.indexOf("auth.admin.createUser(");
+  assert.ok(iFlood > -1 && iLock > iFlood && iCuerpo > iLock && iSupabase > iCuerpo, "orden: freno → bloqueo → cuerpo → Supabase");
+  // «Ese correo ya tiene cuenta» cuenta como fallo: frena la enumeración.
+  assert.match(ruta, /await recordAuthFailure\(req, \{ scope: LOCKOUT_SCOPE, account: email \}\)/);
+  // Nada de `error: msg` con el texto de Supabase.
+  assert.ok(
+    !/error: msg\b/.test(ruta) && !/error: createError\??\.message/.test(ruta),
+    "sale un mensaje crudo de Supabase",
+  );
+  assert.match(ruta, /error: traducirErrorDeAuth\(createError, "/);
+  // La verificación de correo NO se cambia aquí: es decisión de Rafael.
+  assert.match(ruta, /email_confirm: true/);
+});
+
 // ── 5. El plan de la portada llega a Suscripción ───────────────────────
 
 test("los botones de plan de la portada llevan ?plan= y Suscripción lo recibe", () => {
