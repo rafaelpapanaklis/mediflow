@@ -8,11 +8,13 @@ import {
   ArrowLeft,
   Ban,
   CalendarHeart,
+  CalendarPlus,
   Check,
   Crown,
   Eye,
   EyeOff,
   Mail,
+  MessageCircle,
   Pencil,
   Phone,
   ShieldCheck,
@@ -79,6 +81,12 @@ export interface ClientDetailProps {
   canPrintSales?: boolean;
   /** Plan con caja + cash.manage: «Nuevo cobro» desde la ficha. */
   canCharge?: boolean;
+  /** agenda.edit + plan con agenda: «Agendar cita» lleva a la Agenda con el cliente puesto. */
+  canBook?: boolean;
+  /** agenda.view + plan con agenda: las citas del historial abren en la Agenda. */
+  canOpenAgenda?: boolean;
+  /** whatsapp.view + plan con bandeja: «Mensaje» abre SU chat en Mensajes (no wa.me). */
+  canMessage?: boolean;
   /** Sub-árbol barber.caja (el TicketModal de Caja). */
   cajaDict?: Dictionary;
 }
@@ -101,6 +109,9 @@ export function BarberClientDetailScreen({
   cobrosDict,
   canPrintSales = false,
   canCharge = false,
+  canBook = false,
+  canOpenAgenda = false,
+  canMessage = false,
   cajaDict,
 }: ClientDetailProps) {
   const t = useBarberT(dict);
@@ -281,6 +292,33 @@ export function BarberClientDetailScreen({
                     </a>
                   </div>
                 </div>
+
+                {/* Lo que se hace con un cliente en la mano: darle cita y
+                    escribirle. Los dos se quedan DENTRO del panel: la Agenda
+                    con él ya puesto y SU chat en Mensajes (no wa.me). */}
+                {canBook || (canMessage && client.phone) ? (
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", width: "100%" }}>
+                    {canBook ? (
+                      <Link
+                        href={`/barber/agenda?nueva=${encodeURIComponent(client.id)}`}
+                        className={`${s.btn} ${s.btnSm} barber-btn-primary`}
+                      >
+                        <CalendarPlus size={13} />
+                        {t("detail.book")}
+                      </Link>
+                    ) : null}
+                    {canMessage && client.phone ? (
+                      <Link
+                        href={`/barber/mensajes?tel=${encodeURIComponent(soloDigitosTelefono(client.phone).slice(-10))}`}
+                        className={`${s.btn} ${s.btnSm}`}
+                        title={t("detail.messageTitle")}
+                      >
+                        <MessageCircle size={13} />
+                        {t("detail.message")}
+                      </Link>
+                    ) : null}
+                  </div>
+                ) : null}
 
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   {detail.membership ? (
@@ -535,6 +573,7 @@ export function BarberClientDetailScreen({
                   locale={locale}
                   timezone={timezone}
                   t={t}
+                  agendaLinks={canOpenAgenda}
                   onOpenPhoto={setLightbox}
                 />
               </section>

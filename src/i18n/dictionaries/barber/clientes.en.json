@@ -110,6 +110,9 @@
     "lastVisit": "Last visit: {date}",
     "neverVisited": "Hasn't sat in the chair yet.",
     "call": "Call",
+    "book": "Book a visit",
+    "message": "Message",
+    "messageTitle": "Open their WhatsApp chat in Messages",
     "notesTitle": "Notes",
     "notesEmpty": "No notes.",
     "membershipUntil": "{name} membership until {date}",
@@ -216,6 +219,7 @@
   },
   "history": {
     "title": "Haircut history",
+    "openInAgenda": "Open this visit in the schedule",
     "cancelReason": "Why it was cancelled: {reason}",
     "empty": "No visits recorded yet.",
     "noBarber": "No barber assigned",
