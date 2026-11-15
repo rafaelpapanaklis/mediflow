@@ -25,6 +25,7 @@ import {
 } from "@/lib/admin/zona-horaria";
 import { sinActivacionManual } from "@/lib/billing/pagos-reales";
 import { requireAdminPage } from "@/lib/admin-page-guard";
+import { cargarResumenIngresosBarber } from "@/lib/barber/admin";
 
 export const metadata: Metadata = { title: "Super Admin — DaleControl" };
 
@@ -226,6 +227,12 @@ async function renderAdminDashboard() {
   // y se avisa.
   const modulos = await loadModulosContratados();
 
+  // Ingresos de BARBERÍAS, aparte del dental (tarjeta «Ingreso mensual por
+  // línea»). En fila: 1 de precios + 1 de matrices. Nunca lanza → null.
+  // No toca ninguna cifra del dental de esta portada.
+  const ingresosBarber = await cargarResumenIngresosBarber();
+  if (!ingresosBarber) avisos.push("ingresos de barberías");
+
   if (!sedesIncluidas) avisos.push("sedes incluidas (el MRR las cuenta a precio de lista)");
   if (!modulos.medido) avisos.push("módulos contratados (el MRR sale solo con los planes)");
   if (!ultimaCitaRows) avisos.push("última cita de cada clínica");
@@ -418,6 +425,7 @@ async function renderAdminDashboard() {
     trabajando,
     enLinea: portada.totales.enLinea,
     enLineaAhora: await enLineaP.then((n) => ({ disponible: n !== null, clinicas: n, ahora: now.getTime() })),
+    barberias: ingresosBarber,
     avisos,
   };
 
