@@ -3,53 +3,21 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import {
-  BarChart3,
-  Calendar,
-  Contact,
-  CreditCard,
-  Crown,
-  Globe,
-  Handshake,
-  Home,
-  Inbox,
-  LifeBuoy,
-  LogOut,
-  Menu,
-  MessageCircle,
-  Package,
-  Percent,
-  Scissors,
-  Settings,
-  Timer,
-  Users,
-  Wallet,
-  X,
-} from "lucide-react";
 import type { BarberNavItem } from "@/lib/barber/types";
+import { BARBER_NAV_ICON, BarberIcon } from "./barber-icons";
 
-// Mapa icono-por-nombre: el layout (server) manda items serializables y aquí
-// se resuelve el componente lucide. Mismo patrón visual que LabSidebar.
-const ICONS: Record<string, React.ComponentType<{ size?: number | string }>> = {
-  home: Home,
-  calendar: Calendar,
-  timer: Timer,
-  inbox: Inbox,
-  users: Users,
-  scissors: Scissors,
-  contact: Contact,
-  wallet: Wallet,
-  percent: Percent,
-  crown: Crown,
-  package: Package,
-  globe: Globe,
-  "message-circle": MessageCircle,
-  "credit-card": CreditCard,
-  settings: Settings,
-  "life-buoy": LifeBuoy,
-  "bar-chart": BarChart3,
-  handshake: Handshake,
-};
+/**
+ * Menú lateral del panel BARBER — rediseño 15-nov-2026 (el menú de la
+ * propuesta C que eligió Rafael, con la letra y los tamaños del panel).
+ *
+ *  · Arriba, el rótulo: el poste de barbero, «Barbería» chico y el NOMBRE DE
+ *    LA BARBERÍA de la sesión en grande. «DaleControl» baja al pie, discreto.
+ *  · Secciones en minúsculas discretas; cada entrada con su icono del oficio
+ *    (src/components/barber/barber-icons.tsx); la activa, pastilla crema.
+ *  · Los items, su orden, permisos y el recorte sin pagar NO se deciden
+ *    aquí: llegan ya resueltos del layout (server). El menú solo pinta.
+ *  · Estilos: .barber-menu* en src/app/barber/barber-theme.css.
+ */
 
 const SECTION_ORDER: BarberNavItem["section"][] = [
   "operacion",
@@ -93,28 +61,28 @@ export function BarberSidebar({
     return pathname === href || pathname.startsWith(href + "/");
   }
 
-  function renderItem(item: BarberNavItem) {
-    const active = isActive(item.href);
-    const Icon = ICONS[item.icon] ?? Scissors;
-    return (
-      <Link
-        key={item.key}
-        href={item.href}
-        onClick={() => setMobileOpen(false)}
-        aria-current={active ? "page" : undefined}
-        className={`nav-item-new ${active ? "nav-item-new--active" : ""}`}
-      >
-        <Icon size={16} />
-        <span>{item.label}</span>
-      </Link>
-    );
-  }
-
   const sections = SECTION_ORDER.map((section) => ({
     section,
     label: sectionLabels[section] ?? section,
     items: items.filter((i) => i.section === section),
   })).filter((s) => s.items.length > 0);
+
+  // El rótulo lleva a Inicio solo si Inicio está en el menú (sin pagar no lo está).
+  const homeHref = items.find((i) => i.key === "inicio")?.href ?? null;
+
+  const rotulo = (
+    <>
+      <span className="barber-menu__poste" aria-hidden="true">
+        <span />
+      </span>
+      <span className="barber-menu__rotulo-txt">
+        <span className="barber-menu__sobre">{brandSub}</span>
+        <span className="barber-menu__nombre" title={shopName}>
+          {shopName}
+        </span>
+      </span>
+    </>
+  );
 
   return (
     <>
@@ -129,22 +97,12 @@ export function BarberSidebar({
         aria-expanded={mobileOpen}
         aria-controls="barber-sidebar"
       >
-        <Menu size={16} />
+        <BarberIcon name="rayas" size={18} />
       </button>
 
-      {/* Overlay móvil */}
+      {/* Velo móvil */}
       {mobileOpen && (
-        <div
-          onClick={() => setMobileOpen(false)}
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(18,16,16,0.5)",
-            backdropFilter: "blur(2px)",
-            zIndex: 40,
-          }}
-          className="lg:hidden"
-        />
+        <div onClick={() => setMobileOpen(false)} className="barber-menu-veil lg:hidden" />
       )}
 
       {/* En celular (<lg) el menú NO ocupa sitio: barber-theme.css lo
@@ -152,92 +110,62 @@ export function BarberSidebar({
           .barber-sidebar--open. En escritorio esa clase no hace nada. */}
       <aside
         id="barber-sidebar"
-        className={`sidebar-new${mobileOpen ? " barber-sidebar--open" : ""}`}
+        className={`sidebar-new barber-menu${mobileOpen ? " barber-sidebar--open" : ""}`}
         style={{ zIndex: 41 }}
       >
-        {/* Marca */}
-        <div className="sidebar-new__brand">
-          <div
-            className="sidebar-new__logo"
-            style={{
-              background: "var(--brand-grad, linear-gradient(135deg, #A2612F, #BE7A3C))",
-              display: "grid",
-              placeItems: "center",
-              color: "#fff",
-            }}
-          >
-            <Scissors size={18} />
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div className="sidebar-new__brandname">{brandName}</div>
-            <div className="sidebar-new__brandsub">{brandSub}</div>
-          </div>
+        <div className="barber-menu__cab">
+          {homeHref ? (
+            <Link href={homeHref} className="barber-menu__rotulo" onClick={() => setMobileOpen(false)}>
+              {rotulo}
+            </Link>
+          ) : (
+            <div className="barber-menu__rotulo">{rotulo}</div>
+          )}
           <button
             type="button"
             onClick={() => setMobileOpen(false)}
-            className="icon-btn-new lg:hidden"
-            style={{ marginLeft: 4 }}
+            className="barber-menu__cerrar lg:hidden"
             aria-label="Cerrar menú"
           >
-            <X size={14} />
+            <BarberIcon name="equis" size={16} />
           </button>
         </div>
 
         {/* Navegación (gating por plan + rol ya resuelto en el layout server) */}
-        <nav
-          className="scrollbar-thin"
-          style={{ flex: 1, overflowY: "auto", marginRight: -4, paddingRight: 4 }}
-        >
+        <nav className="barber-menu__nav" aria-label="Menú principal">
           {sections.map((s) => (
-            <div key={s.section}>
-              <div className="nav-section-new">{s.label}</div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                {s.items.map(renderItem)}
-              </div>
+            <div key={s.section} className="barber-menu__grupo">
+              <p className="barber-menu__titulo" id={`barber-menu-${s.section}`}>
+                {s.label}
+              </p>
+              <ul className="barber-menu__lista" aria-labelledby={`barber-menu-${s.section}`}>
+                {s.items.map((item) => {
+                  const active = isActive(item.href);
+                  return (
+                    <li key={item.key}>
+                      <Link
+                        href={item.href}
+                        onClick={() => setMobileOpen(false)}
+                        aria-current={active ? "page" : undefined}
+                        className="barber-menu__ent"
+                      >
+                        <BarberIcon name={BARBER_NAV_ICON[item.key] ?? "poste"} size={18} />
+                        <span>{item.label}</span>
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
             </div>
           ))}
         </nav>
 
-        {/* Pie */}
-        <div
-          style={{
-            marginTop: "auto",
-            paddingTop: 12,
-            borderTop: "1px solid var(--border-soft)",
-            display: "flex",
-            flexDirection: "column",
-            gap: 6,
-          }}
-        >
-          <div
-            style={{
-              fontSize: 12,
-              fontWeight: 600,
-              color: "var(--text-1)",
-              padding: "0 8px",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}
-            title={shopName}
-          >
-            {shopName}
-          </div>
-          <button
-            type="button"
-            onClick={handleLogout}
-            className="nav-item-new"
-            style={{
-              color: "var(--danger)",
-              width: "100%",
-              background: "transparent",
-              cursor: "pointer",
-              fontFamily: "inherit",
-            }}
-          >
-            <LogOut size={16} />
+        <div className="barber-menu__pie">
+          <button type="button" onClick={handleLogout} className="barber-menu__ent barber-menu__salir">
+            <BarberIcon name="salir" size={18} />
             <span>{logoutLabel}</span>
           </button>
+          <div className="barber-menu__marca">{brandName}</div>
         </div>
       </aside>
     </>

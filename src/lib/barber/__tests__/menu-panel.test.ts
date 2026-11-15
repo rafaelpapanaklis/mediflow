@@ -53,16 +53,27 @@ test("cada entrada del menú tiene etiqueta en es y en en", () => {
   assert.equal(getBarberT("es")("barber.shell.nav.reportes"), "Reportes");
 });
 
-test("cada icono del menú existe en el mapa del sidebar (si no, cae a tijeras)", () => {
-  const sidebar = leer("src/components/barber/barber-sidebar.tsx");
-  const mapa = /const ICONS[^=]*= \{([\s\S]*?)\n\};/.exec(sidebar);
-  assert.ok(mapa, "no se encontró el mapa ICONS en el sidebar");
-  const conocidos = new Set(
-    Array.from(mapa[1].matchAll(/^\s*"?([a-z0-9-]+)"?:/gm)).map((m) => m[1]),
+test("cada entrada del menú tiene su icono del oficio, y ese icono existe (si no, cae al poste)", () => {
+  // Rediseño 15-nov: el icono va por la CLAVE de la entrada (WhatsApp y
+  // Campañas comparten `icon` en BARBER_NAV_ITEMS y aquí llevan uno cada una).
+  const iconos = leer("src/components/barber/barber-icons.tsx");
+  const mapa = /export const BARBER_NAV_ICON[^=]*= \{([\s\S]*?)\n\};/.exec(iconos);
+  assert.ok(mapa, "no se encontró BARBER_NAV_ICON en barber-icons.tsx");
+  const porClave = new Map(
+    Array.from(mapa[1].matchAll(/^\s*"?([a-z0-9-]+)"?:\s*"([a-z]+)"/gm)).map((m) => [m[1], m[2]]),
   );
+  const paths = /const PATHS = \{([\s\S]*?)\n\} satisfies/.exec(iconos);
+  assert.ok(paths, "no se encontró PATHS en barber-icons.tsx");
+  const dibujados = new Set(Array.from(paths[1].matchAll(/^ {2}([a-z]+):/gm)).map((m) => m[1]));
   for (const i of BARBER_NAV_ITEMS) {
-    assert.ok(conocidos.has(i.icon), `el icono "${i.icon}" de ${i.key} no está en ICONS`);
+    const nombre = porClave.get(i.key);
+    assert.ok(nombre, `la entrada ${i.key} no tiene icono en BARBER_NAV_ICON`);
+    assert.ok(dibujados.has(nombre), `el icono "${nombre}" de ${i.key} no está dibujado en PATHS`);
   }
+  // El sidebar usa ese mapa (y no lucide) para las entradas.
+  const sidebar = leer("src/components/barber/barber-sidebar.tsx");
+  assert.match(sidebar, /BARBER_NAV_ICON\[item\.key\]/);
+  assert.doesNotMatch(sidebar, /from "lucide-react"/);
 });
 
 test("llaves únicas, y features y permisos que existen de verdad", () => {
