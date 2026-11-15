@@ -258,3 +258,33 @@ export async function cargarSeoBarberWeb(slug: string): Promise<{
     config: normalizarConfigBarberWeb(landing?.config),
   };
 }
+
+/**
+ * Una SEDE cerrada de una cadena (no la matriz): el visitante merece una salida,
+ * no una pared. Devuelve su nombre y las demás sedes abiertas de la misma cadena.
+ * null si no es una sede cerrada (no existe, está abierta o es una barbería suelta).
+ */
+export async function cargarSedeCerrada(
+  slug: string,
+): Promise<{ name: string; otras: { name: string; slug: string }[] } | null> {
+  const s = (slug ?? "").trim().toLowerCase();
+  if (!s || s.length > 120) return null;
+  const shop = await prisma.barbershop.findUnique({
+    where: { slug: s },
+    select: { name: true, isActive: true, parentId: true },
+  });
+  if (!shop || shop.isActive || !shop.parentId) return null;
+  const hermanas = await prisma.barbershop.findMany({
+    where: { isActive: true, OR: [{ id: shop.parentId }, { parentId: shop.parentId }] },
+    select: { id: true, name: true, slug: true, subscriptionStatus: true, parentId: true },
+    orderBy: { name: "asc" },
+    take: 12,
+  });
+  const otras: { name: string; slug: string }[] = [];
+  for (const h of hermanas) {
+    // Solo las que de verdad tienen página: nunca pagadas o suspendidas dan 404.
+    if (barberiaNuncaPagada(h) || !(await barberiaAlCorriente(h))) continue;
+    otras.push({ name: h.name, slug: h.slug });
+  }
+  return { name: shop.name, otras };
+}
