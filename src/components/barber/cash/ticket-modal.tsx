@@ -278,8 +278,9 @@ export function TicketModal({
     setLines((prev) => prev.filter((l) => l.key !== key));
   }
 
+  const tipInvalid = tipMode.kind === "custom" && parseAmountText(tipText) === null;
   const tipNeedsBarber = totals.tip > 0 && !barberId;
-  const canSubmit = lines.length > 0 && !submitting && !totals.discountInvalid && !tipNeedsBarber && !bonusNeedsService;
+  const canSubmit = lines.length > 0 && !submitting && !totals.discountInvalid && !tipInvalid && !tipNeedsBarber && !bonusNeedsService;
 
   async function submit() {
     if (!canSubmit) return;
@@ -598,7 +599,7 @@ export function TicketModal({
                   <option key={s.id} value={s.id}>{s.name} · {fmtMoney(s.price)}</option>
                 ))}
               </select>
-              <button type="button" className="btn-new btn-new--secondary" onClick={addService} disabled={!addServiceId}><Plus size={14} /></button>
+              <button type="button" className="btn-new btn-new--secondary" onClick={addService} disabled={!addServiceId} aria-label={t("ticket.addServiceBtn")} title={t("ticket.addServiceBtn")}><Plus size={14} /></button>
             </div>
           </div>
           <div className="field-new">
@@ -615,7 +616,7 @@ export function TicketModal({
                     </option>
                   ))}
                 </select>
-                <button type="button" className="btn-new btn-new--secondary" onClick={addProduct} disabled={!addProductId}><Plus size={14} /></button>
+                <button type="button" className="btn-new btn-new--secondary" onClick={addProduct} disabled={!addProductId} aria-label={t("ticket.addProductBtn")} title={t("ticket.addProductBtn")}><Plus size={14} /></button>
               </div>
             ) : (
               <div className="bcaja-hint">{t("ticket.noProductsInPlan")}</div>
@@ -719,9 +720,9 @@ export function TicketModal({
                 <button type="button" className={`bcaja-chip ${tipMode.kind === "custom" ? "bcaja-chip--on" : ""}`} onClick={() => setTipMode({ kind: "custom" })}>{t("ticket.tipCustom")}</button>
               </div>
               {tipMode.kind === "custom" && (
-                <input className="input-new" inputMode="decimal" value={tipText} onChange={(e) => setTipText(e.target.value)} placeholder="0.00" style={{ marginTop: 6 }} />
+                <input className="input-new" inputMode="decimal" value={tipText} onChange={(e) => setTipText(e.target.value)} placeholder="0.00" aria-invalid={tipInvalid || undefined} style={{ marginTop: 6 }} />
               )}
-              <div className="bcaja-hint">{tipNeedsBarber ? t("ticket.tipNeedsBarber") : t("ticket.tipHint")}</div>
+              {tipInvalid ? <div className="bcaja-hint" role="alert" style={{ color: "var(--danger)" }}>{t("ticket.tipInvalid")}</div> : <div className="bcaja-hint">{tipNeedsBarber ? t("ticket.tipNeedsBarber") : t("ticket.tipHint")}</div>}
             </div>
           )}
         </div>

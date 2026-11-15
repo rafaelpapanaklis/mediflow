@@ -52,6 +52,8 @@ export function SubscriptionsTab({
   canManage?: boolean;
 }) {
   const [selling, setSelling] = useState(false);
+  // «Volver a contratar»: venta NUEVA para el mismo cliente y plan (nunca reactiva la vieja).
+  const [rehiring, setRehiring] = useState<BarberClientMembershipView | null>(null);
   const [renewing, setRenewing] = useState<BarberClientMembershipView | null>(null);
   const [renewMethod, setRenewMethod] = useState<BarberPaymentMethod>("CASH");
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -71,6 +73,8 @@ export function SubscriptionsTab({
   }
 
   function expiryLabel(m: BarberClientMembershipView): string {
+    if (m.status === "PAUSED") return t("barber.membresias.clientes.paused");
+    if (m.status === "CANCELLED") return t("barber.membresias.clientes.cancelled");
     if (m.daysLeft === 0) return t("barber.membresias.clientes.today");
     if (m.daysLeft > 0) return t("barber.membresias.clientes.expiresIn", { count: m.daysLeft });
     return t("barber.membresias.clientes.expiredAgo", { count: Math.abs(m.daysLeft) });
@@ -144,7 +148,7 @@ export function SubscriptionsTab({
       {items.length === 0 ? (
         <EmptyState
           title={t("barber.membresias.clientes.heading")}
-          body={t(`barber.membresias.clientes.empty.${filter}`)}
+          body={t(query.trim() ? "barber.membresias.clientes.empty.search" : `barber.membresias.clientes.empty.${filter}`)}
         />
       ) : (
         <div className="bmem-rows" aria-busy={loading}>
@@ -214,7 +218,16 @@ export function SubscriptionsTab({
                 </div>
 
                 <div className="bmem-row-actions">
-                  {m.autoRenew ? null : (
+                  {m.status === "CANCELLED" ? (
+                    <button
+                      type="button"
+                      className="bmem-btn bmem-btn-sm"
+                      disabled={busyId === m.id}
+                      onClick={() => setRehiring(m)}
+                    >
+                      {t("barber.membresias.clientes.rehire")}
+                    </button>
+                  ) : m.autoRenew ? null : (
                     <button
                       type="button"
                       className="bmem-btn bmem-btn-sm"
@@ -277,6 +290,22 @@ export function SubscriptionsTab({
           stripeReady={stripeReady}
           open
           onClose={() => setSelling(false)}
+          onSold={onRefresh}
+        />
+      ) : null}
+
+      {rehiring ? (
+        <SellMembershipModal
+          t={t}
+          locale={locale}
+          plans={plans}
+          stripeReady={stripeReady}
+          open
+          initial={{
+            client: { id: rehiring.clientId, name: rehiring.clientName, phone: rehiring.clientPhone, activeMembership: null },
+            planId: rehiring.membershipId,
+          }}
+          onClose={() => setRehiring(null)}
           onSold={onRefresh}
         />
       ) : null}

@@ -40,6 +40,7 @@ export function ProductFormModal({ dict, product, onClose, onDone }: { dict: Dic
   const [unit, setUnit] = useState(product?.unit ?? "");
   const [initialStock, setInitialStock] = useState("0");
   const [isActive, setIsActive] = useState(product?.isActive ?? true);
+  const [askFree, setAskFree] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -50,6 +51,8 @@ export function ProductFormModal({ dict, product, onClose, onDone }: { dict: Dic
 
   async function submit() {
     if (!canSave) return;
+    // Precio $0: se permite, pero se confirma (D4).
+    if (parseAmountText(price) === 0 && !askFree) { setAskFree(true); return; }
     setBusy(true);
     setError(null);
     const body: Record<string, unknown> = {
@@ -83,7 +86,7 @@ export function ProductFormModal({ dict, product, onClose, onDone }: { dict: Dic
       footer={
         <>
           <button type="button" className="btn-new btn-new--ghost" onClick={onClose} disabled={busy}>{t("common.cancel")}</button>
-          <button type="button" className="btn-new barber-btn-primary" onClick={submit} disabled={!canSave}>{busy ? t("common.saving") : t("common.save")}</button>
+          <button type="button" className="btn-new barber-btn-primary" onClick={submit} disabled={!canSave}>{busy ? t("common.saving") : askFree ? t("productos.freeYes") : t("common.save")}</button>
         </>
       }
     >
@@ -104,11 +107,13 @@ export function ProductFormModal({ dict, product, onClose, onDone }: { dict: Dic
           </div>
           <div className="field-new">
             <label className="field-new__label">{t("productos.fPrice")}</label>
-            <input className="input-new" inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="0.00" />
+            <input className="input-new" inputMode="decimal" value={price} onChange={(e) => { setPrice(e.target.value); setAskFree(false); }} placeholder="0.00" />
+            {askFree ? <div className="bcaja-hint" role="alert" style={{ color: "var(--warning)" }}>{t("productos.freeAsk")}</div> : null}
           </div>
           <div className="field-new">
             <label className="field-new__label">{t("productos.fCost")}</label>
             <input className="input-new" inputMode="decimal" value={cost} onChange={(e) => setCost(e.target.value)} placeholder="0.00" />
+            {costOk && priceOk && cost.trim() !== "" && (parseAmountText(cost) ?? 0) > (parseAmountText(price) ?? 0) ? <div className="bcaja-hint" style={{ color: "var(--warning)" }}>{t("productos.costAbovePrice")}</div> : null}
           </div>
           <div className="field-new">
             <label className="field-new__label">{t("productos.fMin")}</label>

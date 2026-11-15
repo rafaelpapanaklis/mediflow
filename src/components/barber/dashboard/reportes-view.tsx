@@ -90,7 +90,7 @@ export function ReportesView({
   const periodLabel =
     s.period.from === s.period.to
       ? fmtMediumDay(s.period.from, locale)
-      : `${fmtShortDay(s.period.from, locale)} – ${fmtMediumDay(s.period.to, locale)} · ${t("period.days", { count: s.period.days })}`;
+      : `${(s.period.from.slice(0, 4) === s.period.to.slice(0, 4) ? fmtShortDay(s.period.from, locale) : fmtMediumDay(s.period.from, locale))} – ${fmtMediumDay(s.period.to, locale)} · ${t("period.days", { count: s.period.days })}`;
 
   const hasSales = s.totals.tickets > 0;
   const occ = s.occupancy;

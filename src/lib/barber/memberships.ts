@@ -284,7 +284,7 @@ export async function sweepExpiredMemberships(barbershopId: string): Promise<num
 
 // ── Cadenas de periodos (D1): un cliente + un plan = una membresía ──────
 
-type LiveRow = { id: string; clientId: string; membershipId: string; status: string; startAt: Date; endAt: Date; cutsUsed: number };
+type LiveRow = { id: string; clientId: string; membershipId: string; status: string; startAt: Date; endAt: Date; cutsUsed: number; paymentMethod?: string };
 
 interface Chain {
   /** Periodo vigente (o el primero si ninguno ha empezado). */
@@ -320,7 +320,7 @@ function buildChains(live: LiveRow[], now: Date): Map<string, Chain> {
 async function loadLiveChains(shopId: string, now: Date): Promise<Map<string, Chain>> {
   const live = await prisma.barberClientMembership.findMany({
     where: { barbershopId: shopId, status: { in: ["ACTIVE", "PAUSED"] }, endAt: { gt: now } },
-    select: { id: true, clientId: true, membershipId: true, status: true, startAt: true, endAt: true, cutsUsed: true },
+    select: { id: true, clientId: true, membershipId: true, status: true, startAt: true, endAt: true, cutsUsed: true, paymentMethod: true },
     take: 5000,
   });
   return buildChains(live, now);
@@ -392,6 +392,9 @@ export async function listClientMemberships(
           endAt: n.endAt.toISOString(),
           includedCuts: r.membership.includedCuts,
         }));
+        // El método que se muestra es el del ÚLTIMO periodo pagado (la renovación puede ser en otro método).
+        const lastPaid = chain.next[chain.next.length - 1]?.paymentMethod;
+        if (lastPaid) view.paymentMethod = lastPaid as BarberPaymentMethod;
         // Ya pagó lo que sigue: no está «por vencer».
         view.urgency = membershipUrgency(
           { status: r.status as BarberClientMembershipStatus, endAt: chain.lastEnd, cutsUsed: r.cutsUsed, includedCuts: r.membership.includedCuts },
@@ -402,6 +405,9 @@ export async function listClientMemberships(
       continue;
     }
     if ((filter === "active" || filter === "soon") && !chain) continue;
+    // Cadena ya no viva (cancelada/vencida): el periodo que empieza justo cuando termina otro de la
+    // misma membresía es una renovación, no una membresía aparte.
+    if (!chain && rows.some((o) => o.id !== r.id && chainKey(o) === chainKey(r) && o.status === r.status && Math.abs(o.endAt.getTime() - r.startAt.getTime()) < 60_000)) continue;
     out.push(toClientMembershipView(r, now));
   }
   return out;
