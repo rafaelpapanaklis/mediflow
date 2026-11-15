@@ -95,6 +95,7 @@
       "other": "{count} days ago"
     },
     "today": "today",
+    "paused": "Paused",
     "autoRenew": "Renews itself",
     "manualRenew": "Manual renewal",
     "renew": "Renew",

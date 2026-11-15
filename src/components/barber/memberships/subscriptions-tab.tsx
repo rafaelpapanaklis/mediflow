@@ -71,6 +71,7 @@ export function SubscriptionsTab({
   }
 
   function expiryLabel(m: BarberClientMembershipView): string {
+    if (m.status === "PAUSED") return t("barber.membresias.clientes.paused");
     if (m.daysLeft === 0) return t("barber.membresias.clientes.today");
     if (m.daysLeft > 0) return t("barber.membresias.clientes.expiresIn", { count: m.daysLeft });
     return t("barber.membresias.clientes.expiredAgo", { count: Math.abs(m.daysLeft) });

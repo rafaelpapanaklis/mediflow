@@ -95,6 +95,7 @@
       "other": "hace {count} días"
     },
     "today": "hoy",
+    "paused": "Pausada",
     "autoRenew": "Se renueva sola",
     "manualRenew": "Renovación manual",
     "renew": "Renovar",
