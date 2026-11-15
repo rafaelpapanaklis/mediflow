@@ -39,9 +39,11 @@ export const BARBER_PUBLIC_NEW_PHONE_DAILY_CAP = 50;
 
 /**
  * Nombre de quien reserva en la página pública: SOLO letras (con acentos,
- * ñ y diéresis, de cualquier alfabeto), espacios, apóstrofo y guion. Sin
- * dígitos, puntos, barras ni dos puntos: ese nombre viaja dentro de los
- * mensajes de la barbería y no puede ser una liga ni un teléfono.
+ * ñ y diéresis, de cualquier alfabeto), espacios, apóstrofo y guion, y el
+ * punto de una abreviatura («Ma.», «Fco.») cuando va pegado a una letra y
+ * seguido de espacio o del final. Sin dígitos, barras ni dos puntos, ni un
+ * punto dentro de una palabra: ese nombre viaja dentro de los mensajes de la
+ * barbería y no puede ser una liga ni un teléfono.
  *
  * Devuelve el nombre limpio (NFC, espacios colapsados) o null.
  */
@@ -49,8 +51,11 @@ export function cleanBarberClientName(raw: unknown): string | null {
   if (typeof raw !== "string") return null;
   const name = raw.normalize("NFC").trim().replace(/\s+/g, " ");
   if (name.length < 2 || name.length > 80) return null;
-  // Empieza con letra; luego letras, marcas de acento, espacio, ' ’ o -.
-  if (!/^\p{L}[\p{L}\p{M} '’-]*$/u.test(name)) return null;
+  // Empieza con letra; luego letras, marcas de acento, espacio, ' ’ o -, y un
+  // punto SOLO si va pegado a una letra y seguido de espacio o del final
+  // («Ma. Fernanda», «Fco. Javier», «J. Luis»). «bit.ly/x» no pasa: ahí el punto
+  // va seguido de letra.
+  if (!/^\p{L}(?:[\p{L}\p{M}'’-]|(?<=\p{L})\.(?= |$)| )*$/u.test(name)) return null;
   // Al menos dos letras de verdad ("A-" o "J'" no son nombres).
   const letters = name.match(/\p{L}/gu);
   if (!letters || letters.length < 2) return null;

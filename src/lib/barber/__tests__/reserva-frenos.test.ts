@@ -33,9 +33,17 @@ test("nombre: letras con acentos, ñ, diéresis, espacios, apóstrofo y guion", 
     "D’Artagnan",
     "Ana-Sofía Pérez",
     "Zoë",
+    // Abreviaturas con punto, muy comunes en México (el punto pegado a una
+    // letra y seguido de espacio o del final).
+    "Ma. Fernanda",
+    "Ma. de Jesús",
+    "Fco. Javier",
+    "J. Luis",
+    "Juan.",
   ]) {
     assert.ok(cleanBarberClientName(ok), `debería aceptar «${ok}»`);
   }
+  assert.equal(cleanBarberClientName("Ma.  de   Jesús"), "Ma. de Jesús");
   assert.equal(cleanBarberClientName("  Luis    Pérez  "), "Luis Pérez");
   // Acento escrito como letra + marca combinante (NFD): se acepta y sale en NFC.
   assert.equal(cleanBarberClientName("José"), "José");
@@ -48,8 +56,16 @@ test("nombre: nada que sirva para meter una liga o un número en el mensaje", ()
     "bit.ly/x",
     "https://x.co",
     "Luis 5512345678",
-    "Juan.",
     "gana: aquí",
+    // El punto abre otras puertas si se acepta de más: nada de ligas ni de
+    // puntos sueltos o repetidos.
+    "premio.com/gana",
+    "www.evil.com",
+    "Luis .com",
+    "J.. Luis",
+    ". Luis",
+    "Ma.Fernanda",
+    "Luis 3. 5",
     "Luis 🔥",
     "<b>Luis</b>",
     "-Luis",
