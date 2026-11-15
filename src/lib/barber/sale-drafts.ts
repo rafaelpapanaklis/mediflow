@@ -57,6 +57,11 @@ export interface SaleDraftList {
   /** false = falta sql/barber_por_cobrar.sql. */
   ready: boolean;
   drafts: SaleDraftRow[];
+  /**
+   * Cuántas notas abiertas hay en el alcance (la lista se recorta a las 50 más recientes;
+   * esto no). Lo usa el aviso del cierre de turno.
+   */
+  openCount: number;
 }
 
 interface DraftRaw {
@@ -79,7 +84,7 @@ function inputError(e: unknown): never {
 /** Notas abiertas de la sede (de un cliente, si se pide), más recientes primero. */
 export async function listSaleDrafts(ctx: BarberContext, opts: { clientId?: string | null } = {}): Promise<SaleDraftList> {
   assertBarberPermission(ctx, "cash.view");
-  if (!(await saleDraftsReady(prisma))) return { ready: false, drafts: [] };
+  if (!(await saleDraftsReady(prisma))) return { ready: false, drafts: [], openCount: 0 };
   const barbershopId = ctx.barbershopId;
   const clientId = typeof opts.clientId === "string" && opts.clientId ? opts.clientId : null;
   const rows = clientId
@@ -93,7 +98,7 @@ export async function listSaleDrafts(ctx: BarberContext, opts: { clientId?: stri
         FROM "barber_sale_drafts"
         WHERE "barbershopId" = ${barbershopId} AND "status" = 'OPEN'
         ORDER BY "createdAt" DESC LIMIT ${LIST_MAX}`;
-  if (rows.length === 0) return { ready: true, drafts: [] };
+  if (rows.length === 0) return { ready: true, drafts: [], openCount: 0 };
 
   // Rol Barbero con caja por permiso personal: solo notas de clientes suyos.
   const scope = scopeClientsWhere(clientsViewScope(scopeUserFromCtx(ctx)));
@@ -163,7 +168,16 @@ export async function listSaleDrafts(ctx: BarberContext, opts: { clientId?: stri
       createdByName: userById.get(r.createdByUserId) ?? "—",
     });
   });
-  return { ready: true, drafts };
+  // Con recorte del Barbero cuenta lo que ve; sin recorte, el total exacto.
+  const openCount = scope || rows.length < LIST_MAX ? drafts.length : await countOpenDrafts(barbershopId, clientId);
+  return { ready: true, drafts, openCount };
+}
+
+async function countOpenDrafts(barbershopId: string, clientId: string | null): Promise<number> {
+  const rows = clientId
+    ? await prisma.$queryRaw<Array<{ n: number }>>`SELECT count(*)::int AS "n" FROM "barber_sale_drafts" WHERE "barbershopId" = ${barbershopId} AND "status" = 'OPEN' AND "clientId" = ${clientId}`
+    : await prisma.$queryRaw<Array<{ n: number }>>`SELECT count(*)::int AS "n" FROM "barber_sale_drafts" WHERE "barbershopId" = ${barbershopId} AND "status" = 'OPEN'`;
+  return Number(rows[0]?.n ?? 0);
 }
 
 function safePayload(raw: unknown): SaleDraftPayload {

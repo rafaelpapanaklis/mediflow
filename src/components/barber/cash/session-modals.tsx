@@ -86,12 +86,18 @@ export function CloseSessionModal({
   dict,
   summary,
   tz,
+  openDrafts = 0,
   onClose,
   onDone,
 }: {
   dict: Dictionary;
   summary: CashSessionSummary;
   tz: string;
+  /**
+   * Notas «Por cobrar» abiertas de la sede. Solo se AVISA (número y enlace):
+   * no entran a este corte ni cambian su cuenta.
+   */
+  openDrafts?: number;
   onClose: () => void;
   onDone: () => void;
 }) {
@@ -154,6 +160,15 @@ export function CloseSessionModal({
       <div className="bcaja-form">
         <p className="bcaja-hint" style={{ margin: 0 }}>{t("session.closeBody")}</p>
         {error && <div className="bcaja-alert bcaja-alert--danger" role="alert">{error}</div>}
+        {openDrafts > 0 && (
+          <div className="bcaja-alert bcaja-alert--info" data-aviso-por-cobrar>
+            <strong>{t("session.draftsPending", { count: openDrafts })}</strong>{" "}
+            {t("session.draftsPendingHint")}{" "}
+            <a href="#por-cobrar" onClick={onClose} style={{ fontWeight: 600, color: "inherit", textDecoration: "underline" }}>
+              {t("session.draftsPendingLink")}
+            </a>
+          </div>
+        )}
 
         <CloseExpectedBreakdown view={closeExpectedView(summary)} t={t} />
 

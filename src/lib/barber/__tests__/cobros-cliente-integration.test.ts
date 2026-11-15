@@ -314,7 +314,7 @@ test("3 · antes del SQL: no hay notas por cobrar y guardar lo dice; Caja lo sab
   const drafts = await import("@/lib/barber/sale-drafts");
   await prisma.$executeRawUnsafe(`DROP TABLE IF EXISTS "barber_sale_drafts"`);
   const zoe = await newClient(A, "Zoe");
-  assert.deepEqual(await drafts.listSaleDrafts(A.ctx), { ready: false, drafts: [] });
+  assert.deepEqual(await drafts.listSaleDrafts(A.ctx), { ready: false, drafts: [], openCount: 0 });
   await assert.rejects(
     drafts.saveSaleDraft(A.ctx, { clientId: zoe, payload: { items: [{ kind: "service", id: A.serviceId }] } }),
     cajaError("DRAFTS_SQL_PENDING"),
@@ -488,4 +488,28 @@ test("RONDA 2 · M1: cancelar el ticket que salió de una nota la devuelve a «P
   await cash.cancelSale(rita, second.id, { reason: "otra vez" });
   await drafts.discardSaleDraft(rita, id);
   assert.deepEqual(await draftStatus(id), { status: "DISCARDED", saleId: null });
+});
+
+// ── RONDA 2 · decisión 3: el cierre de turno avisa cuántas notas quedan ─
+
+test("RONDA 2 · aviso del cierre: cuenta exacta de notas abiertas (también por encima de las 50 listadas) y cerrar no toca el corte ni las notas", { skip }, async () => {
+  const drafts = await import("@/lib/barber/sale-drafts");
+  const cli = await newClient(B, "Muchas");
+  for (let i = 0; i < 51; i++) {
+    await drafts.saveSaleDraft(B.ctx, { clientId: cli, payload: { items: [{ kind: "service", id: B.serviceId }] } });
+  }
+  const list = await drafts.listSaleDrafts(B.ctx);
+  assert.equal(list.drafts.length, 50, "la lista se recorta a 50");
+  assert.equal(list.openCount, 51, "el aviso dice el número real");
+
+  // Un cobro normal en el turno, para que el corte tenga algo que cuadrar.
+  const sale = await charge(B, await newClient(B, "Paga"));
+  const before = await cash.getCashState(B.ctx);
+  const closed = await cash.closeCashSession(B.ctx, { countedAmount: before.open!.expectedCash });
+  assert.equal(closed.session.expectedAmount, before.open!.expectedCash, "las notas no cambian lo esperado");
+  assert.equal(closed.session.difference, 0);
+  assert.equal(closed.sales.length, before.open!.sales.length, "en el corte solo están los tickets cobrados");
+  assert.ok(closed.sales.some((x) => x.id === sale.id));
+  assert.equal((await drafts.listSaleDrafts(B.ctx)).openCount, 51, "y las notas siguen pendientes");
+  await cash.openCashSession(B.ctx, { openingAmount: 0 });
 });

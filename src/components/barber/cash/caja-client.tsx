@@ -247,7 +247,7 @@ export function CajaClient({
 
       {/* Notas «Por cobrar» de la sede: no son ingreso hasta que se cobran. */}
       {drafts?.ready && drafts.drafts.length > 0 && cobrosDict ? (
-        <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+        <div id="por-cobrar" className="card" style={{ padding: 0, overflow: "hidden", scrollMarginTop: 16 }}>
           <SaleDraftsList
             drafts={drafts.drafts}
             dict={cobrosDict}
@@ -353,6 +353,7 @@ export function CajaClient({
           dict={dict}
           summary={open}
           tz={tz}
+          openDrafts={drafts?.ready ? drafts.openCount : 0}
           onClose={closeModal}
           onDone={() => {
             closeModal();
