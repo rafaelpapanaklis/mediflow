@@ -167,7 +167,10 @@ export async function withActiveBranch(
     const pick = pickActiveBranchId({ homeId, requested, accessible });
     if (pick !== homeId) {
       const shop = await prisma.barbershop.findUnique({ where: { id: pick } });
-      if (shop) active = shop;
+      // Una sede CERRADA no se opera (ronda 2, M1): ni el dueño. Se queda en la
+      // propia; las pantallas de solo lectura que consolidan (Inicio, Reportes)
+      // la siguen pudiendo enseñar vía resolveBranchScope.
+      if (shop && shop.isActive) active = shop;
     }
   }
 

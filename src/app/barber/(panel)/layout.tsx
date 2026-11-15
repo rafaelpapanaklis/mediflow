@@ -136,6 +136,7 @@ export default async function BarberPanelLayout({
               options={branchOptions.map((b) => ({ id: b.id, label: b.label, isActive: b.isActive }))}
               activeId={ctx.barbershopId}
               consolidated={branchCookie === BARBER_BRANCH_ALL && branchOptions.length > 1}
+              selectedId={branchCookie}
               labels={{
                 branch: t("barber.shell.topbar.branch"),
                 aria: t("barber.shell.topbar.branchAria"),

@@ -286,10 +286,25 @@ test("🔴 el candado de pago mira a la matriz: matriz impaga → la sucursal ta
   }
 });
 
-test("dueño en una sucursal CERRADA: entra a verla (no queda encerrado en Suscripción)", { skip }, async () => {
+test("🔴 RONDA 2 · M1: una sucursal CERRADA no se opera, ni siquiera el dueño (se queda en su sede)", { skip }, async () => {
   const ctx = await como("dueno", tercera);
-  assert.equal(ctx.barbershopId, tercera);
-  assert.equal(await paid.hasBarberPaidAccess(ctx), true);
+  assert.equal(ctx.barbershopId, matriz, "la cerrada no se adopta como sede activa");
+  assert.equal(await paid.hasBarberPaidAccess(ctx), true, "y no queda encerrado en Suscripción");
+  // Tampoco por la puerta de Equipo: dar de alta un barbero en la cerrada.
+  const team = await import("@/lib/barber/team");
+  await assert.rejects(
+    team.createBarberProfile(ctx, { name: "Intruso", barbershopId: tercera, commissionType: "COMMISSION", commissionPct: 50 }),
+    (e: Error & { status?: number }) => e.status === 409 && /cerrada/.test(e.message),
+  );
+  assert.equal(await prisma.barber.count({ where: { barbershopId: tercera } }), 0);
+  // Recepción con acceso a la cerrada tampoco la opera.
+  const recepId = (await prisma.barberUser.findFirstOrThrow({ where: { supabaseId: sb["recepcion-dos-sedes"] } })).id;
+  const grant = await prisma.barberUserBranchAccess.create({ data: { userId: recepId, barbershopId: tercera } });
+  try {
+    assert.equal((await como("recepcion-dos-sedes", tercera)).barbershopId, matriz);
+  } finally {
+    await prisma.barberUserBranchAccess.delete({ where: { id: grant.id } });
+  }
 });
 
 test("🔴 cookie de OTRA cadena puesta a mano: se ignora, el dueño sigue en su matriz", { skip }, async () => {

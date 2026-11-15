@@ -29,6 +29,7 @@ export function BarberBranchBadge({
   options,
   activeId,
   consolidated,
+  selectedId = null,
   labels,
 }: {
   options: BarberBranchBadgeOption[];
@@ -36,6 +37,8 @@ export function BarberBranchBadge({
   activeId: string;
   /** La cookie pide «toda la cadena» y la sesión puede consolidar. */
   consolidated: boolean;
+  /** Valor crudo de la cookie del selector (sin validar). */
+  selectedId?: string | null;
   labels: { branch: string; aria: string; all: string; closed: string };
 }) {
   const pathname = usePathname();
@@ -44,7 +47,10 @@ export function BarberBranchBadge({
 
   const canShowAll = isConsolidatedPath(pathname);
   const showingAll = consolidated && canShowAll;
-  const value = showingAll ? BARBER_BRANCH_ALL : activeId;
+  // En las pantallas que consolidan se enseña la sede pedida (puede ser una
+  // cerrada, solo para verla); en las demás, la que opera la sesión.
+  const viewing = canShowAll && selectedId && options.some((o) => o.id === selectedId) ? selectedId : activeId;
+  const value = showingAll ? BARBER_BRANCH_ALL : viewing;
   const name = (o: BarberBranchBadgeOption) => (o.isActive ? o.label : `${o.label} (${labels.closed})`);
 
   return (
@@ -78,7 +84,9 @@ export function BarberBranchBadge({
       >
         {canShowAll ? <option value={BARBER_BRANCH_ALL}>{labels.all}</option> : null}
         {options.map((o) => (
-          <option key={o.id} value={o.id}>
+          // Sede cerrada: solo se puede elegir para VERLA en las pantallas que
+          // consolidan; operar en ella no se puede (ronda 2, M1).
+          <option key={o.id} value={o.id} disabled={!o.isActive && !canShowAll}>
             {name(o)}
           </option>
         ))}
