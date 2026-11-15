@@ -5,7 +5,7 @@ import { cookies } from "next/headers";
 import { createClient as createSupabaseAdmin } from "@supabase/supabase-js";
 import { prisma } from "@/lib/prisma";
 import { sumMoneyBy } from "@/lib/barber/money";
-import { isBarbershopSubscriptionActive } from "@/lib/barber/plan-shared";
+import { barberiaAlCorriente } from "@/lib/barber/cobros";
 import { BARBER_FILES_BUCKET, canTransition } from "@/lib/barber/types";
 import { getLoyaltyRule, refreshLoyalty } from "@/lib/barber/loyalty-core";
 import {
@@ -85,10 +85,12 @@ export async function resolvePortalShop(slug: string): Promise<PortalShopDTO | n
     select: {
       id: true, name: true, slug: true, phone: true, address: true, city: true,
       state: true, timezone: true, locale: true, logoUrl: true, branchName: true,
-      isActive: true, subscriptionStatus: true,
+      isActive: true, subscriptionStatus: true, parentId: true,
     },
   });
-  if (!row || !row.isActive || !isBarbershopSubscriptionActive(row)) return null;
+  // «Mi cuenta» se cierra mientras la MATRIZ esté suspendida o cancelada por
+  // falta de pago (decisión #10): el MISMO criterio que el panel (cobros.ts).
+  if (!row || !row.isActive || !(await barberiaAlCorriente(row))) return null;
   // isActive y subscriptionStatus se leyeron SOLO para decidir la puerta: no
   // salen del servidor. El recorte lo hace la lista blanca, no un destructuring
   // que se pueda olvidar de un campo nuevo.

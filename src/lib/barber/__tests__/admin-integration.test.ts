@@ -33,6 +33,9 @@ import {
   listBarbershopsForAdmin,
   setBarbershopSuspension,
 } from "@/lib/barber/admin";
+import { Prisma } from "@prisma/client";
+import { resumirIngresosBarber } from "@/lib/barber/admin-ingresos";
+import { cargarCobrosAdmin } from "@/lib/barber/cobros";
 
 const HAS_DB = Boolean(process.env.DATABASE_URL);
 const skip = HAS_DB ? false : "DATABASE_URL no definido: se salta la integración";
@@ -222,20 +225,23 @@ test("el MRR del vertical no incluye ni una suscripción del dental", { skip }, 
   );
   assert.equal(despues.accounts, antes.accounts, "una cuenta del dental no es una cuenta barber");
 
-  // Y el número de barber sí es exactamente el de sus propios planes, y SÓLO
-  // de las que pagan por Stripe: una matriz «active» activada a mano (sin
-  // stripeSubscriptionId) es cortesía y no suma (Rafael, 15-nov-2026).
-  const matricesActivas = await db.barbershop.findMany({
-    where: { parentId: null, subscriptionStatus: "active", stripeSubscriptionId: { not: null } },
-    select: { plan: true },
+  // Y el número de barber sí es exactamente el de sus propias matrices, y
+  // SÓLO de las que pagan por Stripe: una matriz «active» activada a mano es
+  // cortesía y no suma (Rafael, 15-nov-2026). Con sql/barber_cobros.sql
+  // pegado, «paga» = tiene un cobro vigente y suma lo que Stripe le cobra
+  // (ws6-t6, decisión #5); sin él, stripeSubscriptionId + active a precio de
+  // lista. Se recalcula aquí solo con filas de barber_shops y el registro.
+  const matrices = await db.barbershop.findMany({
+    where: { parentId: null },
+    select: { id: true, plan: true, subscriptionStatus: true, stripeSubscriptionId: true },
   });
-  const precios = new Map(
+  const precios = Object.fromEntries(
     (await db.barberPlanConfig.findMany({ select: { planId: true, priceMonthly: true } })).map(
-      (p) => [p.planId, Number(p.priceMonthly)],
+      (p) => [p.planId, new Prisma.Decimal(p.priceMonthly)],
     ),
   );
-  const esperado = matricesActivas.reduce((acc, s) => acc + (precios.get(s.plan) ?? 0), 0);
-  assert.equal(Number(despues.mrrMonthly), esperado);
+  const esperado = resumirIngresosBarber(matrices, precios, await cargarCobrosAdmin());
+  assert.equal(despues.mrrMonthly, esperado.mrr);
 
   // La sucursal NO se cuenta como cuenta (cobraría dos veces).
   assert.ok(despues.branches >= 1);

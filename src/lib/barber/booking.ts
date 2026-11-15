@@ -5,7 +5,7 @@ import { normalizarConfigBarberWeb, normalizarTelefono } from "@/lib/barber/land
 import { sumMoneyBy } from "@/lib/barber/money";
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { mxTenDigits } from "@/lib/phone-mx";
-import { isBarbershopSubscriptionActive } from "@/lib/barber/plan-shared";
+import { barberiaAlCorriente } from "@/lib/barber/cobros";
 import { getBarberPlan } from "@/lib/barber/plans";
 import { canTransition } from "@/lib/barber/types";
 // De T1 (agenda del panel): reconoce el rechazo de la constraint EXCLUDE
@@ -134,6 +134,8 @@ const PUBLIC_SHOP_SELECT = {
   plan: true,
   isActive: true,
   subscriptionStatus: true,
+  // Para mirar a la MATRIZ (criterio único de «al corriente», cobros.ts).
+  parentId: true,
 } satisfies Prisma.BarbershopSelect;
 
 export type BarbershopBookingRow = Prisma.BarbershopGetPayload<{
@@ -186,7 +188,9 @@ export async function resolveBookingGate(slug: string): Promise<BarbershopBookin
     select: PUBLIC_SHOP_SELECT,
   });
   if (!row) return { ok: false, reason: "notFound" };
-  if (!row.isActive || !isBarbershopSubscriptionActive(row)) {
+  // Suspendida (o cancelada) por falta de pago: sin reservas hasta que pague.
+  // El MISMO criterio que el panel (decisión #10, 15-nov-2026).
+  if (!row.isActive || !(await barberiaAlCorriente(row))) {
     return { ok: false, reason: "inactive" };
   }
   const plan = await getBarberPlan(row.plan);
