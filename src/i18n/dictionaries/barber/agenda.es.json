@@ -368,5 +368,13 @@
       "DONE": "Completar",
       "DONE_CHARGE": "Completar y cobrar"
     }
+  },
+  "request": {
+    "accept": "Aceptar solicitud",
+    "view": "Ver en Solicitudes",
+    "pending": "Solicitud por aceptar (llegó por la web o por WhatsApp)",
+    "accepted": "Aceptaste la solicitud de {client}.",
+    "notified": "Le avisamos que quedó agendada.",
+    "notNotified": "Avísale tú: a este cliente no le llegó mensaje."
   }
 }

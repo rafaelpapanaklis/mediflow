@@ -19,7 +19,8 @@
 // llevan container-type, que atraparía al position:fixed.
 // ═══════════════════════════════════════════════════════════════════════
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { CheckCircle2, Clock, Hand, Scissors, Wallet } from "lucide-react";
+import { CheckCircle2, Clock, Hand, Inbox, Scissors, Wallet } from "lucide-react";
+import { isBarberUnacceptedRequest } from "@/lib/barber/whatsapp-core";
 import { posicionDeLaTarjeta } from "@/lib/agenda-nueva/detalles-al-pasar";
 import { BARBER_APPOINTMENT_STATUS_UI, type BarberAppointmentDTO } from "@/lib/barber/types";
 import {
@@ -195,6 +196,14 @@ export function HoverCard(props: HoverCardProps) {
                 amount: formatMXN(deposit.amount),
               })}
             </dd>
+          </div>
+        ) : null}
+        {isBarberUnacceptedRequest(appt) ? (
+          <div className={css.hoverRow} data-request="">
+            <dt aria-label={t("barber.agenda.request.view")}>
+              <Inbox size={13} aria-hidden />
+            </dt>
+            <dd>{t("barber.agenda.request.pending")}</dd>
           </div>
         ) : null}
         {props.sale ? (

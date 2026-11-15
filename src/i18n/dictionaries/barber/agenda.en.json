@@ -368,5 +368,13 @@
       "DONE": "Complete",
       "DONE_CHARGE": "Complete and charge"
     }
+  },
+  "request": {
+    "accept": "Accept request",
+    "view": "See in Requests",
+    "pending": "Request to accept (came from the website or WhatsApp)",
+    "accepted": "You accepted {client}'s request.",
+    "notified": "We let them know it's booked.",
+    "notNotified": "Let them know yourself: no message reached this client."
   }
 }

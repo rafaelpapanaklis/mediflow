@@ -38,6 +38,7 @@ import {
   type BarberAppointmentStatus,
 } from "@/lib/barber/types";
 import { isOwnVisitStatus } from "@/lib/barber/own-visits";
+import { isBarberUnacceptedRequest } from "@/lib/barber/whatsapp-core";
 
 /** Mover con el mouse empieza tras este tanto de píxeles (antes es un clic). */
 export const DRAG_START_PX = 4;
@@ -326,26 +327,55 @@ const FORWARD: BarberAppointmentStatus[] = ["CONFIRMED", "IN_PROGRESS", "DONE"];
  *    SUS visitas (isOwnVisitStatus, la misma de la ruta de estado);
  *  · cobrar pide caja (canCharge) y una visita completada sin ticket.
  * Cancelar y «no llegó» NO van aquí: son decisiones, viven en el detalle.
+ *
+ * 🔴 SOLICITUDES (ronda 2, M1): una visita PENDIENTE que llegó por la web o
+ * por el bot (isBarberUnacceptedRequest) NO se «confirma»: se ACEPTA en
+ * Solicitudes, y es ese camino (resolveBookingRequest) el que le avisa al
+ * cliente «quedó agendada». Confirmarla por la ruta de estado se saltaba el
+ * aviso y luego le llegaba el recordatorio de una cita que nunca le
+ * confirmaron. Aquí: `advance` nunca es CONFIRMED en una solicitud; en su
+ * lugar `accept` (si puede atender solicitudes) o `viewRequests` (si no).
  */
 export function quickActions(args: {
   status: BarberAppointmentStatus;
+  /** Origen de la visita (PANEL, PUBLIC, WHATSAPP…): decide si es solicitud. */
+  source: string;
   barberId: string | null;
   canEdit: boolean;
   ownBarberId: string | null;
   canCharge: boolean;
   charged: boolean;
-}): { advance: BarberAppointmentStatus | null; charge: boolean; chargeOnDone: boolean } {
+  /** requests.manage: puede aceptar solicitudes (lo mismo que pide la ruta). */
+  canAcceptRequests: boolean;
+}): {
+  advance: BarberAppointmentStatus | null;
+  charge: boolean;
+  chargeOnDone: boolean;
+  /** Es una solicitud sin aceptar. */
+  isRequest: boolean;
+  /** Ofrecer «Aceptar solicitud» (el camino de Solicitudes). */
+  accept: boolean;
+  /** Solicitud que quien mira no puede aceptar: mandarlo a Solicitudes. */
+  viewRequests: boolean;
+} {
+  const isRequest = isBarberUnacceptedRequest({ status: args.status, source: args.source });
   const own = Boolean(args.ownBarberId) && args.barberId === args.ownBarberId;
   const allowed = (s: BarberAppointmentStatus) => args.canEdit || (own && isOwnVisitStatus(s));
-  const advance =
-    nextStatuses(args.status).find(
-      (s) => FORWARD.includes(s) && canTransition(args.status, s) && allowed(s),
-    ) ?? null;
+  const advance = isRequest
+    ? null
+    : (nextStatuses(args.status).find(
+        (s) => FORWARD.includes(s) && canTransition(args.status, s) && allowed(s),
+      ) ?? null);
   const chargeable =
     args.canCharge && !args.charged && args.status !== "CANCELLED" && args.status !== "NO_SHOW";
   return {
     advance,
     charge: chargeable && isTerminalAppointmentStatus(args.status),
     chargeOnDone: chargeable && advance === "DONE",
+    isRequest,
+    accept: isRequest && args.canAcceptRequests,
+    // Solo a quien antes la habría «confirmado» (edita la agenda): al rol
+    // Barbero o a quien solo mira no se le manda a una pantalla que no tiene.
+    viewRequests: isRequest && !args.canAcceptRequests && args.canEdit,
   };
 }

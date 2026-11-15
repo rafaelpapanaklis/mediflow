@@ -42,6 +42,7 @@ import {
 } from "@/lib/barber/agenda";
 import { sumMoneyBy } from "@/lib/barber/money";
 import { isOwnVisitStatus } from "@/lib/barber/own-visits";
+import { isBarberUnacceptedRequest } from "@/lib/barber/whatsapp-core";
 import { Field, Modal, Pill, agendaCss as css } from "./agenda-ui";
 
 export interface AppointmentDetailProps {
@@ -66,6 +67,10 @@ export interface AppointmentDetailProps {
   onChanged: (appointment: BarberAppointmentDTO, note?: string | null) => void;
   /** Abre el puente de cobro para esta visita. */
   onCharge: () => void;
+  /** requests.manage: puede aceptar solicitudes web/bot. */
+  canAcceptRequests?: boolean;
+  /** Acepta la solicitud por el camino de Solicitudes (avisa al cliente). */
+  onAcceptRequest?: () => void;
 }
 
 /** Estados que representan "seguir adelante" (el flujo lineal del contrato). */
@@ -95,8 +100,14 @@ export function AppointmentDetail(props: AppointmentDetailProps) {
   // aplica la misma regla (own-visits.ts); aquí solo se decide qué se pinta.
   const isOwnVisit = Boolean(props.ownBarberId) && appt.barberId === props.ownBarberId;
   const canAdvance = (s: BarberAppointmentStatus) => props.canEdit || (isOwnVisit && isOwnVisitStatus(s));
-  const primary = options.find((s) => FORWARD.includes(s) && canAdvance(s)) ?? null;
-  const secondary = options.filter((s) => s !== primary);
+  // Solicitud web/bot sin aceptar (ronda 2, M1): NO se «confirma» por la
+  // ruta de estado — eso se saltaba el «quedó agendada» al cliente. Se
+  // ACEPTA por el camino de Solicitudes (onAcceptRequest), o se manda allá.
+  const isRequest = isBarberUnacceptedRequest(appt);
+  const primary = isRequest
+    ? null
+    : (options.find((s) => FORWARD.includes(s) && canAdvance(s)) ?? null);
+  const secondary = options.filter((s) => s !== primary && !(isRequest && s === "CONFIRMED"));
   const terminal = isTerminalAppointmentStatus(appt.status);
 
   const total = sumMoneyBy(appt.services, (s) => s.priceAtBooking);
@@ -208,6 +219,23 @@ export function AppointmentDetail(props: AppointmentDetailProps) {
             >
               <Receipt size={14} /> {t("barber.agenda.detail.charge")}
             </button>
+          ) : null}
+          {isRequest && props.canEdit ? (
+            props.canAcceptRequests && props.onAcceptRequest ? (
+              <button
+                type="button"
+                className={`${css.btn} ${css.btnPrimary}`}
+                data-accept-request=""
+                onClick={props.onAcceptRequest}
+                disabled={busy !== null}
+              >
+                {t("barber.agenda.request.accept")}
+              </button>
+            ) : (
+              <Link href="/barber/solicitudes" className={`${css.btn} ${css.btnPrimary}`}>
+                {t("barber.agenda.request.view")}
+              </Link>
+            )
           ) : null}
           {primary ? (
             <button

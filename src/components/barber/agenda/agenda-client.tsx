@@ -73,8 +73,13 @@ interface AgendaPayload {
     clients: boolean;
     createClients: boolean;
     cash: boolean;
+    /** requests.manage: aceptar solicitudes web/bot (camino de Solicitudes). */
+    requests?: boolean;
   };
 }
+
+/** Pantalla de Solicitudes: donde se aceptan las reservas web y del bot. */
+const REQUESTS_HREF = "/barber/solicitudes";
 
 interface ToastState {
   message: string;
@@ -422,9 +427,16 @@ export function AgendaClient(props: AgendaClientProps) {
       ownBarberId,
       canCharge,
       charged: Boolean(charged[appt.id]),
+      source: appt.source,
+      canAcceptRequests: data?.can.requests ?? false,
     });
   const quickAction = (appt: BarberAppointmentDTO): CardQuickAction | null => {
     const q = quickFor(appt);
+    // Solicitud web/bot sin aceptar: se ACEPTA (camino de Solicitudes), no se «confirma».
+    if (q.accept) return { label: t("barber.agenda.request.accept"), tone: "go" };
+    if (q.viewRequests) {
+      return { label: t("barber.agenda.request.view"), tone: "go", href: REQUESTS_HREF };
+    }
     if (q.advance) {
       return q.chargeOnDone
         ? { label: t("barber.agenda.hover.short.DONE_CHARGE"), tone: "money" }
@@ -433,9 +445,53 @@ export function AgendaClient(props: AgendaClientProps) {
     if (q.charge) return { label: t("barber.agenda.detail.charge"), tone: "money" };
     return null;
   };
+  // ── Aceptar una solicitud (web/bot) ──────────────────────────────────
+  // El MISMO camino que el botón «Aceptar» de Solicitudes: PATCH
+  // /api/barber/booking-requests/[id] → resolveBookingRequest, que la pasa a
+  // Confirmada y le encola al cliente el «quedó agendada». Nada de POST
+  // /status, que la confirmaría en silencio (M1, ronda 2).
+  const acceptRequest = async (appt: BarberAppointmentDTO) => {
+    hover.close();
+    setBusyId(appt.id);
+    try {
+      const res = await fetch(`/api/barber/booking-requests/${appt.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accion: "aceptar" }),
+      });
+      const body = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        status?: BarberAppointmentDTO["status"];
+        notified?: boolean;
+      };
+      if (!res.ok) {
+        setToast({ message: body.error ?? t("barber.agenda.queue.errors.generic"), tone: "bad" });
+        void load(true);
+        return;
+      }
+      replaceAppointment({ ...appt, status: body.status ?? "CONFIRMED" });
+      setToast({
+        message: t("barber.agenda.request.accepted", {
+          client: appt.clientName || t("barber.agenda.card.noClient"),
+        }),
+        // Igual que Solicitudes: si no le va a llegar aviso, que lo sepa quien acepta.
+        note: body.notified ? t("barber.agenda.request.notified") : t("barber.agenda.request.notNotified"),
+      });
+      void load(true);
+    } catch {
+      setToast({ message: t("barber.agenda.queue.errors.generic"), tone: "bad" });
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   const runQuickAction = async (appt: BarberAppointmentDTO) => {
     hover.close();
     const q = quickFor(appt);
+    if (q.accept) {
+      await acceptRequest(appt);
+      return;
+    }
     if (!q.advance) {
       if (q.charge) openCharge(appt);
       return;
@@ -707,6 +763,8 @@ export function AgendaClient(props: AgendaClientProps) {
             if (note) setToast({ message: note });
           }}
           onCharge={() => openCharge(detail)}
+          canAcceptRequests={data?.can.requests ?? false}
+          onAcceptRequest={() => void acceptRequest(detail)}
         />
       ) : null}
 
