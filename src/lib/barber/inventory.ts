@@ -23,6 +23,10 @@
 // inventory.manage = movimientos manuales; la VENTA descuenta stock bajo
 // cash.manage sin pedir inventory.manage (contrato de permissions.ts). El
 // listado para el cobrador (picker de la caja) acepta cash.view.
+// products.view (Recepción, decisión #13) = ver el catálogo y sus
+// existencias SIN costo ni margen: quien no tiene products.manage recibe
+// `cost`, `marginAmount`, `marginPct`, el valor a costo y la ganancia en null
+// (no se esconden en la pantalla: no viajan).
 // ═══════════════════════════════════════════════════════════════════════
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -137,7 +141,7 @@ export function isLowStock(p: { stock: number; minStock: number | null }): boole
 
 function assertAnyPermission(
   ctx: BarberContext,
-  keys: Array<"products.manage" | "inventory.manage" | "cash.view" | "cash.manage">,
+  keys: Array<"products.manage" | "products.view" | "inventory.manage" | "cash.view" | "cash.manage">,
 ): void {
   const user = { role: ctx.role, permissionsOverride: ctx.user.permissionsOverride };
   if (keys.some((k) => hasBarberPermission(user, k))) return;
@@ -154,8 +158,8 @@ export async function listProducts(
   ctx: BarberContext,
   opts: { includeInactive?: boolean; forSale?: boolean } = {},
 ): Promise<ProductRow[]> {
-  if (opts.forSale) assertAnyPermission(ctx, ["cash.view", "cash.manage", "products.manage"]);
-  else assertBarberPermission(ctx, "products.manage");
+  if (opts.forSale) assertAnyPermission(ctx, ["cash.view", "cash.manage", "products.manage", "products.view"]);
+  else assertBarberPermission(ctx, "products.view");
 
   const rows = await prisma.barberProduct.findMany({
     where: {
@@ -164,7 +168,18 @@ export async function listProducts(
     },
     orderBy: [{ isActive: "desc" }, { name: "asc" }],
   });
-  return rows.map(toProductRow);
+  const showCost = canSeeProductCost(ctx);
+  return rows.map((r) => (showCost ? toProductRow(r) : withoutCost(toProductRow(r))));
+}
+
+/** ¿Puede ver costo y margen? Solo quien administra el catálogo. */
+export function canSeeProductCost(ctx: Pick<BarberContext, "role" | "user">): boolean {
+  return hasBarberPermission({ role: ctx.role, permissionsOverride: ctx.user.permissionsOverride }, "products.manage");
+}
+
+/** La fila sin lo que solo ve quien administra (costo y margen). */
+export function withoutCost(row: ProductRow): ProductRow {
+  return { ...row, cost: null, marginAmount: null, marginPct: null };
 }
 
 export interface ProductInput {
@@ -455,7 +470,8 @@ export interface InventoryStats {
   activeCount: number;
   lowStock: ProductRow[];
   /** Σ stock × costo (a costo) y Σ stock × precio (a venta) de activos. */
-  stockValueCost: number;
+  /** (El valor a costo llega null a quien no administra el catálogo.) */
+  stockValueCost: number | null;
   stockValuePrice: number;
   /** Margen % promedio ponderado por precio de los productos con costo. */
   avgMarginPct: number | null;
@@ -465,7 +481,7 @@ export interface InventoryStats {
 }
 
 export async function getInventoryStats(ctx: BarberContext, periodKey: string): Promise<InventoryStats> {
-  assertBarberPermission(ctx, "products.manage");
+  assertBarberPermission(ctx, "products.view");
   const tz = ctx.barbershop.timezone || DEFAULT_BARBER_TZ;
   const { start, end } = periodRange(periodKey, tz);
 
@@ -535,16 +551,17 @@ export async function getInventoryStats(ctx: BarberContext, periodKey: string): 
     .sort((x, y) => y.qty - x.qty || y.revenue - x.revenue)
     .slice(0, 10);
 
+  const showCost = canSeeProductCost(ctx);
   return {
     periodKey,
     activeCount: active.length,
-    lowStock: active.filter(isLowStock).map(toProductRow),
-    stockValueCost: toNum(stockValueCost),
+    lowStock: active.filter(isLowStock).map((p) => (showCost ? toProductRow(p) : withoutCost(toProductRow(p)))),
+    stockValueCost: showCost ? toNum(stockValueCost) : null,
     stockValuePrice: toNum(stockValuePrice),
-    avgMarginPct: marginWeight.isZero()
+    avgMarginPct: !showCost || marginWeight.isZero()
       ? null
       : marginSum.div(marginWeight).times(100).toDecimalPlaces(1, Prisma.Decimal.ROUND_HALF_UP).toNumber(),
-    topSellers,
+    topSellers: showCost ? topSellers : topSellers.map((s) => ({ ...s, profit: null })),
     periodProductRevenue: toNum(periodRevenue),
     periodProductUnits: periodUnits,
   };

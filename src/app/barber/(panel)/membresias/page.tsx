@@ -49,7 +49,9 @@ export default async function Page() {
   }
 
   // ── Candado de permiso ───────────────────────────────────────────────
-  if (!hasBarberPermission(permUser, "memberships.manage")) {
+  // Vender basta para entrar (Recepción, decisión #13); administrar los
+  // planes, pausar y cancelar sigue siendo memberships.manage.
+  if (!hasBarberPermission(permUser, "memberships.sell")) {
     return (
       <GateCard
         icon={<Lock size={26} />}
@@ -87,6 +89,7 @@ export default async function Page() {
       canEditPolicy={canEditPolicy}
       canViewDeposits={canViewDeposits}
       canManageDeposits={canManageDeposits}
+      canManagePlans={hasBarberPermission(permUser, "memberships.manage")}
     />
   );
 }

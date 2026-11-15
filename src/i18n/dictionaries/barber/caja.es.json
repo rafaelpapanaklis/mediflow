@@ -295,6 +295,8 @@
     "kpiActive": "Productos activos",
     "kpiLow": "Bajo mínimo",
     "kpiValueCost": "Inventario a costo",
+    "kpiValuePrice": "Inventario a precio de venta",
+    "readOnly": "Aquí ves los productos y cuántos quedan. Se venden en Caja, en el mismo ticket que el corte. Darlos de alta, cambiar precios o costos lo hace el dueño o el encargado.",
     "kpiMargin": "Margen promedio",
     "kpiPeriodRevenue": "Vendido en el periodo",
     "kpiPeriodUnits": "{count} piezas",

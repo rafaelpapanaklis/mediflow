@@ -14,7 +14,8 @@ import { ProductosClient } from "@/components/barber/products/productos-client";
 
 /**
  * /barber/productos?period=YYYY-MM — catálogo e inventario. Gate en
- * SERVIDOR: feature `products` (AVANZADO+) + products.manage. Los
+ * SERVIDOR: feature `products` (AVANZADO+) + products.view (ver) o
+ * products.manage (catálogo, precio y costo). Los
  * movimientos manuales exigen además inventory.manage (lo verifica la API).
  */
 export default async function Page(props: { searchParams: Promise<{ period?: string }> }) {
@@ -30,7 +31,9 @@ export default async function Page(props: { searchParams: Promise<{ period?: str
   if (plan.features.products !== true) {
     return <BarberDenied kind="plan" title={t("barber.caja.common.planLockedTitle")} body={t("barber.caja.common.planLockedBody")} ctaLabel={t("barber.caja.common.goToPlan")} />;
   }
-  if (!hasBarberPermission(permUser, "products.manage")) {
+  // Ver el catálogo y sus existencias basta para entrar (Recepción, decisión
+  // #13). Crear, editar, precio y costo siguen siendo products.manage.
+  if (!hasBarberPermission(permUser, "products.view")) {
     return <BarberDenied kind="permission" title={t("barber.caja.common.noPermissionTitle")} body={t("barber.caja.common.noPermissionBody")} />;
   }
 
@@ -50,6 +53,7 @@ export default async function Page(props: { searchParams: Promise<{ period?: str
       stats={stats}
       maxPeriod={current}
       canInventory={hasBarberPermission(permUser, "inventory.manage")}
+      canManage={hasBarberPermission(permUser, "products.manage")}
     />
   );
 }
