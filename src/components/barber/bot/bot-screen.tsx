@@ -27,6 +27,7 @@ import {
   type BarberBotSettings,
 } from "@/lib/barber/bot-core";
 import s from "./bot.module.css";
+import { botEmptyKey } from "./bot-empty";
 
 /* ═══════════════════════════════════════════════════════════════════════
    /barber/whatsapp/bot — encender el bot y confiar en él.
@@ -141,7 +142,9 @@ function Screen({ locale, initial, connected, canEdit, canAttend }: BarberBotScr
           <h2 className={s.cardTitle}>{t("power.title")}</h2>
           <SwitchRow
             title={settings.enabled ? t("power.on") : t("power.off")}
-            hint={settings.enabled ? t("power.hintOn") : t("power.hintOff")}
+            // Encendido pero sin con qué contestar (sin WhatsApp, sin IA…): no se
+            // dice que está contestando.
+            hint={settings.enabled ? (blocked ?? t("power.hintOn")) : t("power.hintOff")}
             checked={settings.enabled}
             disabled={!canEdit || saving || (!settings.enabled && blocked !== null)}
             onChange={(next) => {
@@ -157,7 +160,8 @@ function Screen({ locale, initial, connected, canEdit, canAttend }: BarberBotScr
         <section className={s.card}>
           <h2 className={s.cardTitle}>{t("spend.title")}</h2>
           <p className={s.hint}>{t("spend.hint")}</p>
-          <Field label={t("spend.capLabel")} hint={t("spend.model", { model: initial.aiModel })}>
+          {/* El nombre del modelo de IA no le sirve al dueño para decidir nada: no se enseña. */}
+          <Field label={t("spend.capLabel")}>
             {(id) => (
               <div className={s.capRow}>
                 <span className={s.currency}>$</span>
@@ -359,7 +363,7 @@ function Screen({ locale, initial, connected, canEdit, canAttend }: BarberBotScr
           <h2 className={s.cardTitle}>{t("pauses.title")}</h2>
           <p className={s.hint}>{t("pauses.hint")}</p>
           {pauses.length === 0 ? (
-            <p className={s.empty}>{t("pauses.empty")}</p>
+            <p className={s.empty}>{t(botEmptyKey({ connected, enabled: settings.enabled, blocked: blocked !== null }))}</p>
           ) : (
             <ul className={s.list}>
               {pauses.map((p) => (

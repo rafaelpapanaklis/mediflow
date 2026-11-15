@@ -43,6 +43,9 @@ export interface BookingFlowProps {
   barbers: PublicBarberDTO[];
   /** WhatsApp y teléfono de la barbería, para cuando aquí no se puede apartar. */
   contact: PublicContactDTO;
+  /** ¿La barbería tiene WhatsApp conectado? Lo resuelve el servidor. Sin él no se
+   *  promete ningún mensaje de WhatsApp. Sin dato (undefined) = como siempre. */
+  whatsappConnected?: boolean;
   /** Barbero fijado por la liga directa (?barbero=). */
   pinnedBarberId: string | null;
   /** Servicio ya elegido por la liga directa (?servicio=). */
@@ -106,6 +109,7 @@ export function BookingFlow({
   services,
   barbers,
   contact,
+  whatsappConnected = true,
   pinnedBarberId,
   pinnedServiceId = null,
 }: BookingFlowProps) {
@@ -342,7 +346,12 @@ export function BookingFlow({
   if (done) {
     return (
       <div ref={topRef}>
-        <BookingDone slug={slug} shop={shop} confirmation={done} />
+        <BookingDone
+          slug={slug}
+          shop={shop}
+          confirmation={done}
+          whatsappConnected={whatsappConnected}
+        />
       </div>
     );
   }
@@ -654,7 +663,9 @@ export function BookingFlow({
                 onChange={(e) => setPhone(e.target.value)}
                 required
               />
-              <span className="dcb-help">{t("barber.reserva.datos.telefonoAyuda")}</span>
+              <span className="dcb-help">{whatsappConnected
+                  ? t("barber.reserva.datos.telefonoAyuda")
+                  : t("barber.reserva.datos.telefonoAyudaSinWa")}</span>
             </label>
 
             <label className="dcb-field">
@@ -695,7 +706,9 @@ export function BookingFlow({
               )}
             </button>
             <p className="dcb-help" style={{ textAlign: "center", marginTop: 10 }}>
-              {t("barber.reserva.datos.aviso")}
+              {whatsappConnected
+                ? t("barber.reserva.datos.aviso")
+                : t("barber.reserva.datos.avisoSinWa")}
             </p>
           </form>
         </section>

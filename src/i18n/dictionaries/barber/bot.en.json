@@ -53,11 +53,11 @@
     "noDays": "Pick at least one day or the bot will never answer."
   },
   "spend": {
-    "title": "AI spending cap",
-    "hint": "Per day and per barbershop. When the cap is reached the bot stops using AI and hands the chats to you, so an insistent client can't run up the bill. Voice notes the bot transcribes count here too.",
-    "capLabel": "Daily cap",
+    "title": "Most the bot can spend per day",
+    "hint": "The most you let the bot spend in a day answering. When it reaches that amount the bot stops answering and hands the chats to you, so an insistent client can't run up the bill. Voice notes it listens to count too.",
+    "capLabel": "Daily maximum",
     "today": "{spent} of {cap} so far today",
-    "reached": "Today's cap has been reached. Chats are going to your inbox.",
+    "reached": "The bot hit its maximum for today. Chats are going to your inbox.",
     "model": "Model: {model}"
   },
   "quota": {
@@ -70,6 +70,9 @@
   "pauses": {
     "title": "Chats you're handling",
     "empty": "None. The bot is handling every chat.",
+    "emptyOff": "None. The bot is off: chats come to you.",
+    "emptyNotConnected": "None. Without WhatsApp connected no chats come in.",
+    "emptyBlocked": "None for now. The bot can't handle chats until the notice above is sorted out.",
     "hint": "Chats where the client asked for a person, you replied yourself (from here or from your phone), or the bot chose not to risk it. The bot comes back on its own 12 hours after a person's last reply; “Hand back to the bot” brings it back sooner.",
     "resume": "Give back to the bot",
     "pausedAt": "Since {when}",

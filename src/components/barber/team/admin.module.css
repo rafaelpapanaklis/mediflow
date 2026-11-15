@@ -41,8 +41,9 @@
   gap: 4px;
   flex: 1 1 auto;
   min-width: 0;
-  overflow-x: auto;
-  scrollbar-width: thin;
+  /* Bajan a otro renglón: «Soporte» no se queda escondida tras un scroll
+     lateral sin pista. */
+  flex-wrap: wrap;
 }
 
 .tab {

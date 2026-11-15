@@ -28,7 +28,7 @@
       "tips": "Propinas de hoy",
       "tipsHint": "Íntegras para los barberos",
       "visits": "Visitas de hoy",
-      "visitsHint": "{done} terminadas · {pending} por atender"
+      "visitsHint": { "one": "{done} terminada · {pending} por atender", "other": "{done} terminadas · {pending} por atender" }
     },
     "visits": {
       "title": "Visitas de hoy",

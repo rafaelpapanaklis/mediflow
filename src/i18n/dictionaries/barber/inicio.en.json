@@ -28,7 +28,7 @@
       "tips": "Tips today",
       "tipsHint": "Go entirely to the barbers",
       "visits": "Visits today",
-      "visitsHint": "{done} done · {pending} to serve"
+      "visitsHint": { "one": "{done} done · {pending} to serve", "other": "{done} done · {pending} to serve" }
     },
     "visits": {
       "title": "Today's visits",

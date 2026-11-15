@@ -6,6 +6,7 @@ import type { Dictionary } from "@/i18n/t";
 import type { CommissionEntryRow, CommissionSummaryRow } from "@/lib/barber/commissions";
 import { useBarberT } from "@/components/barber/cash/use-barber-t";
 import { fmtDate, fmtDateTime, fmtMoney, fmtPct, fmtPeriod, fmtSigned } from "@/components/barber/cash/money";
+import { upperFirst } from "@/components/barber/upper-first";
 
 export function ReceiptPrint({
   dict,
@@ -45,7 +46,7 @@ export function ReceiptPrint({
         </div>
         <hr className="bcaja-print__rule" />
         <div className="bcaja-print__row"><span>{t("comisiones.colBarber")}</span><span>{row.barberName}{row.nickname ? ` (${row.nickname})` : ""}</span></div>
-        <div className="bcaja-print__row"><span>{t("print.receiptPeriod")}</span><span style={{ textTransform: "capitalize" }}>{fmtPeriod(periodKey, locale)}</span></div>
+        <div className="bcaja-print__row"><span>{t("print.receiptPeriod")}</span><span>{upperFirst(fmtPeriod(periodKey, locale))}</span></div>
         <div className="bcaja-print__row"><span>{t("print.receiptScheme")}</span><span>{scheme}</span></div>
         <div className="bcaja-print__row"><span>{t("comisiones.policy")}</span><span>{policyLabel}</span></div>
         <div className="bcaja-print__row"><span>{t("print.receiptStatus")}</span><span>{row.paidStatus === "PAID" && row.lastPaidAt ? t("print.receiptPaidAt", { date: fmtDate(row.lastPaidAt, tz) }) : row.paidStatus === "PARTIAL" && row.lastPaidAt ? t("print.receiptPartial", { date: fmtDate(row.lastPaidAt, tz) }) : t("print.receiptPending")}</span></div>
