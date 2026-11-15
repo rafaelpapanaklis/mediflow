@@ -153,6 +153,12 @@ body:has(.barber-panel) .barber-shell {
   --text-3: #6F6153;
   --text-4: #A3958A;                       /* solo decorativo, nunca texto que se lea */
 
+  /* Semánticos con contraste AA como TEXTO chico (los de la raíz del dental,
+     #059669 y #d97706, dan 3.8:1 y 3.2:1 sobre blanco). Mismos tonos que
+     los estados de la agenda: verde 5.3:1, ámbar 5.5:1, rojo 6.5:1. */
+  --success: #1F7A4C;
+  --warning: #8A6110;
+  --danger:  #B3261E;
   /* Semánticos suaves (fondos de aviso) en el mismo cálido. */
   --success-soft: #E7F2EA;
   --danger-soft:  #FBECEA;
@@ -234,6 +240,9 @@ body:has(.barber-panel) .barber-shell {
   --text-2: #CBC0B2;
   --text-3: #A89C8E;
   --text-4: #6E645A;
+  --success: #63C795;
+  --warning: #E3AE4A;
+  --danger:  #F08A82;
   --success-soft: rgba(99, 199, 149, 0.12);
   --danger-soft:  rgba(240, 138, 130, 0.12);
   --warning-soft: rgba(227, 174, 74, 0.12);
