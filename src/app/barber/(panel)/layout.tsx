@@ -111,6 +111,8 @@ export default async function BarberPanelLayout({
         brandSub={t("barber.shell.brand.vertical")}
         logoutLabel={t("barber.shell.logout")}
         navLabel={t("barber.shell.navLabel")}
+        unreadLabel={t("barber.shell.unreadChats")}
+        unreadLabelOne={t("barber.shell.unreadChat")}
         loginHref={BARBER_LOGIN_PATH}
       />
       {/* min-w-0: sin él la columna crece hasta el ancho mínimo de su

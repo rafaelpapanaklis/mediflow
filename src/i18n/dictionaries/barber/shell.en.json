@@ -9,6 +9,7 @@
     "fila": "Virtual queue",
     "solicitudes": "Requests",
     "clientes": "Clients",
+    "mensajes": "Messages",
     "servicios": "Services",
     "barberos": "Barbers",
     "caja": "Cash register",
@@ -35,6 +36,8 @@
   },
   "logout": "Sign out",
   "navLabel": "Main menu",
+  "unreadChats": "{count} unread chats",
+  "unreadChat": "1 unread chat",
   "placeholder": {
     "soon": "Coming soon",
     "body": "This section is under construction. You will be able to manage it from here very soon.",
@@ -53,7 +56,8 @@
     "membresias": "The plans you sell to your clients: unlimited cuts, bundles and more.",
     "productos": "Simple inventory for waxes, shampoos and everything you sell at the counter.",
     "mi-web": "Your public page with online booking, editable without design skills.",
-    "whatsapp": "WhatsApp reminders and conversations with your clients.",
+    "mensajes": "Your WhatsApp chats with clients: read, reply and decide who handles each one.",
+    "whatsapp": "Your WhatsApp connection, templates and campaigns; the bot that books for you.",
     "campanas": "Bring back the ones who stopped coming, wish happy birthdays and flag memberships about to end.",
     "suscripcion": "Your DaleControl Barber plan: what it includes and how to pay for it.",
     "configuracion": "Your barbershop data: hours, address, logo and team access."

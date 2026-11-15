@@ -109,6 +109,14 @@ const PATHS = {
       <path d="M8 9h8M8 12h5" />
     </>
   ),
+  // Dos globos que se responden: la bandeja de Mensajes (WhatsApp, que es
+  // el canal, lleva el globo solo).
+  charla: (
+    <>
+      <path d="M2.5 3.5h13v9H8l-4 3.5v-3.5H2.5z" />
+      <path d="M15.5 8h6v9.5H19.5V21L16 17.5H9.5v-5" />
+    </>
+  ),
   megafono: (
     <>
       <path d="M4 9.5v5h4l9 5V4.5l-9 5z" />
@@ -218,6 +226,7 @@ export const BARBER_NAV_ICON: Record<string, BarberIconName> = {
   fila: "silla",
   solicitudes: "bandeja",
   clientes: "clientes",
+  mensajes: "charla",
   servicios: "tijeras",
   barberos: "navaja",
   caja: "caja",
