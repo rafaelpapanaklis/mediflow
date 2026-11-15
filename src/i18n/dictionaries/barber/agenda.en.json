@@ -186,6 +186,9 @@
       "create": "Block",
       "creating": "Blocking…",
       "delete": "Remove block",
+      "confirmDelete": "Remove this block?",
+      "confirmYes": "Yes, remove",
+      "confirmNo": "No",
       "empty": "No upcoming blocks.",
       "createError": "We couldn't create the block.",
       "trapped": {

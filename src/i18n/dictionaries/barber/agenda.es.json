@@ -186,6 +186,9 @@
       "create": "Bloquear",
       "creating": "Bloqueando…",
       "delete": "Quitar bloqueo",
+      "confirmDelete": "¿Quitar este bloqueo?",
+      "confirmYes": "Sí, quitar",
+      "confirmNo": "No",
       "empty": "No hay bloqueos próximos.",
       "createError": "No se pudo crear el bloqueo.",
       "trapped": {

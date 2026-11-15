@@ -475,6 +475,8 @@ function TimeOffTab(props: {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [trapped, setTrapped] = useState<number>(0);
+  // Quitar un bloqueo pide confirmación (id del que se está por quitar).
+  const [askRemove, setAskRemove] = useState<string | null>(null);
 
   const create = async () => {
     setBusy(true);
@@ -511,6 +513,7 @@ function TimeOffTab(props: {
   };
 
   const remove = async (id: string) => {
+    setAskRemove(null);
     await fetch(`/api/barber/schedules/timeoff/${id}`, { method: "DELETE" });
     await props.onChanged();
   };
@@ -649,14 +652,26 @@ function TimeOffTab(props: {
                 </span>
               </span>
               {props.canManage ? (
-                <button
-                  type="button"
-                  className={`${css.btn} ${css.btnIcon} ${css.btnDanger}`}
-                  onClick={() => void remove(off.id)}
-                  aria-label={t("barber.agenda.schedule.timeOff.delete")}
-                >
-                  <Trash2 size={14} />
-                </button>
+                askRemove === off.id ? (
+                  <span style={{ display: "flex", gap: 6, alignItems: "center" }} role="alertdialog" aria-label={t("barber.agenda.schedule.timeOff.confirmDelete")}>
+                    <span className={css.resultMeta}>{t("barber.agenda.schedule.timeOff.confirmDelete")}</span>
+                    <button type="button" className={`${css.btn} ${css.btnDanger}`} onClick={() => void remove(off.id)}>
+                      {t("barber.agenda.schedule.timeOff.confirmYes")}
+                    </button>
+                    <button type="button" className={css.btn} onClick={() => setAskRemove(null)}>
+                      {t("barber.agenda.schedule.timeOff.confirmNo")}
+                    </button>
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    className={`${css.btn} ${css.btnIcon} ${css.btnDanger}`}
+                    onClick={() => setAskRemove(off.id)}
+                    aria-label={t("barber.agenda.schedule.timeOff.delete")}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                )
               ) : null}
             </div>
           );
