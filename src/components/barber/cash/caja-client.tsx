@@ -236,7 +236,9 @@ export function CajaClient({
           <p className="bcaja-hint" style={{ margin: 0, padding: 18 }}>{t("caja.historyEmpty")}</p>
         ) : (
           <div className="bcaja-table-wrap">
-            <table className="table-new">
+            {/* En celular cada turno es una ficha (bcaja-hist en money.css):
+                cada celda lleva su etiqueta en data-label. */}
+            <table className="table-new bcaja-hist">
               <thead>
                 <tr>
                   <th>{t("caja.colOpened")}</th>
@@ -252,14 +254,14 @@ export function CajaClient({
               <tbody>
                 {state.history.map((h) => (
                   <tr key={h.id}>
-                    <td>{fmtDateTime(h.openedAt, tz)}</td>
-                    <td>{fmtDateTime(h.closedAt, tz)}</td>
-                    <td>{h.openedByName}{h.closedByName && h.closedByName !== h.openedByName ? ` / ${h.closedByName}` : ""}</td>
-                    <td className="bcaja-num">{h.ticketCount}{h.cancelledCount > 0 ? <span className="bcaja-muted"> (+{h.cancelledCount})</span> : null}</td>
-                    <td className="bcaja-num">{fmtMoney(h.openingAmount)}</td>
-                    <td className="bcaja-num">{fmtMoney(h.expectedAmount)}</td>
-                    <td className="bcaja-num">{fmtMoney(h.countedAmount)}</td>
-                    <td className="bcaja-num">
+                    <td data-label={t("caja.colOpened")}>{fmtDateTime(h.openedAt, tz)}</td>
+                    <td data-label={t("caja.colClosed")}>{fmtDateTime(h.closedAt, tz)}</td>
+                    <td data-label={t("caja.colWho")}>{h.openedByName}{h.closedByName && h.closedByName !== h.openedByName ? ` / ${h.closedByName}` : ""}</td>
+                    <td className="bcaja-num" data-label={t("caja.colTickets")}>{h.ticketCount}{h.cancelledCount > 0 ? <span className="bcaja-muted"> (+{h.cancelledCount})</span> : null}</td>
+                    <td className="bcaja-num" data-label={t("caja.colOpening")}>{fmtMoney(h.openingAmount)}</td>
+                    <td className="bcaja-num" data-label={t("caja.colExpected")}>{fmtMoney(h.expectedAmount)}</td>
+                    <td className="bcaja-num" data-label={t("caja.colCounted")}>{fmtMoney(h.countedAmount)}</td>
+                    <td className="bcaja-num" data-label={t("caja.colDifference")}>
                       {h.difference === null ? "—" : (
                         <BadgeNew tone={h.difference === 0 ? "success" : h.difference > 0 ? "info" : "danger"}>{fmtSigned(h.difference)}</BadgeNew>
                       )}

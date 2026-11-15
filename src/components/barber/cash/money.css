@@ -311,3 +311,41 @@
   .bcaja-print { border: 0; border-radius: 0; max-width: none; padding: 0; }
   body { background: #fff !important; }
 }
+
+/* ── Turnos anteriores en celular (tanda 3, pase 6) ───────────────────
+   A 390 px la tabla de 8 columnas se salía de su tarjeta y «ABRIÓ /
+   CERRÓ» quedaba a medias. En angosto cada turno es una ficha: arriba
+   cuándo se abrió y se cerró, quién, y debajo las cifras en dos columnas,
+   cada una con su etiqueta (data-label en caja-client.tsx). Sin scroll
+   lateral. Solo .bcaja-hist: las demás tablas de money.css no cambian. */
+@container bcaja-page (max-width: 640px) {
+  .barber-shell .bcaja-hist thead { display: none; }
+  .barber-shell .bcaja-hist,
+  .barber-shell .bcaja-hist tbody { display: block; width: 100%; }
+  .barber-shell .bcaja-hist tr {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px 16px;
+    padding: 12px 16px;
+    border-top: 1px solid var(--line, var(--border-soft));
+  }
+  .barber-shell .bcaja-hist tr:first-child { border-top: 0; }
+  .barber-shell .bcaja-table-wrap .bcaja-hist td {
+    display: block;
+    padding: 0;
+    border: 0;
+    white-space: normal;
+    text-align: left;
+    min-width: 0;
+  }
+  .barber-shell .bcaja-hist td:nth-child(3),
+  .barber-shell .bcaja-hist td:nth-child(8) { grid-column: 1 / -1; }
+  .barber-shell .bcaja-hist td::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 1px;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-3);
+  }
+}
