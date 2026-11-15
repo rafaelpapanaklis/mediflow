@@ -20,6 +20,41 @@ import {
   type BarberVisitPhotoDTO,
 } from "@/lib/barber/types";
 import type { BarberContext } from "@/lib/barber-auth";
+import { clientsViewScope, scopeClientsWhere, scopeUserFromCtx } from "@/lib/barber/own-visits";
+
+/**
+ * Recorte de clientes por quién pregunta (G1): el rol Barbero ve SOLO los
+ * clientes que él atendió o tiene agendados; sin ficha ligada, ninguno.
+ * null = sin recorte (dueño, encargado, recepción, o un barbero con
+ * clients.edit por permiso personal). Ver clientsViewScope en own-visits.
+ */
+export function barberClientScopeWhere(
+  ctx: Pick<BarberContext, "role" | "user" | "barber">,
+): Prisma.BarberClientWhereInput | null {
+  return scopeClientsWhere(
+    clientsViewScope(scopeUserFromCtx(ctx)),
+  ) as Prisma.BarberClientWhereInput | null;
+}
+
+/** Añade el recorte por alcance a un where de clientes (sin pisar su AND). */
+function withClientScope(
+  ctx: Pick<BarberContext, "role" | "user" | "barber">,
+  where: Prisma.BarberClientWhereInput,
+): Prisma.BarberClientWhereInput {
+  const scope = barberClientScopeWhere(ctx);
+  if (!scope) return where;
+  const and = Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : [];
+  return { ...where, AND: [...and, scope] };
+}
+
+/** ¿Quien pregunta puede ver la ficha de este cliente? (misma barbería + alcance) */
+export async function barberCanSeeClient(ctx: BarberContext, clientId: string): Promise<boolean> {
+  if (!clientId) return false;
+  const n = await prisma.barberClient.count({
+    where: withClientScope(ctx, { id: clientId, barbershopId: ctx.barbershopId }),
+  });
+  return n > 0;
+}
 
 /**
  * ═══════════════════════════════════════════════════════════════════════
@@ -640,10 +675,12 @@ export async function listBarberClients(
   // SQL por nombre y luego reordenar por día daría una página con la gente
   // equivocada. En las demás vistas se pagina normal, en la base.
   const takeAll = birthdayOrder !== null;
+  // Rol Barbero: solo sus clientes (lista, búsqueda y cada filtro).
+  const scoped = withClientScope(ctx, where);
   const [total, rawRows] = await Promise.all([
-    prisma.barberClient.count({ where: { ...where, barbershopId } }),
+    prisma.barberClient.count({ where: { ...scoped, barbershopId } }),
     prisma.barberClient.findMany({
-      where: { ...where, barbershopId },
+      where: { ...scoped, barbershopId },
       select: CLIENT_SELECT,
       // nulls: "last" para que los que nunca han venido no encabecen la lista.
       orderBy: takeAll
@@ -884,8 +921,10 @@ export async function findBarberClient(
   clientId: string,
 ): Promise<BarberClientRow | null> {
   if (!clientId) return null;
+  // Con el recorte del rol Barbero: la ficha de un cliente que no es suyo
+  // «no existe» para él (ficha, historial, lealtad y fotos pasan por aquí).
   return prisma.barberClient.findFirst({
-    where: { id: clientId, barbershopId: ctx.barbershopId },
+    where: withClientScope(ctx, { id: clientId, barbershopId: ctx.barbershopId }),
     select: CLIENT_SELECT,
   });
 }
@@ -1052,7 +1091,7 @@ export async function lookupBarberClientByPhone(
   if (!phone) return { phone: null, client: null, blocked: false, blockReason: null };
 
   const row = await prisma.barberClient.findFirst({
-    where: { barbershopId: ctx.barbershopId, phone },
+    where: withClientScope(ctx, { barbershopId: ctx.barbershopId, phone }),
     select: CLIENT_SELECT,
   });
   if (!row) return { phone, client: null, blocked: false, blockReason: null };
@@ -1141,7 +1180,7 @@ export async function listBarberOutreach(
     if (!ids.length) return { kind: "birthday", month, days: null, targets: [], total: 0 };
 
     const rows = await prisma.barberClient.findMany({
-      where: { barbershopId, id: { in: ids }, blockedAt: null },
+      where: withClientScope(ctx, { barbershopId, id: { in: ids }, blockedAt: null }),
       select: CLIENT_SELECT,
       take: limit,
     });
@@ -1157,7 +1196,7 @@ export async function listBarberOutreach(
     Math.max(INACTIVE_DAYS_MIN, Math.floor(args.days ?? config.inactiveDays)),
   );
   const cutoff = inactiveCutoff(days);
-  const where: Prisma.BarberClientWhereInput = { barbershopId, ...inactiveWhere(cutoff) };
+  const where = withClientScope(ctx, { barbershopId, ...inactiveWhere(cutoff) });
   const [total, rows] = await Promise.all([
     prisma.barberClient.count({ where: { ...where, barbershopId } }),
     prisma.barberClient.findMany({
@@ -1385,6 +1424,8 @@ export async function listBarberClientPhotos(
   clientId: string,
   opts: { take?: number; appointmentId?: string | null } = {},
 ): Promise<BarberVisitPhotoView[]> {
+  // Rol Barbero: las fotos de un cliente que no es suyo no salen (ni firmadas).
+  if (barberClientScopeWhere(ctx) && !(await barberCanSeeClient(ctx, clientId))) return [];
   const where: Prisma.BarberVisitPhotoWhereInput = {
     barbershopId: ctx.barbershopId,
     clientId,

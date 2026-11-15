@@ -9,7 +9,12 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { hasBarberPermission } from "@/lib/barber/permissions";
-import { ownVisitsBarberId } from "@/lib/barber/own-visits";
+import {
+  BARBER_NOT_LINKED_MESSAGE,
+  agendaViewScope,
+  ownVisitsBarberId,
+  scopeUserFromCtx,
+} from "@/lib/barber/own-visits";
 import {
   addDaysISO,
   checkAppointmentSlot,
@@ -60,7 +65,13 @@ export async function GET(req: Request) {
   const fromUtc = shopLocalToUtc(dateISO, 0, timezone);
   const toUtc = shopLocalToUtc(addDaysISO(dateISO, days), 0, timezone);
 
-  const window = await loadAgendaWindow(shopId, fromUtc, toUtc);
+  // El rol Barbero ve SOLO su columna (y sin ficha ligada, nada): el recorte
+  // va en la consulta, así que de lo ajeno no viaja nada al navegador.
+  const scope = agendaViewScope(scopeUserFromCtx(ctx));
+  if (scope.kind === "none") {
+    return jsonError(BARBER_NOT_LINKED_MESSAGE, 403, { code: "BARBER_NOT_LINKED" });
+  }
+  const window = await loadAgendaWindow(shopId, fromUtc, toUtc, scope);
   const permUser = { role: ctx.role, permissionsOverride: ctx.user.permissionsOverride };
 
   // Qué visitas del rango YA pasaron por caja. Va aparte del DTO a

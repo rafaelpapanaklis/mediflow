@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { assertBarberPermission } from "@/lib/barber-auth";
+import { barberClientScopeWhere } from "@/lib/barber/clients";
 import { barberApiError, requireBarberApi } from "../_guard";
 
 export const dynamic = "force-dynamic";
@@ -27,10 +28,13 @@ export async function GET(req: Request) {
     const q = (url.searchParams.get("q") ?? "").trim();
     const digits = q.replace(/\D/g, "");
 
+    // Rol Barbero (con membresías por permiso personal): solo SUS clientes (G1).
+    const scope = barberClientScopeWhere(g.ctx);
     const clients = await prisma.barberClient.findMany({
       where: {
         barbershopId: g.ctx.barbershopId,
         blockedAt: null,
+        ...(scope ? { AND: [scope] } : {}),
         ...(q
           ? {
               OR: [

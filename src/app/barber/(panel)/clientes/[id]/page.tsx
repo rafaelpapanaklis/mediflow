@@ -5,6 +5,8 @@ import { getBarberPlan } from "@/lib/barber/plans";
 import { getBarberDict, getBarberT, resolveBarberLocale } from "@/i18n/dictionaries/barber";
 import type { Dictionary } from "@/i18n/t";
 import { getBarberClientDetail } from "@/lib/barber/loyalty";
+import { barberCanSeeClient, barberClientScopeWhere } from "@/lib/barber/clients";
+import { clientsViewScope, scopeUserFromCtx } from "@/lib/barber/own-visits";
 import { BarberClientDetailScreen } from "@/components/barber/clients/client-detail";
 
 export const dynamic = "force-dynamic";
@@ -30,7 +32,16 @@ export default async function Page(props: { params: Promise<{ id: string }> }) {
   const permUser = { role: ctx.role, permissionsOverride: ctx.user.permissionsOverride };
   const plan = await getBarberPlan(ctx.barbershop.plan);
 
-  if (plan.features.clients !== true || !hasBarberPermission(permUser, "clients.view")) {
+  // Rol Barbero: solo la ficha de SUS clientes (G1). La de otro → «Sin acceso».
+  const noAccess =
+    plan.features.clients !== true || !hasBarberPermission(permUser, "clients.view")
+      ? t("barber.clientes.errors.noPermission")
+      : clientsViewScope(scopeUserFromCtx(ctx)).kind === "none"
+        ? t("barber.clientes.errors.notLinked")
+        : barberClientScopeWhere(ctx) && !(await barberCanSeeClient(ctx, params.id))
+          ? t("barber.clientes.errors.notYourClient")
+          : null;
+  if (noAccess) {
     return (
       <div
         style={{
@@ -46,7 +57,7 @@ export default async function Page(props: { params: Promise<{ id: string }> }) {
           color: "var(--text-2)",
         }}
       >
-        {t("barber.clientes.errors.noPermission")}
+        {noAccess}
       </div>
     );
   }

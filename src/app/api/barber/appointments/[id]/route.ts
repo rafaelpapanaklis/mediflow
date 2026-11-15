@@ -25,6 +25,7 @@ import {
   totalServiceMinutes,
 } from "@/lib/barber/agenda";
 import { isTerminalAppointmentStatus } from "@/lib/barber/types";
+import { agendaViewScope, scopeAppointmentsWhere, scopeUserFromCtx } from "@/lib/barber/own-visits";
 import {
   APPOINTMENT_INCLUDE,
   asDate,
@@ -46,8 +47,10 @@ export async function GET(_req: Request, props: { params: Promise<{ id: string }
   const gate = await openAgendaGate({ permission: "agenda.view", feature: "agenda" });
   if (gate.response) return gate.response;
 
+  // El rol Barbero solo abre SUS visitas: una ajena es «no existe».
+  const scope = agendaViewScope(scopeUserFromCtx(gate.gate.ctx));
   const appt = await prisma.barberAppointment.findFirst({
-    where: { id: params.id, barbershopId: gate.gate.shopId },
+    where: { id: params.id, barbershopId: gate.gate.shopId, ...scopeAppointmentsWhere(scope) },
     include: APPOINTMENT_INCLUDE,
   });
   if (!appt) return jsonError("Esa visita no existe.", 404);

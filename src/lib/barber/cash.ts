@@ -43,6 +43,7 @@ import {
   type BarberContext,
 } from "@/lib/barber-auth";
 import { barberFeatureLabel } from "@/lib/barber/plan-shared";
+import { clientsViewScope, scopeClientsWhere, scopeUserFromCtx } from "@/lib/barber/own-visits";
 import type {
   BarberAppointmentStatus,
   BarberCommissionType,
@@ -678,6 +679,8 @@ export async function lookupClients(ctx: BarberContext, q: string, now: Date = n
   const term = (q ?? "").trim();
   if (term.length < 2) return [];
   const digits = term.replace(/\D/g, "");
+  // Rol Barbero (con caja por permiso personal): solo SUS clientes (G1).
+  const scope = scopeClientsWhere(clientsViewScope(scopeUserFromCtx(ctx))) as Prisma.BarberClientWhereInput | null;
   const rows = await prisma.barberClient.findMany({
     where: {
       barbershopId: ctx.barbershopId,
@@ -686,6 +689,7 @@ export async function lookupClients(ctx: BarberContext, q: string, now: Date = n
         { name: { contains: term, mode: "insensitive" } },
         ...(digits.length >= 3 ? [{ phone: { contains: digits } }] : []),
       ],
+      ...(scope ? { AND: [scope] } : {}),
     },
     orderBy: { name: "asc" },
     take: 8,

@@ -9,6 +9,7 @@ import { redirect } from "next/navigation";
 import { getBarberContext } from "@/lib/barber-auth";
 import { requireBarberPaidAccess } from "@/lib/barber/paid-access";
 import { hasBarberPermission } from "@/lib/barber/permissions";
+import { agendaViewScope, scopeUserFromCtx } from "@/lib/barber/own-visits";
 import { getBarberPlan } from "@/lib/barber/plans";
 import { barberPlanHasFeature } from "@/lib/barber/plan-shared";
 import { getBarberDict } from "@/i18n/dictionaries/barber";
@@ -44,6 +45,9 @@ export default async function BarberSchedulePage(
   const permUser = { role: ctx.role, permissionsOverride: ctx.user.permissionsOverride };
   if (!hasBarberPermission(permUser, "agenda.view")) {
     return <BarberAreaLocked reason="permission" areaKey="agenda" />;
+  }
+  if (agendaViewScope(scopeUserFromCtx(ctx)).kind === "none") {
+    return <BarberAreaLocked reason="unlinked" areaKey="agenda" />;
   }
 
   return (
