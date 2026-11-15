@@ -487,7 +487,9 @@
 .grid {
   display: grid;
   gap: 12px;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  /* min(…, 100%): en un celular de 320 la ficha de 320 px no cabía en el
+     ancho útil (296 px) y la página se iba 12 px de lado (ws6-t8). */
+  grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr));
 }
 
 .rowCard {
