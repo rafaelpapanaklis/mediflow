@@ -15,6 +15,7 @@ import { BarberModal } from "./modal";
 import { useBarberT } from "./use-barber-t";
 import { fmtMoney, fmtTime, fromCents, parseAmountText, ticketDiscountCents, toCents, PAYMENT_METHOD_KEYS, type TicketDiscountMode } from "./money";
 import { formatBarberPhone } from "@/lib/barber/phone-format";
+import { TicketNewClient } from "./ticket-new-client";
 
 interface Line {
   key: string;
@@ -128,6 +129,8 @@ export function TicketModal({
   const [client, setClient] = useState<ClientLookup | null>(appointment?.client ?? initialClient);
   const [query, setQuery] = useState("");
   const [suggestions, setSuggestions] = useState<ClientLookup[]>([]);
+  // Texto cuya búsqueda YA contestó (para decir «nadie coincide» solo cuando es verdad).
+  const [searched, setSearched] = useState("");
   const [lines, setLines] = useState<Line[]>(() =>
     productOrder && !appointment
       ? productOrder.items.map((it) => ({ key: nextKey(), kind: "product" as const, id: it.productId, name: it.name, qty: it.qty, unitPrice: it.unitPrice, frozen: true, stock: null, order: true }))
@@ -191,6 +194,7 @@ export function TicketModal({
         if (!res.ok) return;
         const data = (await res.json()) as { clients: ClientLookup[] };
         setSuggestions(data.clients);
+        setSearched(q);
       } catch {
         /* silencioso: es solo autocompletar */
       }
@@ -568,6 +572,14 @@ export function TicketModal({
                     ))}
                   </div>
                 )}
+                {query.trim().length >= 2 && searched === query.trim() && suggestions.length === 0 ? (
+                  <TicketNewClient
+                    key={searched}
+                    t={t}
+                    query={searched}
+                    onPicked={(c) => { setClient(c); setQuery(""); setSuggestions([]); setSearched(""); }}
+                  />
+                ) : null}
               </div>
             )}
           </div>
