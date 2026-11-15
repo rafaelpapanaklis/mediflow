@@ -428,6 +428,10 @@ export function TicketModal({
                     {client.activeMembership
                       ? ` · ${t("ticket.membershipActive", { name: client.activeMembership.name })} (${client.activeMembership.cutsLeft === null ? t("ticket.membershipUnlimited") : t("ticket.membershipCutsLeft", { count: client.activeMembership.cutsLeft })})`
                       : ""}
+                    {/* Próximo periodo ya pagado (D1): sus cortes se usan cuando empiece. */}
+                    {client.nextMembershipPeriod
+                      ? ` · ${t("ticket.membershipNext", { date: new Date(client.nextMembershipPeriod.startAt).toLocaleDateString("es-MX", { day: "numeric", month: "short", timeZone: "America/Mexico_City" }) })}`
+                      : ""}
                   </div>
                 </div>
                 <button type="button" className="btn-new btn-new--ghost btn-new--sm" onClick={() => setClient(null)}>{t("ticket.clientClear")}</button>

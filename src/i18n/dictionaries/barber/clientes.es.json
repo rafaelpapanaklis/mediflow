@@ -110,7 +110,9 @@
     "notesEmpty": "Sin notas.",
     "membershipUntil": "Membresía {name} hasta el {date}",
     "portalOn": "Este cliente puede entrar a su portal.",
-    "birthdayOn": "Cumple el {day} de {month}."
+    "birthdayOn": "Cumple el {day} de {month}.",
+    "membershipCutsLeft": "le quedan {left} de {total} cortes este periodo",
+    "membershipNext": "ya pagó el siguiente: del {date} al {until}, con sus propios cortes"
   },
   "block": {
     "block": "Bloquear cliente",

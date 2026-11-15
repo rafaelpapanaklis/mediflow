@@ -30,7 +30,7 @@ import type { BarberClientDTO } from "@/lib/barber/types";
 import { isLoyaltyLine, liveStars, manualStarsNet } from "@/lib/barber/loyalty-core";
 import { loadBonusCatalog } from "@/lib/barber/stars-core";
 // El sello interno de los tickets de mostrador nunca se enseña.
-import { stripSaleTag } from "@/lib/barber/memberships-core";
+import { pickCurrentPeriod, stripSaleTag, upcomingPeriods } from "@/lib/barber/memberships-core";
 import { clientsViewScope, scopeUserFromCtx } from "@/lib/barber/own-visits";
 
 /**
@@ -575,6 +575,8 @@ export interface BarberClientMembershipBadge {
   endAt: string;
   cutsUsed: number;
   includedCuts: number | null;
+  /** Periodos ya pagados que siguen al vigente (renovación anticipada, D1). */
+  nextPeriods?: Array<{ startAt: string; endAt: string }>;
 }
 
 export interface BarberClientDetail {
@@ -605,17 +607,23 @@ export async function getBarberClientDetail(
   const { client, state, config } = synced;
   const [history, membership, barbers] = await Promise.all([
     getBarberVisitHistory(ctx, clientId),
-    prisma.barberClientMembership.findFirst({
+    // Todas las filas vivas: el periodo vigente se elige con
+    // pickCurrentPeriod y los demás son «próximos periodos» (D1).
+    prisma.barberClientMembership.findMany({
       where: {
         barbershopId: ctx.barbershopId,
         clientId,
-        status: "ACTIVE",
+        status: { in: ["ACTIVE", "PAUSED"] },
         endAt: { gt: new Date() },
       },
-      orderBy: { endAt: "desc" },
+      orderBy: { startAt: "asc" },
       select: {
+        id: true,
+        status: true,
+        startAt: true,
         endAt: true,
         cutsUsed: true,
+        membershipId: true,
         membership: { select: { name: true, includedCuts: true } },
       },
     }),
@@ -632,14 +640,20 @@ export async function getBarberClientDetail(
     block: readBlockInfo(client.preferences),
     loyalty: state,
     history,
-    membership: membership
-      ? {
-          name: membership.membership?.name ?? "Membresía",
-          endAt: membership.endAt.toISOString(),
-          cutsUsed: membership.cutsUsed,
-          includedCuts: membership.membership?.includedCuts ?? null,
-        }
-      : null,
+    membership: (() => {
+      const now = new Date();
+      const current = pickCurrentPeriod(membership, now);
+      if (!current) return null;
+      return {
+        name: current.membership?.name ?? "Membresía",
+        endAt: current.endAt.toISOString(),
+        cutsUsed: current.cutsUsed,
+        includedCuts: current.membership?.includedCuts ?? null,
+        nextPeriods: upcomingPeriods(membership, now)
+          .filter((p) => p.membershipId === current.membershipId)
+          .map((p) => ({ startAt: p.startAt.toISOString(), endAt: p.endAt.toISOString() })),
+      };
+    })(),
     config,
     barbers: barbers.map((b) => ({ id: b.id, name: b.nickname || b.name })),
   };

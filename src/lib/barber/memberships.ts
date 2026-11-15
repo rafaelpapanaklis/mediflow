@@ -21,6 +21,8 @@ import {
   moneyToCents,
   nextPeriodEnd,
   pickCoveredLine,
+  pickCurrentPeriod,
+  upcomingPeriods,
   remainingCuts,
   BARBER_MEMBERSHIP_LINE_PREFIX,
   BARBER_CASH_MEMBERSHIP_SUFFIX,
@@ -280,6 +282,50 @@ export async function sweepExpiredMemberships(barbershopId: string): Promise<num
   return manual.count + auto.count;
 }
 
+// ── Cadenas de periodos (D1): un cliente + un plan = una membresía ──────
+
+type LiveRow = { id: string; clientId: string; membershipId: string; status: string; startAt: Date; endAt: Date; cutsUsed: number };
+
+interface Chain {
+  /** Periodo vigente (o el primero si ninguno ha empezado). */
+  current: LiveRow;
+  /** Periodos ya pagados que empiezan después del vigente. */
+  next: LiveRow[];
+  /** Fin del ÚLTIMO periodo pagado: con éste se decide «por vencer». */
+  lastEnd: Date;
+}
+
+const chainKey = (r: { clientId: string; membershipId: string }) => `${r.clientId}:${r.membershipId}`;
+
+/** Agrupa las filas vivas (ACTIVE/PAUSED sin vencer) por cliente + plan. */
+function buildChains(live: LiveRow[], now: Date): Map<string, Chain> {
+  const groups = new Map<string, LiveRow[]>();
+  for (const r of live) {
+    const k = chainKey(r);
+    const g = groups.get(k);
+    if (g) g.push(r);
+    else groups.set(k, [r]);
+  }
+  const out = new Map<string, Chain>();
+  for (const [k, rows] of groups) {
+    const sorted = [...rows].sort((a, b) => a.startAt.getTime() - b.startAt.getTime());
+    const current = pickCurrentPeriod(sorted, now) ?? sorted[0];
+    const next = sorted.filter((r) => r.id !== current.id && r.startAt.getTime() >= current.endAt.getTime());
+    const lastEnd = sorted.reduce((m, r) => (r.endAt > m ? r.endAt : m), current.endAt);
+    out.set(k, { current, next, lastEnd });
+  }
+  return out;
+}
+
+async function loadLiveChains(shopId: string, now: Date): Promise<Map<string, Chain>> {
+  const live = await prisma.barberClientMembership.findMany({
+    where: { barbershopId: shopId, status: { in: ["ACTIVE", "PAUSED"] }, endAt: { gt: now } },
+    select: { id: true, clientId: true, membershipId: true, status: true, startAt: true, endAt: true, cutsUsed: true },
+    take: 5000,
+  });
+  return buildChains(live, now);
+}
+
 /** Lista para el dueño. `soon` y `expired` son las dos con las que sale a cobrar. */
 export async function listClientMemberships(
   barbershopId: string,
@@ -291,15 +337,16 @@ export async function listClientMemberships(
   const now = new Date();
   const filter = opts.filter ?? "all";
   const q = (opts.q ?? "").trim();
+  const soonLimit = addDays(now, 7).getTime();
 
   const where: Prisma.BarberClientMembershipWhereInput = { barbershopId: shopId };
 
-  if (filter === "active") {
+  // «Vigentes» y «por vencer» se deciden por el ÚLTIMO periodo pagado de cada
+  // cadena (D1): quien ya renovó no está «por vencer». Por eso aquí solo se
+  // pide lo vivo y la ventana de 7 días se aplica abajo.
+  if (filter === "active" || filter === "soon") {
     where.status = "ACTIVE";
-    where.endAt = { gt: addDays(now, 7) };
-  } else if (filter === "soon") {
-    where.status = "ACTIVE";
-    where.endAt = { gt: now, lte: addDays(now, 7) };
+    where.endAt = { gt: now };
   } else if (filter === "expired") {
     where.OR = [{ status: "EXPIRED" }, { status: "ACTIVE", endAt: { lte: now } }];
   }
@@ -316,21 +363,55 @@ export async function listClientMemberships(
     where.AND = [search];
   }
 
-  const rows = await prisma.barberClientMembership.findMany({
-    where,
-    include: CLIENT_MEMBERSHIP_INCLUDE,
-    orderBy: [{ endAt: "asc" }],
-    take: Math.min(500, Math.max(1, opts.take ?? 200)),
-  });
+  const [rows, chains] = await Promise.all([
+    prisma.barberClientMembership.findMany({
+      where,
+      include: CLIENT_MEMBERSHIP_INCLUDE,
+      orderBy: [{ endAt: "asc" }],
+      take: Math.min(500, Math.max(1, opts.take ?? 200)),
+    }),
+    loadLiveChains(shopId, now),
+  ]);
 
-  return rows.map((r) => toClientMembershipView(r, now));
+  const out: BarberClientMembershipView[] = [];
+  for (const r of rows) {
+    const chain = chains.get(chainKey(r));
+    // Un periodo próximo no es una membresía aparte: viaja dentro del vigente.
+    if (chain && r.id !== chain.current.id && chain.next.some((n) => n.id === r.id)) continue;
+    // Un periodo vencido de una cadena que sigue viva no es «vencida».
+    if (filter === "expired" && chain) continue;
+    if (chain && r.id === chain.current.id) {
+      const lastEnd = chain.lastEnd.getTime();
+      if (filter === "active" && lastEnd <= soonLimit) continue;
+      if (filter === "soon" && lastEnd > soonLimit) continue;
+      const view = toClientMembershipView(r, now);
+      if (chain.next.length > 0) {
+        view.nextPeriods = chain.next.map((n) => ({
+          id: n.id,
+          startAt: n.startAt.toISOString(),
+          endAt: n.endAt.toISOString(),
+          includedCuts: r.membership.includedCuts,
+        }));
+        // Ya pagó lo que sigue: no está «por vencer».
+        view.urgency = membershipUrgency(
+          { status: r.status as BarberClientMembershipStatus, endAt: chain.lastEnd, cutsUsed: r.cutsUsed, includedCuts: r.membership.includedCuts },
+          now,
+        );
+      }
+      out.push(view);
+      continue;
+    }
+    if ((filter === "active" || filter === "soon") && !chain) continue;
+    out.push(toClientMembershipView(r, now));
+  }
+  return out;
 }
 
 export interface MembershipStats {
   activeCount: number;
   soonCount: number;
   expiredCount: number;
-  /** Ingreso recurrente comprometido: suma del precio de las vigentes. */
+  /** Ingreso recurrente comprometido: suma del precio de las vigentes (una vez por membresía, no por periodo). */
   committedRevenue: number;
 }
 
@@ -338,28 +419,44 @@ export async function getMembershipStats(barbershopId: string): Promise<Membersh
   const shopId = requireShop(barbershopId);
   const now = new Date();
 
-  const active = await prisma.barberClientMembership.findMany({
-    where: { barbershopId: shopId, status: "ACTIVE", endAt: { gt: now } },
-    select: { endAt: true, membership: { select: { price: true } } },
-  });
+  const [active, expired] = await Promise.all([
+    prisma.barberClientMembership.findMany({
+      where: { barbershopId: shopId, status: "ACTIVE", endAt: { gt: now } },
+      select: {
+        id: true,
+        clientId: true,
+        membershipId: true,
+        status: true,
+        startAt: true,
+        endAt: true,
+        cutsUsed: true,
+        membership: { select: { price: true } },
+      },
+    }),
+    prisma.barberClientMembership.findMany({
+      where: {
+        barbershopId: shopId,
+        OR: [{ status: "EXPIRED" }, { status: "ACTIVE", endAt: { lte: now } }],
+      },
+      select: { clientId: true, membershipId: true },
+      take: 5000,
+    }),
+  ]);
 
+  // Una membresía = una cadena (cliente + plan), tenga los periodos que tenga.
+  const chains = buildChains(active, now);
+  const priceById = new Map(active.map((a) => [a.id, a.membership.price.toString()]));
   const soonLimit = addDays(now, 7).getTime();
   let soonCount = 0;
   let committedCents = 0;
-  for (const m of active) {
-    if (m.endAt.getTime() <= soonLimit) soonCount++;
-    committedCents += moneyToCents(m.membership.price.toString());
+  for (const chain of chains.values()) {
+    if (chain.lastEnd.getTime() <= soonLimit) soonCount++;
+    committedCents += moneyToCents(priceById.get(chain.current.id) ?? "0");
   }
-
-  const expiredCount = await prisma.barberClientMembership.count({
-    where: {
-      barbershopId: shopId,
-      OR: [{ status: "EXPIRED" }, { status: "ACTIVE", endAt: { lte: now } }],
-    },
-  });
+  const expiredCount = expired.filter((e) => !chains.has(chainKey(e))).length;
 
   return {
-    activeCount: active.length,
+    activeCount: chains.size,
     soonCount,
     expiredCount,
     committedRevenue: committedCents / 100,
@@ -499,9 +596,12 @@ export async function sellMembership(args: {
 }
 
 /**
- * Renovación MANUAL (efectivo / SPEI / tarjeta en mostrador): extiende el
- * periodo y pone el contador de cortes en cero. Si todavía está vigente, el
- * periodo nuevo se encadena al final del actual (el cliente no pierde días).
+ * Renovación MANUAL (efectivo / SPEI / tarjeta en mostrador).
+ *  · Si todavía está vigente (D1, 15-nov): AGREGA un periodo nuevo —fila
+ *    propia— que empieza cuando termina el último pagado, con su propio cupo.
+ *    El periodo vigente conserva sus cortes; los del nuevo no se adelantan.
+ *    Cancelar ese ticket cancela solo ese periodo (si no se usó).
+ *  · Si ya venció: la misma fila arranca hoy con el cupo en cero.
  *
  * Igual que la venta: exige turno abierto y deja un ticket «Renovación de
  * membresía · …» por el precio ACTUAL del plan. El ticket guarda cómo estaba
@@ -551,6 +651,57 @@ export async function renewClientMembership(args: {
           );
         }
 
+        // Mismo candado que la venta: dos renovaciones a la vez del mismo
+        // cliente se ponen en fila y la segunda ve el periodo de la primera.
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`dcb:memsell:${shopId}:${row.clientId}`}))`;
+
+        // ── D1 (15-nov): ¿sigue vigente la cadena? Entonces se AGREGA un
+        //    periodo nuevo después del último pagado, con su propio cupo. El
+        //    periodo vigente no se toca: sus cortes siguen siendo suyos.
+        const chain = await tx.barberClientMembership.findMany({
+          where: {
+            barbershopId: shopId,
+            clientId: row.clientId,
+            membershipId: row.membershipId,
+            status: { in: ["ACTIVE", "PAUSED"] },
+            endAt: { gt: now },
+          },
+          select: { id: true, endAt: true },
+          orderBy: { endAt: "desc" },
+        });
+        if (chain.length > 0) {
+          const last = chain[0];
+          const startAt = last.endAt;
+          const endAt = computePeriodEnd(startAt, row.membership.periodDays);
+          const created = await tx.barberClientMembership.create({
+            data: {
+              barbershopId: shopId,
+              clientId: row.clientId,
+              membershipId: row.membershipId,
+              status: "ACTIVE",
+              startAt,
+              endAt,
+              cutsUsed: 0,
+              paymentMethod: args.paymentMethod,
+            },
+            include: CLIENT_MEMBERSHIP_INCLUDE,
+          });
+          const ticket = await createCounterTicketTx(tx, {
+            barbershopId: shopId,
+            soldByUserId: args.soldByUserId,
+            clientId: row.clientId,
+            description: membershipSaleLineDescription(row.membership.name, true),
+            amount: row.membership.price,
+            paymentMethod: args.paymentMethod,
+            tag: { k: "membership", op: "extend", cm: created.id, end: endAt.toISOString() },
+            now,
+            noSessionMessage: MEMBERSHIP_NEEDS_SESSION_MESSAGE,
+          });
+          return { ...toClientMembershipView(created, now), saleId: ticket.id };
+        }
+
+        // Ya vencida: no hay periodo vigente que cuidar; la misma fila vuelve a
+        // empezar hoy (como siempre), y cancelar el ticket la deja como estaba.
         const startAt = row.endAt.getTime() > now.getTime() ? row.endAt : now;
         const endAt = nextPeriodEnd(row.endAt, row.membership.periodDays, now);
 
@@ -605,13 +756,31 @@ export async function setClientMembershipStatus(args: {
   status: Extract<BarberClientMembershipStatus, "ACTIVE" | "PAUSED" | "CANCELLED">;
 }): Promise<void> {
   const shopId = requireShop(args.barbershopId);
-  const res = await prisma.barberClientMembership.updateMany({
+  const row = await prisma.barberClientMembership.findFirst({
     where: { id: args.clientMembershipId, barbershopId: shopId },
-    data: { status: args.status },
+    select: { id: true, clientId: true, membershipId: true },
   });
-  if (res.count === 0) {
+  if (!row) {
     throw new BarberMembershipError("NOT_FOUND", "No encontramos esa membresía.", 404);
   }
+  // Pausar, reactivar o cancelar va con la membresía ENTERA: el periodo
+  // vigente y los próximos ya pagados de la misma cadena (D1). Las vencidas
+  // y canceladas no se tocan.
+  await prisma.barberClientMembership.updateMany({
+    where: {
+      barbershopId: shopId,
+      OR: [
+        { id: row.id },
+        {
+          clientId: row.clientId,
+          membershipId: row.membershipId,
+          status: { in: ["ACTIVE", "PAUSED"] },
+          endAt: { gt: new Date() },
+        },
+      ],
+    },
+    data: { status: args.status },
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -669,14 +838,21 @@ export async function consumeMembershipCutTx(
   return res.count === 1;
 }
 
-/** La membresía vigente del cliente (o null). Decide el servidor, siempre. */
-export async function getActiveClientMembership(barbershopId: string, clientId: string) {
+/**
+ * El periodo VIGENTE de la membresía del cliente (o null). Decide el
+ * servidor, siempre. Con renovaciones anticipadas hay varias filas activas:
+ * la vigente es la que ya empezó (pickCurrentPeriod, D1); las demás son
+ * «próximos periodos» y no se gastan antes de tiempo.
+ */
+export async function getActiveClientMembership(barbershopId: string, clientId: string, now: Date = new Date()) {
   const shopId = requireShop(barbershopId);
-  return prisma.barberClientMembership.findFirst({
-    where: { barbershopId: shopId, clientId, status: "ACTIVE", endAt: { gt: new Date() } },
+  const rows = await prisma.barberClientMembership.findMany({
+    where: { barbershopId: shopId, clientId, status: { in: ["ACTIVE", "PAUSED", "EXPIRED"] }, endAt: { gt: addDays(now, -400) } },
     include: CLIENT_MEMBERSHIP_INCLUDE,
-    orderBy: { endAt: "desc" },
+    orderBy: { startAt: "asc" },
+    take: 50,
   });
+  return pickCurrentPeriod(rows, now);
 }
 
 function emptyCoverage(reason: MembershipCoverageResult["reason"]): MembershipCoverageResult {

@@ -9,6 +9,7 @@ import { isBarbershopSubscriptionActive } from "@/lib/barber/plan-shared";
 import { BARBER_FILES_BUCKET, canTransition } from "@/lib/barber/types";
 import { getLoyaltyRule, refreshLoyalty } from "@/lib/barber/loyalty-core";
 import { loadStarsView, type StarsView } from "@/lib/barber/stars-core";
+import { pickCurrentPeriod } from "@/lib/barber/memberships-core";
 import {
   BARBER_CANCEL_WINDOW_HOURS,
   BARBER_PORTAL_COOKIE,
@@ -430,7 +431,7 @@ export async function loadPortalData(args: {
     console.warn("[barber/portal] no se pudo armar la tarjeta de estrellas:", (e as Error).message);
   }
 
-  const [appointments, sales, photos, membership] = await Promise.all([
+  const [appointments, sales, photos, membershipRows] = await Promise.all([
     prisma.barberAppointment.findMany({
       where: { barbershopId, clientId },
       select: {
@@ -458,15 +459,24 @@ export async function loadPortalData(args: {
       orderBy: { createdAt: "desc" },
       take: 60,
     }),
-    prisma.barberClientMembership.findFirst({
+    // Todas las vivas: con renovaciones anticipadas (D1) hay un periodo por
+    // fila; el cliente ve el VIGENTE (no el último pagado, que aún no empieza).
+    prisma.barberClientMembership.findMany({
       where: { barbershopId, clientId, status: { in: ["ACTIVE", "PAUSED"] } },
       select: {
-        status: true, startAt: true, endAt: true, cutsUsed: true,
+        id: true, status: true, startAt: true, endAt: true, cutsUsed: true, membershipId: true,
         membership: { select: { name: true, includedCuts: true } },
       },
-      orderBy: { endAt: "desc" },
+      orderBy: { startAt: "asc" },
+      take: 24,
     }),
   ]);
+  const portalNow = new Date();
+  const membership =
+    pickCurrentPeriod(membershipRows, portalNow) ??
+    // Pausada (o sin periodo vigente): la más reciente, como antes.
+    [...membershipRows].sort((a, b) => b.endAt.getTime() - a.endAt.getTime())[0] ??
+    null;
 
   const signedByPhotoId = await signVisitPhotos(photos);
 
