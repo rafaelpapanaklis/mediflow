@@ -10,6 +10,7 @@ import {
 } from "@/lib/barber/support";
 import { assertBarberPermission } from "@/lib/barber-auth";
 import { BARBER_FILES_BUCKET } from "@/lib/barber/types";
+import { BarberPlanGateError, assertBarberSubscriptionActive } from "@/lib/barber/gating";
 import {
   limiteSubidasPorUsuario,
   pareceScriptOMarcado,
@@ -45,6 +46,24 @@ export async function POST(req: NextRequest) {
     if (!ctx) return barberUnauthorized();
     // Subir un archivo es parte de escribir en un ticket.
     assertBarberPermission(ctx, "support.manage");
+
+    // Sin suscripción al día NO se suben archivos. El ticket de TEXTO sí se
+    // puede abrir sin pagar (es la única salida de una barbería impaga): esa
+    // ruta es otra y no pasa por aquí.
+    try {
+      await assertBarberSubscriptionActive(ctx);
+    } catch (e) {
+      if (e instanceof BarberPlanGateError) {
+        return NextResponse.json(
+          {
+            error: "Para adjuntar archivos necesitas tu suscripción activa. Puedes mandar tu mensaje sin adjuntos.",
+            code: e.code,
+          },
+          { status: e.status },
+        );
+      }
+      throw e;
+    }
 
     const cabe = limiteSubidasPorUsuario(`barber:soporte:${ctx.barbershopId}:${ctx.barberUserId}`);
     if (!cabe) {

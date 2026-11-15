@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { barberApiError } from "@/lib/barber/branches";
 import { changeBarberSlug, checkSlugAvailability } from "@/lib/barber/settings";
-import { gateSettings, readJson, revalidateShopWeb } from "../_gate";
+import { gatePaidSubscription, gateSettings, readJson, revalidateShopWeb } from "../_gate";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +31,10 @@ export async function GET(req: NextRequest) {
 export async function PATCH(req: Request) {
   const gate = await gateSettings();
   if ("response" in gate) return gate.response;
+  // La dirección pública se elige con la suscripción al día: sin pagar no se
+  // aparta el nombre de nadie.
+  const unpaid = await gatePaidSubscription(gate.ctx);
+  if (unpaid) return unpaid;
   try {
     const body = await readJson(req);
     const change = await changeBarberSlug(gate.ctx, body.slug, body.confirm);

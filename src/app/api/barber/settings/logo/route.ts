@@ -5,7 +5,8 @@ import { barberApiError } from "@/lib/barber/branches";
 import { setBarberLogo } from "@/lib/barber/settings";
 import { validateMagicNumber } from "@/lib/validate-upload";
 import { BUCKETS } from "@/lib/storage";
-import { gateSettings, revalidateShopWeb } from "../_gate";
+import { prisma } from "@/lib/prisma";
+import { gatePaidSubscription, gateSettings, revalidateShopWeb } from "../_gate";
 import {
   limiteSubidasPorUsuario,
   pareceScriptOMarcado,
@@ -23,7 +24,9 @@ import {
    una URL firmada de TTL corto rompería la caché ISR de la página.
 
    Lo que cambia respecto a la subida de la mini-web: la puerta es
-   `settings.edit` y NO depende del plan (un Básico también tiene logo).
+   `settings.edit` y NO depende del plan (un Básico también tiene logo),
+   pero SÍ exige la suscripción al día (gatePaidSubscription). Y cada logo
+   nuevo quita del bucket el anterior, para no acumular huérfanos públicos.
 
    El navegador comprime antes (prepararFoto en components/barber/landing/
    imagen.ts): el tope de 4 MB de aquí es la última red, no la primera.
@@ -41,11 +44,56 @@ function admin() {
   });
 }
 
+/**
+ * El objeto del bucket al que apunta `logoUrl`, o null si no es nuestro.
+ *
+ * Solo cuenta un objeto dentro de la carpeta de logos de ESTA barbería
+ * (`barber/<barbershopId>/logo/`); una liga pegada a mano, de otra carpeta o
+ * de otra sede se deja en paz.
+ */
+function logoObjectPath(logoUrl: string | null | undefined, barbershopId: string): string | null {
+  if (!logoUrl) return null;
+  const folder = `barber/${barbershopId}/logo/`;
+  const prefix = `/${BUCKETS.CLINIC_PUBLIC}/${folder}`;
+  const idx = logoUrl.indexOf(prefix);
+  if (idx < 0) return null;
+  const name = logoUrl.slice(idx + prefix.length).split("?")[0];
+  // Un nombre plano (lo arma este mismo archivo): nada de subcarpetas ni "..".
+  if (!name || name.includes("/") || name.includes("..")) return null;
+  return folder + name;
+}
+
+/**
+ * Quita del bucket el logo que el registro de la barbería apuntaba ANTES.
+ * No es borrar datos: es no dejar huérfanos (cada subida es un objeto
+ * nuevo y público). Best-effort y con dos frenos:
+ *   · solo el objeto de nuestra carpeta (logoObjectPath);
+ *   · nunca si OTRA barbería apunta a la misma liga — al crear una sede se
+ *     le copia el logo de la matriz (src/lib/barber/branches.ts).
+ */
+async function removePreviousLogo(previous: string | null | undefined, barbershopId: string): Promise<void> {
+  const objeto = logoObjectPath(previous, barbershopId);
+  if (!objeto || !previous) return;
+  try {
+    const shared = await prisma.barbershop.count({
+      where: { logoUrl: previous, id: { not: barbershopId } },
+    });
+    if (shared > 0) return;
+    await admin().storage.from(BUCKETS.CLINIC_PUBLIC).remove([objeto]);
+  } catch (e) {
+    console.warn("[barber/settings/logo] no se pudo quitar el logo anterior:", e);
+  }
+}
+
 /** POST multipart { file } → sube, guarda logoUrl y devuelve la liga. */
 export async function POST(req: NextRequest) {
   const gate = await gateSettings();
   if ("response" in gate) return gate.response;
   const { ctx } = gate;
+
+  // Sin suscripción al día no se sube nada al bucket público.
+  const unpaid = await gatePaidSubscription(ctx);
+  if (unpaid) return unpaid;
 
   const cabe = limiteSubidasPorUsuario(`barber:logo:${ctx.barbershopId}:${ctx.barberUserId}`);
   if (!cabe) {
@@ -147,8 +195,10 @@ export async function POST(req: NextRequest) {
     if (!data?.publicUrl) {
       return NextResponse.json({ error: "No se pudo generar la liga del logo." }, { status: 500 });
     }
+    const previous = ctx.barbershop.logoUrl;
     const logoUrl = await setBarberLogo(ctx, data.publicUrl);
     revalidateShopWeb(ctx.barbershop.slug);
+    if (previous && previous !== logoUrl) await removePreviousLogo(previous, ctx.barbershopId);
     return NextResponse.json({ logoUrl });
   } catch (e) {
     return barberApiError(e, "settings/logo:POST");
@@ -165,18 +215,9 @@ export async function DELETE() {
     await setBarberLogo(ctx, null);
     revalidateShopWeb(ctx.barbershop.slug);
 
-    // Solo se toca un objeto que esté en NUESTRA carpeta de logos; una liga
-    // pegada a mano o de otra carpeta se deja en paz.
-    const prefix = `/${BUCKETS.CLINIC_PUBLIC}/barber/${ctx.barbershopId}/logo/`;
-    const idx = previous ? previous.indexOf(prefix) : -1;
-    if (previous && idx >= 0) {
-      const objeto = previous.slice(idx + prefix.length - `barber/${ctx.barbershopId}/logo/`.length);
-      try {
-        await admin().storage.from(BUCKETS.CLINIC_PUBLIC).remove([objeto.split("?")[0]]);
-      } catch (e) {
-        console.warn("[barber/settings/logo] no se pudo borrar el archivo anterior:", e);
-      }
-    }
+    // Mismos frenos que al reemplazarlo: solo nuestra carpeta y nunca si
+    // otra sede usa la misma liga.
+    await removePreviousLogo(previous, ctx.barbershopId);
     return NextResponse.json({ logoUrl: null });
   } catch (e) {
     return barberApiError(e, "settings/logo:DELETE");
