@@ -681,16 +681,34 @@ export async function applyBarberSubscription(
   return { applied: true, reason: "ok", shopId: shop.id, patch: { ...patch, subscriptionStatus: status } };
 }
 
-// ── Webhook: despacho de eventos (solo checkout.session.* y customer.subscription.*) ──
+// ── Webhook: despacho de eventos (checkout.session.*, customer.subscription.*, invoice.*) ──
+//
+// NO DEPENDE DE LA FORMA DEL EVENTO (15-nov-2026). El endpoint de barber se
+// crea en Stripe con una versión de API NUEVA (2025-02-24.acacia o
+// 2026-05-27.dahlia: Stripe ya no ofrece 2024-06-20 para endpoints nuevos).
+// En esas versiones el payload cambia de forma: invoice.subscription pasó a
+// invoice.parent.subscription_details, current_period_end a los items de la
+// suscripción, la línea de factura ya no trae `price`, la factura ya no trae
+// `payment_intent`… Por eso del evento se usa SOLO el tipo, el id del evento
+// y el id del objeto (sesión, suscripción o factura), y el objeto se RELEE
+// por la API con el cliente de barber (versión fijada en
+// BARBER_STRIPE_API_VERSION) antes de decidir nada. Las lecturas de
+// cobros-core.ts y de aquí aceptan además las dos formas, por si algún día se
+// sube la versión fijada. Si la relectura falla (red), se lanza → 500 y
+// Stripe reintenta; si el objeto ya no existe, se ignora con 200.
 
 /** Lo mínimo de Stripe que usa el despachador (inyectable en pruebas). */
 export interface BarberStripeReader {
   subscriptions: {
     retrieve(id: string, params?: Record<string, unknown>): Promise<unknown>;
   };
-  /** Para releer la factura viva; sin él se usa el payload del evento. */
-  invoices?: {
+  invoices: {
     retrieve(id: string, params?: Record<string, unknown>): Promise<unknown>;
+  };
+  checkout: {
+    sessions: {
+      retrieve(id: string, params?: Record<string, unknown>): Promise<unknown>;
+    };
   };
 }
 
@@ -706,21 +724,56 @@ export function isBarberWebhookEventType(type: string): boolean {
 
 const SUB_EXPAND = { expand: ["items.data.price"] };
 
-async function retrieveLiveSubscription(
-  stripe: BarberStripeReader,
-  id: string,
-  fallback: SubscriptionLike | null,
-): Promise<SubscriptionLike | null> {
+/** El id del objeto del evento: lo ÚNICO que se toma del payload. */
+export function eventObjectId(event: { data?: { object?: unknown } | null }): string | null {
+  const obj = event?.data?.object;
+  if (!obj || typeof obj !== "object") return null;
+  const id = (obj as { id?: unknown }).id;
+  return typeof id === "string" && id ? id : null;
+}
+
+function isResourceMissing(err: unknown): boolean {
+  const e = err as { code?: string; raw?: { code?: string }; statusCode?: number } | null;
+  return e?.code === "resource_missing" || e?.raw?.code === "resource_missing" || e?.statusCode === 404;
+}
+
+/** Relee un objeto; null si ya no existe en Stripe. Cualquier otro error se lanza (Stripe reintenta). */
+async function releer<T>(qué: string, id: string, leer: () => Promise<unknown>): Promise<T | null> {
   try {
-    return (await stripe.subscriptions.retrieve(id, SUB_EXPAND)) as SubscriptionLike;
+    return (await leer()) as T;
   } catch (err) {
-    console.warn("[barber webhook] no se pudo releer la suscripción; se usa el payload:", (err as Error)?.message);
-    return fallback;
+    if (isResourceMissing(err)) return null;
+    throw new Error(`No se pudo releer ${qué} ${id} en Stripe: ${(err as Error)?.message ?? err}`);
   }
 }
 
+async function retrieveLiveSubscription(stripe: BarberStripeReader, id: string): Promise<SubscriptionLike | null> {
+  return releer<SubscriptionLike>("la suscripción", id, () => stripe.subscriptions.retrieve(id, SUB_EXPAND));
+}
+
 /**
- * Procesa UN evento ya verificado. Nunca cobra; solo lee Stripe y escribe el
+ * La factura VIVA. Con la versión fijada se pide además el payment_intent
+ * (motivo del rechazo); en versiones nuevas ese campo ya no existe en la
+ * factura y expandirlo da error: entonces se relee sin expandir.
+ */
+async function retrieveLiveInvoice(stripe: BarberStripeReader, id: string): Promise<InvoiceLike | null> {
+  try {
+    return (await stripe.invoices.retrieve(id, { expand: ["payment_intent"] })) as InvoiceLike;
+  } catch (err) {
+    if (isResourceMissing(err)) return null;
+    return releer<InvoiceLike>("la factura", id, () => stripe.invoices.retrieve(id));
+  }
+}
+
+type SessionLike = {
+  id: string;
+  mode?: string | null;
+  metadata?: Record<string, string> | null;
+  subscription?: string | { id: string } | null;
+};
+
+/**
+ * Procesa UN evento ya verificado. Nunca cobra; relee el objeto y escribe el
  * estado absoluto. Los eventos ajenos (dental, T4, otros kinds) se ignoran
  * con handled=false. Lanza solo ante fallos transitorios (BD/red) para que
  * Stripe reintente.
@@ -732,48 +785,38 @@ export async function handleBarberStripeEvent(
   opts?: { plans?: ReadonlyArray<Pick<BarberResolvedPlan, "id" | "stripePriceIdMonthly" | "stripePriceIdYearly">> },
 ): Promise<BarberWebhookOutcome> {
   if (!isBarberWebhookEventType(event.type)) return { handled: false, action: "ignored-type" };
+  const objectId = eventObjectId(event);
+  if (!objectId) return { handled: false, action: "no-object-id" };
 
   if (event.type.startsWith("invoice.")) {
-    return handleBarberInvoiceEvent(stripe, db, event, opts);
+    return handleBarberInvoiceEvent(stripe, db, event.type, objectId, opts);
   }
 
   if (event.type.startsWith("checkout.session.")) {
-    const session = event.data.object as {
-      id: string;
-      mode?: string;
-      metadata?: Record<string, string> | null;
-      subscription?: string | { id: string } | null;
-    };
-    if (session.metadata?.dc_kind !== BARBER_STRIPE_KIND) return { handled: false, action: "not-barber" };
     if (event.type !== "checkout.session.completed" && event.type !== "checkout.session.async_payment_succeeded") {
       // expired / async_payment_failed: nada que activar; la barbería sigue
       // en pending_payment y puede reintentar desde /barber/suscripcion.
-      return { handled: true, action: "noop" };
+      return { handled: false, action: "noop" };
     }
+    const session = await releer<SessionLike>("la sesión de pago", objectId, () =>
+      stripe.checkout.sessions.retrieve(objectId),
+    );
+    if (!session) return { handled: false, action: "checkout:not-found" };
+    if (session.metadata?.dc_kind !== BARBER_STRIPE_KIND) return { handled: false, action: "not-barber" };
     const subId = typeof session.subscription === "string" ? session.subscription : session.subscription?.id ?? null;
     if (!subId) return { handled: true, action: "no-subscription" };
-    const sub = await retrieveLiveSubscription(stripe, subId, null);
+    const sub = await retrieveLiveSubscription(stripe, subId);
     if (!sub) throw new Error(`Suscripción ${subId} no recuperable`);
     const result = await applyBarberSubscription(db, sub, { plans: opts?.plans });
     return { handled: result.applied, action: `checkout:${result.reason}`, shopId: result.shopId };
   }
 
   // customer.subscription.created | updated | deleted | paused | resumed | …
-  const payload = event.data.object as SubscriptionLike;
-  if (!isBarberSubscription(payload)) return { handled: false, action: "not-barber" };
-  const live = (await retrieveLiveSubscription(stripe, payload.id, payload)) ?? payload;
+  const live = await retrieveLiveSubscription(stripe, objectId);
+  if (!live) return { handled: false, action: "subscription:not-found" };
+  if (!isBarberSubscription(live)) return { handled: false, action: "not-barber" };
   const result = await applyBarberSubscription(db, live, { plans: opts?.plans });
   return { handled: result.applied, action: `subscription:${result.reason}`, shopId: result.shopId };
-}
-
-async function retrieveLiveInvoice(stripe: BarberStripeReader, id: string): Promise<InvoiceLike | null> {
-  if (!stripe.invoices) return null;
-  try {
-    return (await stripe.invoices.retrieve(id, { expand: ["payment_intent"] })) as InvoiceLike;
-  } catch (err) {
-    console.warn("[barber webhook] no se pudo releer la factura; se usa el payload:", (err as Error)?.message);
-    return null;
-  }
 }
 
 /**
@@ -782,21 +825,23 @@ async function retrieveLiveInvoice(stripe: BarberStripeReader, id: string): Prom
  * y vuelve a aplicar la suscripción, porque el pago es justo lo que reabre
  * una barbería suspendida (y el rechazo, lo que la deja past_due). Las
  * facturas del dental y de las membresías de T4 se ignoran por su marca.
+ * Todo sale de la factura RELEÍDA (importe, periodo, suscripción, barbería).
  */
 async function handleBarberInvoiceEvent(
   stripe: BarberStripeReader,
   db: BarberBillingDb,
-  event: { id: string; type: string; data: { object: unknown } },
+  eventType: string,
+  invoiceId: string,
   opts?: { plans?: ReadonlyArray<Pick<BarberResolvedPlan, "id" | "stripePriceIdMonthly" | "stripePriceIdYearly">> },
 ): Promise<BarberWebhookOutcome> {
-  if (!(BARBER_INVOICE_EVENTS as readonly string[]).includes(event.type)) {
+  if (!(BARBER_INVOICE_EVENTS as readonly string[]).includes(eventType)) {
     return { handled: false, action: "ignored-type" };
   }
-  const payload = event.data.object as InvoiceLike;
-  if (!payload?.id || !esFacturaBarber(payload)) return { handled: false, action: "not-barber" };
-
   // La factura VIVA manda (un rechazo que llega después del pago no lo deshace).
-  const invoice = (await retrieveLiveInvoice(stripe, payload.id)) ?? payload;
+  const invoice = await retrieveLiveInvoice(stripe, invoiceId);
+  if (!invoice) return { handled: false, action: "invoice:not-found" };
+  if (!esFacturaBarber(invoice)) return { handled: false, action: "not-barber" };
+
   const shop = await resolveBarbershopForSubscription(db, {
     id: facturaSubscriptionId(invoice) ?? "",
     status: "",
@@ -815,12 +860,12 @@ async function handleBarberInvoiceEvent(
     );
   }
 
-  const cobro = leerCobroDeFactura(invoice, event.type);
+  const cobro = leerCobroDeFactura(invoice, eventType);
   const saved = cobro && db.cobros ? await db.cobros.guardarCobro(shop.id, cobro) : "sin-registro";
 
   const subId = facturaSubscriptionId(invoice);
   if (subId) {
-    const sub = await retrieveLiveSubscription(stripe, subId, null);
+    const sub = await retrieveLiveSubscription(stripe, subId);
     if (sub) await applyBarberSubscription(db, sub, { plans: opts?.plans });
   }
   return { handled: true, action: `invoice:${cobro?.status ?? "noop"}:${saved}`, shopId: shop.id };

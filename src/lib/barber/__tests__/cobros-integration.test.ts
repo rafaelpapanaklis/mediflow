@@ -150,6 +150,9 @@ before(async () => {
     if (!inv) throw Object.assign(new Error("No such invoice"), { code: "resource_missing" });
     return inv;
   };
+  stripe.checkout.sessions.retrieve = async (id: string) => {
+    throw Object.assign(new Error(`No such checkout session: ${id}`), { code: "resource_missing" });
+  };
 });
 
 after(async () => {
@@ -209,18 +212,19 @@ test("un rechazo que llega DESPUÉS del pago no deshace el cobro", { skip }, asy
   const sub = suscripcion(`sub_${RUN}_orden`, shop.id, shop.stripeCustomerId!);
   const pagada = factura(`in_${RUN}_orden`, sub);
   await enviar("invoice.paid", pagada);
-  // Stripe no garantiza el orden: el payment_failed viejo llega al final. La
-  // factura VIVA ya está pagada, y aunque no se pudiera releer, la fila no baja.
+  // Stripe no garantiza el orden: el payment_failed viejo llega al final. Del
+  // evento solo se toma el id: la factura RELEÍDA ya está pagada.
   await enviar("invoice.payment_failed", { ...pagada, status: "open" });
-  invoices.delete(pagada.id); // sin factura viva: manda el payload
-  await enviar("invoice.payment_failed", { ...pagada, status: "open", amount_paid: 0 });
+  invoices.delete(pagada.id); // ya no existe en Stripe: se ignora con 200, la fila no baja
+  const r = await enviar("invoice.payment_failed", { ...pagada, status: "open", amount_paid: 0 });
+  assert.deepEqual([r.status, r.body.action], [200, "invoice:not-found"]);
   const f = await filas(shop.id);
   assert.deepEqual([f.length, f[0].status, f[0].amount_cents], [1, "paid", 74900]);
 });
 
 test("las facturas del dental no se registran (misma cuenta de Stripe)", { skip }, async () => {
-  const antes = await prisma.$queryRawUnsafe<any[]>(`SELECT count(*)::int AS n FROM barber_subscription_payments`);
-  const r = await enviar("invoice.paid", {
+  // La factura del dental, como la devuelve Stripe al releerla.
+  invoices.set(`in_${RUN}_dental`, {
     id: `in_${RUN}_dental`,
     status: "paid",
     customer: "cus_dental",
@@ -229,11 +233,16 @@ test("las facturas del dental no se registran (misma cuenta de Stripe)", { skip 
     amount_paid: 59900,
     lines: { data: [{ amount: 59900, price: { id: "price_dental", recurring: { interval: "month" }, metadata: {} } }] },
   });
+  const r = await enviar("invoice.paid", { id: `in_${RUN}_dental`, object: "invoice" });
   assert.equal(r.status, 200);
   assert.equal(r.body.handled, false);
   assert.equal(r.body.action, "not-barber");
-  const despues = await prisma.$queryRawUnsafe<any[]>(`SELECT count(*)::int AS n FROM barber_subscription_payments`);
-  assert.equal(despues[0].n, antes[0].n);
+  // Acotado a SU factura: otras suites escriben a la vez en esta misma base.
+  const rastro = await prisma.$queryRawUnsafe<any[]>(
+    `SELECT count(*)::int AS n FROM barber_subscription_payments WHERE stripe_invoice_id = $1`,
+    `in_${RUN}_dental`,
+  );
+  assert.equal(rastro[0].n, 0);
 });
 
 test("factura de barber que no encuentra su barbería → 500 (Stripe reintenta) y, cuando aparece, se registra", { skip }, async () => {

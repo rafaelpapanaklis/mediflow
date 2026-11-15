@@ -36,6 +36,12 @@ export const dynamic = "force-dynamic";
  * el mismo cobro, idempotente) pero no hace falta marcarlo.
  * T4 escucha payment_intent.* (y los de sus membresías): sin solape.
  *
+ * VERSIÓN DE API DEL ENDPOINT: cualquiera (2025-02-24.acacia, 2026-05-27.
+ * dahlia…). Del evento solo se usa el tipo, su id y el id del objeto; el
+ * objeto se RELEE con el cliente de barber (versión fijada) antes de decidir.
+ * Lo que no lleva la marca de barber (el DENTAL vive en la misma cuenta) se
+ * ignora con 200 y sin escribir nada. Ver handleBarberStripeEvent.
+ *
  * Idempotente por construcción: no cobra; relee la suscripción (o la
  * factura) viva y escribe su estado absoluto; un cobro se guarda una sola vez
  * por id de factura (ver handleBarberStripeEvent). Un evento
