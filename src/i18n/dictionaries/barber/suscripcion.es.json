@@ -68,6 +68,7 @@
     "yearlyEquivalent": "≈ {amount} al mes",
     "firstMonth": "Primer mes {amount}",
     "current": "Plan actual",
+    "yourPlan": "Tu plan",
     "contract": "Contratar",
     "change": "Cambiar a este plan",
     "lockedIntervalMonth": "Tu suscripción es mensual: el cambio de plan conserva ese ciclo.",
