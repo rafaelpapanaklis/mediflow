@@ -359,6 +359,8 @@
     "typeSALE": "Sale",
     "movementQty": "Quantity",
     "movementAdjustHint": "Enter the real counted stock; the system records the difference.",
+    "movementInHint": "How many pieces come in (positive number): they are added to the stock.",
+    "movementOutHint": "How many pieces go out (positive number): they are taken off the stock.",
     "movementNewStock": "Real counted stock",
     "movementReason": "Reason",
     "movementReasonPlaceholder": "E.g. supplier purchase, damaged product…",

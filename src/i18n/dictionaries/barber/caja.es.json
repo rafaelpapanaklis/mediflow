@@ -359,6 +359,8 @@
     "typeSALE": "Venta",
     "movementQty": "Cantidad",
     "movementAdjustHint": "Captura el stock real contado; el sistema registra la diferencia.",
+    "movementInHint": "Cuántas piezas entran (número positivo): se suman al stock.",
+    "movementOutHint": "Cuántas piezas salen (número positivo): se restan del stock.",
     "movementNewStock": "Stock real contado",
     "movementReason": "Motivo",
     "movementReasonPlaceholder": "Ej. compra a proveedor, producto dañado…",
