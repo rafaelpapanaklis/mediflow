@@ -1,13 +1,15 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
+import { failbanGuard, persistentRateLimit, recordAuthFailure } from "@/lib/failban";
+import { esCorreoYaRegistrado, traducirErrorDeAuth } from "@/lib/auth/errores-contrasena";
 import { BARBER_DEFAULT_SERVICES, makeBarberSlug } from "@/lib/barber/types";
 import { normalizeBarberPhone } from "@/lib/barber/phone-countries";
 
 // Alta pública de barbería (DaleControl Barber) — espejo de
 // /api/laboratorios/auth/register. Crea el usuario en Supabase Auth y, en UNA
 // transacción Prisma: Barbershop + BarberUser OWNER + siembra del catálogo
-// BARBER_DEFAULT_SERVICES. NO inicia sesión (el cliente redirige a /login).
+// BARBER_DEFAULT_SERVICES. NO inicia sesión (el cliente manda a /barber/entrar).
 // Estado inicial de suscripción = igual al dental: sin trial →
 // "pending_payment" (default del schema; se setea explícito por claridad).
 
@@ -21,35 +23,30 @@ function getAdminClient() {
   );
 }
 
-// ── Rate-limit básico in-memory por IP. Ventana 60s, máx 5 intentos. ──────
-// Se reinicia con cada cold start del runtime; suficiente como freno
-// anti-abuso del endpoint público de registro (no es una garantía dura).
-const RATE_LIMIT_WINDOW_MS = 60_000;
-const RATE_LIMIT_MAX = 5;
-const rateLimitStore = new Map<string, { count: number; resetAt: number }>();
-
-function isRateLimited(ip: string): boolean {
-  const now = Date.now();
-  const entry = rateLimitStore.get(ip);
-  if (!entry || now > entry.resetAt) {
-    rateLimitStore.set(ip, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
-    return false;
-  }
-  entry.count += 1;
-  return entry.count > RATE_LIMIT_MAX;
-}
+// ── Freno del alta: el PERSISTENTE del dental (src/lib/failban.ts) ────────
+// Antes era un Map en memoria: en Vercel cada instancia tiene el suyo y se
+// vacía en cada arranque en frío, así que no frenaba nada (auditoría de
+// seguridad 14-nov, G3 y M5). Ahora son las mismas dos piezas que usa
+// /api/auth/register, reutilizadas por import:
+//   · persistentRateLimit — ventana deslizante por IP (Upstash si está
+//     configurado; si no, memoria, igual que en el dental).
+//   · failbanGuard + recordAuthFailure — bloqueo con espera creciente tras
+//     varios fallos seguidos. «Ese correo ya tiene cuenta» cuenta como fallo:
+//     es lo que frena usar el alta para averiguar qué correos existen.
+//
+// 5 por minuto por IP es el MISMO número que tenía el freno anterior; lo que
+// cambia es que ahora se cumple. (El dental usa 15: AUTH_FLOOD_RATE_LIMIT.)
+const BARBER_REGISTER_RATE_LIMIT = { limit: 5, windowSec: 60 } as const;
+const LOCKOUT_SCOPE = "barber-register";
 
 const TEAM_SIZES = new Set(["1", "2-3", "4-5", "6+"]);
 
-export async function POST(req: Request) {
-  // a) Rate-limit por IP.
-  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
-  if (isRateLimited(ip)) {
-    return NextResponse.json(
-      { error: "Demasiados intentos. Espera un minuto e intenta de nuevo." },
-      { status: 429 }
-    );
-  }
+export async function POST(req: NextRequest) {
+  // a) Freno por IP y bloqueo por fallos (el correo aún no se ha leído).
+  const flood = await persistentRateLimit(req, BARBER_REGISTER_RATE_LIMIT);
+  if (flood) return flood;
+  const locked = await failbanGuard(req, { scope: LOCKOUT_SCOPE });
+  if (locked) return locked;
 
   // b) Parseo + validación.
   let body: unknown;
@@ -117,25 +114,45 @@ export async function POST(req: Request) {
   });
 
   if (createError || !created?.user) {
-    const msg = createError?.message ?? "";
-    if (msg.includes("already been registered") || msg.includes("already exists")) {
-      return NextResponse.json({ error: "Este email ya tiene una cuenta." }, { status: 400 });
+    // Todo fallo al crear la cuenta cuenta para el bloqueo (IP y correo).
+    await recordAuthFailure(req, { scope: LOCKOUT_SCOPE, account: email });
+    if (esCorreoYaRegistrado(createError)) {
+      // `code` es para el formulario: con él pinta «Iniciar sesión» y
+      // «Recuperar contraseña» junto al error (G5: sin esas salidas lo
+      // natural era registrarse otra vez con otro correo).
+      return NextResponse.json(
+        {
+          error: "Este correo ya tiene una cuenta. Inicia sesión o recupera tu contraseña.",
+          code: "EMAIL_TAKEN",
+        },
+        { status: 400 },
+      );
     }
-    return NextResponse.json({ error: msg || "No se pudo crear la cuenta." }, { status: 400 });
+    // Supabase contesta en inglés y con detalle interno: su mensaje se queda
+    // en el log y al navegador solo sale un texto nuestro, en español
+    // (contraseña filtrada o débil, correo inválido… o el de respaldo).
+    console.error("[barber-register] createUser falló:", createError?.message ?? "sin usuario");
+    return NextResponse.json(
+      { error: traducirErrorDeAuth(createError, "No se pudo crear la cuenta. Intenta de nuevo.") },
+      { status: 400 },
+    );
   }
 
-  // d) Slug único (con retries; sufijo aleatorio si el nombre choca).
-  let slug = makeBarberSlug(shopName);
-  for (let attempt = 0; attempt < 5; attempt++) {
-    const existing = await prisma.barbershop.findUnique({ where: { slug }, select: { id: true } });
-    if (!existing) break;
-    const suffix = Math.random().toString(36).slice(2, 6);
-    slug = `${makeBarberSlug(shopName)}-${suffix}`;
-  }
-
-  // e) Barbershop + BarberUser OWNER + catálogo semilla, en UNA transacción.
+  // d) + e) Slug único y alta, DENTRO del mismo try: si la base falla al
+  // buscar el slug, el usuario de Supabase recién creado también se deshace
+  // (antes quedaba huérfano y esa persona ya no podía registrarse).
   let shopId: string;
   try {
+    // Slug único (con retries; sufijo aleatorio si el nombre choca).
+    let slug = makeBarberSlug(shopName);
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const existing = await prisma.barbershop.findUnique({ where: { slug }, select: { id: true } });
+      if (!existing) break;
+      const suffix = Math.random().toString(36).slice(2, 6);
+      slug = `${makeBarberSlug(shopName)}-${suffix}`;
+    }
+
+    // Barbershop + BarberUser OWNER + catálogo semilla, en UNA transacción.
     shopId = await prisma.$transaction(async (tx) => {
       const shop = await tx.barbershop.create({
         data: {
@@ -206,6 +223,6 @@ export async function POST(req: Request) {
     console.error("[barber-register] atribución de socio (ignorada)", err);
   }
 
-  // h) Éxito. El cliente redirige a /login (login compartido).
+  // h) Éxito. El cliente manda a /barber/entrar (la entrada del vertical).
   return NextResponse.json({ ok: true }, { status: 201 });
 }

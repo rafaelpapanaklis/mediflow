@@ -99,6 +99,11 @@ export function TeamClient({
 
   const assignableRoles = team.canAssignOwner ? ROLES : ROLES.filter((r) => r !== "OWNER");
 
+  /** Fila de un dueño vista por alguien que no lo es: solo se mira. */
+  function ownerLocked(m: BarberMemberRow): boolean {
+    return m.role === "OWNER" && team.selfRole !== "OWNER";
+  }
+
   async function submitInvite() {
     if (!invite) return;
     const ok = await run(async () => {
@@ -225,33 +230,43 @@ export function TeamClient({
                     </Chip>
                   ) : null}
                 </div>
+                {/* A un dueño solo lo cambia otro dueño (el servidor contesta
+                    403: team.ts, assertCanTouchMember). Quien no lo es no ve
+                    Permisos ni Editar —la baja vive dentro de Editar— sobre
+                    esa fila, en vez de botones que fallan al guardar. */}
                 <div className={s.rowActions}>
-                  <Btn size="sm" onClick={() => setPermsFor(m)}>
-                    <KeyRound size={13} />
-                    {t("team.permissionsBtn")}
-                  </Btn>
+                  {ownerLocked(m) ? (
+                    <Chip tone="muted">{t("team.ownerOnlyNote")}</Chip>
+                  ) : (
+                    <Btn size="sm" onClick={() => setPermsFor(m)}>
+                      <KeyRound size={13} />
+                      {t("team.permissionsBtn")}
+                    </Btn>
+                  )}
                   {team.multiBranch && team.canManageBranches ? (
                     <Btn size="sm" onClick={() => setBranchesFor(m)}>
                       <Building2 size={13} />
                       {t("team.branchesBtn")}
                     </Btn>
                   ) : null}
-                  <Btn
-                    size="sm"
-                    onClick={() =>
-                      setEdit({
-                        id: m.id,
-                        firstName: m.firstName,
-                        lastName: m.lastName,
-                        role: m.role,
-                        barberId: m.barberId ?? "",
-                        isActive: m.isActive,
-                      })
-                    }
-                  >
-                    <Pencil size={13} />
-                    {t("common.edit")}
-                  </Btn>
+                  {ownerLocked(m) ? null : (
+                    <Btn
+                      size="sm"
+                      onClick={() =>
+                        setEdit({
+                          id: m.id,
+                          firstName: m.firstName,
+                          lastName: m.lastName,
+                          role: m.role,
+                          barberId: m.barberId ?? "",
+                          isActive: m.isActive,
+                        })
+                      }
+                    >
+                      <Pencil size={13} />
+                      {t("common.edit")}
+                    </Btn>
+                  )}
                 </div>
               </div>
             </article>
@@ -519,6 +534,7 @@ export function TeamClient({
           roleLabel={roleLabel(permsFor.role)}
           advancedRoles={team.advancedRoles}
           planName={team.planName}
+          ownPermissions={team.selfPermissions}
           onClose={() => setPermsFor(null)}
           onSaved={upsert}
         />

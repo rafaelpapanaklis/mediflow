@@ -18,7 +18,7 @@ import { TeamClient } from "@/components/barber/team/team-client";
  */
 export default async function Page() {
   const ctx = await getBarberContext();
-  if (!ctx) redirect("/login");
+  if (!ctx) redirect("/barber/entrar");
   await requireBarberPaidAccess(ctx);
 
   const permUser = { role: ctx.role, permissionsOverride: ctx.user.permissionsOverride };

@@ -21,7 +21,7 @@ import { InicioView } from "@/components/barber/dashboard/inicio-view";
  */
 export default async function Page() {
   const ctx = await getBarberContext();
-  if (!ctx) redirect("/login");
+  if (!ctx) redirect("/barber/entrar");
   await requireBarberPaidAccess(ctx);
 
   const plan = await getBarberPlan(ctx.barbershop.plan);

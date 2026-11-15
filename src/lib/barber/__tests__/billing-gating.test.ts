@@ -46,9 +46,12 @@ import {
 } from "@/lib/barber/plan-shared";
 import { BARBER_NAV_ITEMS } from "@/lib/barber/types";
 
-test("menú impago: solo la sección cuenta sin Configuración (camino claro a pagar)", () => {
+test("menú impago: solo dónde se paga y a quién pedirle ayuda", () => {
   const nav = barberNavItemsWhileUnpaid(BARBER_NAV_ITEMS);
-  assert.deepEqual(nav.map((i) => i.key), ["suscripcion"]);
+  // Soporte SIEMPRE: quien no logra pagar tiene que poder escribirnos (G4).
+  assert.deepEqual(nav.map((i) => i.key), ["suscripcion", "soporte"]);
+  // Las dos son las pantallas exentas del candado de pago: ninguna redirige.
+  assert.deepEqual(nav.map((i) => i.href), ["/barber/suscripcion", "/barber/soporte"]);
 });
 
 // ── Planes SINTÉTICOS (números distintos del seed a propósito) ───────────

@@ -23,7 +23,7 @@
     "resume": "Resume subscription",
     "payOpenInvoice": "Pay open invoice",
     "stripeError": "We could not read your subscription from Stripe right now. The plans below are still available.",
-    "notConfigured": "Online billing is not connected yet. Contact support to activate your plan.",
+    "notConfigured": "Online billing is not connected yet. Message us and we will activate your plan.",
     "onlyOwner": "Only the barbershop owner can contract, change or cancel the plan."
   },
   "alerts": {
@@ -46,6 +46,13 @@
     "cancelDoneNoDate": "Cancellation scheduled. Your plan stays active until the end of the paid period.",
     "resumeDone": "Your subscription stays active and will renew normally.",
     "goToPanel": "Go to the panel"
+  },
+  "chosen": {
+    "title": "You picked the {plan} plan",
+    "bodyContract": "{amount} per month. Pay by card and your panel opens as soon as the payment is confirmed.",
+    "bodyChange": "You are on the {current} plan today. We show you how your charge changes before you confirm.",
+    "contract": "Get {plan}",
+    "change": "Switch to {plan}"
   },
   "plans": {
     "title": "Plans",
@@ -160,9 +167,13 @@
     "authentication_required": "Your bank asked to authenticate the charge: pay the open invoice from “Update card” and try again.",
     "declined": "Your bank declined the charge; check your payment method and try again."
   },
+  "support": {
+    "goToSupport": "Go to Support",
+    "whatsapp": "WhatsApp {number}"
+  },
   "errors": {
-    "generic": "Something failed. Try again in a moment.",
+    "generic": "Something failed. Try again in a moment; if it keeps happening, message us and we will sort it out with you.",
     "alreadySubscribed": "You already have an active subscription: switch plans here or pay the open invoice.",
-    "notConfigured": "Online billing is not connected yet. Contact support."
+    "notConfigured": "Online billing is not connected yet. Message us and we will activate your plan."
   }
 }

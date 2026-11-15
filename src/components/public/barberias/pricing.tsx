@@ -5,6 +5,7 @@ import { barberFeatureLabel, isBarberUnlimited } from "@/lib/barber/plan-shared"
 import {
   BARBER_LANDING_ANCHORS,
   BARBER_REGISTER_PATH,
+  barberPathWithPlan,
   type BarberPlanCardVM,
 } from "@/lib/barber/marketing";
 import { OficioNavaja, OficioTijeras } from "./oficio";
@@ -76,8 +77,10 @@ export function BarberPricing({ t, cards }: { t: TFunction; cards: BarberPlanCar
                     </p>
                   ) : null}
                 </div>
+                {/* El plan elegido viaja en ?plan= hasta Suscripción: quien
+                    ya tiene cuenta cae directo ahí con su plan a la vista. */}
                 <Link
-                  href={BARBER_REGISTER_PATH}
+                  href={barberPathWithPlan(BARBER_REGISTER_PATH, c.id)}
                   className={`dcbl-btn dcbl-btn--block ${c.recommended ? "dcbl-btn--primary" : "dcbl-btn--light"}`}
                 >
                   {t("pricing.cta", { plan: c.name })}

@@ -15,11 +15,14 @@
     "comisiones": "Comisiones",
     "membresias": "Membresías",
     "productos": "Productos",
+    "reportes": "Reportes",
     "mi-web": "Mi web",
     "whatsapp": "WhatsApp",
     "campanas": "Campañas",
     "suscripcion": "Suscripción",
-    "configuracion": "Configuración"
+    "configuracion": "Configuración",
+    "afiliados": "Socios",
+    "soporte": "Soporte"
   },
   "navSections": {
     "operacion": "Operación",

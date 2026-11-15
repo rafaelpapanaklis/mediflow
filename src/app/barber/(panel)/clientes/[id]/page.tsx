@@ -20,7 +20,7 @@ export const dynamic = "force-dynamic";
 export default async function Page(props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
   const ctx = await getBarberContext();
-  if (!ctx) redirect("/login");
+  if (!ctx) redirect("/barber/entrar");
   await requireBarberPaidAccess(ctx);
 
   const locale = resolveBarberLocale(ctx.barbershop.locale);

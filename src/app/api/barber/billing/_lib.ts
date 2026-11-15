@@ -9,6 +9,11 @@ import {
   getBarberStripe,
   type BarberBillingShop,
 } from "@/lib/barber/billing";
+import {
+  BARBER_SUPPORT_PATH,
+  barberSupportWhatsappUrl,
+  dalecontrolWhatsappDisplay,
+} from "@/lib/barber/marketing";
 
 /**
  * Helpers compartidos por las rutas /api/barber/billing/*. No es una ruta
@@ -41,7 +46,16 @@ export function requireBarberStripe(): Stripe | NextResponse {
   return stripe;
 }
 
-/** Mapea errores de gate (plan/rol) y de cobro a JSON; lo demás es 500 sin filtrar detalles. */
+/**
+ * Mapea errores de gate (plan/rol) y de cobro a JSON; lo demás es 500 sin
+ * filtrar detalles.
+ *
+ * El 500 NO puede ser un error mudo (auditoría 14-nov, G4): quien intenta
+ * pagar y falla tiene que saber a quién escribirle. El motivo real se queda
+ * en el log; al cliente le llega el mensaje y, en `support`, las dos salidas
+ * (el ticket de /barber/soporte y el WhatsApp oficial de DaleControl). La
+ * pantalla de Suscripción las pinta como botones.
+ */
 export function billingErrorResponse(err: unknown): NextResponse {
   const gate = barberGateErrorPayload(err);
   if (gate) return NextResponse.json(gate.body, { status: gate.status });
@@ -49,7 +63,16 @@ export function billingErrorResponse(err: unknown): NextResponse {
   if (billing) return NextResponse.json(billing.body, { status: billing.status });
   console.error("[barber billing]", err);
   return NextResponse.json(
-    { error: "Algo falló al procesar el cobro. Intenta de nuevo.", code: "INTERNAL" },
+    {
+      error:
+        "No pudimos procesar el cobro. Intenta de nuevo; si vuelve a fallar, escríbenos y lo resolvemos contigo.",
+      code: "INTERNAL",
+      support: {
+        path: BARBER_SUPPORT_PATH,
+        whatsapp: dalecontrolWhatsappDisplay(),
+        whatsappUrl: barberSupportWhatsappUrl(),
+      },
+    },
     { status: 500 },
   );
 }

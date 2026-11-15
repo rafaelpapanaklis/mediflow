@@ -22,7 +22,7 @@ export const dynamic = "force-dynamic";
 
 export default async function BarberQueuePage() {
   const ctx = await getBarberContext();
-  if (!ctx) redirect("/login");
+  if (!ctx) redirect("/barber/entrar");
   await requireBarberPaidAccess(ctx);
 
   const plan = await getBarberPlan(ctx.barbershop.plan);

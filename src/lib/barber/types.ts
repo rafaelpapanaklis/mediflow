@@ -325,6 +325,12 @@ export interface BarberNavItemDef {
   section: "operacion" | "negocio" | "crecimiento" | "cuenta";
   permission: string | null;
   featureKey: string | null;
+  /**
+   * Para pantallas que se abren con CUALQUIERA de varios permisos (Reportes:
+   * cash.view o commissions.view, igual que canViewReports en stats.ts). Si
+   * viene, basta uno. Se suma a `permission`, no lo reemplaza.
+   */
+  anyPermission?: string[];
 }
 
 export const BARBER_NAV_ITEMS: BarberNavItemDef[] = [
@@ -339,6 +345,10 @@ export const BARBER_NAV_ITEMS: BarberNavItemDef[] = [
   { key: "comisiones", href: "/barber/comisiones", icon: "percent", section: "negocio", permission: "commissions.view", featureKey: "commissions" },
   { key: "membresias", href: "/barber/membresias", icon: "crown", section: "negocio", permission: "memberships.manage", featureKey: "memberships" },
   { key: "productos", href: "/barber/productos", icon: "package", section: "negocio", permission: "products.manage", featureKey: "products" },
+  // Reportes solo se alcanzaba por el botón «Ver reportes» de Inicio. Mismo
+  // gate que la pantalla: plan con `analytics` + cash.view o commissions.view
+  // (un rol Barbero entra y ve solo lo suyo: lo recorta getReportsSummary).
+  { key: "reportes", href: "/barber/reportes", icon: "bar-chart", section: "negocio", permission: null, featureKey: "analytics", anyPermission: ["cash.view", "commissions.view"] },
   { key: "mi-web", href: "/barber/mi-web", icon: "globe", section: "crecimiento", permission: "web.edit", featureKey: "miniWebEditor" },
   // featureKey `whatsappReminders` (TODOS los planes) y NO `whatsappInbox`
   // (solo Avanzado y Profesional): la pantalla es también donde la barbería
@@ -357,6 +367,15 @@ export const BARBER_NAV_ITEMS: BarberNavItemDef[] = [
   { key: "campanas", href: "/barber/campanas", icon: "message-circle", section: "crecimiento", permission: "whatsapp.view", featureKey: "whatsappInbox" },
   { key: "suscripcion", href: "/barber/suscripcion", icon: "credit-card", section: "cuenta", permission: "billing.manage", featureKey: null },
   { key: "configuracion", href: "/barber/configuracion", icon: "settings", section: "cuenta", permission: "settings.edit", featureKey: null },
+  // Programa de socios: se anuncia en la portada y en la tarjeta del plan,
+  // pero solo se llegaba escribiendo la dirección (auditoría 14-nov, G6).
+  // Mismo gate que la pantalla: feature `affiliates` + billing.manage.
+  { key: "afiliados", href: "/barber/afiliados", icon: "handshake", section: "cuenta", permission: "billing.manage", featureKey: "affiliates" },
+  // Soporte: en TODOS los planes y también con la suscripción sin pagar (la
+  // pantalla está exenta del candado a propósito). Antes solo se llegaba por
+  // una pestaña dentro de Barberos: quien no podía pagar no tenía a quién
+  // escribirle (auditoría 14-nov, G4). Ver BARBER_UNPAID_NAV_KEYS.
+  { key: "soporte", href: "/barber/soporte", icon: "life-buoy", section: "cuenta", permission: "support.view", featureKey: null },
 ];
 
 /** Item de navegación YA resuelto (label + visibilidad) que recibe el sidebar. */

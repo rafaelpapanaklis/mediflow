@@ -4,13 +4,16 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import {
+  BarChart3,
   Calendar,
   Contact,
   CreditCard,
   Crown,
   Globe,
+  Handshake,
   Home,
   Inbox,
+  LifeBuoy,
   LogOut,
   Menu,
   MessageCircle,
@@ -43,6 +46,9 @@ const ICONS: Record<string, React.ComponentType<{ size?: number | string }>> = {
   "message-circle": MessageCircle,
   "credit-card": CreditCard,
   settings: Settings,
+  "life-buoy": LifeBuoy,
+  "bar-chart": BarChart3,
+  handshake: Handshake,
 };
 
 const SECTION_ORDER: BarberNavItem["section"][] = [
@@ -59,6 +65,7 @@ export function BarberSidebar({
   brandName,
   brandSub,
   logoutLabel,
+  loginHref,
 }: {
   shopName: string;
   items: BarberNavItem[];
@@ -66,6 +73,8 @@ export function BarberSidebar({
   brandName: string;
   brandSub: string;
   logoutLabel: string;
+  /** A dónde ir al cerrar sesión: la entrada del vertical (/barber/entrar). */
+  loginHref: string;
 }) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -74,8 +83,8 @@ export function BarberSidebar({
     try {
       await fetch("/api/barber/auth/logout", { method: "POST" });
     } finally {
-      // El login es el COMPARTIDO (/login) — barber no tiene login propio.
-      window.location.href = "/login";
+      // A la entrada PROPIA del vertical, no al /login de las clínicas.
+      window.location.href = loginHref;
     }
   }
 
@@ -109,15 +118,18 @@ export function BarberSidebar({
 
   return (
     <>
-      {/* Hamburguesa móvil */}
+      {/* Hamburguesa móvil. Posición y tamaño: .barber-menu-btn en
+          barber-theme.css (queda sobre la barra superior, que en celular
+          deja libre ese hueco a la izquierda de las migas). */}
       <button
         type="button"
         onClick={() => setMobileOpen(true)}
-        className="icon-btn-new lg:hidden"
-        style={{ position: "fixed", top: 12, left: 12, zIndex: 40 }}
+        className="icon-btn-new barber-menu-btn lg:hidden"
         aria-label="Abrir menú"
+        aria-expanded={mobileOpen}
+        aria-controls="barber-sidebar"
       >
-        <Menu size={14} />
+        <Menu size={16} />
       </button>
 
       {/* Overlay móvil */}
@@ -135,14 +147,13 @@ export function BarberSidebar({
         />
       )}
 
+      {/* En celular (<lg) el menú NO ocupa sitio: barber-theme.css lo
+          esconde y solo lo muestra, flotando sobre la pantalla, cuando lleva
+          .barber-sidebar--open. En escritorio esa clase no hace nada. */}
       <aside
-        className="sidebar-new"
-        style={{
-          zIndex: 41,
-          position: mobileOpen ? "fixed" : undefined,
-          left: mobileOpen ? 0 : undefined,
-          top: mobileOpen ? 0 : undefined,
-        }}
+        id="barber-sidebar"
+        className={`sidebar-new${mobileOpen ? " barber-sidebar--open" : ""}`}
+        style={{ zIndex: 41 }}
       >
         {/* Marca */}
         <div className="sidebar-new__brand">

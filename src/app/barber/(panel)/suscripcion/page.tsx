@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { getBarberContext } from "@/lib/barber-auth";
 import { hasBarberPermission } from "@/lib/barber/permissions";
 import { getBarberPlans } from "@/lib/barber/plans";
-import { BARBER_FEATURES } from "@/lib/barber/plan-shared";
+import { BARBER_FEATURES, isBarberPlanId } from "@/lib/barber/plan-shared";
 import { getBarberGate } from "@/lib/barber/gating";
 import {
   getBarberBillingShop,
@@ -13,6 +13,11 @@ import {
   isBarberStripeConfigured,
   toCents,
 } from "@/lib/barber/billing";
+import {
+  BARBER_SUPPORT_PATH,
+  barberSupportWhatsappUrl,
+  dalecontrolWhatsappDisplay,
+} from "@/lib/barber/marketing";
 import { getBarberDict } from "@/i18n/dictionaries/barber";
 import { BillingScreen } from "@/components/barber/billing/billing-screen";
 import {
@@ -23,7 +28,7 @@ import {
 import "@/components/barber/billing/billing.css";
 
 interface PageProps {
-  searchParams?: Promise<{ checkout?: string; session_id?: string }>;
+  searchParams?: Promise<{ checkout?: string; session_id?: string; plan?: string | string[] }>;
 }
 
 /**
@@ -37,7 +42,7 @@ interface PageProps {
 export default async function BarberSuscripcionPage(props: PageProps) {
   const searchParams = await props.searchParams;
   const ctx = await getBarberContext();
-  if (!ctx) redirect("/login");
+  if (!ctx) redirect("/barber/entrar");
 
   const locale = ctx.barbershop.locale;
   const canManage = hasBarberPermission(
@@ -85,6 +90,15 @@ export default async function BarberSuscripcionPage(props: PageProps) {
       gate={toBarberGateDTO(gate)}
       summary={summary}
       checkout={checkout}
+      // El plan que se eligió en la portada (?plan=). Solo ids de la casa:
+      // lo que no lo sea se ignora y la pantalla sale como siempre.
+      chosenPlanId={isBarberPlanId(searchParams?.plan) ? searchParams.plan : null}
+      // A quién escribirle cuando el cobro falla: ticket + WhatsApp oficial.
+      support={{
+        path: BARBER_SUPPORT_PATH,
+        whatsappUrl: barberSupportWhatsappUrl(ctx.barbershop.name),
+        whatsappNumber: dalecontrolWhatsappDisplay(),
+      }}
     />
   );
 }
