@@ -92,6 +92,8 @@
     "linkedBarber": "Ficha de barbero",
     "linkedBarberNone": "Sin ficha (solo administrativo)",
     "linkedBarberHint": "Ligar a un barbero hace que el sistema sepa qué citas y comisiones son suyas.",
+    "linkedBarberTaken": "{name} · ya es de {who}",
+    "barberWithoutFicha": "Sin ficha, este barbero no verá citas ni comisiones propias: elige la suya.",
     "lastLogin": "Último acceso",
     "neverEntered": "Nunca ha entrado",
     "you": "Tú",

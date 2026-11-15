@@ -92,6 +92,8 @@
     "linkedBarber": "Barber profile",
     "linkedBarberNone": "No profile (office only)",
     "linkedBarberHint": "Linking a barber lets the system know which appointments and commissions are theirs.",
+    "linkedBarberTaken": "{name} · already linked to {who}",
+    "barberWithoutFicha": "Without a profile this barber won't see their own appointments or commissions: pick theirs.",
     "lastLogin": "Last sign in",
     "neverEntered": "Never signed in",
     "you": "You",
