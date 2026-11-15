@@ -10,6 +10,7 @@
 // aparta igual y luego pide el link de pago; si falla, el pedido sigue
 // apartado y se paga en la barbería.
 // ═══════════════════════════════════════════════════════════════════════
+import { soloDigitosTelefono } from "@/lib/barber/phone-format";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Dictionary } from "@/i18n/t";
 import { makeBarberT } from "@/lib/barber/i18n";
@@ -150,7 +151,7 @@ export function ApartarForm({
       </label>
       <label className="dcb-field">
         <span className="dcb-label">{t("reserve.phone")}</span>
-        <input className="dcb-input" name="phone" type="tel" inputMode="tel" autoComplete="tel-national" value={phone} onChange={(e) => setPhone(e.target.value)} maxLength={20} required data-telefono />
+        <input className="dcb-input" name="phone" type="tel" inputMode="tel" autoComplete="tel-national" value={phone} onChange={(e) => setPhone(soloDigitosTelefono(e.target.value))} maxLength={20} required data-telefono />
         <span className="dcb-help">{prefill ? t("reserve.fromAccount") : t("reserve.phoneHint")}</span>
       </label>
       {/* Campo trampa: invisible para una persona. */}

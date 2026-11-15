@@ -10,6 +10,7 @@
 // El ticket se guarda en localStorage por barbería: volver a escanear el
 // QR devuelve tu lugar en vez de formarte otra vez.
 // ═══════════════════════════════════════════════════════════════════════
+import { soloDigitosTelefono } from "@/lib/barber/phone-format";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type Dictionary } from "@/i18n/t";
 import { makeBarberT } from "@/lib/barber/i18n";
@@ -307,7 +308,7 @@ export function WalkinPublic(props: WalkinPublicProps) {
                 <input
                   className={agendaCss.input}
                   value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
+                  onChange={(e) => setPhone(soloDigitosTelefono(e.target.value))}
                   placeholder={t("barber.agenda.public.phonePlaceholder")}
                   inputMode="numeric"
                   autoComplete="tel"

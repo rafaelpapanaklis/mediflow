@@ -13,6 +13,7 @@ import type { BarberScheduleDTO } from "@/lib/barber/types";
 import {
   cancelReasonText,
   citaSteps,
+  depositBody,
   findNextVisitSlot,
   nextVisitOptions,
   parseDepositAmount,
@@ -196,4 +197,14 @@ test("motivo: elegido, escrito, los dos o ninguno", () => {
   assert.equal(cancelReasonText(null, "Se enfermó"), "Se enfermó");
   assert.equal(cancelReasonText("El cliente canceló", "Se enfermó"), "El cliente canceló · Se enfermó");
   assert.equal(cancelReasonText(null, "x".repeat(300))?.length, 200);
+});
+
+test("anticipo: el cuerpo que manda la ventana lo acepta el servidor (paymentMethod, no method)", async () => {
+  const { isCounterPaymentMethod } = await import("@/lib/barber/payments-core");
+  for (const m of ["CASH", "CARD", "SPEI"]) {
+    const body = depositBody(50, m);
+    assert.equal(isCounterPaymentMethod(body.paymentMethod), true, m);
+    assert.equal(body.amount, 50);
+    assert.equal("method" in body, false);
+  }
 });

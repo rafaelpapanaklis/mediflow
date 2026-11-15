@@ -264,3 +264,12 @@ export function cancelReasonText(picked: string | null, typed: string): string |
   if (free) return picked ? `${picked} · ${free}`.slice(0, CANCEL_REASON_MAX) : free;
   return picked;
 }
+
+/**
+ * Cuerpo del POST /api/barber/appointments/<id>/deposit. El servidor lee el
+ * método de `paymentMethod`: con otro nombre responde 400 «Elige cómo pagó»
+ * aunque el botón «Efectivo» se vea marcado (así se rompió en panel.108).
+ */
+export function depositBody(amount: number, method: string): { amount: number; paymentMethod: string } {
+  return { amount, paymentMethod: method };
+}
