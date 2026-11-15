@@ -1090,3 +1090,84 @@ test("G4 — un turno que murió a medias no deja muda la conversación; con el 
   assert.equal(modelRequests.length, 0);
   assert.deepEqual((await marcasDeTurno(sinBot, p2)).map((m) => m.errorMessage), [null]);
 });
+
+/* ═══════ Menores de la revisión (M2, M4) ═══════ */
+
+test("M2 — con «precios» apagado el bot SÍ puede agendar, y no dice precios", { skip }, async () => {
+  const tienda = await crearTienda({ plan: "PROFESIONAL" });
+  await saveBarberBotSettings(tienda.id, {
+    ...BOT_ON,
+    abilities: { precios: false, horarios: true, agendar: true, cancelar: true },
+  });
+  const phone = telefono();
+  modelQueue.push(() => useTool("listar_servicios", {}));
+  modelQueue.push((seen) => {
+    const corte = seen[seen.length - 1].servicios.find((s: any) => /corte/i.test(s.nombre));
+    return useTool("buscar_horarios", { fecha: MANANA, servicioIds: [corte.id] });
+  });
+  modelQueue.push((seen) =>
+    useTool("agendar", {
+      fecha: MANANA,
+      hora: seen[seen.length - 1].horarios[0].hora,
+      servicioIds: [tienda.corteId],
+      nombre: "Nico Paz",
+    }),
+  );
+  modelQueue.push(say("Listo."));
+  await escribe(tienda, phone, "quiero un corte mañana");
+
+  const herramientas = modelRequests[0].raw.tools as { name: string; description: string }[];
+  const listar = herramientas.find((h) => h.name === "listar_servicios");
+  assert.ok(listar, "sin ella el modelo no tiene de dónde sacar los ids que «agendar» exige");
+  assert.match(listar.description, /sin precios/);
+  const servicios = toolResults.find((r) => r && r.servicios);
+  assert.ok(servicios.servicios.length > 0);
+  for (const s of servicios.servicios) {
+    assert.ok(s.id && s.nombre && s.duracionMin, JSON.stringify(s));
+    assert.ok(!("precio" in s), "el dueño apagó «precios»: no viajan al modelo");
+  }
+  const agendada = toolResults.find((r) => r && r.referencia);
+  assert.ok(agendada, "la cita se creó");
+  assert.ok(!("total" in agendada));
+  assert.equal(await prisma.barberAppointment.count({ where: { barbershopId: tienda.id, clientPhone: phone } }), 1);
+  assert.ok(!/\$\s?\d/.test(JSON.stringify(toolResults)), "ningún resultado de herramienta trae un precio");
+
+  // Con «precios» encendido todo sigue igual: precio real en el catálogo.
+  limpiar();
+  modelQueue.push(() => useTool("listar_servicios", {}));
+  modelQueue.push(say("El corte cuesta $180."));
+  await escribe(P, telefono(), "cuánto cuesta el corte");
+  assert.match(toolResults.find((r) => r && r.servicios).servicios[0].precio, /^\$\d/);
+});
+
+test("M4 — los botones no salen antes de ver el resultado de la herramienta que venía con ellos", { skip }, async () => {
+  const phone = telefono();
+  // El modelo pide los horarios y, EN LA MISMA VUELTA, ya quiere enseñar botones con horas.
+  modelQueue.push(() => [
+    ...useTool("buscar_horarios", { fecha: MANANA, servicioIds: [P.corteId] }),
+    ...useTool("responder_con_opciones", {
+      texto: "Tengo estos horarios mañana:",
+      opciones: [
+        { id: "h1", titulo: "3:33 am" },
+        { id: "h2", titulo: "4:44 am" },
+      ],
+    }),
+  ]);
+  modelQueue.push((seen) => {
+    const horas = seen.find((r) => r && r.horarios).horarios.slice(0, 2);
+    return useTool("responder_con_opciones", {
+      texto: "Mañana tengo:",
+      opciones: horas.map((h: any) => ({ id: `h.${h.hora}`, titulo: h.horaBonita ?? h.hora })),
+    });
+  });
+  await escribe(P, phone, "qué horarios tienes mañana para corte");
+
+  assert.equal(modelRequests.length, 2, "la primera vuelta no cerró el turno");
+  const rechazo = toolResults.find((r) => r && typeof r.error === "string" && /responder_con_opciones SOLA/.test(r.error));
+  assert.ok(rechazo, "se le dijo al modelo por qué no se envió");
+  const envio = ultimoEnvio();
+  assert.equal(envio.body.type, "interactive");
+  assert.equal(envio.body.interactive.body.text, "Mañana tengo:");
+  assert.ok(!JSON.stringify(envio.body).includes("3:33"), "las horas inventadas nunca llegaron al cliente");
+  assert.equal(enviados().filter((c) => c.body?.to === `52${phone}`).length, 1);
+});

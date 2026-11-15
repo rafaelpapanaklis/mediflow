@@ -224,17 +224,19 @@ export function botAnswersNow(
 // "pásame con EL barbero" mucho más que "con UN barbero", y sin esto la
 // frase más común de todas se colaba al modelo como si fuera una cita.
 const DET = "(?:un[ao]?|el|la|los|las|mi|algun[ao]?)\\s+";
-// A quién pide: incluye `alguien` ("pásame con alguien") y `barber`, que
-// cubre "barbero" y "barbería" sin tocar "barba".
-const QUIEN = "(?:persona|humano|alguien|asesor|encargad|due[ñn]|barber|staff)";
+// A quién pide: incluye `alguien` ("pásame con alguien").
+const QUIEN = "(?:persona|humano|alguien|asesor|encargad|due[ñn]|staff)";
+// `barber` cubre "barbero" y "barbería" sin tocar "barba". 🔴 SOLO cuenta
+// detrás de «hablar con» / «pásame con»: «quiero con el barbero Luis mañana a
+// las 5», «necesito barbero para hoy» o «quiero mi barbero de siempre» son
+// alguien pidiendo CITA, y antes apagaban al bot 12 horas en ese chat.
+const QUIEN_O_BARBERO = "(?:persona|humano|alguien|asesor|encargad|due[ñn]|barber|staff)";
+const PASAME = "(?:p[aá]sa(?:r)?(?:me|nos)?|com[uú]n[ií]ca(?:r)?(?:me|nos)?|transfier[eo]|transfi[eé]re(?:me|nos)|transferir(?:me)?)";
 
 const HANDOFF_PATTERNS: RegExp[] = [
-  new RegExp(`\\bhablar\\s+con\\s+(?:${DET})?${QUIEN}`, "i"),
-  new RegExp(
-    `\\b(?:p[aá]sa(?:r)?(?:me|nos)?|com[uú]nica(?:r)?(?:me|nos)?|transfier[eo]|transferir(?:me)?|quiero|necesito)\\s+` +
-      `(?:con\\s+)?(?:${DET})?${QUIEN}`,
-    "i",
-  ),
+  new RegExp(`\\bhablar\\s+con\\s+(?:${DET})?${QUIEN_O_BARBERO}`, "i"),
+  new RegExp(`\\b${PASAME}\\s+con\\s+(?:${DET})?${QUIEN_O_BARBERO}`, "i"),
+  new RegExp(`\\b(?:${PASAME}|quiero|necesito)\\s+(?:con\\s+)?(?:${DET})?${QUIEN}`, "i"),
   /\bpersona\s+real\b/i,
   /\bno\s+(quiero|me\s+sirve)\s+(hablar\s+con\s+)?(un\s+)?(bot|robot|m[aá]quina)/i,
   /\b(eres|es)\s+un\s+(bot|robot)\b/i,

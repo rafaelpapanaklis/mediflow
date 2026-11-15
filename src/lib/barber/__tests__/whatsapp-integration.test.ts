@@ -1040,6 +1040,16 @@ test("🔴 doble clic en «Avisar»: un solo mensaje", { skip }, async () => {
   const otra = await notifyBarberWalkIn({ barbershopId: A.id, phone, body: cuerpo });
   assert.equal(otra.outcome, "already");
   assert.equal(enviados().length, 1);
+
+  // M14 — pero un aviso DISTINTO sí sale: «faltan 2» y, al liberarse la silla, «ya es tu turno».
+  const yaTeToca = walkInNotifyBody({ shopName: "Barbería El Corte", clientName: "Luis Pérez", ahead: 0, etaMinutes: 0 });
+  assert.notEqual(yaTeToca, cuerpo);
+  const segundo = await notifyBarberWalkIn({ barbershopId: A.id, phone, body: yaTeToca });
+  assert.equal(segundo.outcome, "sent");
+  assert.equal(enviados().length, 2);
+  // …y ese tampoco se repite con un doble clic.
+  assert.equal((await notifyBarberWalkIn({ barbershopId: A.id, phone, body: yaTeToca })).outcome, "already");
+  assert.equal(enviados().length, 2);
 });
 
 test("sin WhatsApp conectado el aviso NO se encola para después: se dice por qué", { skip }, async () => {
@@ -1317,4 +1327,55 @@ test("G3 — el aviso de rechazo que encola booking.ts: sale si la ventana sigue
   assert.ok(isInvalidatedReminder(caduca.errorMessage), "caducado, no «Meta lo rechazó»");
   const hilo = await listBarberThreadMessages(A.id, cerrada);
   assert.equal(hilo.messages.find((m) => m.id === id2)?.error, null);
+});
+
+test("M18 — el aviso de «falta método de pago» se quita cuando un envío posterior sale o se reconecta", { skip }, async () => {
+  const tienda = await crearTienda({ plan: "PROFESIONAL" });
+  const phone = telefono();
+  const fallo = await prisma.barberMessage.create({
+    data: {
+      barbershopId: tienda.id,
+      direction: "OUTBOUND",
+      phone,
+      body: "Hola, te recordamos tu visita…",
+      status: "FAILED",
+      errorMessage: "(#131042) Business eligibility payment issue",
+      createdAt: new Date(Date.now() - 3_600_000),
+    },
+  });
+  // La conexión se dio de alta ANTES del fallo (lo normal): el aviso se enseña.
+  await prisma.barbershop.update({
+    where: { id: tienda.id },
+    data: { whatsappVerifiedAt: new Date(Date.now() - 86_400_000) },
+  });
+  assert.equal((await getBarberWaConnection(tienda.id)).state, "NO_PAYMENT_METHOD");
+
+  // Pone la tarjeta y el siguiente mensaje SÍ sale: el aviso ya no es verdad.
+  const bueno = await prisma.barberMessage.create({
+    data: { barbershopId: tienda.id, direction: "OUTBOUND", phone, body: "Hola", status: "DELIVERED" },
+  });
+  const sana = await getBarberWaConnection(tienda.id);
+  assert.equal(sana.state, "CONNECTED");
+  assert.equal(sana.problem, null);
+
+  // Sin ese envío, pero habiendo vuelto a conectar después del fallo: igual.
+  await prisma.barberMessage.delete({ where: { id: bueno.id } });
+  assert.equal((await getBarberWaConnection(tienda.id)).state, "NO_PAYMENT_METHOD");
+  await prisma.barbershop.update({ where: { id: tienda.id }, data: { whatsappVerifiedAt: new Date() } });
+  assert.equal((await getBarberWaConnection(tienda.id)).state, "CONNECTED");
+
+  // Y un fallo NUEVO vuelve a encenderlo.
+  await prisma.barberMessage.create({
+    data: {
+      barbershopId: tienda.id,
+      direction: "OUTBOUND",
+      phone,
+      body: "Hola otra vez",
+      status: "FAILED",
+      errorMessage: "(#131042) Business eligibility payment issue",
+      createdAt: new Date(Date.now() + 2_000),
+    },
+  });
+  assert.equal((await getBarberWaConnection(tienda.id)).state, "NO_PAYMENT_METHOD");
+  assert.ok(fallo.id);
 });

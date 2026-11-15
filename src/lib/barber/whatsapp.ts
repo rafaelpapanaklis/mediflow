@@ -339,7 +339,27 @@ export async function getBarberWaConnection(barbershopId: string): Promise<Barbe
       select: { errorMessage: true, createdAt: true },
     });
     const msg = lastFail?.errorMessage ?? null;
-    if (msg && !isInvalidatedReminder(msg)) {
+    // Ese fallo deja de ser «el estado de la conexión» en cuanto algo lo
+    // desmiente: se volvió a conectar DESPUÉS, o un mensaje posterior sí
+    // salió. Sin esto el aviso rojo se quedaba pegado con todo ya arreglado,
+    // hasta que hubiera OTRO fallo distinto.
+    let superseded = false;
+    if (lastFail && msg && !isInvalidatedReminder(msg)) {
+      superseded =
+        Boolean(shop.whatsappVerifiedAt && shop.whatsappVerifiedAt > lastFail.createdAt) ||
+        Boolean(
+          await prisma.barberMessage.findFirst({
+            where: {
+              barbershopId,
+              direction: "OUTBOUND",
+              status: { in: ["SENT", "DELIVERED", "READ"] },
+              createdAt: { gt: lastFail.createdAt },
+            },
+            select: { id: true },
+          }),
+        );
+    }
+    if (msg && !isInvalidatedReminder(msg) && !superseded) {
       if (msg.includes(`(#${WA_ERROR_CODE.BILLING_REQUIRED})`)) {
         state = "NO_PAYMENT_METHOD";
         problem = msg;
@@ -1416,6 +1436,10 @@ export async function notifyBarberWalkIn(args: {
           barbershopId: shop.id,
           phone,
           templateName: BARBER_WALKIN_NOTIFY_TEMPLATE,
+          // El MISMO aviso: un doble clic repite el texto palabra por palabra.
+          // Un aviso distinto («faltan 2» y, a los 6 minutos, «ya es tu
+          // turno») es legítimo y antes se quedaba sin salir.
+          body: args.body,
           // Cuenta lo que ya salió, no solo lo que sigue en cola: ahora el
           // aviso se manda en el momento y casi nunca queda PENDING.
           status: { in: ["PENDING", "SENT", "DELIVERED", "READ"] },

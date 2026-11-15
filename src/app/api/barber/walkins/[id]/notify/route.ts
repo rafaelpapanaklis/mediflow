@@ -63,6 +63,12 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
     where: { id: params.id, barbershopId: shopId },
   });
   if (!entry) return jsonError("Esa persona ya no está en la fila.", 404);
+  // Solo se avisa a quien sigue esperando. A quien ya pasó a la silla, ya fue
+  // atendido o se fue, un «ya casi es tu turno» le llegaba igual (la pantalla
+  // del mostrador puede ir unos segundos atrás de la fila real).
+  if (entry.status !== "WAITING" && entry.status !== "CALLED") {
+    return jsonError("Esa persona ya no está esperando en la fila.", 409, { code: "NOT_WAITING" });
+  }
 
   const phone = mxTenDigits(entry.phone ?? "");
   if (!phone) {

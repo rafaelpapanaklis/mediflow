@@ -801,12 +801,17 @@ function toolDefs(settings: BarberBotSettings): ToolDef[] {
   const defs: ToolDef[] = [];
   const a = settings.abilities;
 
-  if (a.precios) {
+  // Es la ÚNICA fuente de los ids de servicio que `agendar` exige: se declara
+  // también con «precios» apagado (si no, apagar ese interruptor dejaba al bot
+  // sin poder agendar a nadie). Con «precios» apagado NO trae el precio.
+  if (a.precios || a.agendar) {
     defs.push({
       name: "listar_servicios",
-      description:
-        "Servicios que ofrece la barbería con su precio real y su duración. " +
-        "Úsala SIEMPRE antes de decir un precio: nunca los inventes ni los recuerdes de otra conversación.",
+      description: a.precios
+        ? "Servicios que ofrece la barbería con su precio real y su duración. " +
+          "Úsala SIEMPRE antes de decir un precio: nunca los inventes ni los recuerdes de otra conversación."
+        : "Servicios que ofrece la barbería, con su id y su duración (sin precios: no los des). " +
+          "Úsala para saber qué servicio quiere el cliente antes de buscar horarios.",
       input_schema: { type: "object", properties: {}, required: [] },
     });
   }
@@ -975,7 +980,8 @@ async function runTool(
           servicios: ctx.services.map((s) => ({
             id: s.id,
             nombre: s.name,
-            precio: money(s.price),
+            // Con «precios» apagado el dueño no quiere que el bot los diga.
+            ...(ctx.settings.abilities.precios ? { precio: money(s.price) } : {}),
             duracionMin: s.durationMin,
           })),
           barberos: ctx.barbers.map((b) => ({ id: b.id, nombre: b.name })),
@@ -1172,7 +1178,8 @@ async function toolAgendar(ctx: ToolCtx, input: Record<string, unknown>): Promis
     horaBonita: humanTime(time),
     barbero: result.barberName,
     servicios: result.services.map((s) => s.name),
-    total: money(result.total),
+    // Con «precios» apagado el bot tampoco dice el total.
+    ...(ctx.settings.abilities.precios ? { total: money(result.total) } : {}),
     duplicada: result.duplicate,
   };
 }
@@ -2043,13 +2050,22 @@ async function runTurnInner(input: BarberBotTurnInput): Promise<BarberBotTurnRes
     // hay, sus bloques de razonamiento) o la API rechaza el tool_result.
     messages.push({ role: "assistant", content: turn.blocks });
 
+    // responder_con_opciones cierra el turno con lo que el modelo escribió
+    // ANTES de ver nada. Si viene junto con otra herramienta (buscar_horarios,
+    // agendar…), esos botones salieron sin mirar el resultado: horarios sin
+    // consultar, o un «quedó agendada» de algo que falló. Se rechaza y el
+    // modelo la vuelve a pedir, sola, ya con el resultado delante.
+    const accompanied = toolUses.length > 1;
     const results: unknown[] = [];
     for (const use of toolUses) {
-      const out = await runTool(
-        ctx,
-        use.name ?? "",
-        (use.input ?? {}) as Record<string, unknown>,
-      );
+      const out =
+        accompanied && use.name === "responder_con_opciones"
+          ? {
+              error:
+                "No se envió. Primero mira el resultado de las otras herramientas de esta vuelta; " +
+                "después llama a responder_con_opciones SOLA, con datos que salgan de ese resultado.",
+            }
+          : await runTool(ctx, use.name ?? "", (use.input ?? {}) as Record<string, unknown>);
       results.push({
         type: "tool_result",
         tool_use_id: use.id,
