@@ -207,7 +207,7 @@ export function PlantillaPortafolio({ data }: { data: BarberWebData }) {
       ))}
 
       <SeccionProductos data={data} />
-      <Pie nombre={shop.name} />
+      <Pie nombre={shop.name} cuentaUrl={data.cuentaUrl} />
 
       {/* ── Barra de reserva pegada abajo ─────────────────────── */}
       <div className="dcbw-pf-barra">

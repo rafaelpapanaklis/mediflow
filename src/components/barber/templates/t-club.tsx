@@ -374,7 +374,7 @@ export function PlantillaClub({ data }: { data: BarberWebData }) {
       ))}
 
       <SeccionProductos data={data} />
-      <Pie nombre={shop.name} />
+      <Pie nombre={shop.name} cuentaUrl={data.cuentaUrl} />
     </div>
   );
 }

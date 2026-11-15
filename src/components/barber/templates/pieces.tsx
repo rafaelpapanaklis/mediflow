@@ -468,7 +468,7 @@ export function Redes({
    se edita. El enlace sale a la web de DaleControl con `<a>`.
    ══════════════════════════════════════════════════════════════ */
 
-export function Pie({ nombre }: { nombre: string }) {
+export function Pie({ nombre, cuentaUrl }: { nombre: string; cuentaUrl?: string | null }) {
   const anio = 2020; // Sin new Date(): el HTML se cachea por ISR y un año
   // calculado en el servidor se congela con la caché. El aviso legal no
   // necesita año, así que no se pinta ninguno.
@@ -476,6 +476,10 @@ export function Pie({ nombre }: { nombre: string }) {
   return (
     <footer className="dcbw-pie">
       <span>{nombre}</span>
+      {/* La única puerta de vuelta del cliente a SUS citas (cambiar, cancelar,
+          ver sus estrellas). Sin ella, «mi cuenta» solo se veía justo después
+          de reservar (lógica L3, 15-nov). */}
+      {cuentaUrl ? <a href={cuentaUrl}>Mis citas</a> : null}
       <a href="https://www.dalecontrol.com" target="_blank" rel="noopener noreferrer">
         Hecho con DaleControl
       </a>

@@ -79,6 +79,11 @@ export interface BarberWebData {
   /** Liga a /b/<slug>/tienda (solo si hay productos). */
   tiendaUrl?: string | null;
   /**
+   * Liga a /b/<slug>/mi-cuenta (sus citas y estrellas). Solo con WhatsApp
+   * conectado: la entrada es con un código por WhatsApp.
+   */
+  cuentaUrl?: string | null;
+  /**
    * true = se está pintando dentro del editor.
    *
    * Lo usan las plantillas para NO ocultar una sección vacía: la barbería
