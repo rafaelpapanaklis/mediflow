@@ -6,6 +6,8 @@ import { prepararImagen } from "@/lib/image-client";
 import type { BarberSupportAttachment } from "@/lib/barber/types";
 import type { BarberTicketDetail, BarberTicketRow } from "@/lib/barber/support";
 import type { AdminBranchOption } from "../team/admin-nav";
+// Rediseño D: clases propias de Soporte que se AÑADEN a las de admin.module.css.
+import d from "./support.module.css";
 import {
   adminStyles as s,
   apiCall,
@@ -331,7 +333,7 @@ export function SupportClient({
       <div className={s.supportShell}>
       <div className={s.supportLayout}>
         <div className={s.card}>
-          <div className={s.permGroupTitle} style={{ padding: "12px 14px 4px" }}>
+          <div className={`${s.permGroupTitle} ${d.listTitle}`} style={{ padding: "12px 14px 4px" }}>
             {t("support.listTitle")}
           </div>
           {tickets.length === 0 ? (
@@ -341,12 +343,12 @@ export function SupportClient({
               body={t("support.emptyBody")}
             />
           ) : (
-            <div className={s.ticketList}>
+            <div className={`${s.ticketList} ${d.ticketList}`}>
               {tickets.map((ticket) => (
                 <button
                   key={ticket.id}
                   type="button"
-                  className={s.ticketItem}
+                  className={`${s.ticketItem} ${d.ticketItem}`}
                   aria-current={detail?.ticket.id === ticket.id}
                   onClick={() => open(ticket.id)}
                 >
@@ -397,7 +399,7 @@ export function SupportClient({
                     key={m.id}
                     className={[s.msg, m.authorType === "SHOP" ? s.msgShop : s.msgAdmin].join(" ")}
                   >
-                    <div className={s.msgBubble}>{m.body}</div>
+                    <div className={`${s.msgBubble} ${d.msgBubble}`}>{m.body}</div>
                     {m.attachments.length > 0 ? (
                       <div className={s.attachRow}>
                         {m.attachments.map((a) =>
@@ -426,7 +428,7 @@ export function SupportClient({
                         )}
                       </div>
                     ) : null}
-                    <span className={s.msgMeta}>
+                    <span className={`${s.msgMeta} ${d.msgMeta}`}>
                       {m.authorType === "SHOP"
                         ? m.authorName ?? t("support.authorShop")
                         : t("support.authorAdmin")}{" "}

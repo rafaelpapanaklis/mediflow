@@ -1,0 +1,40 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   SOPORTE — rediseño D · tanda 2 (15-nov-2026). Mismos tamaños de letra.
+
+   Soporte pinta con team/admin.module.css, que también usan Equipo y
+   Sucursales. Para no tocar ese archivo, Soporte AÑADE estas clases junto
+   a las de siempre (support-client.tsx). Selectores dobles (.x.x) para
+   ganar sin depender del orden en que Next carga los dos módulos.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* Lista de tickets: renglones con raya, el abierto con raya café. */
+.ticketList.ticketList {
+  gap: 0;
+  padding: 0;
+}
+.ticketItem.ticketItem {
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  padding: 12px 16px;
+}
+.ticketItem.ticketItem:first-child { border-top: 0; }
+.ticketItem.ticketItem:hover { background: var(--bg-elev-2); }
+.ticketItem.ticketItem[aria-current="true"] {
+  background: var(--brand-softer);
+  box-shadow: inset 3px 0 0 var(--brand);
+}
+.ticketItem.ticketItem:focus-visible { box-shadow: var(--ring); border-radius: var(--radius-sm); }
+
+/* Hilo: burbujas con el radio del tema; la hora se lee (antes --text-4). */
+.msgBubble.msgBubble { border-radius: var(--radius-lg); }
+.msgMeta.msgMeta { color: var(--text-3); }
+
+/* Título de la lista sin MAYÚSCULAS espaciadas. */
+.listTitle.listTitle {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-3);
+}
