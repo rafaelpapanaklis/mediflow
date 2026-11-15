@@ -949,3 +949,8 @@ textarea.dcbwe-input {
   .dcbwe-modo { min-height: 40px; }
   .dcbwe-btn-icono { min-height: 40px; width: 40px; }
 }
+
+/* Las horas del horario ganaban por especificidad (.dcbwe-horario-horas .dcbwe-input): también a 40 px en teléfono. */
+@container dcbwe (max-width: 560px) {
+  .dcbwe-horario-horas .dcbwe-input { min-height: 40px; }
+}
