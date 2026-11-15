@@ -53,12 +53,31 @@ export interface BarberWebBarbero {
   bio: string | null;
 }
 
+/** Un producto destacado en la página (solo lo público: sin costo ni existencias exactas). */
+export interface BarberWebProducto {
+  id: string;
+  nombre: string;
+  precio: number;
+  fotoUrl: string | null;
+  categoria: string | null;
+  url: string;
+  agotado: boolean;
+}
+
 export interface BarberWebData {
   shop: BarberWebShop;
   config: BarberWebConfig;
   manifest: BarberWebManifest;
   servicios: BarberWebServicio[];
   barberos: BarberWebBarbero[];
+  /**
+   * Destacados de la tienda (ws6-t1): productos marcados «Mostrar en mi
+   * página». Vacío o ausente = no hay sección «Productos». Los carga la
+   * página pública; el editor no los pinta.
+   */
+  productos?: BarberWebProducto[];
+  /** Liga a /b/<slug>/tienda (solo si hay productos). */
+  tiendaUrl?: string | null;
   /**
    * true = se está pintando dentro del editor.
    *

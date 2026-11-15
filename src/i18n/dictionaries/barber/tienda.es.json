@@ -1,0 +1,73 @@
+{
+  "meta": {
+    "title": "Tienda · {shop}",
+    "description": "Productos de {shop}: apártalos en línea y recógelos en la barbería.",
+    "productTitle": "{name} · {shop}",
+    "productDescription": "{name} a {price} en {shop}. Apártalo en línea y págalo al recogerlo."
+  },
+  "noEncontrada": "Esta tienda no está disponible.",
+  "title": "Tienda",
+  "sub": "Aparta en línea y recoge en la barbería.",
+  "back": "Volver a la barbería",
+  "backStore": "Ver toda la tienda",
+  "branch": "Sucursal",
+  "branchAll": "Todas",
+  "all": "Todo",
+  "empty": "Por ahora no hay productos en la tienda.",
+  "tagAvailable": "Disponible",
+  "tagLow": "Pocas piezas",
+  "tagOut": "Agotado",
+  "pickupAt": "Se recoge en {branch}",
+  "left": "Quedan {count}",
+  "onlyInStore": "Pregunta por él en la barbería.",
+  "outBody": "Se agotó. Escríbenos y te avisamos cuando vuelva.",
+  "reserve": {
+    "title": "Apártalo",
+    "qty": "Cantidad",
+    "less": "Quitar uno",
+    "more": "Agregar uno",
+    "name": "Tu nombre",
+    "phone": "Tu WhatsApp",
+    "phoneHint": "10 dígitos. Solo para avisarte cuando esté listo.",
+    "fromAccount": "Con los datos de tu cuenta.",
+    "submit": "Apartar y pagar en la barbería",
+    "payOnline": "Pagar ahora en línea",
+    "sending": "Apartando…",
+    "redirecting": "Te llevamos a Mercado Pago…",
+    "total": "Total",
+    "note": "Lo apartamos {hours} horas. Se paga al recogerlo.",
+    "badName": "Escribe tu nombre solo con letras.",
+    "badPhone": "Escribe un WhatsApp de México a 10 dígitos.",
+    "error": "No pudimos apartar tu pedido. Intenta de nuevo.",
+    "payFailed": "No pudimos abrir el pago en línea. Tu pedido quedó apartado: págalo al recogerlo."
+  },
+  "captcha": {
+    "error": "No pudimos comprobar que eres una persona.",
+    "reintentar": "Reintentar"
+  },
+  "folio": {
+    "title": "¡Listo! Tu pedido está apartado",
+    "label": "Tu folio",
+    "pickup": "Pasa a recogerlo a {branch}; se paga al recogerlo.",
+    "pickupPaid": "Pasa a recogerlo a {branch}. Ya está pagado.",
+    "until": "Lo apartamos hasta el {when}.",
+    "showFolio": "Enséñale este folio a la barbería.",
+    "statusPENDING": "Apartado",
+    "statusPAID_ONLINE": "Pagado en línea",
+    "statusREADY": "Listo para recoger",
+    "statusPICKED_UP": "Entregado",
+    "statusCANCELLED": "Cancelado",
+    "statusEXPIRED": "Venció",
+    "closed": "Este pedido ya no está apartado.",
+    "notFound": "No encontramos este pedido.",
+    "payNow": "Pagar ahora en línea",
+    "whatsapp": "Escribir a la barbería",
+    "map": "Cómo llegar",
+    "waText": "Hola, aparté el pedido {folio} en su tienda en línea."
+  },
+  "section": {
+    "title": "Productos",
+    "sub": "Apártalos en línea y recógelos aquí.",
+    "cta": "Ver la tienda"
+  }
+}

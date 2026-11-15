@@ -1,0 +1,73 @@
+{
+  "meta": {
+    "title": "Shop · {shop}",
+    "description": "Products from {shop}: reserve online and pick them up at the shop.",
+    "productTitle": "{name} · {shop}",
+    "productDescription": "{name} for {price} at {shop}. Reserve it online and pay at pickup."
+  },
+  "noEncontrada": "This shop isn't available.",
+  "title": "Shop",
+  "sub": "Reserve online, pick up at the barbershop.",
+  "back": "Back to the barbershop",
+  "backStore": "See the whole shop",
+  "branch": "Location",
+  "branchAll": "All",
+  "all": "All",
+  "empty": "There are no products in the shop yet.",
+  "tagAvailable": "In stock",
+  "tagLow": "Few left",
+  "tagOut": "Sold out",
+  "pickupAt": "Pick up at {branch}",
+  "left": "{count} left",
+  "onlyInStore": "Ask for it at the barbershop.",
+  "outBody": "Sold out. Message us and we'll let you know when it's back.",
+  "reserve": {
+    "title": "Reserve it",
+    "qty": "Quantity",
+    "less": "Remove one",
+    "more": "Add one",
+    "name": "Your name",
+    "phone": "Your WhatsApp",
+    "phoneHint": "10 digits. Only to tell you when it's ready.",
+    "fromAccount": "Using your account details.",
+    "submit": "Reserve and pay at the shop",
+    "payOnline": "Pay online now",
+    "sending": "Reserving…",
+    "redirecting": "Taking you to Mercado Pago…",
+    "total": "Total",
+    "note": "We hold it for {hours} hours. You pay at pickup.",
+    "badName": "Use letters only for your name.",
+    "badPhone": "Enter a 10-digit Mexican WhatsApp number.",
+    "error": "We couldn't reserve your order. Try again.",
+    "payFailed": "We couldn't open online payment. Your order is reserved: pay at pickup."
+  },
+  "captcha": {
+    "error": "We couldn't verify you're a person.",
+    "reintentar": "Retry"
+  },
+  "folio": {
+    "title": "Done! Your order is reserved",
+    "label": "Your order number",
+    "pickup": "Pick it up at {branch}; you pay at pickup.",
+    "pickupPaid": "Pick it up at {branch}. It's already paid.",
+    "until": "We hold it until {when}.",
+    "showFolio": "Show this number at the barbershop.",
+    "statusPENDING": "Reserved",
+    "statusPAID_ONLINE": "Paid online",
+    "statusREADY": "Ready for pickup",
+    "statusPICKED_UP": "Picked up",
+    "statusCANCELLED": "Cancelled",
+    "statusEXPIRED": "Expired",
+    "closed": "This order is no longer reserved.",
+    "notFound": "We couldn't find this order.",
+    "payNow": "Pay online now",
+    "whatsapp": "Message the barbershop",
+    "map": "Directions",
+    "waText": "Hi, I reserved order {folio} in your online shop."
+  },
+  "section": {
+    "title": "Products",
+    "sub": "Reserve them online and pick them up here.",
+    "cta": "See the shop"
+  }
+}
