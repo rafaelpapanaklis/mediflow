@@ -41,6 +41,7 @@ import {
   shopMinuteOfDay,
 } from "@/lib/barber/agenda";
 import { sumMoneyBy } from "@/lib/barber/money";
+import { formatBarberPhone } from "@/lib/barber/phone-format";
 import { isOwnVisitStatus } from "@/lib/barber/own-visits";
 import { isBarberUnacceptedRequest } from "@/lib/barber/whatsapp-core";
 import { Field, Modal, Pill, agendaCss as css } from "./agenda-ui";
@@ -362,11 +363,11 @@ export function AppointmentDetail(props: AppointmentDetailProps) {
                   rel="noopener noreferrer"
                   className={css.detailLink}
                 >
-                  <MessageCircle size={12} style={{ verticalAlign: -2 }} /> {appt.clientPhone}
+                  <MessageCircle size={12} style={{ verticalAlign: -2 }} /> {formatBarberPhone(appt.clientPhone)}
                 </a>
               </>
             ) : appt.clientPhone ? (
-              <span style={{ color: "var(--text-3)" }}> · {appt.clientPhone}</span>
+              <span style={{ color: "var(--text-3)" }}> · {formatBarberPhone(appt.clientPhone)}</span>
             ) : null}
           </span>
         </div>

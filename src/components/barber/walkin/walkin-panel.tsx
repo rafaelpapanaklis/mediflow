@@ -31,6 +31,7 @@ import {
 import { Field, Modal, Pill, agendaCss } from "@/components/barber/agenda/agenda-ui";
 import { WalkinQr } from "./walkin-qr";
 import css from "./walkin.module.css";
+import { formatBarberPhone } from "@/lib/barber/phone-format";
 
 interface QueueRow extends BarberWalkInDTO {
   rank: number;
@@ -241,7 +242,7 @@ export function WalkinPanel(props: WalkinPanelProps) {
                             wait: formatMinutes(waited),
                           })}
                           {barber ? ` · ${barber.nickname || barber.name}` : ""}
-                          {row.phone ? ` · ${row.phone}` : ""}
+                          {row.phone ? ` · ${formatBarberPhone(row.phone)}` : ""}
                         </div>
                       </div>
 
