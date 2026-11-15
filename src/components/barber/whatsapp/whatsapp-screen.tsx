@@ -6,7 +6,9 @@ import { ArrowUpRight, Bot, Inbox, Link2, Megaphone, MessageSquareText } from "l
 import { apiCall } from "../team/admin-ui";
 import type { Dictionary } from "@/i18n/t";
 import type { BarberWaConnectionDTO, BarberWaQuotaDTO } from "@/lib/barber/whatsapp-core";
+import type { BarberWaAckSettings } from "@/lib/barber/wa-acuse-core";
 import { ConnectionPanel } from "./connection-panel";
+import { AcusePanel } from "./acuse-panel";
 import { InboxPanel } from "./inbox-panel";
 import { TemplatesPanel, type TemplateRow } from "./templates-panel";
 import { CampaignsPanel } from "./campaigns-panel";
@@ -36,6 +38,7 @@ export function BarberWhatsAppScreen({
   dict,
   locale,
   initial,
+  ack,
   hasInbox,
   canEdit,
   canSend,
@@ -43,6 +46,8 @@ export function BarberWhatsAppScreen({
   dict: Dictionary;
   locale: string;
   initial: WaStatusPayload;
+  /** El acuse automático (apagado por defecto). Sin dato = no se pinta. */
+  ack?: { settings: BarberWaAckSettings; storageReady: boolean } | null;
   hasInbox: boolean;
   canEdit: boolean;
   canSend: boolean;
@@ -52,6 +57,7 @@ export function BarberWhatsAppScreen({
       <Screen
         locale={locale}
         initial={initial}
+        ack={ack ?? null}
         hasInbox={hasInbox}
         canEdit={canEdit}
         canSend={canSend}
@@ -63,12 +69,14 @@ export function BarberWhatsAppScreen({
 function Screen({
   locale,
   initial,
+  ack,
   hasInbox,
   canEdit,
   canSend,
 }: {
   locale: string;
   initial: WaStatusPayload;
+  ack: { settings: BarberWaAckSettings; storageReady: boolean } | null;
   hasInbox: boolean;
   canEdit: boolean;
   canSend: boolean;
@@ -149,6 +157,10 @@ function Screen({
           canSend={canSend}
           onChanged={refresh}
         />
+      ) : null}
+
+      {tab === "conexion" && ack ? (
+        <AcusePanel initial={ack.settings} storageReady={ack.storageReady} canEdit={canEdit} />
       ) : null}
 
       {tab === "plantillas" ? (

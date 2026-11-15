@@ -136,6 +136,26 @@
     "planLocked": "Tu plan no incluye la bandeja de entrada de WhatsApp. Los recordatorios sí están incluidos.",
     "generic": "Algo salió mal. Intenta de nuevo."
   },
+  "acuse": {
+    "title": "Respuesta automática",
+    "lead": "Cuando un cliente contesta a un recordatorio con un mensaje que nadie atiende, le avisamos que ya lo recibiste. Así no se queda esperando sin saber.",
+    "switch": "Contestar en automático cuando un cliente responde a un recordatorio",
+    "switchOn": "Encendido: se manda el texto de abajo.",
+    "switchOff": "Apagado: no se manda nada en automático.",
+    "textLabel": "Texto que recibe el cliente",
+    "textHint": "Hasta {max} caracteres. Si lo dejas vacío, se manda el de ejemplo.",
+    "rules": {
+      "onlyUnanswered": "Solo sale si ni tú ni el bot contestaron ese mensaje.",
+      "oncePerDay": "Sale una sola vez por conversación al día.",
+      "quota": "Cuenta como un mensaje de tu cupo. Sin cupo, no sale."
+    },
+    "preview": "Así le llega",
+    "save": "Guardar",
+    "saving": "Guardando…",
+    "saved": "Guardado",
+    "readOnly": "Solo quien puede cambiar la configuración edita este ajuste.",
+    "storageMissing": "Este ajuste todavía no se puede guardar: falta un paso de nuestro lado. Ya estamos en ello."
+  },
   "common": {
     "cancel": "Cancelar"
   }

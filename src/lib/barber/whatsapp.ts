@@ -40,7 +40,19 @@ import {
   reminderInvalidationData,
 } from "@/lib/barber/agenda";
 import { canTransition, type BarberAppointmentStatus } from "@/lib/barber/types";
-import { advisoryLockKey } from "@/lib/barber/booking-core";
+import {
+  advisoryLockKey,
+  barberTodayISO,
+  barberTzLocalToUtc,
+} from "@/lib/barber/booking-core";
+import {
+  BARBER_WA_ACK_MARK,
+  barberWaAckText,
+  decideBarberWaAck,
+  isBarberWaAckRow,
+  type BarberWaAckDecision,
+} from "@/lib/barber/wa-acuse-core";
+import { getBarberWaAck } from "@/lib/barber/wa-acuse";
 import {
   BARBER_WA_ARCHIVE_MARK,
   BARBER_WA_CLAIM_LOST_MESSAGE,
@@ -2428,8 +2440,16 @@ export async function ingestBarberInbound(value: any, msg: any): Promise<boolean
   // El BOT es el último en la fila, a propósito: primero manda lo que el
   // cliente respondió a un recordatorio nuestro (eso ya tiene dueño y no
   // se le consulta a ninguna IA). Solo lo que nadie atendió llega al bot.
+  let botAttended = false;
   if (!handled) {
-    await runBotIfEnabled(shop, creds, phone, rawText, { deadlineAt, inboundId: stored.id });
+    botAttended = await runBotIfEnabled(shop, creds, phone, rawText, { deadlineAt, inboundId: stored.id });
+  }
+
+  // ACUSE AUTOMÁTICO (opcional, apagado por defecto): una frase escrita en
+  // respuesta al recordatorio que NADIE atendió recibe «Recibimos tu
+  // mensaje…». Las reglas viven en decideBarberWaAck (wa-acuse-core.ts).
+  if (!handled && !botAttended && !fromVoice && !tappedId) {
+    await maybeSendBarberWaAck(shop, creds, phone, client?.id ?? null);
   }
   return true;
 }
@@ -2705,7 +2725,10 @@ async function runBotIfEnabled(
   phone: string,
   text: string,
   opts: { deadlineAt: number; inboundId: string },
-): Promise<void> {
+): Promise<boolean> {
+  // Devuelve true si el BOT atendió este mensaje (contestó, o lo contesta
+  // otro turno suyo). false = nadie del bot lo atendió: apagado, pausado sin
+  // respuesta, o falló. Lo usa el acuse automático para no hablar encima.
   let seenUpTo: Date | null = null;
   let claimed = false;
   let answered = false;
@@ -2713,10 +2736,11 @@ async function runBotIfEnabled(
     const { runBarberBotTurn, barberBotIsOn } = await import("@/lib/barber/bot");
     // Con el bot apagado no hay turno que ordenar: ni candado ni marcas (la
     // enorme mayoría de los mensajes de una barbería sin bot pasan por aquí).
-    if (!(await barberBotIsOn(shop.id))) return;
+    if (!(await barberBotIsOn(shop.id))) return false;
 
     const claim = await claimBotTurn(shop.id, phone, opts.inboundId, opts.deadlineAt);
-    if (claim.decision !== "run") return;
+    // Otro turno del bot contesta por éste (o ya no da tiempo): el bot lo tiene.
+    if (claim.decision !== "run") return true;
     claimed = true;
     seenUpTo = claim.seenUpTo;
 
@@ -2731,7 +2755,7 @@ async function runBotIfEnabled(
       unanswered: true,
     });
     answered = true;
-    if (!turn.reply) return;
+    if (!turn.reply) return false;
 
     // Lo que el turno YA HIZO (agendó, canceló, movió, pasó con una persona)
     // o un aviso fijo (fuera de horario, tope) se dice siempre. Solo una
@@ -2748,15 +2772,132 @@ async function runBotIfEnabled(
         select: { id: true, createdAt: true, errorMessage: true },
       });
       if (barberBotReplyIsStale(seenUpTo, others, new Date())) {
+        // La respuesta nació vieja: el turno del mensaje más nuevo contesta
+        // por todos. El bot lo tiene.
         answered = false;
-        return;
+        return true;
       }
     }
     await replyInline(shop, creds, phone, turn.reply, { options: turn.options });
+    return true;
   } catch (err) {
     console.error(`[barber/wa] el bot no pudo atender (${shop.id}):`, err);
+    return false;
   } finally {
     if (claimed) await releaseBotTurn(shop.id, phone, opts.inboundId, answered ? seenUpTo : null);
+  }
+}
+
+/**
+ * ACUSE AUTOMÁTICO (opcional): «Recibimos tu mensaje. En un momento te
+ * contestamos.» — o el texto que escribió la barbería.
+ *
+ * Solo se llama con una frase ESCRITA que nadie atendió (ni el recordatorio,
+ * ni la baja, ni el bot). Lo demás lo decide decideBarberWaAck: ajuste
+ * encendido, que lo último que le dijimos sea el recordatorio (y reciente),
+ * que haya cupo y conexión.
+ *
+ * UNA vez por conversación y por día: «¿ya salió un acuse desde el
+ * recordatorio o desde que empezó el día de la barbería?» y «guárdalo» van
+ * dentro de una transacción con candado por (barbería, teléfono). Dos
+ * mensajes seguidos del cliente no sacan dos acuses.
+ *
+ * Texto libre: el cliente acaba de escribir, la ventana de 24 h está
+ * abierta. Gasta del cupo como cualquier mensaje. Nunca lanza: un acuse que
+ * no sale no puede tumbar la ingesta.
+ */
+async function maybeSendBarberWaAck(
+  shop: ShopWaRow,
+  creds: BarberWaCredentials | null,
+  phone: string,
+  clientId: string | null,
+): Promise<BarberWaAckDecision> {
+  try {
+    const { settings } = await getBarberWaAck(shop.id);
+    // La enorme mayoría de las barberías lo tienen apagado: una sola lectura.
+    if (!settings.enabled) return "off";
+
+    const now = new Date();
+    const reminder = barberWaTemplate("reminder");
+    const last = await lastWordTo(shop.id, phone, reminder.name);
+    const quota = await getBarberWaQuota(shop.id);
+    const decision = decideBarberWaAck({
+      settings,
+      connected: !!creds,
+      writtenText: true,
+      handled: false,
+      botAttended: false,
+      lastWord: last ? { templateName: last.templateName, createdAt: last.createdAt } : null,
+      reminderTemplate: reminder.name,
+      alreadyAcked: false,
+      quotaFits: barberWaFits(quota.limit, quota.used),
+      now,
+    });
+    if (decision !== "send" || !creds || !last) return decision;
+
+    // «Una vez por conversación y por día»: desde el recordatorio que abrió
+    // esta conversación, o desde el inicio del día de la barbería, lo que
+    // sea ANTES.
+    const dayStart = barberTzLocalToUtc(barberTodayISO(shop.timezone, now), 0, 0, shop.timezone);
+    const since = last.createdAt.getTime() < dayStart.getTime() ? last.createdAt : dayStart;
+    const body = barberWaAckText(settings);
+
+    const [lockA, lockB] = advisoryLockKey(`barber:wa:acuse:${shop.id}:${phone}`);
+    const row = await prisma.$transaction(
+      async (tx) => {
+        await tx.$executeRawUnsafe(
+          `SELECT pg_advisory_xact_lock(${Math.trunc(lockA)}, ${Math.trunc(lockB)})`,
+        );
+        const already = await tx.barberMessage.count({
+          where: {
+            barbershopId: shop.id,
+            phone,
+            direction: "OUTBOUND",
+            templateName: BARBER_WA_ACK_MARK,
+            // Uno que Meta rechazó no cuenta: el siguiente mensaje lo reintenta.
+            status: { not: "FAILED" },
+            createdAt: { gte: since },
+          },
+        });
+        if (already > 0) return null;
+        return tx.barberMessage.create({
+          data: {
+            barbershopId: shop.id,
+            direction: "OUTBOUND",
+            phone,
+            body,
+            status: "PENDING",
+            // Nace RECLAMADA, como las respuestas en línea: el drenado de la
+            // cola no puede mandarla una segunda vez.
+            errorMessage: barberWaClaimMark(),
+            templateName: BARBER_WA_ACK_MARK,
+            clientId,
+          },
+          select: { id: true },
+        });
+      },
+      { maxWait: 10_000, timeout: 15_000 },
+    );
+    if (!row) return "alreadyAcked";
+
+    try {
+      const { wamid } = await sendText(creds, phone, body);
+      await prisma.barberMessage.update({
+        where: { id: row.id },
+        data: { status: "SENT", waMessageId: wamid, errorMessage: null },
+      });
+      await consumeQuota(shop);
+      return "send";
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "No se pudo enviar el acuse";
+      await prisma.barberMessage
+        .update({ where: { id: row.id }, data: { status: "FAILED", errorMessage: message } })
+        .catch(() => {});
+      return "notConnected";
+    }
+  } catch (err) {
+    console.error(`[barber/wa] no se pudo resolver el acuse automático (${shop.id}):`, err);
+    return "off";
   }
 }
 
@@ -2784,7 +2925,17 @@ function deliveredOutboundWhere(barbershopId: string, phone: string) {
     status: { in: ["SENT", "DELIVERED", "READ"] as ("SENT" | "DELIVERED" | "READ")[] },
     // OR explícito: en SQL `NOT (NULL LIKE 'sys:%')` es NULL y dejaría
     // fuera justo las filas sin templateName, que son las respuestas.
-    OR: [{ templateName: null }, { NOT: { templateName: { startsWith: BARBER_WA_SYS_PREFIX } } }],
+    // El ACUSE automático tampoco cuenta como «lo último que le dijimos»: un
+    // CONFIRMAR escrito después del acuse sigue siendo para el recordatorio.
+    OR: [
+      { templateName: null },
+      {
+        AND: [
+          { NOT: { templateName: { startsWith: BARBER_WA_SYS_PREFIX } } },
+          { NOT: { templateName: BARBER_WA_ACK_MARK } },
+        ],
+      },
+    ],
   };
 }
 
@@ -2799,6 +2950,8 @@ async function lastWordTo(
 ): Promise<{
   templateName: string | null;
   appointmentId: string | null;
+  /** Cuándo se le dijo (lo usa el acuse automático). */
+  createdAt: Date;
   /** Visitas distintas en la racha de recordatorios que cierra el hilo. */
   reminderStreak: string[];
 } | null> {
@@ -2806,7 +2959,7 @@ async function lastWordTo(
     where: deliveredOutboundWhere(barbershopId, phone),
     orderBy: { createdAt: "desc" },
     take: 6,
-    select: { templateName: true, appointmentId: true },
+    select: { templateName: true, appointmentId: true, createdAt: true },
   });
   if (rows.length === 0) return null;
   const streak: string[] = [];
@@ -2817,6 +2970,7 @@ async function lastWordTo(
   return {
     templateName: rows[0].templateName,
     appointmentId: rows[0].appointmentId,
+    createdAt: rows[0].createdAt,
     reminderStreak: streak,
   };
 }
@@ -3338,7 +3492,10 @@ function toMessageDTO(row: {
         : row.errorMessage,
     // Los adjuntos y las marcas de sistema no son "una plantilla".
     templateName:
-      attachment || isBarberWaSysRow(row.templateName) || isBarberWaAskRow(row.templateName)
+      attachment ||
+      isBarberWaSysRow(row.templateName) ||
+      isBarberWaAskRow(row.templateName) ||
+      isBarberWaAckRow(row.templateName)
         ? null
         : row.templateName,
     attachment,

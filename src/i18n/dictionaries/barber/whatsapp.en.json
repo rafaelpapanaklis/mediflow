@@ -137,6 +137,26 @@
     "planLocked": "Your plan doesn't include the WhatsApp inbox. Reminders are included.",
     "generic": "Something went wrong. Try again."
   },
+  "acuse": {
+    "title": "Automatic reply",
+    "lead": "When a client answers a reminder with a message nobody handles, we let them know you got it, so they aren’t left waiting.",
+    "switch": "Reply automatically when a client answers a reminder",
+    "switchOn": "On: the text below is sent.",
+    "switchOff": "Off: nothing is sent automatically.",
+    "textLabel": "Text the client receives",
+    "textHint": "Up to {max} characters. Leave it empty to send the sample text.",
+    "rules": {
+      "onlyUnanswered": "It’s only sent if neither you nor the bot answered that message.",
+      "oncePerDay": "It’s sent once per conversation per day.",
+      "quota": "It counts as one message of your quota. With no quota left, it isn’t sent."
+    },
+    "preview": "What they get",
+    "save": "Save",
+    "saving": "Saving…",
+    "saved": "Saved",
+    "readOnly": "Only people who can change the settings can edit this.",
+    "storageMissing": "This setting can’t be saved yet: a step is still pending on our side. We’re on it."
+  },
   "common": {
     "cancel": "Cancel"
   }
