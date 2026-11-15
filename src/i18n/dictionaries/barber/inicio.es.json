@@ -89,7 +89,7 @@
       "tomorrowPendingHint": "Confírmalas hoy para no dejar huecos.",
       "tomorrowPendingCta": "Abrir agenda",
       "publicRequests": { "one": "1 solicitud de reserva por atender", "other": "{count} solicitudes de reserva por atender" },
-      "publicRequestsHint": "Llegaron desde tu página web.",
+      "publicRequestsHint": "Llegaron desde tu página o por WhatsApp.",
       "publicRequestsCta": "Ver solicitudes"
     },
     "blocker": {

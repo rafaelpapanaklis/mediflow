@@ -63,6 +63,7 @@ import {
 import { NOT_CANCELLED } from "@/lib/barber/clients";
 import { BARBER_DEPOSIT_LINE_PREFIX, BARBER_DEPOSIT_REFUND_LINE_PREFIX } from "@/lib/barber/memberships-core";
 import { BARBER_DEFAULT_DAY_END_MIN, BARBER_DEFAULT_DAY_START_MIN } from "@/lib/barber/agenda";
+import { BARBER_REQUEST_SOURCES } from "@/lib/barber/whatsapp-core";
 import type {
   BarberAppointmentStatus,
   BarberCommissionType,
@@ -540,8 +541,13 @@ export async function getInicioSummary(ctx: BarberContext, opts: InicioOptions =
              AND a."startAt" >= ${utcTs(tomorrowStart)} AND a."startAt" < ${utcTs(dayAfterStart)}
              ${barberFilter('a."barberId"', barberIds)}
         ) AS tomorrow_total,
+        -- Solicitudes por atender: mismo criterio que la pantalla Solicitudes
+        -- (web o bot), de BARBER_REQUEST_SOURCES. ::text porque la columna es
+        -- un enum y los parámetros llegan como texto.
         (SELECT COUNT(*)::int FROM "barber_appointments" a
-           WHERE a."barbershopId" IN (${ids}) AND a."source" = 'PUBLIC' AND a."status" = 'PENDING'
+           WHERE a."barbershopId" IN (${ids})
+             AND a."source"::text IN (${Prisma.join([...BARBER_REQUEST_SOURCES])})
+             AND a."status" = 'PENDING'
              AND a."startAt" >= ${utcTs(now)}
         ) AS public_requests,
         EXISTS (SELECT 1 FROM "barber_barbers" b WHERE b."barbershopId" IN (${ids}) AND b."isActive" = TRUE) AS has_barbers,
