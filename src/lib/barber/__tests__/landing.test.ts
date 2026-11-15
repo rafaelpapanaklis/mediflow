@@ -30,6 +30,7 @@ import {
   ordenDeSecciones,
   precioBarberWeb,
   urlMapaEmbed,
+  turnosDesdeHorarioDelLocal,
   seccionesVisibles,
   validarConfigBarberWeb,
   type BarberWebConfig,
@@ -388,4 +389,20 @@ test("un id de plantilla desconocido cae a la clásica, no a una pantalla en bla
   assert.equal(manifiestoBarberWeb("no-existe").id, "clasica");
   assert.equal(manifiestoBarberWeb(null).id, "clasica");
   assert.equal(manifiestoBarberWeb("vintage").id, "vintage");
+});
+
+test("el horario del local pasa a turnos del barbero: lunes=1, domingo=0, cerrados fuera", () => {
+  const t = turnosDesdeHorarioDelLocal({
+    horario: [
+      { dia: 0, abierto: true, desde: "10:00", hasta: "20:00" },
+      { dia: 5, abierto: true, desde: "09:30", hasta: "14:00" },
+      { dia: 6, abierto: false, desde: "09:00", hasta: "20:00" },
+      { dia: 2, abierto: true, desde: "20:00", hasta: "10:00" },
+    ],
+  });
+  assert.deepEqual(t, [
+    { dayOfWeek: 1, startMinute: 600, endMinute: 1200 },
+    { dayOfWeek: 6, startMinute: 570, endMinute: 840 },
+  ]);
+  assert.deepEqual(turnosDesdeHorarioDelLocal(null), []);
 });

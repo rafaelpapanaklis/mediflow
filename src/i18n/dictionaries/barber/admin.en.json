@@ -120,6 +120,7 @@
     "branchAccessHome": "Their location (always included)",
     "branchAccessOwner": "Owner: sees the whole chain without checking anything.",
     "linkedBarberChip": "Profile: {name}",
+    "noScheduleWarn": "Not bookable: no working hours set",
     "branchAccessCount": {
       "one": "1 location",
       "other": "{count} locations"

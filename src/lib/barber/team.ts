@@ -20,6 +20,7 @@ import {
   cleanMultiline,
   cleanText,
 } from "@/lib/barber/branches";
+import { normalizarConfigBarberWeb, turnosDesdeHorarioDelLocal } from "@/lib/barber/landing";
 import { getBarberPlan } from "@/lib/barber/plans";
 import { barberPlanHasFeature, isBarberUnlimited } from "@/lib/barber/plan-shared";
 import type { BarberCommissionType, BarberRole } from "@/lib/barber/types";
@@ -426,7 +427,27 @@ export async function createBarberProfile(
     },
     select: BARBER_SELECT,
   });
+  await heredarHorarioDelLocal(barbershopId, created.id, created.isActive === true);
   return toBarberRow(created as BarberRowRaw);
+}
+
+/**
+ * Un barbero nuevo sin horario no aparece para reservar y el dueño no se entera.
+ * Hereda el horario del local de SU sede (el de Mi web), editable después en Horarios.
+ * Si la sede no publicó horario, o la tabla no existe, no pasa nada.
+ */
+async function heredarHorarioDelLocal(barbershopId: string, barberId: string, activo: boolean): Promise<void> {
+  if (!activo) return;
+  try {
+    const fila = await prisma.barberLandingConfig.findUnique({ where: { barbershopId }, select: { config: true } });
+    const turnos = turnosDesdeHorarioDelLocal(normalizarConfigBarberWeb(fila?.config));
+    if (turnos.length === 0) return;
+    await prisma.barberSchedule.createMany({
+      data: turnos.map((t) => ({ barbershopId, barberId, ...t, isActive: true })),
+    });
+  } catch (e) {
+    console.warn("[barber team] no se pudo heredar el horario del local:", (e as Error)?.message ?? e);
+  }
 }
 
 export async function updateBarberProfile(
@@ -545,6 +566,8 @@ export interface BarberMemberRow {
   permissions: BarberPermissionSummary;
   /** Sedes EXTRA a las que tiene acceso (BarberUserBranchAccess). */
   branchAccessIds: string[];
+  /** Barbero activo ligado a esta persona y SIN un solo día de trabajo: no aparece para reservar. */
+  noSchedule: boolean;
 }
 
 /**
@@ -564,7 +587,7 @@ const MEMBER_SELECT = {
   permissionsOverride: true,
   lastLogin: true,
   createdAt: true,
-  barber: { select: { name: true } },
+  barber: { select: { name: true, isActive: true, _count: { select: { schedules: { where: { isActive: true } } } } } },
   branchAccess: { select: { barbershopId: true } },
 } as const;
 
@@ -580,7 +603,7 @@ type MemberRowRaw = {
   permissionsOverride: string[];
   lastLogin: Date | null;
   createdAt: Date;
-  barber: { name: string } | null;
+  barber: { name: string; isActive?: boolean; _count?: { schedules: number } } | null;
   branchAccess: Array<{ barbershopId: string }>;
 };
 
@@ -600,6 +623,7 @@ function toMemberRow(r: MemberRowRaw, ctx: BarberContext): BarberMemberRow {
     isSelf: r.id === ctx.barberUserId,
     permissions: describeMemberPermissions(r.role, r.permissionsOverride),
     branchAccessIds: r.branchAccess.map((b) => b.barbershopId),
+    noSchedule: r.isActive && !!r.barber && r.barber.isActive !== false && (r.barber._count?.schedules ?? 1) === 0,
   };
 }
 

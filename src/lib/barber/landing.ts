@@ -1031,3 +1031,29 @@ export function rutaReservaBarberia(
 export function rutaCuentaBarberia(slug: string): string {
   return `/b/${slug}/mi-cuenta`;
 }
+
+/**
+ * El horario del local convertido en turnos de un barbero nuevo (BarberSchedule).
+ *
+ * El local usa 0 = lunes … 6 = domingo; la agenda usa 0 = domingo … 6 = sábado.
+ * Solo días abiertos con hasta > desde. Sin horario publicado, lista vacía:
+ * no se inventa nada.
+ */
+export function turnosDesdeHorarioDelLocal(
+  config: Pick<BarberWebConfig, "horario"> | null | undefined,
+): { dayOfWeek: number; startMinute: number; endMinute: number }[] {
+  const out: { dayOfWeek: number; startMinute: number; endMinute: number }[] = [];
+  const lista = Array.isArray(config?.horario) ? config!.horario : [];
+  const aMin = (h: string) => {
+    const m = /^(\d{1,2}):(\d{2})$/.exec(h);
+    return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+  };
+  for (const d of lista) {
+    if (!d || d.abierto === false) continue;
+    const a = aMin(d.desde);
+    const b = aMin(d.hasta);
+    if (a === null || b === null || b <= a || d.dia < 0 || d.dia > 6) continue;
+    out.push({ dayOfWeek: (d.dia + 1) % 7, startMinute: a, endMinute: b });
+  }
+  return out;
+}
