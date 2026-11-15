@@ -171,7 +171,7 @@
       "enabled": "Loyalty program on",
       "enabledHint": "Off: the card disappears from the client's profile and portal, and the register doesn't offer the redemption. Accumulated stamps aren't lost.",
       "threshold": "Visits to earn the reward",
-      "thresholdHint": "With 10, the tenth visit earns the reward. Completed appointments and service sales at the register count.",
+      "thresholdHint": "With 10, the client earns the reward once they have 10 stamps. With an appointment, the stamp lands when the visit is completed: the tenth appointment can already be free. Without one, the stamp lands when they pay: the reward is used on the next visit. Completed appointments and service sales at the register count.",
       "reward": "Reward name",
       "rewardHint": "This is what the client reads on their card and in campaigns: “Free haircut”, “Complimentary beard”…",
       "summary": "Every {count} visits → {reward}",

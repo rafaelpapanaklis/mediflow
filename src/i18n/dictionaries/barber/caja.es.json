@@ -144,7 +144,7 @@
     "remove": "Quitar",
     "discount": "Descuento del ticket",
     "discountHint": "Se registra como una línea negativa.",
-    "loyaltyRedeem": "Canjear premio de lealtad: {reward} ({count} sellos)",
+    "loyaltyRedeem": "Aplicar premio de lealtad ({count} sellos)",
     "loyaltyApplyTo": "Aplicar a",
     "membershipUse": "Usar membresía",
     "membershipApplyTo": "Cubrir",
@@ -170,7 +170,8 @@
     "depositNotice": "Esta cita tiene un anticipo pagado de {amount}. Se descuenta solo del total.",
     "depositApplied": "Anticipo pagado",
     "depositRest": "El anticipo es mayor que lo que queda por cobrar: {amount} no se descuentan en este ticket.",
-    "depositDue": "Por cobrar"
+    "depositDue": "Por cobrar",
+    "loyaltyRedeemEffect": "«{service}» queda gratis en este ticket. El premio de la barbería es «{reward}»."
   },
   "print": {
     "ticketTitle": "Ticket",

@@ -144,7 +144,7 @@
     "remove": "Remove",
     "discount": "Ticket discount",
     "discountHint": "Recorded as a negative line.",
-    "loyaltyRedeem": "Redeem loyalty reward: {reward} ({count} stamps)",
+    "loyaltyRedeem": "Apply loyalty reward ({count} stamps)",
     "loyaltyApplyTo": "Apply to",
     "membershipUse": "Use membership",
     "membershipApplyTo": "Cover",
@@ -170,7 +170,8 @@
     "depositNotice": "This appointment has a paid deposit of {amount}. It is taken off the total automatically.",
     "depositApplied": "Deposit paid",
     "depositRest": "The deposit is larger than what is left to charge: {amount} is not taken off on this ticket.",
-    "depositDue": "Left to charge"
+    "depositDue": "Left to charge",
+    "loyaltyRedeemEffect": "“{service}” is free on this ticket. This shop's reward is “{reward}”."
   },
   "print": {
     "ticketTitle": "Ticket",
