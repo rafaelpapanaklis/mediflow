@@ -1079,3 +1079,109 @@
 @media (prefers-reduced-motion: reduce) {
   .spin { animation: none; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   REDISEÑO D · tanda 3 — CLIENTES, lista y ficha (15-nov-2026).
+   Mismos tamaños de letra; solo radios del tema, pesos, colores por token,
+   rayas finas y quitar MAYÚSCULAS espaciadas.
+
+   SOLO ESTILOS. Otras ramas añaden aquí Estrellas y Bonos (stars-panel,
+   bonos-modal) y van a añadir Cobros (client-sales, con su propio CSS):
+   no se toca markup. Esas piezas usan estas mismas clases (.card, .btn,
+   .sectionTitle…), así que heredan el vestido sin que nadie las edite.
+   Va al final del archivo, sin editar las reglas de arriba, para no chocar
+   con quien las cambie.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* Superficies y controles con los radios del tema (6 / 8 / 12). */
+.card { border-radius: var(--radius-lg); }
+.notice,
+.blockWarn { border-radius: var(--radius-md); }
+.btn,
+.input,
+.textarea,
+.select { border-radius: var(--radius-md); }
+.btnSm,
+.iconBtn { border-radius: var(--radius-sm); }
+.modal { border-radius: var(--radius-lg); }
+.rowLink:focus-visible { border-radius: var(--radius-sm); }
+
+/* Rojos y verdes por token (antes hex sueltos, el verde no pasaba AA). */
+.btnDanger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 35%, transparent); }
+.btnDanger:hover { background: var(--danger-soft); }
+:global(.dark) .btnDanger { color: var(--danger); }
+.errorText,
+:global(.dark) .errorText { color: var(--danger); }
+.badgeDanger,
+:global(.dark) .badgeDanger {
+  background: var(--danger-soft);
+  border-color: color-mix(in srgb, var(--danger) 30%, transparent);
+  color: var(--danger);
+}
+.badgeSuccess,
+:global(.dark) .badgeSuccess {
+  background: var(--success-soft);
+  border-color: color-mix(in srgb, var(--success) 30%, transparent);
+  color: var(--success);
+}
+.badgeBrand { color: var(--brand-ink); }
+.badge { font-weight: 600; }
+.blockWarn {
+  background: var(--danger-soft);
+  border-color: color-mix(in srgb, var(--danger) 28%, transparent);
+}
+
+/* Filtros: la elegida en tinta café (el texto café claro no pasaba AA). */
+.tabActive { color: var(--brand-ink); }
+
+/* Lista: iniciales en café suave (como Mensajes y Barberos), no el bloque
+   de degradado con letra blanca. */
+.avatar,
+.avatarBig {
+  background: var(--brand-soft);
+  color: var(--brand-ink);
+  box-shadow: none;
+  border-radius: 50%;
+}
+.avatarMuted { background: var(--bg-elev-2); color: var(--text-3); }
+.rowLink { border-bottom-color: var(--line); }
+.rowLink:hover { background: var(--bg-elev-2); }
+
+/* Etiquetas de las cifras sin MAYÚSCULAS espaciadas y legibles (antes
+   --text-4, decorativo). Mismo tamaño. */
+.statLabel,
+.prefKey {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 500;
+  color: var(--text-3);
+}
+.statValue { color: var(--text-1); }
+
+/* Pase 6: con la insignia «Membresía» las columnas Última visita / Visitas
+   / Lealtad se corrían a la izquierda (la columna de insignias era `auto`
+   y crecía). Ahora las tres columnas del renglón y las cifras dentro
+   miden lo mismo en todos los renglones. */
+.rowStats {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.6fr) minmax(0, 1.2fr);
+  gap: 12px;
+}
+@container blist (min-width: 700px) {
+  .row { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1.5fr) minmax(150px, 0.9fr); }
+  .rowStats { grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.7fr) minmax(0, 1fr); }
+}
+
+/* Ficha: identidad, preferencias y línea de tiempo con el tema. */
+.detailPhone { color: var(--brand-ink); }
+.metaIcon { color: var(--text-3); }
+.loyaltyReady { background: var(--brand-softer); }
+.prefRead {
+  border-radius: var(--radius-md);
+  background: var(--bg-elev-2);
+  border-color: var(--line);
+}
+.photoHero,
+.photoTile,
+.dropZone { border-radius: var(--radius-md); }
+.empty { border-radius: var(--radius-lg); }
