@@ -5,6 +5,31 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { opcionesDeFicha } from "@/lib/barber/team-fichas";
 import { horarioDelLocalDesdeTurnos, turnosDesdeHorarioDelLocal } from "@/lib/barber/landing";
+import { barberosQueTrabajanHoy, diaDeHoyEnZona } from "@/lib/barber/fila-barberos-hoy";
+
+// ── Fila pública: solo quien trabaja HOY ──
+test("Fila: el día de hoy se toma en la zona de la barbería, no la del servidor", () => {
+  // 16-nov-2026 03:00 UTC = domingo 15-nov 21:00 en CDMX (lunes en UTC)
+  const ahora = new Date("2026-11-16T03:00:00Z");
+  assert.equal(diaDeHoyEnZona(ahora, "America/Mexico_City"), 0);
+  assert.equal(diaDeHoyEnZona(ahora, "UTC"), 1);
+  assert.equal(diaDeHoyEnZona(ahora, "zona/inventada"), 0); // cae a CDMX, no truena
+});
+
+test("Fila: no se ofrece al barbero que descansa hoy ni al que no tiene horario", () => {
+  const barberos = [
+    { id: "luis", schedules: [{ dayOfWeek: 1 }, { dayOfWeek: 2 }] },
+    { id: "tono", schedules: [{ dayOfWeek: 2 }] },
+    { id: "nuevo", schedules: [] },
+  ];
+  assert.deepEqual(barberosQueTrabajanHoy(barberos, 1).map((b) => b.id), ["luis"]);
+  assert.deepEqual(barberosQueTrabajanHoy(barberos, 0).map((b) => b.id), []);
+});
+
+test("Fila: barbería sin ningún horario cargado (solo usa la fila) ofrece a todos", () => {
+  const barberos = [{ id: "a", schedules: [] }, { id: "b", schedules: [] }];
+  assert.deepEqual(barberosQueTrabajanHoy(barberos, 3).map((b) => b.id), ["a", "b"]);
+});
 
 const barberos = [
   { id: "b1", name: "Luis", barbershopId: "s1" },

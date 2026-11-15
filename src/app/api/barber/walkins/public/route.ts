@@ -23,6 +23,7 @@
 // ═══════════════════════════════════════════════════════════════════════
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { barberosQueTrabajanHoy, diaDeHoyEnZona } from "@/lib/barber/fila-barberos-hoy";
 import { mxTenDigits } from "@/lib/phone-mx";
 import { checkBarberCaptcha } from "@/lib/barber/captcha";
 import { BARBER_CAPTCHA_ACTIONS } from "@/lib/barber/captcha-core";
@@ -80,13 +81,21 @@ export async function GET(req: Request) {
   const snapshot = await loadQueueSnapshot(shop.id);
   const queue = snapshot.rows.map(toWalkInDTO);
 
-  const barbers = await prisma.barber.findMany({
+  const allBarbers = await prisma.barber.findMany({
     where: { barbershopId: shop.id, isActive: true },
     // Select explícito: de un barbero solo sale lo que ya es público en la
     // mini-web. Nada de comisiones ni renta de silla.
-    select: { id: true, name: true, nickname: true, photoUrl: true },
+    select: {
+      id: true,
+      name: true,
+      nickname: true,
+      photoUrl: true,
+      // Solo para saber quién trabaja HOY; no sale en la respuesta.
+      schedules: { where: { isActive: true }, select: { dayOfWeek: true } },
+    },
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
   });
+  const barbers = barberosQueTrabajanHoy(allBarbers, diaDeHoyEnZona(new Date(), shop.timezone));
 
   const ticket = (url.searchParams.get("ticket") ?? "").trim();
   const me = ticket ? await loadTicket(shop.id, ticket, queue, snapshot) : null;
