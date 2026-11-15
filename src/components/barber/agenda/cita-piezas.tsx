@@ -21,6 +21,7 @@ import {
   User,
 } from "lucide-react";
 import { formatBarberPhone } from "@/lib/barber/phone-format";
+import { ChatClienteLink } from "../wa-chat";
 import type {
   BarberAppointmentDTO,
   BarberDTO,
@@ -151,14 +152,9 @@ export function ClientColumn(props: {
         <div className={css.contact}>
           {props.phoneDigits.length === 10 ? (
             <>
-              <a
-                className={css.btn}
-                href={`https://wa.me/52${props.phoneDigits}`}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
+              <ChatClienteLink className={css.btn} phone={props.phoneDigits}>
                 <MessageCircle size={16} /> {t("barber.agenda.cita.client.whatsapp")}
-              </a>
+              </ChatClienteLink>
               <a className={css.btn} href={`tel:+52${props.phoneDigits}`}>
                 <Phone size={16} /> {t("barber.agenda.cita.client.call")}
               </a>

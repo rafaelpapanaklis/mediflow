@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check, Copy, Link2, MessageCircle, Phone, X } from "lucide-react";
 import { formatBarberPhone } from "@/lib/barber/phone-format";
+import { ChatClienteLink } from "@/components/barber/wa-chat";
 import { getBarberT } from "@/i18n/dictionaries/barber";
 import { upperFirst } from "@/components/barber/upper-first";
 import type { BarberBookingRequestDTO } from "@/lib/barber/booking";
@@ -203,14 +204,9 @@ export function SolicitudesClient({
                 <a href={`tel:+52${aviso.telefono}`} style={{ ...SMALL_BTN, ...GHOST_BTN }}>
                   <Phone size={14} /> {t("barber.reserva.solicitudes.avisaTuLlamar")} · {formatBarberPhone(aviso.telefono)}
                 </a>
-                <a
-                  href={`https://wa.me/52${aviso.telefono}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{ ...SMALL_BTN, ...GHOST_BTN }}
-                >
+                <ChatClienteLink phone={aviso.telefono} style={{ ...SMALL_BTN, ...GHOST_BTN }}>
                   <MessageCircle size={14} /> {t("barber.reserva.solicitudes.avisaTuWhatsapp")}
-                </a>
+                </ChatClienteLink>
               </>
             ) : (
               <span style={{ fontSize: 13, color: "var(--text-2)", alignSelf: "center" }}>
@@ -318,15 +314,13 @@ export function SolicitudesClient({
                       >
                         <Phone size={14} /> {formatBarberPhone(r.clientPhone)}
                       </a>
-                      <a
-                        href={`https://wa.me/52${r.clientPhone}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                      <ChatClienteLink
+                        phone={r.clientPhone}
                         style={{ ...SMALL_BTN, ...GHOST_BTN }}
                         aria-label="WhatsApp"
                       >
                         <MessageCircle size={14} />
-                      </a>
+                      </ChatClienteLink>
                     </>
                   ) : null}
                 </div>
