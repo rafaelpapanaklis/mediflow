@@ -101,12 +101,24 @@ export function BarbersClient({
     [branches],
   );
 
+  // El contador es el del servidor (toda la cadena) CORREGIDO por lo que pasó
+  // en esta pantalla: dar de alta, dar de baja o reactivar a un barbero mueve
+  // el número y el tope sin recargar. Se parte del dato del servidor y se le
+  // suma la diferencia de barberos ACTIVOS desde que cargó la página.
+  const activeNow = barbers.filter((b) => b.isActive).length;
+  const activeAtLoad = useMemo(
+    () => initialBarbers.filter((b) => b.isActive).length,
+    [initialBarbers],
+  );
+  const used = Math.max(0, seat.used + (activeNow - activeAtLoad));
+  const seatCanCreate = seat.unlimited || used < seat.max;
+
   const seatText = seat.unlimited
-    ? t("barbers.seatUnlimited", { used: seat.used, plan: seat.planName })
-    : t("barbers.seat", { used: seat.used, max: seat.max, plan: seat.planName });
+    ? t("barbers.seatUnlimited", { used, plan: seat.planName })
+    : t("barbers.seat", { used, max: seat.max, plan: seat.planName });
 
   const writeBranchId = activeBranchId ?? branches[0]?.id ?? "";
-  const canCreate = seat.canCreate && !isConsolidated;
+  const canCreate = seatCanCreate && !isConsolidated;
 
   function patch(next: Partial<FormState>) {
     setForm((f) => (f ? { ...f, ...next } : f));
@@ -167,7 +179,7 @@ export function BarbersClient({
       return `${t("barbers.payCommission")} · ${b.commissionPct ?? 0}%`;
     }
     if (b.commissionType === "CHAIR_RENT") {
-      return `${t("barbers.payChairRent")} · $${b.chairRent ?? 0}`;
+      return `${t("barbers.payChairRent")} · $${b.chairRent ?? 0} ${t("barbers.perMonth")}`;
     }
     return t("barbers.paySalary");
   }
@@ -180,7 +192,7 @@ export function BarbersClient({
           <p className={s.subtitle}>{t("barbers.subtitle")}</p>
         </div>
         <div className={s.headerActions}>
-          <Chip tone={seat.canCreate ? undefined : "warn"}>{seatText}</Chip>
+          <Chip tone={seatCanCreate ? undefined : "warn"}>{seatText}</Chip>
           <Btn
             variant="primary"
             onClick={() => setForm(emptyForm(writeBranchId))}
@@ -198,7 +210,7 @@ export function BarbersClient({
         </Banner>
       ) : null}
 
-      {!seat.canCreate && !isConsolidated ? (
+      {!seatCanCreate && !isConsolidated ? (
         <Banner tone="danger">{t("barbers.seatFull", { plan: seat.planName })}</Banner>
       ) : null}
 
@@ -392,7 +404,7 @@ export function BarbersClient({
           ) : null}
 
           {form.commissionType === "CHAIR_RENT" ? (
-            <Field label={t("barbers.chairRent")}>
+            <Field label={t("barbers.chairRent")} hint={t("barbers.chairRentHint")}>
               {(id) => (
                 <TextInput
                   id={id}

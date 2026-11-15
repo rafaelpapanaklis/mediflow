@@ -199,7 +199,7 @@ export function PlantillaEstudio({ data }: { data: BarberWebData }) {
                             <Precio n={sv.precio} className="dcbw-es-precio" />
                             <Duracion min={sv.duracionMin} className="dcbw-es-duracion" />
                             {sv.descripcion && <p className="dcbw-es-desc">{sv.descripcion}</p>}
-                            <a href={reservar} className="dcbw-es-enlace dcbw-es-cta">
+                            <a href={rutaReservaBarberia(shop.slug, null, sv.id)} className="dcbw-es-enlace dcbw-es-cta">
                               {copia(data, "servicios", "servicios.cta")}
                             </a>
                           </li>

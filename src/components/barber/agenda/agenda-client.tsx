@@ -47,6 +47,7 @@ import { WeekBoard } from "./week-board";
 import { AppointmentDialog } from "./appointment-dialog";
 import { AppointmentDetail } from "./appointment-detail";
 import { ChargeBridge } from "./charge-bridge";
+import { nextSlotStart } from "./next-slot";
 
 interface AgendaPayload {
   branchId: string;
@@ -410,7 +411,7 @@ export function AgendaClient(props: AgendaClientProps) {
                 onClick={() =>
                   setCreating({
                     barberId: chair ?? activeBarbers[0]?.id ?? null,
-                    startAt: new Date(),
+                    startAt: nextSlotStart(new Date(), timezone),
                   })
                 }
               >
@@ -541,7 +542,14 @@ export function AgendaClient(props: AgendaClientProps) {
           onClose={() => setCharging(null)}
           onCharged={(sale: SaleRow) => {
             setCharging(null);
-            setToast({ message: t("barber.agenda.charge.done", { amount: formatMXN(sale.total) }) });
+            // El ticket se ofrece, no se abre solo: quien cobra a la fila
+            // de gente no quiere una pestaña nueva en cada cobro.
+            setToast({
+              message: t("barber.agenda.charge.done", { amount: formatMXN(sale.total) }),
+              actionLabel: t("barber.agenda.charge.viewTicket"),
+              onAction: () =>
+                window.open(`/barber/caja/ticket/${sale.id}`, "_blank", "noopener,noreferrer"),
+            });
             // Recargar trae `charged` al día: la tarjeta se marca cobrada.
             void load(true);
           }}

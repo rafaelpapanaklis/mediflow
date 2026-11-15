@@ -45,6 +45,8 @@ export interface BookingFlowProps {
   contact: PublicContactDTO;
   /** Barbero fijado por la liga directa (?barbero=). */
   pinnedBarberId: string | null;
+  /** Servicio ya elegido por la liga directa (?servicio=). */
+  pinnedServiceId?: string | null;
 }
 
 const ANY = "any";
@@ -98,7 +100,15 @@ function NoScheduleNotice(props: {
   );
 }
 
-export function BookingFlow({ slug, shop, services, barbers, contact, pinnedBarberId }: BookingFlowProps) {
+export function BookingFlow({
+  slug,
+  shop,
+  services,
+  barbers,
+  contact,
+  pinnedBarberId,
+  pinnedServiceId = null,
+}: BookingFlowProps) {
   const t = useMemo(() => getBarberT(shop.locale), [shop.locale]);
 
   // Con un solo barbero no hay nada que preguntar; con la liga directa,
@@ -114,7 +124,10 @@ export function BookingFlow({ slug, shop, services, barbers, contact, pinnedBarb
   const [stepIndex, setStepIndex] = useState(0);
   const step = steps[stepIndex];
 
-  const [selectedServices, setSelectedServices] = useState<string[]>([]);
+  // Con la liga de un servicio, arranca ya palomeado (se puede quitar o sumar otro).
+  const [selectedServices, setSelectedServices] = useState<string[]>(
+    pinnedServiceId && services.some((s) => s.id === pinnedServiceId) ? [pinnedServiceId] : [],
+  );
   const [barberId, setBarberId] = useState<string>(fixedBarberId ?? ANY);
   const [dateISO, setDateISO] = useState<string | null>(null);
   const [time, setTime] = useState<string | null>(null);

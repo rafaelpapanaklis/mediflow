@@ -204,7 +204,9 @@ export function InicioView({
                 </div>
                 <div style={{ minWidth: 0 }}>
                   <div className="bdash-step__title">{k(`setup.${st.key}`)}</div>
-                  <div className="bdash-step__hint">{k(`setup.${st.key}Hint`)}</div>
+                  <div className="bdash-step__hint">
+                    {k(st.key === "web" && !st.done ? "setup.webHintOff" : `setup.${st.key}Hint`)}
+                  </div>
                   <div className="bdash-step__state">{st.done ? k("setup.done") : k("setup.pending")}</div>
                 </div>
               </Link>

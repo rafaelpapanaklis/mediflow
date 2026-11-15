@@ -249,7 +249,7 @@ export function PlantillaNocturna({ data }: { data: BarberWebData }) {
                         {sv.descripcion && <p className="dcbw-carta-desc">{sv.descripcion}</p>}
                         <div className="dcbw-no-tarjeta-pie">
                           <Precio n={sv.precio} />
-                          <a href={reservar} className="dcbw-no-liga">
+                          <a href={rutaReservaBarberia(shop.slug, null, sv.id)} className="dcbw-no-liga">
                             {copia(data, "servicios", "servicios.cta")} <IcoFlecha size={13} />
                           </a>
                         </div>

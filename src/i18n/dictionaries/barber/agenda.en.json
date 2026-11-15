@@ -92,7 +92,8 @@
       "client": "Type the client's name.",
       "services": "Pick at least one service.",
       "barber": "Pick a barber.",
-      "time": "Pick a valid time."
+      "time": "Pick a valid time.",
+      "phone": "Type the WhatsApp number with 10 digits, or leave it empty."
     },
     "durationAuto": "Worked out from the services you picked. You can change it.",
     "durationManual": "Custom duration: this one wins over the catalog.",
@@ -151,6 +152,13 @@
     "saveError": "We couldn't save the hours.",
     "noBarber": "Pick a barber to edit their hours.",
     "unsaved": "You have unsaved changes.",
+    "switchGuard": {
+      "title": "You have unsaved changes",
+      "body": "You changed {name}'s schedule and haven't saved it. If you switch barbers now, those changes are lost.",
+      "save": "Save and switch",
+      "discard": "Discard changes",
+      "cancel": "Keep editing"
+    },
     "timeOff": {
       "title": "Schedule blocks",
       "subtitle": "Lunch breaks, vacations and holidays. While a block is on, those slots are never offered.",
@@ -302,6 +310,7 @@
     "notPendingBody": "The register only lists completed visits from the last few days with no receipt yet. If this one is older, charge it from the Register screen.",
     "goToCash": "Go to Register",
     "errorLoad": "We couldn't open the charge.",
-    "done": "Charged: {amount}."
+    "done": "Charged: {amount}.",
+    "viewTicket": "View or print ticket"
   }
 }

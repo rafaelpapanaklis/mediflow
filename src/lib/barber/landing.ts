@@ -1012,9 +1012,17 @@ export function rutaWebBarberia(slug: string): string {
 }
 
 /** La ruta del embudo de reserva (la construye T5; aquí solo se apunta). */
-export function rutaReservaBarberia(slug: string, barberoId?: string | null): string {
+export function rutaReservaBarberia(
+  slug: string,
+  barberoId?: string | null,
+  servicioId?: string | null,
+): string {
   const base = `/b/${slug}/reservar`;
-  return barberoId ? `${base}?barbero=${encodeURIComponent(barberoId)}` : base;
+  const query: string[] = [];
+  if (barberoId) query.push(`barbero=${encodeURIComponent(barberoId)}`);
+  // El «Reservar» de cada servicio lleva ESE servicio ya elegido.
+  if (servicioId) query.push(`servicio=${encodeURIComponent(servicioId)}`);
+  return query.length > 0 ? `${base}?${query.join("&")}` : base;
 }
 
 /** La ruta del portal del cliente (T5). */

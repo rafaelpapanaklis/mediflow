@@ -169,7 +169,7 @@ export function PlantillaClasica({ data }: { data: BarberWebData }) {
                         <div className="dcbw-carta-pie">
                           <Duracion min={sv.duracionMin} />
                           {sv.descripcion && <span className="dcbw-carta-desc">{sv.descripcion}</span>}
-                          <a href={reservar} className="dcbw-enlace">
+                          <a href={rutaReservaBarberia(shop.slug, null, sv.id)} className="dcbw-enlace">
                             {copia(data, "servicios", "servicios.cta")}
                           </a>
                         </div>

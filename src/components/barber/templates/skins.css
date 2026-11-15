@@ -1660,8 +1660,17 @@
 }
 
 .dcbw-urbana .dcbw-h1 {
-  font-size: clamp(42px, 13cqi, 96px);
+  /* El tamaño de siempre, pero nunca mayor que lo que cabe la palabra más
+     larga del nombre (--ur-palabra, la pone t-urbana.tsx; 0,72 em por letra
+     es el peor caso aunque falte la fuente condensada). Piso de 22px: más
+     chico no se lee, y ahí `overflow-wrap` parte la palabra en vez de
+     recortarla o desbordar la portada. */
+  font-size: min(
+    clamp(42px, 13cqi, 96px),
+    max(22px, calc((100cqi - 2 * var(--dcbw-lado)) / (var(--ur-palabra, 8) * 0.72)))
+  );
   line-height: 0.92;
+  overflow-wrap: anywhere;
 }
 
 .dcbw-urbana .dcbw-h2 {
@@ -1683,10 +1692,14 @@
 
 .dcbw-ur-hero-in {
   display: grid;
+  /* minmax(0, …): sin esto la columna única mide lo que mida su palabra más
+     larga y la portada se sale del celular. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 0;
 }
 
 .dcbw-ur-hero-txt {
+  min-width: 0;
   padding: var(--dcbw-aire) var(--dcbw-lado);
   display: grid;
   gap: 14px;

@@ -121,7 +121,7 @@ export function PlantillaPortafolio({ data }: { data: BarberWebData }) {
                     <span className="dcbw-pf-tira-nombre">{sv.nombre}</span>
                     <Duracion min={sv.duracionMin} />
                     <Precio n={sv.precio} />
-                    <a href={reservar} className="dcbw-enlace">
+                    <a href={rutaReservaBarberia(shop.slug, null, sv.id)} className="dcbw-enlace">
                       {copia(data, "servicios", "servicios.cta")}
                     </a>
                   </li>
