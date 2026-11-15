@@ -17,8 +17,15 @@ import {
 
 export const dynamic = "force-dynamic";
 
+/** Nombres con los que se llegó a pedir la pestaña de conversaciones. */
+const BANDEJA_VIEJA = new Set(["inbox", "conversaciones", "conversations", "mensajes"]);
+
 /**
- * /barber/whatsapp — conexión, conversaciones, plantillas y campañas.
+ * /barber/whatsapp — conexión, plantillas y campañas (y el enlace al bot).
+ *
+ * Las conversaciones se mudaron a /barber/mensajes (15-nov). Quien tenga
+ * guardada la liga vieja de la pestaña (?tab=inbox, ?tab=conversaciones)
+ * llega a Mensajes en vez de a la Conexión.
  *
  * El servidor resuelve TODO lo que decide qué se ve: la sesión (y con ella
  * el barbershopId), el plan y los permisos del rol. El componente cliente
@@ -28,13 +35,17 @@ export const dynamic = "force-dynamic";
  *   · whatsappReminders (TODOS los planes) abre la pantalla: es donde la
  *     barbería CONECTA su número, y sin número no hay recordatorios — que sí
  *     están incluidos hasta en el Básico.
- *   · whatsappInbox (Avanzado y Profesional) abre las conversaciones y las
- *     campañas.
+ *   · whatsappInbox (Avanzado y Profesional) abre aquí las campañas, y la
+ *     bandeja de /barber/mensajes.
  */
-export default async function Page() {
+export default async function Page(props: { searchParams: Promise<{ tab?: string | string[] }> }) {
   const ctx = await getBarberContext();
   if (!ctx) redirect("/barber/entrar");
   await requireBarberPaidAccess(ctx);
+
+  // Después del candado (candado-suscripcion lo exige como segundo await).
+  const { tab } = await props.searchParams;
+  if (typeof tab === "string" && BANDEJA_VIEJA.has(tab.toLowerCase())) redirect("/barber/mensajes");
 
   const locale = resolveBarberLocale(ctx.barbershop.locale);
   const t = getBarberT(locale);

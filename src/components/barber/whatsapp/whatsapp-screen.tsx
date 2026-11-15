@@ -2,12 +2,11 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowUpRight, Bot, Inbox, Link2, Megaphone, MessageSquareText } from "lucide-react";
+import { ArrowUpRight, Bot, Link2, Megaphone, MessageSquareText } from "lucide-react";
 import { apiCall } from "../team/admin-ui";
 import type { Dictionary } from "@/i18n/t";
 import type { BarberWaConnectionDTO, BarberWaQuotaDTO } from "@/lib/barber/whatsapp-core";
 import { ConnectionPanel } from "./connection-panel";
-import { InboxPanel } from "./inbox-panel";
 import { TemplatesPanel, type TemplateRow } from "./templates-panel";
 import { CampaignsPanel } from "./campaigns-panel";
 import { WaI18n, useWaT } from "./ui";
@@ -20,11 +19,15 @@ import s from "./whatsapp.module.css";
 //   · Conexión, plantillas y recordatorios → TODOS los planes
 //     (feature whatsappReminders). Sin esto, un Básico no podría ni conectar
 //     su número y los recordatorios que SÍ incluye su plan nunca saldrían.
-//   · Conversaciones y campañas → feature whatsappInbox (Avanzado y
-//     Profesional). Se dice qué se gana; no se esconde y ya.
+//   · Campañas → feature whatsappInbox (Avanzado y Profesional). Se dice
+//     qué se gana; no se esconde y ya.
+//
+// Las conversaciones ya NO viven aquí: desde el 15-nov son la pantalla
+// /barber/mensajes, con entrada propia en el menú (bajo Clientes). La liga
+// vieja (?tab=inbox) la redirige la página.
 // ═══════════════════════════════════════════════════════════════════════
 
-type TabKey = "conexion" | "inbox" | "plantillas" | "campanas";
+type TabKey = "conexion" | "plantillas" | "campanas";
 
 export interface WaStatusPayload {
   connection: BarberWaConnectionDTO;
@@ -98,7 +101,6 @@ function Screen({
 
   const tabs: { key: TabKey; label: string; icon: React.ReactNode; locked: boolean }[] = [
     { key: "conexion", label: t("tabs.conexion"), icon: <Link2 size={14} />, locked: false },
-    { key: "inbox", label: t("tabs.inbox"), icon: <Inbox size={14} />, locked: !hasInbox },
     {
       key: "plantillas",
       label: t("tabs.plantillas"),
@@ -158,14 +160,6 @@ function Screen({
           canEdit={canEdit}
           onChanged={refresh}
         />
-      ) : null}
-
-      {tab === "inbox" ? (
-        hasInbox ? (
-          <InboxPanel locale={locale} canSend={canSend} quota={status.quota} />
-        ) : (
-          <PlanNotice text={t("errors.planLocked")} />
-        )
       ) : null}
 
       {tab === "campanas" ? (

@@ -375,11 +375,20 @@ function Screen({ locale, initial, connected, canEdit, canAttend }: BarberBotScr
                       {t("pauses.pausedAt", { when: shortWhen(p.pausedAt, locale) })}
                     </span>
                   </div>
-                  {canAttend ? (
-                    <Btn size="sm" variant="ghost" disabled={saving} onClick={() => resume(p.phone)}>
-                      {t("pauses.resume")}
-                    </Btn>
-                  ) : null}
+                  <div className={s.rowActions}>
+                    {/* El chat se lee y se contesta en Mensajes (15-nov). */}
+                    <Link
+                      href={`/barber/mensajes?tel=${encodeURIComponent(p.phone)}`}
+                      className={s.rowLink}
+                    >
+                      {t("pauses.openChat")}
+                    </Link>
+                    {canAttend ? (
+                      <Btn size="sm" variant="ghost" disabled={saving} onClick={() => resume(p.phone)}>
+                        {t("pauses.resume")}
+                      </Btn>
+                    ) : null}
+                  </div>
                 </li>
               ))}
             </ul>
