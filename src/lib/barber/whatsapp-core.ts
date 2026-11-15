@@ -224,6 +224,7 @@ export function parseBarberWaAttachment(
 /** Tipos de mensaje que manda el vertical. */
 export type BarberWaKind =
   | "reminder"
+  | "reminderButtons"
   | "portalCode"
   | "walkinTurn"
   | "bookingConfirmed"
@@ -247,11 +248,47 @@ export interface BarberWaTemplate {
    * exigen consentimiento, así que la barbería las activa a mano.
    */
   optional: boolean;
+  /**
+   * Botones de respuesta rápida, en orden. Texto ≤ 25 caracteres y SIN
+   * emojis ni saltos (Meta rechaza la plantilla si los lleva). Al enviar,
+   * cada botón viaja con un `payload` propio (ver barberReminderButtons):
+   * es lo que hace que el toque diga exactamente de qué visita se trata.
+   */
+  buttons?: string[];
 }
 
 export const BARBER_WA_LANG = "es_MX" as const;
 
+/** Textos de los tres botones de la plantilla del recordatorio, en orden. */
+export const BARBER_REMINDER_TEMPLATE_BUTTONS = ["Confirmar", "Cambiar", "Cancelar"] as const;
+
 export const BARBER_WA_TEMPLATES: readonly BarberWaTemplate[] = [
+  {
+    // EL RECORDATORIO CON BOTONES — es el que se intenta primero. El cliente
+    // toca Confirmar / Cambiar / Cancelar en vez de escribir, y el toque trae
+    // la visita exacta. Mismas seis variables y mismo orden que el de texto
+    // de abajo, que queda como RESPALDO: si Meta rechaza o todavía no
+    // aprueba éste, el recordatorio sale con el otro (ver processOutboxRow).
+    kind: "reminderButtons",
+    name: "dc_barber_recordatorio_cita_botones",
+    category: "UTILITY",
+    lang: BARBER_WA_LANG,
+    body:
+      "Hola {{1}}, te recordamos tu visita en {{2}}.\n\n" +
+      "🗓️ {{3}}\n✂️ {{4}}\n💈 Con {{5}}\n📍 {{6}}\n\n" +
+      "Toca un botón para confirmar, cambiar el horario o cancelar.",
+    variables: ["cliente", "barbería", "fecha y hora", "servicio", "barbero", "dirección"],
+    sample: [
+      "Luis",
+      "Barbería El Corte",
+      "martes 26 de agosto a las 17:00",
+      "Corte + barba",
+      "Memo",
+      "Av. Juárez 120, Centro",
+    ],
+    optional: false,
+    buttons: [...BARBER_REMINDER_TEMPLATE_BUTTONS],
+  },
   {
     kind: "reminder",
     name: "dc_barber_recordatorio_cita",
@@ -387,7 +424,40 @@ export function checkBarberWaTemplate(tpl: BarberWaTemplate): string | null {
     return `El cuerpo tiene ${count} variables y el catálogo describe ${tpl.variables.length}.`;
   }
   if (tpl.sample.length < count) return "Falta un ejemplo por variable (Meta lo exige).";
+  for (const button of tpl.buttons ?? []) {
+    if (!button.trim()) return "Un botón no puede ir vacío.";
+    if (Array.from(button).length > 25) return "El texto de un botón admite 25 caracteres.";
+    // Meta rechaza los botones de plantilla con emojis, saltos o formato.
+    if (!/^[\p{L}\p{N} ]+$/u.test(button)) return "Un botón de plantilla solo admite letras, números y espacios.";
+  }
+  if ((tpl.buttons?.length ?? 0) > 3) return "Como mucho tres botones de respuesta.";
+  if (new Set(tpl.buttons ?? []).size !== (tpl.buttons?.length ?? 0)) return "Dos botones no pueden decir lo mismo.";
   return null;
+}
+
+// ── Cambios de última hora ──────────────────────────────────────────────
+
+/**
+ * Con cuánta anticipación se puede cancelar o mover una visita por
+ * WhatsApp (palabra, botón o bot). La MISMA regla que «mi cuenta»
+ * (BARBER_CANCEL_WINDOW_HOURS en portal-core.ts; no se importa de allí
+ * porque aquel módulo usa `crypto` de Node y éste lo carga el navegador —
+ * una prueba vigila que los dos números sigan iguales).
+ */
+export const BARBER_WA_CHANGE_NOTICE_HOURS = 2;
+
+/** ¿Ya es demasiado tarde para cancelar o mover esta visita por WhatsApp? */
+export function barberTooLateToChange(startAt: Date, now: Date = new Date()): boolean {
+  return startAt.getTime() - now.getTime() < BARBER_WA_CHANGE_NOTICE_HOURS * 60 * 60 * 1000;
+}
+
+/** Lo que se le contesta dentro de esas horas, con el teléfono de la barbería. */
+export function barberLateChangeReply(shopPhone: string | null | undefined): string {
+  const phone = String(shopPhone ?? "").trim();
+  return (
+    `⏰ Faltan menos de ${BARBER_WA_CHANGE_NOTICE_HOURS} horas para tu visita. ` +
+    `Para cambios de última hora llama a la barbería${phone ? `: ${phone}` : ""}.`
+  );
 }
 
 // ── Parámetros de una plantilla ─────────────────────────────────────────
@@ -618,54 +688,62 @@ export const BARBER_WA_OPT_OUT_REPLY =
  */
 export type BarberWaReply = "confirm" | "cancel" | "reschedule" | "unclear";
 
-const CANCEL_WORDS = [
-  "cancelar",
-  "cancela",
-  "cancelo",
-  "cancelalo",
-  "cancélalo",
-  "cancelarla",
-  "no puedo",
-  "no podre",
-  "no podré",
-  "no voy",
-  "no ire",
-  "no iré",
-  "no asistire",
-  "no asistiré",
-];
-const RESCHEDULE_WORDS = [
-  "cambiar",
-  "cambio",
-  "cambiar hora",
-  "reagendar",
-  "reagenda",
-  "mover",
-  "muevela",
-  "muévela",
-  "otro dia",
-  "otro día",
-  "otra hora",
-  "otro horario",
-];
-const CONFIRM_WORDS = [
-  "confirmar",
-  "confirmo",
-  "confirmado",
-  "confirma",
+// 🔴 SOLO POR IGUALDAD. Hasta la ronda 2 estas listas se buscaban por
+// «contiene» («no puedo», «no voy», «cancelar»…), y una frase normal
+// cancelaba la cita: «Sí confirmo, no voy a faltar» → CANCELADA («no voy»);
+// «voy a llegar 10 min tarde, no puedo salir antes» → CANCELADA;
+// «¿puedo cancelar si llueve?» → CANCELADA; «no confirmo todavía» →
+// CONFIRMADA. Es el mismo fallo que hizo al dental dejar de leer frases
+// («un "no" escrito dentro de una frase ya canceló citas»,
+// src/lib/whatsapp/interactivo.ts). Aquí el mensaje tiene que SER una de
+// estas respuestas; cualquier otra cosa no decide nada y sigue al bot o a
+// la bandeja.
+const CONFIRM_EXACT = [
+  "1",
   "si",
-  "sí",
   "sip",
   "ok",
   "okay",
   "va",
   "vale",
-  "ahi estare",
-  "ahi estaré",
-  "ahí estaré",
   "claro",
   "de acuerdo",
+  "confirmar",
+  "confirmo",
+  "confirmado",
+  "confirmada",
+  "confirma",
+  "si confirmo",
 ];
+const CANCEL_EXACT = ["2", "cancelar", "cancela", "cancelo", "cancelala", "cancelalo", "cancelarla"];
+const RESCHEDULE_EXACT = [
+  "3",
+  "cambiar",
+  "cambio",
+  "cambiala",
+  "cambiar hora",
+  "cambiar horario",
+  "reagendar",
+  "reagenda",
+  "mover",
+  "muevela",
+];
+/** «Sí» a la pregunta «¿Cancelo tu visita…?». */
+const YES_EXACT = [
+  "si",
+  "sip",
+  "ok",
+  "okay",
+  "va",
+  "vale",
+  "claro",
+  "de acuerdo",
+  "si cancelar",
+  "si cancela",
+  "si cancelala",
+];
+/** «No» a esa misma pregunta. */
+const NO_EXACT = ["no", "nel", "nop", "mejor no", "no gracias", "no la canceles", "no cancelar"];
 
 /** Quita acentos y baja a minúsculas para comparar sin sorpresas. */
 function fold(text: string): string {
@@ -677,55 +755,169 @@ function fold(text: string): string {
 }
 
 /**
- * Clasifica la respuesta. PURO y probado sin BD.
+ * Deja un mensaje listo para compararlo por IGUALDAD: sin acentos, sin
+ * mayúsculas y sin signos ni emojis («¡CONFIRMAR!» → «confirmar»,
+ * «Sí 👍» → «si»). No quita PALABRAS: «sí confirmo, no voy a faltar» sigue
+ * siendo esa frase entera, que no es igual a nada.
+ */
+export function normalizeBarberReply(text: string): string {
+  return fold(String(text ?? ""))
+    .replace(/[^a-z0-9 ]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * Clasifica la respuesta al recordatorio. PURO y probado sin BD.
  *
- * El ORDEN importa y es deliberado, con el mismo criterio que el dental:
- *   1. cancelar — para frases ambiguas ("mejor no, sí cancélala") gana la
- *      salida más destructiva, que es la que el cliente quiso decir;
- *   2. cambiar  — antes que confirmar, porque "sí, pero otro día" lleva un
- *      "sí" dentro y NO es una confirmación;
- *   3. confirmar.
- * Los dígitos "1"/"2"/"3" solo por igualdad EXACTA: un "3" suelto dentro de
- * "somos 3" no puede cancelar la cita de nadie.
+ * Devuelve algo distinto de `unclear` SOLO cuando el mensaje ES una de las
+ * respuestas que el recordatorio pide (CONFIRMAR / CANCELAR / CAMBIAR, 1 / 2
+ * / 3, o un «sí» / «ok» suelto). Que además el recordatorio haya sido lo
+ * último que se le dijo lo decide decideBarberReminderReply.
  */
 export function classifyBarberReply(text: string): BarberWaReply {
-  const raw = String(text ?? "").trim();
-  if (!raw) return "unclear";
-  const t = fold(raw);
-
-  if (t === "1") return "confirm";
-  if (t === "2") return "cancel";
-  if (t === "3") return "reschedule";
-
-  const has = (words: string[]) => words.some((w) => t.includes(fold(w)));
-
-  if (has(CANCEL_WORDS)) return "cancel";
-  if (has(RESCHEDULE_WORDS)) return "reschedule";
-  // Las palabras cortas de confirmación ("si", "ok", "va") solo valen si el
-  // mensaje ES esa palabra: un "no si voy" no confirma nada.
-  if (CONFIRM_WORDS.some((w) => fold(w) === t)) return "confirm";
-  if (has(["confirmar", "confirmo", "confirmado", "ahi estare", "ahí estaré"])) return "confirm";
-
+  const t = normalizeBarberReply(text);
+  if (!t) return "unclear";
+  if (CONFIRM_EXACT.includes(t)) return "confirm";
+  if (CANCEL_EXACT.includes(t)) return "cancel";
+  if (RESCHEDULE_EXACT.includes(t)) return "reschedule";
   return "unclear";
 }
 
-/** Respuestas que solo significan algo según lo último que se dijo. */
-const BARE_REPLY_WORDS = ["si", "sip", "ok", "okay", "va", "vale", "claro", "de acuerdo"];
+/** ¿El mensaje ES un «sí»? (respuesta a «¿Cancelo tu visita…? Responde SÍ»). */
+export function isBarberYesReply(text: string): boolean {
+  return YES_EXACT.includes(normalizeBarberReply(text));
+}
+
+/** ¿El mensaje ES un «no»? */
+export function isBarberNoReply(text: string): boolean {
+  return NO_EXACT.includes(normalizeBarberReply(text));
+}
+
+// ── Botones del recordatorio y pregunta antes de cancelar ───────────────
+//
+// Con la ventana de 24 h abierta el recordatorio sale con TRES botones, y
+// la pregunta «¿Cancelo tu visita…?» con dos. El id de cada botón lleva la
+// acción Y la visita (`rec.cancelar:<id de la visita>`): el toque dice
+// exactamente qué hacer y sobre cuál, sin leer texto y sin adivinar cuando
+// el teléfono lo comparten dos personas con cita. Los prefijos de los tres
+// primeros son los mismos del dental (REC_BOTON en interactivo.ts).
+
+export type BarberReminderAction = "confirm" | "ask-cancel" | "reschedule" | "do-cancel" | "keep";
+
+const REMINDER_BUTTON_PREFIX: Record<BarberReminderAction, string> = {
+  confirm: "rec.confirmar",
+  reschedule: "rec.reagendar",
+  "ask-cancel": "rec.cancelar",
+  "do-cancel": "rec.si-cancelar",
+  keep: "rec.no-cancelar",
+};
+
+export interface BarberWaButton {
+  id: string;
+  title: string;
+}
+
+/** Los tres botones del recordatorio de UNA visita. Títulos ≤ 20 caracteres. */
+export function barberReminderButtons(appointmentId: string): BarberWaButton[] {
+  return [
+    { id: `${REMINDER_BUTTON_PREFIX.confirm}:${appointmentId}`, title: "✅ Confirmar" },
+    { id: `${REMINDER_BUTTON_PREFIX.reschedule}:${appointmentId}`, title: "🔁 Cambiar" },
+    { id: `${REMINDER_BUTTON_PREFIX["ask-cancel"]}:${appointmentId}`, title: "❌ Cancelar" },
+  ];
+}
+
+/** Los dos botones de «¿Cancelo tu visita…?». */
+export function barberCancelAskButtons(appointmentId: string): BarberWaButton[] {
+  return [
+    { id: `${REMINDER_BUTTON_PREFIX["do-cancel"]}:${appointmentId}`, title: "Sí, cancelar" },
+    { id: `${REMINDER_BUTTON_PREFIX.keep}:${appointmentId}`, title: "No, la conservo" },
+  ];
+}
 
 /**
- * ¿La respuesta es una palabra SUELTA ("sí", "ok", "1") que por sí sola no
- * dice a qué contesta?
- *
- * 🔴 Con el bot encendido, un "sí" puede ser la respuesta a «¿te agendo a
- * las 5?» y no al recordatorio de la visita de mañana. Estas respuestas solo
- * cuentan como respuesta al recordatorio cuando el recordatorio fue LO
- * ÚLTIMO que le dijimos a ese número (ver applyReminderReply). Las palabras
- * explícitas —CONFIRMAR, CANCELAR, CAMBIAR— valen siempre.
+ * Qué pide el toque de un botón del recordatorio y sobre qué visita. null si
+ * el id no es de estos (un botón del bot, un botón viejo de otra cosa).
  */
-export function isBareBarberReply(text: string): boolean {
-  const t = fold(String(text ?? ""));
-  if (t === "1" || t === "2" || t === "3") return true;
-  return BARE_REPLY_WORDS.includes(t);
+export function parseBarberReminderButton(
+  id: unknown,
+): { action: BarberReminderAction; appointmentId: string } | null {
+  if (typeof id !== "string") return null;
+  const cut = id.indexOf(":");
+  if (cut <= 0 || cut === id.length - 1) return null;
+  const prefix = id.slice(0, cut);
+  const appointmentId = id.slice(cut + 1);
+  for (const action of Object.keys(REMINDER_BUTTON_PREFIX) as BarberReminderAction[]) {
+    if (REMINDER_BUTTON_PREFIX[action] === prefix) return { action, appointmentId };
+  }
+  return null;
+}
+
+/**
+ * Marca (en `templateName`) de la fila con la pregunta «¿Cancelo tu
+ * visita…?». La fila lleva además el `appointmentId` de la visita por la
+ * que se preguntó: cuando el cliente contesta «sí», se cancela ESA y no «la
+ * primera que tenga recordatorio». No es una plantilla de Meta ni una marca
+ * de sistema: es un mensaje real que se ve en la bandeja.
+ */
+export const BARBER_WA_CANCEL_ASK = "ask:cancelar" as const;
+
+/** ¿`templateName` es una marca interna de conversación y no una plantilla? */
+export function isBarberWaAskRow(templateName: string | null | undefined): boolean {
+  return typeof templateName === "string" && templateName.startsWith("ask:");
+}
+
+/**
+ * ¿Qué hacer con una respuesta ESCRITA, según lo último que se le dijo?
+ *
+ *   · lo último fue la pregunta «¿Cancelo…?»  → «sí» cancela, «no» conserva;
+ *   · lo último fue el recordatorio           → la palabra exacta decide
+ *     (y CANCELAR no cancela: pregunta);
+ *   · lo último fue cualquier otra cosa (el bot preguntó algo, alguien de
+ *     la barbería escribió) → null: esta respuesta no es para el
+ *     recordatorio, aunque sea un «sí» o un «cancelar».
+ */
+export function decideBarberReminderReply(
+  text: string,
+  lastWord: { templateName: string | null } | null,
+  reminderTemplate: string,
+): BarberReminderAction | null {
+  if (!lastWord) return null;
+  if (lastWord.templateName === BARBER_WA_CANCEL_ASK) {
+    if (isBarberYesReply(text)) return "do-cancel";
+    if (isBarberNoReply(text)) return "keep";
+    return null;
+  }
+  if (lastWord.templateName !== reminderTemplate) return null;
+  const reply = classifyBarberReply(text);
+  if (reply === "confirm") return "confirm";
+  if (reply === "cancel") return "ask-cancel";
+  if (reply === "reschedule") return "reschedule";
+  return null;
+}
+
+// ── Solicitudes que la barbería todavía no acepta ───────────────────────
+
+/**
+ * Orígenes cuya cita PENDIENTE es una SOLICITUD que la barbería tiene que
+ * aceptar o rechazar (pantalla Solicitudes), no una visita por confirmar.
+ * Hoy solo la reserva en línea: es exactamente lo que filtra
+ * listBookingRequests() en booking.ts (`source: "PUBLIC"`). Si Solicitudes
+ * empieza a incluir las que agenda el bot, se añade "WHATSAPP" AQUÍ y los
+ * recordatorios y el «CONFIRMAR» las dejan fuera sin tocar nada más.
+ */
+export const BARBER_REQUEST_SOURCES: readonly string[] = ["PUBLIC"];
+
+/**
+ * ¿Esta cita es una solicitud que la barbería aún no acepta?
+ *
+ * 🔴 Con la política por defecto («manual») la reserva en línea nace
+ * PENDIENTE hasta que alguien la acepta. A una solicitud así NO se le manda
+ * «quedó agendada», NO se le recuerda, y un «CONFIRMAR» del cliente NO la
+ * confirma: confirmarla es decisión de la barbería.
+ */
+export function isBarberUnacceptedRequest(appt: { status: string; source: string }): boolean {
+  return appt.status === "PENDING" && BARBER_REQUEST_SOURCES.includes(appt.source);
 }
 
 // ── Programar recordatorios: la decisión, sin BD ────────────────────────

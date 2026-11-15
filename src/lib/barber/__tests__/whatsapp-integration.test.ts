@@ -11,6 +11,8 @@ import {
   crearCliente,
   crearTienda,
   entrante,
+  entranteBotonDePlantilla,
+  entranteToque,
   enviados,
   graph,
   graphDelay,
@@ -41,6 +43,7 @@ import {
   sendBarberManualMessage,
 } from "../whatsapp";
 import {
+  BARBER_WA_CANCEL_ASK,
   BARBER_WA_CLAIM_LOST_MESSAGE,
   BARBER_WA_OPT_OUT_REPLY,
   barberClientOptedOut,
@@ -50,6 +53,7 @@ import {
 import { BARBER_WALKIN_NOTIFY_TEMPLATE, isInvalidatedReminder, walkInNotifyBody } from "../agenda";
 
 const REMINDER = barberWaTemplate("reminder").name;
+const REMINDER_BOTONES = barberWaTemplate("reminderButtons").name;
 
 let A: Tienda;
 let B: Tienda;
@@ -96,7 +100,7 @@ test("programa UN recordatorio por visita y fuera de la ventana sale como planti
   const [envio] = enviados();
   assert.equal(envio.body.type, "template", "el cliente no ha escrito: solo cabe la plantilla");
   assert.equal(envio.body.to, `52${phone}`, "sale al número con lada de México");
-  assert.equal(envio.body.template.name, REMINDER);
+  assert.equal(envio.body.template.name, REMINDER_BOTONES, "primero la plantilla CON botones");
   assert.equal(envio.body.template.language.code, "es_MX");
   const params = envio.body.template.components[0].parameters.map((p: any) => p.text);
   assert.equal(params.length, 6, "las seis variables que tiene la plantilla aprobada");
@@ -104,8 +108,21 @@ test("programa UN recordatorio por visita y fuera de la ventana sale como planti
   assert.equal(params[1], "Barbería El Corte");
   assert.equal(params[3], "Corte de caballero");
   assert.equal(params[4], "Beto");
+  // 🔴 Cada botón viaja con SU payload: la acción y la visita exacta.
+  const botones = envio.body.template.components.filter((c: any) => c.type === "button");
+  assert.deepEqual(
+    botones.map((b: any) => [b.sub_type, b.index, b.parameters[0].payload]),
+    [
+      ["quick_reply", "0", `rec.confirmar:${cita.id}`],
+      ["quick_reply", "1", `rec.reagendar:${cita.id}`],
+      ["quick_reply", "2", `rec.cancelar:${cita.id}`],
+    ],
+  );
 
   const [fila] = await mensajes(A, phone);
+  // La fila conserva el nombre del recordatorio de siempre: es lo que usan
+  // la cola y «lo último que se le dijo», salga con la plantilla que salga.
+  assert.equal(fila.templateName, REMINDER);
   assert.equal(fila.status, "SENT");
   assert.ok(fila.waMessageId?.startsWith("wamid.OUT"), "se guarda el id de Meta para los estados");
   assert.equal(fila.errorMessage, null, "la marca de reclamo se limpia al salir");
@@ -178,10 +195,10 @@ test("🔴 una dirección en dos renglones ya no tumba el recordatorio (132018)"
   assert.equal(params[5], "Av. Juárez 120 Local 4 (planta alta), Centro");
 });
 
-test("con la ventana de 24 h abierta el recordatorio sale como TEXTO (gratis)", { skip }, async () => {
+test("con la ventana de 24 h abierta el recordatorio sale gratis y CON botones; si Meta los rechaza, como texto", { skip }, async () => {
   await vaciarCola(A);
   const phone = telefono();
-  await crearCita(A, { phone, enMinutos: 5 * 60 });
+  const cita = await crearCita(A, { phone, enMinutos: 5 * 60 });
   // El cliente escribió hace un rato: ventana abierta.
   await prisma.barberMessage.create({
     data: { barbershopId: A.id, direction: "INBOUND", phone, body: "hola", status: "DELIVERED" },
@@ -190,9 +207,72 @@ test("con la ventana de 24 h abierta el recordatorio sale como TEXTO (gratis)", 
   await drainBarberOutbox(A.id);
 
   const [envio] = enviados();
-  assert.equal(envio.body.type, "text");
-  assert.match(envio.body.text.body, /te recordamos tu visita en Barbería El Corte/);
-  assert.match(envio.body.text.body, /CONFIRMAR/);
+  assert.equal(envio.body.type, "interactive", "no es plantilla: dentro de la ventana no se cobra");
+  assert.match(envio.body.interactive.body.text, /te recordamos tu visita en Barbería El Corte/);
+  assert.deepEqual(
+    envio.body.interactive.action.buttons.map((b: any) => b.reply),
+    [
+      { id: `rec.confirmar:${cita.id}`, title: "✅ Confirmar" },
+      { id: `rec.reagendar:${cita.id}`, title: "🔁 Cambiar" },
+      { id: `rec.cancelar:${cita.id}`, title: "❌ Cancelar" },
+    ],
+  );
+
+  // Otro cliente, y esta vez Meta rechaza el interactivo: sale el texto.
+  limpiar();
+  await vaciarCola(A);
+  const p2 = telefono();
+  await crearCita(A, { phone: p2, enMinutos: 5 * 60 });
+  await prisma.barberMessage.create({
+    data: { barbershopId: A.id, direction: "INBOUND", phone: p2, body: "hola", status: "DELIVERED" },
+  });
+  await scheduleBarberReminders(A.id);
+  onGraph((call) =>
+    call.body?.type === "interactive"
+      ? { status: 400, json: { error: { code: 131009, message: "(#131009) Parameter value is not valid" } } }
+      : null,
+  );
+  assert.deepEqual(await drainBarberOutbox(A.id), { sent: 1, failed: 0, skipped: 0 });
+  const salidas = enviados();
+  assert.equal(salidas[salidas.length - 1].body.type, "text");
+  assert.match(salidas[salidas.length - 1].body.text.body, /Responde \*CONFIRMAR\*/);
+});
+
+test("🔴 si Meta rechaza o aún no aprueba la plantilla con botones, el recordatorio sale con la de TEXTO", { skip }, async () => {
+  await vaciarCola(A);
+  const phones = [telefono(), telefono()];
+  for (const phone of phones) await crearCita(A, { phone, enMinutos: 5 * 60 });
+  await scheduleBarberReminders(A.id);
+
+  // Solo la de botones está sin aprobar; la de texto sí.
+  onGraph((call) =>
+    call.body?.template?.name === REMINDER_BOTONES
+      ? { status: 404, json: { error: { code: 132001, message: "(#132001) Template name does not exist in the translation" } } }
+      : null,
+  );
+  assert.deepEqual(await drainBarberOutbox(A.id), { sent: 2, failed: 0, skipped: 0 });
+  const usadas = enviados().map((c) => c.body.template.name);
+  assert.deepEqual(
+    usadas,
+    [REMINDER_BOTONES, REMINDER, REMINDER],
+    "se intenta UNA vez la de botones y los demás van directo con la de texto",
+  );
+  for (const phone of phones) assert.equal((await mensajes(A, phone))[0].status, "SENT");
+
+  // Y si la rechaza por otro motivo (la aprobada no trae botones → 132000),
+  // también cae a la de texto en vez de perder el recordatorio.
+  limpiar();
+  await vaciarCola(A);
+  const p3 = telefono();
+  await crearCita(A, { phone: p3, enMinutos: 5 * 60 });
+  await scheduleBarberReminders(A.id);
+  onGraph((call) =>
+    call.body?.template?.name === REMINDER_BOTONES
+      ? { status: 400, json: { error: { code: 132000, message: "(#132000) Number of parameters does not match" } } }
+      : null,
+  );
+  assert.deepEqual(await drainBarberOutbox(A.id), { sent: 1, failed: 0, skipped: 0 });
+  assert.equal(enviados()[enviados().length - 1].body.template.name, REMINDER);
 });
 
 /* ═══════════════ Recordatorios: lo que NO debe salir ═══════════════ */
@@ -308,7 +388,11 @@ test("🔴 la plantilla aún no está aprobada: el recordatorio ESPERA en cola y
   );
   const antes = await drainBarberOutbox(A.id);
   assert.deepEqual(antes, { sent: 0, failed: 0, skipped: 3 }, "ninguno se da por perdido");
-  assert.equal(enviados().length, 1, "a Meta se le pregunta UNA vez por pasada, no una por fila");
+  assert.equal(
+    enviados().length,
+    2,
+    "a Meta se le pregunta UNA vez por plantilla y pasada (la de botones y la de texto), no una por fila",
+  );
   for (const phone of phones) {
     const [fila] = await mensajes(A, phone);
     assert.equal(fila.status, "PENDING", "sigue en cola");
@@ -387,9 +471,41 @@ test("el cliente responde CONFIRMAR: la visita se confirma y se le contesta", { 
   assert.ok(graph.some((c) => c.body?.status === "read" && c.body?.message_id === msg.id));
 });
 
-test("el cliente responde CANCELAR: se cancela y sus recordatorios en cola se invalidan", { skip }, async () => {
+const estadoDe = async (id: string) =>
+  (await prisma.barberAppointment.findUniqueOrThrow({ where: { id } })).status;
+const ultimoTexto = () => {
+  const c = enviados()[enviados().length - 1];
+  return (c.body.type === "interactive" ? c.body.interactive.body.text : c.body.text?.body) as string;
+};
+
+test("🔴 G1 — la tabla de la revisora: contestar al recordatorio con una frase normal NO toca la visita", { skip }, async () => {
+  // El bot de A está apagado: lo que no sea para el recordatorio se queda en
+  // la bandeja y no recibe NINGUNA respuesta automática.
+  const frases = [
+    "Sí confirmo, no voy a faltar",
+    "ahí estaré, no voy a fallar",
+    "voy a llegar 10 min tarde, no puedo salir antes",
+    "no puedo estacionarme, ahorita llego",
+    "¿puedo cancelar si llueve?",
+    "oye no puedo a las 5, ¿me la pasas a las 6?",
+    "¿tienen cambio de 500?",
+    "no confirmo todavía, te aviso",
+  ];
+  for (const frase of frases) {
+    limpiar();
+    const phone = telefono();
+    const cita = await visitaRecordada(A, phone);
+    const { value, msg } = entrante(A, phone, frase);
+    await ingestBarberInbound(value, msg);
+    assert.equal(await estadoDe(cita.id), "PENDING", `«${frase}» no cancela ni confirma`);
+    assert.equal(enviados().length, 0, `«${frase}» no recibe «quedó cancelada» ni «te movemos la visita»`);
+    assert.equal((await mensajes(A, phone)).filter((r) => r.direction === "INBOUND").length, 1, "queda en la bandeja");
+  }
+});
+
+test("🔴 G1 — CANCELAR no cancela: pregunta por ESA visita, y solo el «sí» la cancela", { skip }, async () => {
   const phone = telefono();
-  const cita = await visitaRecordada(A, phone);
+  const cita = await visitaRecordada(A, phone, 8 * 60);
   const enCola = await prisma.barberMessage.create({
     data: {
       barbershopId: A.id,
@@ -401,31 +517,177 @@ test("el cliente responde CANCELAR: se cancela y sus recordatorios en cola se in
       appointmentId: cita.id,
     },
   });
-  const { value, msg } = entrante(A, phone, "no voy a poder, cancela");
-  await ingestBarberInbound(value, msg);
 
-  const despues = await prisma.barberAppointment.findUniqueOrThrow({ where: { id: cita.id } });
-  assert.equal(despues.status, "CANCELLED");
+  let m = entrante(A, phone, "Cancelar");
+  await ingestBarberInbound(m.value, m.msg);
+  assert.equal(await estadoDe(cita.id), "PENDING", "todavía NO está cancelada");
+  const pregunta = enviados()[0];
+  assert.equal(pregunta.body.type, "interactive");
+  assert.match(pregunta.body.interactive.body.text, /^¿Cancelo tu visita del .+\? Responde \*SÍ\*/);
+  assert.deepEqual(
+    pregunta.body.interactive.action.buttons.map((b: any) => b.reply.id),
+    [`rec.si-cancelar:${cita.id}`, `rec.no-cancelar:${cita.id}`],
+  );
+  const filaPregunta = (await mensajes(A, phone)).find((r) => r.templateName === BARBER_WA_CANCEL_ASK);
+  assert.equal(filaPregunta?.appointmentId, cita.id, "la fila recuerda por qué visita se preguntó");
+
+  // Una frase que no es «sí» no cancela nada.
+  limpiar();
+  m = entrante(A, phone, "espera, déjame ver si alcanzo");
+  await ingestBarberInbound(m.value, m.msg);
+  assert.equal(await estadoDe(cita.id), "PENDING");
+  assert.equal(enviados().length, 0);
+
+  // «Sí» → se cancela ESA visita.
+  m = entrante(A, phone, "Sí");
+  await ingestBarberInbound(m.value, m.msg);
+  assert.equal(await estadoDe(cita.id), "CANCELLED");
+  assert.match(ultimoTexto(), /quedó cancelada/);
   const fila = await prisma.barberMessage.findUniqueOrThrow({ where: { id: enCola.id } });
   assert.equal(fila.status, "FAILED");
-  assert.ok(isInvalidatedReminder(fila.errorMessage));
-  assert.match(enviados()[0].body.text.body, /quedó cancelada/);
+  assert.ok(isInvalidatedReminder(fila.errorMessage), "y lo que tenía en cola se invalida");
+  // La pregunta se ve en la bandeja como un mensaje normal, sin etiqueta rara.
+  const hilo = await listBarberThreadMessages(A.id, phone);
+  const dto = hilo.messages.find((x) => x.body?.startsWith("¿Cancelo tu visita"));
+  assert.ok(dto, "la pregunta aparece en la conversación");
+  assert.equal(dto.templateName, null);
 });
 
-test("🔴 un «sí» suelto solo confirma si el recordatorio fue lo último que dijimos", { skip }, async () => {
+test("G1 — contestar «no» a la pregunta conserva la visita", { skip }, async () => {
+  const phone = telefono();
+  const cita = await visitaRecordada(A, phone, 8 * 60);
+  let m = entrante(A, phone, "2");
+  await ingestBarberInbound(m.value, m.msg);
+  assert.match(ultimoTexto(), /^¿Cancelo tu visita/);
+  m = entrante(A, phone, "No");
+  await ingestBarberInbound(m.value, m.msg);
+  assert.equal(await estadoDe(cita.id), "PENDING");
+  assert.match(ultimoTexto(), /sigue en pie/);
+});
+
+test("🔴 G1 — se cancela la visita por la que se preguntó, no «la primera recordada»", { skip }, async () => {
+  const phone = telefono();
+  // Sábado: recordada y ya confirmada por el cliente.
+  const sabado = await visitaRecordada(A, phone, 20 * 60);
+  let m = entrante(A, phone, "confirmar");
+  await ingestBarberInbound(m.value, m.msg);
+  assert.equal(await estadoDe(sabado.id), "CONFIRMED");
+  // Domingo: recordada después.
+  const domingo = await visitaRecordada(A, phone, 23 * 60);
+
+  // La frase de la revisora ya no cancela nada…
+  limpiar();
+  m = entrante(A, phone, "quiero cancelar la del domingo");
+  await ingestBarberInbound(m.value, m.msg);
+  assert.equal(await estadoDe(sabado.id), "CONFIRMED");
+  assert.equal(await estadoDe(domingo.id), "PENDING");
+  assert.equal(enviados().length, 0);
+
+  // …y como ya hubo otro mensaje en medio, hay que volver a mandar el
+  // recordatorio para que «CANCELAR» cuente: aquí lo simula el botón, que
+  // siempre dice su visita.
+  const toque = entranteToque(A, phone, { id: `rec.cancelar:${domingo.id}`, title: "❌ Cancelar" });
+  await ingestBarberInbound(toque.value, toque.msg);
+  m = entrante(A, phone, "sí");
+  await ingestBarberInbound(m.value, m.msg);
+  assert.equal(await estadoDe(domingo.id), "CANCELLED", "se canceló la del domingo");
+  assert.equal(await estadoDe(sabado.id), "CONFIRMED", "la del sábado ni se tocó");
+});
+
+test("🔴 G1 — los botones dicen EXACTAMENTE qué visita, también el de la plantilla", { skip }, async () => {
+  const phone = telefono();
+  const una = await visitaRecordada(A, phone, 9 * 60);
+  const otra = await visitaRecordada(A, phone, 11 * 60);
+
+  // Dos recordatorios seguidos al mismo número: escrito sería ambiguo; el
+  // botón no, porque trae su visita. Así llega el botón de una PLANTILLA.
+  let t: { value: any; msg: any } = entranteBotonDePlantilla(A, phone, {
+    payload: `rec.confirmar:${una.id}`,
+    text: "Confirmar",
+  });
+  await ingestBarberInbound(t.value, t.msg);
+  assert.equal(await estadoDe(una.id), "CONFIRMED");
+  assert.equal(await estadoDe(otra.id), "PENDING");
+
+  // Y así el de un mensaje interactivo: cancelar → pregunta → «Sí, cancelar».
+  t = entranteToque(A, phone, { id: `rec.cancelar:${otra.id}`, title: "❌ Cancelar" });
+  await ingestBarberInbound(t.value, t.msg);
+  assert.equal(await estadoDe(otra.id), "PENDING", "el botón Cancelar tampoco cancela: pregunta");
+  t = entranteToque(A, phone, { id: `rec.si-cancelar:${otra.id}`, title: "Sí, cancelar" });
+  await ingestBarberInbound(t.value, t.msg);
+  assert.equal(await estadoDe(otra.id), "CANCELLED");
+  assert.equal(await estadoDe(una.id), "CONFIRMED");
+
+  // «Cambiar» no toca la visita: abre la conversación.
+  const tercera = await visitaRecordada(A, telefono(), 9 * 60);
+  t = entranteToque(A, tercera.clientPhone!, { id: `rec.reagendar:${tercera.id}`, title: "🔁 Cambiar" });
+  await ingestBarberInbound(t.value, t.msg);
+  assert.equal(await estadoDe(tercera.id), "PENDING");
+  assert.match(ultimoTexto(), /Con gusto te movemos la visita/);
+});
+
+test("🔴 G1 — un botón con la visita de OTRO teléfono, o ya vencida, no hace nada", { skip }, async () => {
+  const ajena = await visitaRecordada(A, telefono(), 9 * 60);
+  const intruso = telefono();
+  for (const id of [`rec.si-cancelar:${ajena.id}`, `rec.confirmar:${ajena.id}`, "rec.si-cancelar:no-existe"]) {
+    limpiar();
+    const t = entranteToque(A, intruso, { id, title: "x" });
+    await ingestBarberInbound(t.value, t.msg);
+    assert.equal(await estadoDe(ajena.id), "PENDING", id);
+    assert.match(ultimoTexto(), /ya no está vigente/);
+  }
+  // La misma visita desde OTRA barbería tampoco.
+  const t = entranteToque(B, ajena.clientPhone!, { id: `rec.si-cancelar:${ajena.id}`, title: "x" });
+  await ingestBarberInbound(t.value, t.msg);
+  assert.equal(await estadoDe(ajena.id), "PENDING");
+});
+
+test("🔴 cancelar o mover a menos de 2 horas: no se toca nada y se le da el teléfono de la barbería", { skip }, async () => {
+  const aviso = /Para cambios de última hora llama a la barbería: 55 1234 5678\./;
+
+  // Visita en 90 minutos, recién recordada.
+  const p1 = telefono();
+  const c1 = await visitaRecordada(A, p1, 90);
+  let m = entrante(A, p1, "CANCELAR");
+  await ingestBarberInbound(m.value, m.msg);
+  assert.equal(await estadoDe(c1.id), "PENDING");
+  assert.match(ultimoTexto(), aviso);
+  assert.ok(!/¿Cancelo tu visita/.test(ultimoTexto()), "ni siquiera se le pregunta");
+
+  // Por botón, y aunque intente saltarse la pregunta.
+  for (const id of [`rec.cancelar:${c1.id}`, `rec.si-cancelar:${c1.id}`, `rec.reagendar:${c1.id}`]) {
+    limpiar();
+    const t = entranteToque(A, p1, { id, title: "x" });
+    await ingestBarberInbound(t.value, t.msg);
+    assert.equal(await estadoDe(c1.id), "PENDING", id);
+    assert.match(ultimoTexto(), aviso, id);
+  }
+
+  // Confirmar sí se puede hasta el último minuto.
+  const t = entranteToque(A, p1, { id: `rec.confirmar:${c1.id}`, title: "✅ Confirmar" });
+  await ingestBarberInbound(t.value, t.msg);
+  assert.equal(await estadoDe(c1.id), "CONFIRMED");
+
+  // Con más de 2 horas, cancelar sigue su camino normal (pregunta).
+  const p2 = telefono();
+  const c2 = await visitaRecordada(A, p2, 150);
+  m = entrante(A, p2, "cancelar");
+  await ingestBarberInbound(m.value, m.msg);
+  assert.match(ultimoTexto(), /^¿Cancelo tu visita/);
+  assert.equal(await estadoDe(c2.id), "PENDING");
+});
+
+test("🔴 la palabra exacta solo cuenta si el recordatorio fue lo último que dijimos", { skip }, async () => {
   // Caso 1: recordatorio → "sí". Confirma.
   const p1 = telefono();
   const c1 = await visitaRecordada(A, p1);
   let m = entrante(A, p1, "Sí");
   await ingestBarberInbound(m.value, m.msg);
-  assert.equal(
-    (await prisma.barberAppointment.findUniqueOrThrow({ where: { id: c1.id } })).status,
-    "CONFIRMED",
-  );
+  assert.equal(await estadoDe(c1.id), "CONFIRMED");
 
   // Caso 2: recordatorio → después ya hubo conversación (alguien le preguntó
-  // otra cosa) → "sí". NO es para el recordatorio: la visita no se toca.
-  limpiar();
+  // otra cosa). Ni «si» ni «CONFIRMAR» ni «CANCELAR» son ya para el
+  // recordatorio: la visita no se toca.
   const p2 = telefono();
   const c2 = await visitaRecordada(A, p2);
   await prisma.barberMessage.create({
@@ -437,22 +699,36 @@ test("🔴 un «sí» suelto solo confirma si el recordatorio fue lo último que
       status: "SENT",
     },
   });
-  m = entrante(A, p2, "si");
-  await ingestBarberInbound(m.value, m.msg);
-  assert.equal(
-    (await prisma.barberAppointment.findUniqueOrThrow({ where: { id: c2.id } })).status,
-    "PENDING",
-    "el «sí» era para la otra pregunta",
-  );
-  assert.equal(enviados().length, 0, "no se le contesta «tu visita está confirmada»");
+  for (const texto of ["si", "CONFIRMAR", "CANCELAR", "2"]) {
+    limpiar();
+    m = entrante(A, p2, texto);
+    await ingestBarberInbound(m.value, m.msg);
+    assert.equal(await estadoDe(c2.id), "PENDING", `«${texto}» era para la otra pregunta`);
+    assert.equal(enviados().length, 0, `«${texto}» no recibe respuesta del recordatorio`);
+  }
 
-  // …pero la palabra explícita vale siempre.
-  m = entrante(A, p2, "CONFIRMAR");
-  await ingestBarberInbound(m.value, m.msg);
-  assert.equal(
-    (await prisma.barberAppointment.findUniqueOrThrow({ where: { id: c2.id } })).status,
-    "CONFIRMED",
-  );
+  // Caso 3: lo último que se le dijo fue la CONFIRMACIÓN DE LA RESERVA (una
+  // fila que también lleva la visita, pero no es el recordatorio). Tampoco.
+  const p3 = telefono();
+  const c3 = await crearCita(A, { phone: p3, enMinutos: 6 * 60 });
+  await prisma.barberMessage.create({
+    data: {
+      barbershopId: A.id,
+      direction: "OUTBOUND",
+      phone: p3,
+      body: "¡Listo Luis! Tu visita quedó agendada…",
+      templateName: barberWaTemplate("bookingConfirmed").name,
+      status: "DELIVERED",
+      appointmentId: c3.id,
+    },
+  });
+  for (const texto of ["CANCELAR", "ok", "3"]) {
+    limpiar();
+    m = entrante(A, p3, texto);
+    await ingestBarberInbound(m.value, m.msg);
+    assert.equal(await estadoDe(c3.id), "PENDING", `«${texto}» tras la confirmación de reserva`);
+    assert.equal(enviados().length, 0);
+  }
 });
 
 test("un teléfono compartido con dos visitas por confirmar: no se adivina", { skip }, async () => {

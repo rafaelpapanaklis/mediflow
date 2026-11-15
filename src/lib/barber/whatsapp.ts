@@ -62,13 +62,22 @@ import {
   barberWaTemplate,
   barberWaWindowOpen,
   buildBarberWaQuota,
-  classifyBarberReply,
+  BARBER_WA_CANCEL_ASK,
+  barberCancelAskButtons,
+  barberLateChangeReply,
+  barberReminderButtons,
+  barberTooLateToChange,
   countBarberWaVariables,
+  decideBarberReminderReply,
   encodeBarberWaAttachment,
-  isBareBarberReply,
   isBarberOptOutText,
+  isBarberUnacceptedRequest,
+  isBarberWaAskRow,
   isBarberWaClaim,
   isBarberWaSysRow,
+  parseBarberReminderButton,
+  type BarberReminderAction,
+  type BarberWaButton,
   nextBarberWaStatus,
   parseBarberWaAttachment,
   parseBarberWaClaim,
@@ -172,6 +181,8 @@ type ShopWaRow = {
   address: string | null;
   city: string | null;
   state: string | null;
+  /** Teléfono de la barbería (el que se le da al cliente para llamar). */
+  phone: string | null;
   parentId: string | null;
   isActive: boolean;
   plan: string;
@@ -193,6 +204,7 @@ const SHOP_WA_SELECT = {
   address: true,
   city: true,
   state: true,
+  phone: true,
   parentId: true,
   isActive: true,
   plan: true,
@@ -588,6 +600,13 @@ async function sendTemplate(
   to: string,
   tpl: BarberWaTemplate,
   params: string[],
+  /**
+   * `payload` de cada botón de respuesta rápida, en el orden de
+   * `tpl.buttons`. Es lo que Meta nos devuelve en el webhook cuando el
+   * cliente toca el botón (formato del dental: componentesDeRespuestaRapida
+   * en src/lib/whatsapp/interactivo.ts).
+   */
+  buttonPayloads: string[] = [],
 ) {
   // 🔴 Un salto de línea, una tabulación o un parámetro vacío hacen que
   // Meta rechace el mensaje ENTERO (132018 / 131008). Se sanea aquí, en el
@@ -608,6 +627,16 @@ async function sendTemplate(
       parameters: [{ type: "text", text: clean[0] ?? "" }],
     });
   }
+  (tpl.buttons ?? []).forEach((_label, i) => {
+    const payload = buttonPayloads[i];
+    if (!payload) return;
+    components.push({
+      type: "button",
+      sub_type: "quick_reply",
+      index: String(i),
+      parameters: [{ type: "payload", payload }],
+    });
+  });
 
   return postGraph(creds, {
     messaging_product: "whatsapp",
@@ -661,6 +690,11 @@ function templateCreatePayload(tpl: BarberWaTemplate): Record<string, unknown> {
         text: tpl.body,
         ...(varCount > 0 ? { example: { body_text: [tpl.sample.slice(0, varCount)] } } : {}),
       },
+      // Botones de respuesta rápida (el recordatorio con botones). Misma
+      // forma que la propuesta del dental (payloadAltaPlantillaConBotones).
+      ...(tpl.buttons && tpl.buttons.length > 0
+        ? [{ type: "BUTTONS", buttons: tpl.buttons.map((text) => ({ type: "QUICK_REPLY", text })) }]
+        : []),
     ],
   };
 }
@@ -889,7 +923,14 @@ function planDelivery(
   row: OutboxRow,
   kind: BarberOutboxKind,
   appt: ApptForMessage | null,
-): { text: string | null; template: { tpl: BarberWaTemplate; params: string[] } | null } {
+): {
+  text: string | null;
+  template: { tpl: BarberWaTemplate; params: string[] } | null;
+  /** Botones de respuesta para cuando sale como texto (ventana abierta). */
+  buttons?: BarberWaButton[];
+  /** Plantilla CON botones que se intenta antes que `template`. */
+  buttonsTemplate?: { tpl: BarberWaTemplate; params: string[]; payloads: string[] };
+} {
   if (kind === "walkinTurn") {
     const body = (row.body ?? "").trim() || "Ya casi es tu turno.";
     return {
@@ -902,7 +943,21 @@ function planDelivery(
   }
   if (kind === "reminder" && appt) {
     const params = reminderParamsFrom(shop, appt);
-    return { text: renderReminderText(params), template: { tpl: barberWaTemplate("reminder"), params } };
+    // Los tres botones llevan la visita en su id: con la ventana abierta van
+    // como botones de respuesta, y fuera de ella como `payload` de los
+    // botones de la plantilla. En los dos casos el toque dice EXACTAMENTE
+    // qué visita confirmar, cambiar o cancelar.
+    const buttons = barberReminderButtons(appt.id);
+    return {
+      text: renderReminderText(params),
+      template: { tpl: barberWaTemplate("reminder"), params },
+      buttons,
+      buttonsTemplate: {
+        tpl: barberWaTemplate("reminderButtons"),
+        params,
+        payloads: buttons.map((b) => b.id),
+      },
+    };
   }
   if (kind === "bookingConfirmed" && appt) {
     const params = bookingParamsFrom(shop, appt);
@@ -1022,19 +1077,62 @@ async function processOutboxRow(
       const plan = planDelivery(shop, row, kind, appt);
       const windowOpen = barberWaWindowOpen(await lastInboundAt(shop.id, row.phone), now);
       if (windowOpen && plan.text) {
-        wamid = (await sendText(creds, row.phone, plan.text)).wamid;
-      } else if (plan.template) {
-        if (opts.pendingTemplates?.has(plan.template.tpl.name)) {
-          return await waitForTemplate(plan.template.tpl.name);
+        // Ventana abierta: texto libre (gratis). El recordatorio lleva además
+        // sus tres botones; si Meta rechaza el interactivo, sale el texto
+        // solo, que ya dice qué responder.
+        const rich = plan.buttons
+          ? buildInteractive(
+              plan.text,
+              plan.buttons.map((b) => ({ id: b.id, titulo: b.title })),
+            )
+          : null;
+        if (rich) {
+          try {
+            wamid = (await sendInteractive(creds, row.phone, rich.interactive)).wamid;
+          } catch (err) {
+            if (!(err instanceof WhatsAppApiError)) throw err;
+            wamid = (await sendText(creds, row.phone, plan.text)).wamid;
+          }
+        } else {
+          wamid = (await sendText(creds, row.phone, plan.text)).wamid;
         }
-        try {
-          wamid = (await sendTemplate(creds, row.phone, plan.template.tpl, plan.template.params)).wamid;
-        } catch (err) {
-          if (err instanceof WhatsAppApiError && err.code === WA_ERROR_CODE.TEMPLATE_NOT_FOUND) {
+      } else if (plan.template) {
+        // Fuera de la ventana solo cabe una plantilla. Primero la que lleva
+        // BOTONES (si este aviso tiene una); si Meta la rechaza o todavía no
+        // la aprueba, la de TEXTO, que es el respaldo. Solo si tampoco la de
+        // texto está aprobada la fila se queda esperando.
+        let sent: { wamid: string | null } | null = null;
+        if (plan.buttonsTemplate && !opts.pendingTemplates?.has(plan.buttonsTemplate.tpl.name)) {
+          try {
+            sent = await sendTemplate(
+              creds,
+              row.phone,
+              plan.buttonsTemplate.tpl,
+              plan.buttonsTemplate.params,
+              plan.buttonsTemplate.payloads,
+            );
+          } catch (err) {
+            // Un timeout NO cae al respaldo: el mensaje pudo haber salido.
+            if (!(err instanceof WhatsAppApiError)) throw err;
+            if (err.code === WA_ERROR_CODE.TEMPLATE_NOT_FOUND) {
+              opts.pendingTemplates?.add(plan.buttonsTemplate.tpl.name);
+            }
+          }
+        }
+        if (!sent) {
+          if (opts.pendingTemplates?.has(plan.template.tpl.name)) {
             return await waitForTemplate(plan.template.tpl.name);
           }
-          throw err;
+          try {
+            sent = await sendTemplate(creds, row.phone, plan.template.tpl, plan.template.params);
+          } catch (err) {
+            if (err instanceof WhatsAppApiError && err.code === WA_ERROR_CODE.TEMPLATE_NOT_FOUND) {
+              return await waitForTemplate(plan.template.tpl.name);
+            }
+            throw err;
+          }
         }
+        wamid = sent.wamid;
       } else {
         throw new WhatsAppApiError({
           message:
@@ -1984,11 +2082,15 @@ export async function ingestBarberInbound(value: any, msg: any): Promise<boolean
       msg?.button?.text ??
       "",
   ).trim();
-  // ¿Tocó un botón o una fila que le ofreció el BOT? El id lo dice sin
-  // adivinar por el texto: un «Sí, agéndala» no es un «sí» al recordatorio.
-  const tappedBotOption = isBarberBotOptionId(
-    msg?.interactive?.button_reply?.id ?? msg?.interactive?.list_reply?.id,
-  );
+  // ¿Tocó un botón o una fila? El id dice de quién era, sin adivinar por el
+  // texto: un «Sí, agéndala» del BOT no es un «sí» al recordatorio, y un
+  // «❌ Cancelar» del RECORDATORIO dice además de qué visita se trata.
+  const tappedId =
+    msg?.interactive?.button_reply?.id ?? msg?.interactive?.list_reply?.id ?? msg?.button?.payload;
+  const tappedBotOption = isBarberBotOptionId(tappedId);
+  const reminderTap = parseBarberReminderButton(tappedId);
+  // 🔴 Lo que viene de una nota de voz NUNCA decide sobre un recordatorio.
+  let fromVoice = false;
   const incoming = rawText ? null : describeBarberIncoming(msg);
   if (!rawText && !incoming) return true;
 
@@ -2076,21 +2178,39 @@ export async function ingestBarberInbound(value: any, msg: any): Promise<boolean
       return true;
     }
     rawText = voz.texto;
+    fromVoice = true;
   }
 
   // "BAJA" / "ya no me manden promociones": se respeta ANTES que nada y no
   // se le consulta a ninguna IA. Solo aplica a quien ya es cliente (sin
-  // ficha no hay a quién dar de baja, y el mensaje sigue su camino).
-  if (isBarberOptOutText(rawText) && (await optOutByPhone(shop.id, phone))) {
+  // ficha no hay a quién dar de baja, y el mensaje sigue su camino). Tiene
+  // que estar ESCRITO: ni un toque ni lo que un transcriptor creyó oír.
+  if (
+    !fromVoice &&
+    !tappedId &&
+    isBarberOptOutText(rawText) &&
+    (await optOutByPhone(shop.id, phone))
+  ) {
     await replyInline(shop, creds, phone, BARBER_WA_OPT_OUT_REPLY);
     return true;
   }
 
-  // Un toque en una opción del bot va DIRECTO al bot: es la respuesta a lo
-  // que él preguntó, no a un recordatorio.
-  const handled = tappedBotOption
-    ? false
-    : await applyReminderReply(shop, creds, phone, rawText);
+  // ¿Es una respuesta al recordatorio? Solo hay tres formas de serlo:
+  //   · tocó un botón del recordatorio (el id trae la acción y la visita);
+  //   · ESCRIBIÓ exactamente CONFIRMAR / CANCELAR / CAMBIAR (o 1/2/3, sí/ok)
+  //     y el recordatorio fue lo último que le dijimos;
+  //   · contestó sí/no a nuestra pregunta «¿Cancelo tu visita…?».
+  // Una frase normal, una nota de voz o un toque en una opción del bot NO
+  // pasan por aquí: van al bot o se quedan en la bandeja.
+  let handled = false;
+  if (reminderTap) {
+    handled = await applyReminderAction(shop, creds, phone, reminderTap.action, {
+      appointmentId: reminderTap.appointmentId,
+      tapped: true,
+    });
+  } else if (!tappedBotOption && !fromVoice) {
+    handled = await applyReminderReply(shop, creds, phone, rawText);
+  }
 
   // El BOT es el último en la fila, a propósito: primero manda lo que el
   // cliente respondió a un recordatorio nuestro (eso ya tiene dueño y no
@@ -2250,7 +2370,7 @@ async function runBotIfEnabled(
       // Se le deja un margen para mandar la respuesta después del turno.
       deadlineAt: deadlineAt ? deadlineAt - 4000 : undefined,
     });
-    if (turn.reply) await replyInline(shop, creds, phone, turn.reply, turn.options);
+    if (turn.reply) await replyInline(shop, creds, phone, turn.reply, { options: turn.options });
   } catch (err) {
     console.error(`[barber/wa] el bot no pudo atender (${shop.id}):`, err);
   }
@@ -2271,42 +2391,60 @@ async function optOutByPhone(barbershopId: string, phone: string): Promise<boole
   }
 }
 
-/**
- * ¿El recordatorio fue lo ÚLTIMO que le dijimos a este número? Se mira la
- * última fila saliente que de verdad le llegó (ni marcas de sistema, ni
- * fallidas, ni las que siguen en cola).
- */
-async function reminderWasLastWord(
-  barbershopId: string,
-  phone: string,
-  reminderTemplate: string,
-): Promise<boolean> {
-  const last = await prisma.barberMessage.findFirst({
-    where: {
-      barbershopId,
-      phone,
-      direction: "OUTBOUND",
-      status: { in: ["SENT", "DELIVERED", "READ"] },
-      // OR explícito: en SQL `NOT (NULL LIKE 'sys:%')` es NULL y dejaría
-      // fuera justo las filas sin templateName, que son las respuestas.
-      OR: [{ templateName: null }, { NOT: { templateName: { startsWith: BARBER_WA_SYS_PREFIX } } }],
-    },
-    orderBy: { createdAt: "desc" },
-    select: { templateName: true },
-  });
-  return last?.templateName === reminderTemplate;
+/** Filas salientes que de verdad le llegaron al cliente (ni sistema, ni fallidas, ni en cola). */
+function deliveredOutboundWhere(barbershopId: string, phone: string) {
+  return {
+    barbershopId,
+    phone,
+    direction: "OUTBOUND" as const,
+    status: { in: ["SENT", "DELIVERED", "READ"] as ("SENT" | "DELIVERED" | "READ")[] },
+    // OR explícito: en SQL `NOT (NULL LIKE 'sys:%')` es NULL y dejaría
+    // fuera justo las filas sin templateName, que son las respuestas.
+    OR: [{ templateName: null }, { NOT: { templateName: { startsWith: BARBER_WA_SYS_PREFIX } } }],
+  };
 }
 
 /**
- * Aplica la respuesta del cliente sobre la visita que le recordamos.
+ * Lo ÚLTIMO que le dijimos a este número y, si fueron varios recordatorios
+ * seguidos sin nada en medio, de cuántas visitas distintas.
+ */
+async function lastWordTo(
+  barbershopId: string,
+  phone: string,
+  reminderTemplate: string,
+): Promise<{
+  templateName: string | null;
+  appointmentId: string | null;
+  /** Visitas distintas en la racha de recordatorios que cierra el hilo. */
+  reminderStreak: string[];
+} | null> {
+  const rows = await prisma.barberMessage.findMany({
+    where: deliveredOutboundWhere(barbershopId, phone),
+    orderBy: { createdAt: "desc" },
+    take: 6,
+    select: { templateName: true, appointmentId: true },
+  });
+  if (rows.length === 0) return null;
+  const streak: string[] = [];
+  for (const row of rows) {
+    if (row.templateName !== reminderTemplate) break;
+    if (row.appointmentId && !streak.includes(row.appointmentId)) streak.push(row.appointmentId);
+  }
+  return {
+    templateName: rows[0].templateName,
+    appointmentId: rows[0].appointmentId,
+    reminderStreak: streak,
+  };
+}
+
+/**
+ * Una respuesta ESCRITA: ¿es para el recordatorio (o para nuestra pregunta
+ * «¿Cancelo tu visita…?»)? La decisión es pura y está probada sin base
+ * (decideBarberReminderReply, whatsapp-core.ts); aquí solo se lee qué fue lo
+ * último que se le dijo.
  *
- * La transición SIEMPRE pasa por canTransition() del contrato: si el estado
- * no lo permite (la visita ya se completó, ya estaba cancelada) no se toca
- * nada y se le contesta la verdad.
- *
- * Devuelve true si ESTE camino ya atendió el mensaje (movió la visita y/o
- * le contestó). false = el mensaje sigue sin dueño, y entonces lo toma el
- * bot. Sin esta señal, un "CONFIRMAR" recibiría dos respuestas.
+ * Devuelve true si ESTE camino ya atendió el mensaje. false = sigue sin
+ * dueño y lo toma el bot (o se queda en la bandeja).
  */
 async function applyReminderReply(
   shop: ShopWaRow,
@@ -2314,92 +2452,119 @@ async function applyReminderReply(
   phone: string,
   text: string,
 ): Promise<boolean> {
-  const action = classifyBarberReply(text);
-  if (action === "unclear") return false;
-
   const template = barberWaTemplate("reminder");
+  const last = await lastWordTo(shop.id, phone, template.name);
+  const action = decideBarberReminderReply(text, last, template.name);
+  if (!action || !last?.appointmentId) return false;
 
-  // 🔴 Un "sí" / "ok" / "1" suelto solo responde al recordatorio si el
-  // recordatorio fue lo último que le dijimos. Si después ya hubo
-  // conversación (el bot le preguntó «¿te agendo a las 5?»), ese "sí" es
-  // para el bot: tomarlo aquí confirmaba la visita de mañana y dejaba sin
-  // respuesta la pregunta que el cliente sí estaba contestando.
-  if (isBareBarberReply(text) && !(await reminderWasLastWord(shop.id, phone, template.name))) {
-    return false;
-  }
-  const sentReminders = await prisma.barberMessage.findMany({
-    where: {
-      barbershopId: shop.id,
-      phone,
-      direction: "OUTBOUND",
-      templateName: template.name,
-      status: { in: ["SENT", "DELIVERED", "READ"] },
-      appointmentId: { not: null },
-    },
-    orderBy: { createdAt: "desc" },
-    take: 10,
-    select: {
-      appointmentId: true,
-      appointment: { select: { id: true, status: true, startAt: true, clientId: true } },
-    },
-  });
-
-  // Visitas VIVAS y futuras a las que esta respuesta podría aplicar.
-  const seen = new Set<string>();
-  const candidates = sentReminders
-    .map((r) => r.appointment)
-    .filter((a): a is NonNullable<typeof a> => Boolean(a))
-    .filter((a) => a.startAt.getTime() > Date.now() - 60 * 60 * 1000)
-    .filter((a) => a.status === "PENDING" || a.status === "CONFIRMED")
-    .filter((a) => (seen.has(a.id) ? false : (seen.add(a.id), true)));
-
-  // Sin ninguna visita a la que aplicar, esto no es una respuesta a un
-  // recordatorio aunque lo parezca: que lo lea el bot.
-  if (candidates.length === 0) return false;
-
-  // Un teléfono compartido (el celular de la familia) con DOS visitas por
-  // confirmar: no se adivina. Se le dice y lo resuelve el mostrador.
-  if (candidates.length > 1) {
+  // Dos recordatorios seguidos de visitas DISTINTAS al mismo número (el
+  // celular de la familia) y un «confirmar» escrito: no se adivina cuál. Se
+  // le dice y lo resuelve el mostrador. (Con botones no pasa: cada botón
+  // trae su visita.)
+  if (last.templateName === template.name && last.reminderStreak.length > 1) {
     await replyInline(shop, creds, phone, AMBIGUOUS_REPLY);
     return true;
   }
 
-  const appt = candidates[0];
+  return applyReminderAction(shop, creds, phone, action, {
+    appointmentId: last.appointmentId,
+    tapped: false,
+  });
+}
+
+const STALE_BUTTON_REPLY =
+  "Ese aviso ya no está vigente, así que no hice ningún cambio. Si necesitas algo de tu visita, escríbenos por aquí. 🙏";
+
+/**
+ * Ejecuta UNA acción sobre UNA visita concreta: la del recordatorio que el
+ * cliente contestó, la del botón que tocó o la de la pregunta «¿Cancelo…?».
+ * Nunca «la primera que tenga recordatorio».
+ *
+ * 🔴 CANCELAR NO CANCELA: PREGUNTA. La visita solo se cancela con `do-cancel`,
+ * que llega cuando el cliente contesta «sí» a esa pregunta (o toca «Sí,
+ * cancelar»), y se cancela la visita por la que se preguntó.
+ *
+ * La visita tiene que ser de ESTA barbería y de ESTE teléfono, seguir viva y
+ * no ser una solicitud que la barbería aún no acepta. Las transiciones pasan
+ * por canTransition() del contrato.
+ */
+async function applyReminderAction(
+  shop: ShopWaRow,
+  creds: BarberWaCredentials | null,
+  phone: string,
+  action: BarberReminderAction,
+  opts: { appointmentId: string; tapped: boolean },
+): Promise<boolean> {
+  const appt = await prisma.barberAppointment.findFirst({
+    where: {
+      id: opts.appointmentId,
+      barbershopId: shop.id,
+      OR: [{ clientPhone: phone }, { client: { phone } }],
+    },
+    select: { id: true, status: true, startAt: true, source: true },
+  });
+
+  const alive =
+    appt !== null &&
+    (appt.status === "PENDING" || appt.status === "CONFIRMED") &&
+    appt.startAt.getTime() > Date.now() - 60 * 60 * 1000 &&
+    // Una solicitud sin aceptar no se confirma ni se cancela desde aquí:
+    // decidir sobre ella es de la barbería (pantalla Solicitudes).
+    !isBarberUnacceptedRequest(appt);
+  if (!appt || !alive) {
+    // Un botón viejo merece respuesta (el cliente lo tocó y espera algo);
+    // una palabra escrita sin visita viva no era para nosotros: al bot.
+    if (opts.tapped) {
+      await replyInline(shop, creds, phone, STALE_BUTTON_REPLY);
+      return true;
+    }
+    return false;
+  }
+
+  const when = formatWhen(appt.startAt, shop.timezone, shop.locale);
   const current = appt.status as BarberAppointmentStatus;
+
+  // 🔴 CANCELAR O MOVER EXIGE 2 HORAS DE ANTICIPACIÓN, igual que en «mi
+  // cuenta». Dentro de esas dos horas la barbería ya no alcanza a llenar el
+  // hueco: no se toca nada y se le da el teléfono para que llame. Confirmar
+  // sí se puede hasta el último minuto.
+  if (action !== "confirm" && action !== "keep" && barberTooLateToChange(appt.startAt)) {
+    await replyInline(shop, creds, phone, barberLateChangeReply(shop.phone));
+    return true;
+  }
 
   if (action === "confirm") {
     if (canTransition(current, "CONFIRMED")) {
-      await prisma.barberAppointment.update({
-        where: { id: appt.id },
-        data: { status: "CONFIRMED" },
-      });
-      await replyInline(
-        shop,
-        creds,
-        phone,
-        `✅ ¡Listo! Tu visita del ${formatWhen(appt.startAt, shop.timezone, shop.locale)} está confirmada. Te esperamos.`,
-      );
+      await prisma.barberAppointment.update({ where: { id: appt.id }, data: { status: "CONFIRMED" } });
+      await replyInline(shop, creds, phone, `✅ ¡Listo! Tu visita del ${when} está confirmada. Te esperamos.`);
     } else {
-      await replyInline(
-        shop,
-        creds,
-        phone,
-        `✅ Tu visita del ${formatWhen(appt.startAt, shop.timezone, shop.locale)} ya estaba confirmada. Te esperamos.`,
-      );
+      await replyInline(shop, creds, phone, `✅ Tu visita del ${when} ya estaba confirmada. Te esperamos.`);
     }
     return true;
   }
 
-  if (action === "cancel") {
-    // No se puede cancelar (ya se completó, ya estaba cancelada): aquí no hay
-    // nada que hacer, pero el cliente merece una respuesta. Se la da el bot,
-    // que sí sabe explicarlo y ofrecer alternativas.
+  if (action === "ask-cancel") {
+    // No se puede cancelar (ya está en curso): que lo explique el bot.
+    if (!canTransition(current, "CANCELLED")) return false;
+    await replyInline(
+      shop,
+      creds,
+      phone,
+      `¿Cancelo tu visita del ${when}? Responde *SÍ* para cancelarla o *NO* para conservarla.`,
+      {
+        buttons: barberCancelAskButtons(appt.id),
+        // La fila recuerda POR QUÉ visita se preguntó: el «sí» cancela esa.
+        templateName: BARBER_WA_CANCEL_ASK,
+        appointmentId: appt.id,
+      },
+    );
+    return true;
+  }
+
+  if (action === "do-cancel") {
     if (!canTransition(current, "CANCELLED")) return false;
     await prisma.$transaction(async (tx) => {
-      await tx.barberAppointment.update({
-        where: { id: appt.id },
-        data: { status: "CANCELLED" },
-      });
+      await tx.barberAppointment.update({ where: { id: appt.id }, data: { status: "CANCELLED" } });
       // Los recordatorios que quedaran en cola para esa visita ya no tienen
       // sentido: se invalidan con los helpers de T1 (misma marca, mismo
       // criterio), no con una marca inventada aquí.
@@ -2412,14 +2577,19 @@ async function applyReminderReply(
       shop,
       creds,
       phone,
-      "❌ Tu visita quedó cancelada. Cuando quieras agendar de nuevo, escríbenos por aquí. ¡Nos vemos!",
+      `❌ Tu visita del ${when} quedó cancelada. Cuando quieras agendar de nuevo, escríbenos por aquí. ¡Nos vemos!`,
     );
     return true;
   }
 
+  if (action === "keep") {
+    await replyInline(shop, creds, phone, `👍 Perfecto, tu visita del ${when} sigue en pie. Te esperamos.`);
+    return true;
+  }
+
   // reschedule — NO se toca el estado de la visita: cambiar de horario es
-  // elegir uno nuevo, y eso lo hace el cliente o el mostrador. El hilo queda
-  // en el Inbox para que alguien lo atienda.
+  // elegir uno nuevo, y eso lo hace el cliente con el bot o el mostrador. El
+  // hilo queda en el Inbox para que alguien lo atienda.
   await replyInline(
     shop,
     creds,
@@ -2430,30 +2600,52 @@ async function applyReminderReply(
 }
 
 /**
- * De las opciones que pide el bot al mensaje interactivo de Meta: botones
- * de respuesta (hasta 3, títulos de hasta 20 caracteres) o lista (hasta 10
- * filas). Los límites y el armado son los del dental (interactivo.ts), ya
- * probados contra Meta. null = no se puede armar uno válido → va texto.
- *
- * El id de cada opción lleva el prefijo del bot: es lo que le dice a la
- * ingesta, cuando el cliente la toca, que esa respuesta es para el bot.
+ * De unas opciones al mensaje interactivo de Meta: botones de respuesta
+ * (hasta 3, títulos de hasta 20 caracteres) o lista (hasta 10 filas). Los
+ * límites y el armado son los del dental (interactivo.ts), ya probados
+ * contra Meta. null = no se puede armar uno válido → va texto.
  */
-function buildBotInteractive(
+function buildInteractive(
   body: string,
-  options: BarberBotOption[],
+  choices: { id: string; titulo: string; descripcion?: string }[],
 ): { interactive: Record<string, unknown>; shape: MensajeInteractivo } | null {
-  if (options.length === 0) return null;
-  const shape = interactivoParaOpciones(
-    options.map((o, i) => ({
-      id: `${BARBER_BOT_OPTION_ID_PREFIX}${i + 1}`,
-      titulo: o.title,
-      ...(o.description ? { descripcion: o.description } : {}),
-    })),
-    "Ver opciones",
-  );
+  if (choices.length === 0) return null;
+  const shape = interactivoParaOpciones(choices, "Ver opciones");
   if (!shape) return null;
   const interactive = construirInteractivo(body, shape);
   return interactive ? { interactive, shape } : null;
+}
+
+/** Manda un interactivo ya armado. Lanza WhatsAppApiError si Meta lo rechaza. */
+async function sendInteractive(
+  creds: BarberWaCredentials,
+  to: string,
+  interactive: Record<string, unknown>,
+) {
+  return postGraph(creds, {
+    messaging_product: "whatsapp",
+    to: normalizeMxWhatsAppPhone(to),
+    type: "interactive",
+    interactive,
+  });
+}
+
+interface InlineExtras {
+  /**
+   * Opciones que ofrece el BOT. Su id lleva el prefijo del bot: es lo que le
+   * dice a la ingesta, cuando el cliente la toca, que la respuesta es para él.
+   * Si Meta rechaza el interactivo, salen como texto numerado.
+   */
+  options?: BarberBotOption[];
+  /**
+   * Botones con id PROPIO (los del recordatorio). Si Meta los rechaza sale
+   * solo el cuerpo, que ya dice qué responder: numerarlos chocaría con el
+   * «1 / 2 / 3» del recordatorio.
+   */
+  buttons?: BarberWaButton[];
+  /** Marca interna de la fila (p. ej. la pregunta «¿Cancelo…?»). */
+  templateName?: string | null;
+  appointmentId?: string | null;
 }
 
 /**
@@ -2461,21 +2653,35 @@ function buildBotInteractive(
  * 24 h (acaba de escribirnos), así que va como texto: gratis y natural.
  * Best-effort — una respuesta que no sale no puede tumbar la ingesta.
  *
- * Con `options` sale como mensaje INTERACTIVO (botones o lista) para que el
- * cliente toque en vez de escribir. Si Meta lo RECHAZA, sale el mismo
- * mensaje como texto con las opciones numeradas: el cliente nunca se queda
- * sin respuesta por un botón. (Un timeout NO cuenta como rechazo: el mensaje
- * pudo haber salido, y mandar el respaldo lo duplicaría.)
+ * Con opciones o botones sale como mensaje INTERACTIVO para que el cliente
+ * toque en vez de escribir. Si Meta lo RECHAZA sale como texto: el cliente
+ * nunca se queda sin respuesta por un botón. (Un timeout NO cuenta como
+ * rechazo: el mensaje pudo haber salido, y mandar el respaldo lo duplicaría.)
  */
 async function replyInline(
   shop: ShopWaRow,
   creds: BarberWaCredentials | null,
   phone: string,
   body: string,
-  options: BarberBotOption[] = [],
+  extras: InlineExtras = {},
 ): Promise<void> {
   if (!creds) return;
-  const rich = buildBotInteractive(body, options);
+  const options = extras.options ?? [];
+  const buttons = extras.buttons ?? [];
+  const rich =
+    buttons.length > 0
+      ? buildInteractive(
+          body,
+          buttons.map((b) => ({ id: b.id, titulo: b.title })),
+        )
+      : buildInteractive(
+          body,
+          options.map((o, i) => ({
+            id: `${BARBER_BOT_OPTION_ID_PREFIX}${i + 1}`,
+            titulo: o.title,
+            ...(o.description ? { descripcion: o.description } : {}),
+          })),
+        );
   const row = await prisma.barberMessage
     .create({
       data: {
@@ -2488,6 +2694,8 @@ async function replyInline(
         status: "PENDING",
         // Nace RECLAMADA: el drenado no puede mandarla una segunda vez.
         errorMessage: barberWaClaimMark(),
+        templateName: extras.templateName ?? null,
+        appointmentId: extras.appointmentId ?? null,
       },
       select: { id: true },
     })
@@ -2498,18 +2706,11 @@ async function replyInline(
     let sentBody: string | null = null;
     if (rich) {
       try {
-        wamid = (
-          await postGraph(creds, {
-            messaging_product: "whatsapp",
-            to: normalizeMxWhatsAppPhone(phone),
-            type: "interactive",
-            interactive: rich.interactive,
-          })
-        ).wamid;
+        wamid = (await sendInteractive(creds, phone, rich.interactive)).wamid;
       } catch (err) {
         if (!(err instanceof WhatsAppApiError)) throw err;
         console.warn(`[barber/wa] Meta rechazó los botones, va texto (${shop.id}): ${err.message}`);
-        sentBody = barberWaOptionsAsText(body, options);
+        sentBody = buttons.length > 0 ? body : barberWaOptionsAsText(body, options);
         wamid = (await sendText(creds, phone, sentBody)).wamid;
       }
     } else {
@@ -2639,7 +2840,9 @@ function toMessageDTO(row: {
         : row.errorMessage,
     // Los adjuntos y las marcas de sistema no son "una plantilla".
     templateName:
-      attachment || isBarberWaSysRow(row.templateName) ? null : row.templateName,
+      attachment || isBarberWaSysRow(row.templateName) || isBarberWaAskRow(row.templateName)
+        ? null
+        : row.templateName,
     attachment,
     createdAt: row.createdAt.toISOString(),
     appointmentId: row.appointmentId,

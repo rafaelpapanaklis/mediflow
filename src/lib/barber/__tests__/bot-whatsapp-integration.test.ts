@@ -485,30 +485,76 @@ test("🔴 una nota de voz se transcribe, el bot la atiende como texto y el cost
   assert.equal((await gastoDeHoy(P)) - antes, botVoiceCostMicros(6, 18) + COSTO_LLAMADA);
 });
 
-test("una nota de voz que dice «confirmo» confirma la visita del recordatorio", { skip }, async () => {
-  const phone = telefono();
-  const cita = await crearCita(P, { phone, enMinutos: 7 * 60 });
-  await prisma.barberMessage.create({
-    data: {
-      barbershopId: P.id,
-      direction: "OUTBOUND",
-      phone,
-      body: "Hola Luis, te recordamos tu visita…",
-      templateName: barberWaTemplate("reminder").name,
-      status: "READ",
-      appointmentId: cita.id,
-    },
-  });
-  setWhisper({ text: "Sí, confirmo, ahí estaré", duration: 3 });
-  const { value, msg } = entranteVoz(P, phone);
-  await ingestBarberInbound(value, msg);
+test("🔴 G1 — lo que dice una nota de voz NUNCA decide sobre el recordatorio: va al bot", { skip }, async () => {
+  const recordada = async (phone: string) => {
+    const cita = await crearCita(P, { phone, enMinutos: 7 * 60 });
+    await prisma.barberMessage.create({
+      data: {
+        barbershopId: P.id,
+        direction: "OUTBOUND",
+        phone,
+        body: "Hola Luis, te recordamos tu visita…",
+        templateName: barberWaTemplate("reminder").name,
+        status: "READ",
+        appointmentId: cita.id,
+      },
+    });
+    return cita;
+  };
+  const estado = async (id: string) =>
+    (await prisma.barberAppointment.findUniqueOrThrow({ where: { id } })).status;
 
-  assert.equal(
-    (await prisma.barberAppointment.findUniqueOrThrow({ where: { id: cita.id } })).status,
-    "CONFIRMED",
-  );
-  assert.equal(modelRequests.length, 0, "lo resolvió el recordatorio, sin IA de conversación");
-  assert.match(ultimoEnvio().body.text.body, /está confirmada/);
+  // Aunque el transcriptor devuelva EXACTAMENTE la palabra que, escrita,
+  // confirmaría o pediría cancelar: por voz no cuenta.
+  for (const oido of ["Cancelar", "confirmar", "Sí", "No puedo ir, cancela"]) {
+    limpiar();
+    const phone = telefono();
+    const cita = await recordada(phone);
+    setWhisper({ text: oido, duration: 2 });
+    modelQueue.push(say("Te escuché. ¿Quieres que revise tu visita?"));
+    const { value, msg } = entranteVoz(P, phone);
+    await ingestBarberInbound(value, msg);
+
+    assert.equal(await estado(cita.id), "PENDING", `oír «${oido}» no toca la visita`);
+    assert.equal(modelRequests.length, 1, "lo atendió el bot");
+    assert.match(ultimoEnvio().body.text.body, /Te escuché/);
+    assert.ok(!/¿Cancelo tu visita|está confirmada|quedó cancelada/.test(ultimoEnvio().body.text.body));
+  }
+});
+
+test("🔴 el bot tampoco cancela ni mueve a menos de 2 horas: contesta con el teléfono de la barbería", { skip }, async () => {
+  const aviso = /Para cambios de última hora llama a la barbería: 55 1234 5678\./;
+  const estado = async (id: string) =>
+    (await prisma.barberAppointment.findUniqueOrThrow({ where: { id } })).status;
+
+  // Cancelar una visita que empieza en 90 minutos.
+  const p1 = telefono();
+  const c1 = await crearCita(P, { phone: p1, enMinutos: 90 });
+  modelQueue.push(useTool("cancelar", { citaId: c1.id }));
+  await escribe(P, p1, "cancela mi cita de al rato");
+  assert.equal(await estado(c1.id), "PENDING", "la cita sigue en pie");
+  assert.match(ultimoEnvio().body.text.body, aviso);
+  assert.equal(modelRequests.length, 1, "el aviso sale tal cual, sin otra vuelta del modelo");
+
+  // Moverla, igual.
+  limpiar();
+  const p2 = telefono();
+  const c2 = await crearCita(P, { phone: p2, enMinutos: 100 });
+  const antes = (await prisma.barberAppointment.findUniqueOrThrow({ where: { id: c2.id } })).startAt;
+  modelQueue.push(useTool("reagendar", { citaId: c2.id, fecha: MANANA, hora: "17:00" }));
+  await escribe(P, p2, "pásala a mañana a las 5");
+  const despues = (await prisma.barberAppointment.findUniqueOrThrow({ where: { id: c2.id } })).startAt;
+  assert.equal(despues.getTime(), antes.getTime(), "no se movió");
+  assert.match(ultimoEnvio().body.text.body, aviso);
+
+  // Con más de 2 horas, cancelar funciona como siempre.
+  limpiar();
+  const p3 = telefono();
+  const c3 = await crearCita(P, { phone: p3, enMinutos: 5 * 60 });
+  modelQueue.push(useTool("cancelar", { citaId: c3.id }));
+  modelQueue.push(say("Listo, quedó cancelada."));
+  await escribe(P, p3, "cancela mi cita");
+  assert.equal(await estado(c3.id), "CANCELLED");
 });
 
 test("audio demasiado largo o que no se pudo escuchar: se le pide que lo escriba", { skip }, async () => {

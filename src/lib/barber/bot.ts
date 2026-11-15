@@ -9,6 +9,11 @@ import { barberPlanHasFeature, isBarbershopSubscriptionActive } from "@/lib/barb
 import { canTransition } from "@/lib/barber/types";
 import { getBarberWaQuota } from "@/lib/barber/whatsapp";
 import {
+  BARBER_WA_CHANGE_NOTICE_HOURS,
+  barberLateChangeReply,
+  barberTooLateToChange,
+} from "@/lib/barber/whatsapp-core";
+import {
   isBarberOverlapError,
   pendingReminderInvalidationWhere,
   reminderInvalidationData,
@@ -1211,6 +1216,28 @@ async function ownAppointment(ctx: ToolCtx, citaId: unknown) {
   });
 }
 
+/**
+ * 🔴 Cancelar o mover por WhatsApp exige 2 horas de anticipación, la misma
+ * regla que «mi cuenta» y que las respuestas al recordatorio. Dentro de esas
+ * dos horas la herramienta NO toca la cita y le devuelve al modelo, como
+ * dato, lo que tiene que decirle al cliente (con el teléfono de la
+ * barbería). La regla vive en el servidor: el modelo no puede saltársela.
+ */
+function tooLateToChange(ctx: ToolCtx, startAt: Date): Record<string, unknown> | null {
+  if (!barberTooLateToChange(startAt, ctx.now)) return null;
+  const decirle = barberLateChangeReply(ctx.shop.phone);
+  // La respuesta al cliente queda FIJADA aquí (cierra el turno, igual que
+  // responder_con_opciones): el aviso con el teléfono sale tal cual, no
+  // como lo quiera parafrasear el modelo.
+  ctx.effects.finalText = decirle;
+  ctx.effects.finalOptions = [];
+  return {
+    error: "ultimaHora",
+    mensaje: `Faltan menos de ${BARBER_WA_CHANGE_NOTICE_HOURS} horas para esa cita: por aquí ya no se puede cancelar ni mover.`,
+    decirle,
+  };
+}
+
 async function toolCancelar(ctx: ToolCtx, input: Record<string, unknown>): Promise<unknown> {
   const appt = await ownAppointment(ctx, input.citaId);
   if (!appt) return { error: "No encontré esa cita a nombre de este teléfono." };
@@ -1224,6 +1251,8 @@ async function toolCancelar(ctx: ToolCtx, input: Record<string, unknown>): Promi
           : "Esa cita ya no se puede cancelar desde aquí. Pasa la conversación a una persona.",
     };
   }
+  const tarde = tooLateToChange(ctx, appt.startAt);
+  if (tarde) return tarde;
 
   await prisma.$transaction(async (tx) => {
     await tx.barberAppointment.update({
@@ -1261,6 +1290,8 @@ async function toolReagendar(ctx: ToolCtx, input: Record<string, unknown>): Prom
   if (appt.status !== "PENDING" && appt.status !== "CONFIRMED") {
     return { error: "noSePuede", mensaje: "Esa cita ya no se puede mover." };
   }
+  const tarde = tooLateToChange(ctx, appt.startAt);
+  if (tarde) return tarde;
 
   const dateISO = typeof input.fecha === "string" ? input.fecha : "";
   const time = typeof input.hora === "string" ? input.hora : "";

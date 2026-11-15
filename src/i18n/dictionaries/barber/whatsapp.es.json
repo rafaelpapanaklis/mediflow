@@ -64,7 +64,8 @@
       "MARKETING": "Promoción"
     },
     "kind": {
-      "reminder": "Recordatorio de visita",
+      "reminder": "Recordatorio de visita (texto, de respaldo)",
+      "reminderButtons": "Recordatorio de visita con botones",
       "portalCode": "Código de acceso al portal",
       "walkinTurn": "Ya casi es tu turno",
       "bookingConfirmed": "Reserva confirmada",

@@ -65,7 +65,8 @@
       "MARKETING": "Promotional"
     },
     "kind": {
-      "reminder": "Visit reminder",
+      "reminder": "Visit reminder (text, fallback)",
+      "reminderButtons": "Visit reminder with buttons",
       "portalCode": "Portal access code",
       "walkinTurn": "You're almost up",
       "bookingConfirmed": "Booking confirmed",

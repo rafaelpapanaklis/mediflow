@@ -47,19 +47,34 @@ import {
   classifyBarberReply,
   countBarberWaVariables,
   encodeBarberWaAttachment,
-  isBareBarberReply,
+  isBarberNoReply,
   isBarberOptOutText,
+  isBarberUnacceptedRequest,
+  isBarberWaAskRow,
   isBarberWaClaim,
   isBarberWaSysRow,
   isBarberWaUnlimited,
+  isBarberYesReply,
   nextBarberWaStatus,
+  normalizeBarberReply,
+  parseBarberReminderButton,
   parseBarberWaAttachment,
   parseBarberWaClaim,
   reminderAlreadyHandled,
   sanitizeBarberWaParam,
   walkInTemplateNotice,
+  BARBER_REMINDER_TEMPLATE_BUTTONS,
+  BARBER_REQUEST_SOURCES,
+  BARBER_WA_CANCEL_ASK,
+  BARBER_WA_CHANGE_NOTICE_HOURS,
+  barberCancelAskButtons,
+  barberLateChangeReply,
+  barberReminderButtons,
+  barberTooLateToChange,
+  decideBarberReminderReply,
   type BarberWaAttachment,
 } from "@/lib/barber/whatsapp-core";
+import { BARBER_CANCEL_WINDOW_HOURS } from "@/lib/barber/portal-core";
 import {
   isInvalidatedReminder,
   BARBER_REMINDER_INVALIDATED_MARK,
@@ -71,6 +86,7 @@ import {
 test("todo lo transaccional es `utility` — nada se cuela como marketing", () => {
   const esperado: Record<string, string> = {
     reminder: "UTILITY",
+    reminderButtons: "UTILITY",
     walkinTurn: "UTILITY",
     bookingConfirmed: "UTILITY",
     // Meta EXIGE authentication para un código de un solo uso; mandarlo como
@@ -167,6 +183,8 @@ test("🔴 CONTRATO: la cantidad de variables es la que pasa el emisor (132000)"
   //   birthday/winback  → [cliente, barbería, promo]    son 3
   const contrato: Record<string, number> = {
     reminder: 6,
+    // La de botones lleva los MISMOS seis parámetros (reminderParamsFrom).
+    reminderButtons: 6,
     bookingConfirmed: 4,
     walkinTurn: 2,
     portalCode: 1,
@@ -255,47 +273,176 @@ test("un estado desconocido de Meta no toca nada (lado seguro)", () => {
 });
 
 /* ═══════════ 5. LA RESPUESTA DEL CLIENTE AL RECORDATORIO ═════════════ */
+//
+// 🔴 G1 de la revisión (ronda 2). Hasta entonces estas respuestas se buscaban
+// por «contiene»: «no puedo», «no voy», «cancelar» dentro de CUALQUIER frase
+// cancelaban la cita. Esta sección fijaba «no puedo → cancela» como lo
+// esperado; ahora fija lo contrario.
 
-test("confirmar reconoce lo que la gente escribe de verdad", () => {
-  for (const text of ["CONFIRMAR", "confirmo", "Confirmado", "sí", "si", "ok", "va", "1", "Ahí estaré"]) {
+const REMINDER = barberWaTemplate("reminder").name;
+const trasElRecordatorio = { templateName: REMINDER };
+
+test("confirmar: solo cuando el mensaje ES la respuesta", () => {
+  for (const text of ["CONFIRMAR", "confirmo", "Sí", "si", "ok", "va", "1", "¡Confirmar!", "Sí 👍", "sí confirmo"]) {
     assert.equal(classifyBarberReply(text), "confirm", text);
   }
 });
 
-test("cancelar reconoce lo que la gente escribe de verdad", () => {
-  for (const text of ["CANCELAR", "cancélalo", "no puedo", "No podré ir", "2"]) {
+test("cancelar y cambiar: solo la palabra, sola", () => {
+  for (const text of ["CANCELAR", "cancelar.", "cancélala", "Cancelo", "2"]) {
     assert.equal(classifyBarberReply(text), "cancel", text);
   }
-});
-
-test("cambiar de horario es una TERCERA salida, no un cancelar", () => {
-  for (const text of ["CAMBIAR", "reagendar", "¿lo movemos a otro día?", "otra hora", "3"]) {
+  for (const text of ["CAMBIAR", "reagendar", "Cambiar hora", "3"]) {
     assert.equal(classifyBarberReply(text), "reschedule", text);
   }
 });
 
-test("🔴 'sí, pero otro día' NO confirma: lleva un sí dentro y no es un sí", () => {
-  assert.equal(classifyBarberReply("sí, pero otro día"), "reschedule");
-});
-
-test("🔴 'mejor no, sí cancélala' cancela: ante la duda gana lo que el cliente quiso", () => {
-  assert.equal(classifyBarberReply("mejor no, sí cancélala"), "cancel");
-});
-
-test("un dígito suelto dentro de una frase NO cancela la cita de nadie", () => {
-  assert.equal(classifyBarberReply("somos 2"), "unclear");
-  assert.equal(classifyBarberReply("llegamos 3 personas"), "unclear");
-});
-
-test("lo que no se entiende se marca unclear y no toca la agenda", () => {
-  for (const text of ["", "   ", "gracias", "¿cuánto cuesta el corte?", "👍"]) {
-    assert.equal(classifyBarberReply(text), "unclear", JSON.stringify(text));
+test("🔴 LA TABLA DE LA REVISORA: ninguna frase normal cancela, confirma ni «mueve» la visita", () => {
+  const frases = [
+    // Antes: CANCELABAN (contenían «no voy» / «no puedo» / «cancelar»).
+    "Sí confirmo, no voy a faltar",
+    "ahí estaré, no voy a fallar",
+    "voy a llegar 10 min tarde, no puedo salir antes",
+    "no puedo estacionarme, ahorita llego",
+    "¿puedo cancelar si llueve?",
+    "oye no puedo a las 5, ¿me la pasas a las 6?",
+    "quiero cancelar la del domingo",
+    // Antes: contestaba «con gusto te movemos la visita» (contenía «cambio»).
+    "¿tienen cambio de 500?",
+    // Antes: CONFIRMABA (contenía «confirmo»).
+    "no confirmo todavía, te aviso",
+    // Las que la prueba vieja daba por buenas como cancelación o cambio.
+    "no puedo",
+    "No podré ir",
+    "no voy",
+    "mejor no, sí cancélala",
+    "sí, pero otro día",
+    "¿lo movemos a otro día?",
+    "otra hora",
+    "ahí estaré",
+    "somos 2",
+    "llegamos 3 personas",
+    "gracias",
+    "👍",
+    "",
+  ];
+  for (const frase of frases) {
+    assert.equal(classifyBarberReply(frase), "unclear", JSON.stringify(frase));
+    // …y por tanto no hay NINGUNA acción sobre la visita, ni siquiera justo
+    // después del recordatorio: el mensaje sigue al bot o a la bandeja.
+    assert.equal(decideBarberReminderReply(frase, trasElRecordatorio, REMINDER), null, JSON.stringify(frase));
   }
 });
 
-test("los acentos y las mayúsculas no cambian la respuesta", () => {
-  assert.equal(classifyBarberReply("CONFÍRMALO"), classifyBarberReply("confirmalo"));
-  assert.equal(classifyBarberReply("Cancélala"), "cancel");
+test("normalizar quita acentos, mayúsculas y signos — nunca palabras", () => {
+  assert.equal(normalizeBarberReply("  ¡CONFIRMAR!  "), "confirmar");
+  assert.equal(normalizeBarberReply("Sí 👍"), "si");
+  assert.equal(normalizeBarberReply("Cancélala."), "cancelala");
+  assert.equal(normalizeBarberReply("Sí confirmo, no voy a faltar"), "si confirmo no voy a faltar");
+});
+
+test("🔴 la palabra exacta solo cuenta si el recordatorio fue lo último que se le dijo", () => {
+  // Justo después del recordatorio.
+  assert.equal(decideBarberReminderReply("CONFIRMAR", trasElRecordatorio, REMINDER), "confirm");
+  assert.equal(decideBarberReminderReply("sí", trasElRecordatorio, REMINDER), "confirm");
+  assert.equal(decideBarberReminderReply("3", trasElRecordatorio, REMINDER), "reschedule");
+
+  // Después de cualquier otra cosa (el bot preguntó algo, alguien escribió,
+  // la confirmación de la reserva): ni siquiera «CANCELAR» escrito tal cual.
+  for (const ultimo of [{ templateName: null }, { templateName: "dc_barber_reserva_confirmada" }, null]) {
+    for (const text of ["CONFIRMAR", "CANCELAR", "CAMBIAR", "sí", "1", "2", "3"]) {
+      assert.equal(decideBarberReminderReply(text, ultimo, REMINDER), null, `${text} tras ${JSON.stringify(ultimo)}`);
+    }
+  }
+});
+
+test("🔴 CANCELAR no cancela: PREGUNTA. Solo el «sí» a esa pregunta cancela", () => {
+  assert.equal(decideBarberReminderReply("CANCELAR", trasElRecordatorio, REMINDER), "ask-cancel");
+  assert.equal(decideBarberReminderReply("2", trasElRecordatorio, REMINDER), "ask-cancel");
+
+  const trasLaPregunta = { templateName: BARBER_WA_CANCEL_ASK };
+  for (const text of ["SÍ", "si", "Sí, cancelar", "ok", "va"]) {
+    assert.equal(decideBarberReminderReply(text, trasLaPregunta, REMINDER), "do-cancel", text);
+  }
+  for (const text of ["no", "No.", "mejor no", "No, gracias"]) {
+    assert.equal(decideBarberReminderReply(text, trasLaPregunta, REMINDER), "keep", text);
+  }
+  // Cualquier otra cosa tras la pregunta no decide nada (y «cancelar»
+  // repetido tampoco cancela: tiene que ser el sí).
+  for (const text of ["no sé, déjame ver", "sí pero mejor el jueves", "cancelar", "1", "gracias"]) {
+    assert.equal(decideBarberReminderReply(text, trasLaPregunta, REMINDER), null, text);
+  }
+  assert.equal(isBarberYesReply("no"), false);
+  assert.equal(isBarberNoReply("sí"), false);
+  assert.equal(isBarberWaAskRow(BARBER_WA_CANCEL_ASK), true);
+  assert.equal(isBarberWaSysRow(BARBER_WA_CANCEL_ASK), false, "la pregunta es un mensaje real: se ve en la bandeja");
+});
+
+test("los botones del recordatorio dicen la acción Y la visita exacta", () => {
+  const botones = barberReminderButtons("cita_123");
+  assert.deepEqual(
+    botones.map((b) => b.id),
+    ["rec.confirmar:cita_123", "rec.reagendar:cita_123", "rec.cancelar:cita_123"],
+  );
+  for (const b of [...botones, ...barberCancelAskButtons("cita_123")]) {
+    assert.ok(Array.from(b.title).length <= 20, `«${b.title}» cabe en un botón de respuesta (20)`);
+  }
+  assert.deepEqual(parseBarberReminderButton("rec.confirmar:cita_123"), { action: "confirm", appointmentId: "cita_123" });
+  assert.deepEqual(parseBarberReminderButton("rec.reagendar:cita_123"), { action: "reschedule", appointmentId: "cita_123" });
+  // El botón «Cancelar» tampoco cancela: pregunta.
+  assert.deepEqual(parseBarberReminderButton("rec.cancelar:cita_123"), { action: "ask-cancel", appointmentId: "cita_123" });
+  const [si, no] = barberCancelAskButtons("cita_123");
+  assert.deepEqual(parseBarberReminderButton(si.id), { action: "do-cancel", appointmentId: "cita_123" });
+  assert.deepEqual(parseBarberReminderButton(no.id), { action: "keep", appointmentId: "cita_123" });
+  // Lo que no es de estos botones no se interpreta.
+  for (const id of ["bot:1", "rec.confirmar", "rec.confirmar:", "otra.cosa:1", "", null, 7]) {
+    assert.equal(parseBarberReminderButton(id), null, String(id));
+  }
+});
+
+test("la plantilla del recordatorio con botones: tres, sin emojis, mismas variables que la de texto", () => {
+  const conBotones = barberWaTemplate("reminderButtons");
+  const deTexto = barberWaTemplate("reminder");
+  assert.deepEqual(conBotones.buttons, ["Confirmar", "Cambiar", "Cancelar"]);
+  assert.deepEqual([...BARBER_REMINDER_TEMPLATE_BUTTONS], conBotones.buttons);
+  assert.deepEqual(conBotones.variables, deTexto.variables, "los mismos seis parámetros, en el mismo orden");
+  assert.equal(conBotones.category, "UTILITY");
+  assert.notEqual(conBotones.name, deTexto.name, "son dos plantillas: la de texto queda de respaldo");
+  assert.equal(deTexto.buttons, undefined);
+  // El payload de cada botón sale de barberReminderButtons, en el mismo orden.
+  assert.equal(barberReminderButtons("x").length, conBotones.buttons!.length);
+
+  // Lo que Meta rechazaría en un botón de plantilla.
+  const con = (buttons: string[]) => checkBarberWaTemplate({ ...conBotones, buttons });
+  assert.equal(con(["Confirmar", "Cambiar", "Cancelar"]), null);
+  assert.ok(con(["✅ Confirmar"]), "emojis");
+  assert.ok(con(["Confirmar\nya"]), "saltos de línea");
+  assert.ok(con(["x".repeat(26)]), "más de 25 caracteres");
+  assert.ok(con(["Sí", "Sí"]), "dos iguales");
+  assert.ok(con(["A", "B", "C", "D"]), "más de tres");
+});
+
+test("🔴 cancelar o mover exige 2 horas de anticipación — la misma regla que «mi cuenta»", () => {
+  assert.equal(BARBER_WA_CHANGE_NOTICE_HOURS, BARBER_CANCEL_WINDOW_HOURS, "un solo número para los dos caminos");
+  const now = new Date("2026-11-17T15:00:00.000Z");
+  const en = (min: number) => new Date(now.getTime() + min * 60_000);
+  assert.equal(barberTooLateToChange(en(121), now), false);
+  assert.equal(barberTooLateToChange(en(120), now), false);
+  assert.equal(barberTooLateToChange(en(119), now), true);
+  assert.equal(barberTooLateToChange(en(-10), now), true);
+  assert.match(barberLateChangeReply("55 1234 5678"), /Para cambios de última hora llama a la barbería: 55 1234 5678\./);
+  assert.match(barberLateChangeReply(null), /llama a la barbería\.$/);
+});
+
+test("una solicitud sin aceptar es la reserva en línea PENDIENTE (lo que lista Solicitudes)", () => {
+  assert.equal(isBarberUnacceptedRequest({ status: "PENDING", source: "PUBLIC" }), true);
+  assert.equal(isBarberUnacceptedRequest({ status: "CONFIRMED", source: "PUBLIC" }), false, "ya aceptada");
+  assert.equal(isBarberUnacceptedRequest({ status: "PENDING", source: "PANEL" }), false, "la creó la barbería");
+  assert.equal(isBarberUnacceptedRequest({ status: "PENDING", source: "WALKIN" }), false);
+  assert.deepEqual([...BARBER_REQUEST_SOURCES], ["PUBLIC"]);
+  // booking.ts (de otra pantalla) define Solicitudes con este mismo filtro.
+  const booking = readFileSync("src/lib/barber/booking.ts", "utf8");
+  assert.ok(booking.includes('source: "PUBLIC"'), "si Solicitudes cambia de filtro, BARBER_REQUEST_SOURCES tiene que seguirlo");
 });
 
 /* ═════════════════ 6. ADJUNTOS Y MARCAS DE SISTEMA ═══════════════════ */
@@ -452,15 +599,6 @@ test("el aviso de la fila no repite en la plantilla lo que la plantilla ya dice"
 });
 
 /* ═══════ 8d. RESPUESTAS SUELTAS Y BAJA DE PROMOCIONES ═════════════════ */
-
-test("🔴 «sí», «ok» y los dígitos son respuestas SUELTAS; las palabras explícitas no", () => {
-  for (const t of ["si", "Sí", "SI", "ok", "Okay", "va", "vale", "claro", "de acuerdo", "1", "2", "3"]) {
-    assert.equal(isBareBarberReply(t), true, t);
-  }
-  for (const t of ["confirmar", "CONFIRMO", "cancelar", "cambiar", "sí, confirmo", "ahí estaré", "hola"]) {
-    assert.equal(isBareBarberReply(t), false, t);
-  }
-});
 
 test("la baja se reconoce por lo que la gente escribe, y no por accidente", () => {
   for (const t of ["BAJA", "baja.", "Stop", "darme de baja", "ya no me manden mensajes", "No quiero promociones!"]) {

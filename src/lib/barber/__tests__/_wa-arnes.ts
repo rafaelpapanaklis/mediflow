@@ -263,6 +263,7 @@ export async function crearTienda(
       timezone: TZ,
       address: opts.address === undefined ? "Av. Juárez 120" : opts.address,
       city: "Centro",
+      phone: "55 1234 5678",
       ...(conectada
         ? {
             whatsappSenderMode: "OWN_WABA" as never,
@@ -397,6 +398,24 @@ export function entranteToque(
       timestamp: String(Math.floor(Date.now() / 1000)),
       type: "interactive",
       interactive: { type: tipo, [tipo]: toque },
+    },
+  };
+}
+
+/** Lo que Meta manda cuando el cliente toca un botón de una PLANTILLA. */
+export function entranteBotonDePlantilla(
+  t: Tienda,
+  phone: string,
+  boton: { payload: string; text: string },
+) {
+  return {
+    value: { messaging_product: "whatsapp", metadata: { phone_number_id: t.phoneNumberId } },
+    msg: {
+      from: `521${phone}`,
+      id: `wamid.IN.${RUN}.${++inSeq}`,
+      timestamp: String(Math.floor(Date.now() / 1000)),
+      type: "button",
+      button: boton,
     },
   };
 }
