@@ -18,6 +18,7 @@ import {
   type BarberAppointmentStatus,
 } from "@/lib/barber/types";
 import { toAppointmentDTO, type BarberReminderInvalidationCause } from "@/lib/barber/agenda";
+import { refreshLoyaltySafe } from "@/lib/barber/loyalty-core";
 import {
   APPOINTMENT_INCLUDE,
   asString,
@@ -93,6 +94,14 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
   const remindersInvalidated = cause
     ? await invalidateAppointmentReminders(shopId, current.id, cause)
     : 0;
+
+  // GANCHO DE LEALTAD: al completar la visita se recuentan los sellos del
+  // cliente en el acto (antes solo se refrescaban al abrir Clientes, y la
+  // caja seguía diciendo «7 de 10» con el décimo corte ya hecho). No suma:
+  // cuenta, así que repetirlo es inocuo; y nunca tumba el cambio de estado.
+  if (to === "DONE" && updated.clientId) {
+    await refreshLoyaltySafe(prisma, shopId, [updated.clientId]);
+  }
 
   return NextResponse.json({
     appointment: toAppointmentDTO(updated),

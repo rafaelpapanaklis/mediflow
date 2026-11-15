@@ -19,6 +19,10 @@
 //    restituidos. Solo con el turno abierto y con la comisión sin pagar.
 //  · Pago mixto (parte efectivo, parte tarjeta) NO cabe en el schema (un solo
 //    paymentMethod por ticket): se reporta, no se improvisa.
+//  · Lealtad: la caja lee los sellos RECONTADOS en el momento (no la
+//    columna, que es caché) y aplica la regla de la barbería: su umbral, su
+//    premio y si la tiene encendida. Cobrar y cancelar un ticket refrescan
+//    el contador dentro de la misma transacción.
 //  · TODO el dinero del mostrador pasa por un ticket del turno abierto,
 //    también el que no es una visita: la venta o renovación de una membresía
 //    y el anticipo de una cita entran como «ticket de mostrador»
@@ -68,6 +72,14 @@ import {
 } from "@/lib/barber/commissions";
 import { applyStockDelta, listProducts, type ProductRow } from "@/lib/barber/inventory";
 import {
+  LOYALTY_DEFAULT_THRESHOLD,
+  LOYALTY_SUFFIX,
+  getLoyaltyRule,
+  loyaltyLineSuffix,
+  refreshLoyalty,
+  type LoyaltyRule,
+} from "@/lib/barber/loyalty-core";
+import {
   BARBER_DEPOSIT_LINE_PREFIX,
   BARBER_SALE_TAG_PREFIX,
   buildSaleTag,
@@ -85,16 +97,18 @@ type Tx = Prisma.TransactionClient;
 
 // ── Constantes del módulo ───────────────────────────────────────────────
 
-/** Sellos de lealtad necesarios para un corte gratis. T2 (clientes) acumula
- *  loyaltyCount; aquí solo se CANJEA (resta este número) y se registra. */
-export const BARBER_LOYALTY_STAMPS_TARGET = 10;
+/** Sellos por defecto para el premio. La caja ya NO usa este número fijo:
+ *  lee el umbral, el premio y el encendido que configuró cada barbería
+ *  (getLoyaltyRule). Se conserva por compatibilidad con quien lo importaba. */
+export const BARBER_LOYALTY_STAMPS_TARGET = LOYALTY_DEFAULT_THRESHOLD;
 
 /** Métodos que acepta el mostrador. STRIPE es del pago en línea (T5/T6). */
 export const POS_PAYMENT_METHODS: BarberPaymentMethod[] = ["CASH", "CARD", "SPEI"];
 
-/** Sufijos que marcan una línea cubierta (canje). Los lee cancelSale para
- *  restituir el cupo; nadie más los interpreta. */
-export const LOYALTY_SUFFIX = " · Gratis (lealtad)";
+/** Sufijos que marcan una línea cubierta (canje). El de lealtad vive en
+ *  loyalty-core.ts (dice además cuántos sellos costó: loyaltyLineSuffix);
+ *  el de membresía lo lee cancelSale para restituir el cupo. */
+export { LOYALTY_SUFFIX };
 export const MEMBERSHIP_SUFFIX = " · Membresía";
 
 const DISCOUNT_DESCRIPTION = "Descuento";
@@ -253,7 +267,9 @@ export interface ClientLookup {
   id: string;
   name: string;
   phone: string;
+  /** Sellos vivos, recontados al leer (no la caché de la columna). */
   loyaltyCount: number;
+  /** Lealtad encendida en la barbería Y sellos ≥ su umbral. */
   loyaltyEligible: boolean;
   activeMembership: {
     id: string;
@@ -286,7 +302,12 @@ export interface CheckoutContext {
   products: ProductRow[];
   barbers: Array<{ id: string; name: string; nickname: string | null; commissionType: BarberCommissionType }>;
   pendingAppointments: PendingAppointment[];
+  /** Umbral de sellos que configuró la barbería (antes: 10 fijo). */
   loyaltyTarget: number;
+  /** La barbería tiene encendida la tarjeta de lealtad. */
+  loyaltyEnabled: boolean;
+  /** Etiqueta del premio que configuró la barbería. */
+  loyaltyReward: string;
   features: { products: boolean; tips: boolean; commissions: boolean };
 }
 
@@ -601,7 +622,10 @@ function toClientLookup(c: {
     cutsUsed: number;
     membership: { name: string; includedCuts: number | null };
   }>;
-}, now: Date): ClientLookup {
+}, now: Date, rule: LoyaltyRule, freshCount?: number): ClientLookup {
+  // `freshCount` = recuento hecho ahora mismo (refreshLoyalty). Sin él se cae
+  // a la columna, que quien llama acaba de refrescar o va a validar aparte.
+  const loyaltyCount = freshCount ?? c.loyaltyCount;
   const active = c.memberships.find(
     (m) =>
       m.status === "ACTIVE" &&
@@ -612,8 +636,8 @@ function toClientLookup(c: {
     id: c.id,
     name: c.name,
     phone: c.phone,
-    loyaltyCount: c.loyaltyCount,
-    loyaltyEligible: c.loyaltyCount >= BARBER_LOYALTY_STAMPS_TARGET,
+    loyaltyCount,
+    loyaltyEligible: rule.enabled && loyaltyCount >= rule.threshold,
     activeMembership: active
       ? {
           id: active.id,
@@ -666,7 +690,13 @@ export async function lookupClients(ctx: BarberContext, q: string, now: Date = n
     take: 8,
     select: clientLookupSelect,
   });
-  return rows.map((c) => toClientLookup(c, now));
+  // Sellos frescos y la regla de ESTA barbería: lo que diga la caja es lo
+  // mismo que dice la ficha del cliente.
+  const [rule, fresh] = await Promise.all([
+    getLoyaltyRule(prisma, ctx.barbershopId),
+    refreshLoyalty(prisma, ctx.barbershopId, rows.map((c) => c.id)),
+  ]);
+  return rows.map((c) => toClientLookup(c, now, rule, fresh.get(c.id)?.count));
 }
 
 export async function getCheckoutContext(
@@ -708,8 +738,13 @@ export async function getCheckoutContext(
     }),
   ]);
 
-  const pending: PendingAppointment[] = appointments
-    .filter((a) => a.sales.every((s) => isSaleCancelled(s)))
+  const pendingRows = appointments.filter((a) => a.sales.every((s) => isSaleCancelled(s)));
+  const [rule, fresh] = await Promise.all([
+    getLoyaltyRule(prisma, ctx.barbershopId),
+    refreshLoyalty(prisma, ctx.barbershopId, pendingRows.map((a) => a.clientId)),
+  ]);
+
+  const pending: PendingAppointment[] = pendingRows
     .map((a) => ({
       id: a.id,
       startAt: a.startAt.toISOString(),
@@ -720,7 +755,7 @@ export async function getCheckoutContext(
       clientId: a.clientId,
       clientName: a.client?.name ?? a.clientName,
       clientPhone: a.client?.phone ?? a.clientPhone,
-      client: a.client ? toClientLookup(a.client, now) : null,
+      client: a.client ? toClientLookup(a.client, now, rule, fresh.get(a.client.id)?.count) : null,
       services: a.services.map((s) => ({
         serviceId: s.serviceId,
         name: s.service.name,
@@ -741,7 +776,9 @@ export async function getCheckoutContext(
     products,
     barbers,
     pendingAppointments: pending,
-    loyaltyTarget: BARBER_LOYALTY_STAMPS_TARGET,
+    loyaltyTarget: rule.threshold,
+    loyaltyEnabled: rule.enabled,
+    loyaltyReward: rule.reward,
     features: {
       products: features.products === true,
       tips: features.tips === true,
@@ -1061,21 +1098,35 @@ export async function createSale(
       });
 
       // 5. Canjes: lealtad y membresía cubren UNA línea de servicio cada uno.
-      let loyaltyRedeemed = false;
       let membershipUsed: { id: string } | null = null;
       if (loyaltyIdx !== null) {
         const target = built[loyaltyIdx];
         if (!target || target.kind !== "service") {
           throw new BarberCajaError(400, "INVALID_INPUT", "El canje de lealtad debe apuntar a un servicio del ticket");
         }
-        if (!client) throw new BarberCajaError(400, "LOYALTY_NEEDS_CLIENT", "Elige al cliente para canjear su corte gratis");
-        if (client.loyaltyCount < BARBER_LOYALTY_STAMPS_TARGET) {
-          throw new BarberCajaError(409, "LOYALTY_NOT_ELIGIBLE", `El cliente tiene ${client.loyaltyCount} de ${BARBER_LOYALTY_STAMPS_TARGET} sellos`);
+        if (!client) throw new BarberCajaError(400, "LOYALTY_NEEDS_CLIENT", "Elige al cliente para canjear su premio de lealtad");
+        // La regla es la de la barbería (umbral, premio y encendido), no 10 fijos.
+        const rule = await getLoyaltyRule(tx, barbershopId);
+        if (!rule.enabled) {
+          throw new BarberCajaError(409, "LOYALTY_DISABLED", "La tarjeta de lealtad está apagada en esta barbería");
         }
-        if (target.qty !== 1) throw new BarberCajaError(400, "INVALID_INPUT", "El corte gratis aplica a una línea de cantidad 1");
+        // Candado sobre el cliente + recuento DENTRO de la transacción: dos
+        // canjes simultáneos se ponen en fila y el segundo ya ve los sellos
+        // que consumió el primero.
+        await tx.$queryRaw`
+          SELECT "id" FROM "barber_clients"
+          WHERE "id" = ${client.id} AND "barbershopId" = ${barbershopId}
+          FOR UPDATE
+        `;
+        const stamps = (await refreshLoyalty(tx, barbershopId, [client.id])).get(client.id)?.count ?? 0;
+        if (stamps < rule.threshold) {
+          throw new BarberCajaError(409, "LOYALTY_NOT_ELIGIBLE", `El cliente tiene ${stamps} de ${rule.threshold} sellos`, { stamps, threshold: rule.threshold });
+        }
+        if (target.qty !== 1) throw new BarberCajaError(400, "INVALID_INPUT", "El premio de lealtad aplica a una línea de cantidad 1");
         target.unitPrice = ZERO;
-        target.description = `${target.description}${LOYALTY_SUFFIX}`;
-        loyaltyRedeemed = true;
+        // El sufijo guarda cuántos sellos costó ESTE canje: es lo que se
+        // resta al recontar (y lo que vuelve si el ticket se cancela).
+        target.description = `${target.description}${loyaltyLineSuffix(rule.threshold)}`;
       }
       if (membershipIdx !== null) {
         const target = built[membershipIdx];
@@ -1083,7 +1134,8 @@ export async function createSale(
           throw new BarberCajaError(400, "INVALID_INPUT", "La membresía debe aplicarse a un servicio del ticket");
         }
         if (!client) throw new BarberCajaError(400, "MEMBERSHIP_NEEDS_CLIENT", "Elige al cliente para usar su membresía");
-        const lookup = toClientLookup(client, now);
+        // Aquí solo interesa la membresía; la regla de lealtad no decide nada.
+        const lookup = toClientLookup(client, now, { enabled: false, threshold: LOYALTY_DEFAULT_THRESHOLD, reward: "" });
         if (!lookup.activeMembership) {
           throw new BarberCajaError(409, "MEMBERSHIP_NOT_ACTIVE", "El cliente no tiene una membresía activa con cupo");
         }
@@ -1196,20 +1248,19 @@ export async function createSale(
         });
       }
 
-      // 11. Canjes: consumir sellos / cupo de la membresía.
-      if (loyaltyRedeemed && client) {
-        const r = await tx.barberClient.updateMany({
-          where: { id: client.id, barbershopId, loyaltyCount: { gte: BARBER_LOYALTY_STAMPS_TARGET } },
-          data: { loyaltyCount: { decrement: BARBER_LOYALTY_STAMPS_TARGET } },
-        });
-        if (r.count === 0) throw new BarberCajaError(409, "LOYALTY_NOT_ELIGIBLE", "El cliente ya no tiene sellos suficientes");
-      }
+      // 11. Canjes: cupo de la membresía.
       if (membershipUsed) {
         await tx.barberClientMembership.updateMany({
           where: { id: membershipUsed.id, barbershopId },
           data: { cutsUsed: { increment: 1 } },
         });
       }
+
+      // 12. Lealtad: se RECUENTAN los sellos del cliente con este ticket ya
+      //     escrito (suma la visita de mostrador, resta lo canjeado) y se
+      //     refresca la caché en esta misma transacción. La caja, la ficha y
+      //     «mi cuenta» ven el dato nuevo en cuanto el cobro termina.
+      if (client) await refreshLoyalty(tx, barbershopId, [client.id]);
 
       return tx.barberSale.findUniqueOrThrow({ where: { id: created.id }, include: saleInclude });
     },
@@ -1417,14 +1468,10 @@ export async function cancelSaleTx(
     });
   }
 
-  // Canjes restituidos (un ticket de mostrador nunca trae canjes).
+  // Canjes restituidos (un ticket de mostrador nunca trae canjes). Los
+  // sellos de lealtad no se «devuelven» a mano: al borrarse las líneas el
+  // canje deja de existir y el recuento de abajo los regresa solos.
   if (s.clientId && !tag) {
-    if (s.items.some((it) => it.description.endsWith(LOYALTY_SUFFIX))) {
-      await tx.barberClient.updateMany({
-        where: { id: s.clientId, barbershopId },
-        data: { loyaltyCount: { increment: BARBER_LOYALTY_STAMPS_TARGET } },
-      });
-    }
     if (s.items.some((it) => it.description.endsWith(MEMBERSHIP_SUFFIX))) {
       const m = await tx.barberClientMembership.findFirst({
         where: { clientId: s.clientId, barbershopId, cutsUsed: { gt: 0 } },
@@ -1452,6 +1499,10 @@ export async function cancelSaleTx(
       notes: s.notes ? `${marker}\n${s.notes}` : marker,
     },
   });
+
+  // Lealtad: con el ticket ya cancelado se recuentan los sellos del cliente
+  // (deja de contar la visita de mostrador y vuelve lo que se había canjeado).
+  if (s.clientId) await refreshLoyalty(tx, barbershopId, [s.clientId]);
 }
 
 /**

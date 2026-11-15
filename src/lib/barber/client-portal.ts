@@ -7,9 +7,9 @@ import { prisma } from "@/lib/prisma";
 import { sumMoneyBy } from "@/lib/barber/money";
 import { isBarbershopSubscriptionActive } from "@/lib/barber/plan-shared";
 import { BARBER_FILES_BUCKET, canTransition } from "@/lib/barber/types";
+import { getLoyaltyRule, refreshLoyalty } from "@/lib/barber/loyalty-core";
 import {
   BARBER_CANCEL_WINDOW_HOURS,
-  BARBER_LOYALTY_GOAL,
   BARBER_PORTAL_COOKIE,
   PORTAL_CODE_MAX_ATTEMPTS,
   PORTAL_CODE_MAX_PER_WINDOW,
@@ -396,6 +396,17 @@ export async function loadPortalData(args: {
   });
   if (!client || !client.portalEnabled || client.blockedAt) return null;
 
+  // LEALTAD FRESCA: los sellos se recuentan ahora (la columna es una caché
+  // que antes solo refrescaba el panel) y la meta es la que configuró la
+  // barbería, no 10 fijos. Si el recuento fallara, se enseña la caché.
+  const loyaltyRule = await getLoyaltyRule(prisma, barbershopId);
+  let loyalty = { count: client.loyaltyCount, visits: client.totalVisits, lastVisitAt: client.lastVisitAt };
+  try {
+    loyalty = (await refreshLoyalty(prisma, barbershopId, [clientId])).get(clientId) ?? loyalty;
+  } catch (e) {
+    console.warn("[barber/portal] no se pudo recontar la lealtad:", (e as Error).message);
+  }
+
   const [appointments, sales, photos, membership] = await Promise.all([
     prisma.barberAppointment.findMany({
       where: { barbershopId, clientId },
@@ -514,11 +525,11 @@ export async function loadPortalData(args: {
     client: {
       name: client.name,
       phone: client.phone,
-      totalVisits: client.totalVisits,
-      lastVisitAt: client.lastVisitAt ? client.lastVisitAt.toISOString() : null,
-      loyaltyCount: client.loyaltyCount,
-      loyaltyGoal: BARBER_LOYALTY_GOAL,
-      freeCutReady: client.loyaltyCount >= BARBER_LOYALTY_GOAL,
+      totalVisits: loyalty.visits,
+      lastVisitAt: loyalty.lastVisitAt ? loyalty.lastVisitAt.toISOString() : null,
+      loyaltyCount: loyalty.count,
+      loyaltyGoal: loyaltyRule.threshold,
+      freeCutReady: loyaltyRule.enabled && loyalty.count >= loyaltyRule.threshold,
     },
     upcoming,
     history: shownHistory,

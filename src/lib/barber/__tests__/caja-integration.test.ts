@@ -131,6 +131,18 @@ before(async () => {
     },
   });
   apptA = appt.id;
+
+  // Lealtad: los sellos ya no se leen de la columna (es una caché), se
+  // RECUENTAN desde las visitas reales. Para que el cliente tenga 10 sellos
+  // de verdad se le dan 9 visitas completadas más (con la cita de arriba,
+  // 10). Van sin barbero y hace semanas: no estorban a la agenda ni a la
+  // lista de «citas por cobrar».
+  for (let i = 1; i <= 9; i++) {
+    const start = new Date(Date.now() - (20 + i) * 86_400_000);
+    await db.barberAppointment.create({
+      data: { barbershopId: A.id, clientId: clientA, status: "DONE", startAt: start, endAt: new Date(start.getTime() + 30 * 60_000) },
+    });
+  }
 });
 
 after(async () => {
@@ -297,7 +309,8 @@ test("lealtad: canje deja el servicio en $0, consume sellos; cancelar los devuel
   assert.equal(sale.items[0].unitPrice, 0);
   assert.equal(sale.subtotal, 0);
   assert.match(sale.items[0].description, /lealtad/);
-  assert.equal((await db.barberClient.findUniqueOrThrow({ where: { id: clientA } })).loyaltyCount, 0);
+  // 10 visitas + esta (el corte canjeado también es una visita) − 10 canjeados = 1.
+  assert.equal((await db.barberClient.findUniqueOrThrow({ where: { id: clientA } })).loyaltyCount, 1);
   // Ya no elegible: un segundo canje falla.
   await assert.rejects(
     createSale(A.ctx, { barberId: a1, clientId: clientA, items: [{ kind: "service", id: corteA }], redeemLoyaltyItemIndex: 0, paymentMethod: "CASH" }, FEATURES_AVANZADO),

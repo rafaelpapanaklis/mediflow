@@ -296,8 +296,10 @@ export function TicketModal({
                 <div style={{ minWidth: 0 }}>
                   <div className="bcaja-client__name">{client.name}</div>
                   <div className="bcaja-client__meta">
-                    {client.phone} · {t("ticket.loyaltyStamps", { count: client.loyaltyCount, target: checkout.loyaltyTarget })}
-                    {client.loyaltyEligible ? ` · ${t("ticket.loyaltyEligible")}` : ""}
+                    {client.phone}
+                    {/* Sellos y premio: los de ESTA barbería (umbral, premio y encendido). */}
+                    {checkout.loyaltyEnabled ? ` · ${t("ticket.loyaltyStamps", { count: client.loyaltyCount, target: checkout.loyaltyTarget })}` : ""}
+                    {client.loyaltyEligible ? ` · ${t("ticket.loyaltyEligible", { reward: checkout.loyaltyReward })}` : ""}
                     {client.activeMembership
                       ? ` · ${t("ticket.membershipActive", { name: client.activeMembership.name })} (${client.activeMembership.cutsLeft === null ? t("ticket.membershipUnlimited") : t("ticket.membershipCutsLeft", { count: client.activeMembership.cutsLeft })})`
                       : ""}
@@ -315,7 +317,7 @@ export function TicketModal({
                     {suggestions.map((c) => (
                       <button key={c.id} type="button" className="bcaja-suggest__item" onClick={() => { setClient(c); setQuery(""); setSuggestions([]); }}>
                         <div className="bcaja-client__name">{c.name}</div>
-                        <div className="bcaja-client__meta">{c.phone} · {t("ticket.loyaltyStamps", { count: c.loyaltyCount, target: checkout.loyaltyTarget })}</div>
+                        <div className="bcaja-client__meta">{c.phone}{checkout.loyaltyEnabled ? ` · ${t("ticket.loyaltyStamps", { count: c.loyaltyCount, target: checkout.loyaltyTarget })}` : ""}</div>
                       </button>
                     ))}
                   </div>
@@ -398,7 +400,7 @@ export function TicketModal({
               <div className="field-new">
                 <label className="field-new__label" style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <input type="checkbox" checked={loyaltyKey !== null} onChange={(e) => setLoyaltyKey(e.target.checked ? (serviceLines.find((l) => l.key !== membershipKey)?.key ?? null) : null)} />
-                  {t("ticket.loyaltyRedeem")}
+                  {t("ticket.loyaltyRedeem", { reward: checkout.loyaltyReward, count: checkout.loyaltyTarget })}
                 </label>
                 {loyaltyKey && (
                   <select className="input-new" value={loyaltyKey} onChange={(e) => setLoyaltyKey(e.target.value)} aria-label={t("ticket.loyaltyApplyTo")}>
