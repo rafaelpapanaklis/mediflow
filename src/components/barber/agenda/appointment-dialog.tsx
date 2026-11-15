@@ -89,6 +89,14 @@ export function AppointmentDialog(props: AppointmentDialogProps) {
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // El aviso va arriba del formulario, que se desplaza: sin esto, quien
+  // pulsa «Agendar» desde el pie no ve por qué no pasó nada.
+  const errorRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (error) errorRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [error]);
+  // Texto que se está tecleando en «Duración» (permite borrar y reescribir).
+  const [durDraft, setDurDraft] = useState<string | null>(null);
 
   // ── Buscador de clientes (con freno para no pegarle a cada tecla) ────
   const abortRef = useRef<AbortController | null>(null);
@@ -234,7 +242,7 @@ export function AppointmentDialog(props: AppointmentDialogProps) {
         </>
       }
     >
-      {error ? <div className={css.errorBox}>{error}</div> : null}
+      {error ? <div ref={errorRef} className={css.errorBox}>{error}</div> : null}
 
       {/* ── Cliente ── */}
       {clientName && (clientId || manual) ? (
@@ -422,13 +430,16 @@ export function AppointmentDialog(props: AppointmentDialogProps) {
               <input
                 className={css.stepperValue}
                 inputMode="numeric"
-                value={durationMin}
+                value={durDraft ?? durationMin}
                 aria-label={t("barber.agenda.modal.duration")}
                 onChange={(e) => {
-                  const raw = parseInt(e.target.value.replace(/\D/g, ""), 10);
+                  const digits = e.target.value.replace(/\D/g, "").slice(0, 4);
+                  setDurDraft(digits);
+                  const raw = parseInt(digits, 10);
                   if (Number.isFinite(raw)) setCustomMinutes(raw);
                 }}
                 onBlur={() => {
+                  setDurDraft(null);
                   if (customMinutes !== null) setDuration(customMinutes);
                 }}
               />

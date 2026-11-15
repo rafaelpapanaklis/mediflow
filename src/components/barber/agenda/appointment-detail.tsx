@@ -87,6 +87,8 @@ export function AppointmentDetail(props: AppointmentDetailProps) {
 
   const savedMinutes = appointmentMinutes(appt);
   const [minutes, setMinutes] = useState(savedMinutes);
+  // Texto que se está tecleando en «Duración»: deja borrar y reescribir.
+  const [durDraft, setDurDraft] = useState<string | null>(null);
   const [durationDirty, setDurationDirty] = useState(false);
 
   // Si la visita cambia por debajo (se guardó, o el refresco silencioso la
@@ -306,16 +308,21 @@ export function AppointmentDetail(props: AppointmentDetailProps) {
             <input
               className={css.stepperValue}
               inputMode="numeric"
-              value={minutes}
+              value={durDraft ?? minutes}
               disabled={!props.canEdit || terminal}
               aria-label={t("barber.agenda.detail.duration")}
               onChange={(e) => {
-                const raw = parseInt(e.target.value.replace(/\D/g, ""), 10);
+                const digits = e.target.value.replace(/\D/g, "").slice(0, 4);
+                setDurDraft(digits);
+                const raw = parseInt(digits, 10);
                 if (!Number.isFinite(raw)) return;
                 setMinutes(raw);
                 setDurationDirty(raw !== savedMinutes);
               }}
-              onBlur={() => setDuration(minutes)}
+              onBlur={() => {
+                setDurDraft(null);
+                setDuration(minutes);
+              }}
             />
             <button
               type="button"
