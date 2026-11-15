@@ -213,6 +213,8 @@ export interface BarberProfileRow {
   createdAt: string;
   /** Usuarios del panel ligados a esta ficha (normalmente 0 o 1). */
   linkedUserIds: string[];
+  /** Activo y sin un solo día de trabajo: no aparece para reservar. */
+  noSchedule: boolean;
 }
 
 export interface BarberProfileInput {
@@ -241,9 +243,11 @@ const BARBER_SELECT = {
   sortOrder: true,
   createdAt: true,
   users: { select: { id: true } },
+  _count: { select: { schedules: { where: { isActive: true } } } },
 } as const;
 
 type BarberRowRaw = {
+  _count?: { schedules: number };
   id: string;
   barbershopId: string;
   name: string;
@@ -276,6 +280,7 @@ function toBarberRow(r: BarberRowRaw): BarberProfileRow {
     sortOrder: r.sortOrder,
     createdAt: r.createdAt.toISOString(),
     linkedUserIds: r.users.map((u) => u.id),
+    noSchedule: r.isActive && (r._count?.schedules ?? 1) === 0,
   };
 }
 
@@ -440,7 +445,22 @@ async function heredarHorarioDelLocal(barbershopId: string, barberId: string, ac
   if (!activo) return;
   try {
     const fila = await prisma.barberLandingConfig.findUnique({ where: { barbershopId }, select: { config: true } });
-    const turnos = turnosDesdeHorarioDelLocal(normalizarConfigBarberWeb(fila?.config));
+    let turnos = turnosDesdeHorarioDelLocal(normalizarConfigBarberWeb(fila?.config));
+    if (turnos.length === 0) {
+      // El local no publicó horario en Mi web: se copia la semana del barbero más antiguo de la sede que ya trabaja.
+      const modelo = await prisma.barberSchedule.findFirst({
+        where: { barbershopId, isActive: true, barberId: { not: barberId } },
+        orderBy: { createdAt: "asc" },
+        select: { barberId: true },
+      });
+      if (modelo) {
+        const filas = await prisma.barberSchedule.findMany({
+          where: { barbershopId, barberId: modelo.barberId, isActive: true },
+          select: { dayOfWeek: true, startMinute: true, endMinute: true },
+        });
+        turnos = filas;
+      }
+    }
     if (turnos.length === 0) return;
     await prisma.barberSchedule.createMany({
       data: turnos.map((t) => ({ barbershopId, barberId, ...t, isActive: true })),
