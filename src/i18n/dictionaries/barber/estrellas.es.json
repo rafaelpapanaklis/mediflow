@@ -62,7 +62,7 @@
     "remove": "Quitar estrella",
     "giveTitle": "Dar una estrella a {name}",
     "removeTitle": "Quitar una estrella a {name}",
-    "reason": "Motivo (obligatorio)",
+    "reason": "Motivo (opcional)",
     "reasonHint": "Queda en el historial con tu nombre y la hora.",
     "reasonPlaceholderGive": "Ej. Trajo a un amigo",
     "reasonPlaceholderRemove": "Ej. Se sumó por error",

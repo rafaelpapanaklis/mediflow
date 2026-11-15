@@ -144,8 +144,6 @@ export function StarsPanel({
     setDialog(null);
   }
 
-  const reasonOk = reason.trim().length >= 3;
-
   return (
     <section className={`${s.card} ${s.cardPad}`} data-stars-panel>
       {!view.enabled ? (
@@ -254,7 +252,7 @@ export function StarsPanel({
                 type="button"
                 className={`${s.btn} barber-btn-primary`}
                 onClick={() => adjust(dialog.delta)}
-                disabled={busy || !reasonOk}
+                disabled={busy}
               >
                 <Check size={14} /> {dialog.delta > 0 ? t("staff.confirmGive") : t("staff.confirmRemove")}
               </button>

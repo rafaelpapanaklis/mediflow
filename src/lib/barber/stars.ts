@@ -69,8 +69,12 @@ export class StarsError extends Error {
   }
 }
 
-/** Motivo de «Dar / Quitar estrella»: obligatorio y corto. */
-export const STAR_REASON_MIN = 3;
+/**
+ * Motivo de «Dar / Quitar estrella»: OPCIONAL y corto (15-nov: Rafael nunca
+ * pidió que fuera obligatorio). Vacío se guarda "" y el historial lo enseña
+ * sin motivo (stars-core: note = reason || null). El tope de 200 se queda.
+ */
+export const STAR_REASON_MIN = 0;
 export const STAR_REASON_MAX = 200;
 export const BONUS_NOTE_MAX = 200;
 
@@ -154,9 +158,6 @@ export async function adjustClientStars(
   const delta = args.delta === 1 || args.delta === -1 ? (args.delta as 1 | -1) : null;
   if (delta === null) throw new StarsError(400, "INVALID_INPUT", "Solo se puede dar o quitar una estrella a la vez.");
   const reason = typeof args.reason === "string" ? args.reason.replace(/\s+/g, " ").trim() : "";
-  if (reason.length < STAR_REASON_MIN) {
-    throw new StarsError(400, "REASON_REQUIRED", "Escribe el motivo (queda en el historial).");
-  }
   if (reason.length > STAR_REASON_MAX) {
     throw new StarsError(400, "INVALID_INPUT", `El motivo va hasta ${STAR_REASON_MAX} caracteres.`);
   }
