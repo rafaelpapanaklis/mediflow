@@ -21,8 +21,14 @@ import {
  * de /barber/solicitudes) o CONFIRMED.
  *
  * Anti-abuso SIN captcha (un captcha en móvil mata la conversión):
- *   · límite persistente por IP,
- *   · tope de citas futuras vivas por teléfono (dentro de createPublicBooking),
+ *   · límite por IP con el freno persistente del dental (persistentRateLimit,
+ *     Upstash; sin sus variables cae a memoria — ver @/lib/failban),
+ *   · tope DIARIO por barbería de solicitudes de teléfonos sin historial
+ *     (BARBER_PUBLIC_NEW_PHONE_DAILY_CAP, dentro de la transacción de
+ *     createPublicBooking: no depende de Redis),
+ *   · tope de citas futuras vivas por teléfono (también dentro),
+ *   · nombre solo con letras y teléfono mexicano real,
+ *   · la confirmación por WhatsApp NO sale al reservar a un teléfono nuevo,
  *   · campo trampa `website` — invisible para una persona.
  */
 
@@ -31,22 +37,48 @@ export const dynamic = "force-dynamic";
 /** Una familia reserva 2-3 veces seguidas; 8 en 10 minutos es holgado. */
 const RL = { limit: 8, windowSec: 600 };
 
-const ERROR_UI: Record<BookingErrorCode, { status: number; message: string }> = {
+/**
+ * Lo que se contesta cuando el NÚMERO no puede agendar en línea. Es UNA sola
+ * respuesta (mismo status, mismo texto, mismo `code`) para tres causas
+ * distintas — cliente bloqueado, tope de citas vivas por teléfono y una cita
+ * ya hecha a esa hora con otro nombre — porque cualquiera puede teclear el
+ * teléfono de otra persona: con respuestas distintas, la página le decía a
+ * un desconocido si ese número está bloqueado o cuántas citas tiene.
+ */
+const PHONE_UNAVAILABLE = {
+  status: 409,
+  code: "phoneUnavailable",
+  message: "No podemos agendar en línea con este número. Escríbele o llama a la barbería.",
+} as const;
+
+const ERROR_UI: Record<BookingErrorCode, { status: number; message: string; code?: string }> = {
   shopNotFound: { status: 404, message: "No encontramos esta barbería." },
   shopInactive: { status: 403, message: "Esta barbería no está recibiendo reservas en línea." },
   planOff: { status: 403, message: "Esta barbería no está recibiendo reservas en línea." },
   badRequest: { status: 400, message: "Revisa los datos e intenta de nuevo." },
+  badName: { status: 400, message: "Escribe tu nombre solo con letras." },
+  badPhone: { status: 400, message: "Escribe un WhatsApp de México a 10 dígitos." },
   noServices: { status: 400, message: "Elige al menos un servicio disponible." },
   badBarber: { status: 409, message: "Ese barbero ya no está disponible. Elige otro, porfa." },
   pastDate: { status: 400, message: "Ese horario ya pasó. Elige otro, porfa." },
   tooFar: { status: 400, message: "Esa fecha está demasiado lejos." },
   slotTaken: { status: 409, message: "Alguien acaba de tomar ese horario. Elige otro, porfa." },
-  tooManyOpen: {
+  tooManyOpen: PHONE_UNAVAILABLE,
+  clientBlocked: PHONE_UNAVAILABLE,
+  phoneConflict: PHONE_UNAVAILABLE,
+  dailyCap: {
     status: 429,
-    message: "Ya tienes varias citas apartadas con este número. Cancela una para agendar otra.",
+    message: "Por hoy ya no recibimos más reservas en línea. Escríbenos por WhatsApp o llámanos.",
   },
-  clientBlocked: { status: 403, message: "No podemos agendar en línea con este número. Llama a la barbería." },
 };
+
+/** El mensaje del tope lleva el teléfono de la barbería cuando lo hay. */
+function dailyCapMessage(shopPhone: string | null): string {
+  const phone = (shopPhone ?? "").trim();
+  return phone
+    ? `Por hoy ya no recibimos más reservas en línea. Escríbenos por WhatsApp o llámanos al ${phone}.`
+    : ERROR_UI.dailyCap.message;
+}
 
 export async function POST(req: NextRequest, props: { params: Promise<{ slug: string }> }) {
   const params = await props.params;
@@ -94,7 +126,11 @@ export async function POST(req: NextRequest, props: { params: Promise<{ slug: st
 
     if (isBookingError(result)) {
       const ui = ERROR_UI[result.code];
-      return NextResponse.json({ error: ui.message, code: result.code }, { status: ui.status });
+      const message = result.code === "dailyCap" ? dailyCapMessage(gate.shop.phone) : ui.message;
+      return NextResponse.json(
+        { error: message, code: ui.code ?? result.code },
+        { status: ui.status },
+      );
     }
 
     // Lo que sale al navegador — lista COMPLETA. Nada de ids internos, ni

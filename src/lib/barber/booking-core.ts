@@ -11,6 +11,9 @@
    en un módulo -core sin dependencias de servidor.
    ═══════════════════════════════════════════════════════════════════════ */
 
+// Puro también (sin servidor): la regla de 10 dígitos del dental.
+import { mxTenDigits } from "@/lib/phone-mx";
+
 // ── Parámetros del embudo ───────────────────────────────────────────────
 
 /** Rejilla de horarios que se le ofrece al cliente (minutos). */
@@ -21,6 +24,113 @@ export const BARBER_MAX_DAYS_AHEAD = 60;
 export const BARBER_MIN_LEAD_MIN = 30;
 /** Tope de citas futuras vivas por teléfono y barbería (anti-abuso). */
 export const BARBER_MAX_OPEN_PER_PHONE = 3;
+/**
+ * TOPE DIARIO DE LA RESERVA EN LÍNEA (decisión de Rafael, 14-nov-2026).
+ *
+ * Cuántas solicitudes vivas puede recibir UNA barbería en UN día (el día de
+ * la barbería, no el de la cita) desde teléfonos SIN historial en ella.
+ * Pasado el tope, la página manda a escribir por WhatsApp o a llamar. El
+ * cliente de siempre no cuenta ni choca con él.
+ *
+ * "Vivas" = PENDING con la política manual (lo que espera en Solicitudes);
+ * con la política automática nacen CONFIRMED, así que ahí cuentan las dos.
+ */
+export const BARBER_PUBLIC_NEW_PHONE_DAILY_CAP = 50;
+
+/**
+ * Nombre de quien reserva en la página pública: SOLO letras (con acentos,
+ * ñ y diéresis, de cualquier alfabeto), espacios, apóstrofo y guion. Sin
+ * dígitos, puntos, barras ni dos puntos: ese nombre viaja dentro de los
+ * mensajes de la barbería y no puede ser una liga ni un teléfono.
+ *
+ * Devuelve el nombre limpio (NFC, espacios colapsados) o null.
+ */
+export function cleanBarberClientName(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const name = raw.normalize("NFC").trim().replace(/\s+/g, " ");
+  if (name.length < 2 || name.length > 80) return null;
+  // Empieza con letra; luego letras, marcas de acento, espacio, ' ’ o -.
+  if (!/^\p{L}[\p{L}\p{M} '’-]*$/u.test(name)) return null;
+  // Al menos dos letras de verdad ("A-" o "J'" no son nombres).
+  const letters = name.match(/\p{L}/gu);
+  if (!letters || letters.length < 2) return null;
+  return name;
+}
+
+/**
+ * Teléfono REAL de México a 10 dígitos. La limpieza (espacios, guiones,
+ * +52 / +521 de más) es la del dental (`mxTenDigits`, @/lib/phone-mx); aquí
+ * se añade lo que esa función no mira: en el plan de numeración de México
+ * ningún número nacional empieza con 0 ni con 1 (las ladas van del 2 al 9:
+ * 22x Puebla, 33 Guadalajara, 55 CDMX, 81 Monterrey, 99x Mérida…). Así
+ * `1000000008` o `0123456789` no pasan.
+ */
+export function realMxPhone(raw: unknown): string | null {
+  const ten = mxTenDigits(typeof raw === "string" ? raw : "");
+  if (!ten) return null;
+  return /^[2-9]\d{9}$/.test(ten) ? ten : null;
+}
+
+/**
+ * ¿Sale la confirmación por WhatsApp EN EL MOMENTO de reservar?
+ *
+ *  · Política manual: NUNCA. La cita es una solicitud; la confirmación sale
+ *    cuando la barbería la ACEPTA en Solicitudes (resolveBookingRequest).
+ *    Mandar «quedó agendada» antes era mentirle al cliente si luego se
+ *    rechazaba.
+ *  · Política automática: solo al cliente CON historial en la barbería. A un
+ *    teléfono nuevo no se le escribe por una reserva hecha en una página
+ *    pública: así nadie usa el WhatsApp de la barbería para escribirle a
+ *    terceros (decisión de Rafael, 14-nov-2026).
+ */
+export function shouldConfirmOnBooking(args: {
+  policy: "auto" | "manual";
+  hasHistory: boolean;
+}): boolean {
+  return args.policy === "auto" && args.hasHistory;
+}
+
+/**
+ * Aviso de solicitud RECHAZADA, como texto libre (solo sale si el cliente
+ * escribió en las últimas 24 h; fuera de esa ventana Meta exige plantilla y
+ * no hay una aprobada para esto).
+ */
+export function bookingRejectedText(args: {
+  shopName: string;
+  startAt: Date;
+  timezone: string;
+}): string {
+  const when = new Intl.DateTimeFormat("es-MX", {
+    timeZone: args.timezone,
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  }).format(args.startAt);
+  return (
+    `${args.shopName}: no pudimos apartar tu cita del ${when}. ` +
+    "Escríbenos por aquí y te buscamos otro horario."
+  );
+}
+
+/**
+ * ¿Son la misma persona según lo que tecleó? Para el doble envío: solo se
+ * le enseña la cita ya hecha a quien la reservó con ESE nombre. Sin
+ * mayúsculas, sin acentos y sin espacios de más.
+ */
+export function sameTypedName(a: string | null | undefined, b: string | null | undefined): boolean {
+  const norm = (s: string | null | undefined) =>
+    (s ?? "")
+      .normalize("NFD")
+      .replace(/\p{M}/gu, "")
+      .toLowerCase()
+      .replace(/\s+/g, " ")
+      .trim();
+  const x = norm(a);
+  return x.length > 0 && x === norm(b);
+}
 /**
  * Estados que OCUPAN el sillón (los demás liberan el hueco).
  *
