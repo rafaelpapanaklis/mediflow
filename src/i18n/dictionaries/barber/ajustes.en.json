@@ -122,6 +122,7 @@
       "sub": "Shown on your public page, in WhatsApp reminders and on the receipt.",
       "name": "Name",
       "nameHint": "This is how clients see you everywhere.",
+      "nameEmpty": "Enter the barbershop name: it cannot be empty.",
       "phone": "Phone",
       "phoneHint": "So clients can call you. Not the number your WhatsApp messages are sent from.",
       "email": "Email",
@@ -179,8 +180,10 @@
       "enabledHint": "Off: the card disappears from the client's profile and portal, and the register doesn't offer the redemption. Accumulated stamps aren't lost.",
       "threshold": "Visits to earn the reward",
       "thresholdHint": "With 10, the client earns the reward once they have 10 stamps. With an appointment, the stamp lands when the visit is completed: the tenth appointment can already be free. Without one, the stamp lands when they pay: the reward is used on the next visit. Completed appointments and service sales at the register count.",
+      "thresholdBad": "Enter a whole number from {min} to {max} stamps.",
       "reward": "Reward name",
       "rewardHint": "This is what the client reads on their card and in campaigns: “Free haircut”, “Complimentary beard”…",
+      "rewardEmpty": "Enter what the reward is.",
       "summary": "Every {count} visits → {reward}",
       "saved": "Loyalty saved"
     },
@@ -189,6 +192,7 @@
       "sub": "When a client moves to the inactive list.",
       "days": "Days without a visit",
       "daysHint": "After that long since their last visit, the client shows up in Clients › Inactive and enters the “We miss you” campaign.",
+      "daysBad": "Enter a whole number from {min} to {max} days.",
       "saved": "Saved"
     },
     "campaigns": {
@@ -196,6 +200,7 @@
       "sub": "The brake so nobody gets flooded.",
       "cooldown": "Rest days between campaigns",
       "cooldownHint": "The same phone doesn't get two campaigns —of any kind— with fewer than this many days in between. Appointment reminders don't count.",
+      "cooldownBad": "Enter a whole number from {min} to {max} days.",
       "saved": "Saved"
     },
     "booking": {
