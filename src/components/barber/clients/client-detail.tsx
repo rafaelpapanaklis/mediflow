@@ -28,6 +28,8 @@ import { LoyaltyCard } from "./loyalty-card";
 import { StarsPanel } from "./stars-panel";
 import { ClientSales } from "./client-sales";
 import { ClientChargeBridge } from "./client-charge-bridge";
+import { ClientDrafts } from "./sale-drafts-list";
+import type { SaleDraftRow } from "@/lib/barber/sale-drafts";
 import type { ClientSalesPage } from "@/lib/barber/client-sales";
 import type { StarsView } from "@/lib/barber/stars-core";
 import { PhotoUploader, type UploadedPhoto } from "./photo-uploader";
@@ -118,6 +120,7 @@ export function BarberClientDetailScreen({
 
   const [showEdit, setShowEdit] = useState(false);
   const [charging, setCharging] = useState(false);
+  const [chargeDraft, setChargeDraft] = useState<SaleDraftRow | null>(null);
   const [salesReload, setSalesReload] = useState(0);
   const chargeEnabled = canCharge && Boolean(cajaDict && cobrosDict) && !client.blockedAt;
   const [showBlock, setShowBlock] = useState(false);
@@ -484,12 +487,31 @@ export function BarberClientDetailScreen({
                   timezone={timezone}
                   canPrint={canPrintSales}
                   reloadKey={salesReload}
+                  beforeList={
+                    chargeEnabled && cobrosDict ? (
+                      <ClientDrafts
+                        clientId={client.id}
+                        dict={cobrosDict}
+                        locale={locale}
+                        timezone={timezone}
+                        canManage={chargeEnabled}
+                        reloadKey={salesReload}
+                        onCharge={(d) => {
+                          setChargeDraft(d);
+                          setCharging(true);
+                        }}
+                      />
+                    ) : null
+                  }
                   headerAction={
                     chargeEnabled ? (
                       <button
                         type="button"
                         className={`${s.btn} barber-btn-primary`}
-                        onClick={() => setCharging(true)}
+                        onClick={() => {
+                          setChargeDraft(null);
+                          setCharging(true);
+                        }}
                         data-accion="nuevo-cobro"
                       >
                         <Wallet size={14} />
@@ -515,8 +537,11 @@ export function BarberClientDetailScreen({
           locale={locale}
           timezone={timezone}
           canOpenSession={canCharge}
+          draft={chargeDraft}
+          onDraftSaved={() => setSalesReload((n) => n + 1)}
           onClose={() => {
             setCharging(false);
+            setChargeDraft(null);
             setSalesReload((n) => n + 1);
             router.refresh();
           }}

@@ -8,6 +8,7 @@ import { getBarberPlan } from "@/lib/barber/plans";
 import { getBarberDict, getBarberT } from "@/i18n/dictionaries/barber";
 import type { Dictionary } from "@/i18n/t";
 import { getCashState, getCheckoutContext } from "@/lib/barber/cash";
+import { listSaleDrafts } from "@/lib/barber/sale-drafts";
 import { BarberDenied } from "@/components/barber/cash/denied";
 import { CajaClient } from "@/components/barber/cash/caja-client";
 
@@ -50,6 +51,8 @@ export default async function Page() {
     getCashState(ctx),
     getCheckoutContext(ctx, plan.features),
   ]);
+  // Notas «Por cobrar» de la sede (null si falla: Caja sigue igual).
+  const drafts = await listSaleDrafts(ctx).catch(() => null);
 
   return (
     <CajaClient
@@ -59,6 +62,8 @@ export default async function Page() {
       canManage={hasBarberPermission(permUser, "cash.manage")}
       starsDict={((getBarberDict(ctx.barbershop.locale).barber as Dictionary).estrellas ?? {}) as Dictionary}
       locale={ctx.barbershop.locale === "en" ? "en" : "es"}
+      drafts={drafts}
+      cobrosDict={((getBarberDict(ctx.barbershop.locale).barber as Dictionary).cobros ?? {}) as Dictionary}
     />
   );
 }

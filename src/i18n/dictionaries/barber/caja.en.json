@@ -148,6 +148,8 @@
     "discountMode": "Discount in pesos or percent",
     "discountPctHint": "In % it is taken from what is left on the ticket (0.01 to 100).",
     "discountPctEquals": "That is {amount} off.",
+    "saveDraft": "Save without charging",
+    "savingDraft": "Saving…",
     "loyaltyRedeem": "Apply loyalty reward ({count} stamps)",
     "loyaltyApplyTo": "Apply to",
     "membershipUse": "Use membership",

@@ -20,6 +20,7 @@ import { Wallet } from "lucide-react";
 import type { Dictionary } from "@/i18n/t";
 import { makeBarberT } from "@/lib/barber/i18n";
 import type { CashState, CheckoutContext, ClientLookup, SaleRow } from "@/lib/barber/cash";
+import type { SaleDraftRow } from "@/lib/barber/sale-drafts";
 import { TicketModal } from "@/components/barber/cash/ticket-modal";
 import { OpenSessionModal } from "@/components/barber/cash/session-modals";
 import { Modal, clientStyles as s } from "./ui";
@@ -35,6 +36,8 @@ export function ClientChargeBridge({
   locale,
   timezone,
   canOpenSession,
+  draft = null,
+  onDraftSaved,
   onClose,
   onCharged,
 }: {
@@ -50,6 +53,10 @@ export function ClientChargeBridge({
   timezone: string;
   /** cash.manage: puede abrir el turno desde aquí. */
   canOpenSession: boolean;
+  /** Nota «Por cobrar» que se abre para cobrarla o editarla. */
+  draft?: SaleDraftRow | null;
+  /** Se guardó (o se volvió a guardar) como «Por cobrar». */
+  onDraftSaved?: () => void;
   onClose: () => void;
   onCharged: (sale: SaleRow) => void;
 }) {
@@ -98,6 +105,8 @@ export function ClientChargeBridge({
         checkout={checkout}
         appointment={null}
         initialClient={client}
+        draft={draft}
+        onDraftSaved={onDraftSaved}
         tz={timezone}
         onClose={onClose}
         onCharged={onCharged}

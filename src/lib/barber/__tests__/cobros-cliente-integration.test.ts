@@ -294,3 +294,112 @@ test("2 · cliente para el cobro: de esta barbería, no bloqueado, y el Barbero 
   await charge(A, moi);
   assert.equal((await cash.getClientLookup(betoCaja, moi))?.id, moi, "ya lo atendió: ahora sí");
 });
+
+// ── 3. «Por cobrar» ────────────────────────────────────────────────────
+
+const DRAFTS_SQL = path.join(ROOT, "sql/barber_por_cobrar.sql");
+async function applyDraftsSql() {
+  const fs = await import("node:fs");
+  const sql = fs.readFileSync(DRAFTS_SQL, "utf8").replace(/^\s*--.*$/gm, "");
+  for (const stmt of sql.split(/;\s*\n/).map((x) => x.trim()).filter(Boolean)) await prisma.$executeRawUnsafe(stmt);
+}
+const draftStatus = async (id: string) =>
+  (await prisma.$queryRaw<Array<{ status: string; saleId: string | null }>>`SELECT "status", "saleId" FROM "barber_sale_drafts" WHERE "id" = ${id}`)[0];
+
+test("3 · antes del SQL: no hay notas por cobrar y guardar lo dice; Caja lo sabe (draftsReady)", { skip }, async () => {
+  const drafts = await import("@/lib/barber/sale-drafts");
+  await prisma.$executeRawUnsafe(`DROP TABLE IF EXISTS "barber_sale_drafts"`);
+  const zoe = await newClient(A, "Zoe");
+  assert.deepEqual(await drafts.listSaleDrafts(A.ctx), { ready: false, drafts: [] });
+  await assert.rejects(
+    drafts.saveSaleDraft(A.ctx, { clientId: zoe, payload: { items: [{ kind: "service", id: A.serviceId }] } }),
+    cajaError("DRAFTS_SQL_PENDING"),
+  );
+  assert.equal((await cash.getCheckoutContext(A.ctx, FEATURES)).draftsReady, false);
+  await applyDraftsSql();
+  await applyDraftsSql(); // idempotente
+  assert.equal((await cash.getCheckoutContext(A.ctx, FEATURES)).draftsReady, true);
+});
+
+test("3 · guardar sin cobrar NO toca corte, ingresos, comisiones ni estrellas; cobrarla la vuelve un ticket, UNA vez", { skip }, async () => {
+  const drafts = await import("@/lib/barber/sale-drafts");
+  const starsCore = await import("@/lib/barber/stars-core");
+  const rita = await staff(A, "RECEPTION");
+  const tom = await newClient(A, "Tom");
+  const before = await cash.getCashState(A.ctx);
+  const commissionsBefore = await prisma.barberCommissionEntry.count({ where: { barbershopId: A.id } });
+
+  const { id } = await drafts.saveSaleDraft(rita, {
+    clientId: tom,
+    payload: { items: [{ kind: "service", id: A.serviceId }, { kind: "product", id: A.productId, qty: 2 }], barberId: A.barberId, discountPct: "10", notes: "Paga al rato" },
+  });
+  const list = await drafts.listSaleDrafts(A.ctx, { clientId: tom });
+  assert.equal(list.drafts.length, 1);
+  assert.equal(list.drafts[0].estimate, 450, "200 + 2×150 − 10%");
+  assert.equal(list.drafts[0].clientName, `Tom ${RUN}`);
+  assert.equal(list.drafts[0].createdByName, "Rita Staff");
+
+  const after = await cash.getCashState(A.ctx);
+  assert.equal(after.open?.sales.length, before.open?.sales.length, "el corte no ve la nota");
+  assert.equal(after.open?.expectedCash, before.open?.expectedCash);
+  assert.equal(await prisma.barberCommissionEntry.count({ where: { barbershopId: A.id } }), commissionsBefore, "sin comisión");
+  assert.equal((await starsCore.loadStarsView(prisma, { barbershopId: A.id, clientId: tom, audience: "client" }))?.stars, 0, "sin estrella");
+  assert.equal((await sales.listClientSales(A.ctx, tom)).summary.spent, 0, "sin ingreso");
+
+  // Editarla mientras siga abierta.
+  await drafts.saveSaleDraft(rita, { id, clientId: tom, payload: { items: [{ kind: "service", id: A.serviceId }], barberId: A.barberId, notes: "Solo el corte" } });
+  assert.equal((await drafts.listSaleDrafts(A.ctx, { clientId: tom })).drafts[0].estimate, 200);
+
+  // Cobrarla: el MISMO createSale, con draftId.
+  const sale = await charge(A, tom, { draftId: id }, rita);
+  assert.deepEqual(await draftStatus(id), { status: "CHARGED", saleId: sale.id });
+  assert.equal((await drafts.listSaleDrafts(A.ctx, { clientId: tom })).drafts.length, 0, "ya no está por cobrar");
+  assert.equal((await sales.listClientSales(A.ctx, tom)).summary.spent, 200, "ahora sí es ingreso");
+
+  // Una segunda vez no: ni ticket nuevo.
+  const count = await prisma.barberSale.count({ where: { clientId: tom } });
+  await assert.rejects(charge(A, tom, { draftId: id }, rita), cajaError("DRAFT_NOT_OPEN"));
+  assert.equal(await prisma.barberSale.count({ where: { clientId: tom } }), count, "el intento repetido no dejó ticket");
+  await assert.rejects(drafts.saveSaleDraft(rita, { id, clientId: tom, payload: { items: [{ kind: "service", id: A.serviceId }] } }), cajaError("DRAFT_NOT_OPEN"));
+});
+
+test("3 · dos cobros A LA VEZ de la misma nota: entra uno; el otro se deshace entero", { skip }, async () => {
+  const drafts = await import("@/lib/barber/sale-drafts");
+  const uri = await newClient(A, "Uri");
+  const { id } = await drafts.saveSaleDraft(A.ctx, { clientId: uri, payload: { items: [{ kind: "service", id: A.serviceId }] } });
+  const results = await Promise.allSettled([charge(A, uri, { draftId: id }), charge(A, uri, { draftId: id }), charge(A, uri, { draftId: id })]);
+  assert.equal(results.filter((r) => r.status === "fulfilled").length, 1);
+  assert.ok(results.filter((r) => r.status === "rejected").every((r) => cajaError("DRAFT_NOT_OPEN")((r as PromiseRejectedResult).reason)));
+  assert.equal(await prisma.barberSale.count({ where: { clientId: uri } }), 1, "un solo ticket");
+  assert.equal(await prisma.barberCommissionEntry.count({ where: { sale: { clientId: uri } } }), 1, "una sola comisión");
+});
+
+test("3 · descartar no borra; otra sede no la toca; otro cliente no la salda; permisos", { skip }, async () => {
+  const drafts = await import("@/lib/barber/sale-drafts");
+  const val = await newClient(A, "Val");
+  const otro = await newClient(A, "OtroCli");
+  const { id } = await drafts.saveSaleDraft(A.ctx, { clientId: val, payload: { items: [{ kind: "service", id: A.serviceId }] } });
+
+  await assert.rejects(charge(A, otro, { draftId: id }), cajaError("DRAFT_NOT_OPEN"), "la nota de Val no la salda un ticket de otro cliente");
+  await assert.rejects(drafts.discardSaleDraft(B.ctx, id), cajaError("DRAFT_NOT_OPEN"), "otra barbería no la ve");
+  assert.equal((await drafts.listSaleDrafts(B.ctx)).drafts.some((d) => d.id === id), false);
+
+  const beto = await staff(A, "BARBER", { barberId: A.barberId });
+  await assert.rejects(drafts.saveSaleDraft(beto, { clientId: val, payload: { items: [{ kind: "service", id: A.serviceId }] } }), (e: unknown) => e instanceof BarberForbiddenError);
+  await assert.rejects(drafts.listSaleDrafts(beto), (e: unknown) => e instanceof BarberForbiddenError);
+
+  await assert.rejects(
+    drafts.saveSaleDraft(A.ctx, { clientId: val, payload: { items: [{ kind: "product", id: B.productId }] } }),
+    cajaError("ITEM_NOT_FOUND"),
+    "un producto de otra barbería no entra",
+  );
+  await assert.rejects(drafts.saveSaleDraft(A.ctx, { clientId: val, payload: { items: [] } }), cajaError("INVALID_INPUT"));
+  await assert.rejects(
+    drafts.saveSaleDraft(A.ctx, { clientId: val, payload: { items: [{ kind: "service", id: A.serviceId }], discount: "5", discountPct: "5" } }),
+    cajaError("INVALID_INPUT"),
+  );
+
+  await drafts.discardSaleDraft(A.ctx, id);
+  assert.equal((await draftStatus(id)).status, "DISCARDED", "descartada, no borrada");
+  await assert.rejects(charge(A, val, { draftId: id }), cajaError("DRAFT_NOT_OPEN"));
+});

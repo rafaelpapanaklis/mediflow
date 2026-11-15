@@ -26,6 +26,9 @@ import { KpiCard } from "@/components/ui/design-system/kpi-card";
 import { useBarberT } from "./use-barber-t";
 import { fmtMoney, fmtSigned, fmtTime, fmtDateTime, PAYMENT_METHOD_KEYS } from "./money";
 import { TicketModal } from "./ticket-modal";
+import type { SaleDraftList, SaleDraftRow } from "@/lib/barber/sale-drafts";
+import { SaleDraftsList } from "@/components/barber/clients/sale-drafts-list";
+import { ClientChargeBridge } from "@/components/barber/clients/client-charge-bridge";
 import { CancelSaleModal, CloseSessionModal, OpenSessionModal } from "./session-modals";
 
 type ModalState =
@@ -49,6 +52,8 @@ export function CajaClient({
   canManage,
   starsDict,
   locale = "es",
+  drafts = null,
+  cobrosDict,
 }: {
   dict: Dictionary;
   state: CashState;
@@ -57,10 +62,15 @@ export function CajaClient({
   /** Sub-árbol barber.estrellas (bono en el cobro y «+1 estrella» al terminar). */
   starsDict?: Dictionary;
   locale?: string;
+  /** Notas «Por cobrar» abiertas de la sede (null = sin permiso o sin SQL). */
+  drafts?: SaleDraftList | null;
+  /** Sub-árbol barber.cobros (textos de las notas «Por cobrar»). */
+  cobrosDict?: Dictionary;
 }) {
   const t = useBarberT(dict);
   const router = useRouter();
   const [modal, setModal] = useState<ModalState>({ kind: "none" });
+  const [chargeDraft, setChargeDraft] = useState<SaleDraftRow | null>(null);
   const closeModal = useCallback(() => setModal({ kind: "none" }), []);
   const refresh = useCallback(() => router.refresh(), [router]);
 
@@ -235,6 +245,22 @@ export function CajaClient({
         </CardNew>
       </div>
 
+      {/* Notas «Por cobrar» de la sede: no son ingreso hasta que se cobran. */}
+      {drafts?.ready && drafts.drafts.length > 0 && cobrosDict ? (
+        <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+          <SaleDraftsList
+            drafts={drafts.drafts}
+            dict={cobrosDict}
+            locale={locale}
+            timezone={tz}
+            showClient
+            canManage={canManage}
+            onCharge={(d) => setChargeDraft(d)}
+            onDiscarded={refresh}
+          />
+        </div>
+      ) : null}
+
       {/* Historial de turnos */}
       <CardNew title={t("caja.historyTitle")} noPad>
         {state.history.length === 0 ? (
@@ -278,6 +304,25 @@ export function CajaClient({
       </CardNew>
 
       {/* Modales (fuera de los contenedores) */}
+      {chargeDraft?.clientId && cobrosDict ? (
+        <ClientChargeBridge
+          clientId={chargeDraft.clientId}
+          clientName={chargeDraft.clientName ?? ""}
+          cajaDict={dict}
+          starsDict={starsDict}
+          cobrosDict={cobrosDict}
+          locale={locale}
+          timezone={tz}
+          canOpenSession={canManage}
+          draft={chargeDraft}
+          onDraftSaved={refresh}
+          onClose={() => {
+            setChargeDraft(null);
+            refresh();
+          }}
+          onCharged={() => refresh()}
+        />
+      ) : null}
       {modal.kind === "ticket" && (
         <TicketModal
           dict={dict}

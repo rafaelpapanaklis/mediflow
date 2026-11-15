@@ -80,6 +80,7 @@ import {
   refreshLoyalty,
   type LoyaltyRule,
 } from "@/lib/barber/loyalty-core";
+import { markSaleDraftChargedTx, saleDraftsReady } from "@/lib/barber/sale-drafts-core";
 import {
   activeBonuses,
   availableBonuses,
@@ -331,6 +332,8 @@ export interface CheckoutContext {
   loyaltyReward: string;
   /** Bonos ACTIVOS de la barbería (el premio de siempre si no ha creado otros). */
   bonuses: StarBonus[];
+  /** Existe la tabla de notas «Por cobrar» (sql/barber_por_cobrar.sql). */
+  draftsReady: boolean;
   features: { products: boolean; tips: boolean; commissions: boolean };
 }
 
@@ -833,6 +836,7 @@ export async function getCheckoutContext(
     loyaltyEnabled: rule.enabled,
     loyaltyReward: rule.reward,
     bonuses,
+    draftsReady: await saleDraftsReady(prisma),
     features: {
       products: features.products === true,
       tips: features.tips === true,
@@ -997,6 +1001,11 @@ export interface CreateSaleInput {
   redeemBonusId?: string | null;
   /** Índice (en `items`) de la línea de servicio cubierta por la membresía. */
   membershipItemIndex?: number | null;
+  /**
+   * Nota «Por cobrar» que este cobro salda. Se marca COBRADA en esta misma
+   * transacción, una sola vez: si ya se cobró o descartó, el ticket no se crea.
+   */
+  draftId?: string | null;
   notes?: unknown;
 }
 
@@ -1105,6 +1114,7 @@ export async function createSale(
   const notes = cleanNotes(input.notes);
   let loyaltyIdx = optionalIndex(input.redeemLoyaltyItemIndex, "redeemLoyaltyItemIndex");
   const bonusId = optionalId(input.redeemBonusId, "redeemBonusId");
+  const draftId = optionalId(input.draftId, "draftId");
   const membershipIdx = optionalIndex(input.membershipItemIndex, "membershipItemIndex");
   if (loyaltyIdx !== null && membershipIdx !== null && loyaltyIdx === membershipIdx) {
     throw new BarberCajaError(400, "INVALID_INPUT", "Una misma línea no puede canjearse por lealtad y membresía");
@@ -1435,6 +1445,23 @@ export async function createSale(
           where: { id: membershipUsed.id, barbershopId },
           data: { cutsUsed: { increment: 1 } },
         });
+      }
+
+      // 11b. Nota «Por cobrar»: queda cobrada por ESTE ticket, en la misma
+      //      transacción. Dos cobros de la misma nota: el segundo espera la
+      //      fila, ya no la ve abierta y se deshace entero (ticket incluido).
+      if (draftId) {
+        if (!(await saleDraftsReady(tx))) {
+          throw new BarberCajaError(409, "DRAFTS_SQL_PENDING", "Falta aplicar sql/barber_por_cobrar.sql");
+        }
+        const marked = await markSaleDraftChargedTx(tx, {
+          draftId,
+          barbershopId,
+          clientId: client?.id ?? null,
+          saleId: created.id,
+          userId: ctx.barberUserId,
+        });
+        if (!marked) throw new BarberCajaError(409, "DRAFT_NOT_OPEN", "Esa nota ya se cobró o se descartó");
       }
 
       // 12. Lealtad: se RECUENTAN los sellos del cliente con este ticket ya
