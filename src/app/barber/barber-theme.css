@@ -103,6 +103,197 @@
   --shadow-3: 0 16px 40px -12px rgba(0, 0, 0, 0.6);
 }
 
+/* ═══════════════════════════════════════════════════════════════════════
+   REDISEÑO DEL PANEL (15-nov-2026, mockup D aprobado por Rafael)
+   «Es mi panel, pero mejor»: misma estructura, misma letra (IBM Plex Sans)
+   y los MISMOS TAMAÑOS que el panel de hoy; cambian color, peso, aire,
+   líneas en vez de cajas y el menú (propuesta C: café-negro con pastilla).
+
+   ⚠️ SOLO EL PANEL. .barber-shell también lo usan páginas que ve el
+   cliente final (/b/<slug>/reservar, la fila por QR, la comparativa de
+   /barberias). Por eso todo cuelga de .barber-panel —la clase que solo
+   lleva el envoltorio de src/app/barber/(panel)/layout.tsx— y de los
+   diálogos .barber-shell montados mientras el panel está en pantalla
+   (body:has(.barber-panel) .barber-shell). Las públicas no cambian.
+   Especificidad (0,3,1): gana a .barber-shell y a .dark .barber-shell.
+   ═══════════════════════════════════════════════════════════════════════ */
+body:has(.barber-panel) .barber-shell {
+  /* La escala se queda; el paso 600 (el de los botones con texto blanco)
+     baja un punto a café y el 700 queda como su hover. [#A2612F → #8C4F26:
+     6.4:1 con blanco, antes 4.9:1] */
+  --caramel-600: #8C4F26;
+  --caramel-700: #6F3D1E;
+
+  /* Superficies: crema un punto más café y LISO (sin la cuadrícula). */
+  --bg:        #F5EDE2;                    /* [#FAF5EE] */
+  --bg-elev:   #FFFFFF;
+  --bg-elev-2: #F8F1E7;                    /* [#F6EADC] relleno de chips/renglones */
+  --bg-hover:  rgba(162, 97, 47, 0.07);
+
+  /* Bordes y líneas en tinta café (antes tinta negra). --line es la raya
+     interna que sustituye a las cajas dentro de una tarjeta. */
+  --border-soft:   rgba(42, 28, 21, 0.10);
+  --border-strong: rgba(42, 28, 21, 0.18);
+  --border-brand:  rgba(162, 97, 47, 0.35);
+  --line:          rgba(42, 28, 21, 0.07);
+
+  --brand:        var(--caramel-600);
+  --brand-hover:  var(--caramel-700);
+  --brand-ink:    #7A4323;                 /* enlaces de texto: 7.9:1 sobre blanco */
+  --on-brand:     #FFFFFF;
+  --brand-soft:   rgba(162, 97, 47, 0.12);
+  --brand-softer: rgba(162, 97, 47, 0.06);
+  --brand-grad:   linear-gradient(90deg, var(--caramel-600), var(--caramel-600));
+  --brand-grad-v: linear-gradient(180deg, var(--caramel-600), var(--caramel-600));
+
+  /* Texto. --text-3 sube de contraste: #7D7268 daba 4.3:1 sobre el crema y
+     4.0:1 sobre chips (no pasaba AA en letra chica); #6F6153 da 5.2 y 6.0. */
+  --text-1: #1F1611;
+  --text-2: #4A3D33;
+  --text-3: #6F6153;
+  --text-4: #A3958A;                       /* solo decorativo, nunca texto que se lea */
+
+  /* Semánticos suaves (fondos de aviso) en el mismo cálido. */
+  --success-soft: #E7F2EA;
+  --danger-soft:  #FBECEA;
+  --warning-soft: #FAF0DA;
+
+  /* Estados de la visita: los mismos hex de agenda.module.css, ahora tokens. */
+  --st-pending:   #9C6F0F;
+  --st-confirmed: #2D6AA8;
+  --st-chair:     #A2612F;
+  --st-done:      #1F7A4C;
+  --st-noshow:    #B3261E;
+  --st-cancelled: #6F6459;
+  --st-now:       #C8322B;
+
+  /* Radios por jerarquía [antes 14/12/10/9/8/6 sueltos]: 6 chico, 8 control, 12 tarjeta. */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  /* Espacios de 4 en 4 [antes 21.6/18/14 mezclados]. */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+
+  --ring: 0 0 0 3px rgba(162, 97, 47, 0.38);
+  --shadow-1: 0 1px 2px rgba(42, 28, 21, 0.05);
+  --shadow-2: 0 6px 16px -6px rgba(42, 28, 21, 0.18);
+  --shadow-3: 0 16px 40px -12px rgba(42, 28, 21, 0.30);
+
+  /* ── Menú (propuesta C): café-negro, letra arena, activo en pastilla crema ── */
+  --menu-bg:          #1D120C;
+  --menu-text:        #D9C5A6;             /* 10.9:1 sobre el fondo */
+  --menu-muted:       #B39C82;             /* títulos de sección: 7.2:1 */
+  --menu-strong:      #F4E8D2;
+  --menu-hover:       rgba(244, 232, 210, 0.07);
+  --menu-line:        rgba(244, 232, 210, 0.11);
+  --menu-active-bg:   #F4E8D2;
+  --menu-active-text: #23140C;
+  --menu-logout:      #F2936D;             /* ladrillo claro: 7.1:1 */
+  /* El poste de barbero del rótulo */
+  --pole-cream:   #F4E8D2;
+  --pole-mustard: #E8AC2F;
+  --pole-leather: #6F4526;
+  --pole-cap:     #9A6532;
+
+  /* Cifras alineadas en todo el panel (dinero, horas, conteos). */
+  font-variant-numeric: tabular-nums;
+}
+
+/* Modo oscuro: hoy /barber nunca lo activa (el script del layout raíz solo
+   pone .dark en /dashboard y /admin), pero si un día se enciende, que no
+   herede el claro de arriba. El menú y los estados ya son oscuros/legibles. */
+.dark body:has(.barber-panel) .barber-shell {
+  --caramel-600: #A2612F;
+  --caramel-700: #814A28;
+  --bg:        #1A1513;
+  --bg-elev:   #241D19;
+  --bg-elev-2: #2E241D;
+  --bg-hover:  rgba(205, 148, 89, 0.08);
+  --border-soft:   rgba(250, 245, 238, 0.10);
+  --border-strong: rgba(250, 245, 238, 0.18);
+  --border-brand:  rgba(205, 148, 89, 0.40);
+  --line:          rgba(250, 245, 238, 0.07);
+  --brand:        var(--caramel-400);
+  --brand-hover:  var(--caramel-300);
+  --brand-ink:    var(--caramel-300);
+  --on-brand:     var(--caramel-950);
+  --brand-soft:   rgba(205, 148, 89, 0.14);
+  --brand-softer: rgba(205, 148, 89, 0.06);
+  --brand-grad:   linear-gradient(90deg, var(--caramel-400), var(--caramel-400));
+  --brand-grad-v: linear-gradient(180deg, var(--caramel-400), var(--caramel-400));
+  --text-1: #F5EFE7;
+  --text-2: #CBC0B2;
+  --text-3: #A89C8E;
+  --text-4: #6E645A;
+  --success-soft: rgba(99, 199, 149, 0.12);
+  --danger-soft:  rgba(240, 138, 130, 0.12);
+  --warning-soft: rgba(227, 174, 74, 0.12);
+  --st-pending:   #E3AE4A;
+  --st-confirmed: #7FB4E6;
+  --st-chair:     #CD9459;
+  --st-done:      #63C795;
+  --st-noshow:    #F08A82;
+  --st-cancelled: #A2968A;
+  --ring: 0 0 0 3px rgba(205, 148, 89, 0.40);
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-2: 0 6px 16px -6px rgba(0, 0, 0, 0.5);
+  --shadow-3: 0 16px 40px -12px rgba(0, 0, 0, 0.6);
+}
+
+/* Fondo de la página del panel: liso, sin la cuadrícula de 32 px. */
+html body:has(.barber-panel) {
+  --brand-600: 24.1 57.3% 34.9%;  /* #8C4F26, el mismo café de los botones */
+  --brand-700: 22.9 57.4% 27.6%;  /* #6F3D1E */
+  background-color: #F5EDE2;
+  background-image: none;
+}
+html.dark body:has(.barber-panel) {
+  background-color: #1A1513;
+  background-image: none;
+}
+
+/* Botón primario: sigue al token (en claro, texto blanco sobre el café). */
+body:has(.barber-panel) .barber-shell .barber-btn-primary {
+  background: var(--brand);
+  color: var(--on-brand);
+  border-color: var(--brand-hover);
+  border-radius: var(--radius-md);
+}
+body:has(.barber-panel) .barber-shell .barber-btn-primary:hover {
+  background: var(--brand-hover);
+}
+
+/* Tarjeta base (.card de globals.css, compartida con dental): en barber,
+   radio 12 y borde café. Solo tokens: --radius-lg ya cambió arriba. */
+
+/* Barra superior: en Inicio se aplastaba a 21 px. La columna del panel
+   es flex con max-h-screen: con contenido alto, la barra encogía. */
+:root .barber-panel.mf-extpanel.barber-shell .topbar-new {
+  flex-shrink: 0;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border-soft);
+}
+
+/* El activo del menú salía MORADO (#6d28d9): panel-chrome-va.css lo fija
+   con (0,4,0) para los paneles externos del dental. El menú de barber ya
+   no usa .nav-item-new--active, pero cualquier otra lista que lo use
+   dentro del panel (pestañas de Ajustes, etc.) queda en café. */
+:root .barber-panel.mf-extpanel.barber-shell .nav-item-new--active {
+  color: var(--brand-ink);
+  background: var(--brand-soft);
+}
+:root .barber-panel.mf-extpanel.barber-shell .nav-item-new__count {
+  color: var(--brand-ink);
+  background: var(--brand-soft);
+}
+
 /* ── Rampa Tailwind brand-* → caramel dentro del vertical ──────────────
    Vía <body> con :has() para que los portales de Radix (Dialog/Popover
    montan en <body>, FUERA del shell) hereden el caramelo. El panel barber

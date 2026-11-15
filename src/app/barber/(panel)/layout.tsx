@@ -102,7 +102,7 @@ export default async function BarberPanelLayout({
   };
 
   return (
-    <div className="barber-shell mf-extpanel flex min-h-screen font-sans">
+    <div className="barber-shell barber-panel mf-extpanel flex min-h-screen font-sans">
       <BarberSidebar
         shopName={ctx.barbershop.name}
         items={items}
