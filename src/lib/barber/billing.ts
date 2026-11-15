@@ -628,7 +628,11 @@ export interface ApplyBarberSubscriptionResult {
 export async function applyBarberSubscription(
   db: BarberBillingDb,
   sub: SubscriptionLike,
-  opts?: { plans?: ReadonlyArray<Pick<BarberResolvedPlan, "id" | "stripePriceIdMonthly" | "stripePriceIdYearly">> },
+  opts?: {
+    plans?: ReadonlyArray<Pick<BarberResolvedPlan, "id" | "stripePriceIdMonthly" | "stripePriceIdYearly">>;
+    /** Reloj del corte por fecha (pruebas). */
+    now?: Date;
+  },
 ): Promise<ApplyBarberSubscriptionResult> {
   if (!isBarberSubscription(sub)) return { applied: false, reason: "not-barber" };
   const shop = await resolveBarbershopForSubscription(db, sub);
@@ -649,10 +653,15 @@ export async function applyBarberSubscription(
   const customerId = subscriptionCustomerId(sub);
   // Lo que Stripe le cobra HOY (importe y ciclo reales) para el MRR del admin.
   if (db.cobros) await db.cobros.guardarTerminos(shop.id, terminosDeSuscripcion(sub));
+  // Corte sin días de gracia (decisión #10): si Stripe sigue «al corriente»
+  // pero el periodo PAGADO ya venció, se escribe past_due. Sin registro de
+  // cobros no se corta nada (estadoEfectivo devuelve el de Stripe).
+  const ledger = db.cobros ? await db.cobros.leerRegistro(shop.id) : null;
+  const status = estadoEfectivo(patch.subscriptionStatus, ledger, opts?.now ?? new Date());
   await db.barbershop.update({
     where: { id: shop.id },
     data: {
-      subscriptionStatus: patch.subscriptionStatus,
+      subscriptionStatus: status,
       stripeSubscriptionId: patch.stripeSubscriptionId,
       ...(patch.plan ? { plan: patch.plan } : {}),
       ...(!shop.stripeCustomerId && customerId ? { stripeCustomerId: customerId } : {}),
@@ -661,11 +670,11 @@ export async function applyBarberSubscription(
   await db.barbershop.updateMany({
     where: { parentId: shop.id },
     data: {
-      subscriptionStatus: patch.subscriptionStatus,
+      subscriptionStatus: status,
       ...(patch.plan ? { plan: patch.plan } : {}),
     },
   });
-  return { applied: true, reason: "ok", shopId: shop.id, patch };
+  return { applied: true, reason: "ok", shopId: shop.id, patch: { ...patch, subscriptionStatus: status } };
 }
 
 // ── Webhook: despacho de eventos (solo checkout.session.* y customer.subscription.*) ──

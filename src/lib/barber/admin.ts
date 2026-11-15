@@ -4,7 +4,7 @@ import { createClient as createSupabaseAdmin } from "@supabase/supabase-js";
 import { prisma } from "@/lib/prisma";
 import { isMissingTableError } from "@/lib/barber/db-errors";
 import { getBarberPlans } from "@/lib/barber/plans";
-import { cargarCobrosAdmin } from "@/lib/barber/cobros";
+import { cargarCobrosAdmin, marcarReactivacionManualBarber } from "@/lib/barber/cobros";
 import {
   clasificarCobro,
   pagoMensual,
@@ -1058,6 +1058,11 @@ async function loadShopForAction(id: string) {
  * Stripe, el siguiente evento de esa suscripción vuelve a escribir el estado
  * real y deshace la suspensión manual. Es una palanca de operación, no un
  * corte de cobro.
+ *
+ * REACTIVAR deja además la marca `manual_access_at` (cobros.ts): sin ella el
+ * corte por fecha (sin días de gracia) la volvería a cerrar en ≤ 5 min por su
+ * periodo pagado vencido. Con la marca es CORTESÍA (no cuenta como «paga»)
+ * hasta que entre un cobro nuevo de Stripe.
  */
 export async function setBarbershopSuspension(
   id: string,
@@ -1087,6 +1092,8 @@ export async function setBarbershopSuspension(
       data: { subscriptionStatus: nextStatus },
     }),
   ]);
+
+  if (!input.suspend) await marcarReactivacionManualBarber(shop.id);
 
   const audited = await recordBarberAdminAction({
     barbershopId: shop.id,
