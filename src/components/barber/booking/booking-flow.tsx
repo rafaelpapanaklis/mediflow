@@ -1,5 +1,6 @@
 "use client";
 
+import { soloTelefono } from "@/lib/barber/telefono-teclado";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { CalendarOff, Check, ChevronLeft, MapPin, MessageCircle, Phone, Scissors } from "lucide-react";
 import { getBarberT } from "@/i18n/dictionaries/barber";
@@ -677,7 +678,7 @@ export function BookingFlow({
                 maxLength={20}
                 placeholder={t("barber.reserva.datos.telefonoPlaceholder")}
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
+                onChange={(e) => setPhone(soloTelefono(e.target.value))}
                 required
               />
               <span className="dcb-help">{whatsappConnected

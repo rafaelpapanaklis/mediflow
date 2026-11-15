@@ -1,5 +1,6 @@
 "use client";
 
+import { soloTelefono } from "@/lib/barber/telefono-teclado";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import toast from "react-hot-toast";
 import {
@@ -241,7 +242,7 @@ function ProfileCard({
         </div>
         <Field label={t("configuracion.profile.phone")} hint={t("configuracion.profile.phoneHint")}>
           {(id) => (
-            <TextInput id={id} type="tel" inputMode="tel" value={form.phone} maxLength={limits.phone} onChange={set("phone")} />
+            <TextInput id={id} type="tel" inputMode="tel" value={form.phone} maxLength={limits.phone} onChange={(e) => setForm((f) => ({ ...f, phone: soloTelefono(e.target.value) }))} />
           )}
         </Field>
         <Field label={t("configuracion.profile.email")} hint={t("configuracion.profile.emailHint")}>

@@ -1,5 +1,6 @@
 "use client";
 
+import { soloTelefono } from "@/lib/barber/telefono-teclado";
 import { useState } from "react";
 import { ArrowRightLeft, CalendarClock, Crown, Pencil, Plus, Store, Users } from "lucide-react";
 import Link from "next/link";
@@ -433,7 +434,7 @@ export function BranchesClient({
                   value={form.phone}
                   maxLength={20}
                   inputMode="tel"
-                  onChange={(e) => patch({ phone: e.target.value })}
+                  onChange={(e) => patch({ phone: soloTelefono(e.target.value) })}
                 />
               )}
             </Field>
