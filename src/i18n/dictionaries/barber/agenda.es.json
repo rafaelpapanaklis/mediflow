@@ -162,6 +162,7 @@
     "save": "Guardar horario",
     "saved": "Horario guardado.",
     "saveError": "No se pudo guardar el horario.",
+    "saveRangeError": "Un turno termina antes de empezar. Revisa que la hora de salida sea después de la de entrada.",
     "noBarber": "Elige un barbero para editar su horario.",
     "unsaved": "Tienes cambios sin guardar.",
     "switchGuard": {

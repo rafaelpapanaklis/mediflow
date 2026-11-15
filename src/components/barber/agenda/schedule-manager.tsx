@@ -163,7 +163,7 @@ export function ScheduleManager(props: ScheduleManagerProps) {
       for (const day of DAYS) {
         for (const shift of week[day] ?? []) {
           if (shift.end <= shift.start) {
-            setError(t("barber.agenda.schedule.saveError"));
+            setError(t("barber.agenda.schedule.saveRangeError"));
             return false;
           }
           rows.push({ dayOfWeek: day, startMinute: shift.start, endMinute: shift.end });

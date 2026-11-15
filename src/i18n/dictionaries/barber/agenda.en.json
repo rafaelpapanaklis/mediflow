@@ -162,6 +162,7 @@
     "save": "Save hours",
     "saved": "Hours saved.",
     "saveError": "We couldn't save the hours.",
+    "saveRangeError": "A shift ends before it starts. Make sure the end time is after the start time.",
     "noBarber": "Pick a barber to edit their hours.",
     "unsaved": "You have unsaved changes.",
     "switchGuard": {
