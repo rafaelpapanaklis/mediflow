@@ -213,7 +213,8 @@ export function ComisionesClient({
                             {canManage && r.paidStatus !== "PAID" && r.paidStatus !== "EMPTY" && (
                               <button type="button" className="bcom-act bcom-act--primary" onClick={() => setPayRow(r)}>
                                 <BadgeCheck size={14} aria-hidden="true" />
-                                {t("comisiones.markPaid")}
+                                {/* Renta de silla mayor que lo producido: el barbero le paga al dueño (lógica L2). */}
+                                {r.totalToPay < 0 ? t("comisiones.markOwed") : t("comisiones.markPaid")}
                               </button>
                             )}
                           </span>
@@ -279,18 +280,20 @@ export function ComisionesClient({
       {payRow && (
         <BarberModal
           open
-          title={t("comisiones.markPaidTitle")}
+          title={payRow.totalToPay < 0 ? t("comisiones.markOwedTitle") : t("comisiones.markPaidTitle")}
           onClose={() => setPayRow(null)}
           closeLabel={t("common.close")}
           footer={
             <>
               <button type="button" className="btn-new btn-new--ghost" onClick={() => setPayRow(null)} disabled={busy}>{t("common.cancel")}</button>
-              <button type="button" className="btn-new barber-btn-primary" onClick={confirmPay} disabled={busy}>{busy ? t("common.saving") : t("comisiones.markPaidConfirm")}</button>
+              <button type="button" className="btn-new barber-btn-primary" onClick={confirmPay} disabled={busy}>{busy ? t("common.saving") : payRow.totalToPay < 0 ? t("comisiones.markOwedConfirm") : t("comisiones.markPaidConfirm")}</button>
             </>
           }
         >
           <p style={{ margin: "0 0 12px", fontSize: 13.5, lineHeight: 1.6, color: "var(--text-2)" }}>
-            {t("comisiones.markPaidBody", { name: payRow.nickname || payRow.barberName, period: fmtPeriod(summary.periodKey, locale) })}
+            {payRow.totalToPay < 0
+              ? t("comisiones.markOwedBody", { name: payRow.nickname || payRow.barberName, amount: fmtMoney(-payRow.totalToPay), period: fmtPeriod(summary.periodKey, locale) })
+              : t("comisiones.markPaidBody", { name: payRow.nickname || payRow.barberName, period: fmtPeriod(summary.periodKey, locale) })}
           </p>
           {/* La MISMA cifra de la columna «A pagar» y del recibo, con su desglose. */}
           <div className="bcaja-totals">
