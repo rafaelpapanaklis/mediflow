@@ -4,11 +4,11 @@ import { redirect } from "next/navigation";
 import { getBarberContext, hasBarberPermission } from "@/lib/barber-auth";
 import { requireBarberPaidAccess } from "@/lib/barber/paid-access";
 import { getBarberPlan } from "@/lib/barber/plans";
-import { getBarberDict, getBarberT, resolveBarberLocale } from "@/i18n/dictionaries/barber";
+import { getBarberDict, resolveBarberLocale } from "@/i18n/dictionaries/barber";
 import type { Dictionary } from "@/i18n/t";
 import { getBarberSettings } from "@/lib/barber/settings";
-import { BarberDenied } from "@/components/barber/cash/denied";
 import { ConfiguracionScreen } from "@/components/barber/configuracion/configuracion-screen";
+import { MiCuentaScreen } from "@/components/barber/configuracion/mi-contrasena-card";
 
 /**
  * /barber/configuracion — datos de la barbería, dirección pública,
@@ -27,18 +27,13 @@ export default async function Page() {
   await requireBarberPaidAccess(ctx);
 
   const locale = resolveBarberLocale(ctx.barbershop.locale);
-  const t = getBarberT(locale);
   const dict = ((getBarberDict(locale).barber as Dictionary).ajustes ?? {}) as Dictionary;
 
   const permUser = { role: ctx.role, permissionsOverride: ctx.user.permissionsOverride };
   if (!hasBarberPermission(permUser, "settings.edit")) {
-    return (
-      <BarberDenied
-        kind="permission"
-        title={t("barber.ajustes.common.noPermissionTitle")}
-        body={t("barber.ajustes.common.noPermissionBody")}
-      />
-    );
+    // Sin permiso para la barbería, pero SÍ para lo suyo: cambiar su propia
+    // contraseña (auditoría 14-nov, M5). Antes aquí solo había «sin acceso».
+    return <MiCuentaScreen dict={dict} />;
   }
 
   const [settings, plan] = await Promise.all([

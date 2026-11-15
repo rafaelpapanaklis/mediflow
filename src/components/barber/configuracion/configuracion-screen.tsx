@@ -33,6 +33,7 @@ import {
   useSaving,
 } from "@/components/barber/team/admin-ui";
 import { prepararFoto } from "@/components/barber/landing/imagen";
+import { MiContrasenaCard } from "./mi-contrasena-card";
 import s from "./configuracion.module.css";
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -111,6 +112,8 @@ export function ConfiguracionScreen({
           inPlan={publicBookingInPlan}
           onSaved={(booking) => setSettings((v) => ({ ...v, booking }))}
         />
+        {/* Lo único de la pantalla que es de la PERSONA y no de la barbería. */}
+        <MiContrasenaCard dict={dict} />
       </div>
       </div>
     </div>
@@ -119,7 +122,7 @@ export function ConfiguracionScreen({
 
 // ── Tarjeta ────────────────────────────────────────────────────────────
 
-function Card({
+export function Card({
   icon,
   title,
   sub,

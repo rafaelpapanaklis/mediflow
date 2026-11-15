@@ -199,7 +199,7 @@ const prisma = {
 const DOBLES = new Map<string, unknown>([
   [src("lib/supabase/server.ts"), supabaseServidor],
   [src("lib/failban.ts"), failban],
-  [src("lib/prisma.ts"), prisma],
+  [src("lib/prisma.ts"), { prisma, default: prisma }],
 ]);
 const POR_NOMBRE = new Map<string, unknown>([
   ["@supabase/supabase-js", supabaseJs],

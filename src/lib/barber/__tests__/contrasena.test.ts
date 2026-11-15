@@ -16,12 +16,14 @@ type Ruta = (req: NextRequest) => Promise<Response>;
 
 let recuperar: Ruta;
 let confirmar: Ruta;
+let cambiar: Ruta;
 let C: typeof import("@/lib/barber/contrasena");
 let MK: typeof import("@/lib/barber/marketing");
 
 before(async () => {
   recuperar = (await import("@/app/api/barber/auth/recuperar/route")).POST as Ruta;
   confirmar = (await import("@/app/api/barber/auth/confirmar/route")).GET as Ruta;
+  cambiar = (await import("@/app/api/barber/auth/contrasena/route")).POST as Ruta;
   C = await import("@/lib/barber/contrasena");
   MK = await import("@/lib/barber/marketing");
 });
@@ -157,4 +159,153 @@ describe("1 · recuperar la contraseña sin salir de Barber", () => {
   });
 });
 
-void estado;
+// ── 2. Cambiar mi contraseña dentro del panel ──────────────────────────
+
+/** Una persona del panel con sesión abierta. `marca` = temporal pendiente. */
+function conSesion(opts: { rol?: string; marca?: boolean; vigente?: string } = {}) {
+  reiniciar({
+    sesion: {
+      id: "sb-1",
+      email: "luis@barberia.mx",
+      last_sign_in_at: null,
+      app_metadata: opts.marca ? { barber_must_change_password: true } : {},
+    },
+    contrasenaVigente: opts.vigente ?? "Vieja-Clave-2026",
+    filas: [
+      {
+        id: "bu-1",
+        supabaseId: "sb-1",
+        barbershopId: "shop-1",
+        email: "luis@barberia.mx",
+        role: opts.rol ?? "BARBER",
+        isActive: true,
+        permissionsOverride: [],
+        lastLogin: null,
+        createdAt: new Date("2026-11-01"),
+      },
+    ],
+  });
+}
+
+const NUEVA = "Nueva-Clave-2026";
+
+describe("2 · cambiar mi contraseña dentro del panel", () => {
+  test("sin sesión: 401 y no toca nada", async () => {
+    reiniciar();
+    const res = await cambiar(post("/api/barber/auth/contrasena", { password: NUEVA, confirmacion: NUEVA, currentPassword: "x" }));
+    assert.equal(res.status, 401);
+    assert.equal((await res.json()).code, "sin_sesion");
+    assert.ok(!llamadas.some((l) => /updateUser/.test(l.que)));
+  });
+
+  test("con la actual correcta cambia CON LA SESIÓN de la persona y no la cierra", async () => {
+    conSesion({ rol: "BARBER" });
+    const res = await cambiar(
+      post("/api/barber/auth/contrasena", { currentPassword: "Vieja-Clave-2026", password: NUEVA, confirmacion: NUEVA }),
+    );
+    assert.equal(res.status, 200);
+    assert.equal(estado.contrasenaVigente, NUEVA);
+    assert.ok(llamadas.some((l) => l.que === "sesion.updateUser"), "cambió por otra vía");
+    assert.ok(!llamadas.some((l) => l.que === "admin.updateUserById"), "usó la service role en un cambio voluntario");
+    assert.ok(!llamadas.some((l) => l.que === "sesion.signOut"), "cerró la sesión del navegador");
+    // La sonda que comprobó la actual se cierra SOLO a sí misma.
+    assert.deepEqual(llamadas.find((l) => l.que === "sonda.signOut")?.args, { scope: "local" });
+  });
+
+  test("cualquier rol puede (la ruta no pide permisos del panel)", async () => {
+    for (const rol of ["OWNER", "MANAGER", "RECEPTION", "BARBER"]) {
+      conSesion({ rol });
+      const res = await cambiar(
+        post("/api/barber/auth/contrasena", { currentPassword: "Vieja-Clave-2026", password: NUEVA, confirmacion: NUEVA }),
+      );
+      assert.equal(res.status, 200, rol);
+    }
+  });
+
+  test("lo que se rechaza, con su código y sin cambiar nada", async () => {
+    const casos: Array<[string, Record<string, string>, string]> = [
+      ["sin actual", { password: NUEVA, confirmacion: NUEVA }, "falta_actual"],
+      ["actual mala", { currentPassword: "otra", password: NUEVA, confirmacion: NUEVA }, "actual_incorrecta"],
+      ["débil", { currentPassword: "Vieja-Clave-2026", password: "abcdefgh", confirmacion: "abcdefgh" }, "debil"],
+      ["corta", { currentPassword: "Vieja-Clave-2026", password: "Ab1!", confirmacion: "Ab1!" }, "debil"],
+      ["larga", { currentPassword: "Vieja-Clave-2026", password: "Aa1!" + "x".repeat(70), confirmacion: "Aa1!" + "x".repeat(70) }, "larga"],
+      ["no coinciden", { currentPassword: "Vieja-Clave-2026", password: NUEVA, confirmacion: NUEVA + "x" }, "no_coinciden"],
+      ["igual", { currentPassword: "Vieja-Clave-2026", password: "Vieja-Clave-2026", confirmacion: "Vieja-Clave-2026" }, "igual"],
+    ];
+    for (const [nombre, cuerpo, code] of casos) {
+      conSesion();
+      const res = await cambiar(post("/api/barber/auth/contrasena", cuerpo));
+      assert.equal(res.status, 400, nombre);
+      assert.equal((await res.json()).code, code, nombre);
+      assert.equal(estado.contrasenaVigente, "Vieja-Clave-2026", `${nombre}: cambió la contraseña`);
+    }
+  });
+
+  test("Supabase la rechaza por filtrada: código propio, 400", async () => {
+    conSesion();
+    estado.errorUpdate = { message: "Password is known to be weak and easy to guess", code: "weak_password", reasons: ["pwned"] } as never;
+    const res = await cambiar(
+      post("/api/barber/auth/contrasena", { currentPassword: "Vieja-Clave-2026", password: NUEVA, confirmacion: NUEVA }),
+    );
+    assert.equal(res.status, 400);
+    assert.equal((await res.json()).code, "filtrada");
+  });
+
+  test("freno a quien adivina la actual: el MISMO del dental (10 cada 15 min por persona)", async () => {
+    conSesion();
+    await cambiar(post("/api/barber/auth/contrasena", { currentPassword: "otra", password: NUEVA, confirmacion: NUEVA }));
+    assert.deepEqual(
+      llamadas.filter((l) => l.que === "rateLimit").map((l) => l.args),
+      [{ llave: "cambio-contrasena:actual:sb-1", limit: 10, windowSec: 900 }],
+    );
+    const dental = sinComentarios(leer("src/app/api/auth/change-password/route.ts"));
+    assert.match(dental, /scope: "cambio-contrasena:actual", limit: 10, windowSec: 15 \* 60/);
+
+    conSesion();
+    estado.frenar = () => true;
+    const res = await cambiar(
+      post("/api/barber/auth/contrasena", { currentPassword: "Vieja-Clave-2026", password: NUEVA, confirmacion: NUEVA }),
+    );
+    assert.equal(res.status, 429);
+    assert.ok(!llamadas.some((l) => l.que === "sonda.signIn"), "probó la actual con el freno puesto");
+  });
+
+  test("el usuario es el de la sesión: un id en el cuerpo no cambia a nadie más", async () => {
+    conSesion();
+    await cambiar(
+      post("/api/barber/auth/contrasena", {
+        currentPassword: "Vieja-Clave-2026",
+        password: NUEVA,
+        confirmacion: NUEVA,
+        supabaseId: "sb-otro",
+        email: "otro@barberia.mx",
+      }),
+    );
+    for (const l of llamadas.filter((x) => x.que === "sonda.signIn")) assert.equal(l.args.email, "luis@barberia.mx");
+    assert.ok(!JSON.stringify(llamadas).includes("sb-otro"));
+  });
+
+  test("Configuración: menú para todos los roles; sin settings.edit, solo «Tu contraseña»", () => {
+    const layout = sinComentarios(leer("src/app/barber/(panel)/layout.tsx"));
+    const iConfig = layout.indexOf('if (item.key === "configuracion") return true;');
+    assert.ok(iConfig > -1 && iConfig < layout.indexOf("item.permission &&"), "Configuración sigue filtrada por permiso");
+    const pagina = sinComentarios(leer("src/app/barber/(panel)/configuracion/page.tsx"));
+    assert.match(pagina, /if \(!hasBarberPermission\(permUser, "settings\.edit"\)\) \{\s*return <MiCuentaScreen dict=\{dict\} \/>;/);
+    assert.match(leer("src/components/barber/configuracion/configuracion-screen.tsx"), /<MiContrasenaCard dict=\{dict\} \/>/);
+  });
+
+  test("textos es/en completos para cada código que puede llegar", () => {
+    const card = leer("src/components/barber/configuracion/mi-contrasena-card.tsx");
+    const codigos = [...card.slice(card.indexOf("const CODIGOS"), card.indexOf("]);")).matchAll(/"([a-z_]+)"/g)].map((m) => m[1]);
+    const ruta = leer("src/app/api/barber/auth/contrasena/route.ts");
+    const deRuta = [...ruta.slice(ruta.indexOf("const TEXTO"), ruta.indexOf("};", ruta.indexOf("const TEXTO"))).matchAll(/^\s+([a-z_]+):/gm)].map((m) => m[1]);
+    for (const c of deRuta) assert.ok(codigos.includes(c), `la pantalla no conoce el código «${c}»`);
+    for (const idioma of ["es", "en"]) {
+      const d = JSON.parse(leer(`src/i18n/dictionaries/barber/ajustes.${idioma}.json`)).configuracion.password;
+      for (const llave of ["title", "sub", "accountTitle", "accountSub", "current", "new", "newHint", "confirm", "save", "saved"]) {
+        assert.ok(typeof d[llave] === "string" && d[llave], `${idioma}: falta ${llave}`);
+      }
+      for (const c of codigos) assert.ok(d.errors[c], `${idioma}: falta errors.${c}`);
+    }
+  });
+});

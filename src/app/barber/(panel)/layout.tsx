@@ -68,6 +68,9 @@ export default async function BarberPanelLayout({
     // permiso la escondiera un empleado vería el menú VACÍO, sin una sola
     // pista de por qué su barbería dejó de funcionar.
     if (!paid && item.key === "suscripcion") return true;
+    // Configuración se ve con CUALQUIER rol: quien no edita la barbería entra
+    // ahí a cambiar su propia contraseña (la página le enseña solo eso).
+    if (item.key === "configuracion") return true;
     if (item.featureKey && plan.features[item.featureKey] !== true) return false;
     if (item.permission && !hasBarberPermission(permUser, item.permission as BarberPermissionKey)) {
       return false;

@@ -201,6 +201,31 @@
       "note": "Either way the slot is held from the moment the client books: nobody else can take it while you decide.",
       "planNote": "Your plan doesn't include online booking. The setting is saved and applies as soon as you turn it on.",
       "saved": "Saved"
+    },
+    "password": {
+      "title": "Your password",
+      "sub": "Change it anytime. You stay signed in.",
+      "accountTitle": "Your account",
+      "accountSub": "Your access to the panel.",
+      "current": "Current password",
+      "new": "New password",
+      "newHint": "At least 8 characters; mix upper and lower case letters and numbers.",
+      "confirm": "Repeat the new password",
+      "save": "Change password",
+      "saved": "Done, your password was changed.",
+      "errors": {
+        "sin_sesion": "Your session ended. Sign in again to change your password.",
+        "debil": "Too weak: use at least 8 characters and mix upper and lower case letters and numbers.",
+        "larga": "Use 72 characters or fewer.",
+        "no_coinciden": "The new passwords don't match.",
+        "falta_actual": "Enter your current password.",
+        "actual_incorrecta": "Your current password is incorrect.",
+        "igual": "The new password must be different from the current one.",
+        "filtrada": "That password showed up in public data leaks. Choose another one.",
+        "rechazada": "That password isn't accepted. Try a longer, more varied one.",
+        "demasiados": "Too many attempts. Wait a few minutes and try again.",
+        "error": "We couldn't change your password. Please try again."
+      }
     }
   }
 }
