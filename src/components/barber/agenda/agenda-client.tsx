@@ -103,6 +103,8 @@ export interface AgendaClientProps {
   dict: Dictionary;
   /** Sub-diccionario `barber.caja`: lo hablan los modales de dinero. */
   cajaDict: Dictionary;
+  /** Sub-diccionario `barber.estrellas` (estrellas y bonos en el ticket). */
+  starsDict?: Dictionary;
   locale: string;
   timezone: string;
   branchId: string;
@@ -792,6 +794,7 @@ export function AgendaClient(props: AgendaClientProps) {
       {charging ? (
         <ChargeBridge
           cajaDict={props.cajaDict}
+          starsDict={props.starsDict}
           appointmentId={charging.id}
           clientLabel={charging.clientLabel}
           timezone={timezone}
