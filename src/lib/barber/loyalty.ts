@@ -29,6 +29,7 @@ import type { BarberClientDTO } from "@/lib/barber/types";
 // La marca con la que la caja señala la línea que se llevó el canje (y
 // cuántos sellos costó) vive en el núcleo compartido.
 import { isLoyaltyLine, liveStars, manualStarsNet } from "@/lib/barber/loyalty-core";
+import { loadBonusCatalog } from "@/lib/barber/stars-core";
 // El sello interno de los tickets de mostrador nunca se enseña.
 import { stripSaleTag } from "@/lib/barber/memberships-core";
 
@@ -311,6 +312,11 @@ export async function redeemBarberLoyalty(
 ): Promise<RedeemResult> {
   const synced = await syncBarberClientLoyalty(ctx, args.clientId);
   if (!synced) return { ok: false, error: "Ese cliente no es de esta barbería." };
+  // Con bonos propios (ronda 2, D6) el premio de siempre ya no es «el más
+  // barato»: se entrega desde la tarjeta de estrellas, que dice cuál.
+  if (!(await loadBonusCatalog(prisma, ctx.barbershopId)).legacy) {
+    return { ok: false, error: "Esta barbería ya usa bonos: entrégalo desde la tarjeta de estrellas («Marcar como entregado»)." };
+  }
 
   const { client, config, state } = synced;
   if (!config.loyaltyEnabled) {

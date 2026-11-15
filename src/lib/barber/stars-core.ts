@@ -76,6 +76,11 @@ export interface StarBonus {
 
 /** Id del bono que nace del premio único de siempre (antes del SQL o sin bonos). */
 export const LEGACY_BONUS_ID = "premio";
+
+/** Id de la fila en que sql/barber_estrellas.sql convirtió el premio de siempre. */
+export function seededBonusId(barbershopId: string): string {
+  return `premio-${barbershopId}`;
+}
 export const BONUS_NAME_MAX = 60;
 export const BONUS_TEXT_MAX = 140;
 export const BONUS_MAX_PER_SHOP = 12;

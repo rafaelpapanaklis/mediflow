@@ -596,6 +596,17 @@ test("5 · Caja aplica cada tipo de bono en la misma transacción; cancelar lo d
   );
   // Inactivo: no.
   await assert.rejects(sell({ redeemBonusId: byName("Cera") }), (e: unknown) => e instanceof caja.BarberCajaError && e.code === "BONUS_NOT_FOUND");
+
+  // RONDA 2 · M1: sin id (pestaña vieja) se canjea SOLO el premio de siempre
+  // (su fila «premio-…», 10 estrellas), nunca «el más barato» de otro tipo…
+  const viejo = await sell({ redeemLoyaltyItemIndex: 0 });
+  assert.equal(viejo.items[0].description, `Corte${loyaltyLineSuffix(10)}`);
+  assert.equal(viejo.total, 0);
+  // …y si la barbería lo apagó, sin id no se canjea nada.
+  const seeded = starsCore.seededBonusId(A.id);
+  await prisma.$executeRaw`UPDATE "barber_loyalty_rewards" SET "active" = false WHERE "id" = ${seeded}`;
+  await assert.rejects(sell({ redeemLoyaltyItemIndex: 0 }), (e: unknown) => e instanceof caja.BarberCajaError && e.code === "BONUS_REQUIRED");
+  await prisma.$executeRaw`UPDATE "barber_loyalty_rewards" SET "active" = true WHERE "id" = ${seeded}`;
 });
 
 test("5 · «Marcar bono como entregado» desde la ficha descuenta y queda en el historial", { skip }, async () => {

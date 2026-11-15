@@ -85,6 +85,7 @@ import {
   availableBonuses,
   legacyBonus,
   loadBonusCatalog,
+  seededBonusId,
   type StarBonus,
 } from "@/lib/barber/stars-core";
 import {
@@ -1178,11 +1179,19 @@ export async function createSale(
         if (!catalog.rule.enabled) {
           throw new BarberCajaError(409, "LOYALTY_DISABLED", "La tarjeta de estrellas está apagada en esta barbería");
         }
-        // Sin id (pantalla vieja): el premio de siempre, con el umbral de la barbería.
-        bonus = bonusId !== null
-          ? activeBonuses(catalog.bonuses).find((b) => b.id === bonusId) ?? null
-          : legacyBonus(catalog.rule);
-        if (!bonus) throw new BarberCajaError(404, "BONUS_NOT_FOUND", "Ese bono no existe o está inactivo");
+        // Sin id (pestaña de Caja de antes del despliegue): SOLO el premio de
+        // siempre. Sin bonos propios es el de las columnas de la barbería; con
+        // bonos (ronda 2, M1), la fila que nació de él y solo si sigue ACTIVA y
+        // es un servicio gratis — nunca «el más barato» de otro tipo.
+        if (bonusId !== null) {
+          bonus = activeBonuses(catalog.bonuses).find((b) => b.id === bonusId) ?? null;
+          if (!bonus) throw new BarberCajaError(404, "BONUS_NOT_FOUND", "Ese bono no existe o está inactivo");
+        } else {
+          bonus = catalog.legacy
+            ? legacyBonus(catalog.rule)
+            : activeBonuses(catalog.bonuses).find((b) => b.id === seededBonusId(barbershopId) && b.kind === "service") ?? null;
+          if (!bonus) throw new BarberCajaError(400, "BONUS_REQUIRED", "Elige qué bono se aplica (vuelve a abrir Caja)");
+        }
         // Candado sobre el cliente + recuento DENTRO de la transacción: dos
         // canjes simultáneos se ponen en fila y el segundo ya ve las estrellas
         // que consumió el primero.
