@@ -184,7 +184,7 @@ export function PlantillaCarta({ data }: { data: BarberWebData }) {
                               <div className="dcbw-ca-detalle">
                                 <Duracion min={sv.duracionMin} className="dcbw-ca-duracion" />
                                 {sv.descripcion && <span className="dcbw-ca-desc">{sv.descripcion}</span>}
-                                <a href={reservar} className="dcbw-ca-liga">
+                                <a href={rutaReservaBarberia(shop.slug, null, sv.id)} className="dcbw-ca-liga">
                                   {copia(data, "servicios", "servicios.cta")}
                                 </a>
                               </div>

@@ -125,7 +125,7 @@ export function PlantillaPrecios({ data }: { data: BarberWebData }) {
                           <td className="dcbw-pc-dur">{duracionBarberWeb(sv.duracionMin)}</td>
                           <td className="dcbw-pc-cifra">{precioBarberWeb(sv.precio)}</td>
                           <td className="dcbw-pc-accion">
-                            <a href={reservar} className="dcbw-enlace">
+                            <a href={rutaReservaBarberia(shop.slug, null, sv.id)} className="dcbw-enlace">
                               {copia(data, "servicios", "servicios.cta")}
                             </a>
                           </td>

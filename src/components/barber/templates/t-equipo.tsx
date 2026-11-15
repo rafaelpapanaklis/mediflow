@@ -123,7 +123,7 @@ export function PlantillaEquipo({ data }: { data: BarberWebData }) {
                     </div>
                     <Duracion min={sv.duracionMin} />
                     {sv.descripcion && <p className="dcbw-carta-desc">{sv.descripcion}</p>}
-                    <a href={reservar} className="dcbw-enlace">
+                    <a href={rutaReservaBarberia(shop.slug, null, sv.id)} className="dcbw-enlace">
                       {copia(data, "servicios", "servicios.cta")}
                     </a>
                   </li>
