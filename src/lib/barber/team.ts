@@ -627,6 +627,46 @@ function assertCanAssignRole(ctx: BarberContext, role: BarberRole): void {
 }
 
 /**
+ * A un DUEÑO solo lo toca otro dueño. Sin este freno un encargado (que trae
+ * team.manage de fábrica) podía recortarle los permisos al dueño o darlo de
+ * baja y quedarse con la barbería (auditoría 14-nov, G2). Cubre todo cambio
+ * sobre la ficha: datos, rol, baja y permisos.
+ */
+function assertCanTouchMember(ctx: BarberContext, member: { role: BarberRole }): void {
+  if (member.role === "OWNER" && ctx.role !== "OWNER") {
+    throw new BarberAdminError("Solo un dueño puede hacer cambios en la cuenta de otro dueño.", 403);
+  }
+}
+
+/**
+ * Nadie reparte un permiso que él mismo no tiene. Se compara lo que la
+ * persona GANA (después − antes) contra los permisos efectivos de quien
+ * actúa: así un encargado no se regala billing.manage, ni lo reparte, pero
+ * sí puede editar a alguien que ya lo tenía sin tener que quitárselo.
+ *
+ * Vale igual para los permisos sueltos, para un cambio de rol y para un alta:
+ * los tres son formas de dar permisos.
+ */
+function assertOnlyGrantsOwnPermissions(
+  ctx: BarberContext,
+  before: ReadonlySet<BarberPermissionKey>,
+  after: ReadonlySet<BarberPermissionKey>,
+): void {
+  const own = resolveBarberPermissions(ctx.role, ctx.user.permissionsOverride);
+  const forbidden = BARBER_PERMISSIONS.filter(
+    (p) => after.has(p.key) && !before.has(p.key) && !own.has(p.key),
+  );
+  if (forbidden.length === 0) return;
+  const labels = forbidden.map((p) => `«${p.label}»`).join(", ");
+  throw new BarberAdminError(
+    forbidden.length === 1
+      ? `No puedes dar un permiso que tú no tienes: ${labels}. Pídeselo al dueño.`
+      : `No puedes dar permisos que tú no tienes: ${labels}. Pídeselo al dueño.`,
+    403,
+  );
+}
+
+/**
  * ¿Queda alguien más que pueda administrar el equipo en esa sede? Sin este
  * freno una barbería se puede dejar fuera de su propio panel.
  */
@@ -709,6 +749,8 @@ export async function inviteMember(
     throw new BarberAdminError("Escribe un correo válido.");
   }
   assertCanAssignRole(ctx, role);
+  // Dar de alta con un rol es darle los permisos de ese rol.
+  assertOnlyGrantsOwnPermissions(ctx, new Set(), resolveBarberPermissions(role, []));
 
   const barbershopId = await targetBranchId(ctx, input.barbershopId);
 
@@ -790,6 +832,7 @@ export async function updateMember(
 ): Promise<BarberMemberRow> {
   assertBarberPermission(ctx, "team.manage");
   const member = await loadMemberInScope(ctx, memberId);
+  assertCanTouchMember(ctx, member);
   const isSelf = member.id === ctx.barberUserId;
 
   const data: Record<string, unknown> = {};
@@ -813,6 +856,12 @@ export async function updateMember(
     // Cambiar de rol con override guardado dejaría el override viejo mandando
     // sobre el rol nuevo: se limpia y vuelve a heredar (y se avisa en la UI).
     const nextGrants = resolveBarberPermissions(input.role, []);
+    // Subir de rol también reparte permisos: mismo freno que la matriz.
+    assertOnlyGrantsOwnPermissions(
+      ctx,
+      resolveBarberPermissions(member.role, member.permissionsOverride),
+      nextGrants,
+    );
     if (!nextGrants.has("team.manage")) {
       await assertNotLastTeamAdmin(member, "No puedes quitarle la administración del equipo.");
     }
@@ -860,6 +909,7 @@ export async function setMemberPermissions(
 ): Promise<BarberMemberRow> {
   assertBarberPermission(ctx, "team.manage");
   const member = await loadMemberInScope(ctx, memberId);
+  assertCanTouchMember(ctx, member);
 
   if (!Array.isArray(effectiveKeys)) {
     throw new BarberAdminError("Lista de permisos inválida.");
@@ -873,6 +923,15 @@ export async function setMemberPermissions(
 
   const nextOverride = overrideFromEffective(member.role, effectiveKeys as string[]);
   const backToRole = nextOverride.length === 0;
+  const nextGrants = resolveBarberPermissions(member.role, nextOverride);
+
+  // Va ANTES del candado de plan: quien intenta darse un permiso ajeno
+  // recibe el motivo real, no un «sube de plan».
+  assertOnlyGrantsOwnPermissions(
+    ctx,
+    resolveBarberPermissions(member.role, member.permissionsOverride),
+    nextGrants,
+  );
 
   // La matriz fina es del plan Profesional. Volver a los permisos del rol
   // (limpiar el override) se permite SIEMPRE: es la válvula de escape de
@@ -887,7 +946,6 @@ export async function setMemberPermissions(
     }
   }
 
-  const nextGrants = resolveBarberPermissions(member.role, nextOverride);
   if (!nextGrants.has("team.manage")) {
     if (member.id === ctx.barberUserId) {
       throw new BarberAdminError(
