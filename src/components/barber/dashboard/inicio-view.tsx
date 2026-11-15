@@ -322,7 +322,7 @@ export function InicioView({
                         </div>
                         {inChair && (
                           <span className="bdash-badge-chair">
-                            <BarberIcon name="silla" size={13} /> {k("upcoming.inChair")}
+                            <BarberIcon name="silla" size={11} /> {k("upcoming.inChair")}
                           </span>
                         )}
                       </li>

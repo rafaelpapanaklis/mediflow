@@ -925,7 +925,7 @@ textarea.dcbwe-input {
 .dcbwe-pastilla {
   text-transform: none;
   letter-spacing: 0;
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 600;
   border-radius: var(--radius-sm);
 }

@@ -876,7 +876,6 @@
 .table thead th {
   text-transform: none;
   letter-spacing: 0;
-  font-size: 12px;
   font-weight: 500;
   color: var(--text-3);
 }

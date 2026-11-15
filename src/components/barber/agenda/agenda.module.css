@@ -1938,7 +1938,7 @@
   text-decoration: line-through;
   text-decoration-color: color-mix(in srgb, var(--st) 45%, transparent);
 }
-.cardStatus { text-transform: none; letter-spacing: 0; font-size: 10.5px; color: color-mix(in srgb, var(--st) 75%, var(--text-1)); }
+.cardStatus { text-transform: none; letter-spacing: 0; color: color-mix(in srgb, var(--st) 75%, var(--text-1)); }
 .cardTime { color: color-mix(in srgb, var(--st) 75%, var(--text-1)); }
 .cardPaid,
 :global(.dark) .cardPaid { color: var(--st-done); }

@@ -33,6 +33,7 @@ export function BarberSidebar({
   brandName,
   brandSub,
   logoutLabel,
+  navLabel,
   loginHref,
 }: {
   shopName: string;
@@ -41,6 +42,8 @@ export function BarberSidebar({
   brandName: string;
   brandSub: string;
   logoutLabel: string;
+  /** Nombre accesible del menú («Menú principal» / «Main menu»). */
+  navLabel: string;
   /** A dónde ir al cerrar sesión: la entrada del vertical (/barber/entrar). */
   loginHref: string;
 }) {
@@ -132,7 +135,7 @@ export function BarberSidebar({
         </div>
 
         {/* Navegación (gating por plan + rol ya resuelto en el layout server) */}
-        <nav className="barber-menu__nav" aria-label="Menú principal">
+        <nav className="barber-menu__nav" aria-label={navLabel}>
           {sections.map((s) => (
             <div key={s.section} className="barber-menu__grupo">
               <p className="barber-menu__titulo" id={`barber-menu-${s.section}`}>
