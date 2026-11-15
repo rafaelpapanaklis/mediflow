@@ -3,6 +3,7 @@ import { randomUUID } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { assertBarberPermission, type BarberContext } from "@/lib/barber-auth";
 import { hasBarberPermission } from "@/lib/barber/permissions";
+import { clientsViewScope, scopeUserFromCtx } from "@/lib/barber/own-visits";
 import {
   LOYALTY_HISTORY_MAX,
   LOYALTY_LEDGER_KEY,
@@ -103,7 +104,21 @@ export async function getStaffStarsView(ctx: BarberContext, clientId: string): P
     if (e instanceof StarsError) return null;
     throw e;
   }
-  return loadStarsView(prisma, { barbershopId: ctx.barbershopId, clientId, audience: "staff" });
+  return staffView(ctx, clientId);
+}
+
+/**
+ * La vista «staff» con el recorte del rol Barbero: en un cliente SUYO solo
+ * ve el historial de sus visitas (misma regla que la ficha, clientsViewScope).
+ */
+function staffView(ctx: BarberContext, clientId: string): Promise<StarsView | null> {
+  const scope = clientsViewScope(scopeUserFromCtx(ctx));
+  return loadStarsView(prisma, {
+    barbershopId: ctx.barbershopId,
+    clientId,
+    audience: "staff",
+    onlyBarberId: scope.kind === "own" ? scope.barberId : null,
+  });
 }
 
 /** Candado sobre la fila del cliente dentro de la transacción. */
@@ -179,7 +194,7 @@ export async function adjustClientStars(
     { maxWait: 5000, timeout: 15000 },
   );
 
-  const view = await loadStarsView(prisma, { barbershopId, clientId: args.clientId, audience: "staff" });
+  const view = await staffView(ctx, args.clientId);
   if (!view) throw new StarsError(404, "CLIENT_NOT_FOUND", "Cliente no encontrado");
   return view;
 }
@@ -239,7 +254,7 @@ export async function deliverClientBonus(
     { maxWait: 5000, timeout: 15000 },
   );
 
-  const view = await loadStarsView(prisma, { barbershopId, clientId: args.clientId, audience: "staff" });
+  const view = await staffView(ctx, args.clientId);
   if (!view) throw new StarsError(404, "CLIENT_NOT_FOUND", "Cliente no encontrado");
   return view;
 }

@@ -338,6 +338,8 @@ export interface DeskRedemption {
   stars: number;
   reward: string;
   rewardId: string | null;
+  /** Visita sobre la que se entregó (el canje viejo la guardaba; «Marcar como entregado», no). */
+  appointmentId: string | null;
   byUserId: string;
   note: string | null;
 }
@@ -358,6 +360,7 @@ export function readDeskRedemptions(preferences: unknown): DeskRedemption[] {
         stars: Number.isFinite(n) && n > 0 ? Math.floor(n) : 0,
         reward: typeof r.reward === "string" && r.reward ? r.reward : LOYALTY_DEFAULT_REWARD,
         rewardId: typeof r.rewardId === "string" ? r.rewardId : null,
+        appointmentId: typeof r.appointmentId === "string" ? r.appointmentId : null,
         byUserId: typeof r.byUserId === "string" ? r.byUserId : "",
         note: typeof r.note === "string" && r.note ? r.note : null,
       };
@@ -445,11 +448,19 @@ export async function loadStarsView(
     barbershopId: string;
     clientId: string;
     audience: Audience;
-    /** Nombres del personal por id (solo staff; si falta, se usa el congelado). */
+    /**
+     * Rol Barbero en un cliente SUYO (regla de la rama de sedes, aa58760dc:
+     * «que vea solo lo de él»): el historial lleva solo las visitas y los
+     * tickets que atendió él, y los bonos entregados sobre una visita suya.
+     * Los ajustes a mano y lo hecho con otro barbero no salen. El NÚMERO de
+     * estrellas no cambia: es el de la tarjeta.
+     */
+    onlyBarberId?: string | null;
     now?: Date;
   },
 ): Promise<StarsView | null> {
   const { barbershopId, clientId, audience } = args;
+  const mine = args.onlyBarberId ? { barberId: args.onlyBarberId } : {};
   if (!barbershopId || !clientId) return null;
   const now = args.now ?? new Date();
 
@@ -472,6 +483,7 @@ export async function loadStarsView(
         clientId,
         status: { in: ["DONE", "CANCELLED", "NO_SHOW"] },
         startAt: { lte: now },
+        ...mine,
       },
       orderBy: { startAt: "desc" },
       take: STARS_HISTORY_MAX,
@@ -484,7 +496,7 @@ export async function loadStarsView(
       },
     }),
     db.barberSale.findMany({
-      where: { barbershopId, clientId },
+      where: { barbershopId, clientId, ...mine },
       orderBy: { createdAt: "desc" },
       take: STARS_HISTORY_MAX,
       select: {
@@ -583,7 +595,9 @@ export async function loadStarsView(
     });
   }
 
+  const myAppointments = new Set(appointments.map((a) => a.id));
   readDeskRedemptions(client.preferences).forEach((r, i) => {
+    if (args.onlyBarberId && !(r.appointmentId && myAppointments.has(r.appointmentId))) return;
     events.push({
       id: `d-${i}-${r.at}`,
       at: r.at,
@@ -595,7 +609,7 @@ export async function loadStarsView(
     });
   });
 
-  for (const m of readStarsLedger(client.preferences).entries) {
+  for (const m of args.onlyBarberId ? [] : readStarsLedger(client.preferences).entries) {
     events.push({
       id: `m-${m.id || m.at}`,
       at: m.at,

@@ -656,6 +656,21 @@ test("6 · Barbero: ve la tarjeta de sus clientes, no la de los demás", { skip 
   assert.equal((await stars.getStaffStarsView(beto, suyo))?.stars, 1);
   assert.equal(await stars.getStaffStarsView(beto, ajeno), null);
   assert.equal(await stars.getStaffStarsView(B.ctx, suyo), null, "otra barbería, tampoco");
+
+  // RONDA 2 · unión con la rama de sedes (aa58760dc): en un cliente SUYO, el
+  // Barbero ve en el historial solo SUS visitas; lo hecho con otro barbero y
+  // los ajustes a mano no salen. El número de estrellas es el de la tarjeta.
+  const otro = await prisma.barber.create({ data: { barbershopId: A.id, name: `Otro ${RUN}`, commissionType: "COMMISSION", commissionPct: new Prisma.Decimal(40) } });
+  const s2 = new Date(Date.now() - 9 * DAY);
+  await prisma.barberAppointment.create({
+    data: { barbershopId: A.id, clientId: suyo, barberId: otro.id, status: "DONE", startAt: s2, endAt: new Date(s2.getTime() + 30 * MIN) },
+  });
+  await stars.adjustClientStars(await staffCtx(A, "RECEPTION"), { clientId: suyo, delta: 1, reason: "Cumpleaños" });
+  const suya = await stars.getStaffStarsView(beto, suyo);
+  assert.equal(suya?.stars, 3, "la tarjeta cuenta todo: 2 visitas + 1 a mano");
+  assert.deepEqual(suya?.history.map((e) => e.reason), ["appointment"], "pero el historial solo trae SU visita");
+  const dueña = await stars.getStaffStarsView(A.ctx, suyo);
+  assert.equal(dueña?.history.length, 3, "la dueña ve las dos visitas y el ajuste");
 });
 
 // ── RONDA 2 · M3: nadie pisa una estrella a mano ni un enlace revocado ──
