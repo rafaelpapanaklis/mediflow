@@ -15,6 +15,7 @@ import { prisma } from "@/lib/prisma";
 import {
   canTransition,
   nextStatuses,
+  transitionErrorMessage,
   type BarberAppointmentStatus,
 } from "@/lib/barber/types";
 import { toAppointmentDTO, type BarberReminderInvalidationCause } from "@/lib/barber/agenda";
@@ -77,7 +78,7 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
 
   if (!canTransition(current.status, to)) {
     return jsonError(
-      `No se puede pasar de "${current.status}" a "${to}".`,
+      transitionErrorMessage(current.status, to),
       409,
       { code: "BAD_TRANSITION", allowed: nextStatuses(current.status) },
     );
