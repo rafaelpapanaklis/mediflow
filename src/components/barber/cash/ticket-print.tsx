@@ -8,6 +8,7 @@ import type { Dictionary } from "@/i18n/t";
 import type { SaleDetail } from "@/lib/barber/cash";
 import { useBarberT } from "./use-barber-t";
 import { fmtDateTime, fmtMoney, PAYMENT_METHOD_KEYS } from "./money";
+import { ticketPrintLines } from "./print-lines";
 
 /** Ticket imprimible / compartible. Todo el dinero viene ya calculado del server. */
 export function TicketPrint({ sale, dict }: { sale: SaleDetail; dict: Dictionary }) {
@@ -75,7 +76,7 @@ export function TicketPrint({ sale, dict }: { sale: SaleDetail; dict: Dictionary
 
         <hr className="bcaja-print__rule" />
         <div className="bcaja-print__section">{t("print.items")}</div>
-        {sale.items.map((it) => (
+        {ticketPrintLines(sale.items, sale.discount > 0).map((it) => (
           <div key={it.id} className="bcaja-print__row">
             <span>{it.qty > 1 ? `${it.qty} × ` : ""}{it.description}</span>
             <span>{fmtMoney(it.unitPrice * it.qty)}</span>
