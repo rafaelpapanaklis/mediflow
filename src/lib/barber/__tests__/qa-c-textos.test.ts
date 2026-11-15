@@ -73,3 +73,8 @@ test("Bot: el motivo por el que no contesta sale UNA vez (aviso), no también en
   assert.match(ui, /power\.hintBlocked/);
   for (const l of ["es", "en"] as const) assert.ok(dict("bot", l).power.hintBlocked);
 });
+
+test("Planes en español: «Estadísticas avanzadas», no «Analytics»", () => {
+  assert.equal(dict("suscripcion", "es").features.analytics, "Estadísticas avanzadas");
+  assert.match(readFileSync("src/lib/barber/plan-shared.ts", "utf8"), /key: "analytics", label: "Estadísticas avanzadas"/);
+});
