@@ -61,8 +61,9 @@
   border-radius: 14px;
   background: var(--bg-elev);
   border: 1px solid var(--border-soft);
-  overflow-x: auto;
-  scrollbar-width: thin;
+  /* Las pestañas BAJAN a otro renglón en vez de esconderse tras un scroll
+     lateral sin pista (a 390 px «Campañas» y «Bot» quedaban fuera). */
+  flex-wrap: wrap;
 }
 
 .tab {
@@ -113,8 +114,12 @@
   gap: 14px;
 }
 
+/* Un elemento NO resuelve su propio @container: la regla de antes preguntaba
+   por el ancho de .cards para cambiar .cards y nunca aplicaba (a 390 px las
+   dos tarjetas quedaban lado a lado). Ahora el contenedor decide por sus
+   HIJOS: cada tarjeta ocupa toda la fila y se apilan. */
 @container (max-width: 720px) {
-  .cards { grid-template-columns: minmax(0, 1fr); }
+  .cards > * { grid-column: 1 / -1; }
 }
 
 .card {
@@ -236,7 +241,7 @@
 }
 
 @container (max-width: 780px) {
-  .inbox { grid-template-columns: minmax(0, 1fr); }
+  .inbox > * { grid-column: 1 / -1; }
 }
 
 .threadList {
@@ -427,7 +432,7 @@
 }
 
 @container (max-width: 720px) {
-  .campaignGrid { grid-template-columns: minmax(0, 1fr); }
+  .campaignGrid > * { grid-column: 1 / -1; }
 }
 
 .cost {

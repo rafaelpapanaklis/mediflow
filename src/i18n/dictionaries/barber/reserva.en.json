@@ -61,18 +61,21 @@
     "telefono": "Your WhatsApp",
     "telefonoPlaceholder": "10 digits",
     "telefonoAyuda": "That's where the confirmation goes.",
+    "telefonoAyudaSinWa": "The barbershop uses it to reach you if needed.",
     "notas": "Anything your barber should know?",
     "notasPlaceholder": "Optional: the usual cut, allergies, etc.",
     "enviar": "Save my spot",
     "enviando": "Saving…",
     "resumen": "Your appointment",
-    "aviso": "By booking you agree the barbershop may contact you on WhatsApp to confirm."
+    "aviso": "By booking you agree the barbershop may contact you on WhatsApp to confirm.",
+    "avisoSinWa": "By booking you agree the barbershop may contact you to confirm."
   },
   "confirmacion": {
     "tituloConfirmada": "You're set, {nombre}!",
     "tituloPendiente": "Almost there, {nombre}",
     "subConfirmada": "Your spot is saved.",
     "subPendiente": "The barbershop will confirm on WhatsApp shortly.",
+    "subPendienteSinWa": "The barbershop will confirm.",
     "referencia": "Reference",
     "conBarbero": "With {barbero}",
     "cualquierBarbero": "We'll assign a barber when you arrive",
@@ -186,7 +189,17 @@
     "modoAuto": "Mode: auto-confirm. Online bookings go straight into the calendar.",
     "tuLiga": "Your booking link",
     "copiar": "Copy",
-    "copiado": "Copied!"
+    "copiado": "Copied!",
+    "confirmarRechazo": "Decline {nombre}'s request?",
+    "confirmarRechazoSi": "Yes, decline",
+    "confirmarRechazoNo": "No, go back",
+    "avisaTuAcepto": "You accepted {nombre}'s request.",
+    "avisaTuRechazo": "You declined {nombre}'s request.",
+    "avisaTu": "Let them know yourself: this client didn't get a message.",
+    "avisaTuLlamar": "Call",
+    "avisaTuWhatsapp": "Message on WhatsApp",
+    "avisaTuSinTelefono": "They didn't leave a phone number.",
+    "avisaTuCerrar": "Got it"
   },
   "tope": {
     "titulo": "No more online bookings for today",

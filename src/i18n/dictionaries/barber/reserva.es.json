@@ -61,18 +61,21 @@
     "telefono": "Tu WhatsApp",
     "telefonoPlaceholder": "10 dígitos",
     "telefonoAyuda": "Ahí te llega la confirmación.",
+    "telefonoAyudaSinWa": "La barbería lo usa para contactarte si hace falta.",
     "notas": "¿Algo que deba saber tu barbero?",
     "notasPlaceholder": "Opcional: el corte de siempre, alergias, etc.",
     "enviar": "Apartar mi lugar",
     "enviando": "Apartando…",
     "resumen": "Tu cita",
-    "aviso": "Al apartar aceptas que la barbería te contacte por WhatsApp para confirmar."
+    "aviso": "Al apartar aceptas que la barbería te contacte por WhatsApp para confirmar.",
+    "avisoSinWa": "Al apartar aceptas que la barbería te contacte para confirmar."
   },
   "confirmacion": {
     "tituloConfirmada": "¡Listo, {nombre}!",
     "tituloPendiente": "Ya casi, {nombre}",
     "subConfirmada": "Tu lugar está apartado.",
     "subPendiente": "La barbería te confirma en un momento por WhatsApp.",
+    "subPendienteSinWa": "La barbería te confirma.",
     "referencia": "Referencia",
     "conBarbero": "Con {barbero}",
     "cualquierBarbero": "Te asignamos barbero al llegar",
@@ -186,7 +189,17 @@
     "modoAuto": "Modo: confirmación automática. Las reservas en línea entran directo a la agenda.",
     "tuLiga": "Tu liga de reservas",
     "copiar": "Copiar",
-    "copiado": "¡Copiada!"
+    "copiado": "¡Copiada!",
+    "confirmarRechazo": "¿Rechazar la solicitud de {nombre}?",
+    "confirmarRechazoSi": "Sí, rechazar",
+    "confirmarRechazoNo": "No, volver",
+    "avisaTuAcepto": "Aceptaste la solicitud de {nombre}.",
+    "avisaTuRechazo": "Rechazaste la solicitud de {nombre}.",
+    "avisaTu": "Avísale tú: a este cliente no le llegó mensaje.",
+    "avisaTuLlamar": "Llamar",
+    "avisaTuWhatsapp": "Escribirle por WhatsApp",
+    "avisaTuSinTelefono": "No dejó teléfono.",
+    "avisaTuCerrar": "Entendido"
   },
   "tope": {
     "titulo": "Por hoy ya no hay reservas en línea",

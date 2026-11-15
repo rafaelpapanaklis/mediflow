@@ -7,6 +7,7 @@ import {
   resolveBookingGate,
   toPublicShop,
 } from "@/lib/barber/booking";
+import { barberiaTieneWhatsApp } from "@/lib/barber/wa-conectado";
 import { getBarberT } from "@/i18n/dictionaries/barber";
 import { BookingFlow } from "@/components/barber/booking/booking-flow";
 import "@/app/barber/barber-theme.css";
@@ -93,10 +94,12 @@ export default async function BarberBookingPage(props: PageProps) {
   // El contacto viaja aparte de toPublicShop(): solo WhatsApp y teléfono,
   // para que la página pueda decir "escríbeles" cuando no hay horarios en
   // línea en vez de dar a entender que la barbería está llena.
-  const [services, barbers, contact] = await Promise.all([
+  const [services, barbers, contact, whatsappConnected] = await Promise.all([
     getPublicServices(shop.id),
     getPublicBarbers(shop.id),
     getPublicContact({ id: shop.id, phone: shop.phone }),
+    // Sí/no resuelto aquí: sin WhatsApp conectado la reserva no promete mensajes.
+    barberiaTieneWhatsApp(shop.id),
   ]);
 
   // Liga directa por barbero (?barbero=<id>) para compartir en WhatsApp o en
@@ -137,6 +140,7 @@ export default async function BarberBookingPage(props: PageProps) {
         services={services}
         barbers={barbers}
         contact={contact}
+        whatsappConnected={whatsappConnected}
         pinnedBarberId={pinnedBarberId}
         pinnedServiceId={pinnedServiceId}
       />

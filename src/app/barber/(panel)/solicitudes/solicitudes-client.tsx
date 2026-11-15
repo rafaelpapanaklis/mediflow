@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check, Copy, Link2, MessageCircle, Phone, X } from "lucide-react";
 import { getBarberT } from "@/i18n/dictionaries/barber";
+import { upperFirst } from "@/components/barber/upper-first";
 import type { BarberBookingRequestDTO } from "@/lib/barber/booking";
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -42,6 +43,14 @@ export function SolicitudesClient({
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  // «Rechazar» pide confirmación: aquí queda la solicitud que se está por rechazar.
+  const [confirmId, setConfirmId] = useState<string | null>(null);
+  // Cuando al cliente NO le va a llegar aviso, el dueño lo ve aquí y avisa él.
+  const [aviso, setAviso] = useState<{
+    accion: "aceptar" | "rechazar";
+    nombre: string;
+    telefono: string | null;
+  } | null>(null);
 
   const money = useMemo(
     () =>
@@ -64,8 +73,11 @@ export function SolicitudesClient({
       timeZone: timezone,
     }).format(new Date(iso));
 
-  const resolve = async (id: string, accion: "aceptar" | "rechazar") => {
+  const resolve = async (r: BarberBookingRequestDTO, accion: "aceptar" | "rechazar") => {
+    const id = r.id;
     setError(null);
+    setConfirmId(null);
+    setAviso(null);
     setBusyId(id);
     try {
       const res = await fetch(`/api/barber/booking-requests/${id}`, {
@@ -77,6 +89,12 @@ export function SolicitudesClient({
       if (!res.ok) {
         setError(body?.error ?? "No pudimos guardar el cambio");
         return;
+      }
+      // El servidor dice si al cliente le va a llegar aviso. Si no (sin WhatsApp
+      // conectado, sin teléfono o —al rechazar— fuera de las 24 h), se lo decimos
+      // al dueño con el teléfono a la mano. Sin dato (servidor viejo) no se alarma.
+      if (body?.notified === false) {
+        setAviso({ accion, nombre: r.clientName, telefono: r.clientPhone || null });
       }
       router.refresh();
     } catch {
@@ -146,9 +164,9 @@ export function SolicitudesClient({
           role="alert"
           style={{
             fontSize: 13,
-            color: "#b91c1c",
-            background: "rgba(185,28,28,0.08)",
-            border: "1px solid rgba(185,28,28,0.28)",
+            color: "var(--danger)",
+            background: "var(--danger-soft)",
+            border: "1px solid var(--danger-border-strong)",
             borderRadius: 10,
             padding: "10px 12px",
             margin: "0 0 14px",
@@ -156,6 +174,53 @@ export function SolicitudesClient({
         >
           {error}
         </p>
+      ) : null}
+
+      {aviso ? (
+        <div
+          role="status"
+          data-aviso-manual
+          style={{
+            background: "var(--warning-soft)",
+            border: "1px solid var(--warning-border-strong)",
+            borderRadius: 12,
+            padding: "12px 14px",
+            margin: "0 0 14px",
+          }}
+        >
+          <p style={{ fontSize: 12.5, color: "var(--text-3)", margin: 0 }}>
+            {aviso.accion === "aceptar"
+              ? t("barber.reserva.solicitudes.avisaTuAcepto", { nombre: aviso.nombre })
+              : t("barber.reserva.solicitudes.avisaTuRechazo", { nombre: aviso.nombre })}
+          </p>
+          <p style={{ fontSize: 14.5, fontWeight: 700, color: "var(--warning-strong)", margin: "4px 0 10px" }}>
+            {t("barber.reserva.solicitudes.avisaTu")}
+          </p>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {aviso.telefono ? (
+              <>
+                <a href={`tel:+52${aviso.telefono}`} style={{ ...SMALL_BTN, ...GHOST_BTN }}>
+                  <Phone size={14} /> {t("barber.reserva.solicitudes.avisaTuLlamar")} · {aviso.telefono}
+                </a>
+                <a
+                  href={`https://wa.me/52${aviso.telefono}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ ...SMALL_BTN, ...GHOST_BTN }}
+                >
+                  <MessageCircle size={14} /> {t("barber.reserva.solicitudes.avisaTuWhatsapp")}
+                </a>
+              </>
+            ) : (
+              <span style={{ fontSize: 13, color: "var(--text-2)", alignSelf: "center" }}>
+                {t("barber.reserva.solicitudes.avisaTuSinTelefono")}
+              </span>
+            )}
+            <button type="button" style={{ ...SMALL_BTN, ...GHOST_BTN }} onClick={() => setAviso(null)}>
+              {t("barber.reserva.solicitudes.avisaTuCerrar")}
+            </button>
+          </div>
+        </div>
       ) : null}
 
       {/* Pestañas */}
@@ -211,12 +276,10 @@ export function SolicitudesClient({
                         : t("barber.reserva.solicitudes.origenWeb")}
                     </span>
                   </p>
-                  <p style={{ fontSize: 13.5, color: "var(--text-2)", margin: "4px 0 0", textTransform: "capitalize" }}>
-                    {fmtWhen(r.startAt)}
+                  <p style={{ fontSize: 13.5, color: "var(--text-2)", margin: "4px 0 0" }}>
+                    {upperFirst(fmtWhen(r.startAt))}
                     {" · "}
-                    <span style={{ textTransform: "none" }}>
-                      {r.barberName ?? t("barber.reserva.solicitudes.cualquierBarbero")}
-                    </span>
+                    {r.barberName ?? t("barber.reserva.solicitudes.cualquierBarbero")}
                   </p>
                   <p style={{ fontSize: 13, color: "var(--text-3)", margin: "3px 0 0" }}>
                     {r.services.map((s) => s.name).join(" + ")}
@@ -238,7 +301,7 @@ export function SolicitudesClient({
                     </p>
                   ) : null}
                   {r.isPast && r.status === "PENDING" ? (
-                    <p style={{ fontSize: 12.5, color: "#b45309", margin: "8px 0 0", fontWeight: 600 }}>
+                    <p style={{ fontSize: 12.5, color: "var(--warning-strong)", margin: "8px 0 0", fontWeight: 600 }}>
                       {t("barber.reserva.solicitudes.vencida")}
                     </p>
                   ) : null}
@@ -275,7 +338,7 @@ export function SolicitudesClient({
                     className="barber-btn-primary"
                     style={SMALL_BTN}
                     disabled={busyId === r.id}
-                    onClick={() => void resolve(r.id, "aceptar")}
+                    onClick={() => void resolve(r, "aceptar")}
                   >
                     <Check size={15} /> {t("barber.reserva.solicitudes.aceptar")}
                   </button>
@@ -283,10 +346,48 @@ export function SolicitudesClient({
                     type="button"
                     style={{ ...SMALL_BTN, ...GHOST_BTN }}
                     disabled={busyId === r.id}
-                    onClick={() => void resolve(r.id, "rechazar")}
+                    aria-expanded={confirmId === r.id}
+                    onClick={() => setConfirmId(confirmId === r.id ? null : r.id)}
                   >
                     <X size={15} /> {t("barber.reserva.solicitudes.rechazar")}
                   </button>
+                  {confirmId === r.id ? (
+                    <div
+                      role="alertdialog"
+                      aria-label={t("barber.reserva.solicitudes.confirmarRechazo", { nombre: r.clientName })}
+                      style={{
+                        flexBasis: "100%",
+                        display: "flex",
+                        flexWrap: "wrap",
+                        alignItems: "center",
+                        gap: 8,
+                        padding: "10px 12px",
+                        borderRadius: 10,
+                        background: "var(--danger-soft)",
+                        border: "1px solid var(--danger-border-strong)",
+                      }}
+                    >
+                      <span style={{ fontSize: 13.5, fontWeight: 600, flex: "1 1 200px" }}>
+                        {t("barber.reserva.solicitudes.confirmarRechazo", { nombre: r.clientName })}
+                      </span>
+                      <button
+                        type="button"
+                        autoFocus
+                        style={{ ...SMALL_BTN, background: "var(--danger)", border: "1px solid var(--danger)", color: "var(--bg-elev)" }}
+                        disabled={busyId === r.id}
+                        onClick={() => void resolve(r, "rechazar")}
+                      >
+                        {t("barber.reserva.solicitudes.confirmarRechazoSi")}
+                      </button>
+                      <button
+                        type="button"
+                        style={{ ...SMALL_BTN, ...GHOST_BTN }}
+                        onClick={() => setConfirmId(null)}
+                      >
+                        {t("barber.reserva.solicitudes.confirmarRechazoNo")}
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
               ) : (
                 <p style={{ ...PILL, display: "inline-block", marginTop: 12 }}>{STATUS_LABEL[r.status]}</p>

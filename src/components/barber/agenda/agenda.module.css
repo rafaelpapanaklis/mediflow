@@ -87,7 +87,8 @@
   font-weight: 700;
   letter-spacing: -0.01em;
   color: var(--text-1);
-  text-transform: capitalize;
+  /* Solo la primera letra: capitalize daba «Sábado, 14 De Noviembre»,
+     «Horarios Y Bloqueos» y «Fila Virtual». */
   margin: 0;
   line-height: 1.2;
   white-space: nowrap;
@@ -1343,12 +1344,14 @@
   line-height: 1.15;
 }
 
+.dateTitle::first-letter { text-transform: uppercase; }
+
 .detailWhenSub {
   font-size: 12px;
   color: var(--text-3);
   margin: 2px 0 0;
-  text-transform: capitalize;
 }
+.detailWhenSub::first-letter { text-transform: uppercase; }
 
 .detailRow {
   display: flex;
