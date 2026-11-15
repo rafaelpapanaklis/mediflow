@@ -41,6 +41,7 @@
       "other": "{count} visits"
     },
     "dayTotal": "Day total",
+    "weekTotal": "Week total",
     "hours": "Hours"
   },
   "card": {
