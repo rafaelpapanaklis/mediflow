@@ -382,7 +382,9 @@ export function TicketModal({
           </div>
           <div className="field-new">
             <label className="field-new__label">{t("ticket.addProduct")}</label>
-            {checkout.features.products ? (
+            {checkout.features.products && checkout.products.length === 0 ? (
+              <div className="bcaja-hint">{t("ticket.noProductsYet")}</div>
+            ) : checkout.features.products ? (
               <div style={{ display: "flex", gap: 6 }}>
                 <select className="input-new" value={addProductId} onChange={(e) => setAddProductId(e.target.value)}>
                   <option value="">—</option>

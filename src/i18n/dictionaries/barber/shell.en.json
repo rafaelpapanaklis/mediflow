@@ -32,7 +32,12 @@
     "cuenta": "Account"
   },
   "topbar": {
-    "root": "Barbershop"
+    "root": "Barbershop",
+    "branch": "Location",
+    "branchAria": "Location you are working in",
+    "branchAll": "Whole chain",
+    "branchClosed": "closed",
+    "branchChanged": "You switched location in another tab. Reload this page to keep working in the location you see; nothing was saved."
   },
   "logout": "Sign out",
   "navLabel": "Main menu",

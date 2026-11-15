@@ -22,7 +22,7 @@ export const dynamic = "force-dynamic";
  * hasta que la barbería pueda conectar su propia cuenta de Stripe.
  */
 export async function POST(req: Request) {
-  const g = await requireBarberApi({ permission: "memberships.manage", feature: "memberships" });
+  const g = await requireBarberApi({ permission: "memberships.sell", feature: "memberships" });
   if (!g.ok) return g.res;
   try {
     // «Tarjeta en línea» está APAGADA (BARBER_ONLINE_CARD_ENABLED): se
@@ -65,7 +65,7 @@ export async function POST(req: Request) {
  * tarda esto la activa al instante. Es idempotente.
  */
 export async function PUT(req: Request) {
-  const g = await requireBarberApi({ permission: "memberships.manage", feature: "memberships" });
+  const g = await requireBarberApi({ permission: "memberships.sell", feature: "memberships" });
   if (!g.ok) return g.res;
   try {
     const body = await readJson(req);

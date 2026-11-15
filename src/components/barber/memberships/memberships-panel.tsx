@@ -32,6 +32,8 @@ export interface MembershipsPanelProps {
   canEditPolicy: boolean;
   canViewDeposits: boolean;
   canManageDeposits: boolean;
+  /** memberships.manage: crear y editar planes, pausar y cancelar. Sin él, solo vende y renueva. */
+  canManagePlans: boolean;
 }
 
 /**
@@ -191,11 +193,12 @@ export function MembershipsPanel(props: MembershipsPanelProps) {
           onQueryChange={setQuery}
           onRefresh={refreshAll}
           loading={loading}
+          canManage={props.canManagePlans}
         />
       ) : null}
 
       {tab === "planes" ? (
-        <PlansTab t={t} locale={props.locale} plans={plans} onRefresh={refreshAll} />
+        <PlansTab t={t} locale={props.locale} plans={plans} onRefresh={refreshAll} canManage={props.canManagePlans} />
       ) : null}
 
       {tab === "anticipos" ? (

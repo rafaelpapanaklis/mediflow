@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
  * es solo lectura para poder elegir a quién se le vende.
  */
 export async function GET(req: Request) {
-  const g = await requireBarberApi({ permission: "memberships.manage", feature: "memberships" });
+  const g = await requireBarberApi({ permission: "memberships.sell", feature: "memberships" });
   if (!g.ok) return g.res;
 
   // Defensa en profundidad: ver clientes exige su propio permiso.

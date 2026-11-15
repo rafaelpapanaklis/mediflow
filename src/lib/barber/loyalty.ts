@@ -31,6 +31,7 @@ import type { BarberClientDTO } from "@/lib/barber/types";
 import { isLoyaltyLine } from "@/lib/barber/loyalty-core";
 // El sello interno de los tickets de mostrador nunca se enseña.
 import { stripSaleTag } from "@/lib/barber/memberships-core";
+import { clientsViewScope, scopeUserFromCtx } from "@/lib/barber/own-visits";
 
 /**
  * ═══════════════════════════════════════════════════════════════════════
@@ -418,10 +419,18 @@ export async function getBarberVisitHistory(
   if (barberClientScopeWhere(ctx) && !(await barberCanSeeClient(ctx, clientId))) {
     return { entries: [], loosePhotos: [], latestPhoto: null };
   }
+  // Y en uno SUYO (decisión #9 de Rafael, 15-nov; A-M2 de la ronda 10): solo
+  // las visitas y los tickets que atendió ÉL — con sus importes, notas y
+  // fotos. Lo que el cliente hizo con otro barbero, y los canjes de lealtad
+  // que no van sobre una visita suya, no salen. Los demás roles,
+  // y un Barbero con clients.edit por permiso personal, ven todo como antes.
+  const scope = clientsViewScope(scopeUserFromCtx(ctx));
+  const onlyBarberId = scope.kind === "own" ? scope.barberId : null;
+  const mine = onlyBarberId ? { barberId: onlyBarberId } : {};
 
   const [appointments, sales, photos, client] = await Promise.all([
     prisma.barberAppointment.findMany({
-      where: { barbershopId, clientId },
+      where: { barbershopId, clientId, ...mine },
       orderBy: { startAt: "desc" },
       take: HISTORY_MAX_ENTRIES,
       select: {
@@ -441,7 +450,7 @@ export async function getBarberVisitHistory(
       },
     }),
     prisma.barberSale.findMany({
-      where: { barbershopId, clientId, appointmentId: null, ...NOT_CANCELLED },
+      where: { barbershopId, clientId, appointmentId: null, ...NOT_CANCELLED, ...mine },
       orderBy: { createdAt: "desc" },
       take: HISTORY_MAX_ENTRIES,
       select: {
@@ -513,7 +522,12 @@ export async function getBarberVisitHistory(
   }
 
   const ledger = readLoyaltyLedger(client?.preferences);
-  ledger.redemptions.forEach((r, i) => {
+  // Con alcance propio, solo los canjes apuntados sobre una visita SUYA.
+  const myAppointmentIds = new Set(appointments.map((a) => a.id));
+  const redemptions = onlyBarberId
+    ? ledger.redemptions.filter((r) => r.appointmentId !== null && myAppointmentIds.has(r.appointmentId))
+    : ledger.redemptions;
+  redemptions.forEach((r, i) => {
     entries.push({
       id: `redemption-${i}-${r.at}`,
       kind: "redemption",

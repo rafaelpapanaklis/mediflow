@@ -393,8 +393,8 @@ export const BARBER_NAV_ITEMS: BarberNavItemDef[] = [
   { key: "barberos", href: "/barber/barberos", icon: "contact", section: "negocio", permission: "barbers.manage", featureKey: null },
   { key: "caja", href: "/barber/caja", icon: "wallet", section: "negocio", permission: "cash.view", featureKey: "cash" },
   { key: "comisiones", href: "/barber/comisiones", icon: "percent", section: "negocio", permission: "commissions.view", featureKey: "commissions" },
-  { key: "membresias", href: "/barber/membresias", icon: "crown", section: "negocio", permission: "memberships.manage", featureKey: "memberships" },
-  { key: "productos", href: "/barber/productos", icon: "package", section: "negocio", permission: "products.manage", featureKey: "products" },
+  { key: "membresias", href: "/barber/membresias", icon: "crown", section: "negocio", permission: "memberships.sell", featureKey: "memberships" },
+  { key: "productos", href: "/barber/productos", icon: "package", section: "negocio", permission: "products.view", featureKey: "products" },
   // Reportes solo se alcanzaba por el botón «Ver reportes» de Inicio. Mismo
   // gate que la pantalla: plan con `analytics` + cash.view o commissions.view
   // (un rol Barbero entra y ve solo lo suyo: lo recorta getReportsSummary).

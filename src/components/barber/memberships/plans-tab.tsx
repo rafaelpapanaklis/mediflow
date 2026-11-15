@@ -21,11 +21,14 @@ export function PlansTab({
   locale,
   plans,
   onRefresh,
+  canManage = true,
 }: {
   t: TFunction;
   locale: string;
   plans: BarberMembershipPlanView[];
   onRefresh: () => void;
+  /** false = solo vende (Recepción): ve el catálogo, no lo crea ni lo edita. */
+  canManage?: boolean;
 }) {
   const [editing, setEditing] = useState<BarberMembershipPlanView | null>(null);
   const [creating, setCreating] = useState(false);
@@ -60,11 +63,16 @@ export function PlansTab({
     <div className="bmem-card">
       <div className="bmem-section-head">
         <h2 className="bmem-h2">{t("barber.membresias.planes.heading")}</h2>
-        <button type="button" className="bmem-btn" onClick={() => setCreating(true)}>
-          <Plus size={15} />
-          {t("barber.membresias.planes.new")}
-        </button>
+        {canManage ? (
+          <button type="button" className="bmem-btn" onClick={() => setCreating(true)}>
+            <Plus size={15} />
+            {t("barber.membresias.planes.new")}
+          </button>
+        ) : null}
       </div>
+      {canManage ? null : (
+        <p className="bmem-cell-sub" style={{ marginBottom: 10 }}>{t("barber.membresias.planes.readOnly")}</p>
+      )}
 
       {error ? <p className="bmem-error" style={{ marginBottom: 10 }}>{error}</p> : null}
 
@@ -78,10 +86,12 @@ export function PlansTab({
             <span className="bmem-example">{t("barber.membresias.planes.empty.example2")}</span>
             <span className="bmem-example">{t("barber.membresias.planes.empty.example3")}</span>
           </div>
-          <button type="button" className="bmem-btn" onClick={() => setCreating(true)}>
-            <Plus size={15} />
-            {t("barber.membresias.planes.new")}
-          </button>
+          {canManage ? (
+            <button type="button" className="bmem-btn" onClick={() => setCreating(true)}>
+              <Plus size={15} />
+              {t("barber.membresias.planes.new")}
+            </button>
+          ) : null}
         </EmptyState>
       ) : (
         <div className="bmem-plans">
@@ -112,6 +122,7 @@ export function PlansTab({
                 {t("barber.membresias.planes.clients", { count: plan.activeCount })}
               </span>
 
+              {canManage ? (
               <div className="bmem-plan-actions">
                 <button
                   type="button"
@@ -141,6 +152,7 @@ export function PlansTab({
                   </button>
                 ) : null}
               </div>
+              ) : null}
             </article>
           ))}
         </div>

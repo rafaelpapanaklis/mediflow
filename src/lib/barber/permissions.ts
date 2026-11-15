@@ -31,8 +31,17 @@ export const BARBER_PERMISSIONS = [
   { key: "cash.manage", label: "Cobrar y hacer cortes" },
   { key: "commissions.view", label: "Ver comisiones" },
   { key: "commissions.manage", label: "Administrar comisiones" },
-  { key: "memberships.manage", label: "Administrar membresías" },
-  { key: "products.manage", label: "Administrar productos" },
+  // Vender ≠ administrar (decisión #13 de Rafael, 15-nov: «que la Recepción
+  // sí pueda vender membresías, productos, etc.»). Vender = vender y renovar
+  // en mostrador, con los planes que ya existen. Administrar = crear, editar,
+  // precios, archivar, y pausar/cancelar lo vendido. Administrar INCLUYE
+  // vender (BARBER_PERMISSION_IMPLIES): nadie que ya administraba pierde nada.
+  { key: "memberships.sell", label: "Vender y renovar membresías" },
+  { key: "memberships.manage", label: "Administrar planes de membresía" },
+  // Ver el catálogo y sus existencias (sin costo ni margen). La venta en Caja
+  // sigue colgando de cash.manage.
+  { key: "products.view", label: "Ver productos y existencias" },
+  { key: "products.manage", label: "Administrar productos (catálogo, precio y costo)" },
   // Entradas/ajustes/devoluciones manuales (BarberStockMovement). La venta
   // descuenta stock sola bajo cash.manage — NO exige esta clave.
   { key: "inventory.manage", label: "Registrar movimientos de inventario" },
@@ -60,7 +69,8 @@ const ALL: BarberPermissionKey[] = [...BARBER_PERMISSION_KEYS];
 /**
  * Defaults por rol. OWNER todo; MANAGER todo menos billing (suscripción y
  * facturación) — ambos absorben claves nuevas solos vía ALL. RECEPTION opera
- * el mostrador (agenda, clientes + portal, fila, caja, WhatsApp). BARBER ve
+ * el mostrador (agenda, clientes + portal, fila, caja, WhatsApp) y VENDE
+ * (membresías, anticipos, productos, lealtad), sin administrar. BARBER ve
  * SOLO lo suyo: la ola de cada área recorta ADEMÁS por su barberId (su
  * agenda, sus clientes, sus comisiones) — el permiso da la puerta, no el
  * alcance.
@@ -78,6 +88,13 @@ export const BARBER_ROLE_DEFAULT_PERMISSIONS: Record<BarberRole, BarberPermissio
     "requests.manage",
     "cash.view",
     "cash.manage",
+    // Recepción vende (decisión #13, 15-nov): membresías (vender y renovar),
+    // anticipos y productos en Caja (cash.manage), premios de lealtad al
+    // cobrar (cash.manage), y ve las existencias. NO administra planes,
+    // precios, catálogo, costos, comisiones, configuración, equipo ni
+    // suscripción.
+    "memberships.sell",
+    "products.view",
     "whatsapp.view",
     "whatsapp.send",
   ],
@@ -85,8 +102,20 @@ export const BARBER_ROLE_DEFAULT_PERMISSIONS: Record<BarberRole, BarberPermissio
 };
 
 /**
+ * Permisos que vienen INCLUIDOS en otro: quien administra, también vende y
+ * ve. Se aplica sobre el set final (rol u override), así que una persona a
+ * la que hoy le dieron «Administrar membresías» a mano sigue pudiendo
+ * vender sin tocar su ficha. No funciona al revés: vender no da administrar.
+ */
+export const BARBER_PERMISSION_IMPLIES: Partial<Record<BarberPermissionKey, BarberPermissionKey[]>> = {
+  "memberships.manage": ["memberships.sell"],
+  "products.manage": ["products.view"],
+};
+
+/**
  * Set efectivo de permisos: override REEMPLAZA al default del rol si trae
- * keys (mismo contrato que el dental). Keys desconocidas se ignoran.
+ * keys (mismo contrato que el dental). Keys desconocidas se ignoran. Al
+ * final se suman los permisos incluidos (BARBER_PERMISSION_IMPLIES).
  */
 export function resolveBarberPermissions(
   role: BarberRole,
@@ -95,8 +124,13 @@ export function resolveBarberPermissions(
   const override = (permissionsOverride ?? []).filter((k): k is BarberPermissionKey =>
     (BARBER_PERMISSION_KEYS as string[]).includes(k),
   );
-  if (override.length > 0) return new Set(override);
-  return new Set(BARBER_ROLE_DEFAULT_PERMISSIONS[role] ?? []);
+  const set = new Set<BarberPermissionKey>(
+    override.length > 0 ? override : BARBER_ROLE_DEFAULT_PERMISSIONS[role] ?? [],
+  );
+  for (const [key, implied] of Object.entries(BARBER_PERMISSION_IMPLIES)) {
+    if (set.has(key as BarberPermissionKey)) for (const k of implied ?? []) set.add(k);
+  }
+  return set;
 }
 
 /** ¿El usuario (rol + override) tiene el permiso? */

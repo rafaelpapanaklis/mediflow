@@ -34,6 +34,7 @@ export function SubscriptionsTab({
   onQueryChange,
   onRefresh,
   loading,
+  canManage = true,
 }: {
   t: TFunction;
   locale: string;
@@ -46,6 +47,8 @@ export function SubscriptionsTab({
   onQueryChange: (q: string) => void;
   onRefresh: () => void;
   loading: boolean;
+  /** false = solo vende y renueva (Recepción): sin pausar, reactivar ni cancelar. */
+  canManage?: boolean;
 }) {
   const [selling, setSelling] = useState(false);
   const [renewing, setRenewing] = useState<BarberClientMembershipView | null>(null);
@@ -211,7 +214,7 @@ export function SubscriptionsTab({
                       {t("barber.membresias.clientes.renew")}
                     </button>
                   )}
-                  {m.status === "ACTIVE" ? (
+                  {!canManage ? null : m.status === "ACTIVE" ? (
                     <button
                       type="button"
                       className="bmem-btn bmem-btn-ghost bmem-btn-sm"
@@ -230,7 +233,7 @@ export function SubscriptionsTab({
                       {t("barber.membresias.clientes.resume")}
                     </button>
                   ) : null}
-                  {m.status === "CANCELLED" ? null : (
+                  {!canManage || m.status === "CANCELLED" ? null : (
                     <button
                       type="button"
                       className="bmem-btn bmem-btn-danger bmem-btn-sm"

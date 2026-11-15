@@ -26,6 +26,7 @@ export function ProductosClient({
   stats,
   maxPeriod,
   canInventory,
+  canManage = true,
 }: {
   dict: Dictionary;
   locale: string;
@@ -33,6 +34,12 @@ export function ProductosClient({
   stats: InventoryStats;
   maxPeriod: string;
   canInventory: boolean;
+  /**
+   * products.manage: alta, edición, precio y costo. Sin él (Recepción) la
+   * pantalla es de consulta: catálogo, existencias y lo más vendido, sin
+   * costo ni margen (el servidor ya no los manda).
+   */
+  canManage?: boolean;
 }) {
   const t = useBarberT(dict);
   const router = useRouter();
@@ -53,18 +60,27 @@ export function ProductosClient({
           <h1 className="bcaja-head__title">{t("productos.title")}</h1>
           <p className="bcaja-head__sub">{t("productos.subtitle")}</p>
         </div>
-        <div className="bcaja-head__actions">
-          <button type="button" className="btn-new barber-btn-primary" onClick={() => setModal({ kind: "form", product: null })}>
-            <PackagePlus size={15} /> {t("productos.newProduct")}
-          </button>
-        </div>
+        {canManage ? (
+          <div className="bcaja-head__actions">
+            <button type="button" className="btn-new barber-btn-primary" onClick={() => setModal({ kind: "form", product: null })}>
+              <PackagePlus size={15} /> {t("productos.newProduct")}
+            </button>
+          </div>
+        ) : null}
       </div>
+      {canManage ? null : <p className="bcaja-hint" style={{ margin: 0 }}>{t("productos.readOnly")}</p>}
 
-      <div className="bcaja-kpis bcaja-kpis--5 bd-band">
+      <div className={canManage ? "bcaja-kpis bcaja-kpis--5 bd-band" : "bcaja-kpis bd-band"}>
         <KpiCard label={t("productos.kpiActive")} value={String(stats.activeCount)} icon={Package} hero />
         <KpiCard label={t("productos.kpiLow")} value={String(stats.lowStock.length)} icon={AlertTriangle} tone={stats.lowStock.length > 0 ? "warning" : undefined} />
-        <KpiCard label={t("productos.kpiValueCost")} value={fmtMoney(stats.stockValueCost)} />
-        <KpiCard label={t("productos.kpiMargin")} value={fmtPct(stats.avgMarginPct)} />
+        {canManage ? (
+          <>
+            <KpiCard label={t("productos.kpiValueCost")} value={fmtMoney(stats.stockValueCost ?? 0)} />
+            <KpiCard label={t("productos.kpiMargin")} value={fmtPct(stats.avgMarginPct)} />
+          </>
+        ) : (
+          <KpiCard label={t("productos.kpiValuePrice")} value={fmtMoney(stats.stockValuePrice)} />
+        )}
         <KpiCard label={t("productos.kpiPeriodRevenue")} value={fmtMoney(stats.periodProductRevenue)} icon={TrendingUp} hint={`${fmtPeriod(stats.periodKey, locale)} · ${t("productos.kpiPeriodUnits", { count: stats.periodProductUnits })}`} />
       </div>
 
@@ -91,7 +107,23 @@ export function ProductosClient({
           </label>
         }
       >
-        {visible.length === 0 ? (
+        {products.length === 0 ? (
+          // Barbería nueva: que entienda QUÉ se da de alta aquí y dónde se
+          // cobra (auditoría 15-nov, punto 3 de ws6-t3).
+          <div style={{ padding: 18, display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 8 }} data-productos-vacio>
+            {canManage ? (
+              <>
+                <strong style={{ fontSize: 14, color: "var(--text-1)" }}>{t("productos.emptyTitle")}</strong>
+                <p className="bcaja-hint" style={{ margin: 0 }}>{t("productos.emptyBody")}</p>
+                <button type="button" className="btn-new barber-btn-primary" onClick={() => setModal({ kind: "form", product: null })}>
+                  <PackagePlus size={15} /> {t("productos.newProduct")}
+                </button>
+              </>
+            ) : (
+              <p className="bcaja-hint" style={{ margin: 0 }}>{t("productos.emptyReadOnly")}</p>
+            )}
+          </div>
+        ) : visible.length === 0 ? (
           <p className="bcaja-hint" style={{ margin: 0, padding: 18 }}>{t("productos.empty")}</p>
         ) : (
           <div className="bcaja-table-wrap">
@@ -103,11 +135,11 @@ export function ProductosClient({
                   <th className="bcaja-num">{t("productos.colStock")}</th>
                   <th className="bcaja-num">{t("productos.colMin")}</th>
                   <th className="bcaja-num">{t("productos.colPrice")}</th>
-                  <th className="bcaja-num">{t("productos.colCost")}</th>
-                  <th className="bcaja-num">{t("productos.colMargin")}</th>
+                  {canManage ? <th className="bcaja-num">{t("productos.colCost")}</th> : null}
+                  {canManage ? <th className="bcaja-num">{t("productos.colMargin")}</th> : null}
                   <th>{t("productos.colUnit")}</th>
                   <th>{t("productos.colStatus")}</th>
-                  <th />
+                  {canManage || canInventory ? <th /> : null}
                 </tr>
               </thead>
               <tbody>
@@ -120,19 +152,23 @@ export function ProductosClient({
                     </td>
                     <td className="bcaja-num bcaja-muted">{p.minStock ?? "—"}</td>
                     <td className="bcaja-num">{fmtMoney(p.price)}</td>
-                    <td className="bcaja-num">{p.cost === null ? "—" : fmtMoney(p.cost)}</td>
-                    <td className="bcaja-num">{p.marginAmount === null ? "—" : `${fmtMoney(p.marginAmount)} (${fmtPct(p.marginPct)})`}</td>
+                    {canManage ? <td className="bcaja-num">{p.cost === null ? "—" : fmtMoney(p.cost)}</td> : null}
+                    {canManage ? <td className="bcaja-num">{p.marginAmount === null ? "—" : `${fmtMoney(p.marginAmount)} (${fmtPct(p.marginPct)})`}</td> : null}
                     <td className="bcaja-muted">{p.unit ?? "—"}</td>
                     <td><BadgeNew tone={p.isActive ? "success" : "neutral"} dot>{p.isActive ? t("productos.active") : t("productos.inactive")}</BadgeNew></td>
-                    <td>
-                      <span className="bcaja-row-actions">
-                        <button type="button" className="icon-btn-new" onClick={() => setModal({ kind: "form", product: p })} title={t("productos.edit")} aria-label={t("productos.edit")}><Pencil size={13} /></button>
-                        {canInventory && (
-                          <button type="button" className="icon-btn-new" onClick={() => setModal({ kind: "movement", product: p })} title={t("productos.movement")} aria-label={t("productos.movement")}><ArrowLeftRight size={13} /></button>
-                        )}
-                        <button type="button" className="icon-btn-new" onClick={() => setModal({ kind: "history", product: p })} title={t("productos.history")} aria-label={t("productos.history")}><History size={13} /></button>
-                      </span>
-                    </td>
+                    {canManage || canInventory ? (
+                      <td>
+                        <span className="bcaja-row-actions">
+                          {canManage && (
+                            <button type="button" className="icon-btn-new" onClick={() => setModal({ kind: "form", product: p })} title={t("productos.edit")} aria-label={t("productos.edit")}><Pencil size={13} /></button>
+                          )}
+                          {canInventory && (
+                            <button type="button" className="icon-btn-new" onClick={() => setModal({ kind: "movement", product: p })} title={t("productos.movement")} aria-label={t("productos.movement")}><ArrowLeftRight size={13} /></button>
+                          )}
+                          <button type="button" className="icon-btn-new" onClick={() => setModal({ kind: "history", product: p })} title={t("productos.history")} aria-label={t("productos.history")}><History size={13} /></button>
+                        </span>
+                      </td>
+                    ) : null}
                   </tr>
                 ))}
               </tbody>
@@ -156,7 +192,7 @@ export function ProductosClient({
                   <th>{t("productos.colName")}</th>
                   <th className="bcaja-num">{t("productos.colQty")}</th>
                   <th className="bcaja-num">{t("productos.colRevenue")}</th>
-                  <th className="bcaja-num">{t("productos.colProfit")}</th>
+                  {canManage ? <th className="bcaja-num">{t("productos.colProfit")}</th> : null}
                 </tr>
               </thead>
               <tbody>
@@ -165,7 +201,7 @@ export function ProductosClient({
                     <td><strong>{s.name}</strong>{s.unit ? <span className="bcaja-muted"> · {s.unit}</span> : null}</td>
                     <td className="bcaja-num">{s.qty}</td>
                     <td className="bcaja-num">{fmtMoney(s.revenue)}</td>
-                    <td className="bcaja-num">{s.profit === null ? "—" : fmtMoney(s.profit)}</td>
+                    {canManage ? <td className="bcaja-num">{s.profit === null ? "—" : fmtMoney(s.profit)}</td> : null}
                   </tr>
                 ))}
               </tbody>
