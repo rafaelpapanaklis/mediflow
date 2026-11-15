@@ -192,12 +192,12 @@
       "applied": "Applied to the ticket",
       "refund": "Refund",
       "forfeit": "Keep",
-      "refundConfirm": "Refund the deposit? If it was taken at the counter and the shift is still open, its ticket is cancelled and leaves the cash count.",
+      "refundConfirm": "Refund the deposit? You need an open shift: the refund is recorded today as a negative ticket, so it lowers this shift's expected cash and the month's income.",
       "forfeitConfirm": "Keep the deposit? The client does not get it back.",
       "howItWorks": "A paid deposit is taken off automatically when you charge the appointment. If you take it at the counter, it goes into the shift's cash count with its payment method.",
       "notApplied": "Taken off when the appointment is charged",
-      "refundedInSession": "Deposit refunded: its ticket was cancelled and it is out of the shift's cash count.",
-      "refundedOutsideSession": "Deposit refunded. The shift where it was taken is already closed, so this money going out is not in any cash count: write it down in the note of today's count."
+      "refundedTicket": "Deposit refunded. A \"Devolución de anticipo\" ticket was recorded in today's shift: it is already off the expected cash and the income.",
+      "refundedNoTicket": "Deposit refunded, but the refund was NOT recorded in the cash count (a database change is pending). Write this money going out in the note of today's count."
     },
     "depositStatus": {
       "PENDING": "Unpaid",

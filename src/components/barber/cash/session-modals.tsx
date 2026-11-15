@@ -269,7 +269,9 @@ export function CancelSaleModal({ dict, sale, onClose, onDone }: { dict: Diction
             ? t("caja.cancelMembershipBody")
             : sale.kind === "deposit"
               ? t("caja.cancelDepositBody")
-              : t("caja.cancelTicketBody")}
+              : sale.kind === "refund"
+                ? t("caja.cancelRefundBody")
+                : t("caja.cancelTicketBody")}
         </div>
         {error && <div className="bcaja-alert bcaja-alert--danger" role="alert">{error}</div>}
         <div className="field-new">

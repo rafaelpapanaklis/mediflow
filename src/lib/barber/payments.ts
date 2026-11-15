@@ -4,7 +4,6 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { isMissingTableError } from "@/lib/barber/db-errors";
 import {
-  cancelSaleTx,
   createCounterTicketTx,
   findLiveDepositTicketTx,
   lockAppointmentTx,
@@ -16,6 +15,7 @@ import {
   centsToNumber,
   depositLineDescription,
   depositReceivedLineDescription,
+  depositRefundLineDescription,
   formatCents,
   moneyToCents,
 } from "@/lib/barber/memberships-core";
@@ -32,6 +32,7 @@ import {
   computeDepositCents,
   describeDepositPolicy,
   isChargeableAmount,
+  isCounterPaymentMethod,
   isOurWebhookEvent,
   isWithinRefundWindow,
   normalizeDepositPolicy,
@@ -863,18 +864,24 @@ export interface DepositDecisionResult {
   /** true si además se devolvió el dinero por Stripe. */
   refundedOnline: boolean;
   /**
-   * true si el anticipo se había cobrado en mostrador con el turno todavía
-   * abierto: su ticket se canceló, así que la salida del dinero ya está en
-   * el corte.
+   * Devolución en mostrador: id del ticket NEGATIVO «Devolución de anticipo»
+   * que quedó en el turno abierto de hoy (baja el esperado del día y el
+   * ingreso del mes). Ausente si se reembolsó por Stripe.
    */
-  ticketCancelled?: boolean;
+  refundSaleId?: string;
+  /** Método con el que salió el dinero (CASH | SPEI | CARD). */
+  refundMethod?: string;
   /**
-   * true si se cobró en mostrador en un turno que YA se cerró: ese ticket no
-   * se puede tocar, así que la salida del dinero NO queda en ningún corte y
-   * hay que anotarla a mano (la pantalla lo avisa).
+   * true solo mientras la base no admita tickets negativos (falta pegar
+   * sql/barber_devolucion_anticipo.sql): quedó Devuelto pero SIN ticket, así
+   * que esa salida de dinero no está en ningún corte. La pantalla lo avisa.
    */
   cashOutsideSession?: boolean;
 }
+
+/** Mensaje único de «sin turno no se devuelve dinero» para los anticipos. */
+export const REFUND_NEEDS_SESSION_MESSAGE =
+  "Abre un turno en Caja antes de devolver el anticipo: la devolución se registra en el turno de hoy para que el corte cuadre.";
 
 /** ¿El anticipo de la cita ya se descontó en un ticket vivo? */
 async function isDepositApplied(barbershopId: string, appointmentId: string): Promise<boolean> {
@@ -894,19 +901,27 @@ const DEPOSIT_ALREADY_APPLIED_MESSAGE =
 
 /**
  * Devuelve el anticipo.
- *  · Cobrado en mostrador con el turno aún abierto → se CANCELA su ticket en
- *    la misma transacción: el dinero sale del corte igual que entró.
- *  · Cobrado en mostrador en un turno ya cerrado → queda el registro y se
- *    avisa (cashOutsideSession): un turno cerrado no se corrige.
- *  · Cobrado con tarjeta en línea → busca su PaymentIntent por metadata y
- *    ejecuta el reembolso en Stripe.
+ *
+ *  · En MOSTRADOR (lo normal): exige turno abierto y registra un ticket
+ *    NEGATIVO «Devolución de anticipo · …» en el turno de HOY, con el método
+ *    con que sale el dinero. Así baja el efectivo esperado del día en que de
+ *    verdad sale del cajón y baja el ingreso del mes. El ticket con el que se
+ *    cobró (que puede estar en un turno cerrado hace días) no se toca. Todo
+ *    en una transacción con la cita bloqueada: o queda Devuelto con su
+ *    ticket, o no pasa nada. Cancelar ese ticket negativo (con el turno aún
+ *    abierto) deshace la devolución.
+ *  · Cobrado con tarjeta EN LÍNEA: busca su PaymentIntent por metadata y
+ *    reembolsa en Stripe; ahí no hay dinero de caja que mover.
  */
 export async function refundDeposit(args: {
   barbershopId: string;
   appointmentId: string;
   actorName?: string;
-  /** BarberUser.id de quien devuelve (para la marca del ticket cancelado). */
+  /** BarberUser.id de quien devuelve: es el «cobró» del ticket de devolución. */
   actorUserId?: string;
+  /** CASH | SPEI | CARD. Si falta, el mismo método con que se cobró. */
+  paymentMethod?: unknown;
+  now?: Date;
 }): Promise<DepositDecisionResult> {
   const shopId = requireShop(args.barbershopId);
   const appt = await prisma.barberAppointment.findFirst({
@@ -928,59 +943,13 @@ export async function refundDeposit(args: {
   const cents = appt.depositAmount ? moneyToCents(appt.depositAmount.toString()) : 0;
   const stamp = `${new Date().toLocaleDateString("es-MX")}${args.actorName ? ` · ${args.actorName}` : ""}`;
 
-  // ── Cobrado en mostrador: el dinero entró por un ticket del turno ──
-  const counter = await prisma.$transaction(
-    async (tx) => {
-      const ticket = await findLiveDepositTicketTx(tx, shopId, appt.id);
-      if (!ticket) return null;
-      if (ticket.sessionClosed || !args.actorUserId) return { ticketCancelled: false };
-      try {
-        await cancelSaleTx(
-          tx,
-          { barbershopId: shopId, userId: args.actorUserId, userName: args.actorName ?? "" },
-          ticket.id,
-          "Devolución del anticipo",
-          new Date(),
-          { depositOutcome: "REFUNDED" },
-        );
-      } catch (err) {
-        if (err instanceof BarberCajaError) {
-          throw new BarberPaymentsError(err.code, err.message, err.status);
-        }
-        throw err;
-      }
-      return { ticketCancelled: true };
-    },
-    { maxWait: 5000, timeout: 15000 },
-  );
+  // ¿Se cobró en mostrador? (tiene su ticket «Anticipo recibido» vivo)
+  const counterTicket = await findLiveDepositTicketTx(prisma, shopId, appt.id);
 
-  if (counter) {
-    if (!counter.ticketCancelled) {
-      await prisma.barberAppointment.updateMany({
-        where: { id: appt.id, barbershopId: shopId, depositStatus: "PAID" },
-        data: { depositStatus: "REFUNDED" },
-      });
-    }
-    await appendAppointmentNote(
-      shopId,
-      appt.id,
-      counter.ticketCancelled
-        ? `[Anticipo] Devuelto ${formatCents(cents)} (en mostrador; su ticket se canceló y salió del corte) — ${stamp}`
-        : `[Anticipo] Devuelto ${formatCents(cents)} (en mostrador; el turno donde se cobró ya estaba cerrado) — ${stamp}`,
-    );
-    return {
-      status: "REFUNDED",
-      amount: centsToNumber(cents),
-      refundedOnline: false,
-      ticketCancelled: counter.ticketCancelled,
-      cashOutsideSession: !counter.ticketCancelled,
-    };
-  }
-
-  // ── Cobrado en línea (o registrado antes de que existiera el ticket) ──
+  // ── Cobrado en línea: reembolso en Stripe, sin dinero de caja ──
   let refundedOnline = false;
 
-  const stripe = getBarberStripe();
+  const stripe = counterTicket ? null : getBarberStripe();
   if (stripe) {
     try {
       const found = await stripe.paymentIntents.search({
@@ -999,17 +968,139 @@ export async function refundDeposit(args: {
     }
   }
 
-  await prisma.barberAppointment.updateMany({
-    where: { id: appt.id, barbershopId: shopId, depositStatus: "PAID" },
-    data: { depositStatus: "REFUNDED" },
-  });
+  if (refundedOnline) {
+    await prisma.barberAppointment.updateMany({
+      where: { id: appt.id, barbershopId: shopId, depositStatus: "PAID" },
+      data: { depositStatus: "REFUNDED" },
+    });
+    await appendAppointmentNote(
+      shopId,
+      appt.id,
+      `[Anticipo] Devuelto ${formatCents(cents)} (reembolso en Stripe) — ${stamp}`,
+    );
+    return { status: "REFUNDED", amount: centsToNumber(cents), refundedOnline: true };
+  }
+
+  // ── En mostrador: el dinero sale HOY, por un ticket negativo de HOY ──
+  if (!args.actorUserId || typeof args.actorUserId !== "string") {
+    throw new BarberPaymentsError("NO_USER", "Falta quién registra la devolución.", 401);
+  }
+  const actorUserId = args.actorUserId;
+  // Mismo método con que se cobró, salvo que digan otro (cobró en efectivo
+  // y devuelve por transferencia, por ejemplo).
+  const refundMethod = args.paymentMethod ?? counterTicket?.paymentMethod ?? null;
+  if (!isCounterPaymentMethod(refundMethod)) {
+    throw new BarberPaymentsError(
+      "INVALID_PAYMENT_METHOD",
+      "Elige cómo devuelves el anticipo: efectivo, transferencia o tarjeta en mostrador.",
+    );
+  }
+  const now = args.now ?? new Date();
+
+  let refundSaleId: string | null;
+  try {
+    refundSaleId = await prisma.$transaction(
+      async (tx) => {
+        if (!(await lockAppointmentTx(tx, shopId, appt.id))) {
+          throw new BarberPaymentsError("APPOINTMENT_NOT_FOUND", "No encontramos esa cita.", 404);
+        }
+        // Con la cita bloqueada se vuelve a mirar: dos «Devolver» a la vez
+        // no sacan el dinero dos veces.
+        const fresh = await tx.barberAppointment.findFirst({
+          where: { id: appt.id, barbershopId: shopId },
+          select: {
+            clientId: true,
+            startAt: true,
+            depositAmount: true,
+            depositStatus: true,
+            barbershop: { select: { timezone: true } },
+            sales: { select: { notes: true, items: { select: { description: true } } } },
+          },
+        });
+        if (!fresh || fresh.depositStatus !== "PAID") {
+          throw new BarberPaymentsError(
+            "NOT_PAID",
+            "Solo se puede devolver un anticipo que ya está pagado.",
+            409,
+          );
+        }
+        const applied = fresh.sales.some(
+          (x) => !isSaleCancelled(x) && x.items.some((it) => it.description.startsWith(BARBER_DEPOSIT_LINE_PREFIX)),
+        );
+        if (applied) {
+          throw new BarberPaymentsError("DEPOSIT_APPLIED", DEPOSIT_ALREADY_APPLIED_MESSAGE, 409);
+        }
+        const amountCents = fresh.depositAmount ? moneyToCents(fresh.depositAmount.toString()) : 0;
+        if (amountCents <= 0) {
+          throw new BarberPaymentsError("BAD_AMOUNT", "Ese anticipo no tiene monto que devolver.", 409);
+        }
+
+        const ticket = await createCounterTicketTx(tx, {
+          barbershopId: shopId,
+          soldByUserId: actorUserId,
+          clientId: fresh.clientId,
+          description: depositRefundLineDescription(
+            `cita del ${formatDepositLabel(fresh.startAt, fresh.barbershop.timezone)}`,
+          ),
+          amount: new Prisma.Decimal(centsToMoney(-amountCents)),
+          paymentMethod: refundMethod,
+          tag: { k: "refund", appt: appt.id },
+          now,
+          noSessionMessage: REFUND_NEEDS_SESSION_MESSAGE,
+        });
+
+        await tx.barberAppointment.updateMany({
+          where: { id: appt.id, barbershopId: shopId },
+          data: { depositStatus: "REFUNDED" },
+        });
+        return ticket.id;
+      },
+      { maxWait: 5000, timeout: 15000 },
+    );
+  } catch (err) {
+    if (err instanceof BarberCajaError) {
+      throw new BarberPaymentsError(err.code, err.message, err.status);
+    }
+    if (!isNegativeTicketRejected(err)) throw err;
+    // La base todavía no admite tickets negativos (falta pegar
+    // sql/barber_devolucion_anticipo.sql). La transacción se deshizo entera.
+    // Se sigue pudiendo devolver, como antes de esta ola: queda Devuelto y
+    // la pantalla avisa que la salida NO está en el corte.
+    refundSaleId = null;
+    const marked = await prisma.barberAppointment.updateMany({
+      where: { id: appt.id, barbershopId: shopId, depositStatus: "PAID" },
+      data: { depositStatus: "REFUNDED" },
+    });
+    if (marked.count === 0) {
+      throw new BarberPaymentsError("NOT_PAID", "Solo se puede devolver un anticipo que ya está pagado.", 409);
+    }
+  }
+
   await appendAppointmentNote(
     shopId,
     appt.id,
-    `[Anticipo] Devuelto ${formatCents(cents)}${refundedOnline ? " (reembolso en Stripe)" : " (en mostrador)"} — ${stamp}`,
+    refundSaleId
+      ? `[Anticipo] Devuelto ${formatCents(cents)} (en mostrador; ticket de devolución en el turno de hoy) — ${stamp}`
+      : `[Anticipo] Devuelto ${formatCents(cents)} (en mostrador; SIN ticket de devolución: anotarlo en el corte) — ${stamp}`,
   );
 
-  return { status: "REFUNDED", amount: centsToNumber(cents), refundedOnline };
+  return {
+    status: "REFUNDED",
+    amount: centsToNumber(cents),
+    refundedOnline: false,
+    ...(refundSaleId ? { refundSaleId } : { cashOutsideSession: true }),
+    refundMethod: String(refundMethod),
+  };
+}
+
+/**
+ * ¿La base rechazó el ticket negativo por la restricción vieja de montos?
+ * (23514 = check_violation; el nombre es el de sql/barber_caja.sql.) Pasa
+ * mientras no se pegue sql/barber_devolucion_anticipo.sql.
+ */
+export function isNegativeTicketRejected(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : typeof err === "string" ? err : "";
+  return message.includes("barber_sales_amounts_nonnegative");
 }
 
 /**

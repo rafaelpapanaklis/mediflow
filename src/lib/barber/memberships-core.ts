@@ -318,6 +318,22 @@ export function depositLineDescription(label: string): string {
 export const BARBER_MEMBERSHIP_SALE_LINE_PREFIX = "Venta de membresía · ";
 export const BARBER_MEMBERSHIP_RENEWAL_LINE_PREFIX = "Renovación de membresía · ";
 export const BARBER_DEPOSIT_RECEIVED_LINE_PREFIX = "Anticipo recibido · ";
+/**
+ * Devolución de un anticipo cobrado en mostrador: ticket NEGATIVO en el turno
+ * abierto del día en que se devuelve, con el método con que sale el dinero.
+ * Baja el esperado de ese turno y el ingreso del mes (el ticket original, que
+ * puede estar en un turno ya cerrado, no se toca).
+ */
+export const BARBER_DEPOSIT_REFUND_LINE_PREFIX = "Devolución de anticipo · ";
+
+export function depositRefundLineDescription(label: string): string {
+  return `${BARBER_DEPOSIT_REFUND_LINE_PREFIX}${label}`;
+}
+
+/** ¿Es la línea de una devolución de anticipo (ticket negativo)? */
+export function isDepositRefundLine(description: string | null | undefined): boolean {
+  return typeof description === "string" && description.startsWith(BARBER_DEPOSIT_REFUND_LINE_PREFIX);
+}
 
 export function membershipSaleLineDescription(planName: string, renewal = false): string {
   return `${renewal ? BARBER_MEMBERSHIP_RENEWAL_LINE_PREFIX : BARBER_MEMBERSHIP_SALE_LINE_PREFIX}${planName}`;
@@ -333,7 +349,8 @@ export function isCounterTicketLine(description: string | null | undefined): boo
   return (
     description.startsWith(BARBER_MEMBERSHIP_SALE_LINE_PREFIX) ||
     description.startsWith(BARBER_MEMBERSHIP_RENEWAL_LINE_PREFIX) ||
-    description.startsWith(BARBER_DEPOSIT_RECEIVED_LINE_PREFIX)
+    description.startsWith(BARBER_DEPOSIT_RECEIVED_LINE_PREFIX) ||
+    description.startsWith(BARBER_DEPOSIT_REFUND_LINE_PREFIX)
   );
 }
 
@@ -350,6 +367,8 @@ export interface BarberMembershipSnapshot {
 
 export type BarberSaleTag =
   | { k: "deposit"; appt: string }
+  /** Devolución (ticket negativo) del anticipo de esa cita. */
+  | { k: "refund"; appt: string }
   | {
       k: "membership";
       op: "sell" | "renew";
@@ -360,12 +379,12 @@ export type BarberSaleTag =
       prev?: BarberMembershipSnapshot;
     };
 
-export type BarberSaleKind = "sale" | "membership" | "deposit";
+export type BarberSaleKind = "sale" | "membership" | "deposit" | "refund";
 
 export function buildSaleTag(tag: BarberSaleTag): string {
   // El orden de las llaves es FIJO: depositTagNeedle() busca ese texto exacto.
   const canon =
-    tag.k === "deposit"
+    tag.k === "deposit" || tag.k === "refund"
       ? { k: tag.k, appt: tag.appt }
       : { k: tag.k, op: tag.op, cm: tag.cm, end: tag.end, ...(tag.prev ? { prev: tag.prev } : {}) };
   return `${BARBER_SALE_TAG_PREFIX}${JSON.stringify(canon)}`;
@@ -393,8 +412,8 @@ export function parseSaleTag(notes: string | null | undefined): BarberSaleTag | 
     if (!line.startsWith(BARBER_SALE_TAG_PREFIX)) continue;
     try {
       const raw = JSON.parse(line.slice(BARBER_SALE_TAG_PREFIX.length)) as Record<string, unknown>;
-      if (raw.k === "deposit" && typeof raw.appt === "string" && raw.appt) {
-        return { k: "deposit", appt: raw.appt };
+      if ((raw.k === "deposit" || raw.k === "refund") && typeof raw.appt === "string" && raw.appt) {
+        return { k: raw.k, appt: raw.appt };
       }
       if (
         raw.k === "membership" &&

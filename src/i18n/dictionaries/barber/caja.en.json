@@ -90,7 +90,8 @@
     "noCashManage": "Your role can view the register but can't charge or close shifts.",
     "pendingDeposit": "deposit paid {amount}",
     "cancelMembershipBody": "This ticket is a membership sale or renewal. Cancelling it cancels the membership (or puts it back as it was before the renewal) and the ticket stops counting in the cash count. This cannot be undone.",
-    "cancelDepositBody": "This ticket is the deposit for an appointment. Cancelling it leaves the appointment without a deposit and the ticket stops counting in the cash count. This cannot be undone."
+    "cancelDepositBody": "This ticket is the deposit for an appointment. Cancelling it leaves the appointment without a deposit and the ticket stops counting in the cash count. This cannot be undone.",
+    "cancelRefundBody": "This ticket is a deposit refund. Cancelling it undoes the refund: the deposit goes back to paid and the money counts in the cash count again. This cannot be undone."
   },
   "session": {
     "openTitle": "Open shift",

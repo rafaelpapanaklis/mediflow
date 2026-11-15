@@ -86,6 +86,7 @@ import {
   depositLineDescription,
   isCounterTicketLine,
   isDepositLine,
+  isDepositRefundLine,
   parseSaleTag,
   saleKindOf,
   stripSaleTag,
@@ -849,8 +850,15 @@ export async function createCounterTicketTx(tx: Tx, input: CounterTicketInput): 
     throw new BarberCajaError(400, "INVALID_PAYMENT_METHOD", "Elige cómo pagó: efectivo, transferencia o tarjeta en mostrador");
   }
   const amount = money(input.amount);
-  if (!amount.gt(0)) throw new BarberCajaError(400, "INVALID_AMOUNT", "El monto debe ser mayor a cero");
-  if (!isCounterTicketLine(input.description)) {
+  // El ÚNICO ticket negativo que existe es la devolución de un anticipo: el
+  // dinero sale del cajón (o de la cuenta) el día que se devuelve, así que
+  // resta en el corte de ESE turno y en el ingreso de ese día. Todo lo demás
+  // es estrictamente positivo.
+  const isRefund = input.tag.k === "refund";
+  if (isRefund ? !amount.lt(0) : !amount.gt(0)) {
+    throw new BarberCajaError(400, "INVALID_AMOUNT", isRefund ? "La devolución debe ser un monto negativo" : "El monto debe ser mayor a cero");
+  }
+  if (!isCounterTicketLine(input.description) || isDepositRefundLine(input.description) !== isRefund) {
     throw new BarberCajaError(500, "INVALID_COUNTER_TICKET", "Línea de ticket de mostrador inválida");
   }
 
@@ -886,17 +894,17 @@ export async function findLiveDepositTicketTx(
   tx: Tx,
   barbershopId: string,
   appointmentId: string,
-): Promise<{ id: string; sessionClosed: boolean } | null> {
+): Promise<{ id: string; sessionClosed: boolean; paymentMethod: BarberPaymentMethod } | null> {
   const rows = await tx.barberSale.findMany({
     where: { barbershopId, notes: { contains: `"appt":"${appointmentId}"` } },
-    select: { id: true, notes: true, cashSession: { select: { closedAt: true } } },
+    select: { id: true, notes: true, paymentMethod: true, cashSession: { select: { closedAt: true } } },
     orderBy: { createdAt: "desc" },
   });
   for (const r of rows) {
     if (isSaleCancelled(r)) continue;
     const tag = parseSaleTag(r.notes);
     if (tag && tag.k === "deposit" && tag.appt === appointmentId) {
-      return { id: r.id, sessionClosed: Boolean(r.cashSession?.closedAt) };
+      return { id: r.id, sessionClosed: Boolean(r.cashSession?.closedAt), paymentMethod: r.paymentMethod };
     }
   }
   return null;
@@ -1304,15 +1312,6 @@ export interface CancelActor {
   userName: string;
 }
 
-export interface CancelSaleOptions {
-  /**
-   * Solo para el ticket de un ANTICIPO: en qué estado queda el anticipo de la
-   * cita. Por defecto vuelve a «sin anticipo» (se canceló el cobro); la
-   * devolución desde Anticipos pasa "REFUNDED" para dejar el rastro.
-   */
-  depositOutcome?: "NONE" | "REFUNDED";
-}
-
 /**
  * Deshace lo que vendió un ticket de MEMBRESÍA. Solo si la membresía sigue
  * exactamente como la dejó ese ticket: sin cortes usados y sin otra
@@ -1388,7 +1387,6 @@ async function revertDepositTicketTx(
   tx: Tx,
   barbershopId: string,
   tag: Extract<BarberSaleTag, { k: "deposit" }>,
-  outcome: "NONE" | "REFUNDED",
 ): Promise<void> {
   if (!(await lockAppointmentTx(tx, barbershopId, tag.appt))) return; // la cita ya no existe
   const appt = await tx.barberAppointment.findFirst({
@@ -1416,15 +1414,29 @@ async function revertDepositTicketTx(
       "DEPOSIT_CLOSED",
       appt.depositStatus === "FORFEITED"
         ? "Ese anticipo ya se retuvo (el cliente no llegó): su ticket se queda como está."
-        : "Ese anticipo ya figura como devuelto: su ticket se queda como está.",
+        : "Ese anticipo ya se devolvió (la devolución tiene su propio ticket): este ticket se queda como está.",
     );
   }
   await tx.barberAppointment.updateMany({
     where: { id: appt.id, barbershopId },
-    data:
-      outcome === "REFUNDED"
-        ? { depositStatus: "REFUNDED" }
-        : { depositAmount: null, depositStatus: null },
+    data: { depositAmount: null, depositStatus: null },
+  });
+}
+
+/**
+ * Deshace una DEVOLUCIÓN de anticipo (se canceló su ticket negativo, con el
+ * turno aún abierto): el dinero vuelve a contar en el corte y el anticipo de
+ * la cita vuelve a «pagado», como estaba antes de devolverlo.
+ */
+async function revertRefundTicketTx(
+  tx: Tx,
+  barbershopId: string,
+  tag: Extract<BarberSaleTag, { k: "refund" }>,
+): Promise<void> {
+  if (!(await lockAppointmentTx(tx, barbershopId, tag.appt))) return; // la cita ya no existe
+  await tx.barberAppointment.updateMany({
+    where: { id: tag.appt, barbershopId, depositStatus: "REFUNDED" },
+    data: { depositStatus: "PAID" },
   });
 }
 
@@ -1438,7 +1450,6 @@ export async function cancelSaleTx(
   saleId: string,
   reason: string,
   now: Date,
-  opts: CancelSaleOptions = {},
 ): Promise<void> {
   const barbershopId = actor.barbershopId;
   // Candado del ticket: dos cancelaciones simultáneas no devuelven el stock
@@ -1472,7 +1483,8 @@ export async function cancelSaleTx(
   // Ticket de mostrador: deshace la membresía o el anticipo que vendió.
   const tag = parseSaleTag(s.notes);
   if (tag?.k === "membership") await revertMembershipTicketTx(tx, barbershopId, tag);
-  if (tag?.k === "deposit") await revertDepositTicketTx(tx, barbershopId, tag, opts.depositOutcome ?? "NONE");
+  if (tag?.k === "deposit") await revertDepositTicketTx(tx, barbershopId, tag);
+  if (tag?.k === "refund") await revertRefundTicketTx(tx, barbershopId, tag);
 
   // Ticket de una cita: se bloquea la cita para que el anticipo que este
   // ticket traía aplicado no lo tome otro cobro a medias. Al borrarse las
@@ -1576,7 +1588,12 @@ export async function getSaleDetail(ctx: BarberContext, saleId: string): Promise
   const row = toSaleRow(s);
   const gross = sumMoney(row.items.filter((it) => it.unitPrice >= 0).map((it) => D(it.unitPrice).times(it.qty)));
   const negative = row.items.filter((it) => it.unitPrice < 0);
-  const discount = sumMoney(negative.filter((it) => !isDepositLine(it.description)).map((it) => D(it.unitPrice).times(it.qty))).abs();
+  // Ni el anticipo aplicado ni la devolución de un anticipo son un descuento.
+  const discount = sumMoney(
+    negative
+      .filter((it) => !isDepositLine(it.description) && !isDepositRefundLine(it.description))
+      .map((it) => D(it.unitPrice).times(it.qty)),
+  ).abs();
   const depositApplied = sumMoney(negative.filter((it) => isDepositLine(it.description)).map((it) => D(it.unitPrice).times(it.qty))).abs();
   const shop = ctx.barbershop;
   return {

@@ -42,9 +42,11 @@ export async function GET(req: Request) {
 }
 
 /**
- * El cliente no llegó: la barbería decide. `refund` devuelve (cancela el
- * ticket del anticipo si su turno sigue abierto, o reembolsa en Stripe si el
- * cobro fue con tarjeta en línea); `forfeit` lo retiene. `mark-paid` registra
+ * El cliente no llegó: la barbería decide. `refund` devuelve: en mostrador
+ * exige turno abierto y registra un ticket NEGATIVO «Devolución de anticipo»
+ * en el turno de hoy con su método (`paymentMethod`, por defecto el mismo con
+ * que se cobró); si el cobro fue con tarjeta en línea, reembolsa en Stripe.
+ * `forfeit` lo retiene. `mark-paid` registra
  * un anticipo cobrado en mostrador: exige turno abierto y método de pago
  * (CASH | SPEI | CARD) y deja su ticket en el corte. Las tres dejan registro.
  */
@@ -62,11 +64,21 @@ export async function POST(req: Request) {
     const actorName = `${g.ctx.user.firstName} ${g.ctx.user.lastName}`.trim();
 
     if (action === "refund") {
+      // El método es opcional (por defecto, el mismo con que se cobró), pero
+      // si llega tiene que ser uno de mostrador.
+      const refundMethod = body.paymentMethod ?? undefined;
+      if (refundMethod !== undefined && !isCounterPaymentMethod(refundMethod)) {
+        return NextResponse.json(
+          { error: "Elige cómo devuelves el anticipo: efectivo, transferencia o tarjeta en mostrador.", code: "INVALID_PAYMENT_METHOD" },
+          { status: 400 },
+        );
+      }
       const out = await refundDeposit({
         barbershopId: g.ctx.barbershopId,
         appointmentId,
         actorName,
         actorUserId: g.ctx.barberUserId,
+        paymentMethod: refundMethod,
       });
       return NextResponse.json(out);
     }

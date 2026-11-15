@@ -61,7 +61,7 @@ import {
   type Money,
 } from "@/lib/barber/commissions";
 import { NOT_CANCELLED } from "@/lib/barber/clients";
-import { BARBER_DEPOSIT_LINE_PREFIX } from "@/lib/barber/memberships-core";
+import { BARBER_DEPOSIT_LINE_PREFIX, BARBER_DEPOSIT_REFUND_LINE_PREFIX } from "@/lib/barber/memberships-core";
 import { BARBER_DEFAULT_DAY_END_MIN, BARBER_DEFAULT_DAY_START_MIN } from "@/lib/barber/agenda";
 import type {
   BarberAppointmentStatus,
@@ -968,6 +968,8 @@ interface ReportDaySql {
  * no inflan ni esconden la cifra de «Descuentos».
  */
 const DEPOSIT_CREDIT_LIKE = `${BARBER_DEPOSIT_LINE_PREFIX}%`;
+/** La devolución de un anticipo (ticket negativo) tampoco es un descuento. */
+const DEPOSIT_REFUND_LIKE = `${BARBER_DEPOSIT_REFUND_LINE_PREFIX}%`;
 
 interface ReportBarberSql {
   id: string;
@@ -1054,6 +1056,7 @@ export async function getReportsSummary(ctx: BarberContext, opts: ReportsOptions
                COALESCE(SUM(CASE WHEN it."serviceId" IS NULL AND it."productId" IS NULL THEN it."qty" * it."unitPrice" END), 0) AS adjustments,
                COALESCE(SUM(CASE WHEN it."serviceId" IS NULL AND it."productId" IS NULL AND it."unitPrice" < 0
                                   AND it."description" NOT LIKE ${DEPOSIT_CREDIT_LIKE}
+                                  AND it."description" NOT LIKE ${DEPOSIT_REFUND_LIKE}
                                  THEN it."qty" * it."unitPrice" END), 0) AS discounts
         FROM "barber_sale_items" it WHERE it."saleId" = s."id"
       ) i ON TRUE

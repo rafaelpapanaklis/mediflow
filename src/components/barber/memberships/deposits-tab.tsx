@@ -125,7 +125,7 @@ export function DepositsTab({
     setBusyId(appointmentId);
     setListError(null);
     setNotice(null);
-    const res = await apiCall<{ ticketCancelled?: boolean; cashOutsideSession?: boolean }>(
+    const res = await apiCall<{ refundSaleId?: string; cashOutsideSession?: boolean }>(
       "/api/barber/deposits/actions",
       {
         method: "POST",
@@ -137,12 +137,12 @@ export function DepositsTab({
       setListError(res.error);
       return;
     }
-    // Devolución de un anticipo cobrado en mostrador: se dice qué pasó con
-    // el dinero en el corte, para que el cajón no amanezca descuadrado.
-    if (action === "refund" && res.data.ticketCancelled) {
-      setNotice(t("barber.membresias.anticipos.list.refundedInSession"));
+    // Devolución en mostrador: quedó un ticket negativo en el turno de hoy.
+    if (action === "refund" && res.data.refundSaleId) {
+      setNotice(t("barber.membresias.anticipos.list.refundedTicket"));
     } else if (action === "refund" && res.data.cashOutsideSession) {
-      setNotice(t("barber.membresias.anticipos.list.refundedOutsideSession"));
+      // La base aún no admite el ticket de devolución: se dice sin rodeos.
+      setNotice(t("barber.membresias.anticipos.list.refundedNoTicket"));
     }
     onRefresh();
   }

@@ -192,12 +192,12 @@
       "applied": "Aplicado al ticket",
       "refund": "Devolver",
       "forfeit": "Retener",
-      "refundConfirm": "¿Devolver el anticipo? Si se cobró en mostrador y el turno sigue abierto, su ticket se cancela y sale del corte.",
+      "refundConfirm": "¿Devolver el anticipo? Necesitas un turno abierto: la devolución se registra hoy como un ticket negativo, así que baja el efectivo esperado de este turno y el ingreso del mes.",
       "forfeitConfirm": "¿Retener el anticipo? El cliente no lo recupera.",
       "howItWorks": "El anticipo pagado se descuenta solo al cobrar la cita. Si lo cobras en mostrador, entra al corte del turno con su método de pago.",
       "notApplied": "Se descuenta al cobrar la cita",
-      "refundedInSession": "Anticipo devuelto: su ticket se canceló y ya salió del corte del turno.",
-      "refundedOutsideSession": "Anticipo devuelto. El turno donde se cobró ya está cerrado, así que esta salida de dinero no aparece en ningún corte: anótala en la nota de tu corte de hoy."
+      "refundedTicket": "Anticipo devuelto. Quedó un ticket «Devolución de anticipo» en el turno de hoy: ya bajó del efectivo esperado y del ingreso.",
+      "refundedNoTicket": "Anticipo devuelto, pero la devolución NO quedó registrada en el corte (falta un ajuste en la base de datos). Anota esta salida de dinero en la nota de tu corte de hoy."
     },
     "depositStatus": {
       "PENDING": "Por pagar",

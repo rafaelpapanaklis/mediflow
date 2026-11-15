@@ -90,7 +90,8 @@
     "noCashManage": "Tu rol puede ver la caja pero no cobrar ni hacer cortes.",
     "pendingDeposit": "anticipo pagado {amount}",
     "cancelMembershipBody": "Este ticket es la venta o renovación de una membresía. Al cancelarlo, la membresía se cancela (o vuelve a como estaba antes de renovar) y el ticket deja de contar en el corte. Esta acción no se puede deshacer.",
-    "cancelDepositBody": "Este ticket es el anticipo de una cita. Al cancelarlo, la cita queda sin anticipo y el ticket deja de contar en el corte. Esta acción no se puede deshacer."
+    "cancelDepositBody": "Este ticket es el anticipo de una cita. Al cancelarlo, la cita queda sin anticipo y el ticket deja de contar en el corte. Esta acción no se puede deshacer.",
+    "cancelRefundBody": "Este ticket es la devolución de un anticipo. Al cancelarlo, la devolución se deshace: el anticipo vuelve a quedar pagado y el dinero vuelve a contar en el corte. Esta acción no se puede deshacer."
   },
   "session": {
     "openTitle": "Abrir turno",

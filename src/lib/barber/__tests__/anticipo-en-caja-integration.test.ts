@@ -18,6 +18,8 @@
 import "./_sin-server-only";
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import type { BarberContext } from "@/lib/barber-auth";
@@ -41,7 +43,11 @@ import {
   markDepositPaidManually,
   refundDeposit,
 } from "../payments";
-import { BARBER_DEPOSIT_LINE_PREFIX, BARBER_DEPOSIT_RECEIVED_LINE_PREFIX } from "../memberships-core";
+import {
+  BARBER_DEPOSIT_LINE_PREFIX,
+  BARBER_DEPOSIT_RECEIVED_LINE_PREFIX,
+  BARBER_DEPOSIT_REFUND_LINE_PREFIX,
+} from "../memberships-core";
 
 const HAS_DB = Boolean(process.env.DATABASE_URL);
 const skip = HAS_DB ? false : "DATABASE_URL no definido: se salta la integración";
@@ -130,7 +136,30 @@ before(async () => {
   if (!HAS_DB) return;
   A = await makeShop("A");
   B = await makeShop("B");
+  // La base arranca como está HOY producción: con la restricción vieja de
+  // sql/barber_caja.sql (ningún ticket negativo). Así se prueba primero qué
+  // pasa ANTES de pegar sql/barber_devolucion_anticipo.sql, y después se
+  // aplica ese archivo tal cual. NOT VALID: solo vigila las filas nuevas.
+  await prisma.$executeRawUnsafe(`ALTER TABLE "barber_sales" DROP CONSTRAINT IF EXISTS "barber_sales_amounts_valid"`);
+  await prisma.$executeRawUnsafe(`ALTER TABLE "barber_sales" DROP CONSTRAINT IF EXISTS "barber_sales_amounts_nonnegative"`);
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE "barber_sales" ADD CONSTRAINT "barber_sales_amounts_nonnegative" CHECK ("subtotal" >= 0 AND "tip" >= 0 AND "total" >= 0) NOT VALID`,
+  );
 });
+
+/** Ejecuta un .sql plano del repo, sentencia por sentencia (como al pegarlo). */
+async function applySqlFile(rel: string): Promise<number> {
+  const raw = fs.readFileSync(path.resolve(__dirname, "../../../..", rel), "utf8");
+  const statements = raw
+    .split("\n")
+    .filter((line) => !line.trim().startsWith("--"))
+    .join("\n")
+    .split(";")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  for (const statement of statements) await prisma.$executeRawUnsafe(statement);
+  return statements.length;
+}
 
 after(async () => {
   if (!HAS_DB) return;
@@ -226,6 +255,49 @@ test("no se registra dos veces, ni por más que la cita, ni en una cita cancelad
   assert.deepEqual(await depositOf(other), { amount: null, status: null });
 });
 
+test("ANTES de pegar el SQL: devolver sigue funcionando — queda Devuelto, sin ticket, y avisa que no está en el corte", { skip }, async () => {
+  const appt = await makeAppointment(A);
+  await markDepositPaidManually({ barbershopId: A.id, appointmentId: appt, amount: 40, paymentMethod: "CASH", soldByUserId: A.ctx.barberUserId });
+  assert.equal(await expectedCash(A), 640);
+  const tickets = await prisma.barberSale.count({ where: { barbershopId: A.id } });
+
+  const res = await refundDeposit({ barbershopId: A.id, appointmentId: appt, actorName: "Dueña A", actorUserId: A.ctx.barberUserId });
+  assert.equal(res.status, "REFUNDED");
+  assert.equal(res.refundSaleId, undefined, "la base todavía rechaza el ticket negativo");
+  assert.equal(res.cashOutsideSession, true, "y se le dice a la persona que lo anote en su corte");
+  assert.deepEqual(await depositOf(appt), { amount: 40, status: "REFUNDED" });
+  assert.equal(await prisma.barberSale.count({ where: { barbershopId: A.id } }), tickets, "no quedó ningún ticket a medias");
+  assert.equal(await expectedCash(A), 640, "sin el SQL, el corte no se entera (por eso el aviso)");
+});
+
+test("sql/barber_devolucion_anticipo.sql: plano, se puede pegar dos veces, y solo deja pasar el ticket de devolución", { skip }, async () => {
+  const raw = fs.readFileSync(path.resolve(__dirname, "../../../../sql/barber_devolucion_anticipo.sql"), "utf8");
+  const code = raw.split("\n").filter((line) => !line.trim().startsWith("--")).join("\n");
+  assert.doesNotMatch(code, /\bDO\s+\$/i, "sin bloques DO $$");
+  assert.equal(await applySqlFile("sql/barber_devolucion_anticipo.sql"), 3);
+  assert.equal(await applySqlFile("sql/barber_devolucion_anticipo.sql"), 3, "idempotente");
+
+  const session = await prisma.barberCashSession.findFirstOrThrow({ where: { barbershopId: A.id, closedAt: null } });
+  const negative = (notes: string | null, extra: Record<string, unknown> = {}) =>
+    prisma.barberSale.create({
+      data: {
+        barbershopId: A.id, soldByUserId: A.ctx.barberUserId, cashSessionId: session.id, paymentMethod: "CASH",
+        subtotal: new Prisma.Decimal(-10), total: new Prisma.Decimal(-10), notes, ...extra,
+      },
+    });
+  // Un ticket negativo cualquiera sigue prohibido: sin sello, con barbero o con propina negativa.
+  await assert.rejects(negative(null), /barber_sales_amounts_valid/);
+  await assert.rejects(negative("devolución a mano"), /barber_sales_amounts_valid/);
+  await assert.rejects(negative(`#dcb {"k":"refund","appt":"x"}`, { barberId: A.barberId }), /barber_sales_amounts_valid/);
+  await assert.rejects(
+    prisma.barberSale.create({
+      data: { barbershopId: A.id, soldByUserId: A.ctx.barberUserId, cashSessionId: session.id, subtotal: new Prisma.Decimal(10), tip: new Prisma.Decimal(-1), total: new Prisma.Decimal(9) },
+    }),
+    /barber_sales_amounts_valid/,
+  );
+  assert.equal(await expectedCash(A), 640, "nada de lo rechazado entró");
+});
+
 test("anticipo por transferencia: entra al corte en SPEI y NO al efectivo esperado", { skip }, async () => {
   const appt = await makeAppointment(A);
   const out = await markDepositPaidManually({
@@ -233,18 +305,67 @@ test("anticipo por transferencia: entra al corte en SPEI y NO al efectivo espera
   });
   const state = await getCashState(A.ctx);
   assert.equal(state.open!.byMethod.SPEI.total, 60);
-  assert.equal(state.open!.expectedCash, 600, "la transferencia no está en el cajón");
-  assert.equal(state.open!.session.salesTotal, 160);
+  assert.equal(state.open!.expectedCash, 640, "la transferencia no está en el cajón");
+  assert.equal(state.open!.session.salesTotal, 200);
 
-  // Devolverlo con el turno aún abierto cancela su ticket: sale del corte.
+  // Devolverlo registra un ticket NEGATIVO en el turno abierto, por defecto
+  // con el mismo método con que se cobró: sale del corte por donde entró.
   const res = await refundDeposit({ barbershopId: A.id, appointmentId: appt, actorName: "Dueña A", actorUserId: A.ctx.barberUserId });
   assert.equal(res.status, "REFUNDED");
-  assert.equal(res.ticketCancelled, true);
+  assert.equal(res.refundMethod, "SPEI");
+  assert.ok(res.refundSaleId, "la devolución tiene su propio ticket");
   assert.deepEqual(await depositOf(appt), { amount: 60, status: "REFUNDED" });
   const after = await getCashState(A.ctx);
-  assert.equal(after.open!.byMethod.SPEI.total, 0);
-  assert.equal(after.open!.session.salesTotal, 100);
-  assert.equal(after.open!.sales.find((s) => s.id === out.saleId)!.cancelled, true);
+  assert.equal(after.open!.byMethod.SPEI.total, 0, "+$60 del anticipo − $60 de la devolución");
+  assert.equal(after.open!.session.salesTotal, 140);
+  assert.equal(after.open!.expectedCash, 640, "la transferencia nunca estuvo en el cajón");
+  assert.equal(after.open!.sales.find((s) => s.id === out.saleId)!.cancelled, false, "el ticket con que se cobró no se toca");
+
+  const refund = after.open!.sales.find((s) => s.id === res.refundSaleId)!;
+  assert.equal(refund.kind, "refund");
+  assert.equal(refund.total, -60);
+  assert.equal(refund.paymentMethod, "SPEI");
+  assert.equal(refund.clientId, A.clientId);
+  assert.ok(refund.items[0].description.startsWith(BARBER_DEPOSIT_REFUND_LINE_PREFIX));
+  assert.equal(refund.items[0].unitPrice, -60);
+  const detail = await getSaleDetail(A.ctx, refund.id);
+  assert.equal(detail!.discount, 0, "una devolución no es un descuento");
+
+  // Ya devuelto: ni se devuelve otra vez ni se cancela el ticket con que se cobró.
+  await assert.rejects(refundDeposit({ barbershopId: A.id, appointmentId: appt, actorUserId: A.ctx.barberUserId }), payCode("NOT_PAID"));
+  await assert.rejects(cancelSale(A.ctx, out.saleId, { reason: "tarde" }), cajaCode("DEPOSIT_CLOSED"));
+});
+
+test("cancelar el ticket de devolución (turno aún abierto) deshace la devolución: el anticipo vuelve a pagado", { skip }, async () => {
+  const appt = await makeAppointment(A);
+  await markDepositPaidManually({ barbershopId: A.id, appointmentId: appt, amount: 50, paymentMethod: "CASH", soldByUserId: A.ctx.barberUserId });
+  assert.equal(await expectedCash(A), 690);
+  // Se cobró en efectivo y se devuelve por transferencia: cada uno en su método.
+  const res = await refundDeposit({ barbershopId: A.id, appointmentId: appt, actorUserId: A.ctx.barberUserId, paymentMethod: "SPEI" });
+  let state = await getCashState(A.ctx);
+  assert.equal(state.open!.expectedCash, 690, "el efectivo no salió: se devolvió por transferencia");
+  assert.equal(state.open!.byMethod.SPEI.total, -50);
+  assert.deepEqual(await depositOf(appt), { amount: 50, status: "REFUNDED" });
+
+  const cancelled = await cancelSale(A.ctx, res.refundSaleId!, { reason: "no se devolvió al final" });
+  assert.equal(cancelled.kind, "refund");
+  state = await getCashState(A.ctx);
+  assert.equal(state.open!.byMethod.SPEI.total, 0);
+  assert.deepEqual(await depositOf(appt), { amount: 50, status: "PAID" });
+
+  // Y ahora sí, en efectivo: el esperado baja $50. Dos «Devolver» a la vez → un solo ticket.
+  const results = await Promise.allSettled([
+    refundDeposit({ barbershopId: A.id, appointmentId: appt, actorUserId: A.ctx.barberUserId }),
+    refundDeposit({ barbershopId: A.id, appointmentId: appt, actorUserId: A.ctx.barberUserId }),
+    refundDeposit({ barbershopId: A.id, appointmentId: appt, actorUserId: A.ctx.barberUserId }),
+  ]);
+  assert.equal(results.filter((r) => r.status === "fulfilled").length, 1, "el dinero sale una sola vez");
+  assert.ok((results.filter((r) => r.status === "rejected") as PromiseRejectedResult[]).every((r) => payCode("NOT_PAID")(r.reason)));
+  assert.equal(await expectedCash(A), 640);
+  await assert.rejects(
+    refundDeposit({ barbershopId: A.id, appointmentId: apptMain, actorUserId: A.ctx.barberUserId, paymentMethod: "STRIPE" }),
+    payCode("INVALID_PAYMENT_METHOD"),
+  );
 });
 
 test("la lista de citas para registrar anticipo no ofrece las que ya lo tienen", { skip }, async () => {
@@ -426,17 +547,49 @@ test("la barbería B no puede registrar, devolver ni ver el anticipo de una cita
   assert.deepEqual(await depositOf(apptA), { amount: null, status: null });
 });
 
-test("al cerrar el turno, el esperado incluye los anticipos en efectivo; devolver después avisa que quedó fuera del corte", { skip }, async () => {
+// El caso de la revisora (G1 de la ronda 3): el anticipo se cobra un día y se
+// devuelve otro, con el turno donde se cobró ya cerrado. Antes solo quedaba
+// «Devuelto» y una nota: el cajón del día de la devolución cerraba con $100
+// de faltante y el ingreso del mes seguía contando dinero ya devuelto.
+test("anticipo cobrado en un turno ya cerrado: devolver exige turno abierto y registra un ticket negativo HOY", { skip }, async () => {
   const appt = await makeAppointment(A);
-  await markDepositPaidManually({ barbershopId: A.id, appointmentId: appt, amount: 90, paymentMethod: "CASH", soldByUserId: A.ctx.barberUserId });
+  await markDepositPaidManually({ barbershopId: A.id, appointmentId: appt, amount: 100, paymentMethod: "CASH", soldByUserId: A.ctx.barberUserId });
   const expected = await expectedCash(A);
   const closed = await closeCashSession(A.ctx, { countedAmount: expected });
   assert.equal(closed.session.expectedAmount, expected);
-  assert.equal(closed.session.difference, 0, "con los anticipos dentro, el cajón cuadra");
+  assert.equal(closed.session.difference, 0, "con los anticipos dentro, el cajón del día del cobro cuadra");
+  const revenueBefore = (await getReportsSummary(A.ctx, { range: "today", features: FEATURES })).totals.revenue;
 
+  // Sin turno abierto no se devuelve: no hay dónde registrar la salida.
+  await assert.rejects(
+    refundDeposit({ barbershopId: A.id, appointmentId: appt, actorName: "Dueña A", actorUserId: A.ctx.barberUserId }),
+    payCode("NO_OPEN_SESSION"),
+  );
+  assert.deepEqual(await depositOf(appt), { amount: 100, status: "PAID" }, "sigue pagado: no pasó nada");
+
+  // «Otro día»: turno nuevo con fondo $500.
+  await openCashSession(A.ctx, { openingAmount: 500 });
   const res = await refundDeposit({ barbershopId: A.id, appointmentId: appt, actorName: "Dueña A", actorUserId: A.ctx.barberUserId });
   assert.equal(res.status, "REFUNDED");
-  assert.equal(res.ticketCancelled, false, "un turno cerrado no se toca");
-  assert.equal(res.cashOutsideSession, true, "y se avisa: esa salida hay que anotarla a mano");
-  assert.deepEqual(await depositOf(appt), { amount: 90, status: "REFUNDED" });
+  assert.equal(res.refundMethod, "CASH");
+  assert.deepEqual(await depositOf(appt), { amount: 100, status: "REFUNDED" });
+
+  const state = await getCashState(A.ctx);
+  assert.equal(state.open!.expectedCash, 400, "fondo $500 − $100 que salieron del cajón hoy");
+  assert.equal(state.open!.byMethod.CASH.total, -100);
+  assert.equal(state.open!.session.salesTotal, -100);
+  const refund = state.open!.sales.find((s) => s.id === res.refundSaleId)!;
+  assert.equal(refund.total, -100);
+  assert.equal(refund.cashSessionId, state.open!.session.id, "en el turno de HOY, no en el que ya cerró");
+
+  // El turno cerrado no cambió, y el ingreso baja los $100 devueltos.
+  const history = (await getCashState(A.ctx)).history.find((h) => h.id === closed.session.id)!;
+  assert.equal(history.expectedAmount, expected);
+  const report = await getReportsSummary(A.ctx, { range: "today", features: FEATURES });
+  assert.equal(report.totals.revenue, revenueBefore - 100, "el ingreso ya no cuenta dinero que se devolvió");
+  assert.equal(report.totals.discounts, 120, "y la devolución no se disfraza de descuento");
+
+  // Al cerrar hoy contando lo que hay ($400), cuadra.
+  const closedToday = await closeCashSession(A.ctx, { countedAmount: 400 });
+  assert.equal(closedToday.session.difference, 0);
 });
