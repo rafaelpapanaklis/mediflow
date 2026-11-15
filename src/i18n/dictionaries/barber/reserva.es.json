@@ -177,6 +177,8 @@
     "rechazar": "Rechazar",
     "clienteNuevo": "Cliente nuevo",
     "clienteVisitas": "{n} visitas",
+    "origenWhatsapp": "Por WhatsApp",
+    "origenWeb": "Por tu página",
     "vencida": "El horario ya pasó",
     "cualquierBarbero": "Sin barbero asignado",
     "sinPermiso": "No tienes permiso para atender solicitudes.",

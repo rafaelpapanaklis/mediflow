@@ -441,15 +441,22 @@ test("🔴 cancelar o mover exige 2 horas de anticipación — la misma regla qu
   assert.match(barberLateChangeReply(null), /llama a la barbería\.$/);
 });
 
-test("una solicitud sin aceptar es la reserva en línea PENDIENTE (lo que lista Solicitudes)", () => {
+test("una solicitud sin aceptar es la reserva PENDIENTE de la web o del bot (lo que lista Solicitudes)", () => {
   assert.equal(isBarberUnacceptedRequest({ status: "PENDING", source: "PUBLIC" }), true);
+  assert.equal(isBarberUnacceptedRequest({ status: "PENDING", source: "WHATSAPP" }), true, "la agendó el bot en modo manual");
   assert.equal(isBarberUnacceptedRequest({ status: "CONFIRMED", source: "PUBLIC" }), false, "ya aceptada");
+  assert.equal(isBarberUnacceptedRequest({ status: "CONFIRMED", source: "WHATSAPP" }), false, "bot en automático / ya aceptada");
   assert.equal(isBarberUnacceptedRequest({ status: "PENDING", source: "PANEL" }), false, "la creó la barbería");
   assert.equal(isBarberUnacceptedRequest({ status: "PENDING", source: "WALKIN" }), false);
-  assert.deepEqual([...BARBER_REQUEST_SOURCES], ["PUBLIC"]);
-  // booking.ts (de otra pantalla) define Solicitudes con este mismo filtro.
+  assert.deepEqual([...BARBER_REQUEST_SOURCES], ["PUBLIC", "WHATSAPP"]);
+  // booking.ts define Solicitudes (listar, y aceptar/rechazar en dos pasos)
+  // con ESTA constante, no con un origen escrito a mano.
   const booking = readFileSync("src/lib/barber/booking.ts", "utf8");
-  assert.ok(booking.includes('source: "PUBLIC"'), "si Solicitudes cambia de filtro, BARBER_REQUEST_SOURCES tiene que seguirlo");
+  const usos = booking.split("source: { in: [...BARBER_REQUEST_SOURCES] }").length - 1;
+  assert.equal(usos, 3, "listBookingRequests + findFirst y updateMany de resolveBookingRequest");
+  // El único `source: "PUBLIC"` que queda es el del tope diario: es SOLO de la web.
+  assert.equal(booking.split('source: "PUBLIC",').length - 1, 1);
+  assert.match(booking, /async function countNewPhoneRequestsToday[\s\S]{0,400}source: "PUBLIC",/);
 });
 
 /* ═════════════════ 6. ADJUNTOS Y MARCAS DE SISTEMA ═══════════════════ */

@@ -177,6 +177,8 @@
     "rechazar": "Decline",
     "clienteNuevo": "New client",
     "clienteVisitas": "{n} visits",
+    "origenWhatsapp": "Via WhatsApp",
+    "origenWeb": "Via your page",
     "vencida": "That time already passed",
     "cualquierBarbero": "No barber assigned",
     "sinPermiso": "You don't have permission to handle requests.",

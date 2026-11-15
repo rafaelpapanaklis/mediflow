@@ -1024,12 +1024,18 @@ export function decideBarberReminderReply(
 /**
  * Orígenes cuya cita PENDIENTE es una SOLICITUD que la barbería tiene que
  * aceptar o rechazar (pantalla Solicitudes), no una visita por confirmar.
- * Hoy solo la reserva en línea: es exactamente lo que filtra
- * listBookingRequests() en booking.ts (`source: "PUBLIC"`). Si Solicitudes
- * empieza a incluir las que agenda el bot, se añade "WHATSAPP" AQUÍ y los
- * recordatorios y el «CONFIRMAR» las dejan fuera sin tocar nada más.
+ * La reserva en línea (PUBLIC) y la que agenda el bot (WHATSAPP): con la
+ * política manual las dos nacen PENDIENTES y el bot le dice al cliente
+ * «falta que la barbería la confirme». Es el ÚNICO criterio: lo usan
+ * listBookingRequests() y resolveBookingRequest() en booking.ts, los
+ * recordatorios y el «CONFIRMAR» del cliente. Con la automática nacen
+ * CONFIRMED y no son solicitudes.
+ *
+ * Ojo: el tope diario de teléfonos nuevos y la validación de nombre y
+ * teléfono son SOLO de la web (`fromWeb` en createPublicBooking); esto no
+ * los extiende al bot.
  */
-export const BARBER_REQUEST_SOURCES: readonly string[] = ["PUBLIC"];
+export const BARBER_REQUEST_SOURCES: readonly ("PUBLIC" | "WHATSAPP")[] = ["PUBLIC", "WHATSAPP"];
 
 /**
  * ¿Esta cita es una solicitud que la barbería aún no acepta?
@@ -1040,7 +1046,7 @@ export const BARBER_REQUEST_SOURCES: readonly string[] = ["PUBLIC"];
  * confirma: confirmarla es decisión de la barbería.
  */
 export function isBarberUnacceptedRequest(appt: { status: string; source: string }): boolean {
-  return appt.status === "PENDING" && BARBER_REQUEST_SOURCES.includes(appt.source);
+  return appt.status === "PENDING" && (BARBER_REQUEST_SOURCES as readonly string[]).includes(appt.source);
 }
 
 /**

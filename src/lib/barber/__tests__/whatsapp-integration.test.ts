@@ -56,6 +56,7 @@ import {
   barberWaTemplate,
 } from "../whatsapp-core";
 import { BARBER_WALKIN_NOTIFY_TEMPLATE, isInvalidatedReminder, walkInNotifyBody } from "../agenda";
+import { resolveBookingRequest } from "../booking";
 
 const REMINDER = barberWaTemplate("reminder").name;
 const REMINDER_BOTONES = barberWaTemplate("reminderButtons").name;
@@ -1262,6 +1263,36 @@ test("🔴 G3 — a una solicitud sin aceptar NO se le recuerda, y un «CONFIRMA
   // En cuanto la barbería la acepta, entra a los recordatorios.
   await prisma.barberAppointment.update({ where: { id: solicitud.id }, data: { status: "CONFIRMED" } });
   await prisma.barberMessage.deleteMany({ where: { barbershopId: A.id, phone: pSolicitud } });
+  assert.deepEqual(await scheduleBarberReminders(A.id), { queued: 1 });
+});
+
+test("🔴 la cita que agenda el BOT en manual también es solicitud: sin recordatorio, «CONFIRMAR» no la confirma, al aceptarla sale texto", { skip }, async () => {
+  await vaciarCola(A);
+  const phone = telefono();
+  const delBot = await crearCita(A, { phone, enMinutos: 5 * 60, source: "WHATSAPP" });
+  // El cliente acaba de agendar por el chat: la ventana de 24 h está abierta.
+  await prisma.barberMessage.create({
+    data: { barbershopId: A.id, direction: "INBOUND", phone, body: "quiero corte a las 5", status: "DELIVERED" },
+  });
+
+  assert.deepEqual(await scheduleBarberReminders(A.id), { queued: 0 }, "no se recuerda lo que la barbería no ha aceptado");
+
+  limpiar();
+  const m = entrante(A, phone, "CONFIRMAR");
+  await ingestBarberInbound(m.value, m.msg);
+  assert.equal(await estadoDe(delBot.id), "PENDING", "confirmarla es de la barbería, no del cliente");
+
+  // La barbería la acepta en Solicitudes: el aviso sale como TEXTO (ventana abierta).
+  limpiar();
+  const ok = await resolveBookingRequest({ barbershopIds: [A.id], appointmentId: delBot.id, action: "aceptar" });
+  assert.deepEqual(ok, { ok: true, status: "CONFIRMED" });
+  await drainBarberOutbox(A.id);
+  const aEl = enviados().filter((c) => c.body.to === `52${phone}`);
+  assert.equal(aEl.length, 1);
+  assert.equal(aEl[0].body.type, "text", "dentro de la ventana no se gasta plantilla");
+
+  // Ya aceptada, entra a los recordatorios como cualquier visita.
+  await prisma.barberMessage.deleteMany({ where: { barbershopId: A.id, phone, direction: "OUTBOUND" } });
   assert.deepEqual(await scheduleBarberReminders(A.id), { queued: 1 });
 });
 

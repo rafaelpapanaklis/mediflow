@@ -30,6 +30,7 @@ import assert from "node:assert/strict";
 import { NextRequest } from "next/server";
 import {
   createPublicBooking,
+  listBookingRequests,
   resolveBookingGate,
   resolveBookingRequest,
   type BookingResult,
@@ -66,6 +67,25 @@ async function reservar(
     clientName: args.name ?? "Luis Pérez",
     phone: args.phone,
     notes: null,
+  });
+}
+
+/** Como agenda el bot (bot.ts): origen WHATSAPP y sin aviso al reservar. */
+async function reservarBot(
+  t: Tienda,
+  args: { phone: string; dateISO: string; time: string; name?: string },
+): Promise<BookingResult> {
+  return createPublicBooking({
+    shop: await shopRow(t),
+    serviceIds: [t.corteId],
+    barberId: "any",
+    dateISO: args.dateISO,
+    time: args.time,
+    clientName: args.name ?? "Luis Pérez",
+    phone: args.phone,
+    notes: "Agendada por el bot de WhatsApp.",
+    source: "WHATSAPP",
+    skipNotify: true,
   });
 }
 
@@ -248,6 +268,82 @@ test("automática: confirma al reservar SOLO al cliente con historial", { skip }
   const r2 = await reservar(B, { phone: deSiempre, dateISO: dia(6), time: "11:00" });
   assert.ok(r2.ok && r2.status === "CONFIRMED");
   assert.equal(await confirmacionesDe(B, deSiempre), 1);
+});
+
+/* ═══════════════ Solicitudes que agenda el bot ═══════════════ */
+
+test("bot en manual: nace PENDIENTE, sale en Solicitudes «por WhatsApp» y aceptarla encola la confirmación", { skip }, async () => {
+  const H = await crearTienda();
+  const web = telefono();
+  await reservar(H, { phone: web, dateISO: dia(3), time: "10:00" });
+  const phone = telefono();
+  const r = await reservarBot(H, { phone, dateISO: dia(3), time: "11:00" });
+  assert.ok(r.ok && r.status === "PENDING", "en manual también espera a la barbería");
+  assert.equal(await confirmacionesDe(H, phone), 0, "el bot ya contestó en el chat: nada en la cola");
+
+  const pendientes = await listBookingRequests({ barbershopIds: [H.id], scope: "pendientes" });
+  const porOrigen = Object.fromEntries(pendientes.map((p) => [p.clientPhone, p.source]));
+  assert.deepEqual(porOrigen, { [web]: "PUBLIC", [phone]: "WHATSAPP" });
+
+  const cita = pendientes.find((p) => p.clientPhone === phone)!;
+  const ok = await resolveBookingRequest({ barbershopIds: [H.id], appointmentId: cita.id, action: "aceptar" });
+  assert.deepEqual(ok, { ok: true, status: "CONFIRMED" });
+  assert.equal(await confirmacionesDe(H, phone), 1, "al aceptar sale la confirmación, como la de la web");
+  const resueltas = await listBookingRequests({ barbershopIds: [H.id], scope: "resueltas" });
+  assert.equal(resueltas.find((p) => p.id === cita.id)?.source, "WHATSAPP");
+
+  // Otra barbería no la ve ni la puede resolver.
+  const otra = await crearTienda();
+  assert.deepEqual(
+    await resolveBookingRequest({ barbershopIds: [otra.id], appointmentId: cita.id, action: "rechazar" }),
+    { ok: false, code: "notFound" },
+  );
+});
+
+test("bot en manual: rechazarla avisa por texto (el cliente acaba de escribir)", { skip }, async () => {
+  const phone = telefono();
+  await prisma.barberMessage.create({
+    data: { barbershopId: A.id, direction: "INBOUND", phone, body: "quiero corte mañana", status: "DELIVERED" },
+  });
+  const r = await reservarBot(A, { phone, dateISO: dia(7), time: "11:00" });
+  assert.ok(r.ok && r.status === "PENDING");
+  const cita = await prisma.barberAppointment.findFirst({ where: { barbershopId: A.id, clientPhone: phone } });
+  const res = await resolveBookingRequest({ barbershopIds: [A.id], appointmentId: cita!.id, action: "rechazar" });
+  assert.deepEqual(res, { ok: true, status: "CANCELLED" });
+  const salientes = await prisma.barberMessage.findMany({
+    where: { barbershopId: A.id, phone, direction: "OUTBOUND" },
+  });
+  assert.equal(salientes.length, 1);
+  assert.equal(salientes[0].templateName, null, "texto, sin plantilla");
+  assert.match(salientes[0].body ?? "", /no pudimos apartar tu cita/);
+});
+
+test("el bot NO entra al tope diario ni a la regla de nombre y teléfono de la web", { skip }, async () => {
+  const J = await crearTienda();
+  await sembrarSolicitudes(J, BARBER_PUBLIC_NEW_PHONE_DAILY_CAP);
+  assert.deepEqual(
+    await reservar(J, { phone: telefono(), dateISO: dia(2), time: "10:00" }),
+    { ok: false, code: "dailyCap" },
+    "la web ya llegó al tope",
+  );
+  const bot = await reservarBot(J, { phone: telefono(), dateISO: dia(2), time: "11:00", name: "Memo 💈 R." });
+  assert.ok(bot.ok && bot.status === "PENDING", "el bot agenda aunque la web esté topada y con un nombre que la web no deja");
+
+  // Y la solicitud del bot no gasta lugar del tope de la web.
+  const K = await crearTienda();
+  await sembrarSolicitudes(K, BARBER_PUBLIC_NEW_PHONE_DAILY_CAP - 1);
+  assert.ok((await reservarBot(K, { phone: telefono(), dateISO: dia(2), time: "10:00" })).ok);
+  assert.ok((await reservar(K, { phone: telefono(), dateISO: dia(2), time: "11:00" })).ok, "la 50.ª de la web sigue cabiendo");
+});
+
+test("bot en automático: confirma al momento y no es una solicitud", { skip }, async () => {
+  const L = await crearTienda();
+  await prisma.barbershop.update({ where: { id: L.id }, data: { bookingPolicy: "auto" } });
+  const phone = telefono();
+  const r = await reservarBot(L, { phone, dateISO: dia(3), time: "10:00" });
+  assert.ok(r.ok && r.status === "CONFIRMED");
+  assert.equal(await confirmacionesDe(L, phone), 0, "skipNotify: el bot ya lo dijo en el chat");
+  assert.deepEqual(await listBookingRequests({ barbershopIds: [L.id], scope: "pendientes" }), []);
 });
 
 /* ═══════════════ Tope diario por barbería ═══════════════ */
