@@ -265,7 +265,7 @@ test("un envío que se interrumpió a la mitad NO se reintenta (no-duplicar pesa
   assert.equal(w.status, "PENDING", "la que está saliendo en otra pasada no se toca");
 });
 
-test("Meta rechaza la plantilla: la fila queda FAILED con el motivo REAL y no se reprograma", { skip }, async () => {
+test("Meta rechaza el envío por un motivo REAL: la fila queda FAILED con ese motivo y no se reprograma", { skip }, async () => {
   await vaciarCola(A);
   const phone = telefono();
   await crearCita(A, { phone, enMinutos: 5 * 60 });
@@ -275,7 +275,7 @@ test("Meta rechaza la plantilla: la fila queda FAILED con el motivo REAL y no se
     call.url.includes("/messages")
       ? {
           status: 400,
-          json: { error: { code: 132001, message: "(#132001) Template name does not exist in the translation" } },
+          json: { error: { code: 132000, message: "(#132000) Number of parameters does not match" } },
         }
       : null,
   );
@@ -284,11 +284,43 @@ test("Meta rechaza la plantilla: la fila queda FAILED con el motivo REAL y no se
 
   const [fila] = await mensajes(A, phone);
   assert.equal(fila.status, "FAILED");
-  assert.match(fila.errorMessage ?? "", /#132001/);
+  assert.match(fila.errorMessage ?? "", /#132000/);
 
   // Un fallo REAL de Meta no se reintenta cada pocos minutos.
   onGraph(null);
   assert.deepEqual(await scheduleBarberReminders(A.id), { queued: 0 });
+});
+
+test("🔴 la plantilla aún no está aprobada: el recordatorio ESPERA en cola y sale cuando Meta la aprueba", { skip }, async () => {
+  await vaciarCola(A);
+  const phones = [telefono(), telefono(), telefono()];
+  for (const phone of phones) await crearCita(A, { phone, enMinutos: 5 * 60 });
+  await scheduleBarberReminders(A.id);
+
+  // Recién conectada: Meta todavía no aprueba dc_barber_recordatorio_cita.
+  onGraph((call) =>
+    call.url.includes("/messages")
+      ? {
+          status: 404,
+          json: { error: { code: 132001, message: "(#132001) Template name does not exist in the translation" } },
+        }
+      : null,
+  );
+  const antes = await drainBarberOutbox(A.id);
+  assert.deepEqual(antes, { sent: 0, failed: 0, skipped: 3 }, "ninguno se da por perdido");
+  assert.equal(enviados().length, 1, "a Meta se le pregunta UNA vez por pasada, no una por fila");
+  for (const phone of phones) {
+    const [fila] = await mensajes(A, phone);
+    assert.equal(fila.status, "PENDING", "sigue en cola");
+    assert.equal(fila.errorMessage, null, "sin reclamo colgado: la siguiente pasada la puede tomar");
+  }
+  // Y no se programa un segundo recordatorio mientras espera.
+  assert.deepEqual(await scheduleBarberReminders(A.id), { queued: 0 });
+
+  // Meta aprueba la plantilla: la siguiente pasada los manda.
+  limpiar();
+  assert.deepEqual(await drainBarberOutbox(A.id), { sent: 3, failed: 0, skipped: 0 });
+  assert.equal(enviados().length, 3);
 });
 
 test("sin cupo no sale nada y la cola espera; el despacho con el tiempo agotado se corta", { skip }, async () => {
@@ -770,8 +802,9 @@ test("si Meta rechaza el aviso (plantilla sin aprobar), el mostrador ve el motiv
   );
   const r = await notifyBarberWalkIn({ barbershopId: A.id, phone, body: avisoDe("Barbería El Corte") });
   assert.equal(r.outcome, "failed");
-  assert.equal(r.code, "SEND_FAILED");
+  assert.equal(r.code, "TEMPLATE_PENDING", "el aviso de la fila no espera: se dice en el acto");
   assert.match(r.error ?? "", /#132001/);
+  assert.match(r.error ?? "", /todavía no está aprobada por Meta/);
   assert.equal((await mensajes(A, phone))[0].status, "FAILED");
 
   // Un aviso fallido no bloquea el siguiente intento.

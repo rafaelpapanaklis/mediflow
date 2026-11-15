@@ -914,7 +914,12 @@ function planDelivery(
   return { text: (row.body ?? "").trim() || null, template: null };
 }
 
-type OutboxOutcome = "sent" | "failed" | "stale" | "busy" | "lost" | "noQuota";
+type OutboxOutcome = "sent" | "failed" | "stale" | "busy" | "lost" | "noQuota" | "waiting";
+
+/** Lo que se le dice a quien mira la fila mientras Meta aprueba la plantilla. */
+const TEMPLATE_PENDING_MESSAGE =
+  "La plantilla de este aviso todavía no está aprobada por Meta (#132001). " +
+  "Revisa su estado en WhatsApp → Plantillas.";
 
 /**
  * Procesa UNA fila de la cola: decide si todavía tiene sentido, la RECLAMA
@@ -933,7 +938,16 @@ async function processOutboxRow(
   shop: ShopWaRow,
   creds: BarberWaCredentials,
   row: OutboxRow,
-  opts: { hasQuota: boolean; now?: Date },
+  opts: {
+    hasQuota: boolean;
+    now?: Date;
+    /**
+     * Plantillas que Meta ya rechazó por "no existe / no está aprobada" en
+     * esta misma pasada: a las demás filas que la necesitan no se les
+     * vuelve a preguntar (serían decenas de llamadas con la misma respuesta).
+     */
+    pendingTemplates?: Set<string>;
+  },
 ): Promise<{ outcome: OutboxOutcome; error: string | null }> {
   const now = opts.now ?? new Date();
 
@@ -987,6 +1001,22 @@ async function processOutboxRow(
     });
     if (claim.count === 0) return { outcome: "busy", error: null };
 
+    // 🔴 LA PLANTILLA TODAVÍA NO ESTÁ APROBADA (132001). Al conectar el
+    // número, Meta tarda de minutos a horas en aprobar las plantillas. Si la
+    // cola intentaba mandar en ese hueco, el recordatorio quedaba FAILED
+    // para siempre (un fallo real de Meta no se reprograma): la barbería
+    // conectaba a las 10:00 y perdía los recordatorios de todo el día
+    // siguiente. Ahora la fila SE QUEDA EN COLA (se suelta el reclamo) y la
+    // siguiente pasada lo vuelve a intentar; si la visita llega antes que la
+    // aprobación, caduca sola por barberOutboxStaleReason.
+    const waitForTemplate = async (tplName: string) => {
+      opts.pendingTemplates?.add(tplName);
+      await prisma.barberMessage
+        .updateMany({ where: { id: row.id, status: "PENDING" }, data: { errorMessage: null } })
+        .catch(() => {});
+      return { outcome: "waiting" as const, error: TEMPLATE_PENDING_MESSAGE };
+    };
+
     let wamid: string | null;
     try {
       const plan = planDelivery(shop, row, kind, appt);
@@ -994,7 +1024,17 @@ async function processOutboxRow(
       if (windowOpen && plan.text) {
         wamid = (await sendText(creds, row.phone, plan.text)).wamid;
       } else if (plan.template) {
-        wamid = (await sendTemplate(creds, row.phone, plan.template.tpl, plan.template.params)).wamid;
+        if (opts.pendingTemplates?.has(plan.template.tpl.name)) {
+          return await waitForTemplate(plan.template.tpl.name);
+        }
+        try {
+          wamid = (await sendTemplate(creds, row.phone, plan.template.tpl, plan.template.params)).wamid;
+        } catch (err) {
+          if (err instanceof WhatsAppApiError && err.code === WA_ERROR_CODE.TEMPLATE_NOT_FOUND) {
+            return await waitForTemplate(plan.template.tpl.name);
+          }
+          throw err;
+        }
       } else {
         throw new WhatsAppApiError({
           message:
@@ -1070,6 +1110,7 @@ export async function drainBarberOutbox(
   let sent = 0;
   let failed = 0;
   let skipped = 0;
+  const pendingTemplates = new Set<string>();
 
   for (let i = 0; i < rows.length; i++) {
     if (opts.deadline && Date.now() >= opts.deadline) {
@@ -1085,7 +1126,10 @@ export async function drainBarberOutbox(
       continue;
     }
 
-    const { outcome } = await processOutboxRow(shop, creds, row, { hasQuota: room > 0 });
+    const { outcome } = await processOutboxRow(shop, creds, row, {
+      hasQuota: room > 0,
+      pendingTemplates,
+    });
     if (outcome === "sent") {
       sent++;
       room--;
@@ -1104,7 +1148,15 @@ export interface DeliverNowResult {
   status: "SENT" | "FAILED" | "PENDING";
   /** Por qué no salió (texto para la pantalla), o null si salió. */
   error: string | null;
-  code: "NOT_CONNECTED" | "QUOTA" | "STALE" | "BUSY" | "NOT_FOUND" | "SEND_FAILED" | null;
+  code:
+    | "NOT_CONNECTED"
+    | "QUOTA"
+    | "STALE"
+    | "BUSY"
+    | "NOT_FOUND"
+    | "TEMPLATE_PENDING"
+    | "SEND_FAILED"
+    | null;
 }
 
 /**
@@ -1159,6 +1211,9 @@ export async function deliverBarberMessageNow(
     const { outcome, error } = await processOutboxRow(shop, creds, row, { hasQuota: true });
     if (outcome === "sent") return { status: "SENT", error: null, code: null };
     if (outcome === "busy") return { status: "PENDING", error: null, code: "BUSY" };
+    // Aquí NO se espera a que Meta apruebe la plantilla: quien tocó "Avisar"
+    // tiene a la persona enfrente y necesita saberlo ya.
+    if (outcome === "waiting") return await fail("TEMPLATE_PENDING", TEMPLATE_PENDING_MESSAGE);
     if (outcome === "stale") return { status: "FAILED", error: `El aviso ya no se mandó: ${error}.`, code: "STALE" };
     return { status: "FAILED", error: error ?? "No se pudo enviar el aviso.", code: "SEND_FAILED" };
   } catch (err) {

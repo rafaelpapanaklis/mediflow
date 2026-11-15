@@ -104,7 +104,11 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
   if (result.outcome === "failed") {
     // 409 = algo que la barbería puede resolver (conectar, cupo); 502 = Meta
     // lo rechazó. En los dos casos viaja el motivo real.
-    const fixable = result.code === "NOT_CONNECTED" || result.code === "QUOTA" || result.code === "NO_PHONE";
+    const fixable =
+      result.code === "NOT_CONNECTED" ||
+      result.code === "QUOTA" ||
+      result.code === "NO_PHONE" ||
+      result.code === "TEMPLATE_PENDING";
     return jsonError(result.error ?? "No se pudo mandar el aviso.", fixable ? 409 : 502, {
       code: result.code ?? "SEND_FAILED",
     });
