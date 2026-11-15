@@ -92,7 +92,8 @@
       "client": "Type the client's name.",
       "services": "Pick at least one service.",
       "barber": "Pick a barber.",
-      "time": "Pick a valid time."
+      "time": "Pick a valid time.",
+      "phone": "Type the WhatsApp number with 10 digits, or leave it empty."
     },
     "durationAuto": "Worked out from the services you picked. You can change it.",
     "durationManual": "Custom duration: this one wins over the catalog.",
@@ -309,6 +310,7 @@
     "notPendingBody": "The register only lists completed visits from the last few days with no receipt yet. If this one is older, charge it from the Register screen.",
     "goToCash": "Go to Register",
     "errorLoad": "We couldn't open the charge.",
-    "done": "Charged: {amount}."
+    "done": "Charged: {amount}.",
+    "viewTicket": "View or print ticket"
   }
 }

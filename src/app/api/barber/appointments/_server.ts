@@ -312,6 +312,8 @@ export async function invalidateAppointmentReminders(
  *     visita. Para eso existen esas columnas, y así alguien con agenda.edit
  *     pero SIN clients.edit no acaba dando de alta clientes de rebote.
  */
+export const PHONE_INVALID_MESSAGE = "Escribe el WhatsApp a 10 dígitos o déjalo vacío.";
+
 export interface ResolvedClient {
   clientId: string | null;
   clientName: string | null;
@@ -342,7 +344,13 @@ export async function resolveAppointmentClient(
   if (!name) {
     return { client: null, error: jsonError("Escribe el nombre del cliente.", 400) };
   }
-  const phone = mxTenDigits(asString(body.clientPhone) ?? "");
+  const rawPhone = asString(body.clientPhone) ?? "";
+  const phone = mxTenDigits(rawPhone);
+  // Un teléfono escrito que no es de 10 dígitos NO se descarta en silencio:
+  // la visita quedaba sin cliente ligado y nadie se enteraba.
+  if (rawPhone && !phone) {
+    return { client: null, error: jsonError(PHONE_INVALID_MESSAGE, 400, { code: "PHONE_INVALID" }) };
+  }
 
   const canCreate = hasBarberPermission(
     { role: ctx.role, permissionsOverride: ctx.user.permissionsOverride },

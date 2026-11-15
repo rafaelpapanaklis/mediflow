@@ -30,6 +30,7 @@ import {
   totalServiceMinutes,
   totalServicePrice,
 } from "@/lib/barber/agenda";
+import { mxTenDigits } from "@/lib/phone-mx";
 import { Field, Modal, agendaCss as css } from "./agenda-ui";
 
 interface ClientHit {
@@ -162,6 +163,12 @@ export function AppointmentDialog(props: AppointmentDialogProps) {
   const submit = async () => {
     setError(null);
     if (!clientName.trim()) return setError(t("barber.agenda.modal.errors.client"));
+    // Un cliente ya elegido de la lista trae su teléfono bueno. Lo escrito a
+    // mano, si no es de 10 dígitos, se avisa AQUÍ: antes el servidor guardaba
+    // la visita sin ligar al cliente y sin decir nada.
+    if (!clientId && clientPhone.trim() && !mxTenDigits(clientPhone)) {
+      return setError(t("barber.agenda.modal.errors.phone"));
+    }
     if (selected.length === 0) return setError(t("barber.agenda.modal.errors.services"));
     if (!barberId) return setError(t("barber.agenda.modal.errors.barber"));
     const minute = hhmmToMinute(hhmm);

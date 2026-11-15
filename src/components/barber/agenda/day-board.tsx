@@ -119,6 +119,9 @@ export function DayBoard(props: DayBoardProps) {
   }, [windowsByBarber, appointments, toMinutes]);
 
   const height = Math.max(240, (bounds.end - bounds.start) * PX);
+  const scrollerRef = useRef<HTMLDivElement | null>(null);
+  /** Día para el que ya se desplazó la rejilla a «ahora» (una vez por día). */
+  const scrolledFor = useRef<string | null>(null);
   const yOf = useCallback((minute: number) => (minute - bounds.start) * PX, [bounds.start]);
 
   // ── Línea del "ahora" ────────────────────────────────────────────────
@@ -133,8 +136,25 @@ export function DayBoard(props: DayBoardProps) {
     return () => window.clearInterval(id);
   }, [dateISO, timezone, dayStartUtc]);
 
-  // ── Arrastre ─────────────────────────────────────────────────────────
   const columnRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+
+  // Al abrir HOY la rejilla se acomoda en la hora actual (con un tercio de
+  // la pantalla de margen hacia arriba), en vez de abrir siempre a las 9 a. m.
+  // Una sola vez por día visto: el refresco de cada minuto no debe quitarle
+  // el scroll a quien está revisando otra hora.
+  useEffect(() => {
+    if (nowMinute === null || scrolledFor.current === dateISO) return;
+    const scroller = scrollerRef.current;
+    const column = columnRefs.current.values().next().value as HTMLDivElement | undefined;
+    if (!scroller || !column) return;
+    scrolledFor.current = dateISO;
+    const columnTop =
+      column.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop;
+    const target = columnTop + (nowMinute - bounds.start) * PX - scroller.clientHeight / 3;
+    scroller.scrollTop = Math.max(0, target);
+  }, [nowMinute, dateISO, bounds.start]);
+
+  // ── Arrastre ─────────────────────────────────────────────────────────
   const [drag, setDrag] = useState<DragState | null>(null);
   const dragRef = useRef<DragState | null>(null);
   dragRef.current = drag;
@@ -251,7 +271,7 @@ export function DayBoard(props: DayBoardProps) {
 
   return (
     <div className={css.board}>
-      <div className={css.scroller}>
+      <div className={css.scroller} ref={scrollerRef}>
         <div
           className={css.grid}
           style={{ gridTemplateColumns: `58px repeat(${columns.length}, minmax(0, 1fr))` }}
