@@ -9,6 +9,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { mxTenDigits } from "@/lib/phone-mx";
+import { hasBarberPermission } from "@/lib/barber/permissions";
+import { clientsViewScope, scopeUserFromCtx } from "@/lib/barber/own-visits";
 import {
   estimateWaitMinutes,
   toBarberDTO,
@@ -30,7 +32,19 @@ export async function GET(req: Request) {
     branchId: url.searchParams.get("branchId"),
   });
   if (gate.response) return gate.response;
-  const { shopId, timezone } = gate.gate;
+  const { shopId, timezone, ctx } = gate.gate;
+
+  // La fila es de todos (cualquiera con walkin.manage sienta gente), pero lo
+  // ajeno no viaja (A-M1, ronda 10):
+  //  · sin barbers.manage, de los compañeros no salen comisión ni renta;
+  //  · con el alcance de clientes recortado (rol Barbero), «recientes» son
+  //    solo los suyos y las filas que no son suyas van sin teléfono.
+  const permUser = { role: ctx.role, permissionsOverride: ctx.user.permissionsOverride };
+  const seesPay = hasBarberPermission(permUser, "barbers.manage");
+  const ownBarberId = ctx.barber?.id ?? null;
+  const clientScope = clientsViewScope(scopeUserFromCtx(ctx));
+  const mine = clientScope.kind === "own" ? clientScope.barberId : null;
+  const narrowed = clientScope.kind !== "all";
 
   const [snapshot, barbers, services, recent] = await Promise.all([
     loadQueueSnapshot(shopId),
@@ -50,19 +64,24 @@ export async function GET(req: Request) {
         barbershopId: shopId,
         status: { in: ["SERVED", "LEFT"] },
         updatedAt: { gt: new Date(Date.now() - 12 * 3_600_000) },
+        ...(narrowed ? { barberId: mine ?? { in: [] as string[] } } : {}),
       },
       orderBy: { updatedAt: "desc" },
       take: 10,
     }),
   ]);
 
-  const queue = snapshot.rows.map(toWalkInDTO);
+  const hidePhone = <T extends { barberId: string | null; phone: string | null }>(row: T): T =>
+    narrowed && (!mine || row.barberId !== mine) ? { ...row, phone: null } : row;
+  const queue = snapshot.rows.map(toWalkInDTO).map(hidePhone);
   return NextResponse.json({
     branchId: shopId,
     timezone,
     chairs: snapshot.chairs,
     avgServiceMin: snapshot.avgServiceMin,
-    barbers: barbers.map(toBarberDTO),
+    barbers: barbers
+      .map(toBarberDTO)
+      .map((b) => (seesPay || b.id === ownBarberId ? b : { ...b, commissionPct: null, chairRent: null })),
     services: services.map((s) => ({
       id: s.id,
       name: s.name,
@@ -82,7 +101,7 @@ export async function GET(req: Request) {
         }),
       };
     }),
-    recent: recent.map(toWalkInDTO),
+    recent: recent.map(toWalkInDTO).map(hidePhone),
   });
 }
 

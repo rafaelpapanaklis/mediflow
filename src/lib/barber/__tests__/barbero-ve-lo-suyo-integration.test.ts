@@ -307,6 +307,69 @@ test("la fila virtual sigue siendo de todos: el Barbero la sigue viendo", { skip
   assert.equal(res.status, 200);
 });
 
+test("🔴 A-M1 · la fila: el Barbero ve a todos en espera, pero sin comisiones ajenas, ni teléfonos ajenos, ni recientes de otros", { skip }, async () => {
+  await prisma.barber.update({ where: { id: dos }, data: { chairRent: new Prisma.Decimal(1500) } });
+  const hace = (min: number) => new Date(Date.now() - min * MIN);
+  await prisma.barberWalkIn.createMany({
+    data: [
+      { barbershopId: shopId, clientName: "Espera Uno", phone: "5522220001", position: 1 },
+      { barbershopId: shopId, clientName: "Espera Dos", phone: "5522220002", position: 2 },
+      { barbershopId: shopId, clientName: "Atendido Por Uno", phone: "5522220003", barberId: uno, status: "SERVED", servedAt: hace(30), position: 3 },
+      { barbershopId: shopId, clientName: "Atendido Por Dos", phone: "5522220004", barberId: dos, status: "SERVED", servedAt: hace(20), position: 4 },
+    ],
+  });
+  type Fila = {
+    barbers: Array<{ id: string; commissionPct: number | null; chairRent: number | null }>;
+    queue: Array<{ clientName: string; phone: string | null }>;
+    recent: Array<{ clientName: string; phone: string | null; barberId: string | null }>;
+  };
+  const fila = async (who: BarberContext) => {
+    session = who;
+    const res = await walkinsRoute.GET(new Request("http://localhost/api/barber/walkins"));
+    assert.equal(res.status, 200, who.role);
+    const text = await res.text();
+    return { text, json: JSON.parse(text) as Fila };
+  };
+
+  // Barbero: toda la fila en espera (para sentar gente), sin sus teléfonos.
+  const b = await fila(barberoUno);
+  assert.deepEqual(b.json.queue.map((q) => q.clientName), ["Espera Uno", "Espera Dos"]);
+  assert.ok(b.json.queue.every((q) => q.phone === null));
+  // Recientes: solo los que atendió él (con su teléfono).
+  assert.deepEqual(b.json.recent.map((r) => [r.clientName, r.phone]), [["Atendido Por Uno", "5522220003"]]);
+  // Su comisión sí; la de su compañero, no.
+  const yo = b.json.barbers.find((x) => x.id === uno)!;
+  const otro = b.json.barbers.find((x) => x.id === dos)!;
+  assert.equal(yo.commissionPct, 50);
+  assert.equal(otro.commissionPct, null);
+  assert.equal(otro.chairRent, null);
+  for (const ajeno of ["5522220001", "5522220002", "5522220004", "Atendido Por Dos", "1500"]) {
+    assert.ok(!b.text.includes(ajeno), ajeno);
+  }
+
+  // Recepción: todos los teléfonos y recientes, pero sin comisiones (no tiene barbers.manage).
+  const r = await fila(reception);
+  assert.ok(r.json.queue.every((q) => q.phone !== null));
+  assert.equal(r.json.recent.length, 2);
+  assert.ok(r.json.barbers.every((x) => x.commissionPct === null && x.chairRent === null));
+
+  // Dueño y Encargado (barbers.manage): todo, como antes.
+  for (const who of [owner, manager]) {
+    const o = await fila(who);
+    assert.ok(o.json.queue.every((q) => q.phone !== null), who.role);
+    assert.equal(o.json.recent.length, 2, who.role);
+    assert.equal(o.json.barbers.find((x) => x.id === dos)!.chairRent, 1500, who.role);
+  }
+
+  // Barbero sin ficha: sigue viendo la fila, sin teléfonos ni recientes.
+  const s = await fila(barberoSuelto);
+  assert.equal(s.json.queue.length, 2);
+  assert.ok(s.json.queue.every((q) => q.phone === null));
+  assert.deepEqual(s.json.recent, []);
+
+  await prisma.barberWalkIn.deleteMany({ where: { barbershopId: shopId } });
+});
+
 /* ═══════════════ Clientes ═══════════════ */
 
 const nombres = (items: Array<{ name: string }>) => items.map((c) => c.name).sort();
