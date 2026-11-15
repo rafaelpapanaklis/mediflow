@@ -18,7 +18,7 @@
 // ═══════════════════════════════════════════════════════════════════════
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { CalendarClock, ChevronLeft, ChevronRight, Plus, RefreshCw } from "lucide-react";
+import { CalendarClock, CalendarDays, ChevronLeft, ChevronRight, Plus, RefreshCw } from "lucide-react";
 import { type Dictionary } from "@/i18n/t";
 import { makeBarberT } from "@/lib/barber/i18n";
 import { sumMoney } from "@/lib/barber/money";
@@ -593,6 +593,29 @@ export function AgendaClient(props: AgendaClientProps) {
               >
                 {t("barber.agenda.nav.today")}
               </button>
+              {/* Ir a una fecha: el cliente que quiere volver en 5 semanas no
+                  se busca con 35 flechas. Es el calendario NATIVO (en el
+                  celular sale la rueda del sistema): la cajita invisible va
+                  encima del ícono y al tocarla se abre el selector. */}
+              <span className={`${css.btn} ${css.btnIcon} ${css.datePick}`} title={t("barber.agenda.nav.pickDate")}>
+                <CalendarDays size={16} aria-hidden />
+                <input
+                  type="date"
+                  className={css.datePickInput}
+                  aria-label={t("barber.agenda.nav.pickDate")}
+                  value={dateISO}
+                  onClick={(e) => {
+                    try {
+                      e.currentTarget.showPicker();
+                    } catch {
+                      /* Navegador sin showPicker: el clic normal ya lo abre. */
+                    }
+                  }}
+                  onChange={(e) => {
+                    if (/^\d{4}-\d{2}-\d{2}$/.test(e.target.value)) setDateISO(e.target.value);
+                  }}
+                />
+              </span>
             </div>
 
             <div className={css.dateBlock}>
