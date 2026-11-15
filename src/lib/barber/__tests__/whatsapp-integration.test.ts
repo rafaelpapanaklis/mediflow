@@ -510,6 +510,37 @@ test("🔴 el cliente responde BAJA: queda dado de baja y la campaña ya no le l
   assert.equal(params[2], "Esta semana tu corte lleva barba de cortesía.", "la promoción sale sin saltos de línea");
 });
 
+test("la campaña dice POR QUÉ se cortó: sin conexión no es «sin cupo», y un no elegible no corta nada", { skip }, async () => {
+  const cliente = await crearCliente(A, telefono(), "Beto Sol");
+  const bloqueado = await crearCliente(A, telefono(), "Bloqueado");
+  await prisma.barberClient.update({ where: { id: bloqueado.id }, data: { blockedAt: new Date() } });
+
+  // Uno bloqueado y uno bueno: el bueno recibe, y nada "se cortó".
+  const mixta = await sendBarberCampaign({
+    barbershopId: A.id,
+    kind: "birthday",
+    promo: "tu corte lleva barba de cortesía.",
+    clientIds: [bloqueado.id, cliente.id],
+  });
+  assert.deepEqual({ sent: mixta.sent, stop: mixta.stop }, { sent: 1, stop: null });
+
+  // Sin número conectado.
+  const sinNumero = await crearTienda({ conectada: false });
+  const c2 = await crearCliente(sinNumero, telefono());
+  const off = await sendBarberCampaign({ barbershopId: sinNumero.id, kind: "winback", promo: "x", clientIds: [c2.id] });
+  assert.deepEqual({ sent: off.sent, stop: off.stop }, { sent: 0, stop: "not_connected" });
+
+  // Cupo agotado.
+  const basico = await crearTienda({ plan: "BASICO" });
+  const c3 = await crearCliente(basico, telefono());
+  await prisma.barbershop.update({
+    where: { id: basico.id },
+    data: { messagesUsedPeriod: 200, messagesPeriodStart: new Date() },
+  });
+  const tope = await sendBarberCampaign({ barbershopId: basico.id, kind: "winback", promo: "x", clientIds: [c3.id] });
+  assert.deepEqual({ sent: tope.sent, stop: tope.stop }, { sent: 0, stop: "quota" });
+});
+
 test("«baja» dentro de una frase normal no da de baja a nadie", { skip }, async () => {
   const phone = telefono();
   const cliente = await crearCliente(A, phone, "Toño");

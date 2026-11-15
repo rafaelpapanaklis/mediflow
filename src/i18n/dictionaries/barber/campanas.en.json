@@ -108,6 +108,7 @@
     "doneWithFailed": "{sent} messages went out. {failed} couldn't be sent.",
     "doneNone": "No messages went out.",
     "costChanged": "The list changed since you saw the cost. Check it again before sending.",
+    "notConnected": "None went out: connect the barbershop's WhatsApp first.",
     "quotaStopped": "Sending stopped: your plan's message allowance ran out.",
     "needsTemplate": "Meta still has to approve the {name} template. Turn it on in the WhatsApp screen before sending campaigns.",
     "templatePending": "The {name} template is under review by Meta. You can send as soon as it's approved.",

@@ -577,6 +577,9 @@ function SendSummary({ result }: { result: SendResult }) {
       {result.quotaExhausted ? (
         <span className={s.summaryWarn}> {t("send.quotaStopped")}</span>
       ) : null}
+      {result.notConnected ? (
+        <span className={s.summaryWarn}> {t("send.notConnected")}</span>
+      ) : null}
     </Banner>
   );
 }

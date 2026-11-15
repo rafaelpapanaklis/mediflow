@@ -1703,11 +1703,21 @@ export async function sendBarberCampaign(args: {
   kind: "birthday" | "winback";
   promo: string;
   clientIds: string[];
-}): Promise<{ sent: number; failed: number; skipped: number }> {
+}): Promise<{
+  sent: number;
+  failed: number;
+  skipped: number;
+  /**
+   * Por qué se CORTÓ la tanda, si se cortó. Quien llama lo necesita para no
+   * decirle a la barbería «se acabó el cupo» cuando lo que pasa es que no
+   * tiene el número conectado, o que ese cliente simplemente no era elegible.
+   */
+  stop: "quota" | "not_connected" | null;
+}> {
   const ids = args.clientIds.slice(0, CAMPAIGN_BATCH_MAX);
   const shop = await loadShop(args.barbershopId);
   const creds = shop ? resolveSenderCredentials(shop) : null;
-  if (!shop || !creds) return { sent: 0, failed: 0, skipped: ids.length };
+  if (!shop || !creds) return { sent: 0, failed: 0, skipped: ids.length, stop: "not_connected" };
 
   const tpl = barberWaTemplate(args.kind);
   const clients = await prisma.barberClient.findMany({
@@ -1718,6 +1728,7 @@ export async function sendBarberCampaign(args: {
   const promo = sanitizeBarberWaParam(args.promo, "").slice(0, 300) || "Te esperamos cuando gustes.";
   let sent = 0;
   let failed = 0;
+  let stop: "quota" | null = null;
 
   for (const client of clients) {
     const phone = mxTenDigits(client.phone);
@@ -1729,7 +1740,10 @@ export async function sendBarberCampaign(args: {
     if (barberClientOptedOut(client.preferences)) continue;
 
     const quota = await getBarberWaQuota(shop.id);
-    if (!barberWaFits(quota.limit, quota.used)) break;
+    if (!barberWaFits(quota.limit, quota.used)) {
+      stop = "quota";
+      break;
+    }
 
     const params = [firstName(client.name), shop.name, promo];
     const row = await prisma.barberMessage.create({
@@ -1768,7 +1782,7 @@ export async function sendBarberCampaign(args: {
     }
   }
 
-  return { sent, failed, skipped: ids.length - sent - failed };
+  return { sent, failed, skipped: ids.length - sent - failed, stop };
 }
 
 /**

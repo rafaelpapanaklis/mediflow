@@ -897,6 +897,8 @@ export interface CampaignSendResult {
   cost: BarberCampaignCost;
   /** true = se cortó porque se acabó el cupo de mensajes del plan. */
   quotaExhausted: boolean;
+  /** true = no salió nada porque la barbería no tiene su WhatsApp conectado. */
+  notConnected: boolean;
 }
 
 export interface SendCampaignArgs {
@@ -962,10 +964,16 @@ export async function sendBarberCampaignRun(
   let sent = 0;
   let failed = 0;
   let quotaExhausted = false;
+  let notConnected = false;
 
   for (const target of batch) {
-    if (quotaExhausted) {
-      detail.push({ clientId: target.clientId, name: target.name, ok: false, reason: "quota" });
+    if (quotaExhausted || notConnected) {
+      detail.push({
+        clientId: target.clientId,
+        name: target.name,
+        ok: false,
+        reason: quotaExhausted ? "quota" : "notConnected",
+      });
       continue;
     }
 
@@ -995,11 +1003,18 @@ export async function sendBarberCampaignRun(
     } else if (result.failed === 1) {
       failed++;
       detail.push({ clientId: target.clientId, name: target.name, ok: false, reason: "failed" });
-    } else {
-      // skipped del emisor = o no hay cupo, o no hay conexión de WhatsApp,
-      // o la ficha dejó de ser elegible entre el cálculo y el envío.
+    } else if (result.stop === "quota") {
       quotaExhausted = true;
       detail.push({ clientId: target.clientId, name: target.name, ok: false, reason: "quota" });
+    } else if (result.stop === "not_connected") {
+      notConnected = true;
+      detail.push({ clientId: target.clientId, name: target.name, ok: false, reason: "notConnected" });
+    } else {
+      // La ficha dejó de ser elegible entre el cálculo y el envío (se dio de
+      // baja, la bloquearon, le cambiaron el teléfono). Antes cualquier
+      // salto se contaba como "se acabó el cupo" y CORTABA la tanda entera:
+      // un solo cliente dado de baja dejaba sin mensaje a todos los demás.
+      detail.push({ clientId: target.clientId, name: target.name, ok: false, reason: "skipped" });
     }
   }
 
@@ -1010,6 +1025,7 @@ export async function sendBarberCampaignRun(
     detail,
     cost: { ...cost, messages: sent, totalUsd: Number((sent * cost.unitUsd).toFixed(4)) },
     quotaExhausted,
+    notConnected,
   };
 }
 
