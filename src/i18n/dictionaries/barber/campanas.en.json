@@ -123,7 +123,13 @@
     "cooldown": "Rest days between campaigns",
     "cooldownHelp": "Nobody gets two campaigns back to back before that many days, even if they show up on several lists.",
     "repeatAfter": "Not repeated before {days} days",
-    "approved": "Template approved by Meta",
+    "sentWith": "Sent with a WhatsApp template. You can check whether Meta approved it in WhatsApp › Templates.",
+    "sample": {
+      "label": "How a client gets it (example):",
+      "name": "Luis",
+      "shop": "your barbershop",
+      "reward": "your reward"
+    },
     "sqlPending": "Can't save yet: sql/barber_campanas.sql hasn't been applied. Meanwhile the suggested wording is used and you can still send campaigns."
   },
   "results": {

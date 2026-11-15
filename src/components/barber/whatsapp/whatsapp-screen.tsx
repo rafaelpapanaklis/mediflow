@@ -40,6 +40,7 @@ export interface WaStatusPayload {
 export function BarberWhatsAppScreen({
   dict,
   locale,
+  timezone = null,
   initial,
   ack,
   hasInbox,
@@ -48,6 +49,8 @@ export function BarberWhatsAppScreen({
 }: {
   dict: Dictionary;
   locale: string;
+  /** Zona de la barbería: las fechas salen igual en servidor y navegador (error 418 de hidratación). */
+  timezone?: string | null;
   initial: WaStatusPayload;
   /** El acuse automático (apagado por defecto). Sin dato = no se pinta. */
   ack?: { settings: BarberWaAckSettings; storageReady: boolean } | null;
@@ -59,6 +62,7 @@ export function BarberWhatsAppScreen({
     <WaI18n dict={dict}>
       <Screen
         locale={locale}
+        timezone={timezone}
         initial={initial}
         ack={ack ?? null}
         hasInbox={hasInbox}
@@ -71,6 +75,7 @@ export function BarberWhatsAppScreen({
 
 function Screen({
   locale,
+  timezone,
   initial,
   ack,
   hasInbox,
@@ -78,6 +83,7 @@ function Screen({
   canSend,
 }: {
   locale: string;
+  timezone: string | null;
   initial: WaStatusPayload;
   ack: { settings: BarberWaAckSettings; storageReady: boolean } | null;
   hasInbox: boolean;
@@ -155,6 +161,7 @@ function Screen({
           connection={status.connection}
           quota={status.quota}
           locale={locale}
+          timezone={timezone}
           canEdit={canEdit}
           canSend={canSend}
           onChanged={refresh}

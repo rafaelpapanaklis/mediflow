@@ -51,7 +51,7 @@ export const BARBER_FEATURES: { key: string; label: string }[] = [
   { key: "multiBranch", label: "Multi-sucursal" },
   { key: "whatsappBot", label: "Bot de WhatsApp" },
   { key: "advancedRoles", label: "Roles avanzados" },
-  { key: "analytics", label: "Analytics" },
+  { key: "analytics", label: "Estadísticas avanzadas" },
   { key: "affiliates", label: "Programa de socios" },
 ];
 

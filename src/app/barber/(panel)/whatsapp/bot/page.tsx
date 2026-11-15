@@ -50,6 +50,7 @@ export default async function Page() {
     <BarberBotScreen
       dict={dict}
       locale={locale}
+      timezone={ctx.barbershop.timezone}
       initial={state}
       connected={isBarberWaLinked(connection.state)}
       canEdit={hasBarberPermission(permUser, "settings.edit")}

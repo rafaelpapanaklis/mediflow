@@ -14,6 +14,7 @@ import { X } from "lucide-react";
 import { type Dictionary, type TVars } from "@/i18n/t";
 import { makeBarberT } from "@/lib/barber/i18n";
 import s from "./admin.module.css";
+import { formatBarberShortWhen } from "@/lib/barber/fecha-corta";
 
 // ═══════════════════════════════════════════════════════════════════════
 // Piezas compartidas de las pantallas de administración barber.
@@ -426,17 +427,15 @@ export function useSaving() {
 }
 
 /** Fecha corta legible en la zona del navegador. */
-export function formatWhen(iso: string, locale: string): string {
-  try {
-    return new Intl.DateTimeFormat(locale === "en" ? "en-US" : "es-MX", {
-      day: "2-digit",
-      month: "short",
-      hour: "2-digit",
-      minute: "2-digit",
-    }).format(new Date(iso));
-  } catch {
-    return iso.slice(0, 16).replace("T", " ");
-  }
+/**
+ * Fecha corta legible. Con `timeZone` (la de la barbería) el texto es el MISMO
+ * en el servidor y en el navegador: sin ella, el servidor (UTC en Vercel)
+ * y el navegador (hora de México) escribían horas distintas y React tiraba el
+ * HTML del servidor (error 418 de hidratación, QA C 15-nov). Sin `timeZone`
+ * se comporta como antes.
+ */
+export function formatWhen(iso: string, locale: string, timeZone?: string | null): string {
+  return formatBarberShortWhen(iso, locale, timeZone);
 }
 
 export { s as adminStyles };

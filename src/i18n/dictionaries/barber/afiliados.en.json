@@ -6,6 +6,7 @@
     "schemaMissingBody": "The program's tables don't exist in the database yet. Apply sql/barber_afiliados.sql in Supabase and this screen turns on by itself. Nothing else in the panel is affected in the meantime.",
     "disabledTitle": "The program is paused",
     "disabledBody": "No new commissions are being generated right now. What you already earned is still on record.",
+    "onlyOwner": "Only the barbershop owner can see the partner program and its commissions.",
     "lockedTitle": "Your plan doesn't include the partner program",
     "lockedBody": "Switch plans to start earning for every barbershop you recommend."
   },

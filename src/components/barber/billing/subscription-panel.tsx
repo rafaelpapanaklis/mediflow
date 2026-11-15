@@ -65,7 +65,7 @@ export function SubscriptionPanel({
 
       <div className="dcbb-facts">
         <div className="dcbb-fact">
-          <span className="dcbb-kicker">{t("barber.suscripcion.plans.title")}</span>
+          <span className="dcbb-kicker">{t("barber.suscripcion.hero.planLabel")}</span>
           <span className="dcbb-fact__value">{gate.planName}</span>
           {sub && (
             <span className="dcbb-fact__hint">
@@ -74,7 +74,7 @@ export function SubscriptionPanel({
           )}
         </div>
         <div className="dcbb-fact">
-          <span className="dcbb-kicker">{t("barber.suscripcion.invoices.date")}</span>
+          <span className="dcbb-kicker">{t("barber.suscripcion.hero.dateLabel")}</span>
           <span className="dcbb-fact__value">{dateLine ?? "—"}</span>
           {sub?.cancelAtPeriodEnd && (
             <span className="dcbb-fact__hint">{t("barber.suscripcion.status.canceled")}</span>
@@ -83,7 +83,7 @@ export function SubscriptionPanel({
         <div className="dcbb-fact">
           <span className="dcbb-kicker">
             <CreditCard size={12} aria-hidden style={{ display: "inline", verticalAlign: "-2px", marginRight: 4 }} />
-            {t("barber.suscripcion.hero.manageCard")}
+            {t("barber.suscripcion.hero.cardLabel")}
           </span>
           <span className="dcbb-fact__value">
             {card

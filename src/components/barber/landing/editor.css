@@ -756,7 +756,14 @@ textarea.dcbwe-input {
   min-height: 420px;
 }
 
+/* `width: 100%` es lo que hace que el marco quepa: con `margin-inline: auto`
+   dentro de la columna flex el marco deja de estirarse y toma el ancho de su
+   contenido (el lienzo de 390 px), así que en un celular medía 392 dentro de
+   una columna de 366 y la página entera se movía de lado. Con el ancho
+   explícito, el marco mide lo que cabe (hasta su max-width) y la escala de
+   vista-previa.tsx encoge el lienzo. */
 .dcbwe-marco[data-modo="movil"] {
+  width: 100%;
   max-width: 420px;
   margin-inline: auto;
 }
@@ -766,6 +773,7 @@ textarea.dcbwe-input {
    Por debajo de 1280 el lienzo se encoge y sigue midiendo 1280 para sus
    @container, que es lo que hace fiel a la vista previa. */
 .dcbwe-marco[data-modo="escritorio"] {
+  width: 100%;
   max-width: 1280px;
   margin-inline: auto;
 }

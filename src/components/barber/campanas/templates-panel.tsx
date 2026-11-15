@@ -43,13 +43,27 @@ export function TemplatesPanel({
   config,
   limits,
   canEdit,
+  shopName,
 }: {
   audiences: AudienceDef[];
   config: CampaignConfigView;
   limits: CampaignLimits;
   canEdit: boolean;
+  /** Nombre real de la barbería para el ejemplo; sin él, «tu barbería». */
+  shopName?: string;
 }) {
   const t = useCampT();
+  /**
+   * Así le llega a un cliente: las variables de Meta ({{1}} nombre, {{2}}
+   * barbería, {{3}} el texto de la barbería) y {premio} con un EJEMPLO. Antes
+   * el dueño veía «Hola {{1}}… en {{2}}… tienes {premio}» tal cual (QA C, 15-nov).
+   */
+  const ejemplo = (body: string, promo: string) =>
+    body
+      .split("{{3}}").join(promo)
+      .split("{{1}}").join(t("templates.sample.name"))
+      .split("{{2}}").join(shopName?.trim() || t("templates.sample.shop"))
+      .split("{premio}").join(t("templates.sample.reward"));
   const { saving, error, setError, run } = useSaving();
   const [data, setData] = useState<TemplatesPayload | null>(null);
   const [promos, setPromos] = useState<Record<string, string>>({ ...config.templates });
@@ -153,9 +167,10 @@ export function TemplatesPanel({
             </div>
 
             {row.templateBody ? (
-              <p className={s.templateBody}>
-                {row.templateBody.replace("{{3}}", promos[row.id] ?? row.promo)}
-              </p>
+              <>
+                <span className={s.templateMeta}>{t("templates.sample.label")}</span>
+                <p className={s.templateBody}>{ejemplo(row.templateBody, promos[row.id] ?? row.promo)}</p>
+              </>
             ) : null}
 
             <TextArea
@@ -166,9 +181,7 @@ export function TemplatesPanel({
               onChange={(e) => setPromos((p) => ({ ...p, [row.id]: e.target.value }))}
             />
             {row.templateName ? (
-              <span className={s.templateApproved}>
-                {t("templates.approved")} · {row.templateName}
-              </span>
+              <span className={s.templateMeta}>{t("templates.sentWith")}</span>
             ) : null}
           </li>
         ))}

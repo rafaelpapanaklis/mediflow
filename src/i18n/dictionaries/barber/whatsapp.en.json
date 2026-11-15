@@ -10,7 +10,7 @@
     "botHint": "The bot that answers your WhatsApp and books for you"
   },
   "connection": {
-    "tokenUnreadable": "We couldn’t read your WhatsApp connection key (this happens if the security settings changed). Reconnect your number with the button below: your conversations are kept and pending notices go out as soon as you reconnect.",
+    "tokenUnreadable": "We couldn’t read your WhatsApp connection key (this happens if the security settings changed). Your number needs to be reconnected: your conversations are kept and pending notices go out as soon as you reconnect.",
     "title": "Your WhatsApp number",
     "lead": "Messages go out under your barbershop's name, from your own number. Clients reply to you.",
     "connect": "Connect my WhatsApp",
@@ -34,6 +34,7 @@
       "ERROR": "Reconnect your WhatsApp to renew the permission."
     },
     "number": "Connected number",
+    "metaId": "Number ID at Meta",
     "verifiedAt": "Verified on",
     "webhookOff": "Meta is not delivering your clients' messages to us yet, so confirmations, conversations and the bot receive nothing. Tap “Reconnect”; if it stays the same, write to us.",
     "notVerified": "Business not verified (optional)"

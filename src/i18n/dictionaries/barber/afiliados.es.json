@@ -6,6 +6,7 @@
     "schemaMissingBody": "Las tablas del programa todavía no existen en la base de datos. Aplica sql/barber_afiliados.sql en Supabase y esta pantalla se enciende sola. Mientras tanto nada más del panel se ve afectado.",
     "disabledTitle": "El programa está pausado",
     "disabledBody": "Ahora mismo no se están generando comisiones nuevas. Lo que ya ganaste sigue registrado.",
+    "onlyOwner": "El programa de socios y sus comisiones los ve solo el dueño de la barbería.",
     "lockedTitle": "Tu plan no incluye el programa de socios",
     "lockedBody": "Cambia de plan para empezar a ganar por cada barbería que recomiendes."
   },

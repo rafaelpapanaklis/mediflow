@@ -47,6 +47,7 @@ export default async function Page() {
   return (
     <AdminFrame ctx={ctx} active="soporte">
       <SupportClient
+        timezone={ctx.barbershop.timezone}
         initialTickets={tickets}
         initialDetail={initialDetail}
         canWrite={hasBarberPermission(permUser, "support.manage")}

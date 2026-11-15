@@ -90,6 +90,7 @@ export default async function Page(props: { searchParams: Promise<{ tab?: string
     <BarberWhatsAppScreen
       dict={dict}
       locale={locale}
+      timezone={ctx.barbershop.timezone}
       initial={{ connection, quota, templates }}
       ack={ack}
       hasInbox={barberPlanHasFeature(plan, "whatsappInbox")}
