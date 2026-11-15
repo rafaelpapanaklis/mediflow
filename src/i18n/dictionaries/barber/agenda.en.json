@@ -207,11 +207,11 @@
     "servedOk": "{name} is in the chair.",
     "recent": "Left the queue",
     "notify": {
-      "queued": "Ping recorded. It goes out as soon as WhatsApp is connected.",
-      "already": "There was already a ping queued for this person.",
+      "queued": "Ping sent on WhatsApp.",
+      "already": "This person was already pinged a few minutes ago.",
       "noPhone": "That person didn't leave a WhatsApp number.",
       "pending": "Waiting to be sent",
-      "explain": "This version RECORDS the ping; sending it over WhatsApp is wired up by the next wave."
+      "explain": "Sends a “you're almost up” WhatsApp from the barbershop's number."
     },
     "qr": {
       "title": "Counter QR",

@@ -1141,6 +1141,112 @@ export async function deliverBarberMessageNow(
   }
 }
 
+/* ─────────────────── aviso de la fila: "casi es tu turno" ────────────── */
+
+/** No se le avisa dos veces al mismo número en menos de esto. */
+export const WALKIN_NOTIFY_DEDUPE_MS = 10 * 60 * 1000;
+
+export interface WalkInNotifyResult {
+  /**
+   * sent    = Meta lo aceptó;
+   * already = ya se le había avisado hace unos minutos (no se repite);
+   * queued  = quedó en la cola (otra pasada lo está mandando);
+   * failed  = no salió, con el motivo en `error`.
+   */
+  outcome: "sent" | "already" | "queued" | "failed";
+  messageId: string | null;
+  error: string | null;
+  code: DeliverNowResult["code"] | "NO_PHONE";
+}
+
+/**
+ * Le avisa por WhatsApp a quien espera en la fila virtual que ya casi le
+ * toca. Lo llama POST /api/barber/walkins/[id]/notify, que antes solo
+ * dejaba una fila PENDING que nadie mandaba.
+ *
+ * El envío es el del drenado (deliverBarberMessageNow): texto si el cliente
+ * escribió en las últimas 24 h, y si no la plantilla de utilidad
+ * `dc_barber_turno_fila`; con reclamo, cupo y estados de entrega.
+ *
+ * SIN número conectado NO se encola nada: un "ya casi es tu turno" que sale
+ * cuando la barbería conecte su WhatsApp, días después, es peor que no
+ * mandarlo. Se devuelve el motivo para que el mostrador lo vea.
+ */
+export async function notifyBarberWalkIn(args: {
+  barbershopId: string;
+  phone: string;
+  /** El aviso ya redactado por walkInNotifyBody() (agenda.ts). */
+  body: string;
+}): Promise<WalkInNotifyResult> {
+  const phone = mxTenDigits(args.phone);
+  if (!phone) {
+    return {
+      outcome: "failed",
+      messageId: null,
+      error: "Esa persona no dejó un WhatsApp a 10 dígitos.",
+      code: "NO_PHONE",
+    };
+  }
+  const shop = await loadShop(args.barbershopId);
+  if (!shop || !shop.isActive || !resolveSenderCredentials(shop)) {
+    return {
+      outcome: "failed",
+      messageId: null,
+      error: "Conecta el WhatsApp de la barbería para poder mandar avisos.",
+      code: "NOT_CONNECTED",
+    };
+  }
+
+  const client = await prisma.barberClient.findUnique({
+    where: { barbershopId_phone: { barbershopId: shop.id, phone } },
+    select: { id: true },
+  });
+
+  // "¿Ya se le avisó?" + "encólalo" con candado por (barbería, teléfono): un
+  // doble clic en "Avisar" no puede mandarle dos mensajes seguidos.
+  const [lockA, lockB] = advisoryLockKey(`barber:wa:walkin:${shop.id}:${phone}`);
+  const row = await prisma.$transaction(
+    async (tx) => {
+      await tx.$executeRawUnsafe(
+        `SELECT pg_advisory_xact_lock(${Math.trunc(lockA)}, ${Math.trunc(lockB)})`,
+      );
+      const already = await tx.barberMessage.findFirst({
+        where: {
+          barbershopId: shop.id,
+          phone,
+          templateName: BARBER_WALKIN_NOTIFY_TEMPLATE,
+          // Cuenta lo que ya salió, no solo lo que sigue en cola: ahora el
+          // aviso se manda en el momento y casi nunca queda PENDING.
+          status: { in: ["PENDING", "SENT", "DELIVERED", "READ"] },
+          createdAt: { gt: new Date(Date.now() - WALKIN_NOTIFY_DEDUPE_MS) },
+        },
+        select: { id: true },
+      });
+      if (already) return { already: true, id: already.id };
+      const created = await tx.barberMessage.create({
+        data: {
+          barbershopId: shop.id,
+          direction: "OUTBOUND",
+          phone,
+          body: args.body,
+          templateName: BARBER_WALKIN_NOTIFY_TEMPLATE,
+          status: "PENDING",
+          clientId: client?.id ?? null,
+        },
+        select: { id: true },
+      });
+      return { already: false, id: created.id };
+    },
+    { maxWait: 10_000, timeout: 15_000 },
+  );
+  if (row.already) return { outcome: "already", messageId: row.id, error: null, code: null };
+
+  const sent = await deliverBarberMessageNow(shop.id, row.id);
+  if (sent.status === "SENT") return { outcome: "sent", messageId: row.id, error: null, code: null };
+  if (sent.status === "PENDING") return { outcome: "queued", messageId: row.id, error: null, code: sent.code };
+  return { outcome: "failed", messageId: row.id, error: sent.error, code: sent.code };
+}
+
 /* ──────────────────────── recordatorios de cita ──────────────────────── */
 
 function formatWhen(date: Date, timezone: string, locale: string): string {

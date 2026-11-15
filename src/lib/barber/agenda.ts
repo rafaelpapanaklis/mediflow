@@ -779,13 +779,15 @@ export function isInvalidatedReminder(errorMessage: string | null | undefined): 
   return typeof errorMessage === "string" && errorMessage.startsWith(BARBER_REMINDER_INVALIDATED_MARK);
 }
 
-// ── Punto de extensión: aviso de la fila por WhatsApp (lo conecta T7) ───
+// ── Aviso de la fila por WhatsApp ("ya casi es tu turno") ───────────────
 //
-// Esta ola NO envía nada. Cuando el mostrador toca "Avisar", se ENCOLA una
-// fila BarberMessage OUTBOUND / PENDING con este templateName y el cuerpo ya
-// redactado. T7 lee las PENDING, las manda por la WABA de la barbería y les
-// pone SENT (o FAILED con su propio motivo). Ese es todo el contrato: no hay
-// tabla nueva ni cola aparte.
+// Cuando el mostrador toca "Avisar", POST /api/barber/walkins/[id]/notify
+// redacta el aviso con walkInNotifyBody() y lo MANDA en el momento con
+// notifyBarberWalkIn() (src/lib/barber/whatsapp.ts). La fila que queda en
+// BarberMessage lleva este templateName como discriminador: es lo que le
+// dice a la cola que, fuera de la ventana de 24 h, sale con la plantilla
+// aprobada `dc_barber_turno_fila` (ver whatsapp-core.ts). No hay tabla
+// nueva ni cola aparte.
 
 export const BARBER_WALKIN_NOTIFY_TEMPLATE = "walkin_casi_es_tu_turno" as const;
 

@@ -34,6 +34,7 @@ import {
   getBarberWaConnection,
   ingestBarberInbound,
   listBarberThreadMessages,
+  notifyBarberWalkIn,
   runBarberWaDispatch,
   scheduleBarberReminders,
   sendBarberCampaign,
@@ -46,7 +47,7 @@ import {
   barberWaClaimMark,
   barberWaTemplate,
 } from "../whatsapp-core";
-import { isInvalidatedReminder } from "../agenda";
+import { BARBER_WALKIN_NOTIFY_TEMPLATE, isInvalidatedReminder, walkInNotifyBody } from "../agenda";
 
 const REMINDER = barberWaTemplate("reminder").name;
 
@@ -630,4 +631,139 @@ test("al conectar, el número tiene que ser de la cuenta que se autorizó", { sk
   assert.equal(await barberWabaOwnsPhone("waba-1", "999", "token"), false, "un número ajeno no pasa");
   onGraph(() => ({ status: 400, json: { error: { message: "nope" } } }));
   assert.equal(await barberWabaOwnsPhone("waba-1", "222", "token"), false, "si Meta no lo confirma, es que no");
+});
+
+/* ═══════════════ Aviso de la fila: «ya casi es tu turno» ═══════════════ */
+
+const avisoDe = (shop: string, nombre = "Luis Pérez", ahead = 2) =>
+  walkInNotifyBody({ shopName: shop, clientName: nombre, ahead, etaMinutes: 20 });
+
+test("🔴 el aviso de la fila SALE de verdad: plantilla de utilidad fuera de la ventana", { skip }, async () => {
+  const phone = telefono();
+  const r = await notifyBarberWalkIn({
+    barbershopId: A.id,
+    phone,
+    body: avisoDe("Barbería El Corte"),
+  });
+  assert.equal(r.outcome, "sent");
+
+  const [envio] = enviados();
+  assert.equal(envio.body.to, `52${phone}`);
+  assert.equal(envio.body.type, "template", "quien se formó en la fila no nos ha escrito: va la plantilla");
+  assert.equal(envio.body.template.name, "dc_barber_turno_fila");
+  const params = envio.body.template.components[0].parameters.map((p: any) => p.text);
+  assert.deepEqual(params, [
+    "Barbería El Corte",
+    "Luis, faltan 2 personas para tu turno. Vente en unos 20 min.",
+  ]);
+
+  const [fila] = await mensajes(A, phone);
+  assert.equal(fila.status, "SENT", "ya no se queda PENDING esperando a nadie");
+  assert.equal(fila.templateName, BARBER_WALKIN_NOTIFY_TEMPLATE);
+  assert.ok(fila.waMessageId);
+  // Y el estado de entrega de Meta le llega a esa fila.
+  await applyBarberDeliveryStatuses(A.phoneNumberId, [{ id: fila.waMessageId, status: "delivered" }]);
+  assert.equal((await mensajes(A, phone))[0].status, "DELIVERED");
+});
+
+test("con la ventana abierta el aviso va como texto, completo", { skip }, async () => {
+  const phone = telefono();
+  const { value, msg } = entrante(A, phone, "ya llegué, ¿cuánto falta?");
+  await ingestBarberInbound(value, msg);
+  limpiar();
+
+  const cuerpo = avisoDe("Barbería El Corte", "Memo", 0);
+  const r = await notifyBarberWalkIn({ barbershopId: A.id, phone, body: cuerpo });
+  assert.equal(r.outcome, "sent");
+  assert.equal(enviados()[0].body.type, "text");
+  assert.equal(enviados()[0].body.text.body, "Memo, ya es tu turno en Barbería El Corte. Te esperamos en la silla.");
+});
+
+test("🔴 doble clic en «Avisar»: un solo mensaje", { skip }, async () => {
+  const phone = telefono();
+  graphDelay(50);
+  const cuerpo = avisoDe("Barbería El Corte");
+  const resultados = await Promise.all([
+    notifyBarberWalkIn({ barbershopId: A.id, phone, body: cuerpo }),
+    notifyBarberWalkIn({ barbershopId: A.id, phone, body: cuerpo }),
+    notifyBarberWalkIn({ barbershopId: A.id, phone, body: cuerpo }),
+  ]);
+  assert.equal(resultados.filter((r) => r.outcome === "sent").length, 1);
+  assert.equal(resultados.filter((r) => r.outcome === "already").length, 2);
+  assert.equal(enviados().length, 1);
+
+  // Un rato después (ya enviado) tampoco se repite dentro de los 10 minutos.
+  const otra = await notifyBarberWalkIn({ barbershopId: A.id, phone, body: cuerpo });
+  assert.equal(otra.outcome, "already");
+  assert.equal(enviados().length, 1);
+});
+
+test("sin WhatsApp conectado el aviso NO se encola para después: se dice por qué", { skip }, async () => {
+  const sinNumero = await crearTienda({ conectada: false });
+  const phone = telefono();
+  const r = await notifyBarberWalkIn({ barbershopId: sinNumero.id, phone, body: avisoDe("X") });
+  assert.equal(r.outcome, "failed");
+  assert.equal(r.code, "NOT_CONNECTED");
+  assert.equal(enviados().length, 0);
+  assert.equal((await mensajes(sinNumero, phone)).length, 0, "no queda nada en cola para salir días después");
+});
+
+test("el aviso respeta el cupo del plan y cuenta contra él", { skip }, async () => {
+  const T = await crearTienda({ plan: "BASICO" });
+  const p1 = telefono();
+  await prisma.barbershop.update({
+    where: { id: T.id },
+    data: { messagesUsedPeriod: 199, messagesPeriodStart: new Date() },
+  });
+  assert.equal((await notifyBarberWalkIn({ barbershopId: T.id, phone: p1, body: avisoDe("X") })).outcome, "sent");
+  assert.equal(
+    (await prisma.barbershop.findUniqueOrThrow({ where: { id: T.id } })).messagesUsedPeriod,
+    200,
+  );
+
+  // Cupo agotado: no sale, y no se queda PENDING.
+  const p2 = telefono();
+  const r = await notifyBarberWalkIn({ barbershopId: T.id, phone: p2, body: avisoDe("X") });
+  assert.equal(r.outcome, "failed");
+  assert.equal(r.code, "QUOTA");
+  assert.equal(enviados().length, 1);
+  assert.equal((await mensajes(T, p2))[0].status, "FAILED");
+});
+
+test("si Meta rechaza el aviso (plantilla sin aprobar), el mostrador ve el motivo real", { skip }, async () => {
+  const phone = telefono();
+  onGraph((call) =>
+    call.url.includes("/messages")
+      ? { status: 400, json: { error: { code: 132001, message: "(#132001) Template name does not exist" } } }
+      : null,
+  );
+  const r = await notifyBarberWalkIn({ barbershopId: A.id, phone, body: avisoDe("Barbería El Corte") });
+  assert.equal(r.outcome, "failed");
+  assert.equal(r.code, "SEND_FAILED");
+  assert.match(r.error ?? "", /#132001/);
+  assert.equal((await mensajes(A, phone))[0].status, "FAILED");
+
+  // Un aviso fallido no bloquea el siguiente intento.
+  onGraph(null);
+  assert.equal((await notifyBarberWalkIn({ barbershopId: A.id, phone, body: avisoDe("X") })).outcome, "sent");
+});
+
+test("un aviso viejo que siguiera en cola ya no se manda", { skip }, async () => {
+  const phone = telefono();
+  const vieja = await prisma.barberMessage.create({
+    data: {
+      barbershopId: A.id,
+      direction: "OUTBOUND",
+      phone,
+      body: avisoDe("Barbería El Corte"),
+      templateName: BARBER_WALKIN_NOTIFY_TEMPLATE,
+      status: "PENDING",
+      createdAt: new Date(Date.now() - 45 * 60_000),
+    },
+  });
+  await drainBarberOutbox(A.id);
+  assert.equal(enviados().filter((c) => c.body.to === `52${phone}`).length, 0);
+  const fila = await prisma.barberMessage.findUniqueOrThrow({ where: { id: vieja.id } });
+  assert.equal(fila.status, "FAILED");
+  assert.ok(isInvalidatedReminder(fila.errorMessage));
 });
