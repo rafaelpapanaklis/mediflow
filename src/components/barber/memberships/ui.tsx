@@ -28,10 +28,15 @@ export function Modal({
   children: React.ReactNode;
   footer?: React.ReactNode;
 }) {
-  const [mounted, setMounted] = useState(false);
+  // El modal se monta DENTRO de .barber-shell: ahí viven los tokens del tema (café).
+  // Montado en <body> caía fuera y el foco y lo elegido salían en el violeta del dental.
+  const [host, setHost] = useState<HTMLElement | null>(null);
+  const mounted = host !== null;
   const boxRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => setMounted(true), []);
+  useEffect(() => {
+    setHost((document.querySelector(".barber-shell") as HTMLElement | null) ?? document.body);
+  }, []);
 
   // Esc, scroll y foco inicial (primer campo) UNA vez al abrir (ver ../dialogo.ts).
   useDialogo({ panel: boxRef, onClose, abierta: open && mounted });
@@ -63,7 +68,7 @@ export function Modal({
         {footer ? <div className="bmem-modal-foot">{footer}</div> : null}
       </div>
     </div>,
-    document.body,
+    host,
   );
 }
 
