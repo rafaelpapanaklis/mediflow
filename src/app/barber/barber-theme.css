@@ -803,3 +803,25 @@ body:has(.barber-shell) {
   max-width: 1320px;
   margin-inline: auto;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   TOQUES DE 40 PX EN PANTALLAS TÁCTILES (ws6-t8, 15-nov). La regla del
+   panel (C-126 en globals.css) sube con dedo los controles de `main` a
+   36 px; en Barber se pidió 40 px, y quedaban fuera los campos de texto y
+   el selector de sede de la barra (30 px). Es la MISMA regla, con 40 y
+   bajo .barber-shell: `pointer: coarse` mira el apuntador (dedo), no el
+   ancho — con ratón a 1440 nada cambia. min-height, no height: lo que ya
+   mide más se queda igual; los interruptores se excluyen como en C-126.
+   Especificidad (0,3,0) para ganarle a la de C-126 (0,2,1).
+   ═══════════════════════════════════════════════════════════════════════ */
+@media (pointer: coarse) {
+  .barber-shell :where(button, [role="button"], [role="tab"], select, summary, a[class*="boton"], a[class*="btn"], a[class*="enlace"], .input-new, input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="hidden"]):not([type="file"])):not([role="switch"]):not(.switch) {
+    min-height: 40px;
+  }
+  /* Botones de solo icono (llevan aria-label): también de ancho. */
+  .barber-shell :where(button[aria-label], a[aria-label]):not([role="switch"]):not(.switch) {
+    min-width: 40px;
+  }
+  /* Los chips de una sola letra («$» / «%» del descuento en el ticket). */
+  .barber-shell .bcaja-chip { min-width: 40px; }
+}
