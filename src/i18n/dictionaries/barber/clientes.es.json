@@ -225,7 +225,10 @@
       "NO_SHOW": "No llegó",
       "CANCELLED": "Cancelada"
     },
-    "paidWithReward": "Pagó con su premio"
+    "paidWithReward": "Pagó con su premio",
+    "movementDeposit": "Anticipo",
+    "movementRefund": "Devolución de anticipo",
+    "movementMembership": "Membresía"
   },
   "errors": {
     "generic": "Algo salió mal. Inténtalo otra vez.",

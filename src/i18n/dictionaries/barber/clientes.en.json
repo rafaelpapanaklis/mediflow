@@ -225,7 +225,10 @@
       "NO_SHOW": "No-show",
       "CANCELLED": "Cancelled"
     },
-    "paidWithReward": "Paid with their reward"
+    "paidWithReward": "Paid with their reward",
+    "movementDeposit": "Deposit",
+    "movementRefund": "Deposit refund",
+    "movementMembership": "Membership"
   },
   "errors": {
     "generic": "Something went wrong. Try again.",

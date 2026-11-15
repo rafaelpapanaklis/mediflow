@@ -30,7 +30,7 @@ import type { BarberClientDTO } from "@/lib/barber/types";
 import { isLoyaltyLine, liveStars, manualStarsNet } from "@/lib/barber/loyalty-core";
 import { loadBonusCatalog } from "@/lib/barber/stars-core";
 // El sello interno de los tickets de mostrador nunca se enseña.
-import { pickCurrentPeriod, stripSaleTag, upcomingPeriods } from "@/lib/barber/memberships-core";
+import { pickCurrentPeriod, saleKindOf, stripSaleTag, upcomingPeriods, type BarberSaleKind } from "@/lib/barber/memberships-core";
 import { clientsViewScope, scopeUserFromCtx } from "@/lib/barber/own-visits";
 
 /**
@@ -406,6 +406,12 @@ export interface BarberVisitEntry {
    * VISIBLE en el historial, venga de donde venga.
    */
   loyaltyRedeemed: boolean;
+  /**
+   * Solo en kind = "sale": qué movimiento de mostrador es (D2, 15-nov). El
+   * anticipo cobrado y su devolución salen como DOS movimientos, cada uno con
+   * su importe (+ y −), igual que en Caja y Reportes.
+   */
+  movement?: BarberSaleKind;
 }
 
 export interface BarberVisitHistory {
@@ -529,6 +535,7 @@ export async function getBarberVisitHistory(
       amount: Number(sale.total),
       amountIsEstimate: false,
       notes: stripSaleTag(sale.notes),
+      movement: saleKindOf(sale.notes),
       photos: [],
       reward: null,
       loyaltyRedeemed: sale.items.some((i) => isLoyaltyLine(i.description)),

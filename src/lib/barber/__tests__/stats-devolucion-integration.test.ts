@@ -1,11 +1,14 @@
-// La devolución de un anticipo NO es un «ticket» en los conteos de Inicio y
-// Reportes (ronda 5 · M2 de la revisión de ws6-t2).
+// La devolución de un anticipo es un MOVIMIENTO y cuenta igual en Caja,
+// Inicio y Reportes (D2 de Rafael, 15-nov: «debe estar el ticket con el
+// pago del anticipo y luego que fue reembolsado, o sea ambos movimientos»).
+// Antes (ronda 5 · M2 de ws6-t2) Inicio y Reportes no la contaban y Caja sí:
+// el mismo día salían 8 y 9.
 //
 // La devolución se registra como un ticket de subtotal NEGATIVO en el turno
-// abierto (sql/barber_devolucion_anticipo.sql). El INGRESO tiene que seguir
-// restándola, pero «Tickets» y «ticket promedio» no deben contarla:
-//   3 tickets de $100 y una devolución de −$100  →  Tickets 3, Ingresos $200
-//   (y ticket promedio $66.67 = 200 / 3, no 200 / 4).
+// abierto (sql/barber_devolucion_anticipo.sql). El INGRESO la resta, «Tickets»
+// la cuenta, y el ticket PROMEDIO sigue siendo sobre ventas:
+//   3 tickets de $100 y una devolución de −$100  →  Tickets 4, Ingresos $200
+//   (y ticket promedio $66.67 = 200 / 3 ventas, no 200 / 4).
 //
 //   DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:<puerto>/barber \
 //   DIRECT_URL=$DATABASE_URL npx tsx --test \
@@ -93,21 +96,21 @@ after(async () => {
   await db.$disconnect();
 });
 
-test("Inicio: 3 tickets de $100 y una devolución de −$100 → Tickets 3, Ingresos $200", { skip }, async () => {
+test("Inicio: 3 tickets de $100 y una devolución de −$100 → Tickets 4 (movimientos), Ingresos $200", { skip }, async () => {
   const s = await getInicioSummary(ctx, { features: PRO, now });
-  assert.equal(s.today.tickets, 3, "la devolución no es un ticket");
+  assert.equal(s.today.tickets, 4, "D2: la devolución es un movimiento y se cuenta");
   assert.equal(s.today.revenue, 200, "pero el ingreso SÍ la resta: 300 − 100");
   assert.equal(s.today.total, 200);
   assert.equal(s.today.avgTicket, 66.67, "ticket promedio = 200 / 3 (no 200 / 4)");
 });
 
-test("Reportes: Tickets 3, Ingresos $200, y por barbero 3 tickets", { skip }, async () => {
+test("Reportes: Tickets 4, Ingresos $200, y por barbero 3 tickets", { skip }, async () => {
   const r = await getReportsSummary(ctx, { range: "month", features: PRO, now });
-  assert.equal(r.totals.tickets, 3);
+  assert.equal(r.totals.tickets, 4, "mismo número que Caja e Inicio");
   assert.equal(r.totals.revenue, 200);
   assert.equal(r.totals.avgTicket, 66.67);
   const hoy = r.byDay.filter((d) => d.tickets > 0 || d.revenue !== 0);
-  assert.equal(hoy.reduce((n, d) => n + d.tickets, 0), 3, "por día también suman 3");
+  assert.equal(hoy.reduce((n, d) => n + d.tickets, 0), 4, "por día también suman 4");
   const fila = r.byBarber.find((b) => b.barberId === barberId)!;
   assert.equal(fila.tickets, 3);
   assert.equal(fila.produced, 300, "el barbero produjo 300: la devolución no es suya (no lleva barbero)");
@@ -119,4 +122,5 @@ test("La caja SÍ cuenta la devolución en su turno (no se toca): el efectivo es
   assert.ok(caja.open);
   assert.equal(caja.open!.session.salesTotal, 200, "vendido neto: 300 − 100");
   assert.equal(caja.open!.expectedCash, 200, "fondo 0 + 300 cobrados − 100 devueltos");
+  assert.equal(caja.open!.session.ticketCount, 4, "D2: Caja, Inicio y Reportes dicen 4");
 });
