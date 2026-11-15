@@ -197,11 +197,15 @@ export function moveStartMinute(args: {
   grabOffsetMin: number;
   boundsStart: number;
   boundsEnd: number;
+  /** Lo que dura: la visita entera tiene que caber en la rejilla visible. */
+  durationMin?: number;
   step?: number;
 }): number {
   const step = args.step && args.step > 0 ? args.step : BARBER_SLOT_MINUTES;
   const snapped = Math.round((args.pointerMin - args.grabOffsetMin) / step) * step;
-  const last = Math.max(args.boundsStart, args.boundsEnd - step);
+  const span = Math.max(step, args.durationMin ?? step);
+  // El último inicio que deja caber la visita, bajado a la rejilla.
+  const last = Math.max(args.boundsStart, Math.floor((args.boundsEnd - span) / step) * step);
   return Math.min(last, Math.max(args.boundsStart, snapped));
 }
 
@@ -279,6 +283,18 @@ export function weekClosedBands(
     windows.push(...barberDayWindows(schedules, id, weekday));
   }
   return complementWindows(windows, bounds);
+}
+
+/**
+ * «1:30» — etiqueta de MEDIA hora en la regleta: reloj de 12 h como el resto
+ * de la agenda («1 p. m.» arriba), sin sufijo porque la hora en punto de
+ * encima ya lo dice y no cabe en los 58 px de la regleta.
+ */
+export function halfHourLabel(minute: number): string {
+  const m = Math.max(0, Math.round(minute));
+  const h24 = Math.floor(m / 60) % 24;
+  const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+  return `${h12}:${String(m % 60).padStart(2, "0")}`;
 }
 
 /** Marcas de la regleta: horas en punto y, si caben, las medias horas. */

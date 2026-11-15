@@ -13,8 +13,9 @@
 // Nada de esto captura el puntero: el resalte del hueco y el clic los
 // recibe la columna, y quien decide si un hueco vale es el servidor.
 // ═══════════════════════════════════════════════════════════════════════
-import type { MinuteWindow } from "@/lib/barber/agenda";
+import { formatMinutes, minuteToLabel, type MinuteWindow } from "@/lib/barber/agenda";
 import { agendaCss as css } from "./agenda-ui";
+import type { DragPreview } from "./use-card-drag";
 
 export function GridLines({
   marks,
@@ -96,6 +97,54 @@ export function TimeOffBand({
       title={text}
     >
       <span className={css.timeOffText}>{text}</span>
+    </div>
+  );
+}
+
+/**
+ * El fantasma de lo que se arrastra: DÓNDE caería y si cabe, mientras se
+ * mueve. Mover: «10:30 – 11:00 a. m. · Beto». Alargar: «Hasta 11:15 a. m. ·
+ * 45 min». Si no cabe, en rojo y con el MOTIVO (antes decía «Ahí no cabe» y,
+ * al soltar, no decía nada).
+ */
+export function DragGhost({
+  preview,
+  top,
+  height,
+  left,
+  width,
+  barberName,
+  compact = false,
+  t,
+}: {
+  preview: DragPreview;
+  top: number;
+  height: number;
+  left: string;
+  width: string;
+  barberName: string;
+  compact?: boolean;
+  t: (key: string, vars?: Record<string, string | number>) => string;
+}) {
+  const start = minuteToLabel(preview.startMin);
+  const end = minuteToLabel(preview.startMin + preview.durationMin);
+  const main =
+    preview.mode === "resize"
+      ? t("barber.agenda.resize.until", { time: end, duration: formatMinutes(preview.durationMin) })
+      : compact
+        ? start
+        : `${start} – ${end}`;
+  const sub = !preview.ok ? preview.reason : preview.mode === "move" && !compact ? barberName : "";
+  return (
+    <div
+      className={`${css.ghost} ${preview.ok ? "" : css.ghostBad} ${compact ? css.ghostCompact : ""}`}
+      style={{ top, height, left, width }}
+      data-ghost={preview.ok ? "ok" : "bad"}
+      role="status"
+      aria-live="polite"
+    >
+      <span className={css.ghostTime}>{main}</span>
+      {sub ? <span className={css.ghostSub}>{sub}</span> : null}
     </div>
   );
 }

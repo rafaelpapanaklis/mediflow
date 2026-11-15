@@ -35,6 +35,7 @@ import {
 import {
   addDaysISO,
   formatMXN,
+  formatMinutes,
   minuteToLabel,
   shopDateISO,
   shopMinuteOfDay,
@@ -237,8 +238,17 @@ export function AgendaClient(props: AgendaClientProps) {
 
       replaceAppointment(payload.appointment);
       const label = minuteToLabel(shopMinuteOfDay(startAt, timezone));
+      const newBarber =
+        barberId !== previousBarber
+          ? data?.barbers.find((b) => b.id === barberId)
+          : null;
       setToast({
-        message: t("barber.agenda.move.moved", { time: label }),
+        message: newBarber
+          ? t("barber.agenda.move.movedBarber", {
+              barber: newBarber.nickname || newBarber.name,
+              time: label,
+            })
+          : t("barber.agenda.move.moved", { time: label }),
         note: payload.remindersInvalidated ? t("barber.agenda.move.remindersCancelled") : null,
         actionLabel: t("barber.agenda.actions.undo"),
         onAction: async () => {
@@ -255,7 +265,45 @@ export function AgendaClient(props: AgendaClientProps) {
         },
       });
     },
-    [patchAppointment, replaceAppointment, t, timezone],
+    [patchAppointment, replaceAppointment, t, timezone, data?.barbers],
+  );
+
+  // ── Alargar / acortar jalando el borde de abajo ──────────────────────
+  // Mismo PATCH que el +/- del detalle (`durationMin`): el servidor revalida
+  // el hueco y la constraint de la base manda. Optimista y con «Deshacer».
+  const handleResize = useCallback(
+    async (appt: BarberAppointmentDTO, durationMin: number) => {
+      const previousEnd = appt.endAt;
+      const previousDuration = Math.round(
+        (new Date(appt.endAt).getTime() - new Date(appt.startAt).getTime()) / 60_000,
+      );
+      replaceAppointment({
+        ...appt,
+        endAt: new Date(new Date(appt.startAt).getTime() + durationMin * 60_000).toISOString(),
+      });
+      const { ok, payload } = await patchAppointment(appt.id, { durationMin });
+      if (!ok || !payload.appointment) {
+        replaceAppointment({ ...appt, endAt: previousEnd });
+        setToast({ message: payload.error ?? t("barber.agenda.state.error"), tone: "bad" });
+        return;
+      }
+      replaceAppointment(payload.appointment);
+      setToast({
+        message: t("barber.agenda.resize.done", { duration: formatMinutes(durationMin) }),
+        note: payload.remindersInvalidated ? t("barber.agenda.move.remindersCancelled") : null,
+        actionLabel: t("barber.agenda.actions.undo"),
+        onAction: async () => {
+          const undo = await patchAppointment(appt.id, { durationMin: previousDuration });
+          if (undo.ok && undo.payload.appointment) {
+            replaceAppointment(undo.payload.appointment);
+            setToast({ message: t("barber.agenda.resize.undone") });
+          } else {
+            setToast({ message: t("barber.agenda.move.undoFailed"), tone: "bad" });
+          }
+        },
+      });
+    },
+    [patchAppointment, replaceAppointment, t],
   );
 
   // ── Encabezado ───────────────────────────────────────────────────────
@@ -474,6 +522,8 @@ export function AgendaClient(props: AgendaClientProps) {
             onSlotRejected={(message) => setToast({ message, tone: "bad" })}
             onCardClick={setDetail}
             onMove={(appt, startAt, barberId) => void handleMove(appt, startAt, barberId)}
+            onResize={(appt, minutes) => void handleResize(appt, minutes)}
+            onDropRejected={(message) => setToast({ message, tone: "bad" })}
           />
         ) : data ? (
           <WeekBoard

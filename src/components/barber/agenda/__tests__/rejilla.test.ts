@@ -22,6 +22,7 @@ import {
   complementWindows,
   edgeScrollDelta,
   freeBarbersAt,
+  halfHourLabel,
   minuteAtOffset,
   moveStartMinute,
   quickActions,
@@ -170,6 +171,22 @@ test("moveStartMinute: la hora bajo el puntero menos el agarre, en la rejilla de
   assert.equal(moveStartMinute({ ...b, pointerMin: min("11:20"), grabOffsetMin: 10 }), min("11:15"));
   assert.equal(moveStartMinute({ ...b, pointerMin: min("08:00"), grabOffsetMin: 0 }), min("09:00"));
   assert.equal(moveStartMinute({ ...b, pointerMin: min("23:00"), grabOffsetMin: 0 }), min("20:45"));
+  // una de 30 min no se suelta asomándose fuera de la rejilla (20:45–21:15)
+  assert.equal(
+    moveStartMinute({ ...b, pointerMin: min("23:00"), grabOffsetMin: 0, durationMin: 30 }),
+    min("20:30"),
+  );
+  // una de 40 min: el último inicio en la rejilla de 15 que la deja caber
+  assert.equal(
+    moveStartMinute({ ...b, pointerMin: min("23:00"), grabOffsetMin: 0, durationMin: 40 }),
+    min("20:15"),
+  );
+});
+
+test("halfHourLabel: reloj de 12 h como la regleta", () => {
+  assert.equal(halfHourLabel(min("09:30")), "9:30");
+  assert.equal(halfHourLabel(min("13:30")), "1:30");
+  assert.equal(halfHourLabel(min("00:30")), "12:30");
 });
 
 test("resizeDuration: pasos de 5 min, entre 5 y 480 (los del servidor)", () => {
