@@ -61,6 +61,8 @@ interface AgendaPayload {
   charged: Record<string, { saleId: string; total: number }>;
   can: {
     edit: boolean;
+    /** Rol Barbero: id del barbero cuyas visitas puede marcar En silla / Completada. */
+    advanceOwnBarberId?: string | null;
     schedule: boolean;
     clients: boolean;
     createClients: boolean;
@@ -514,6 +516,7 @@ export function AgendaClient(props: AgendaClientProps) {
           timezone={timezone}
           branchId={props.branchId}
           canEdit={canEdit}
+          ownBarberId={data?.can.advanceOwnBarberId ?? null}
           canViewClients={data?.can.clients ?? false}
           canCharge={canCharge}
           sale={charged[detail.id] ?? null}

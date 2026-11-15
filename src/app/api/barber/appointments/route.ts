@@ -9,6 +9,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { hasBarberPermission } from "@/lib/barber/permissions";
+import { ownVisitsBarberId } from "@/lib/barber/own-visits";
 import {
   addDaysISO,
   checkAppointmentSlot,
@@ -81,6 +82,12 @@ export async function GET(req: Request) {
     charged,
     can: {
       edit: hasBarberPermission(permUser, "agenda.edit"),
+      // Rol Barbero sin agenda.edit: puede marcar «En silla» y «Completada»
+      // en SUS visitas. Aquí va de quién son «sus» visitas (o null); el
+      // permiso de verdad lo vuelve a aplicar la ruta de estado.
+      advanceOwnBarberId: hasBarberPermission(permUser, "agenda.edit")
+        ? null
+        : ownVisitsBarberId({ role: ctx.role, barberId: ctx.barber?.id ?? null }),
       schedule: hasBarberPermission(permUser, "schedule.manage"),
       clients: hasBarberPermission(permUser, "clients.view"),
       createClients: hasBarberPermission(permUser, "clients.edit"),
