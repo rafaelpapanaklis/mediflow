@@ -278,8 +278,9 @@ export function assertBarberPermission(
  * Reglas:
  *  · Familia = la matriz de la cadena (parentId null) + sus sucursales; si
  *    la barbería del usuario no tiene parentId, ella es la matriz.
- *  · OWNER de la MATRIZ ve la familia COMPLETA (no necesita filas de acceso);
- *    un OWNER cuya sede propia es una sucursal, como cualquier otro rol.
+ *  · OWNER ve la familia COMPLETA (no necesita filas de acceso), esté dado de
+ *    alta en la matriz o en una sucursal (decisión #6 de Rafael, 15-nov: «un
+ *    dueño ve todo; para alguien de una sola sede está el rol Encargado»).
  *  · Cualquier otro rol ve su propia sede + sus filas BarberUserBranchAccess,
  *    SIEMPRE recortadas a la familia (una fila que apunte a una cadena ajena
  *    se ignora — defensa en profundidad).
@@ -304,11 +305,12 @@ export async function getAccessibleBranchIds(ctx: BarberContext): Promise<string
   });
   const ordered = [rootId, ...family.map((s) => s.id).filter((id) => id !== rootId)];
 
-  // Dueño = toda la cadena SOLO si su sede propia es la matriz (ronda 2, M2).
-  // Un «dueño» dado de alta en una sucursal (socio, franquiciatario) ve y opera
-  // su sede más las que le concedan, como cualquier otro rol: antes, con el
-  // contexto siguiendo a la sede elegida, podía cobrar en la matriz.
-  if (ctx.role === "OWNER" && homeId === rootId) return ordered;
+  // Dueño = toda SU cadena, aunque esté dado de alta en una sucursal
+  // (decisión #6 de Rafael, 15-nov; deshace el efecto de 77c84f42b). La familia
+  // sale de SU sede propia, así que nunca alcanza otra cadena; una sede cerrada
+  // la sigue excluyendo withActiveBranch. Para alguien de una sola sede está el
+  // rol Encargado.
+  if (ctx.role === "OWNER") return ordered;
 
   const grants = await prisma.barberUserBranchAccess.findMany({
     where: { userId: ctx.barberUserId },
