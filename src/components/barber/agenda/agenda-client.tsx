@@ -102,6 +102,8 @@ export interface AgendaClientProps {
   timezone: string;
   branchId: string;
   initialDateISO: string;
+  /** Visita a resaltar al abrir (viene de Inicio: ?visita=<id>). */
+  highlightId?: string | null;
   /** El plan incluye caja. Sin esto no se ofrece cobrar (el server igual lo niega). */
   cashEnabled: boolean;
 }
@@ -175,6 +177,24 @@ export function AgendaClient(props: AgendaClientProps) {
       document.removeEventListener("visibilitychange", onVisible);
     };
   }, [load]);
+
+  // Desde Inicio (?visita=<id>): en cuanto la visita está en pantalla, se
+  // lleva a la vista y se resalta unos segundos. Una sola vez.
+  const resaltada = useRef(false);
+  useEffect(() => {
+    const id = props.highlightId;
+    if (!id || resaltada.current || !data?.appointments.some((a) => a.id === id)) return;
+    resaltada.current = true;
+    // Después del «ir a la hora de ahora» de la rejilla, para no pelearse con él.
+    const t1 = window.setTimeout(() => {
+      const el = document.querySelector<HTMLElement>(`[data-appt-id="${CSS.escape(id)}"]`);
+      if (!el) return;
+      el.scrollIntoView({ block: "center", inline: "center", behavior: "smooth" });
+      el.setAttribute("data-resaltada", "");
+      window.setTimeout(() => el.removeAttribute("data-resaltada"), 4000);
+    }, 350);
+    return () => window.clearTimeout(t1);
+  }, [data, props.highlightId]);
 
   // El aviso flotante se va solo a los 9 segundos (da tiempo a "Deshacer").
   useEffect(() => {

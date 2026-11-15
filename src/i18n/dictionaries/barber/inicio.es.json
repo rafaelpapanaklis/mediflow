@@ -44,6 +44,7 @@
       "goAgenda": "Abrir agenda"
     },
     "upcoming": {
+      "open": "Ver la visita de {client} en la agenda",
       "title": "Próximas visitas",
       "empty": "No quedan visitas por atender hoy.",
       "tomorrow": { "one": "Mañana: 1 visita", "other": "Mañana: {count} visitas" },

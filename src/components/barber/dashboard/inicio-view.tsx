@@ -310,6 +310,14 @@ export function InicioView({
                     const [hora, ...sufijo] = fmtTime(u.startAt, tz).split(" ");
                     return (
                       <li className={`bdash-upcoming__row${inChair ? " bdash-upcoming__row--chair" : ""}`} key={u.id}>
+                        {/* La lista no se arrastra: tocar una visita lleva a la
+                            Agenda en ese día con la visita resaltada, que es
+                            donde se mueve (15-nov, «estoy en HOY»). */}
+                        <Link
+                          href={`/barber/agenda?fecha=${diaDeLaBarberia(u.startAt, tz)}&visita=${encodeURIComponent(u.id)}`}
+                          className="bdash-upcoming__link"
+                          aria-label={k("upcoming.open", { client: u.clientName ?? k("upcoming.noClient") })}
+                        >
                         <div className="bdash-upcoming__time">
                           {hora}
                           {sufijo.length > 0 && <span> {sufijo.join(" ")}</span>}
@@ -325,6 +333,8 @@ export function InicioView({
                             <BarberIcon name="silla" size={11} /> {k("upcoming.inChair")}
                           </span>
                         )}
+                        <BarberIcon name="flecha" size={14} className="bdash-upcoming__go" />
+                        </Link>
                       </li>
                     );
                   })}
@@ -527,4 +537,13 @@ function BandCell({
       )}
     </div>
   );
+}
+
+/** «2026-11-15» del instante, en la zona de la barbería (para abrir la Agenda en ese día). */
+function diaDeLaBarberia(iso: string, tz: string): string {
+  try {
+    return new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(iso));
+  } catch {
+    return iso.slice(0, 10);
+  }
 }

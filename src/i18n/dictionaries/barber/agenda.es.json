@@ -60,7 +60,12 @@
     "remindersCancelled": "Cancelamos el recordatorio anterior; se reprograma con la hora nueva.",
     "blocked": "Ahí no cabe",
     "rejected": "No se movió a las {time} — {reason}",
-    "movedDay": "Visita movida al {day}, {time}"
+    "movedDay": "Visita movida al {day}, {time}",
+    "denied": {
+      "terminal": "Esta visita ya quedó como «{status}»: no se puede mover.",
+      "sinBarbero": "Asígnale un barbero a esta visita para poder moverla.",
+      "sinPermiso": "Tu rol no puede mover visitas."
+    }
   },
   "modal": {
     "newTitle": "Nueva visita",

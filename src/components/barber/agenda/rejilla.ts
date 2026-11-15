@@ -248,6 +248,38 @@ export function touchGesture(elapsedMs: number, movedPx: number): "wait" | "drag
   return elapsedMs >= LONG_PRESS_MS ? "drag" : "wait";
 }
 
+/**
+ * Por qué una visita NO se puede arrastrar (null = sí se puede). Es la
+ * misma regla que el `canDrag` de las rejillas, con el motivo para decirlo.
+ *
+ * 15-nov (Rafael: «no funciona el arrastrar»): en «Hoy» la única visita a
+ * la vista estaba Completada; apretarla y jalar no hacía nada y no decía
+ * nada. Ahora la pantalla avisa por qué esa no se mueve.
+ */
+export type MotivoSinArrastre = "sinPermiso" | "terminal" | "sinBarbero";
+
+export function motivoSinArrastre(args: {
+  canEdit: boolean;
+  barberId: string | null;
+  status: BarberAppointmentStatus;
+}): MotivoSinArrastre | null {
+  if (!args.canEdit) return "sinPermiso";
+  if (isTerminalAppointmentStatus(args.status)) return "terminal";
+  if (!args.barberId) return "sinBarbero";
+  return null;
+}
+
+/**
+ * ¿Ya hay que avisar que esa visita no se mueve? Justo cuando, si se
+ * pudiera, el arrastre habría empezado: con mouse, al pasar de
+ * DRAG_START_PX; con el dedo, al mantener apretado LONG_PRESS_MS sin
+ * desplazarse (si el dedo se mueve antes es scroll, y no se avisa).
+ */
+export function avisarSinArrastre(pointerType: string, elapsedMs: number, movedPx: number): boolean {
+  if (pointerType === "touch") return touchGesture(elapsedMs, movedPx) === "drag";
+  return movedPx > DRAG_START_PX;
+}
+
 // ── Franjas de la rejilla ──────────────────────────────────────────────
 
 /** Los huecos que NO cubre ninguna ventana, dentro de la rejilla. */
