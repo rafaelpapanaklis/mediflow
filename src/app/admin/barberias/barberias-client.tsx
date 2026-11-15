@@ -20,7 +20,10 @@ import {
   ArrowDownRight,
   ArrowUpRight,
   CalendarPlus,
+  CreditCard,
   DollarSign,
+  Gift,
+  ReceiptText,
   LifeBuoy,
   MessageSquare,
   Scissors,
@@ -34,7 +37,9 @@ import { KpiCard } from "@/components/ui/design-system/kpi-card";
 import { BARBER_PLAN_IDS } from "@/lib/barber/plan-shared";
 import type { AdminBarbershopRow, BarberVerticalMetrics } from "@/lib/barber/admin";
 import {
+  COBRO_FACE,
   PLAN_TONES,
+  anidarSedes,
   SCOPE_FILTERS,
   SUBSCRIPTION_FILTERS,
   formatInt,
@@ -52,6 +57,7 @@ type SortKey =
   | "city"
   | "plan"
   | "status"
+  | "pago"
   | "createdAt"
   | "barbers"
   | "lastActivityAt"
@@ -62,6 +68,7 @@ const COLUMNS: { key: SortKey; label: string; cls?: string; align?: "right" | "c
   { key: "city", label: "Ciudad", cls: "dcba-col-wide" },
   { key: "plan", label: "Plan" },
   { key: "status", label: "Suscripción" },
+  { key: "pago", label: "Paga al mes", align: "right" },
   { key: "barbers", label: "Barberos", align: "right" },
   { key: "whatsapp", label: "WhatsApp", cls: "dcba-col-xwide" },
   { key: "lastActivityAt", label: "Última actividad", cls: "dcba-col-wide" },
@@ -78,6 +85,8 @@ function sortValue(row: AdminBarbershopRow, key: SortKey): string | number {
       return BARBER_PLAN_IDS.indexOf(row.plan);
     case "status":
       return subscriptionFace(row.subscriptionStatus).label.toLowerCase();
+    case "pago":
+      return Number(row.pagoMensual);
     case "barbers":
       return row.barbers;
     case "whatsapp":
@@ -169,7 +178,9 @@ export function AdminBarberiasClient() {
       else cmp = String(va).localeCompare(String(vb), "es");
       return sortDir === "asc" ? cmp : -cmp;
     });
-    return copy;
+    // Las sucursales van ANIDADAS bajo su matriz (Rafael: «las barberías y
+    // sus sedes»), respetando el orden elegido para las matrices.
+    return anidarSedes(copy);
   }, [rows, sortKey, sortDir]);
 
   function toggleSort(key: SortKey) {
@@ -203,22 +214,55 @@ export function AdminBarberiasClient() {
 
       {/* ── D. Métricas del vertical ─────────────────────────────────── */}
       <div className="dcba-kpis">
+        {/* Cobro de un vistazo (Rafael, 15-nov-2026): cuántas hay, cuántas
+            PAGAN, cuántas son cortesía y cuántas no han pagado. Mismo
+            cálculo que el bloque «Barberías» de la portada de /admin
+            (src/lib/barber/admin-ingresos.ts). */}
         <KpiCard
-          label="Barberías activas"
-          value={metrics ? formatInt(metrics.activeAccounts) : "—"}
+          label="Barberías"
+          value={metrics ? formatInt(metrics.accounts) : "—"}
           icon={Store}
           hero
           hint={
             metrics
-              ? `${formatInt(metrics.accounts)} cuentas dadas de alta · ${formatInt(metrics.branches)} sucursales`
+              ? `Matrices dadas de alta · ${formatInt(metrics.branches)} ${metrics.branches === 1 ? "sucursal activa" : "sucursales activas"} aparte`
               : undefined
           }
         />
         <KpiCard
-          label="MRR de barber"
+          label="Pagan"
+          value={metrics ? formatInt(metrics.payingAccounts) : "—"}
+          icon={CreditCard}
+          hint="Con suscripción de Stripe cobrando."
+        />
+        <KpiCard
+          label="Cortesía"
+          value={metrics ? formatInt(metrics.courtesyAccounts) : "—"}
+          icon={Gift}
+          hint="Activadas a mano: tienen acceso y no pagan. No cuentan como ingreso."
+        />
+        <KpiCard
+          label="Sin pagar"
+          value={metrics ? formatInt(metrics.unpaidAccounts) : "—"}
+          icon={AlertTriangle}
+          tone={metrics && metrics.unpaidAccounts > 0 ? "warning" : undefined}
+          hint={
+            metrics && metrics.trialAccounts > 0
+              ? `Sin pago o con el pago vencido · además ${formatInt(metrics.trialAccounts)} en prueba de Stripe`
+              : "Sin pago o con el pago vencido: no tienen acceso."
+          }
+        />
+        <KpiCard
+          label="Ingreso mensual (MRR)"
           value={metrics ? formatMoney(metrics.mrrMonthly) : "—"}
           icon={DollarSign}
-          hint="Sólo suscripciones de barbería, a precio de barber_plan_configs."
+          hint="Sólo las que pagan por Stripe, a precio de barber_plan_configs. Las cortesías no suman."
+        />
+        <KpiCard
+          label="Cobrado este mes"
+          value="—"
+          icon={ReceiptText}
+          hint="Sin registro de cobros: el webhook de Stripe guarda el estado de la suscripción, no el importe cobrado."
         />
         <KpiCard
           label="Altas del mes"
@@ -258,13 +302,18 @@ export function AdminBarberiasClient() {
                     <span className="dcba-note">{formatMoney(p.priceMonthly)}/mes</span>
                   </div>
                   <div style={{ fontSize: 20, fontWeight: 600, color: "var(--text-1)" }}>
-                    {formatInt(p.activeAccounts)}
+                    {formatInt(p.payingAccounts)}
                     <span style={{ fontSize: 12, color: "var(--text-3)", fontWeight: 400 }}>
                       {" "}
-                      / {formatInt(p.accounts)} cuentas
+                      {p.payingAccounts === 1 ? "paga" : "pagan"} / {formatInt(p.accounts)} cuentas
                     </span>
                   </div>
-                  <div className="dcba-note">{formatMoney(p.mrr)} de MRR</div>
+                  <div className="dcba-note">
+                    {formatMoney(p.mrr)} de MRR
+                    {p.activeAccounts > p.payingAccounts
+                      ? ` · ${formatInt(p.activeAccounts - p.payingAccounts)} con acceso sin pagar`
+                      : ""}
+                  </div>
                 </div>
               ))}
             </div>
@@ -407,13 +456,14 @@ export function AdminBarberiasClient() {
                         ))}
                       </tr>
                     ))
-                  : sorted.map((row) => {
+                  : sorted.map(({ fila: row, sede }) => {
                       const face = subscriptionFace(row.subscriptionStatus);
+                      const cobro = COBRO_FACE[row.cobro] ?? COBRO_FACE.sin_pagar;
                       const go = () => router.push(`/admin/barberias/${row.id}`);
                       return (
                         <tr
                           key={row.id}
-                          className="dcba-row"
+                          className={`dcba-row${sede ? " dcba-row--sede" : ""}`}
                           tabIndex={0}
                           onClick={go}
                           onKeyDown={(e) => {
@@ -428,8 +478,8 @@ export function AdminBarberiasClient() {
                               <div className="mono dcba-note">{row.slug}</div>
                               {row.isBranch ? (
                                 <div className="dcba-note">
-                                  Sucursal{row.branchName ? ` · ${row.branchName}` : ""}
-                                  {row.parentName ? ` de ${row.parentName}` : ""}
+                                  {sede ? "↳ " : ""}Sucursal{row.branchName ? ` · ${row.branchName}` : ""}
+                                  {row.parentName && !sede ? ` de ${row.parentName}` : ""}
                                 </div>
                               ) : row.branchCount > 0 ? (
                                 <div className="dcba-note">
@@ -448,17 +498,42 @@ export function AdminBarberiasClient() {
                           <td>
                             <BadgeNew tone={PLAN_TONES[row.plan] ?? "neutral"}>{row.planName}</BadgeNew>
                             <div className="mono dcba-note" style={{ marginTop: 4 }}>
-                              {formatMoney(row.planPriceMonthly)}/mes
+                              lista {formatMoney(row.planPriceMonthly)}/mes
                             </div>
                           </td>
                           <td>
                             <BadgeNew tone={face.tone} dot>
                               {face.label}
                             </BadgeNew>
-                            {row.isBranch && (
+                            {row.isBranch ? (
                               <div className="dcba-note" style={{ marginTop: 4 }}>
-                                Heredado de la matriz
+                                Heredado de la matriz{row.isActive ? "" : " · sucursal inactiva"}
                               </div>
+                            ) : (
+                              <div style={{ marginTop: 4 }}>
+                                <BadgeNew tone={cobro.tone}>{cobro.label}</BadgeNew>
+                              </div>
+                            )}
+                          </td>
+                          <td style={{ textAlign: "right" }}>
+                            {row.isBranch ? (
+                              <span className="dcba-note">La paga la matriz</span>
+                            ) : (
+                              <>
+                                <span
+                                  className="mono"
+                                  style={{
+                                    fontSize: 13,
+                                    fontWeight: 600,
+                                    color: row.cobro === "stripe" ? "var(--text-1)" : "var(--text-3)",
+                                  }}
+                                >
+                                  {formatMoney(row.pagoMensual)}
+                                </span>
+                                <div className="dcba-note">
+                                  {row.cobro === "stripe" ? "por Stripe" : "no es ingreso"}
+                                </div>
+                              </>
                             )}
                           </td>
                           <td style={{ textAlign: "right" }}>
@@ -497,7 +572,7 @@ export function AdminBarberiasClient() {
                             <span
                               className="mono dcba-nowrap"
                               style={{ fontSize: 12, color: "var(--text-2)" }}
-                              title={fullDate(row.createdAt)}
+                              title={`Alta: ${fullDate(row.createdAt)}. La fecha en que empezó a pagar no se guarda en la base.`}
                             >
                               {shortDate(row.createdAt)}
                             </span>
