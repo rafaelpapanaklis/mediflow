@@ -208,6 +208,16 @@ function liveSale(alias: string): Prisma.Sql {
   return Prisma.sql`(${col} IS NULL OR ${col} NOT LIKE ${`${CANCELLED_MARK}%`})`;
 }
 
+/**
+ * ¿Esta fila cuenta como un «ticket» en los CONTEOS de Inicio y Reportes
+ * (Tickets y ticket promedio)? No cuenta la devolución de un anticipo: es un
+ * ticket de subtotal NEGATIVO que devuelve dinero, no una venta. Solo afecta
+ * al conteo; el ingreso sigue sumando (y restando) todas las filas vivas.
+ */
+function countsAsTicket(alias: string): Prisma.Sql {
+  return Prisma.sql`${Prisma.raw(`${alias}."subtotal"`)} >= 0`;
+}
+
 /** Recorte por barbero para una columna dada; [] = nada (AND FALSE). */
 function barberFilter(column: string, barberIds: string[] | null): Prisma.Sql {
   if (barberIds === null) return Prisma.empty;
@@ -455,7 +465,7 @@ export async function getInicioSummary(ctx: BarberContext, opts: InicioOptions =
   const [dayRows, todayAppointments, queueGroups, alertsRows, openSessionRows] = await Promise.all([
     prisma.$queryRaw<DayMoneyRow[]>`
       SELECT to_char(${localTs(tz, 's."createdAt"')}, 'YYYY-MM-DD') AS day,
-             COUNT(*) FILTER (WHERE ${liveSale("s")})::int AS tickets,
+             COUNT(*) FILTER (WHERE ${liveSale("s")} AND ${countsAsTicket("s")})::int AS tickets,
              COALESCE(SUM(s."subtotal"), 0) AS subtotal,
              COALESCE(SUM(s."tip"), 0) AS tip,
              COALESCE(SUM(s."total"), 0) AS total
@@ -1050,7 +1060,7 @@ export async function getReportsSummary(ctx: BarberContext, opts: ReportsOptions
   const [dayRows, barberRows, itemRows, heatRows, noShowRows, statusGroups] = await Promise.all([
     prisma.$queryRaw<ReportDaySql[]>`
       SELECT to_char(${localTs(tz, 's."createdAt"')}, 'YYYY-MM-DD') AS day,
-             COUNT(*)::int AS tickets,
+             COUNT(*) FILTER (WHERE ${countsAsTicket("s")})::int AS tickets,
              COALESCE(SUM(i.services), 0) AS services,
              COALESCE(SUM(i.products), 0) AS products,
              COALESCE(SUM(i.adjustments), 0) AS adjustments,
@@ -1082,7 +1092,7 @@ export async function getReportsSummary(ctx: BarberContext, opts: ReportsOptions
              COALESCE(ce.amount, 0) AS commission
       FROM "barber_barbers" b
       LEFT JOIN LATERAL (
-        SELECT COUNT(*) AS tickets, SUM(s."subtotal") AS produced, SUM(s."tip") AS tips
+        SELECT COUNT(*) FILTER (WHERE ${countsAsTicket("s")}) AS tickets, SUM(s."subtotal") AS produced, SUM(s."tip") AS tips
         FROM "barber_sales" s
         WHERE s."barberId" = b."id" AND s."barbershopId" IN (${ids}) AND ${rangeSql('s."createdAt"')} AND ${liveSale("s")}
       ) sa ON TRUE
