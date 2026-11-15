@@ -334,5 +334,33 @@
     "done": "Ahora dura {duration}",
     "undone": "Listo, regresó a su duración.",
     "rejected": "No se cambió la duración — {reason}"
+  },
+  "hover": {
+    "label": "Resumen de la visita de {client}",
+    "time": "Hora",
+    "deposit": "Anticipo",
+    "open": "Abrir",
+    "done": "{client}: {status}",
+    "status": {
+      "PENDING": "Pendiente",
+      "CONFIRMED": "Confirmada",
+      "IN_PROGRESS": "En silla",
+      "DONE": "Completada",
+      "NO_SHOW": "No llegó",
+      "CANCELLED": "Cancelada"
+    },
+    "depositStatus": {
+      "PENDING": "Anticipo pendiente de pago: {amount}",
+      "PAID": "Anticipo pagado: {amount}",
+      "REFUNDED": "Anticipo devuelto: {amount}",
+      "FORFEITED": "Anticipo retenido: {amount}"
+    },
+    "quickHint": "Atajo en la visita: «{action}»",
+    "short": {
+      "CONFIRMED": "Confirmar",
+      "IN_PROGRESS": "Iniciar",
+      "DONE": "Completar",
+      "DONE_CHARGE": "Completar y cobrar"
+    }
   }
 }

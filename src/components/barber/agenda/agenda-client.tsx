@@ -25,6 +25,7 @@ import { sumMoney } from "@/lib/barber/money";
 import type { SaleRow } from "@/lib/barber/cash";
 import {
   BARBER_APPOINTMENT_STATUS_UI,
+  isTerminalAppointmentStatus,
   type BarberAppointmentDTO,
   type BarberAppointmentStatus,
   type BarberDTO,
@@ -49,6 +50,9 @@ import { AppointmentDialog } from "./appointment-dialog";
 import { AppointmentDetail } from "./appointment-detail";
 import { ChargeBridge } from "./charge-bridge";
 import { nextSlotStart } from "./next-slot";
+import { HoverCard, useHoverCard } from "./hover-card";
+import { quickActions } from "./rejilla";
+import type { CardQuickAction } from "./appointment-card";
 
 interface AgendaPayload {
   branchId: string;
@@ -369,12 +373,97 @@ export function AgendaClient(props: AgendaClientProps) {
   const canCharge = props.cashEnabled && (data?.can.cash ?? false);
   const charged = data?.charged ?? {};
 
+  // ── Resumen al pasar el mouse ────────────────────────────────────────
+  const hover = useHoverCard();
+  const closeHover = hover.close;
+  // Cambiar de día o de vista lo quita (la visita ya no está donde estaba).
+  useEffect(() => closeHover(), [view, dateISO, chair, closeHover]);
+  const hovered =
+    hover.anchor && data && !detail && !editing && !creating && !charging
+      ? data.appointments.find((a) => a.id === hover.anchor?.appointmentId) ?? null
+      : null;
+
+  const openDetail = (appt: BarberAppointmentDTO) => {
+    hover.close();
+    setDetail(appt);
+  };
+
   const openCharge = (appt: BarberAppointmentDTO) => {
+    hover.close();
     setDetail(null);
     setCharging({
       id: appt.id,
       clientLabel: appt.clientName || t("barber.agenda.card.noClient"),
     });
+  };
+
+  // ── Acción rápida del estado siguiente (en la visita) ────────────────
+  // Misma regla que el detalle (quickActions en rejilla.ts): quien edita
+  // avanza el flujo; el rol Barbero solo «Iniciar»/«Completar» en SUS
+  // visitas; cobrar pide caja. El servidor vuelve a revisarlo todo.
+  const ownBarberId = data?.can.advanceOwnBarberId ?? null;
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const quickFor = (appt: BarberAppointmentDTO) =>
+    quickActions({
+      status: appt.status,
+      barberId: appt.barberId,
+      canEdit,
+      ownBarberId,
+      canCharge,
+      charged: Boolean(charged[appt.id]),
+    });
+  const quickAction = (appt: BarberAppointmentDTO): CardQuickAction | null => {
+    const q = quickFor(appt);
+    if (q.advance) {
+      return q.chargeOnDone
+        ? { label: t("barber.agenda.hover.short.DONE_CHARGE"), tone: "money" }
+        : { label: t(`barber.agenda.hover.short.${q.advance}`), tone: "go" };
+    }
+    if (q.charge) return { label: t("barber.agenda.detail.charge"), tone: "money" };
+    return null;
+  };
+  const runQuickAction = async (appt: BarberAppointmentDTO) => {
+    hover.close();
+    const q = quickFor(appt);
+    if (!q.advance) {
+      if (q.charge) openCharge(appt);
+      return;
+    }
+    const to = q.advance;
+    setBusyId(appt.id);
+    try {
+      const res = await fetch(`/api/barber/appointments/${appt.id}/status`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ to, branchId: props.branchId }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok || !body.appointment) {
+        setToast({
+          message: typeof body.error === "string" ? body.error : t("barber.agenda.queue.errors.generic"),
+          tone: "bad",
+        });
+        return;
+      }
+      const updated = body.appointment as BarberAppointmentDTO;
+      replaceAppointment(updated);
+      // Completar y cobrar son UN movimiento del mostrador (igual que el detalle).
+      if (to === "DONE" && q.chargeOnDone) {
+        openCharge(updated);
+        return;
+      }
+      setToast({
+        message: t("barber.agenda.hover.done", {
+          client: updated.clientName || t("barber.agenda.card.noClient"),
+          status: t(`barber.agenda.hover.status.${to}`),
+        }),
+        note: body.remindersInvalidated > 0 ? t("barber.agenda.move.remindersCancelled") : null,
+      });
+    } catch {
+      setToast({ message: t("barber.agenda.queue.errors.generic"), tone: "bad" });
+    } finally {
+      setBusyId(null);
+    }
   };
 
   return (
@@ -520,7 +609,13 @@ export function AgendaClient(props: AgendaClientProps) {
             t={t}
             onSlotClick={(barberId, startAt) => setCreating({ barberId, startAt })}
             onSlotRejected={(message) => setToast({ message, tone: "bad" })}
-            onCardClick={setDetail}
+            onCardClick={openDetail}
+            onCardHover={hover.show}
+            onCardHoverEnd={hover.close}
+            quickAction={quickAction}
+            onQuickAction={(appt) => void runQuickAction(appt)}
+            busyId={busyId}
+            onDragStart={hover.close}
             onMove={(appt, startAt, barberId) => void handleMove(appt, startAt, barberId)}
             onResize={(appt, minutes) => void handleResize(appt, minutes)}
             onDropRejected={(message) => setToast({ message, tone: "bad" })}
@@ -650,6 +745,18 @@ export function AgendaClient(props: AgendaClientProps) {
             setEditing(null);
             void load(true);
           }}
+        />
+      ) : null}
+
+      {hovered && hover.anchor ? (
+        <HoverCard
+          anchor={hover.anchor}
+          appointment={hovered}
+          timezone={timezone}
+          sale={charged[hovered.id] ?? null}
+          quickLabel={quickAction(hovered)?.label ?? null}
+          draggable={canEdit && Boolean(hovered.barberId) && !isTerminalAppointmentStatus(hovered.status)}
+          t={t}
         />
       ) : null}
 

@@ -28,9 +28,8 @@
 // ═══════════════════════════════════════════════════════════════════════
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { CalendarPlus, CheckCircle2 } from "lucide-react";
+import { CalendarPlus } from "lucide-react";
 import {
-  BARBER_APPOINTMENT_STATUS_UI,
   BARBER_TIME_OFF_TYPE_LABELS,
   isTerminalAppointmentStatus,
   type BarberAppointmentDTO,
@@ -39,14 +38,12 @@ import {
   type BarberTimeOffDTO,
 } from "@/lib/barber/types";
 import {
-  BARBER_CARD_COMPACT_PX,
   BARBER_CARD_MIN_PX,
   BARBER_DAY_PX_PER_MIN,
   BARBER_SLOT_MINUTES,
   assignLanes,
   barberDayWindows,
   computeGridBounds,
-  formatMXN,
   hasAnySchedule,
   minuteToHHMM,
   minuteToHourLabel,
@@ -56,7 +53,6 @@ import {
   weekdayOfISO,
   type MinuteWindow,
 } from "@/lib/barber/agenda";
-import { sumMoneyBy } from "@/lib/barber/money";
 import type { BarberSlotCheck } from "@/lib/barber/agenda";
 import {
   complementWindows,
@@ -69,6 +65,7 @@ import {
 import { ClosedBands, DragGhost, GridLines, NowLine, TimeOffBand } from "./rejilla-piezas";
 import { useCardDrag } from "./use-card-drag";
 import { agendaCss as css, barberColor, initials } from "./agenda-ui";
+import { AppointmentCard, type CardQuickAction } from "./appointment-card";
 
 export interface DayBoardProps {
   dateISO: string;
@@ -99,6 +96,11 @@ export interface DayBoardProps {
     e: { clientX: number; clientY: number },
   ) => void;
   onCardHoverEnd?: () => void;
+  /** La acción rápida del estado siguiente para esta visita (o null). */
+  quickAction?: (appointment: BarberAppointmentDTO) => CardQuickAction | null;
+  onQuickAction?: (appointment: BarberAppointmentDTO) => void;
+  /** Visita con una acción rápida en curso (su botón se deshabilita). */
+  busyId?: string | null;
 }
 
 const PX = BARBER_DAY_PX_PER_MIN;
@@ -464,6 +466,7 @@ export function DayBoard(props: DayBoardProps) {
                   <AppointmentCard
                     key={appt.id}
                     appointment={appt}
+                    variant="day"
                     top={yOf(Math.max(bounds.start, toMinutes(appt.startAt)))}
                     height={cardHeightPx(toMinutes(appt.startAt), toMinutes(appt.endAt), bounds)}
                     lane={lanes[index]?.lane ?? 0}
@@ -471,10 +474,12 @@ export function DayBoard(props: DayBoardProps) {
                     startLabel={minuteToLabel(toMinutes(appt.startAt))}
                     endLabel={minuteToLabel(toMinutes(appt.endAt))}
                     barberName={appt.barberName || barber.nickname || barber.name}
-                    barberTint={barberColor(appt.barberId ?? barber.id)}
                     sale={charged[appt.id] ?? null}
                     dragging={preview?.appointmentId === appt.id}
                     draggable={canDrag(appt)}
+                    quick={props.quickAction?.(appt) ?? null}
+                    busy={props.busyId === appt.id}
+                    onQuick={() => props.onQuickAction?.(appt)}
                     t={t}
                     onOpen={() => {
                       if (drag.consumeClick()) return;
@@ -513,149 +518,4 @@ export function DayBoard(props: DayBoardProps) {
 function cardHeightPx(startMin: number, endMin: number, bounds: MinuteWindow): number {
   const visible = Math.min(bounds.end, endMin) - Math.max(bounds.start, startMin);
   return Math.max(BARBER_CARD_MIN_PX, visible * PX);
-}
-
-interface CardProps {
-  appointment: BarberAppointmentDTO;
-  top: number;
-  height: number;
-  lane: number;
-  laneCount: number;
-  startLabel: string;
-  endLabel: string;
-  barberName: string;
-  barberTint: string;
-  sale: { saleId: string; total: number } | null;
-  dragging: boolean;
-  draggable: boolean;
-  t: (key: string, vars?: Record<string, string | number>) => string;
-  onOpen: () => void;
-  onPointerDown: (e: React.PointerEvent) => void;
-  onResizeDown: (e: React.PointerEvent) => void;
-  onHoverStart?: (el: HTMLElement, e: { clientX: number; clientY: number }) => void;
-  onHoverEnd?: () => void;
-}
-
-/**
- * Bloque de una visita. Es un <button> de verdad: se abre con Enter y con
- * espacio, y el foco se ve. Nada de div con onClick.
- */
-function AppointmentCard(props: CardProps) {
-  const { appointment: appt, t } = props;
-  const ui = BARBER_APPOINTMENT_STATUS_UI[appt.status];
-  const compact = props.height < BARBER_CARD_COMPACT_PX;
-  const roomy = props.height >= 74 && props.laneCount === 1;
-  /** Poco alto o partida en carriles: no cabe el texto del estado. */
-  const narrow = compact || props.laneCount > 1;
-  const total = sumMoneyBy(appt.services, (s) => s.priceAtBooking);
-
-  const now = Date.now();
-  const startMs = new Date(appt.startAt).getTime();
-  const endMs = new Date(appt.endAt).getTime();
-  const terminal = isTerminalAppointmentStatus(appt.status);
-  const live = !terminal && startMs <= now && now < endMs;
-  const past = !terminal && !live && endMs <= now;
-
-  const width = 100 / props.laneCount;
-  const clientLabel = appt.clientName || t("barber.agenda.card.noClient");
-  const serviceLabel =
-    appt.services.length > 0
-      ? appt.services.map((s) => s.serviceName).join(" + ")
-      : t("barber.agenda.card.noServices");
-
-  return (
-    <button
-      type="button"
-      data-status={appt.status}
-      data-card=""
-      className={[
-        css.card,
-        compact ? css.cardCompact : "",
-        props.dragging ? css.cardDragging : "",
-        live ? css.cardLive : "",
-        past ? css.cardPast : "",
-      ]
-        .filter(Boolean)
-        .join(" ")}
-      style={{
-        top: props.top,
-        height: props.height,
-        left: `calc(${props.lane * width}% + 3px)`,
-        width: `calc(${width}% - 6px)`,
-        cursor: props.draggable ? "grab" : "pointer",
-      }}
-      aria-label={t("barber.agenda.card.aria", {
-        time: props.startLabel,
-        client: clientLabel,
-        status: ui.label,
-      })}
-      // Con el resumen al pasar el mouse, el `title` nativo saldría encima
-      // de él diciendo lo mismo: solo se deja si no hay resumen.
-      title={
-        props.onHoverStart
-          ? undefined
-          : `${props.startLabel} – ${props.endLabel} · ${clientLabel} · ${serviceLabel} · ${props.barberName} · ${ui.label}`
-      }
-      onClick={(e) => {
-        e.stopPropagation();
-        props.onOpen();
-      }}
-      onPointerDown={props.onPointerDown}
-      onPointerEnter={(e) => {
-        if (e.pointerType === "mouse" && e.buttons === 0) props.onHoverStart?.(e.currentTarget, e);
-      }}
-      onPointerLeave={() => props.onHoverEnd?.()}
-      onContextMenu={(e) => {
-        // Mantener apretado con el dedo es «mover»: sin menú del sistema.
-        if (props.draggable) e.preventDefault();
-      }}
-    >
-      <span className={css.cardRow}>
-        <span className={css.cardTime}>
-          {narrow ? props.startLabel : `${props.startLabel} – ${props.endLabel}`}
-        </span>
-        {/* Con la tarjeta partida en carriles, la palabra del estado se
-            cortaría a "CANC…": ahí vale más el punto de color (el estado
-            completo sigue en el title y en el aria-label). */}
-        {narrow ? (
-          <span className={css.cardDot} aria-hidden />
-        ) : (
-          <span className={css.cardStatus}>{ui.label}</span>
-        )}
-      </span>
-
-      <span className={css.cardName}>{clientLabel}</span>
-
-      {compact ? null : <span className={css.cardServices}>{serviceLabel}</span>}
-
-      {roomy ? (
-        <span className={css.cardFoot}>
-          <span className={css.cardBarber}>
-            <span className={css.cardBarberDot} style={{ background: props.barberTint }} aria-hidden />
-            <span className={css.cardBarberName}>{props.barberName}</span>
-          </span>
-          {props.sale ? (
-            <span className={css.cardPaid}>
-              <CheckCircle2 size={11} /> {t("barber.agenda.card.charged")}
-            </span>
-          ) : total > 0 ? (
-            <span className={css.cardPrice}>{formatMXN(total)}</span>
-          ) : null}
-        </span>
-      ) : null}
-
-      {/* El asa para alargar/acortar: el borde de abajo. Se nota al pasar
-          el mouse (cursor ↕ y una rayita); con el dedo, mantener apretado
-          sobre ella. */}
-      {props.draggable && !compact ? (
-        <span
-          className={css.resizeHandle}
-          data-resize=""
-          aria-hidden
-          onPointerDown={props.onResizeDown}
-          onClick={(e) => e.stopPropagation()}
-        />
-      ) : null}
-    </button>
-  );
 }

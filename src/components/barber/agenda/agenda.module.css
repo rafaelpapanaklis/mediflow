@@ -685,11 +685,89 @@
 
 /* ── Tarjeta de visita ─────────────────────────────────────────────────
    El alto SIEMPRE es proporcional al tiempo (2 px por minuto en día):
-   30 min = 60 px, 90 min = 180 px. Nada de franjitas de alto fijo. */
+   30 min = 60 px, 90 min = 180 px. Nada de franjitas de alto fijo.
+   La POSICIÓN la lleva el marco (.cardSlot); dentro van la tarjeta, la
+   acción rápida y el asa de alargar (un botón no puede llevar otro). */
+.cardSlot {
+  position: absolute;
+  z-index: 1;
+}
+
+.cardSlot:hover,
+.cardSlot:focus-within {
+  z-index: 5;
+}
+
+.cardSlotDragging {
+  z-index: 1;
+}
+
+/* La acción rápida del estado siguiente: aparece al pasar el mouse o al
+   llegar con el teclado, abajo a la derecha (arriba están la hora y el
+   estado). Con el dedo no hay «pasar por encima»: ahí todo sigue en el
+   detalle, que se abre tocando la visita. */
+.cardQuick {
+  position: absolute;
+  right: 6px;
+  bottom: 10px;
+  z-index: 7;
+  display: none;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 9px;
+  border-radius: 999px;
+  border-width: 1px;
+  border-style: solid;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: var(--shadow-2);
+}
+
+.cardSlot:hover .cardQuick,
+.cardSlot:focus-within .cardQuick {
+  display: inline-flex;
+}
+
+.cardSlotDragging .cardQuick,
+.cardSlotDragging:hover .cardQuick {
+  display: none;
+}
+
+.cardQuick:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.cardQuick:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.cardQuick:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+/* Tarjeta de una sola línea: el botón va centrado en vertical. */
+.cardQuickCompact {
+  bottom: auto;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 18px;
+  padding: 0 7px;
+  font-size: 10.5px;
+}
+
 .card {
   --st: #6F6459;
   box-sizing: border-box;
   position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   border-radius: 9px;
   border: 1px solid color-mix(in srgb, var(--st) 38%, transparent);
   border-left: 4px solid var(--st);
@@ -980,6 +1058,7 @@
   left: 0;
   right: 0;
   bottom: 0;
+  z-index: 6;
   height: 9px;
   cursor: ns-resize;
   touch-action: pan-y;
@@ -993,12 +1072,12 @@
   width: 22px;
   height: 3px;
   border-radius: 2px;
-  background: var(--st);
+  background: var(--text-3);
   opacity: 0;
   transition: opacity 120ms ease;
 }
 
-.card:hover .resizeHandle::after,
+.cardSlot:hover .resizeHandle::after,
 .resizeHandle:hover::after {
   opacity: 0.85;
 }
@@ -1466,6 +1545,96 @@
   font-weight: 700;
   color: var(--text-1);
   font-variant-numeric: tabular-nums;
+}
+
+/* ── Resumen al pasar el mouse por una visita ──────────────────────────
+   Fijo en la ventana, junto a la visita (posicionDeLaTarjeta del dental).
+   Debajo de los modales y del aviso flotante, encima de la rejilla. */
+.hoverCard {
+  position: fixed;
+  /* No captura el puntero: nunca tapa ni roba el clic de lo de abajo. */
+  pointer-events: none;
+  z-index: 60;
+  box-sizing: border-box;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  box-shadow: var(--shadow-3);
+  padding: 11px 12px 10px;
+  color: var(--text-1);
+  font-size: 12.5px;
+  animation: hoverIn 120ms ease-out;
+}
+
+@keyframes hoverIn {
+  from { opacity: 0; transform: translateY(2px); }
+  to { opacity: 1; transform: none; }
+}
+
+.hoverHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.hoverName {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hoverRows {
+  margin: 8px 0 0;
+  display: grid;
+  gap: 5px;
+}
+
+.hoverRow {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+}
+
+.hoverRow dt {
+  display: grid;
+  place-items: center;
+  color: var(--text-3);
+}
+
+.hoverRow dd {
+  margin: 0;
+  min-width: 0;
+  color: var(--text-1);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.hoverMuted {
+  color: var(--text-3);
+}
+
+.hoverFoot {
+  margin-top: 9px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-soft);
+  display: grid;
+  gap: 4px;
+}
+
+.hoverHint {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0;
+  font-size: 11px;
+  color: var(--text-3);
 }
 
 /* ── Aviso flotante (mover / deshacer) ─────────────────────────────── */

@@ -334,5 +334,33 @@
     "done": "Now lasts {duration}",
     "undone": "Done, it's back to its length.",
     "rejected": "Length not changed — {reason}"
+  },
+  "hover": {
+    "label": "Summary of {client}'s visit",
+    "time": "Time",
+    "deposit": "Deposit",
+    "open": "Open",
+    "done": "{client}: {status}",
+    "status": {
+      "PENDING": "Pending",
+      "CONFIRMED": "Confirmed",
+      "IN_PROGRESS": "In the chair",
+      "DONE": "Completed",
+      "NO_SHOW": "No-show",
+      "CANCELLED": "Cancelled"
+    },
+    "depositStatus": {
+      "PENDING": "Deposit not paid yet: {amount}",
+      "PAID": "Deposit paid: {amount}",
+      "REFUNDED": "Deposit refunded: {amount}",
+      "FORFEITED": "Deposit kept: {amount}"
+    },
+    "quickHint": "Shortcut on the visit: “{action}”",
+    "short": {
+      "CONFIRMED": "Confirm",
+      "IN_PROGRESS": "Start",
+      "DONE": "Complete",
+      "DONE_CHARGE": "Complete and charge"
+    }
   }
 }
