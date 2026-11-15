@@ -11,8 +11,10 @@ import {
   getBarberBillingSummary,
   getBarberStripe,
   isBarberStripeConfigured,
+  resolverReactivacionBarber,
   toCents,
 } from "@/lib/barber/billing";
+import { fechaMexico } from "@/lib/barber/cobros-core";
 import {
   BARBER_SUPPORT_PATH,
   barberSupportWhatsappUrl,
@@ -76,6 +78,19 @@ export default async function BarberSuscripcionPage(props: PageProps) {
     getBarberBillingShop(ctx),
   ]);
 
+  // Suspendida después de haber pagado: solo se reactiva con SU plan o uno
+  // mayor (decisión #10 de Rafael). El servidor lo exige en checkout y
+  // change-plan; aquí solo se enseña.
+  const reactivacionRaw = await resolverReactivacionBarber(shop);
+  const reactivacion = reactivacionRaw
+    ? {
+        planId: reactivacionRaw.planId,
+        planName: plans.find((p) => p.id === reactivacionRaw.planId)?.name ?? reactivacionRaw.planId,
+        // Día de México en que terminó lo pagado ("AAAA-MM-DD").
+        paidThroughDay: reactivacionRaw.paidThroughAt ? fechaMexico(new Date(reactivacionRaw.paidThroughAt)) : null,
+      }
+    : null;
+
   const summary: BarberBillingSummary = canManage
     ? await getBarberBillingSummary(getBarberStripe(), shop, plans)
     : { configured: isBarberStripeConfigured(), stripeError: null, subscription: null, invoices: [], failedAttempts: [] };
@@ -113,6 +128,7 @@ export default async function BarberSuscripcionPage(props: PageProps) {
       // El plan que se eligió en la portada (?plan=). Solo ids de la casa:
       // lo que no lo sea se ignora y la pantalla sale como siempre.
       chosenPlanId={isBarberPlanId(searchParams?.plan) ? searchParams.plan : null}
+      reactivacion={reactivacion}
       // A quién escribirle cuando el cobro falla: ticket + WhatsApp oficial.
       support={{
         path: BARBER_SUPPORT_PATH,

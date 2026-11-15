@@ -4,7 +4,13 @@ import { isBarberPlanId } from "@/lib/barber/plan-shared";
 import { countBarberUsage, limitAllows, planLimit, type BarberLimitKey } from "@/lib/barber/gating";
 import { previewBarberPlanChange } from "@/lib/barber/billing";
 import type { BarberChangePreviewDTO, BarberLimitWarningDTO } from "@/components/barber/billing/shared";
-import { billingErrorResponse, readJsonBody, requireBarberBilling, requireBarberStripe } from "../../_lib";
+import {
+  assertReactivacionPermitida,
+  billingErrorResponse,
+  readJsonBody,
+  requireBarberBilling,
+  requireBarberStripe,
+} from "../../_lib";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,6 +36,8 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    // Suspendida: el modal ni siquiera simula bajar de plan (mismo candado que el cambio).
+    await assertReactivacionPermitida(auth, body.plan);
     const [targetPlan, currentPlan, usage] = await Promise.all([
       getBarberPlan(body.plan),
       getBarberPlan(auth.shop.plan),

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, CheckCircle2, Info, Loader2, XCircle } from "lucide-react";
 import { makeBarberT } from "@/lib/barber/i18n";
+import { barberPlanRank } from "@/lib/barber/plan-shared";
 import { BillingModal } from "./modal";
 import { PlanCards } from "./plan-cards";
 import { SubscriptionPanel } from "./subscription-panel";
@@ -41,6 +42,14 @@ export interface BarberBillingSupport {
   whatsappUrl: string;
   /** El número como se lee: "+52 999 438 7769". */
   whatsappNumber: string;
+}
+
+/** Suspendida después de pagar: solo su plan (o uno mayor) la reactiva. */
+export interface BarberReactivacionUI {
+  planId: BarberPlanCardDTO["id"];
+  planName: string;
+  /** Día de México en que terminó lo pagado ("AAAA-MM-DD"); null sin registro. */
+  paidThroughDay: string | null;
 }
 
 interface CheckoutReturn {
@@ -81,6 +90,7 @@ export function BillingScreen({
   checkout,
   chosenPlanId = null,
   support,
+  reactivacion = null,
 }: {
   locale: string;
   dict: Dictionary;
@@ -92,6 +102,8 @@ export function BillingScreen({
   /** Plan elegido en la portada (viaja en ?plan= por registro y entrada). */
   chosenPlanId?: BarberPlanCardDTO["id"] | null;
   support: BarberBillingSupport;
+  /** Suspendida después de pagar (decisión #10). null = elige cualquier plan. */
+  reactivacion?: BarberReactivacionUI | null;
 }) {
   const t = useMemo(() => makeBarberT(dict), [dict]);
   const router = useRouter();
@@ -345,9 +357,52 @@ export function BillingScreen({
     }
   }, [failGeneric, failWith, router, t]);
 
+  /** ¿Este plan queda por debajo del que tenía? (no reactiva; el servidor también lo frena) */
+  const bajoReactivacion = (planId: BarberPlanCardDTO["id"]) =>
+    reactivacion !== null && barberPlanRank(planId) < barberPlanRank(reactivacion.planId);
+
   // ── Avisos de estado ─────────────────────────────────────────────────
   const stateAlert = (() => {
     if (confirming) return null;
+    if (reactivacion) {
+      const body = reactivacion.paidThroughDay
+        ? t("barber.suscripcion.reactivar.body", {
+            // Mediodía UTC: el mismo día de México en cualquier zona del navegador.
+            date: formatBarberDate(`${reactivacion.paidThroughDay}T12:00:00Z`, locale),
+            plan: reactivacion.planName,
+          })
+        : t("barber.suscripcion.reactivar.bodyNoDate", { plan: reactivacion.planName });
+      const paga = plans.find((p) => p.id === reactivacion.planId && p.isActive) ?? null;
+      return (
+        <Alert tone="danger" title={t("barber.suscripcion.reactivar.title")} body={body}>
+          {!canManage && <p className="dcbb-alert__body" style={{ marginTop: 6 }}>{t("barber.suscripcion.hero.onlyOwner")}</p>}
+          {canManage && summary.configured && (
+            <div className="dcbb-alert__actions">
+              {sub?.openInvoiceUrl ? (
+                <a className="dcbb-btn barber-btn-primary" href={sub.openInvoiceUrl} target="_blank" rel="noopener noreferrer">
+                  {t("barber.suscripcion.hero.payOpenInvoice")}
+                </a>
+              ) : !hasLive && paga ? (
+                <button
+                  type="button"
+                  className="dcbb-btn barber-btn-primary"
+                  disabled={busy !== null}
+                  onClick={() => contract(paga.id, "month")}
+                >
+                  {busy === `plan:${paga.id}` ? <Loader2 size={15} className="dcbb-spin" aria-hidden /> : null}
+                  {t("barber.suscripcion.reactivar.pay", { plan: reactivacion.planName })}
+                </button>
+              ) : null}
+              {hasLive && (
+                <button type="button" className="dcbb-btn" disabled={busy !== null} onClick={openPortal}>
+                  {t("barber.suscripcion.hero.manageCard")}
+                </button>
+              )}
+            </div>
+          )}
+        </Alert>
+      );
+    }
     if (statusKey === "pastDue") {
       return (
         <Alert tone="danger" title={t("barber.suscripcion.alerts.pastDueTitle")} body={t("barber.suscripcion.alerts.pastDueBody")}>
@@ -389,7 +444,9 @@ export function BillingScreen({
   // Quien pulsó «Empezar con Profesional» no tiene que volver a buscarlo
   // entre tres tarjetas: sale arriba, con su precio (de la tabla) y un solo
   // botón. No se pinta si ya es su plan, ni mientras se confirma un pago.
-  const chosen = chosenPlanId ? plans.find((p) => p.id === chosenPlanId && p.isActive) ?? null : null;
+  const chosen = chosenPlanId
+    ? plans.find((p) => p.id === chosenPlanId && p.isActive && !bajoReactivacion(p.id)) ?? null
+    : null;
   const chosenAlert =
     chosen && !(subscribed && chosen.id === gate.planId) && !confirming && checkout.result !== "success" ? (
       <Alert
@@ -493,6 +550,7 @@ export function BillingScreen({
         subscribed={subscribed}
         lockedInterval={lockedInterval}
         busyPlan={busy?.startsWith("plan:") ? busy.slice(5) : null}
+        minPlan={reactivacion ? { id: reactivacion.planId, name: reactivacion.planName } : null}
         onContract={contract}
         onChange={openChange}
       />

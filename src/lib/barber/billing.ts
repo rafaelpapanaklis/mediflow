@@ -7,12 +7,16 @@ import { clearBarberPlanConfigCache, getBarberPlans } from "@/lib/barber/plans";
 import {
   barberPlanRank,
   isBarberPlanId,
+  isBarbershopSubscriptionActive,
   type BarberPlanId,
   type BarberResolvedPlan,
 } from "@/lib/barber/plan-shared";
 import {
+  barberiaVencida,
   esFacturaBarber,
   estadoEfectivo,
+  planPermitidoParaReactivar,
+  suspendidaTrasPagar,
   facturaCustomerId,
   facturaShopIdDeclarado,
   facturaSubscriptionId,
@@ -810,6 +814,55 @@ async function handleBarberInvoiceEvent(
     if (sub) await applyBarberSubscription(db, sub, { plans: opts?.plans });
   }
   return { handled: true, action: `invoice:${cobro?.status ?? "noop"}:${saved}`, shopId: shop.id };
+}
+
+// ── Reactivar = pagar el MISMO plan (o uno mayor) ────────────────────────
+
+/**
+ * Decisión #10 de Rafael (15-nov-2026): una barbería SUSPENDIDA después de
+ * haber pagado solo se reactiva pagando el plan que tenía o uno mayor; no
+ * puede bajar de plan para volver a abrir. null = no aplica (al corriente, o
+ * alta nueva que nunca pagó): elige el plan que quiera, como hoy.
+ */
+export interface BarberReactivacion {
+  /** El plan que tenía: el mínimo para reactivar. */
+  planId: BarberPlanId;
+  /** Fin de su último periodo pagado (ISO), si hay registro de cobros. */
+  paidThroughAt: string | null;
+}
+
+export async function resolverReactivacionBarber(
+  shop: Pick<BarberBillingShop, "id" | "plan" | "subscriptionStatus" | "stripeSubscriptionId">,
+  now: Date = new Date(),
+): Promise<BarberReactivacion | null> {
+  let ledger: Awaited<ReturnType<typeof leerRegistroBarber>> = null;
+  try {
+    ledger = await leerRegistroBarber(shop.id);
+  } catch (err) {
+    // Sin registro se decide por la suscripción de Stripe (ver suspendidaTrasPagar).
+    console.error("[barber billing] registro de cobros no disponible:", (err as Error)?.message ?? err);
+  }
+  const tieneAcceso = isBarbershopSubscriptionActive(shop) && !barberiaVencida(ledger, now);
+  if (!suspendidaTrasPagar({ tieneAcceso, subscriptionStatus: shop.subscriptionStatus, stripeSubscriptionId: shop.stripeSubscriptionId, ledger })) {
+    return null;
+  }
+  if (!isBarberPlanId(shop.plan)) return null;
+  return { planId: shop.plan, paidThroughAt: ledger?.paidThroughAt ? ledger.paidThroughAt.toISOString() : null };
+}
+
+/**
+ * Candado del SERVIDOR (checkout y cambio de plan): con la barbería
+ * suspendida, un plan menor que el que tenía responde 409
+ * REACTIVATE_SAME_PLAN con `requiredPlan`. `message` llega ya traducido.
+ */
+export function assertPlanParaReactivar(
+  reactivacion: BarberReactivacion | null,
+  targetPlanId: BarberPlanId,
+  message: string,
+): void {
+  if (!reactivacion) return;
+  if (planPermitidoParaReactivar(reactivacion.planId, targetPlanId)) return;
+  throw new BarberBillingError("REACTIVATE_SAME_PLAN", 409, message, { requiredPlan: reactivacion.planId });
 }
 
 // ── Checkout ─────────────────────────────────────────────────────────────

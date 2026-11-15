@@ -3,12 +3,17 @@ import type Stripe from "stripe";
 import { assertBarberPermission, getBarberContext, type BarberContext } from "@/lib/barber-auth";
 import { barberGateErrorPayload } from "@/lib/barber/gating";
 import {
+  assertPlanParaReactivar,
   barberBillingErrorPayload,
   barberStripeUnavailable,
   getBarberBillingShop,
   getBarberStripe,
+  resolverReactivacionBarber,
   type BarberBillingShop,
 } from "@/lib/barber/billing";
+import { getBarberPlan } from "@/lib/barber/plans";
+import type { BarberPlanId } from "@/lib/barber/plan-shared";
+import { getBarberT } from "@/i18n/dictionaries/barber";
 import {
   BARBER_SUPPORT_PATH,
   barberSupportWhatsappUrl,
@@ -38,6 +43,20 @@ export async function requireBarberBilling(): Promise<BarberBillingAuth | NextRe
   } catch (err) {
     return billingErrorResponse(err);
   }
+}
+
+/**
+ * Reactivar = pagar el MISMO plan (o uno mayor), decisión #10 de Rafael. Si
+ * la barbería está suspendida después de haber pagado, un plan menor lanza
+ * 409 REACTIVATE_SAME_PLAN (lo mapea billingErrorResponse). Una barbería al
+ * corriente, o un alta que nunca pagó, pasa sin tocar nada.
+ */
+export async function assertReactivacionPermitida(auth: BarberBillingAuth, targetPlanId: BarberPlanId): Promise<void> {
+  const reactivacion = await resolverReactivacionBarber(auth.shop);
+  if (!reactivacion) return;
+  const t = getBarberT(auth.ctx.barbershop.locale);
+  const plan = await getBarberPlan(reactivacion.planId);
+  assertPlanParaReactivar(reactivacion, targetPlanId, t("barber.suscripcion.reactivar.blocked", { plan: plan.name }));
 }
 
 export function requireBarberStripe(): Stripe | NextResponse {

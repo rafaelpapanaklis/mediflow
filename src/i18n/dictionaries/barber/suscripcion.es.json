@@ -177,5 +177,13 @@
     "generic": "Algo falló. Intenta de nuevo en un momento; si sigue igual, escríbenos y lo vemos contigo.",
     "alreadySubscribed": "Ya tienes una suscripción activa: cambia de plan desde aquí o paga la factura pendiente.",
     "notConfigured": "El cobro en línea todavía no está conectado. Escríbenos y activamos tu plan."
+  },
+  "reactivar": {
+    "title": "Tu barbería está suspendida",
+    "body": "Tu periodo pagado terminó el {date}. Para volver a abrirla paga tu plan {plan} o uno mayor. No se puede bajar de plan para reactivar.",
+    "bodyNoDate": "Tu periodo pagado terminó. Para volver a abrirla paga tu plan {plan} o uno mayor. No se puede bajar de plan para reactivar.",
+    "pay": "Pagar mi plan {plan}",
+    "lowerBlocked": "Para reactivar tu barbería elige {plan} o uno mayor.",
+    "blocked": "Tu barbería está suspendida: para reactivarla paga tu plan {plan} o uno mayor. No se puede bajar de plan para reactivar."
   }
 }
