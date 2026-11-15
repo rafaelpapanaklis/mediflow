@@ -192,7 +192,6 @@
       "applied": "Aplicado al ticket",
       "refund": "Devolver",
       "forfeit": "Retener",
-      "refundConfirm": "¿Devolver el anticipo? Necesitas un turno abierto: la devolución se registra hoy como un ticket negativo, así que baja el efectivo esperado de este turno y el ingreso del mes.",
       "forfeitConfirm": "¿Retener el anticipo? El cliente no lo recupera.",
       "howItWorks": "El anticipo pagado se descuenta solo al cobrar la cita. Si lo cobras en mostrador, entra al corte del turno con su método de pago.",
       "notApplied": "Se descuenta al cobrar la cita",
@@ -218,6 +217,14 @@
       "howPaid": "¿Cómo pagó?",
       "confirm": "Registrar anticipo",
       "done": "Anticipo registrado. Ya está en el corte del turno."
+    },
+    "refund": {
+      "title": "Devolver anticipo",
+      "who": "Vas a devolverle {amount} a {client}.",
+      "warning": "Antes de confirmar: necesitas un turno abierto en Caja. La devolución se registra HOY como un ticket negativo de {amount}, así que baja el efectivo esperado de este turno (si la devuelves en efectivo) y el ingreso del mes. El turno donde se cobró no cambia.",
+      "howReturned": "¿Cómo se lo devuelves?",
+      "sameMethod": "Igual que como se cobró",
+      "confirm": "Devolver {amount}"
     }
   },
   "errors": {

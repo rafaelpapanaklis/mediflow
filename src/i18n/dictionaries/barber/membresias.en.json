@@ -192,7 +192,6 @@
       "applied": "Applied to the ticket",
       "refund": "Refund",
       "forfeit": "Keep",
-      "refundConfirm": "Refund the deposit? You need an open shift: the refund is recorded today as a negative ticket, so it lowers this shift's expected cash and the month's income.",
       "forfeitConfirm": "Keep the deposit? The client does not get it back.",
       "howItWorks": "A paid deposit is taken off automatically when you charge the appointment. If you take it at the counter, it goes into the shift's cash count with its payment method.",
       "notApplied": "Taken off when the appointment is charged",
@@ -218,6 +217,14 @@
       "howPaid": "How did they pay?",
       "confirm": "Record deposit",
       "done": "Deposit recorded. It is now in the shift's cash count."
+    },
+    "refund": {
+      "title": "Refund deposit",
+      "who": "You are about to refund {amount} to {client}.",
+      "warning": "Before you confirm: you need an open shift in Cash. The refund is recorded TODAY as a negative {amount} ticket, so it lowers this shift's expected cash (if you return it in cash) and the month's income. The shift where it was taken does not change.",
+      "howReturned": "How are you returning it?",
+      "sameMethod": "Same way it was taken",
+      "confirm": "Refund {amount}"
     }
   },
   "errors": {

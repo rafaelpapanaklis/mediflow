@@ -78,6 +78,8 @@ export function DepositsTab({
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [registering, setRegistering] = useState(false);
+  /** Anticipo que se está por devolver (el aviso sale ANTES de confirmar). */
+  const [refunding, setRefunding] = useState<BarberDepositView | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   /** Error de «Devolver» / «Retener» (aparte del error de guardar la política). */
   const [listError, setListError] = useState<string | null>(null);
@@ -116,33 +118,20 @@ export function DepositsTab({
     setSaved(true);
   }
 
-  async function act(appointmentId: string, action: "refund" | "forfeit") {
-    const confirmKey =
-      action === "refund"
-        ? "barber.membresias.anticipos.list.refundConfirm"
-        : "barber.membresias.anticipos.list.forfeitConfirm";
-    if (!window.confirm(t(confirmKey))) return;
+  /** Retener: el dinero se queda donde está, basta una confirmación. */
+  async function forfeit(appointmentId: string) {
+    if (!window.confirm(t("barber.membresias.anticipos.list.forfeitConfirm"))) return;
     setBusyId(appointmentId);
     setListError(null);
     setNotice(null);
-    const res = await apiCall<{ refundSaleId?: string; cashOutsideSession?: boolean }>(
-      "/api/barber/deposits/actions",
-      {
-        method: "POST",
-        body: JSON.stringify({ appointmentId, action }),
-      },
-    );
+    const res = await apiCall("/api/barber/deposits/actions", {
+      method: "POST",
+      body: JSON.stringify({ appointmentId, action: "forfeit" }),
+    });
     setBusyId(null);
     if (!res.ok) {
       setListError(res.error);
       return;
-    }
-    // Devolución en mostrador: quedó un ticket negativo en el turno de hoy.
-    if (action === "refund" && res.data.refundSaleId) {
-      setNotice(t("barber.membresias.anticipos.list.refundedTicket"));
-    } else if (action === "refund" && res.data.cashOutsideSession) {
-      // La base aún no admite el ticket de devolución: se dice sin rodeos.
-      setNotice(t("barber.membresias.anticipos.list.refundedNoTicket"));
     }
     onRefresh();
   }
@@ -448,7 +437,11 @@ export function DepositsTab({
                         type="button"
                         className="bmem-btn bmem-btn-ghost bmem-btn-sm"
                         disabled={busyId === d.appointmentId}
-                        onClick={() => act(d.appointmentId, "refund")}
+                        onClick={() => {
+                          setListError(null);
+                          setNotice(null);
+                          setRefunding(d);
+                        }}
                       >
                         {t("barber.membresias.anticipos.list.refund")}
                       </button>
@@ -456,7 +449,7 @@ export function DepositsTab({
                         type="button"
                         className="bmem-btn bmem-btn-danger bmem-btn-sm"
                         disabled={busyId === d.appointmentId}
-                        onClick={() => act(d.appointmentId, "forfeit")}
+                        onClick={() => forfeit(d.appointmentId)}
                       >
                         {t("barber.membresias.anticipos.list.forfeit")}
                       </button>
@@ -481,7 +474,121 @@ export function DepositsTab({
           }}
         />
       ) : null}
+
+      {refunding ? (
+        <RefundDepositModal
+          t={t}
+          locale={locale}
+          deposit={refunding}
+          onClose={() => setRefunding(null)}
+          onDone={(result) => {
+            setRefunding(null);
+            // Devolución en mostrador: quedó un ticket negativo en el turno de
+            // hoy. Si la base aún no lo admite, se dice sin rodeos.
+            if (result.refundSaleId) setNotice(t("barber.membresias.anticipos.list.refundedTicket"));
+            else if (result.cashOutsideSession) setNotice(t("barber.membresias.anticipos.list.refundedNoTicket"));
+            onRefresh();
+          }}
+        />
+      ) : null}
     </div>
+  );
+}
+
+/**
+ * Devolver un anticipo. Todo lo que va a pasar con el dinero se dice ANTES de
+ * confirmar: hace falta un turno abierto, se registra un ticket negativo en
+ * el turno de HOY (baja el efectivo esperado y el ingreso) y se elige cómo
+ * sale el dinero. Si el servidor se niega (sin turno, ya aplicado…), su
+ * mensaje se ve aquí mismo y no se devolvió nada.
+ */
+function RefundDepositModal({
+  t,
+  locale,
+  deposit,
+  onClose,
+  onDone,
+}: {
+  t: TFunction;
+  locale: string;
+  deposit: BarberDepositView;
+  onClose: () => void;
+  onDone: (result: { refundSaleId?: string; cashOutsideSession?: boolean }) => void;
+}) {
+  // «Igual que como se cobró» es lo normal; el servidor lo resuelve si no se
+  // manda método. Elegir uno aquí lo cambia (cobró en efectivo, devuelve por
+  // transferencia).
+  const [method, setMethod] = useState<BarberCounterPaymentMethod | "SAME">("SAME");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const amount = formatCents(moneyToCents(deposit.amount), "MXN", locale);
+
+  async function submit() {
+    if (saving) return;
+    setSaving(true);
+    setError(null);
+    const res = await apiCall<{ refundSaleId?: string; cashOutsideSession?: boolean }>(
+      "/api/barber/deposits/actions",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          appointmentId: deposit.appointmentId,
+          action: "refund",
+          ...(method === "SAME" ? {} : { paymentMethod: method }),
+        }),
+      },
+    );
+    setSaving(false);
+    if (!res.ok) {
+      setError(res.error);
+      return;
+    }
+    onDone(res.data);
+  }
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={t("barber.membresias.anticipos.refund.title")}
+      footer={
+        <>
+          <button type="button" className="bmem-btn bmem-btn-ghost" onClick={onClose}>
+            {t("barber.membresias.planes.form.cancel")}
+          </button>
+          <button type="button" className="bmem-btn bmem-btn-danger" onClick={submit} disabled={saving}>
+            {saving
+              ? t("barber.membresias.planes.form.saving")
+              : t("barber.membresias.anticipos.refund.confirm", { amount })}
+          </button>
+        </>
+      }
+    >
+      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <p className="bmem-hint">
+          {t("barber.membresias.anticipos.refund.who", { client: deposit.clientName, amount })}
+        </p>
+        <div className="bmem-note t-bad">
+          <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: 1 }} />
+          <span>{t("barber.membresias.anticipos.refund.warning", { amount })}</span>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <span className="bmem-label">{t("barber.membresias.anticipos.refund.howReturned")}</span>
+          <Chips<BarberCounterPaymentMethod | "SAME">
+            value={method}
+            options={[
+              { value: "SAME", label: t("barber.membresias.anticipos.refund.sameMethod") },
+              ...BARBER_COUNTER_PAYMENT_METHODS.map((m) => ({
+                value: m as BarberCounterPaymentMethod | "SAME",
+                label: t(`barber.membresias.payment.${m}`),
+              })),
+            ]}
+            onChange={setMethod}
+          />
+        </div>
+        {error ? <p className="bmem-error">{error}</p> : null}
+      </div>
+    </Modal>
   );
 }
 
