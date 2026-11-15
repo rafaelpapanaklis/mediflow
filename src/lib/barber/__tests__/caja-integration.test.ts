@@ -31,6 +31,7 @@ import {
   openCashSession,
 } from "@/lib/barber/cash";
 import { listMovements, listProducts, registerStockMovement, updateProduct } from "@/lib/barber/inventory";
+import { closeExpectedView } from "@/components/barber/cash/close-expected";
 
 const HAS_DB = Boolean(process.env.DATABASE_URL);
 const skip = HAS_DB ? false : "DATABASE_URL no definido: se salta la integración";
@@ -401,6 +402,17 @@ test("cerrar turno: esperado = fondo + efectivo (sin cancelados), diferencia, qu
   const expected = state.open!.expectedCash;
   const cashTotal = state.open!.byMethod.CASH.total;
   assert.equal(expected, 500 + cashTotal);
+
+  // Ronda 4: el cuadro del cierre explica el esperado con ESTOS números, sin
+  // recalcular nada: fondo + efectivo cobrado; las propinas en efectivo ya
+  // van dentro de lo cobrado (no son un tercer sumando).
+  const view = closeExpectedView(state.open!);
+  assert.equal(view.opening, 500);
+  assert.equal(view.cashCharged, cashTotal);
+  assert.equal(view.expected, expected);
+  assert.equal(view.cashTipsIncluded, state.open!.byMethod.CASH.tip, "las propinas en efectivo son parte del efectivo cobrado");
+  assert.ok(view.cashTipsIncluded > 0 && view.cashTipsIncluded < view.cashCharged, "hubo propinas en efectivo y van dentro");
+  assert.equal(Math.round((view.opening + view.cashCharged) * 100), Math.round(view.expected * 100));
 
   const closed = await closeCashSession(A.ctx, { countedAmount: expected - 20, notes: "faltaron 20" });
   assert.equal(closed.session.closedByUserId, A.ctx.barberUserId);

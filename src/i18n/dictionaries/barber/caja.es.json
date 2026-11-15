@@ -100,7 +100,7 @@
     "openNotes": "Nota (opcional)",
     "openConfirm": "Abrir turno",
     "closeTitle": "Cerrar turno",
-    "closeBody": "Cuenta el efectivo del cajón y captúralo. El sistema calcula el esperado y la diferencia.",
+    "closeBody": "Cuenta el efectivo del cajón y captúralo. Debe haber lo que había al abrir más lo que se cobró en efectivo.",
     "countedAmount": "Efectivo contado",
     "expected": "Esperado en efectivo",
     "difference": "Diferencia",
@@ -113,7 +113,11 @@
     "closeWarning": "Un turno cerrado no se puede reabrir. Para corregir algo después, abre un turno nuevo y déjalo anotado.",
     "closedTitle": "Turno cerrado",
     "closedBody": "Esperado {expected} · Contado {counted} · Diferencia {difference}.",
-    "ticketsInSession": "{count} tickets"
+    "ticketsInSession": "{count} tickets",
+    "cashCharged": "Efectivo cobrado en el turno",
+    "cashChargedTips": "Incluye {tips} de propinas: ya van dentro, no se suman aparte.",
+    "expectedHow": "Fondo inicial + efectivo cobrado.",
+    "outsideDrawer": "No está en el cajón (no lo cuentes):"
   },
   "ticket": {
     "title": "Cobrar",

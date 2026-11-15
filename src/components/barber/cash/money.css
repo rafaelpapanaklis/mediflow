@@ -202,6 +202,10 @@
 .barber-shell .bcaja-totals__row { display: flex; justify-content: space-between; font-size: 13px; color: var(--text-2); }
 .barber-shell .bcaja-totals__row--big { font-size: 18px; font-weight: 700; color: var(--text-1); padding-top: 6px; border-top: 1px dashed var(--border-soft); }
 .barber-shell .bcaja-totals__row span:last-child { font-variant-numeric: tabular-nums; }
+/* Cierre de turno: qué suma (+, =) y qué solo se explica (nota sin importe). */
+.barber-shell .bcaja-totals__op { display: inline-block; width: 1.1em; color: var(--text-3); font-weight: 600; }
+.barber-shell .bcaja-totals__note { font-size: 11.5px; line-height: 1.4; color: var(--text-3); padding-left: 1.25em; margin-top: -3px; }
+.barber-shell .bcaja-totals__aside { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; padding-top: 8px; border-top: 1px solid var(--border-soft); }
 
 /* Formularios en modal */
 .barber-shell .bcaja-form { display: flex; flex-direction: column; gap: 14px; container-type: inline-size; }

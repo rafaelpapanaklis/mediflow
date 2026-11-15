@@ -100,7 +100,7 @@
     "openNotes": "Note (optional)",
     "openConfirm": "Open shift",
     "closeTitle": "Close shift",
-    "closeBody": "Count the cash in the drawer and enter it. The system computes the expected amount and the difference.",
+    "closeBody": "Count the cash in the drawer and enter it. It should hold what was there at opening plus what was charged in cash.",
     "countedAmount": "Counted cash",
     "expected": "Expected cash",
     "difference": "Difference",
@@ -113,7 +113,11 @@
     "closeWarning": "A closed shift can't be reopened. To fix something later, open a new shift and leave a note.",
     "closedTitle": "Shift closed",
     "closedBody": "Expected {expected} · Counted {counted} · Difference {difference}.",
-    "ticketsInSession": "{count} tickets"
+    "ticketsInSession": "{count} tickets",
+    "cashCharged": "Cash charged this shift",
+    "cashChargedTips": "Includes {tips} in tips: already counted here, do not add them again.",
+    "expectedHow": "Opening float + cash charged.",
+    "outsideDrawer": "Not in the drawer (do not count it):"
   },
   "ticket": {
     "title": "Charge",
