@@ -663,7 +663,7 @@ export function TicketModal({
           <div className="field-new">
             <label className="field-new__label" htmlFor="ticket-discount">{t("ticket.discount")}</label>
             <div style={{ display: "flex", gap: 6 }}>
-              <div className="bcaja-seg" role="radiogroup" aria-label={t("ticket.discountMode")} style={{ flex: "0 0 auto" }}>
+              <div className="bcaja-seg" role="radiogroup" aria-label={t("ticket.discountMode")} style={{ flex: "0 0 auto", display: "inline-flex", width: "auto", gap: 2 }}>
                 {(["amount", "pct"] as const).map((m) => (
                   <button
                     key={m}
@@ -671,6 +671,7 @@ export function TicketModal({
                     role="radio"
                     aria-checked={discountMode === m}
                     className={`bcaja-seg__btn ${discountMode === m ? "bcaja-seg__btn--on" : ""}`}
+                    style={{ minWidth: 38, flex: "0 0 auto" }}
                     onClick={() => setDiscountMode(m)}
                     data-descuento={m}
                   >

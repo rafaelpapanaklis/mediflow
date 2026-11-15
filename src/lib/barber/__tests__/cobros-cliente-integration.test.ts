@@ -187,6 +187,8 @@ test("1 · los cobros del cliente: cada ticket, total pagado, visitas cobradas y
   const [last, , mixto] = page.rows;
   assert.equal(last.status, "cancelled");
   assert.equal(last.cancelledSummary, "Corte");
+  assert.equal(last.cancelledTotal, 200, "el total que tenía, leído de la marca");
+  assert.equal(last.total, 0);
   assert.equal(mixto.discount, 50);
   assert.equal(mixto.paymentMethod, "CARD");
   assert.deepEqual(mixto.lines.map((l) => [l.kind, l.qty]), [["service", 1], ["product", 2], ["discount", 1]]);

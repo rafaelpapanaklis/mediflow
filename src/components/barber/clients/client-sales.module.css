@@ -268,7 +268,8 @@
   .head > :last-child {
     width: 100%;
   }
-  .primary {
+  /* El primario («Nuevo cobro») baja a lo ancho y a 44 px. */
+  .head > :last-child > * {
     width: 100%;
     min-height: 44px;
     justify-content: center;

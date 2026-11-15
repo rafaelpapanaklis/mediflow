@@ -66,6 +66,8 @@ export interface ClientSaleRow {
   total: number;
   /** Lo que llevaba un ticket cancelado (sus líneas ya no existen). */
   cancelledSummary: string | null;
+  /** Total que tenía antes de cancelarse (de la marca «… total X (MÉTODO)»). */
+  cancelledTotal: number | null;
 }
 
 export interface ClientSalesPage {
@@ -132,6 +134,13 @@ export function classifySaleLine(it: {
   return { kind: "other", free: false };
 }
 
+/** El total que tenía un ticket cancelado, leído de su marca. */
+export function cancelledTotalOf(notes: string | null | undefined): number | null {
+  if (typeof notes !== "string") return null;
+  const m = / · total (\d+(?:\.\d{1,2})?) \([A-Z]+\)/.exec(notes.split("\n")[0]);
+  return m ? Number(m[1]) : null;
+}
+
 export function toClientSaleRow(s: SaleRowRaw): ClientSaleRow {
   const cancelled = isSaleCancelled(s);
   const lines: ClientSaleLine[] = s.items.map((it) => {
@@ -157,6 +166,7 @@ export function toClientSaleRow(s: SaleRowRaw): ClientSaleRow {
     tip: toNum(s.tip),
     total: toNum(s.total),
     cancelledSummary: cancelled ? originalSummaryOf(s.notes) || null : null,
+    cancelledTotal: cancelled ? cancelledTotalOf(s.notes) : null,
   };
 }
 

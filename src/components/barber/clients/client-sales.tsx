@@ -210,7 +210,9 @@ function SaleRow({
         <p className={s.meta}>{meta.join(" · ")}</p>
       </div>
       <div className={s.side}>
-        <span className={`${s.total} ${cancelled ? s.totalCancelled : ""}`}>{money.format(row.total)}</span>
+        <span className={`${s.total} ${cancelled ? s.totalCancelled : ""}`}>
+          {money.format(cancelled && row.cancelledTotal !== null ? row.cancelledTotal : row.total)}
+        </span>
         {canPrint ? (
           <a className={s.link} href={`/barber/caja/ticket/${row.id}`} target="_blank" rel="noopener noreferrer">
             <Printer size={13} style={{ verticalAlign: "-2px", marginRight: 4 }} />
