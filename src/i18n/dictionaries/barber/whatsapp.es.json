@@ -58,8 +58,17 @@
       "APPROVED": "Aprobada",
       "PENDING": "En revisión",
       "REJECTED": "Rechazada",
-      "MISSING": "Sin dar de alta"
+      "MISSING": "Sin dar de alta",
+      "PAUSED": "En pausa",
+      "DISABLED": "Desactivada",
+      "IN_APPEAL": "En apelación",
+      "PENDING_DELETION": "Se está borrando",
+      "DELETED": "Borrada",
+      "ARCHIVED": "Archivada",
+      "LIMIT_EXCEEDED": "Límite de plantillas"
     },
+    "otherLanguage": "Meta la tiene en otro idioma ({lang}); para mandarla necesitamos español de México (es_MX). Toca «Dar de alta las que falten».",
+    "notUsable": "Meta la tiene así y con ese estado no deja mandarla.",
     "category": {
       "UTILITY": "Utilidad",
       "AUTHENTICATION": "Código de acceso",
@@ -86,6 +95,8 @@
       "invalid": "Meta dice que a la plantilla le falta o le sobra un dato. Mándanos una captura de este aviso y lo corregimos.",
       "network": "Meta no respondió a tiempo. Vuelve a intentarlo en un momento.",
       "other": "Meta no aceptó esta plantilla. Abajo va lo que dijo Meta.",
+      "nameHidden": "Meta dice que ya existe una plantilla con ese nombre, pero no aparece en tu cuenta: casi siempre es porque se está borrando, y Meta bloquea el nombre varias semanas. Avísanos y la damos de alta con otro nombre.",
+      "notUsable": "Meta dice que ya existe, pero la tiene en un estado o idioma con el que no se puede mandar. Abajo va cómo la tiene Meta.",
       "metaSaid": "Lo que dijo Meta"
     },
     "rejected": {

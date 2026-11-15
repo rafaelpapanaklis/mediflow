@@ -62,6 +62,14 @@ export interface BarberTemplateFailure {
   userMsg?: string | null;
   /** true = ni siquiera hubo respuesta de Meta (red / tiempo). */
   network?: boolean;
+  /**
+   * Meta dijo «ya existe» y se buscó por nombre: «hidden» = no la lista (se
+   * está borrando); «notUsable» = está, pero en un estado o idioma que no
+   * sirve (foundStatus / foundLanguage dicen cuál).
+   */
+  taken?: "hidden" | "notUsable";
+  foundStatus?: string | null;
+  foundLanguage?: string | null;
 }
 
 /** Lee el error de Meta tal cual viene en el JSON. Nunca lanza. */
@@ -91,6 +99,8 @@ export type BarberTemplateFailureKey =
   | "rateLimit"
   | "deleting"
   | "authNotAccepted"
+  | "nameHidden"
+  | "notUsable"
   | "invalid"
   | "network"
   | "other";
@@ -113,6 +123,11 @@ export function explainBarberTemplateFailure(f: BarberTemplateFailure): {
   const text = unique.join(" ").toLowerCase();
 
   if (f.network) return { key: "network", raw: raw || "sin respuesta de Meta" };
+  if (f.taken === "hidden") return { key: "nameHidden", raw };
+  if (f.taken === "notUsable") {
+    const where = [f.foundStatus, f.foundLanguage].filter(Boolean).join(" · ");
+    return { key: "notUsable", raw: [where ? `Meta: ${where}` : "", raw].filter(Boolean).join(" — ") };
+  }
   if (f.code === 190) return { key: "token", raw };
   if (f.code === 10 || f.code === 200 || f.code === 294 || (f.code !== null && f.code !== undefined && f.code >= 200 && f.code <= 299)) {
     return { key: "permission", raw };
@@ -126,4 +141,91 @@ export function explainBarberTemplateFailure(f: BarberTemplateFailure): {
   if (String(f.category ?? "").toUpperCase() === "AUTHENTICATION") return { key: "authNotAccepted", raw };
   if (f.code === 100) return { key: "invalid", raw };
   return { key: "other", raw };
+}
+
+// ── «Ya existe» en el alta pero «Sin dar de alta» en la lista ───────────
+
+/** Una plantilla tal como la lista Meta (GET /{waba}/message_templates). */
+export interface MetaTemplateRow {
+  name: string;
+  status: string;
+  language?: string | null;
+  rejectedReason?: string | null;
+}
+
+/** Estados con los que la plantilla SÍ se puede mandar (o pronto podrá). */
+const USABLE_STATUSES = new Set(["APPROVED", "PENDING"]);
+
+/**
+ * Estados de Meta con texto propio en la pantalla. Cualquier otro se
+ * enseña tal cual (y se trata como «no se puede usar»).
+ */
+export const BARBER_TEMPLATE_KNOWN_STATUSES = [
+  "APPROVED",
+  "PENDING",
+  "REJECTED",
+  "MISSING",
+  "PAUSED",
+  "DISABLED",
+  "IN_APPEAL",
+  "PENDING_DELETION",
+  "DELETED",
+  "ARCHIVED",
+  "LIMIT_EXCEEDED",
+] as const;
+
+/**
+ * De todas las filas de Meta con ESE nombre, la que cuenta: la del idioma
+ * con el que mandamos (es_MX); si solo existe en otro idioma, esa, marcada.
+ * null = Meta no la lista.
+ */
+export function pickBarberTemplateRow(
+  rows: MetaTemplateRow[],
+  name: string,
+  lang: string,
+): { status: string; reason: string | null; language: string | null; otherLanguage: boolean } | null {
+  const same = rows.filter((r) => r.name === name);
+  if (same.length === 0) return null;
+  const exact = same.find((r) => (r.language ?? "") === lang);
+  const row = exact ?? same[0];
+  const status = String(row.status ?? "PENDING").toUpperCase();
+  return {
+    status,
+    reason: barberTemplateRejection(status, row.rejectedReason),
+    language: row.language ?? null,
+    otherLanguage: !exact && !!row.language,
+  };
+}
+
+/** ¿Con esta plantilla se puede mandar? (aprobada, o en revisión) */
+export function barberTemplateUsable(t: { status: string; otherLanguage?: boolean }): boolean {
+  return USABLE_STATUSES.has(String(t.status).toUpperCase()) && !t.otherLanguage;
+}
+
+/**
+ * ¿Lo que contestó Meta al dar de alta quiere decir «ese nombre ya está
+ * ocupado»? El `code` es 100 y lo que distingue va en el SUBCÓDIGO (2388023 /
+ * 2388024) o en el texto (error_user_title / error_user_msg). Antes se
+ * miraba `code === 2388023`, que nunca pasa, y el texto de `message`.
+ */
+export function isBarberTemplateNameTaken(f: BarberTemplateFailure): boolean {
+  if (f.subcode === 2388023 || f.subcode === 2388024 || f.code === 2388023 || f.code === 2388024) return true;
+  const text = [f.message, f.userTitle, f.userMsg].filter(Boolean).join(" ").toLowerCase();
+  return /already exists|ya existe|being deleted|se est[aá] (eliminando|borrando)/.test(text);
+}
+
+/**
+ * Meta dijo «ya existe»: con lo que se encontró al buscarla POR NOMBRE, ¿qué
+ * se hace? Nunca un «ya existe» silencioso que deje la plantilla faltante.
+ *   ok          → está y se puede usar: no hay nada que avisar (la lista la
+ *                 enseña con su estado real).
+ *   notUsable   → está, pero en un estado o idioma que no sirve: se avisa.
+ *   hidden      → Meta dice que existe pero no la lista (casi siempre: se
+ *                 está borrando y el nombre queda bloqueado semanas): se avisa.
+ */
+export function decideBarberTemplateNameTaken(
+  found: { status: string; otherLanguage: boolean } | null,
+): "ok" | "notUsable" | "hidden" {
+  if (!found) return "hidden";
+  return barberTemplateUsable(found) ? "ok" : "notUsable";
 }

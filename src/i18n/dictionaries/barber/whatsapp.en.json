@@ -59,8 +59,17 @@
       "APPROVED": "Approved",
       "PENDING": "Under review",
       "REJECTED": "Rejected",
-      "MISSING": "Not registered"
+      "MISSING": "Not registered",
+      "PAUSED": "Paused",
+      "DISABLED": "Disabled",
+      "IN_APPEAL": "In appeal",
+      "PENDING_DELETION": "Being deleted",
+      "DELETED": "Deleted",
+      "ARCHIVED": "Archived",
+      "LIMIT_EXCEEDED": "Template limit"
     },
+    "otherLanguage": "Meta has it in another language ({lang}); to send it we need Mexican Spanish (es_MX). Tap “Register the missing ones”.",
+    "notUsable": "Meta has it like this, and with that status it can’t be sent.",
     "category": {
       "UTILITY": "Utility",
       "AUTHENTICATION": "Access code",
@@ -87,6 +96,8 @@
       "invalid": "Meta says the template is missing a field or has an extra one. Send us a screenshot of this notice and we’ll fix it.",
       "network": "Meta didn’t respond in time. Try again in a moment.",
       "other": "Meta didn’t accept this template. Meta’s message is below.",
+      "nameHidden": "Meta says a template with that name already exists, but it doesn’t show up in your account: almost always it’s being deleted, and Meta locks the name for several weeks. Let us know and we’ll create it under another name.",
+      "notUsable": "Meta says it already exists, but in a status or language that can’t be used to send. How Meta has it is shown below.",
       "metaSaid": "What Meta said"
     },
     "rejected": {

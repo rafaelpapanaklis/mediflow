@@ -20,7 +20,7 @@ import {
 } from "./_wa-arnes";
 import { test, before, after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { provisionBarberTemplates } from "../whatsapp";
+import { listBarberTemplates, provisionBarberTemplates } from "../whatsapp";
 import { explainBarberTemplateFailure } from "../wa-plantillas-core";
 
 before(() => {
@@ -102,4 +102,104 @@ test("sin respuesta de Meta en el alta: queda como fallo de red, no se pierde", 
   assert.equal(r.failed.length, 1);
   assert.equal(r.failed[0].network, true);
   assert.equal(explainBarberTemplateFailure(r.failed[0]).key, "network");
+});
+
+/* ═══════ «Ya existe» en el alta, «Sin dar de alta» en la lista (15-nov) ═══════ */
+
+const G = "https://graph.facebook.com/v19.0";
+const CODIGO = "dc_barber_codigo_acceso";
+const UTILES = ["dc_barber_recordatorio_cita_botones", "dc_barber_recordatorio_cita", "dc_barber_turno_fila", "dc_barber_reserva_confirmada"];
+const tpl = (name: string, status = "APPROVED", language = "es_MX") => ({ name, status, language, category: "UTILITY", rejected_reason: "NONE" });
+
+/**
+ * Meta simulado: la lista general devuelve `general` (en páginas de `porPagina`);
+ * la búsqueda por nombre (`name=`) devuelve `porNombre`; el alta de la de
+ * código contesta `altaCodigo`. Las útiles ya existen.
+ */
+function meta(o: { general: any[]; porPagina?: number; porNombre?: any[]; altaCodigo?: { status: number; json: unknown } }) {
+  const por = o.porPagina ?? 1000;
+  onGraph((call) => {
+    const u = new URL(call.url);
+    if (call.method === "GET" && u.pathname.endsWith("/message_templates")) {
+      if (u.searchParams.get("name")) return { status: 200, json: { data: o.porNombre ?? [] } };
+      const desde = Number(u.searchParams.get("after") ?? "0");
+      const data = o.general.slice(desde, desde + por);
+      const next = desde + por < o.general.length ? `${u.origin}${u.pathname}?limit=200&after=${desde + por}` : undefined;
+      return { status: 200, json: { data, ...(next ? { paging: { next } } : {}) } };
+    }
+    if (call.method === "POST" && u.pathname.endsWith("/message_templates")) {
+      if (call.body?.name === CODIGO && o.altaCodigo) return o.altaCodigo;
+      return { status: 200, json: { id: "1", status: "PENDING" } };
+    }
+    return null;
+  });
+}
+
+test("la lista sigue la PAGINACIÓN: la de código en la página 3 ya no sale «Sin dar de alta»", { skip }, async () => {
+  const t = await crearTienda();
+  const relleno = Array.from({ length: 250 }, (_, i) => tpl(`otra_plantilla_${i}`));
+  meta({ general: [...relleno, ...UTILES.map((n) => tpl(n)), tpl(CODIGO, "PENDING")], porPagina: 100 });
+  const r = await listBarberTemplates(t.id);
+  assert.equal(r.ok, true);
+  const codigo = r.templates.find((x) => x.name === CODIGO)!;
+  assert.equal(codigo.status, "PENDING");
+  assert.equal(codigo.reason, null, "nunca «NONE»");
+});
+
+test("«ya existe» y Meta NO la lista (se está borrando): se avisa, nunca en silencio", { skip }, async () => {
+  const t = await crearTienda();
+  meta({
+    general: UTILES.map((n) => tpl(n)),
+    porNombre: [],
+    altaCodigo: {
+      status: 400,
+      json: { error: { message: "Invalid parameter", code: 100, error_subcode: 2388023,
+        error_user_title: "Message template language is being deleted",
+        error_user_msg: "New Spanish (MEX) content can't be added while the existing Spanish (MEX) content is being deleted. Try again in 4 weeks or consider creating a new message template." } },
+    },
+  });
+  const r = await provisionBarberTemplates(t.id);
+  assert.equal(r.failed.length, 1, "antes: 0 y la pantalla no decía nada");
+  assert.equal(r.failed[0].taken, "hidden");
+  assert.equal(explainBarberTemplateFailure(r.failed[0]).key, "nameHidden");
+  assert.match(explainBarberTemplateFailure(r.failed[0]).raw, /being deleted/);
+});
+
+test("«ya existe» y Meta la tiene SE ESTÁ BORRANDO: se avisa con su estado", { skip }, async () => {
+  const t = await crearTienda();
+  meta({
+    general: UTILES.map((n) => tpl(n)),
+    porNombre: [tpl(CODIGO, "PENDING_DELETION")],
+    altaCodigo: { status: 400, json: { error: { message: "Invalid parameter", code: 100, error_subcode: 2388024, error_user_msg: "Content in this language already exists" } } },
+  });
+  const r = await provisionBarberTemplates(t.id);
+  assert.equal(r.failed.length, 1);
+  assert.equal(r.failed[0].taken, "notUsable");
+  assert.equal(r.failed[0].foundStatus, "PENDING_DELETION");
+  assert.equal(explainBarberTemplateFailure(r.failed[0]).key, "notUsable");
+});
+
+test("«ya existe» y Meta la tiene APROBADA en es_MX: no hay nada que avisar", { skip }, async () => {
+  const t = await crearTienda();
+  meta({
+    general: UTILES.map((n) => tpl(n)),
+    porNombre: [tpl(CODIGO, "APPROVED")],
+    altaCodigo: { status: 400, json: { error: { message: "Invalid parameter", code: 100, error_subcode: 2388024 } } },
+  });
+  const r = await provisionBarberTemplates(t.id);
+  assert.deepEqual(r.failed, []);
+});
+
+test("la de código SOLO en otro idioma: la lista lo dice y el alta pide la versión es_MX", { skip }, async () => {
+  const t = await crearTienda();
+  meta({ general: [...UTILES.map((n) => tpl(n)), tpl(CODIGO, "APPROVED", "es")] });
+  const lista = await listBarberTemplates(t.id);
+  const codigo = lista.templates.find((x) => x.name === CODIGO)!;
+  assert.equal(codigo.status, "APPROVED");
+  assert.equal(codigo.otherLanguage, true);
+  assert.equal(codigo.language, "es");
+  const r = await provisionBarberTemplates(t.id);
+  assert.deepEqual(r.created, [CODIGO]);
+  const pedida = altas().find((b) => b?.name === CODIGO);
+  assert.equal(pedida.language, "es_MX");
 });

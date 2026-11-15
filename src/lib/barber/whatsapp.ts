@@ -55,9 +55,12 @@ import {
 import { getBarberWaAck } from "@/lib/barber/wa-acuse";
 import { wabaIdsFromDebugToken } from "@/lib/barber/wa-signup-core";
 import {
-  barberTemplateRejection,
+  decideBarberTemplateNameTaken,
+  isBarberTemplateNameTaken,
+  pickBarberTemplateRow,
   readBarberTemplateFailure,
   type BarberTemplateFailure,
+  type MetaTemplateRow,
 } from "@/lib/barber/wa-plantillas-core";
 import {
   BARBER_WA_ARCHIVE_MARK,
@@ -767,6 +770,49 @@ export interface BarberTemplateStatus {
    */
   reason: string | null;
   optional: boolean;
+  /** Idioma en el que Meta la tiene (null si falta). */
+  language?: string | null;
+  /** true = Meta solo la tiene en OTRO idioma: con ésa no se puede mandar. */
+  otherLanguage?: boolean;
+}
+
+/**
+ * TODAS las plantillas de la WABA, siguiendo la paginación de Meta (hasta 10
+ * páginas). Antes se leía una sola página: si la nuestra caía en la segunda,
+ * la pantalla decía «Sin dar de alta» aunque Meta la tuviera. Lanza
+ * WhatsAppApiError si Meta contesta mal.
+ */
+async function fetchBarberTemplateRows(
+  creds: BarberWaCredentials,
+  opts: { name?: string } = {},
+): Promise<MetaTemplateRow[]> {
+  const rows: MetaTemplateRow[] = [];
+  let url: string | null =
+    `${GRAPH}/${encodeURIComponent(creds.wabaId!)}/message_templates?limit=200` +
+    `&fields=name,status,category,language,rejected_reason` +
+    (opts.name ? `&name=${encodeURIComponent(opts.name)}` : "");
+  for (let page = 0; url && page < 10; page++) {
+    const res: Response = await fetch(url, {
+      headers: { Authorization: `Bearer ${creds.accessToken}` },
+      signal: AbortSignal.timeout(15000),
+    });
+    const json: any = await res.json().catch(() => ({}));
+    if (!res.ok) throw parseWaError(json, res.status);
+    for (const row of Array.isArray(json?.data) ? json.data : []) {
+      if (typeof row?.name !== "string") continue;
+      // Con `name=` Meta busca por PARECIDO: solo cuenta el nombre exacto.
+      if (opts.name && row.name !== opts.name) continue;
+      rows.push({
+        name: row.name,
+        status: String(row.status ?? "PENDING"),
+        language: typeof row.language === "string" ? row.language : null,
+        rejectedReason: typeof row.rejected_reason === "string" ? row.rejected_reason : null,
+      });
+    }
+    const next = json?.paging?.next;
+    url = typeof next === "string" && next.startsWith(`${GRAPH}/`) ? next : null;
+  }
+  return rows;
 }
 
 /**
@@ -837,23 +883,9 @@ export async function listBarberTemplates(barbershopId: string): Promise<{
     };
   }
 
-  const byName = new Map<string, { status: string; reason: string | null }>();
+  let rows: MetaTemplateRow[] = [];
   try {
-    const res = await fetch(
-      `${GRAPH}/${encodeURIComponent(creds.wabaId)}/message_templates?limit=200&fields=name,status,category,rejected_reason`,
-      { headers: { Authorization: `Bearer ${creds.accessToken}` }, signal: AbortSignal.timeout(15000) },
-    );
-    const json: any = await res.json().catch(() => ({}));
-    if (!res.ok) throw parseWaError(json, res.status);
-    for (const row of Array.isArray(json?.data) ? json.data : []) {
-      if (typeof row?.name !== "string") continue;
-      const status = String(row.status ?? "PENDING").toUpperCase();
-      byName.set(row.name, {
-        status,
-        // Meta manda "NONE" cuando no hay rechazo: eso no se enseña.
-        reason: barberTemplateRejection(status, row.rejected_reason),
-      });
-    }
+    rows = await fetchBarberTemplateRows(creds);
   } catch (err) {
     return {
       ok: false,
@@ -865,7 +897,9 @@ export async function listBarberTemplates(barbershopId: string): Promise<{
   return {
     ok: true,
     templates: BARBER_WA_TEMPLATES.map((t) => {
-      const found = byName.get(t.name);
+      // La del idioma con el que mandamos; si solo hay otra, marcada. El
+      // motivo de rechazo nunca es «NONE» (pickBarberTemplateRow lo filtra).
+      const found = pickBarberTemplateRow(rows, t.name, t.lang);
       return {
         kind: t.kind,
         name: t.name,
@@ -873,6 +907,8 @@ export async function listBarberTemplates(barbershopId: string): Promise<{
         status: found?.status ?? "MISSING",
         reason: found?.reason ?? null,
         optional: t.optional,
+        language: found?.language ?? null,
+        otherLanguage: found?.otherLanguage ?? false,
       };
     }),
   };
@@ -917,8 +953,13 @@ export async function provisionBarberTemplates(
   }
 
   const current = await listBarberTemplates(barbershopId);
+  // Existe = Meta la tiene EN NUESTRO IDIOMA (con el estado que sea). Si solo
+  // la tiene en otro, se pide la versión es_MX: Meta deja varios idiomas con
+  // el mismo nombre.
   const existing = new Set(
-    current.ok ? current.templates.filter((t) => t.status !== "MISSING").map((t) => t.name) : [],
+    current.ok
+      ? current.templates.filter((t) => t.status !== "MISSING" && !t.otherLanguage).map((t) => t.name)
+      : [],
   );
 
   const created: string[] = [];
@@ -943,12 +984,31 @@ export async function provisionBarberTemplates(
         continue;
       }
       const err = parseWaError(json, res.status);
-      // 2388023 / "already exists": el nombre ya está en la WABA. No es fallo.
-      if (/already exists/i.test(err.message) || err.code === 2388023) {
-        continue;
-      }
       // Lo útil de Meta suele venir en error_user_msg, no en message.
       const detail = readBarberTemplateFailure(tpl.name, tpl.category, json);
+      // «Ya existe»: NUNCA en silencio. Se busca POR NOMBRE para ver cómo
+      // la tiene Meta. Si está y sirve, no hay nada que avisar (la lista la
+      // enseña con su estado real); si no la lista (se está borrando) o está
+      // en un estado/idioma que no sirve, se avisa como fallo.
+      if (isBarberTemplateNameTaken(detail)) {
+        let found: ReturnType<typeof pickBarberTemplateRow> = null;
+        try {
+          found = pickBarberTemplateRow(await fetchBarberTemplateRows(creds, { name: tpl.name }), tpl.name, tpl.lang);
+        } catch {
+          found = null;
+        }
+        const verdict = decideBarberTemplateNameTaken(found);
+        if (verdict === "ok") continue;
+        failed.push({
+          ...detail,
+          kind: tpl.kind,
+          taken: verdict,
+          foundStatus: found?.status ?? null,
+          foundLanguage: found?.language ?? null,
+          error: detail.userMsg ?? err.message,
+        });
+        continue;
+      }
       failed.push({
         ...detail,
         kind: tpl.kind,

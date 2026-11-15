@@ -6,8 +6,10 @@ import { apiCall, Banner, Btn, Chip, ErrorText, useSaving } from "../team/admin-
 import type { BarberWaKind } from "@/lib/barber/whatsapp-core";
 import { useWaT } from "./ui";
 import {
+  BARBER_TEMPLATE_KNOWN_STATUSES,
   barberTemplateRejection,
   barberTemplateRejectionKey,
+  barberTemplateUsable,
   explainBarberTemplateFailure,
   type BarberTemplateFailure,
 } from "@/lib/barber/wa-plantillas-core";
@@ -27,6 +29,8 @@ export interface TemplateRow {
   status: string;
   reason: string | null;
   optional: boolean;
+  language?: string | null;
+  otherLanguage?: boolean;
 }
 
 /**
@@ -121,8 +125,14 @@ export function TemplatesPanel({
                     <p className={s.tplReason}>{t(barberTemplateRejectionKey(code), { code })}</p>
                   ) : null;
                 })()}
+                {/* Meta la tiene, pero así no sirve para mandar: se dice por qué. */}
+                {row.status !== "MISSING" && row.otherLanguage ? (
+                  <p className={s.tplReason}>{t("templates.otherLanguage", { lang: row.language ?? "?" })}</p>
+                ) : row.status !== "MISSING" && row.status !== "REJECTED" && !barberTemplateUsable(row) ? (
+                  <p className={s.tplReason}>{t("templates.notUsable")}</p>
+                ) : null}
                 {/* No se pudo dar de alta: por qué, entendible, y lo que dijo Meta en pequeño. */}
-                {row.status === "MISSING" && failures[row.name] ? (
+                {failures[row.name] && (row.status === "MISSING" || !barberTemplateUsable(row)) ? (
                   <>
                     <p className={s.tplReason} role="alert">
                       {t(failures[row.name].key)}
@@ -146,7 +156,9 @@ export function TemplatesPanel({
                         : "muted"
                 }
               >
-                {t(`templates.status.${row.status}`) || row.status}
+                {(BARBER_TEMPLATE_KNOWN_STATUSES as readonly string[]).includes(row.status)
+                  ? t(`templates.status.${row.status}`)
+                  : row.status}
               </Chip>
             </div>
           ))}

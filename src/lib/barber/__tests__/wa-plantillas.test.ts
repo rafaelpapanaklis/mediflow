@@ -15,6 +15,10 @@ import {
   barberTemplateRejectionKey,
   explainBarberTemplateFailure,
   readBarberTemplateFailure,
+  barberTemplateUsable,
+  decideBarberTemplateNameTaken,
+  isBarberTemplateNameTaken,
+  pickBarberTemplateRow,
 } from "../wa-plantillas-core";
 
 test("«NONE», vacío o nulo: no se enseña nada, esté como esté la plantilla", () => {
@@ -51,7 +55,7 @@ test("la pantalla ya no pinta el motivo crudo", () => {
   assert.doesNotMatch(panel, /\{row\.reason\}/);
   assert.match(panel, /barberTemplateRejection\(row\.status, row\.reason\)/);
   const wa = readFileSync("src/lib/barber/whatsapp.ts", "utf8");
-  assert.match(wa, /reason: barberTemplateRejection\(status, row\.rejected_reason\)/);
+  assert.match(wa, /pickBarberTemplateRow\(rows, t\.name, t\.lang\)/);
 });
 
 // ── cuando Meta NO deja dar de alta una plantilla ──────────────────────
@@ -125,4 +129,51 @@ test("la conexión ya no ignora los fallos del alta en segundo plano", () => {
   const ruta = readFileSync("src/app/api/barber/whatsapp/connect/route.ts", "utf8");
   assert.match(ruta, /for \(const f of r\.failed\)/);
   assert.match(ruta, /Meta no aceptó la plantilla/);
+});
+
+// ── «ya existe» en el alta pero «Sin dar de alta» en la lista ───────────
+
+test("de las filas con ese nombre cuenta la de es_MX; si solo hay otro idioma, se marca", () => {
+  const rows = [
+    { name: "dc_barber_codigo_acceso", status: "APPROVED", language: "es" },
+    { name: "dc_barber_codigo_acceso", status: "PENDING", language: "es_MX", rejectedReason: "NONE" },
+    { name: "otra", status: "APPROVED", language: "es_MX" },
+  ];
+  assert.deepEqual(pickBarberTemplateRow(rows, "dc_barber_codigo_acceso", "es_MX"), {
+    status: "PENDING", reason: null, language: "es_MX", otherLanguage: false,
+  });
+  assert.deepEqual(pickBarberTemplateRow(rows.slice(0, 1), "dc_barber_codigo_acceso", "es_MX"), {
+    status: "APPROVED", reason: null, language: "es", otherLanguage: true,
+  });
+  assert.equal(pickBarberTemplateRow(rows, "no_esta", "es_MX"), null);
+});
+
+test("se puede mandar solo aprobada o en revisión, y en nuestro idioma", () => {
+  assert.equal(barberTemplateUsable({ status: "APPROVED" }), true);
+  assert.equal(barberTemplateUsable({ status: "PENDING" }), true);
+  for (const s of ["REJECTED", "PAUSED", "DISABLED", "PENDING_DELETION", "DELETED", "IN_APPEAL", "MISSING"]) {
+    assert.equal(barberTemplateUsable({ status: s }), false, s);
+  }
+  assert.equal(barberTemplateUsable({ status: "APPROVED", otherLanguage: true }), false);
+});
+
+test("«ese nombre ya está»: por SUBCÓDIGO (el code es 100) o por el texto de Meta", () => {
+  const f = (e: Record<string, unknown>) => readBarberTemplateFailure("t", "AUTHENTICATION", { error: e });
+  assert.equal(isBarberTemplateNameTaken(f({ code: 100, error_subcode: 2388023, message: "Invalid parameter" })), true);
+  assert.equal(isBarberTemplateNameTaken(f({ code: 100, error_subcode: 2388024, message: "Invalid parameter" })), true);
+  assert.equal(isBarberTemplateNameTaken(f({ code: 100, message: "Invalid parameter", error_user_msg: "Content in this language already exists" })), true);
+  assert.equal(isBarberTemplateNameTaken(f({ code: 100, error_user_msg: "New Spanish (MEX) content can't be added while the existing Spanish (MEX) content is being deleted." })), true);
+  assert.equal(isBarberTemplateNameTaken(f({ code: 100, message: "Invalid parameter" })), false);
+  assert.equal(isBarberTemplateNameTaken(f({ code: 190 })), false);
+});
+
+test("nunca un «ya existe» silencioso: solo se calla si Meta la tiene y sirve", () => {
+  assert.equal(decideBarberTemplateNameTaken(null), "hidden");
+  assert.equal(decideBarberTemplateNameTaken({ status: "PENDING_DELETION", otherLanguage: false }), "notUsable");
+  assert.equal(decideBarberTemplateNameTaken({ status: "APPROVED", otherLanguage: true }), "notUsable");
+  assert.equal(decideBarberTemplateNameTaken({ status: "APPROVED", otherLanguage: false }), "ok");
+  assert.equal(explainBarberTemplateFailure({ name: "t", taken: "hidden", code: 100, subcode: 2388023 }).key, "nameHidden");
+  const nu = explainBarberTemplateFailure({ name: "t", taken: "notUsable", foundStatus: "DISABLED", foundLanguage: "es_MX" });
+  assert.equal(nu.key, "notUsable");
+  assert.match(nu.raw, /Meta: DISABLED · es_MX/);
 });
