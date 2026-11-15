@@ -29,6 +29,7 @@ import {
   normalizarTelefono,
   ordenDeSecciones,
   precioBarberWeb,
+  urlMapaEmbed,
   seccionesVisibles,
   validarConfigBarberWeb,
   type BarberWebConfig,
@@ -84,6 +85,14 @@ test("el mapa solo acepta google.com; cualquier otro dominio se cae", () => {
   assert.equal(esUrlDeMapa("javascript:alert(1)"), false);
   // El caso que engaña: un dominio que TERMINA en google.com pero no lo es.
   assert.equal(esUrlDeMapa("https://notgoogle.com/maps"), false);
+});
+
+test("urlMapaEmbed no entrega media palabra escrita en el editor como src del iframe", () => {
+  const base = { ...configBarberWebVacia(), mapaEmbed: "Prue" };
+  assert.equal(urlMapaEmbed(base, null), null);
+  assert.match(urlMapaEmbed(base, "Calle 60") as string, /^https:\/\/www\.google\.com\/maps\?q=/);
+  const bueno = { ...base, mapaEmbed: "https://www.google.com/maps/embed?pb=1" };
+  assert.equal(urlMapaEmbed(bueno, null), "https://www.google.com/maps/embed?pb=1");
 });
 
 test("el teléfono se guarda en dígitos con lada; lo imposible se descarta", () => {

@@ -757,7 +757,9 @@ export function urlComoLlegar(direccion: string | null): string | null {
  * dirección — `output=embed` no pide llave de API. Sin dirección, no hay mapa.
  */
 export function urlMapaEmbed(config: BarberWebConfig, direccion: string | null): string | null {
-  if (config.mapaEmbed) return config.mapaEmbed;
+  // Mientras el dueño escribe en el editor, `mapaEmbed` puede ser media palabra («Pr», «Prue»):
+  // sin validar, la vista previa pedía cada tecla como ruta relativa (404 por pulsación).
+  if (config.mapaEmbed && esUrlDeMapa(config.mapaEmbed)) return config.mapaEmbed;
   if (!direccion) return null;
   return `https://www.google.com/maps?q=${encodeURIComponent(direccion)}&output=embed`;
 }
