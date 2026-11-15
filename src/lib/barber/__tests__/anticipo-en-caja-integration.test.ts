@@ -32,6 +32,7 @@ import {
   getSaleDetail,
   openCashSession,
 } from "@/lib/barber/cash";
+import { getReportsSummary } from "@/lib/barber/stats";
 import {
   BarberPaymentsError,
   forfeitDeposit,
@@ -359,6 +360,17 @@ test("con descuento: el anticipo se aplica después y nunca deja el ticket en ne
   assert.equal(credit.unitPrice, -60);
   const entry = await prisma.barberCommissionEntry.findFirstOrThrow({ where: { saleId: sale.id } });
   assert.equal(entry.base.toFixed(2), "60.00", "base = servicio − descuento (el anticipo no cuenta)");
+});
+
+test("Reportes: el anticipo aplicado no se cuenta como descuento, y el ingreso del día cuadra con los tickets", { skip }, async () => {
+  const r = await getReportsSummary(A.ctx, { range: "today", features: FEATURES });
+  // El único descuento de verdad de esta barbería es el de $120 de la prueba anterior.
+  assert.equal(r.totals.discounts, 120, "los anticipos aplicados ($100 + $100 + $60) no inflan «Descuentos»");
+  const live = await prisma.barberSale.findMany({ where: { barbershopId: A.id }, select: { subtotal: true, tip: true, total: true } });
+  const sum = (k: "subtotal" | "tip" | "total") => Math.round(live.reduce((s, t) => s + Number(t[k]), 0) * 100) / 100;
+  assert.equal(r.totals.revenue, sum("subtotal"), "ingreso = Σ subtotal de los tickets (anticipos incluidos, una sola vez)");
+  assert.equal(r.totals.total, sum("total"));
+  assert.equal(Math.round((r.totals.services + r.totals.products) * 100) / 100, r.totals.revenue, "Servicios + Productos = Ingresos");
 });
 
 test("un anticipo que NO está pagado no descuenta nada", { skip }, async () => {

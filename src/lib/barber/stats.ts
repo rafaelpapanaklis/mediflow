@@ -61,6 +61,7 @@ import {
   type Money,
 } from "@/lib/barber/commissions";
 import { NOT_CANCELLED } from "@/lib/barber/clients";
+import { BARBER_DEPOSIT_LINE_PREFIX } from "@/lib/barber/memberships-core";
 import { BARBER_DEFAULT_DAY_END_MIN, BARBER_DEFAULT_DAY_START_MIN } from "@/lib/barber/agenda";
 import type {
   BarberAppointmentStatus,
@@ -952,10 +953,21 @@ interface ReportDaySql {
   services: unknown;
   products: unknown;
   adjustments: unknown;
+  /** Solo los descuentos de verdad (negativo): sin el anticipo aplicado. */
+  discounts: unknown;
   tips: unknown;
   revenue: unknown;
   total: unknown;
 }
+
+/**
+ * Líneas sin servicio ni producto que NO son un descuento: el crédito del
+ * anticipo («Anticipo aplicado · …», negativo) y los tickets de mostrador
+ * («Venta de membresía», «Anticipo recibido», positivos). Siguen entrando al
+ * ingreso neto del día —por eso Servicios + Productos = Ingresos—, pero ya
+ * no inflan ni esconden la cifra de «Descuentos».
+ */
+const DEPOSIT_CREDIT_LIKE = `${BARBER_DEPOSIT_LINE_PREFIX}%`;
 
 interface ReportBarberSql {
   id: string;
@@ -1031,6 +1043,7 @@ export async function getReportsSummary(ctx: BarberContext, opts: ReportsOptions
              COALESCE(SUM(i.services), 0) AS services,
              COALESCE(SUM(i.products), 0) AS products,
              COALESCE(SUM(i.adjustments), 0) AS adjustments,
+             COALESCE(SUM(i.discounts), 0) AS discounts,
              COALESCE(SUM(s."tip"), 0) AS tips,
              COALESCE(SUM(s."subtotal"), 0) AS revenue,
              COALESCE(SUM(s."total"), 0) AS total
@@ -1038,7 +1051,10 @@ export async function getReportsSummary(ctx: BarberContext, opts: ReportsOptions
       LEFT JOIN LATERAL (
         SELECT COALESCE(SUM(CASE WHEN it."serviceId" IS NOT NULL THEN it."qty" * it."unitPrice" END), 0) AS services,
                COALESCE(SUM(CASE WHEN it."productId" IS NOT NULL THEN it."qty" * it."unitPrice" END), 0) AS products,
-               COALESCE(SUM(CASE WHEN it."serviceId" IS NULL AND it."productId" IS NULL THEN it."qty" * it."unitPrice" END), 0) AS adjustments
+               COALESCE(SUM(CASE WHEN it."serviceId" IS NULL AND it."productId" IS NULL THEN it."qty" * it."unitPrice" END), 0) AS adjustments,
+               COALESCE(SUM(CASE WHEN it."serviceId" IS NULL AND it."productId" IS NULL AND it."unitPrice" < 0
+                                  AND it."description" NOT LIKE ${DEPOSIT_CREDIT_LIKE}
+                                 THEN it."qty" * it."unitPrice" END), 0) AS discounts
         FROM "barber_sale_items" it WHERE it."saleId" = s."id"
       ) i ON TRUE
       WHERE s."barbershopId" IN (${ids}) AND ${rangeSql('s."createdAt"')} AND ${liveSale("s")}
@@ -1194,13 +1210,16 @@ export async function getReportsSummary(ctx: BarberContext, opts: ReportsOptions
     const key = ymdKey(ymdFromUtcDays(fromDays + i));
     const r = byDayMap.get(key);
     const services = D(r?.services as never);
-    const adjustments = D(r?.adjustments as never); // negativo (descuentos)
+    // Líneas sin servicio ni producto: descuentos (−), anticipo aplicado (−)
+    // y tickets de mostrador (+: membresías vendidas, anticipos recibidos).
+    const adjustments = D(r?.adjustments as never);
     const products = D(r?.products as never);
     const tips = D(r?.tips as never);
     const revenue = D(r?.revenue as never);
     const total = D(r?.total as never);
     const netServices = services.plus(adjustments);
-    const discounts = adjustments.isNegative() ? adjustments.negated() : ZERO;
+    // «Descuentos» = solo los descuentos de verdad, no el neto de arriba.
+    const discounts = D(r?.discounts as never).negated();
     tot.tickets += intOf(r?.tickets);
     tot.services = tot.services.plus(netServices);
     tot.products = tot.products.plus(products);
