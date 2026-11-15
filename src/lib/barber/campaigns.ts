@@ -8,7 +8,7 @@ import {
   getBarberClientsConfig,
   listBarberOutreach,
   NOT_CANCELLED,
-  withReservedPreference,
+  setReservedPreferenceAtomic,
   type BarberClientsConfig,
   type BarberOutreachTarget,
 } from "@/lib/barber/clients";
@@ -397,11 +397,11 @@ export async function setBarberCampaignOptOut(
       }
     : null;
 
-  await prisma.barberClient.update({
-    where: { id: row.id },
-    data: {
-      preferences: withReservedPreference(row.preferences, CAMPAIGN_OPT_OUT_KEY, value),
-    },
+  await setReservedPreferenceAtomic(prisma, {
+    barbershopId: ctx.barbershopId,
+    clientId: row.id,
+    key: CAMPAIGN_OPT_OUT_KEY,
+    value,
   });
   return { ok: true, optOut: value };
 }
@@ -421,16 +421,11 @@ export async function optOutBarberClientByPhone(
     select: { id: true, preferences: true },
   });
   if (!row) return false;
-  await prisma.barberClient.update({
-    where: { id: row.id },
-    data: {
-      preferences: withReservedPreference(row.preferences, CAMPAIGN_OPT_OUT_KEY, {
-        at: new Date().toISOString(),
-        source: "client",
-        byUserId: null,
-        reason: null,
-      }),
-    },
+  await setReservedPreferenceAtomic(prisma, {
+    barbershopId,
+    clientId: row.id,
+    key: CAMPAIGN_OPT_OUT_KEY,
+    value: { at: new Date().toISOString(), source: "client", byUserId: null, reason: null },
   });
   return true;
 }
@@ -1062,12 +1057,8 @@ async function stampLedger(
       audience,
       new Date().toISOString(),
     );
-    await prisma.barberClient.update({
-      where: { id: row.id },
-      data: {
-        preferences: withReservedPreference(row.preferences, CAMPAIGN_LEDGER_KEY, next),
-      },
-    });
+    // Solo la llave de la bitácora (ronda 2, M3): no pisa estrellas ni enlaces.
+    await setReservedPreferenceAtomic(prisma, { barbershopId, clientId: row.id, key: CAMPAIGN_LEDGER_KEY, value: next });
   } catch (e) {
     // El mensaje YA salió: que falle la bitácora no puede tumbar la tanda.
     // Se avisa fuerte porque el precio de perderla es un repetido.

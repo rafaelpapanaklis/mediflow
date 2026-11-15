@@ -2,9 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Banknote, CheckCircle2, CreditCard, Landmark, Minus, Plus, Printer, Trash2, type LucideIcon } from "lucide-react";
+import { Banknote, CheckCircle2, Copy, CreditCard, Landmark, Minus, Plus, Printer, Star, Trash2, type LucideIcon } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
 import type { Dictionary } from "@/i18n/t";
 import type { CheckoutContext, ClientLookup, PendingAppointment, SaleRow } from "@/lib/barber/cash";
+import type { BonusPublic, SaleStarsOutcome, StarBonus, StarsView } from "@/lib/barber/stars-core";
+import { StarsCard, bonusWhatText, starsT } from "@/components/barber/stars/stars-card";
 import type { BarberPaymentMethod } from "@/lib/barber/types";
 import { loyaltyRedeemText } from "./loyalty-redeem-text";
 import { BarberModal } from "./modal";
@@ -35,10 +38,31 @@ const METHODS: Array<{ value: BarberPaymentMethod; Icon: LucideIcon }> = [
 const TIP_FIXED = [20, 50, 100];
 const TIP_PCT = [10, 15];
 
+/** Lo que devuelve POST /api/barber/sales: el ticket + el resumen de estrellas. */
+type ChargedSale = SaleRow & { stars?: SaleStarsOutcome | null };
+
+/** El catálogo de Caja → lo que pinta la tarjeta (sin importar nada del servidor). */
+function toPublic(b: StarBonus): BonusPublic {
+  return {
+    id: b.id,
+    name: b.name,
+    cost: b.cost,
+    what: {
+      kind: b.kind,
+      serviceName: b.kind === "service" ? b.serviceName : null,
+      amount: b.kind === "amount" ? b.amount : null,
+      percent: b.kind === "percent" ? b.percent : null,
+      text: b.kind === "other" ? b.description : null,
+    },
+  };
+}
+
 type TipMode = { kind: "none" } | { kind: "fixed"; amount: number } | { kind: "pct"; pct: number } | { kind: "custom" };
 
 export function TicketModal({
   dict,
+  starsDict,
+  locale = "es",
   checkout,
   appointment,
   tz,
@@ -46,6 +70,9 @@ export function TicketModal({
   onCharged,
 }: {
   dict: Dictionary;
+  /** Sub-árbol barber.estrellas. */
+  starsDict?: Dictionary;
+  locale?: string;
   checkout: CheckoutContext;
   appointment: PendingAppointment | null;
   tz: string;
@@ -53,6 +80,9 @@ export function TicketModal({
   onCharged: (sale: SaleRow) => void;
 }) {
   const t = useBarberT(dict);
+  const st = useMemo(() => starsT(starsDict ?? {}), [starsDict]);
+  const [bonusId, setBonusId] = useState<string | null>(null);
+  const [linkCopied, setLinkCopied] = useState(false);
   const [barberId, setBarberId] = useState<string>(
     appointment?.barberId ?? (checkout.barbers.length === 1 ? checkout.barbers[0].id : ""),
   );
@@ -82,7 +112,7 @@ export function TicketModal({
   const [membershipKey, setMembershipKey] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<SaleRow | null>(null);
+  const [result, setResult] = useState<ChargedSale | null>(null);
 
   // Búsqueda de clientes (debounce corto).
   useEffect(() => {
@@ -105,20 +135,36 @@ export function TicketModal({
   }, [query]);
 
   const serviceLines = lines.filter((l) => l.kind === "service" && l.qty === 1);
-  const loyaltyAvailable = Boolean(client?.loyaltyEligible) && serviceLines.length > 0;
+  // Bonos que este cliente YA puede canjear (lo decidió el servidor al buscarlo).
+  const readyBonuses = useMemo(
+    () => (client ? checkout.bonuses.filter((b) => (client.availableBonusIds ?? []).includes(b.id)) : []),
+    [client, checkout.bonuses],
+  );
+  const bonus = readyBonuses.find((b) => b.id === bonusId) ?? null;
+  // Un bono de servicio fijo solo va contra ESE servicio; el de siempre, contra cualquiera.
+  const bonusLines = bonus?.kind === "service"
+    ? serviceLines.filter((l) => l.key !== membershipKey && (!bonus.serviceId || l.id === bonus.serviceId))
+    : [];
+  const bonusNeedsService = Boolean(bonus?.kind === "service" && bonusLines.length === 0);
+  const loyaltyAvailable = readyBonuses.length > 0 && lines.length > 0;
   const membershipAvailable = Boolean(client?.activeMembership) && serviceLines.length > 0;
-  // La casilla es genérica; el servicio que de verdad queda gratis se dice aparte.
+  // Qué queda gratis con un bono de servicio (el texto de siempre de la caja).
   const loyaltyText = loyaltyRedeemText(t, {
-    stamps: checkout.loyaltyTarget,
-    reward: checkout.loyaltyReward,
-    serviceName: loyaltyKey ? lines.find((l) => l.key === loyaltyKey)?.name : null,
+    stamps: bonus?.cost ?? checkout.loyaltyTarget,
+    reward: bonus?.name ?? checkout.loyaltyReward,
+    serviceName: bonus?.kind === "service" && loyaltyKey ? lines.find((l) => l.key === loyaltyKey)?.name : null,
   });
 
   // Si desaparece el cliente o la línea, el canje se apaga solo.
   useEffect(() => {
-    if (loyaltyKey && (!loyaltyAvailable || !lines.some((l) => l.key === loyaltyKey && l.kind === "service" && l.qty === 1))) setLoyaltyKey(null);
+    if (bonusId && !readyBonuses.some((b) => b.id === bonusId)) setBonusId(null);
+    if (loyaltyKey && (!bonus || bonus.kind !== "service" || !bonusLines.some((l) => l.key === loyaltyKey))) {
+      setLoyaltyKey(bonus?.kind === "service" ? bonusLines[0]?.key ?? null : null);
+    } else if (!loyaltyKey && bonus?.kind === "service" && bonusLines.length > 0) {
+      setLoyaltyKey(bonusLines[0].key);
+    }
     if (membershipKey && (!membershipAvailable || !lines.some((l) => l.key === membershipKey && l.kind === "service" && l.qty === 1))) setMembershipKey(null);
-  }, [lines, loyaltyAvailable, membershipAvailable, loyaltyKey, membershipKey]);
+  }, [lines, loyaltyAvailable, membershipAvailable, loyaltyKey, membershipKey, bonusId, bonus, bonusLines, readyBonuses]);
 
   // Anticipo PAGADO de la cita (lo manda el servidor en `appointment.deposit`).
   // Aquí solo se PINTA: quien lo descuenta de verdad es createSale, dentro
@@ -131,10 +177,15 @@ export function TicketModal({
       const covered = l.key === loyaltyKey || l.key === membershipKey;
       return s + (covered ? 0 : toCents(l.unitPrice) * l.qty);
     }, 0);
+    // Bono de descuento: misma cuenta que el servidor (antes del descuento normal).
+    let bonusOff = 0;
+    if (bonus?.kind === "amount") bonusOff = Math.min(toCents(bonus.amount ?? 0), gross);
+    else if (bonus?.kind === "percent") bonusOff = Math.round((gross * (bonus.percent ?? 0)) / 100);
+    const grossAfterBonus = gross - bonusOff;
     const discountParsed = parseAmountText(discountText);
-    const discount = Math.min(discountParsed === null ? 0 : toCents(discountParsed), gross);
+    const discount = Math.min(discountParsed === null ? 0 : toCents(discountParsed), grossAfterBonus);
     // Lo que vale el servicio ya con descuento: base de la propina en %.
-    const due = gross - discount;
+    const due = grossAfterBonus - discount;
     const deposit = Math.min(depositPaidCents, due);
     const subtotal = due - deposit;
     let tip = 0;
@@ -144,8 +195,8 @@ export function TicketModal({
       const p = parseAmountText(tipText);
       tip = p === null ? 0 : toCents(p);
     }
-    return { gross, discount, deposit, depositRest: depositPaidCents - deposit, subtotal, tip, total: subtotal + tip, discountInvalid: discountParsed === null };
-  }, [lines, loyaltyKey, membershipKey, discountText, tipMode, tipText, depositPaidCents]);
+    return { gross, bonusOff, discount, deposit, depositRest: depositPaidCents - deposit, subtotal, tip, total: subtotal + tip, discountInvalid: discountParsed === null };
+  }, [lines, loyaltyKey, membershipKey, discountText, tipMode, tipText, depositPaidCents, bonus]);
 
   function addService() {
     const s = checkout.services.find((x) => x.id === addServiceId);
@@ -179,7 +230,7 @@ export function TicketModal({
   }
 
   const tipNeedsBarber = totals.tip > 0 && !barberId;
-  const canSubmit = lines.length > 0 && !submitting && !totals.discountInvalid && !tipNeedsBarber;
+  const canSubmit = lines.length > 0 && !submitting && !totals.discountInvalid && !tipNeedsBarber && !bonusNeedsService;
 
   async function submit() {
     if (!canSubmit) return;
@@ -194,7 +245,8 @@ export function TicketModal({
         discount: fromCents(totals.discount),
         tip: fromCents(totals.tip),
         paymentMethod: method,
-        redeemLoyaltyItemIndex: loyaltyKey ? lines.findIndex((l) => l.key === loyaltyKey) : null,
+        redeemBonusId: bonus ? bonus.id : null,
+        redeemLoyaltyItemIndex: bonus?.kind === "service" && loyaltyKey ? lines.findIndex((l) => l.key === loyaltyKey) : null,
         membershipItemIndex: membershipKey ? lines.findIndex((l) => l.key === membershipKey) : null,
         notes: notes.trim() || null,
       };
@@ -203,7 +255,7 @@ export function TicketModal({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      const data = (await res.json().catch(() => ({}))) as SaleRow & { error?: string; code?: string };
+      const data = (await res.json().catch(() => ({}))) as ChargedSale & { error?: string; code?: string };
       if (!res.ok) {
         if (data.code === "NO_OPEN_SESSION") setError(t("ticket.errorNoSession"));
         else if (data.code === "OUT_OF_STOCK") setError(`${t("ticket.errorStock")} ${data.error ?? ""}`.trim());
@@ -229,6 +281,8 @@ export function TicketModal({
     setTipText("");
     setNotes("");
     setLoyaltyKey(null);
+    setBonusId(null);
+    setLinkCopied(false);
     setMembershipKey(null);
     setError(null);
   }
@@ -236,12 +290,74 @@ export function TicketModal({
   const title = appointment ? t("ticket.fromAppointment", { time: fmtTime(appointment.startAt, tz) }) : t("ticket.title");
 
   if (result) {
+    const out = result.stars ?? null;
+    const cardUrl = out && typeof window !== "undefined" ? `${window.location.origin}${out.cardPath}` : null;
+    // La tarjeta dibujada con lo que dijo el servidor (sin otra llamada).
+    const miniView: StarsView | null = out
+      ? {
+          enabled: true,
+          firstName: out.firstName,
+          stars: out.stars,
+          slots: out.next ? out.next.cost : Math.max(out.stars, 1),
+          next: out.next
+            ? {
+                bonus: checkout.bonuses.map(toPublic).find((b) => b.name === out.next!.name && b.cost === out.next!.cost) ?? {
+                  id: "next", name: out.next.name, cost: out.next.cost,
+                  what: { kind: "other", serviceName: null, amount: null, percent: null, text: null },
+                },
+                remaining: out.next.remaining,
+              }
+            : null,
+          available: [],
+          catalog: checkout.bonuses.map(toPublic),
+          history: [],
+          usedCount: 0,
+        }
+      : null;
     return (
       <BarberModal open title={t("ticket.success")} onClose={onClose} closeLabel={t("common.close")}>
         <div className="bcaja-success">
           <div className="bcaja-success__icon"><CheckCircle2 size={28} /></div>
           <div className="bcaja-success__amount">{fmtMoney(result.total)}</div>
           <div className="bcaja-hint">{t("ticket.successBody", { amount: fmtMoney(result.total), method: t(PAYMENT_METHOD_KEYS[result.paymentMethod]) })}</div>
+          {out && miniView ? (
+            <div data-estrellas-cobro style={{ width: "100%", maxWidth: 420, margin: "10px auto 0", textAlign: "left", display: "grid", gap: 8 }}>
+              <div className="bcaja-alert bcaja-alert--info" role="status" style={{ fontWeight: 700 }}>
+                {out.gained > 0
+                  ? out.next
+                    ? st("caja.gained", { name: out.firstName, count: out.stars, total: out.next.cost })
+                    : st("caja.gainedNoGoal", { name: out.firstName, count: out.stars })
+                  : st("caja.noStar")}
+                {out.reached.length > 0 ? <div style={{ marginTop: 4 }}>{st("caja.reached", { bonus: out.reached.join(", ") })}</div> : null}
+                {out.used ? (
+                  <div style={{ marginTop: 4, fontWeight: 500 }}>{st("caja.used", { bonus: out.used.name, count: out.used.stars, left: out.stars })}</div>
+                ) : null}
+              </div>
+              <StarsCard view={miniView} t={st} audience="staff" locale={locale} />
+              {cardUrl ? (
+                <div style={{ display: "grid", justifyItems: "center", gap: 6, marginTop: 4 }}>
+                  <div className="bcaja-hint" style={{ fontWeight: 600 }}>{st("caja.showCard")}</div>
+                  <div style={{ borderRadius: 12, overflow: "hidden", lineHeight: 0 }}>
+                    <QRCodeSVG value={cardUrl} size={148} level="M" marginSize={2} />
+                  </div>
+                  <button
+                    type="button"
+                    className="btn-new btn-new--secondary btn-new--sm"
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(cardUrl);
+                        setLinkCopied(true);
+                      } catch {
+                        /* sin portapapeles: el QR sigue en pantalla */
+                      }
+                    }}
+                  >
+                    <Copy size={13} /> {linkCopied ? st("staff.copied") : st("staff.copy")}
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center", marginTop: 8 }}>
             <Link href={`/barber/caja/ticket/${result.id}`} className="btn-new btn-new--secondary" target="_blank">
               <Printer size={14} /> {t("ticket.printTicket")}
@@ -305,8 +421,8 @@ export function TicketModal({
                   <div className="bcaja-client__meta">
                     {client.phone}
                     {/* Sellos y premio: los de ESTA barbería (umbral, premio y encendido). */}
-                    {checkout.loyaltyEnabled ? ` · ${t("ticket.loyaltyStamps", { count: client.loyaltyCount, target: checkout.loyaltyTarget })}` : ""}
-                    {client.loyaltyEligible ? ` · ${t("ticket.loyaltyEligible", { reward: checkout.loyaltyReward })}` : ""}
+                    {checkout.loyaltyEnabled ? ` · ${st("caja.starsShort", { count: client.loyaltyCount })}` : ""}
+                    {readyBonuses.length > 0 ? ` · ${t("ticket.loyaltyEligible", { reward: readyBonuses.map((b) => b.name).join(", ") })}` : ""}
                     {client.activeMembership
                       ? ` · ${t("ticket.membershipActive", { name: client.activeMembership.name })} (${client.activeMembership.cutsLeft === null ? t("ticket.membershipUnlimited") : t("ticket.membershipCutsLeft", { count: client.activeMembership.cutsLeft })})`
                       : ""}
@@ -324,7 +440,7 @@ export function TicketModal({
                     {suggestions.map((c) => (
                       <button key={c.id} type="button" className="bcaja-suggest__item" onClick={() => { setClient(c); setQuery(""); setSuggestions([]); }}>
                         <div className="bcaja-client__name">{c.name}</div>
-                        <div className="bcaja-client__meta">{c.phone}{checkout.loyaltyEnabled ? ` · ${t("ticket.loyaltyStamps", { count: c.loyaltyCount, target: checkout.loyaltyTarget })}` : ""}</div>
+                        <div className="bcaja-client__meta">{c.phone}{checkout.loyaltyEnabled ? ` · ${st("caja.starsShort", { count: c.loyaltyCount })}` : ""}</div>
                       </button>
                     ))}
                   </div>
@@ -406,17 +522,39 @@ export function TicketModal({
         {(loyaltyAvailable || membershipAvailable) && (
           <div className="bcaja-form__grid">
             {loyaltyAvailable && (
-              <div className="field-new">
-                <label className="field-new__label" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <input type="checkbox" checked={loyaltyKey !== null} onChange={(e) => setLoyaltyKey(e.target.checked ? (serviceLines.find((l) => l.key !== membershipKey)?.key ?? null) : null)} />
-                  {loyaltyText.label}
+              <div className="field-new" data-bono>
+                <label className="field-new__label" htmlFor="ticket-bono" style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <Star size={13} /> {st("caja.applyBonus")}
                 </label>
-                {loyaltyKey && (
-                  <select className="input-new" value={loyaltyKey} onChange={(e) => setLoyaltyKey(e.target.value)} aria-label={t("ticket.loyaltyApplyTo")}>
-                    {serviceLines.filter((l) => l.key !== membershipKey).map((l) => <option key={l.key} value={l.key}>{l.name}</option>)}
+                <select
+                  id="ticket-bono"
+                  className="input-new"
+                  value={bonusId ?? ""}
+                  onChange={(e) => {
+                    setBonusId(e.target.value || null);
+                    setLoyaltyKey(null);
+                  }}
+                >
+                  <option value="">{st("caja.bonusNone")}</option>
+                  {readyBonuses.map((b) => (
+                    <option key={b.id} value={b.id}>{st("caja.bonusOption", { bonus: b.name, count: b.cost })}</option>
+                  ))}
+                </select>
+                {bonus ? (
+                  <div className="bcaja-hint" style={{ marginTop: 4 }}>{bonusWhatText(st, toPublic(bonus).what, locale)}</div>
+                ) : null}
+                {bonus?.kind === "service" && bonusLines.length > 1 && loyaltyKey ? (
+                  <select className="input-new" style={{ marginTop: 6 }} value={loyaltyKey} onChange={(e) => setLoyaltyKey(e.target.value)} aria-label={st("caja.applyTo")}>
+                    {bonusLines.map((l) => <option key={l.key} value={l.key}>{l.name}</option>)}
                   </select>
-                )}
-                {loyaltyText.effect && <div className="bcaja-hint" style={{ marginTop: 4 }}>{loyaltyText.effect}</div>}
+                ) : null}
+                {bonusNeedsService ? (
+                  <div className="bcaja-alert bcaja-alert--info" style={{ marginTop: 6 }}>{st("caja.needsService", { service: bonus?.serviceName ?? "" })}</div>
+                ) : null}
+                {bonus?.kind === "service" && loyaltyText.effect ? <div className="bcaja-hint" style={{ marginTop: 4 }}>{loyaltyText.effect}</div> : null}
+                {bonus?.kind === "other" && bonus.description ? (
+                  <div className="bcaja-hint" style={{ marginTop: 4 }}>{st("caja.bonusGift", { text: bonus.description })}</div>
+                ) : null}
               </div>
             )}
             {membershipAvailable && (
@@ -484,6 +622,9 @@ export function TicketModal({
 
         {/* Totales */}
         <div className="bcaja-totals">
+          {totals.bonusOff > 0 && bonus && (
+            <div className="bcaja-totals__row"><span>{st("caja.bonusDiscount", { bonus: bonus.name })}</span><span>−{fmtMoney(fromCents(totals.bonusOff))}</span></div>
+          )}
           {totals.discount > 0 && (
             <div className="bcaja-totals__row"><span>{t("common.discount")}</span><span>−{fmtMoney(fromCents(totals.discount))}</span></div>
           )}

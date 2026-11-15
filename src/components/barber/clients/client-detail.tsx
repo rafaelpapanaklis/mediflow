@@ -24,6 +24,8 @@ import type { BarberClientPreferences, BarberVisitPhotoView } from "@/lib/barber
 import type { BarberClientDetail, BarberLoyaltyState } from "@/lib/barber/loyalty";
 import type { BarberClientDTO } from "@/lib/barber/types";
 import { LoyaltyCard } from "./loyalty-card";
+import { StarsPanel } from "./stars-panel";
+import type { StarsView } from "@/lib/barber/stars-core";
 import { PhotoUploader, type UploadedPhoto } from "./photo-uploader";
 import { PreferencesPanel } from "./preferences-panel";
 import { VisitTimeline } from "./visit-timeline";
@@ -55,6 +57,13 @@ export interface ClientDetailProps {
   canEdit: boolean;
   /** portal.manage — puede marcar fotos visibles para el cliente. */
   canPublish: boolean;
+  /** Tarjeta de estrellas (null = no se pudo leer: se pinta la de sellos). */
+  stars?: StarsView | null;
+  /** Sub-árbol barber.estrellas. */
+  starsDict?: Dictionary;
+  /** cash.manage — dar/quitar estrella, entregar bono, enlace de la tarjeta. */
+  canHandleStars?: boolean;
+  timezone?: string;
 }
 
 function sortPhotos(list: BarberVisitPhotoView[]): BarberVisitPhotoView[] {
@@ -67,6 +76,10 @@ export function BarberClientDetailScreen({
   detail,
   canEdit,
   canPublish,
+  stars = null,
+  starsDict,
+  canHandleStars = false,
+  timezone = "America/Mexico_City",
 }: ClientDetailProps) {
   const t = useBarberT(dict);
   const toast = useToast();
@@ -285,6 +298,19 @@ export function BarberClientDetailScreen({
                 ) : null}
               </section>
 
+              {stars && starsDict ? (
+                <StarsPanel
+                  clientId={client.id}
+                  clientName={client.name}
+                  initial={stars}
+                  dict={starsDict}
+                  locale={locale}
+                  timezone={timezone}
+                  canHandle={canHandleStars}
+                  onMessage={toast.show}
+                  onChanged={() => router.refresh()}
+                />
+              ) : (
               <LoyaltyCard
                 clientId={client.id}
                 state={loyalty}
@@ -296,6 +322,7 @@ export function BarberClientDetailScreen({
                 }}
                 onMessage={toast.show}
               />
+              )}
 
               <section className={`${s.card} ${s.cardPad}`}>
                 <h2 className={s.sectionTitle}>{t("detail.notesTitle")}</h2>

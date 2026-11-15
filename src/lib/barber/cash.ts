@@ -75,11 +75,19 @@ import { applyStockDelta, listProducts, type ProductRow } from "@/lib/barber/inv
 import {
   LOYALTY_DEFAULT_THRESHOLD,
   LOYALTY_SUFFIX,
-  getLoyaltyRule,
+  loyaltyBonusLineDescription,
   loyaltyLineSuffix,
   refreshLoyalty,
   type LoyaltyRule,
 } from "@/lib/barber/loyalty-core";
+import {
+  activeBonuses,
+  availableBonuses,
+  legacyBonus,
+  loadBonusCatalog,
+  seededBonusId,
+  type StarBonus,
+} from "@/lib/barber/stars-core";
 import {
   BARBER_DEPOSIT_LINE_PREFIX,
   BARBER_SALE_TAG_PREFIX,
@@ -114,6 +122,15 @@ export { LOYALTY_SUFFIX };
 export const MEMBERSHIP_SUFFIX = " · Membresía";
 
 const DISCOUNT_DESCRIPTION = "Descuento";
+
+/**
+ * ¿El descuento de un BONO de estrellas (en pesos o en %) baja la comisión
+ * del barbero? false = no: igual que el servicio gratis por bono (decisión de
+ * Rafael del 14-nov-2026), el premio lo paga la barbería y el barbero
+ * comisiona como si no hubiera bono. Un descuento NORMAL del ticket sí la
+ * baja, como siempre. DECISIÓN PARA RAFAEL (reporte ws6-t5): una constante.
+ */
+export const BONUS_DISCOUNT_REDUCES_COMMISSION = false;
 
 // ── Plan gate (servidor) ────────────────────────────────────────────────
 
@@ -269,10 +286,12 @@ export interface ClientLookup {
   id: string;
   name: string;
   phone: string;
-  /** Sellos vivos, recontados al leer (no la caché de la columna). */
+  /** Estrellas vivas, recontadas al leer (no la caché de la columna). */
   loyaltyCount: number;
-  /** Lealtad encendida en la barbería Y sellos ≥ su umbral. */
+  /** Tarjeta encendida en la barbería Y alcanza al menos un bono. */
   loyaltyEligible: boolean;
+  /** Ids de los bonos que ya puede canjear (catálogo en CheckoutContext.bonuses). */
+  availableBonusIds: string[];
   activeMembership: {
     id: string;
     name: string;
@@ -310,6 +329,8 @@ export interface CheckoutContext {
   loyaltyEnabled: boolean;
   /** Etiqueta del premio que configuró la barbería. */
   loyaltyReward: string;
+  /** Bonos ACTIVOS de la barbería (el premio de siempre si no ha creado otros). */
+  bonuses: StarBonus[];
   features: { products: boolean; tips: boolean; commissions: boolean };
 }
 
@@ -624,10 +645,11 @@ function toClientLookup(c: {
     cutsUsed: number;
     membership: { name: string; includedCuts: number | null };
   }>;
-}, now: Date, rule: LoyaltyRule, freshCount?: number): ClientLookup {
+}, now: Date, rule: LoyaltyRule, freshCount?: number, bonuses: StarBonus[] = [legacyBonus(rule)]): ClientLookup {
   // `freshCount` = recuento hecho ahora mismo (refreshLoyalty). Sin él se cae
   // a la columna, que quien llama acaba de refrescar o va a validar aparte.
   const loyaltyCount = freshCount ?? c.loyaltyCount;
+  const ready = rule.enabled ? availableBonuses(loyaltyCount, bonuses) : [];
   const active = c.memberships.find(
     (m) =>
       m.status === "ACTIVE" &&
@@ -639,7 +661,8 @@ function toClientLookup(c: {
     name: c.name,
     phone: c.phone,
     loyaltyCount,
-    loyaltyEligible: rule.enabled && loyaltyCount >= rule.threshold,
+    loyaltyEligible: ready.length > 0,
+    availableBonusIds: ready.map((b) => b.id),
     activeMembership: active
       ? {
           id: active.id,
@@ -697,11 +720,12 @@ export async function lookupClients(ctx: BarberContext, q: string, now: Date = n
   });
   // Sellos frescos y la regla de ESTA barbería: lo que diga la caja es lo
   // mismo que dice la ficha del cliente.
-  const [rule, fresh] = await Promise.all([
-    getLoyaltyRule(prisma, ctx.barbershopId),
+  const [catalog, fresh] = await Promise.all([
+    loadBonusCatalog(prisma, ctx.barbershopId),
     refreshLoyalty(prisma, ctx.barbershopId, rows.map((c) => c.id)),
   ]);
-  return rows.map((c) => toClientLookup(c, now, rule, fresh.get(c.id)?.count));
+  const bonuses = activeBonuses(catalog.bonuses);
+  return rows.map((c) => toClientLookup(c, now, catalog.rule, fresh.get(c.id)?.count, bonuses));
 }
 
 export async function getCheckoutContext(
@@ -744,10 +768,12 @@ export async function getCheckoutContext(
   ]);
 
   const pendingRows = appointments.filter((a) => a.sales.every((s) => isSaleCancelled(s)));
-  const [rule, fresh] = await Promise.all([
-    getLoyaltyRule(prisma, ctx.barbershopId),
+  const [catalog, fresh] = await Promise.all([
+    loadBonusCatalog(prisma, ctx.barbershopId),
     refreshLoyalty(prisma, ctx.barbershopId, pendingRows.map((a) => a.clientId)),
   ]);
+  const rule = catalog.rule;
+  const bonuses = activeBonuses(catalog.bonuses);
 
   const pending: PendingAppointment[] = pendingRows
     .map((a) => ({
@@ -760,7 +786,7 @@ export async function getCheckoutContext(
       clientId: a.clientId,
       clientName: a.client?.name ?? a.clientName,
       clientPhone: a.client?.phone ?? a.clientPhone,
-      client: a.client ? toClientLookup(a.client, now, rule, fresh.get(a.client.id)?.count) : null,
+      client: a.client ? toClientLookup(a.client, now, rule, fresh.get(a.client.id)?.count, bonuses) : null,
       services: a.services.map((s) => ({
         serviceId: s.serviceId,
         name: s.service.name,
@@ -784,6 +810,7 @@ export async function getCheckoutContext(
     loyaltyTarget: rule.threshold,
     loyaltyEnabled: rule.enabled,
     loyaltyReward: rule.reward,
+    bonuses,
     features: {
       products: features.products === true,
       tips: features.tips === true,
@@ -932,14 +959,25 @@ export interface CreateSaleInput {
   paymentMethod?: unknown;
   /** Índice (en `items`) de la línea de servicio que se canjea por lealtad. */
   redeemLoyaltyItemIndex?: number | null;
+  /**
+   * Bono de estrellas que se aplica (id del catálogo de la barbería). Sin él,
+   * `redeemLoyaltyItemIndex` canjea el premio de siempre (compatibilidad).
+   * Un bono de servicio gratis usa `redeemLoyaltyItemIndex` para la línea;
+   * los de descuento y «otro» no la necesitan.
+   */
+  redeemBonusId?: string | null;
   /** Índice (en `items`) de la línea de servicio cubierta por la membresía. */
   membershipItemIndex?: number | null;
   notes?: unknown;
 }
 
 interface BuiltLine {
-  /** "deposit" = crédito del anticipo: resta del total, NO de la base de comisión. */
-  kind: "service" | "product" | "adjustment" | "deposit";
+  /**
+   * "deposit" = crédito del anticipo: resta del total, NO de la base de comisión.
+   * "bonus"   = descuento (o regalo en $0) de un bono de estrellas: resta del
+   *             total; de la comisión solo si BONUS_DISCOUNT_REDUCES_COMMISSION.
+   */
+  kind: "service" | "product" | "adjustment" | "deposit" | "bonus";
   /**
    * Precio NORMAL del servicio cuando la línea va cubierta (membresía o
    * premio de lealtad) y por eso se cobra en $0. Solo lo usa la comisión: el
@@ -1018,7 +1056,8 @@ export async function createSale(
   const discount = parseMoneyInput(input.discount, { field: "discount" });
   const tip = parseMoneyInput(input.tip, { field: "tip" });
   const notes = cleanNotes(input.notes);
-  const loyaltyIdx = optionalIndex(input.redeemLoyaltyItemIndex, "redeemLoyaltyItemIndex");
+  let loyaltyIdx = optionalIndex(input.redeemLoyaltyItemIndex, "redeemLoyaltyItemIndex");
+  const bonusId = optionalId(input.redeemBonusId, "redeemBonusId");
   const membershipIdx = optionalIndex(input.membershipItemIndex, "membershipItemIndex");
   if (loyaltyIdx !== null && membershipIdx !== null && loyaltyIdx === membershipIdx) {
     throw new BarberCajaError(400, "INVALID_INPUT", "Una misma línea no puede canjearse por lealtad y membresía");
@@ -1130,19 +1169,31 @@ export async function createSale(
 
       // 5. Canjes: lealtad y membresía cubren UNA línea de servicio cada uno.
       let membershipUsed: { id: string } | null = null;
-      if (loyaltyIdx !== null) {
-        const target = built[loyaltyIdx];
-        if (!target || target.kind !== "service") {
-          throw new BarberCajaError(400, "INVALID_INPUT", "El canje de lealtad debe apuntar a un servicio del ticket");
+      // Bono de estrellas: se decide AQUÍ, dentro de la transacción. El navegador
+      // solo dice cuál; si alcanza, qué da y cuántas estrellas cuesta lo dice
+      // el catálogo de la barbería.
+      let bonus: StarBonus | null = null;
+      if (bonusId !== null || loyaltyIdx !== null) {
+        if (!client) throw new BarberCajaError(400, "LOYALTY_NEEDS_CLIENT", "Elige al cliente para canjear su bono");
+        const catalog = await loadBonusCatalog(tx, barbershopId);
+        if (!catalog.rule.enabled) {
+          throw new BarberCajaError(409, "LOYALTY_DISABLED", "La tarjeta de estrellas está apagada en esta barbería");
         }
-        if (!client) throw new BarberCajaError(400, "LOYALTY_NEEDS_CLIENT", "Elige al cliente para canjear su premio de lealtad");
-        // La regla es la de la barbería (umbral, premio y encendido), no 10 fijos.
-        const rule = await getLoyaltyRule(tx, barbershopId);
-        if (!rule.enabled) {
-          throw new BarberCajaError(409, "LOYALTY_DISABLED", "La tarjeta de lealtad está apagada en esta barbería");
+        // Sin id (pestaña de Caja de antes del despliegue): SOLO el premio de
+        // siempre. Sin bonos propios es el de las columnas de la barbería; con
+        // bonos (ronda 2, M1), la fila que nació de él y solo si sigue ACTIVA y
+        // es un servicio gratis — nunca «el más barato» de otro tipo.
+        if (bonusId !== null) {
+          bonus = activeBonuses(catalog.bonuses).find((b) => b.id === bonusId) ?? null;
+          if (!bonus) throw new BarberCajaError(404, "BONUS_NOT_FOUND", "Ese bono no existe o está inactivo");
+        } else {
+          bonus = catalog.legacy
+            ? legacyBonus(catalog.rule)
+            : activeBonuses(catalog.bonuses).find((b) => b.id === seededBonusId(barbershopId) && b.kind === "service") ?? null;
+          if (!bonus) throw new BarberCajaError(400, "BONUS_REQUIRED", "Elige qué bono se aplica (vuelve a abrir Caja)");
         }
         // Candado sobre el cliente + recuento DENTRO de la transacción: dos
-        // canjes simultáneos se ponen en fila y el segundo ya ve los sellos
+        // canjes simultáneos se ponen en fila y el segundo ya ve las estrellas
         // que consumió el primero.
         await tx.$queryRaw`
           SELECT "id" FROM "barber_clients"
@@ -1150,15 +1201,37 @@ export async function createSale(
           FOR UPDATE
         `;
         const stamps = (await refreshLoyalty(tx, barbershopId, [client.id])).get(client.id)?.count ?? 0;
-        if (stamps < rule.threshold) {
-          throw new BarberCajaError(409, "LOYALTY_NOT_ELIGIBLE", `El cliente tiene ${stamps} de ${rule.threshold} sellos`, { stamps, threshold: rule.threshold });
+        if (stamps < bonus.cost) {
+          throw new BarberCajaError(409, "LOYALTY_NOT_ELIGIBLE", `El cliente tiene ${stamps} de ${bonus.cost} estrellas para «${bonus.name}»`, { stamps, threshold: bonus.cost });
         }
-        if (target.qty !== 1) throw new BarberCajaError(400, "INVALID_INPUT", "El premio de lealtad aplica a una línea de cantidad 1");
-        target.commissionUnitPrice = target.unitPrice;
-        target.unitPrice = ZERO;
-        // El sufijo guarda cuántos sellos costó ESTE canje: es lo que se
-        // resta al recontar (y lo que vuelve si el ticket se cancela).
-        target.description = `${target.description}${loyaltyLineSuffix(rule.threshold)}`;
+        if (bonus.kind === "service") {
+          // Servicio fijo: si no dijeron qué línea, la primera de ese servicio.
+          if (loyaltyIdx === null && bonus.serviceId) {
+            const found = built.findIndex((b, i) => b.kind === "service" && b.serviceId === bonus!.serviceId && b.qty === 1 && i !== membershipIdx);
+            loyaltyIdx = found >= 0 ? found : null;
+          }
+          if (loyaltyIdx === null) {
+            throw new BarberCajaError(400, "BONUS_NEEDS_SERVICE", bonus.serviceName ? `Agrega «${bonus.serviceName}» al ticket para usar el bono` : "Elige el servicio que va gratis");
+          }
+          if (loyaltyIdx === membershipIdx) {
+            throw new BarberCajaError(400, "INVALID_INPUT", "Una misma línea no puede canjearse por lealtad y membresía");
+          }
+          const target = built[loyaltyIdx];
+          if (!target || target.kind !== "service") {
+            throw new BarberCajaError(400, "INVALID_INPUT", "El canje de lealtad debe apuntar a un servicio del ticket");
+          }
+          if (bonus.serviceId && target.serviceId !== bonus.serviceId) {
+            throw new BarberCajaError(400, "BONUS_WRONG_SERVICE", `El bono «${bonus.name}» es para «${bonus.serviceName ?? "otro servicio"}»`);
+          }
+          if (target.qty !== 1) throw new BarberCajaError(400, "INVALID_INPUT", "El premio de lealtad aplica a una línea de cantidad 1");
+          target.commissionUnitPrice = target.unitPrice;
+          target.unitPrice = ZERO;
+          // El sufijo guarda cuántas estrellas costó ESTE canje: es lo que se
+          // resta al recontar (y lo que vuelve si el ticket se cancela).
+          target.description = `${target.description}${loyaltyLineSuffix(bonus.cost)}`;
+        } else if (loyaltyIdx !== null) {
+          throw new BarberCajaError(400, "INVALID_INPUT", "Ese bono no es un servicio gratis");
+        }
       }
       if (membershipIdx !== null) {
         const target = built[membershipIdx];
@@ -1176,6 +1249,27 @@ export async function createSale(
         target.unitPrice = ZERO;
         target.description = `${target.description}${MEMBERSHIP_SUFFIX}`;
         membershipUsed = { id: lookup.activeMembership.id };
+      }
+
+      // 5b. Bono de descuento (pesos o %) o de regalo: una línea propia con la
+      //     marca de canje (nombre del bono + estrellas que costó). Va ANTES
+      //     del descuento normal y nunca deja el ticket en negativo.
+      if (bonus && bonus.kind !== "service") {
+        const before = money(sumMoney(built.map(lineTotal)));
+        let off = ZERO;
+        if (bonus.kind === "amount") off = Prisma.Decimal.min(D(bonus.amount ?? 0), before);
+        else if (bonus.kind === "percent") off = money(before.times(bonus.percent ?? 0).dividedBy(100));
+        if (bonus.kind !== "other" && !off.gt(0)) {
+          throw new BarberCajaError(400, "BONUS_NOTHING_TO_DISCOUNT", "No hay nada que descontar con ese bono");
+        }
+        built.push({
+          kind: "bonus",
+          serviceId: null,
+          productId: null,
+          description: loyaltyBonusLineDescription(bonus.kind === "other" ? "gift" : "discount", bonus.name, bonus.cost),
+          qty: 1,
+          unitPrice: off.negated(),
+        });
       }
 
       // 6. Descuento del ticket como línea de ajuste (negativa).
@@ -1262,7 +1356,8 @@ export async function createSale(
         // El crédito del anticipo NO entra: el barbero hizo el servicio
         // completo y comisiona sobre él, se haya apartado con anticipo o no.
         const commissionLines: CommissionLine[] = built
-          .filter((b): b is BuiltLine & { kind: CommissionLine["kind"] } => b.kind !== "deposit")
+          .filter((b) => b.kind !== "deposit" && (b.kind !== "bonus" || BONUS_DISCOUNT_REDUCES_COMMISSION))
+          .map((b) => ({ ...b, kind: (b.kind === "bonus" ? "adjustment" : b.kind) as CommissionLine["kind"] }))
           // Corte cubierto por membresía o gratis por lealtad (decisión de
           // Rafael, 14-nov-2026): SÍ comisiona, sobre el precio normal del
           // servicio. Solo cambia la base de comisión; la línea del ticket y

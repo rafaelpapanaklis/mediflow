@@ -7,6 +7,8 @@ import {
   moneyErrorResponse,
   type CreateSaleInput,
 } from "@/lib/barber/cash";
+import { prisma } from "@/lib/prisma";
+import { saleStarsOutcome } from "@/lib/barber/stars-core";
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +33,10 @@ export async function GET(req: NextRequest) {
 // POST /api/barber/sales → cobra un ticket (cash.manage, turno abierto).
 // Body: { appointmentId?, clientId?, barberId?, items: [{kind, id, qty}],
 //         discount?, tip?, paymentMethod, redeemLoyaltyItemIndex?,
-//         membershipItemIndex?, notes? }. Los precios NO viajan en el body.
+//         redeemBonusId?, membershipItemIndex?, notes? }. Los precios NO viajan
+//         en el body. La respuesta trae además `stars` (lo que Caja enseña al
+//         terminar: «★ +1 estrella para Juan: lleva 7 de 10», el bono que
+//         alcanzó y el enlace de su tarjeta) o null.
 export async function POST(req: NextRequest) {
   const ctx = await getBarberContext();
   if (!ctx) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
@@ -39,7 +44,17 @@ export async function POST(req: NextRequest) {
     const features = await assertBarberFeature(ctx, "cash");
     const body = (await req.json().catch(() => ({}))) as CreateSaleInput;
     const sale = await createSale(ctx, body, features);
-    return NextResponse.json(sale, { status: 201 });
+    // El cobro YA quedó: si el resumen de estrellas fallara, no se tumba.
+    const stars = await saleStarsOutcome(prisma, {
+      barbershopId: ctx.barbershopId,
+      slug: ctx.barbershop.slug,
+      saleId: sale.id,
+      bonusId: typeof body.redeemBonusId === "string" ? body.redeemBonusId : null,
+    }).catch((e) => {
+      console.warn("[api/barber/sales] resumen de estrellas:", (e as Error).message);
+      return null;
+    });
+    return NextResponse.json({ ...sale, stars }, { status: 201 });
   } catch (e) {
     return moneyErrorResponse(e);
   }

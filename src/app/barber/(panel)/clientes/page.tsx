@@ -47,6 +47,7 @@ export default async function Page() {
   return (
     <BarberClientsScreen
       dict={dict}
+      starsDict={((getBarberDict(locale).barber as Dictionary).estrellas ?? {}) as Dictionary}
       locale={locale}
       initial={initial}
       canEdit={hasBarberPermission(permUser, "clients.edit")}

@@ -18,7 +18,6 @@ import {
   readLoyaltyLedger,
   tallyVisitsForClient,
   toBarberClientDTO,
-  withReservedPreference,
   type BarberClientPreferences,
   type BarberClientRow,
   type BarberClientsConfig,
@@ -28,7 +27,8 @@ import {
 import type { BarberClientDTO } from "@/lib/barber/types";
 // La marca con la que la caja señala la línea que se llevó el canje (y
 // cuántos sellos costó) vive en el núcleo compartido.
-import { isLoyaltyLine } from "@/lib/barber/loyalty-core";
+import { isLoyaltyLine, liveStars, manualStarsNet } from "@/lib/barber/loyalty-core";
+import { loadBonusCatalog } from "@/lib/barber/stars-core";
 // El sello interno de los tickets de mostrador nunca se enseña.
 import { stripSaleTag } from "@/lib/barber/memberships-core";
 import { clientsViewScope, scopeUserFromCtx } from "@/lib/barber/own-visits";
@@ -180,8 +180,16 @@ export async function syncBarberClientLoyalty(
   // huella en la línea de venta). Los dos consumen sellos, así que los dos
   // se restan. Si solo se contara la bitácora, el recálculo le devolvería
   // al cliente los sellos que la caja ya le descontó: corte gratis infinito.
-  const redeemedVisits = ledger.redeemedVisits + tally.cashRedeemedStamps;
-  const count = Math.max(0, tally.visits - redeemedVisits);
+  // Las estrellas dadas o quitadas a mano (bitácora __stars) también cuentan:
+  // se restan como «canje negativo» para que buildLoyaltyState dé lo mismo
+  // que liveStars(), la fórmula única de loyalty-core.ts.
+  const redeemedVisits =
+    ledger.redeemedVisits + tally.cashRedeemedStamps - manualStarsNet(client.preferences);
+  const count = liveStars({
+    visits: tally.visits,
+    preferences: client.preferences,
+    cashRedeemedStamps: tally.cashRedeemedStamps,
+  });
   const lastMs = (d: Date | null) => (d ? d.getTime() : null);
 
   let row = client;
@@ -304,6 +312,11 @@ export async function redeemBarberLoyalty(
 ): Promise<RedeemResult> {
   const synced = await syncBarberClientLoyalty(ctx, args.clientId);
   if (!synced) return { ok: false, error: "Ese cliente no es de esta barbería." };
+  // Con bonos propios (ronda 2, D6) el premio de siempre ya no es «el más
+  // barato»: se entrega desde la tarjeta de estrellas, que dice cuál.
+  if (!(await loadBonusCatalog(prisma, ctx.barbershopId)).legacy) {
+    return { ok: false, error: "Esta barbería ya usa bonos: entrégalo desde la tarjeta de estrellas («Marcar como entregado»)." };
+  }
 
   const { client, config, state } = synced;
   if (!config.loyaltyEnabled) {
@@ -345,19 +358,20 @@ export async function redeemBarberLoyalty(
     redemptions: [entry, ...ledger.redemptions].slice(0, LOYALTY_HISTORY_MAX),
   };
 
-  const written = await prisma.barberClient.updateMany({
-    where: {
-      id: client.id,
-      barbershopId: ctx.barbershopId,
-      loyaltyCount: { gte: config.loyaltyThreshold },
-    },
-    data: {
-      loyaltyCount: { decrement: config.loyaltyThreshold },
-      preferences: withReservedPreference(client.preferences, LOYALTY_LEDGER_KEY, nextLedger),
-    },
-  });
+  // Un solo UPDATE condicionado: descuenta y escribe SOLO la llave __loyalty
+  // (ronda 2, M3), sin pisar estrellas a mano ni la versión del enlace.
+  const written = await prisma.$executeRaw`
+    UPDATE "barber_clients"
+    SET "loyaltyCount" = "loyaltyCount" - ${config.loyaltyThreshold}::int,
+        "preferences" = jsonb_set(
+          CASE WHEN jsonb_typeof("preferences") = object THEN "preferences" ELSE {}::jsonb END,
+          ARRAY[${LOYALTY_LEDGER_KEY}::text], ${JSON.stringify(nextLedger)}::jsonb, true),
+        "updatedAt" = NOW()
+    WHERE "id" = ${client.id} AND "barbershopId" = ${ctx.barbershopId}
+      AND "loyaltyCount" >= ${config.loyaltyThreshold}::int
+  `;
 
-  if (written.count === 0) {
+  if (written === 0) {
     return { ok: false, error: "Ese premio ya se canjeó. Vuelve a abrir la ficha." };
   }
 

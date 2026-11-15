@@ -2,7 +2,9 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { CalendarPlus, LogOut, MessageCircle } from "lucide-react";
-import { getBarberT } from "@/i18n/dictionaries/barber";
+import { getBarberDict, getBarberT } from "@/i18n/dictionaries/barber";
+import type { Dictionary } from "@/i18n/t";
+import { StarsCard, StarsDetails, starsT } from "@/components/barber/stars/stars-card";
 import type { PortalPayload, PortalShopDTO } from "@/lib/barber/client-portal";
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -17,7 +19,7 @@ import type { PortalPayload, PortalShopDTO } from "@/lib/barber/client-portal";
    visibleToClient — el filtro está en la búsqueda, no en el render.
    ═══════════════════════════════════════════════════════════════════════ */
 
-type TabId = "citas" | "visitas" | "pagos";
+type TabId = "estrellas" | "citas" | "visitas" | "pagos";
 
 export function PortalClient({
   slug,
@@ -29,10 +31,15 @@ export function PortalClient({
   initial: PortalPayload;
 }) {
   const t = useMemo(() => getBarberT(shop.locale), [shop.locale]);
+  const st = useMemo(
+    () => starsT(((getBarberDict(shop.locale).barber as Dictionary).estrellas ?? {}) as Dictionary),
+    [shop.locale],
+  );
   const locale = shop.locale === "en" ? "en-US" : "es-MX";
 
   const [data, setData] = useState<PortalPayload>(initial);
   const [tab, setTab] = useState<TabId>("citas");
+  const starsOn = Boolean(initial.stars?.enabled);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -149,7 +156,12 @@ export function PortalClient({
       ) : null}
       {notice ? <p className="dcb-alert dcb-alert--ok">{notice}</p> : null}
 
-      {/* ── Lealtad ─────────────────────────────────────────────────── */}
+      {/* ── Mis estrellas ───────────────────────────────────────────── */}
+      {data.stars?.enabled ? (
+        <div style={{ margin: "0 0 18px" }}>
+          <StarsCard view={data.stars} t={st} audience="client" locale={shop.locale} />
+        </div>
+      ) : data.stars ? null : (
       <section className="dcb-loyalty">
         <p className="dcb-section" style={{ margin: 0 }}>
           {t("barber.reserva.portal.lealtad.title")}
@@ -179,6 +191,7 @@ export function PortalClient({
           ))}
         </div>
       </section>
+      )}
 
       {/* ── Membresía ───────────────────────────────────────────────── */}
       {data.membership ? (
@@ -203,7 +216,7 @@ export function PortalClient({
 
       {/* ── Pestañas ────────────────────────────────────────────────── */}
       <div className="dcb-tabs" role="tablist">
-        {(["citas", "visitas", "pagos"] as TabId[]).map((id) => (
+        {((starsOn ? ["citas", "estrellas", "visitas", "pagos"] : ["citas", "visitas", "pagos"]) as TabId[]).map((id) => (
           <button
             key={id}
             type="button"
@@ -212,7 +225,7 @@ export function PortalClient({
             className={"dcb-tab" + (tab === id ? " dcb-tab--on" : "")}
             onClick={() => setTab(id)}
           >
-            {t(`barber.reserva.portal.nav.${id}`)}
+            {id === "estrellas" ? st("card.title") : t(`barber.reserva.portal.nav.${id}`)}
           </button>
         ))}
       </div>
@@ -324,6 +337,19 @@ export function PortalClient({
               </a>
             </>
           )}
+        </section>
+      ) : null}
+
+      {/* ── Estrellas: bonos, regla e historial ─────────────────────── */}
+      {tab === "estrellas" && data.stars ? (
+        <section>
+          <StarsDetails
+            view={data.stars}
+            t={st}
+            audience="client"
+            locale={shop.locale}
+            timezone={shop.timezone}
+          />
         </section>
       ) : null}
 

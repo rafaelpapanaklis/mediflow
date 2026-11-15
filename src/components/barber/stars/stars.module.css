@@ -1,0 +1,285 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   Tarjeta de ESTRELLAS — la misma pieza en «mi cuenta», la tarjeta por
+   enlace, la ficha del cliente y la pantalla de «cobrado» de Caja.
+   Solo tokens de barber-theme.css: claro y oscuro salen solos.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.card {
+  background: var(--brand-softer);
+  border: 1px solid var(--border-brand);
+  border-radius: 18px;
+  padding: 16px;
+  color: var(--text-1);
+}
+
+.head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.eyebrow {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.count {
+  margin: 2px 0 0;
+  font-size: 28px;
+  line-height: 1.1;
+  font-weight: 800;
+  color: var(--text-1);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.countStar {
+  color: var(--caramel-500);
+}
+
+.progress {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-2);
+  white-space: nowrap;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  margin: 14px 0 0;
+  max-width: 360px;
+}
+
+.slot {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  background: var(--bg-elev);
+  border: 1.5px dashed var(--border-strong);
+  color: var(--text-4);
+}
+
+.slotOn {
+  border-style: solid;
+  border-color: var(--caramel-400);
+  background: var(--caramel-50);
+  color: var(--caramel-500);
+}
+
+.slotGoal {
+  border-color: var(--brand-400);
+}
+
+.slotGift {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--brand);
+  color: var(--bg);
+}
+
+.bar {
+  margin: 14px 0 0;
+  height: 12px;
+  border-radius: 999px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  overflow: hidden;
+}
+
+.barFill {
+  height: 100%;
+  background: var(--caramel-500);
+}
+
+.next {
+  margin: 14px 0 0;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--text-1);
+}
+
+.nextWhat {
+  display: block;
+  margin-top: 2px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-2);
+}
+
+.section {
+  margin: 18px 0 0;
+}
+
+.sectionTitle {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-2);
+}
+
+.bonus {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  margin: 0 0 8px;
+}
+
+.bonusReady {
+  border-color: var(--border-brand);
+  background: var(--brand-softer);
+}
+
+.bonusName {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+
+.bonusWhat {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+
+.cost {
+  flex: 0 0 auto;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--caramel-600);
+  white-space: nowrap;
+}
+
+.hint {
+  margin: 6px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-3);
+}
+
+.history {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.event {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.event:last-child {
+  border-bottom: 0;
+}
+
+.eventWhen {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.eventTitle {
+  margin: 2px 0 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.eventDetail {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  color: var(--text-2);
+  overflow-wrap: anywhere;
+}
+
+.eventNote {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--text-3);
+  font-style: italic;
+  overflow-wrap: anywhere;
+}
+
+.delta {
+  align-self: center;
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-elev);
+  color: var(--text-3);
+}
+
+.deltaPlus {
+  color: var(--caramel-600);
+  border-color: var(--caramel-300);
+  background: var(--caramel-50);
+}
+
+.deltaMinus {
+  color: var(--brand-700);
+  border-color: var(--border-brand);
+  background: var(--brand-softer);
+}
+
+.deltaZero {
+  font-weight: 600;
+}
+
+/* Modo oscuro: la rampa caramelo no se invierte, así que las piezas llenas
+   usan sus tonos profundos (si no, quedan como bloques crema que deslumbran). */
+:global(.dark) .slotOn {
+  background: var(--caramel-950);
+  border-color: var(--caramel-600);
+  color: var(--caramel-400);
+}
+
+:global(.dark) .deltaPlus {
+  background: var(--caramel-950);
+  border-color: var(--caramel-700);
+  color: var(--caramel-300);
+}
+
+:global(.dark) .cost {
+  color: var(--caramel-400);
+}
+
+@media (max-width: 380px) {
+  .count {
+    font-size: 24px;
+  }
+  .grid {
+    gap: 6px;
+  }
+}

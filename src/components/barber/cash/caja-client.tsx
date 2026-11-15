@@ -47,11 +47,16 @@ export function CajaClient({
   state,
   checkout,
   canManage,
+  starsDict,
+  locale = "es",
 }: {
   dict: Dictionary;
   state: CashState;
   checkout: CheckoutContext;
   canManage: boolean;
+  /** Sub-árbol barber.estrellas (bono en el cobro y «+1 estrella» al terminar). */
+  starsDict?: Dictionary;
+  locale?: string;
 }) {
   const t = useBarberT(dict);
   const router = useRouter();
@@ -276,6 +281,8 @@ export function CajaClient({
       {modal.kind === "ticket" && (
         <TicketModal
           dict={dict}
+          starsDict={starsDict}
+          locale={locale}
           checkout={checkout}
           appointment={modal.appointment}
           tz={tz}

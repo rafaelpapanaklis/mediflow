@@ -5,6 +5,7 @@ import { getBarberPlan } from "@/lib/barber/plans";
 import { getBarberDict, getBarberT, resolveBarberLocale } from "@/i18n/dictionaries/barber";
 import type { Dictionary } from "@/i18n/t";
 import { getBarberClientDetail } from "@/lib/barber/loyalty";
+import { getStaffStarsView } from "@/lib/barber/stars";
 import { barberCanSeeClient, barberClientScopeWhere } from "@/lib/barber/clients";
 import { clientsViewScope, scopeUserFromCtx } from "@/lib/barber/own-visits";
 import { BarberClientDetailScreen } from "@/components/barber/clients/client-detail";
@@ -64,6 +65,12 @@ export default async function Page(props: { params: Promise<{ id: string }> }) {
 
   const detail = await getBarberClientDetail(ctx, params.id);
   if (!detail) notFound();
+  // Tarjeta de estrellas (si fallara la lectura, la ficha cae a la de sellos).
+  const stars = await getStaffStarsView(ctx, params.id).catch((e) => {
+    console.warn("[barber/clientes] no se pudo leer la tarjeta de estrellas:", (e as Error).message);
+    return null;
+  });
+  const starsDict = ((getBarberDict(locale).barber as Dictionary).estrellas ?? {}) as Dictionary;
 
   return (
     <BarberClientDetailScreen
@@ -72,6 +79,10 @@ export default async function Page(props: { params: Promise<{ id: string }> }) {
       detail={detail}
       canEdit={hasBarberPermission(permUser, "clients.edit")}
       canPublish={hasBarberPermission(permUser, "portal.manage")}
+      stars={stars}
+      starsDict={starsDict}
+      canHandleStars={hasBarberPermission(permUser, "cash.manage")}
+      timezone={ctx.barbershop.timezone || "America/Mexico_City"}
     />
   );
 }
