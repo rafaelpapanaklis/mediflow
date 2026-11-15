@@ -84,6 +84,7 @@
       "other": "{count} visitas"
     },
     "changeClient": "Cambiar",
+    "searchExisting": "Buscar en mis clientes",
     "services": "Servicios",
     "servicesEmpty": "Todavía no tienes servicios en el catálogo.",
     "barber": "Barbero",

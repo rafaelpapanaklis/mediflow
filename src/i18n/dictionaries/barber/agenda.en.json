@@ -84,6 +84,7 @@
       "other": "{count} visits"
     },
     "changeClient": "Change",
+    "searchExisting": "Search my clients",
     "services": "Services",
     "servicesEmpty": "You don't have any services in the catalog yet.",
     "barber": "Barber",

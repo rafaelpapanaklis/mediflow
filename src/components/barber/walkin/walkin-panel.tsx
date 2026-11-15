@@ -445,7 +445,7 @@ function AddWalkInDialog(props: {
         <input
           className={agendaCss.input}
           value={phone}
-          onChange={(e) => setPhone(e.target.value)}
+          onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 13))}
           inputMode="numeric"
         />
       </Field>

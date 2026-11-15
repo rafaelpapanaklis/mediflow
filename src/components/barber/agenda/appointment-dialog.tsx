@@ -245,7 +245,7 @@ export function AppointmentDialog(props: AppointmentDialogProps) {
       {error ? <div ref={errorRef} className={css.errorBox}>{error}</div> : null}
 
       {/* ── Cliente ── */}
-      {clientName && (clientId || manual) ? (
+      {clientId && clientName ? (
         <Field label={t("barber.agenda.modal.client")}>
           <div className={css.chosen}>
             <span>
@@ -257,6 +257,16 @@ export function AppointmentDialog(props: AppointmentDialogProps) {
             </button>
           </div>
         </Field>
+      ) : manual ? (
+        // Cliente nuevo: los campos de abajo SON la captura; no se repite el nombre en
+        // una tarjeta mientras se teclea. La tarjeta solo sale al elegir de la lista.
+        editing || !props.canSearchClients ? null : (
+          <Field label={t("barber.agenda.modal.client")}>
+            <button type="button" className={css.btn} onClick={clearClient} style={{ alignSelf: "flex-start" }}>
+              <Search size={14} /> {t("barber.agenda.modal.searchExisting")}
+            </button>
+          </Field>
+        )
       ) : (
         <Field
           label={t("barber.agenda.modal.client")}
@@ -337,7 +347,7 @@ export function AppointmentDialog(props: AppointmentDialogProps) {
             <input
               className={css.input}
               value={clientPhone}
-              onChange={(e) => setClientPhone(e.target.value)}
+              onChange={(e) => setClientPhone(e.target.value.replace(/\D/g, "").slice(0, 13))}
               inputMode="numeric"
               autoComplete="off"
             />

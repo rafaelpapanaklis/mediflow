@@ -597,7 +597,7 @@ function NewClientModal({
           value={form.phone}
           inputMode="tel"
           placeholder={t("form.phonePlaceholder")}
-          onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+          onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value.replace(/\D/g, "").slice(0, 13) }))}
         />
       </Field>
 

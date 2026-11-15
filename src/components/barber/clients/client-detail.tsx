@@ -754,7 +754,7 @@ function EditClientModal({
           className={s.input}
           inputMode="tel"
           value={form.phone}
-          onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+          onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value.replace(/\D/g, "").slice(0, 13) }))}
         />
       </Field>
 
