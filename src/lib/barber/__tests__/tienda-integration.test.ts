@@ -29,6 +29,7 @@ const ROOT = path.resolve(__dirname, "../../../..");
 const abs = (rel: string) => path.join(ROOT, rel);
 const FEATURES = FALLBACK_BARBER_PLAN_CONFIG.PROFESIONAL.features;
 
+let portalCookie: string | null = null;
 const DOUBLES = new Map<string, unknown>([
   [
     abs("src/lib/barber-auth.ts"),
@@ -53,6 +54,13 @@ const M = Module as unknown as {
 const originalLoad = M._load;
 M._load = function (request: string, parent: unknown, isMain: boolean) {
   if (request === "server-only" || request === "client-only") return {};
+  // La cookie de «mi cuenta»: la ruta pública la lee con next/headers.
+  if (request === "next/headers") {
+    return {
+      cookies: async () => ({ get: (n: string) => (n === "dcb_portal" && portalCookie ? { value: portalCookie } : undefined) }),
+      headers: async () => new Headers(),
+    };
+  }
   try {
     const resolved = M._resolveFilename(request, parent);
     if (DOUBLES.has(resolved)) return DOUBLES.get(resolved);
@@ -465,4 +473,56 @@ test("5d · dinero: total en centavos sin errores de coma flotante", () => {
     assert.equal(orderTotalCents([{ unitPrice: 0.1, qty: 3 }, { unitPrice: 0.2, qty: 1 }]), 50);
     assert.equal(orderTotalCents([{ unitPrice: 120.5, qty: 2 }, { unitPrice: 19.99, qty: 3 }]), 30097);
   })();
+});
+
+// ── 6. La ruta pública ─────────────────────────────────────────────────
+
+test("6 · POST /api/barber/public/tienda/[slug]/pedidos: valida, liga «mi cuenta» de su sede y no deja apartar de más", { skip }, async () => {
+  const { POST } = await import("@/app/api/barber/public/tienda/[slug]/pedidos/route");
+  const { NextRequest } = await import("next/server");
+  const { packPortalSession } = await import("@/lib/barber/portal-core");
+  let ip = 10;
+  const call = (slug: string, body: unknown) =>
+    POST(
+      new NextRequest(`http://localhost/api/barber/public/tienda/${slug}/pedidos`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-forwarded-for": `10.0.${seq}.${ip++}` },
+        body: JSON.stringify(body),
+      }),
+      { params: Promise.resolve({ slug }) },
+    );
+  const lines = [{ productId: A.aceite, qty: 1 }];
+  assert.equal((await call(A.slug, { lines, name: "4n4", phone: "5512345678" })).status, 400, "nombre con números");
+  assert.equal((await call(A.slug, { lines, name: "Ana López", phone: "123" })).status, 400, "teléfono corto");
+  assert.equal((await call(`no-existe-${RUN}`, { lines, name: "Ana López", phone: "5512345678" })).status, 404);
+  const trampa = await call(A.slug, { lines, name: "Ana López", phone: "5512345678", website: "spam.com" });
+  assert.equal(trampa.status, 200);
+  assert.equal(((await trampa.json()) as { folio: string }).folio, "-----", "el bot ve éxito y no se crea nada");
+
+  // «mi cuenta» de A: el pedido queda ligado a su ficha.
+  const cli = await prisma.barberClient.create({ data: { barbershopId: A.id, name: "Cliente Portal", phone: newPhone() } });
+  portalCookie = packPortalSession(cli.id, A.id).value;
+  const r = await call(A.slug, { lines, name: "Cliente Portal", phone: "55 1234 5678", payOnline: true });
+  const body = (await r.json()) as { id: string; folio: string; folioUrl: string };
+  assert.equal(r.status, 200, JSON.stringify(body));
+  assert.equal(body.folioUrl, `/b/${A.slug}/tienda/pedido/${body.id}`, "la ruta del folio que espera ws6-t5");
+  const row = (await prisma.$queryRaw<Array<{ client_id: string | null; client_phone: string; pay_method: string }>>`
+    SELECT "client_id", "client_phone", "pay_method" FROM "barber_product_orders" WHERE "id" = ${body.id}`)[0];
+  assert.deepEqual(row, { client_id: cli.id, client_phone: "5512345678", pay_method: "MERCADOPAGO" });
+  // La misma cookie NO liga un pedido de otra barbería.
+  const rb = await call(B.slug, { lines: [{ productId: B.aceite, qty: 1 }], name: "Cliente Portal", phone: "5512345678" });
+  const bb = (await rb.json()) as { id: string };
+  assert.equal(rb.status, 200, JSON.stringify(bb));
+  const rowB = (await prisma.$queryRaw<Array<{ client_id: string | null }>>`SELECT "client_id" FROM "barber_product_orders" WHERE "id" = ${bb.id}`)[0];
+  assert.equal(rowB.client_id, null);
+  portalCookie = null;
+  // Forma: más de 10 piezas → 400. Más de lo que hay → 409 con lo que queda.
+  assert.equal((await call(A.slug, { lines: [{ productId: A.cera, qty: 11 }], name: "Ana López", phone: "5512345678" })).status, 400);
+  const r2 = await call(A.slug, { lines: [{ productId: A.cera, qty: 4 }], name: "Ana López", phone: newPhone() });
+  assert.equal(r2.status, 409);
+  const b2 = (await r2.json()) as { code: string; available: number };
+  assert.equal(b2.code, "OUT_OF_STOCK");
+  assert.equal(b2.available, 3);
+  await tienda.cancelProductOrder(A.ctx, body.id);
+  await tienda.cancelProductOrder(B.ctx, bb.id);
 });
