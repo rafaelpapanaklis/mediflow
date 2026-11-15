@@ -60,13 +60,17 @@ export function ConfiguracionScreen({
   dict,
   initial,
   publicBookingInPlan,
+  starsDict,
 }: {
   dict: Dictionary;
+  /** Sub-árbol barber.estrellas: con él, el umbral y el premio pasan a «Estrellas y bonos». */
+  starsDict?: Dictionary;
   initial: BarberSettingsView;
   /** El plan trae `publicBooking` (si no, el ajuste se guarda pero se avisa). */
   publicBookingInPlan: boolean;
 }) {
   const t = useBarberT(dict);
+  const st = useBarberT(starsDict ?? {});
   const [settings, setSettings] = useState<BarberSettingsView>(initial);
 
   return (
@@ -93,6 +97,7 @@ export function ConfiguracionScreen({
         />
         <LoyaltyCard
           t={t}
+          bonos={starsDict ? { note: st("bonos.configNote"), link: st("bonos.configLink") } : null}
           value={settings.loyalty}
           onSaved={(loyalty) => setSettings((v) => ({ ...v, loyalty }))}
         />
@@ -541,10 +546,13 @@ function SlugCard({
 
 function LoyaltyCard({
   t,
+  bonos,
   value,
   onSaved,
 }: {
   t: T;
+  /** Con bonos de estrellas: aquí solo se enciende/apaga; el resto vive en Clientes. */
+  bonos: { note: string; link: string } | null;
   value: BarberSettingsView["loyalty"];
   onSaved: (v: BarberSettingsView["loyalty"]) => void;
 }) {
@@ -555,14 +563,16 @@ function LoyaltyCard({
 
   const n = Number(threshold);
   const thresholdOk = Number.isInteger(n) && n >= value.min && n <= value.max;
-  const dirty = enabled !== value.enabled || n !== value.threshold || reward.trim() !== value.reward;
-  const canSave = value.persisted && dirty && thresholdOk && reward.trim().length > 0 && !saving;
+  const dirty = bonos
+    ? enabled !== value.enabled
+    : enabled !== value.enabled || n !== value.threshold || reward.trim() !== value.reward;
+  const canSave = value.persisted && dirty && (bonos ? true : thresholdOk && reward.trim().length > 0) && !saving;
 
   async function save() {
     const ok = await run(async () => {
       const r = await apiCall<{ value: BarberSettingsView["loyalty"] }>("/api/barber/settings", {
         method: "PATCH",
-        json: { section: "loyalty", enabled, threshold: n, reward: reward.trim() },
+        json: bonos ? { section: "loyalty", enabled } : { section: "loyalty", enabled, threshold: n, reward: reward.trim() },
       });
       onSaved(r.value);
     });
@@ -593,6 +603,13 @@ function LoyaltyCard({
         <Switch checked={enabled} onChange={setEnabled} label={t("configuracion.loyalty.enabled")} disabled={!value.persisted} />
       </div>
 
+      {bonos ? (
+        <div className={s.summary}>
+          {bonos.note}{" "}
+          <a href="/barber/clientes?bonos=1" style={{ fontWeight: 700, color: "var(--brand)" }}>{bonos.link}</a>
+        </div>
+      ) : (
+      <>
       <Field label={t("configuracion.loyalty.threshold")} hint={t("configuracion.loyalty.thresholdHint")}>
         {(id) => (
           <div className={s.numRow}>
@@ -626,6 +643,8 @@ function LoyaltyCard({
       {enabled && thresholdOk && reward.trim() ? (
         <div className={s.summary}>{t("configuracion.loyalty.summary", { count: n, reward: reward.trim() })}</div>
       ) : null}
+      </>
+      )}
     </Card>
   );
 }

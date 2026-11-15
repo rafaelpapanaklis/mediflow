@@ -9940,6 +9940,7 @@ model Barbershop {
   botSettings       BarberBotSettings?
   botUsage          BarberBotUsage[]
   botPauses         BarberBotPause[]
+  loyaltyRewards    BarberLoyaltyReward[]
 
   @@index([parentId])
   @@map("barber_shops")
@@ -10017,6 +10018,33 @@ model Barber {
 /// El CLIENTE (nunca "paciente"). preferences (Json): máquina/número, raya,
 /// largo, alergias a productos, etc. — forma libre, la define la ola de
 /// clientes. loyaltyCount = sellos de lealtad acumulados.
+/// Bono de la tarjeta de ESTRELLAS (ws6-t5): cuesta `cost` estrellas y da un
+/// servicio gratis (serviceId null = el que se elija en caja), un descuento en
+/// pesos (amount) o en % (percent), u «otro» (description). La creó a mano
+/// sql/barber_estrellas.sql (CHECKs de rangos solo en la base) y el código la
+/// lee con SQL crudo (src/lib/barber/stars-core.ts) para no depender de que
+/// se regenere el cliente. Se declara aquí para que un db push no la tire.
+model BarberLoyaltyReward {
+  id           String   @id
+  barbershopId String
+  name         String
+  cost         Int
+  kind         String
+  serviceId    String?
+  amount       Decimal? @db.Decimal(10, 2)
+  percent      Int?
+  description  String?
+  active       Boolean  @default(true)
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @default(now())
+
+  barbershop Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+
+  @@index([barbershopId, sortOrder])
+  @@map("barber_loyalty_rewards")
+}
+
 model BarberClient {
   id           String    @id @default(cuid())
   barbershopId String

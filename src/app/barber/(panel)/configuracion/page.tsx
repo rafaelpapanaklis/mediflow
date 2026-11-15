@@ -44,6 +44,7 @@ export default async function Page() {
   return (
     <ConfiguracionScreen
       dict={dict}
+      starsDict={((getBarberDict(locale).barber as Dictionary).estrellas ?? {}) as Dictionary}
       initial={settings}
       publicBookingInPlan={plan.features.publicBooking === true}
     />

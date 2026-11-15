@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -12,6 +12,7 @@ import {
   Gift,
   Search,
   Settings2,
+  Star,
   UserPlus,
   Users,
   X,
@@ -35,6 +36,8 @@ import {
   useBarberT,
   useToast,
 } from "./ui";
+import { BonosModal } from "./bonos-modal";
+import { starsT } from "@/components/barber/stars/stars-card";
 
 /**
  * Lista de clientes de la barbería.
@@ -62,6 +65,8 @@ export interface ClientsScreenProps {
   initial: BarberClientListResult;
   canEdit: boolean;
   canEditSettings: boolean;
+  /** Sub-árbol barber.estrellas (editor de bonos). */
+  starsDict?: Dictionary;
 }
 
 export function BarberClientsScreen({
@@ -70,6 +75,7 @@ export function BarberClientsScreen({
   initial,
   canEdit,
   canEditSettings,
+  starsDict,
 }: ClientsScreenProps) {
   const t = useBarberT(dict);
   const router = useRouter();
@@ -87,6 +93,13 @@ export function BarberClientsScreen({
 
   const [showNew, setShowNew] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showBonos, setShowBonos] = useState(false);
+  const st = useMemo(() => starsT(starsDict ?? {}), [starsDict]);
+
+  // /barber/clientes?bonos=1 abre el editor (el enlace de Configuración).
+  useEffect(() => {
+    if (canEditSettings && starsDict && new URLSearchParams(window.location.search).has("bonos")) setShowBonos(true);
+  }, [canEditSettings, starsDict]);
 
   // Secuencia de petición: si el barbero escribe rápido, la respuesta que
   // llega tarde NO puede pisar a la que llegó después.
@@ -168,6 +181,17 @@ export function BarberClientsScreen({
               <p className={s.subtitle}>{t("subtitle")}</p>
             </div>
             <div className={s.headerActions}>
+              {canEditSettings && starsDict ? (
+                <button
+                  type="button"
+                  className={s.btn}
+                  onClick={() => setShowBonos(true)}
+                  data-accion="estrellas-y-bonos"
+                >
+                  <Star size={14} />
+                  {st("bonos.cta")}
+                </button>
+              ) : null}
               {canEditSettings ? (
                 <button
                   type="button"
@@ -353,9 +377,21 @@ export function BarberClientsScreen({
         />
       ) : null}
 
+      {showBonos && starsDict ? (
+        <BonosModal
+          dict={starsDict}
+          onClose={() => setShowBonos(false)}
+          onSaved={() => {
+            void load();
+          }}
+          onMessage={toast.show}
+        />
+      ) : null}
+
       {showSettings ? (
         <SettingsModal
           t={t}
+          bonosNote={starsDict ? st("bonos.configNote") : null}
           config={config}
           onClose={() => setShowSettings(false)}
           onSaved={(next) => {
@@ -584,12 +620,15 @@ function NewClientModal({
 
 function SettingsModal({
   t,
+  bonosNote,
   config,
   onClose,
   onSaved,
   onMessage,
 }: {
   t: ReturnType<typeof useBarberT>;
+  /** Con bonos, el umbral y el premio se editan en «Estrellas y bonos». */
+  bonosNote: string | null;
   config: BarberClientsConfig;
   onClose: () => void;
   onSaved: (next: BarberClientsConfig) => void;
@@ -611,8 +650,10 @@ function SettingsModal({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           loyaltyEnabled: draft.loyaltyEnabled,
-          loyaltyThreshold: Number(draft.loyaltyThreshold),
-          loyaltyReward: draft.loyaltyReward,
+          // Con el editor de bonos, el umbral y el premio ya no se tocan aquí.
+          ...(bonosNote
+            ? {}
+            : { loyaltyThreshold: Number(draft.loyaltyThreshold), loyaltyReward: draft.loyaltyReward }),
           inactiveDays: Number(draft.inactiveDays),
         }),
       });
@@ -674,6 +715,10 @@ function SettingsModal({
         {t("settings.enabled")}
       </label>
 
+      {bonosNote ? <p className={s.hint}>{bonosNote}</p> : null}
+
+      {bonosNote ? null : (
+      <>
       <Field
         label={t("settings.threshold")}
         htmlFor="set-threshold"
@@ -699,6 +744,8 @@ function SettingsModal({
           onChange={(e) => setDraft((d) => ({ ...d, loyaltyReward: e.target.value }))}
         />
       </Field>
+      </>
+      )}
 
       <Field
         label={t("settings.inactiveDays")}
