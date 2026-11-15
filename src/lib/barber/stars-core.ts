@@ -711,5 +711,71 @@ export async function resolveCardToken(
   return { clientId: client.id };
 }
 
+// ── Lo que Caja enseña al terminar de cobrar ────────────────────────────
+
+export interface SaleStarsOutcome {
+  firstName: string;
+  /** Estrellas que lleva AHORA (con este ticket ya escrito). */
+  stars: number;
+  /** 1 si este cobro es una visita (cita o servicio en caja); 0 si no. */
+  gained: number;
+  next: { name: string; cost: number; remaining: number } | null;
+  /** Bonos que alcanzó justo con esta estrella. */
+  reached: string[];
+  /** Bono aplicado en este ticket (si hubo). */
+  used: { name: string; stars: number } | null;
+  /** Ruta del enlace personal de su tarjeta (para el QR de «cobrado»). */
+  cardPath: string;
+}
+
+/**
+ * «★ +1 estrella para Juan: lleva 7 de 10» y, si con esa alcanza un bono,
+ * cuál. Se calcula DESPUÉS del cobro con el número fresco. null si el ticket
+ * no tiene cliente o la tarjeta está apagada.
+ */
+export async function saleStarsOutcome(
+  db: LoyaltyDb,
+  args: { barbershopId: string; slug: string; saleId: string; bonusId?: string | null },
+): Promise<SaleStarsOutcome | null> {
+  const { barbershopId } = args;
+  if (!barbershopId || !args.saleId) return null;
+  const sale = await db.barberSale.findFirst({
+    where: { id: args.saleId, barbershopId },
+    select: {
+      clientId: true,
+      appointmentId: true,
+      items: { select: { description: true, serviceId: true } },
+      client: { select: { name: true, preferences: true } },
+    },
+  });
+  if (!sale?.clientId || !sale.client) return null;
+  const catalog = await loadBonusCatalog(db, barbershopId);
+  if (!catalog.rule.enabled) return null;
+  const stars = (await refreshLoyalty(db, barbershopId, [sale.clientId])).get(sale.clientId)?.count ?? 0;
+  const active = activeBonuses(catalog.bonuses);
+
+  const gained = sale.appointmentId || sale.items.some((i) => i.serviceId) ? 1 : 0;
+  let used: SaleStarsOutcome["used"] = null;
+  for (const item of sale.items) {
+    const line = parseLoyaltyLine(item.description);
+    if (!line) continue;
+    const named = args.bonusId ? active.find((b) => b.id === args.bonusId)?.name : null;
+    used = { name: named ?? line.bonusName ?? line.head, stars: line.stars };
+    break;
+  }
+  const reached =
+    gained > 0 ? active.filter((b) => b.cost <= stars && b.cost > stars - gained).map((b) => b.name) : [];
+  const next = nextBonus(stars, active);
+  return {
+    firstName: firstNameOf(sale.client.name),
+    stars,
+    gained,
+    next: next ? { name: next.bonus.name, cost: next.bonus.cost, remaining: next.remaining } : null,
+    reached,
+    used,
+    cardPath: cardPath(args.slug, signCardToken(barbershopId, sale.clientId, cardVersion(sale.client.preferences))),
+  };
+}
+
 // Re-export para quien solo importa este módulo.
 export { APPOINTMENT_GIVES_STAR, NOT_CANCELLED };

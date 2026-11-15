@@ -50,7 +50,7 @@ import type {
 } from "@/lib/barber/types";
 // Núcleo puro (sin prisma): no rompe el DAG commissions ← inventory ← cash.
 import { isDepositLine, isMembershipLine } from "@/lib/barber/memberships-core";
-import { isLoyaltyLine } from "@/lib/barber/loyalty-core";
+import { isLoyaltyFreeLine } from "@/lib/barber/loyalty-core";
 
 // ── Dinero ──────────────────────────────────────────────────────────────
 
@@ -858,7 +858,7 @@ export async function getCommissionEntries(
     itemsSummary: e.sale
       ? e.sale.items.map((it) => (it.qty > 1 ? `${it.qty}× ${it.description}` : it.description)).join(", ") || null
       : null,
-    coveredCut: e.sale ? e.sale.items.some((it) => isMembershipLine(it.description) || isLoyaltyLine(it.description)) : false,
+    coveredCut: e.sale ? e.sale.items.some((it) => isMembershipLine(it.description) || isLoyaltyFreeLine(it.description)) : false,
   }));
 }
 

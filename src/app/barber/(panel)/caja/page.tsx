@@ -57,6 +57,8 @@ export default async function Page() {
       state={state}
       checkout={checkout}
       canManage={hasBarberPermission(permUser, "cash.manage")}
+      starsDict={((getBarberDict(ctx.barbershop.locale).barber as Dictionary).estrellas ?? {}) as Dictionary}
+      locale={ctx.barbershop.locale === "en" ? "en" : "es"}
     />
   );
 }
