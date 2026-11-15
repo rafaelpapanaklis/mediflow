@@ -119,6 +119,10 @@
     {
       "path": "/api/cron/caja-cierre",
       "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/barber/whatsapp/dispatch",
+      "schedule": "*/5 * * * *"
     }
   ]
 }
