@@ -126,6 +126,7 @@
       "step2": "2. ¿Cuál?",
       "step3": "3. ¿Cómo paga?",
       "searchClient": "Escribe el nombre o el teléfono del cliente",
+      "planGone": "El plan «{plan}» ya no se vende. Elige otro para volver a contratar.",
       "noClients": "No encontramos clientes con eso.",
       "alreadyHas": "Ya tiene {plan} hasta el {date}",
       "choosePlan": "Elige la membresía",

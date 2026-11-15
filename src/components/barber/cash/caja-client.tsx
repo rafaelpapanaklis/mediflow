@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import toast from "react-hot-toast";
@@ -72,7 +72,9 @@ export function CajaClient({
   const [modal, setModal] = useState<ModalState>({ kind: "none" });
   const [chargeDraft, setChargeDraft] = useState<SaleDraftRow | null>(null);
   const closeModal = useCallback(() => setModal({ kind: "none" }), []);
-  const refresh = useCallback(() => router.refresh(), [router]);
+  // El refresco del servidor tarda 1-4 s: mientras tanto se dice «Actualizando…» (QA E, ronda 4).
+  const [refreshing, startRefresh] = useTransition();
+  const refresh = useCallback(() => startRefresh(() => router.refresh()), [router]);
 
   const open = state.open;
   const tz = state.timezone;
@@ -84,7 +86,7 @@ export function CajaClient({
       <div className="bcaja-head">
         <div>
           <h1 className="bcaja-head__title">{t("caja.title")}</h1>
-          <p className="bcaja-head__sub">{t("caja.subtitle")}</p>
+          <p className="bcaja-head__sub">{refreshing ? <span role="status" aria-live="polite">{t("common.updating")}</span> : t("caja.subtitle")}</p>
         </div>
         <div className="bcaja-head__actions">
           {canManage && !open && (
