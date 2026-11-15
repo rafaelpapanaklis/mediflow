@@ -1028,6 +1028,12 @@ export interface BarberTeamContext {
   multiBranch: boolean;
   planName: string;
   canManageBranches: boolean;
+  /**
+   * Permisos efectivos de quien mira la pantalla. La matriz los usa para NO
+   * ofrecer lo que el servidor va a rechazar (nadie reparte un permiso que no
+   * tiene). Es una ayuda de pantalla: el freno real es setMemberPermissions.
+   */
+  selfPermissions: BarberPermissionKey[];
 }
 
 export async function getTeamContext(ctx: BarberContext): Promise<BarberTeamContext> {
@@ -1041,5 +1047,6 @@ export async function getTeamContext(ctx: BarberContext): Promise<BarberTeamCont
     multiBranch: barberPlanHasFeature(plan, "multiBranch"),
     planName: plan.name,
     canManageBranches: grants.has("branches.manage"),
+    selfPermissions: canonicalPermissions(grants),
   };
 }

@@ -39,6 +39,7 @@ export function PermissionMatrix({
   roleLabel,
   advancedRoles,
   planName,
+  ownPermissions,
   onClose,
   onSaved,
 }: {
@@ -46,6 +47,8 @@ export function PermissionMatrix({
   roleLabel: string;
   advancedRoles: boolean;
   planName: string;
+  /** Permisos efectivos de quien edita: lo que no tiene, no lo puede dar. */
+  ownPermissions: BarberPermissionKey[];
   onClose: () => void;
   onSaved: (next: BarberMemberRow) => void;
 }) {
@@ -63,6 +66,19 @@ export function PermissionMatrix({
   );
 
   const effectiveSet = useMemo(() => new Set<string>(effective), [effective]);
+
+  // Lo que quien edita NO puede dar: permisos que él no tiene y que esta
+  // persona tampoco tenía ya guardados. Es la misma cuenta que hace el
+  // servidor (team.ts, assertOnlyGrantsOwnPermissions: lo que GANA frente a lo
+  // guardado), así que el interruptor se apaga aquí en vez de fallar al
+  // guardar. Los que ya tenía sí se le pueden quitar y volver a poner.
+  const notGrantable = useMemo(() => {
+    const own = new Set<string>(ownPermissions);
+    const saved = new Set<string>(member.permissions.effective);
+    return new Set<string>(
+      items.filter((i) => !own.has(i.key) && !saved.has(i.key)).map((i) => i.key),
+    );
+  }, [items, member.permissions.effective, ownPermissions]);
 
   function originOf(key: string, fromRole: boolean): Origin {
     const on = effectiveSet.has(key);
@@ -125,6 +141,10 @@ export function PermissionMatrix({
         role: roleLabel,
       })}`;
 
+  // «Volver al rol» también reparte: si el rol trae algo que no puedo dar,
+  // el servidor lo rechazaría entero.
+  const resetBlocked = roleDefaults.some((k) => notGrantable.has(k));
+
   const dirty =
     effective.length !== member.permissions.effective.length ||
     effective.some((k) => !member.permissions.effective.includes(k));
@@ -140,7 +160,7 @@ export function PermissionMatrix({
           <Btn
             variant="ghost"
             onClick={() => setEffective(roleDefaults.slice())}
-            disabled={saving || inheritsAll}
+            disabled={saving || inheritsAll || resetBlocked}
             title={t("perms.resetHint", { role: roleLabel })}
           >
             <RotateCcw size={14} />
@@ -170,6 +190,9 @@ export function PermissionMatrix({
       )}
 
       {isSelf ? <p className={s.hint}>{t("perms.selfWarning")}</p> : null}
+      {advancedRoles && notGrantable.size > 0 ? (
+        <p className={s.hint}>{t("perms.notYoursNote")}</p>
+      ) : null}
 
       <div>
         {groups.map(([prefix, list]) => (
@@ -179,6 +202,7 @@ export function PermissionMatrix({
               const origin = originOf(item.key, item.fromRole);
               const changed = origin === "added" || origin === "removed";
               const lockSelf = isSelf && item.key === "team.manage";
+              const lockNotMine = notGrantable.has(item.key);
               return (
                 <div
                   key={item.key}
@@ -202,11 +226,16 @@ export function PermissionMatrix({
                       {t("perms.badgeInherited")}
                     </span>
                   ) : null}
+                  {lockNotMine && advancedRoles ? (
+                    <span className={[s.permTag, s.permTagInherited].join(" ")}>
+                      {t("perms.badgeNotYours")}
+                    </span>
+                  ) : null}
                   <Switch
                     checked={effectiveSet.has(item.key)}
                     onChange={() => toggle(item.key)}
                     label={item.label}
-                    disabled={!advancedRoles || saving || lockSelf}
+                    disabled={!advancedRoles || saving || lockSelf || lockNotMine}
                   />
                 </div>
               );

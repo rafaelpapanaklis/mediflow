@@ -17,6 +17,8 @@
 import "./_sin-server-only";
 import { test, before, beforeEach } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { BarberContext } from "@/lib/barber-auth";
 import {
   BARBER_PERMISSION_KEYS,
@@ -276,6 +278,33 @@ test("control: se puede editar a quien YA tenía un permiso que tú no tienes, s
   await team.setMemberPermissions(sesion("gerente"), "recepcion", sinFila);
   assert.ok(de("recepcion").permissionsOverride.includes("billing.manage"), "conserva lo que ya tenía");
   assert.ok(!de("recepcion").permissionsOverride.includes("walkin.manage"));
+});
+
+// ── 3b. La pantalla no ofrece lo que el servidor va a rechazar ─────────
+
+test("la pantalla recibe los permisos de quien mira", async () => {
+  const gerente = await team.getTeamContext(sesion("gerente"));
+  assert.equal(gerente.selfRole, "MANAGER");
+  assert.ok(gerente.selfPermissions.includes("team.manage"));
+  assert.ok(!gerente.selfPermissions.includes("billing.manage"), "el encargado no trae cobro");
+  const dueno = await team.getTeamContext(sesion("dueno"));
+  assert.deepEqual(dueno.selfPermissions, BARBER_PERMISSION_KEYS);
+});
+
+test("Equipo esconde Permisos y Editar sobre un dueño, y la matriz apaga lo que no puedes dar", () => {
+  const raiz = join(__dirname, "..", "..", "..", "..");
+  const lista = readFileSync(join(raiz, "src/components/barber/team/team-client.tsx"), "utf8");
+  assert.match(lista, /return m\.role === "OWNER" && team\.selfRole !== "OWNER";/);
+  // Los dos botones (y con Editar, la baja) quedan detrás de ownerLocked.
+  assert.match(lista, /ownerLocked\(m\) \? \(\s*<Chip tone="muted">\{t\("team\.ownerOnlyNote"\)\}<\/Chip>\s*\) : \(\s*<Btn size="sm" onClick=\{\(\) => setPermsFor\(m\)\}>/);
+  assert.match(lista, /\{ownerLocked\(m\) \? null : \(\s*<Btn\s+size="sm"\s+onClick=\{\(\) =>\s+setEdit\(/);
+  assert.match(lista, /ownPermissions=\{team\.selfPermissions\}/);
+
+  const matriz = readFileSync(join(raiz, "src/components/barber/team/permission-matrix.tsx"), "utf8");
+  // Misma cuenta que el servidor: ni lo tengo yo, ni lo tenía ya esa persona.
+  assert.match(matriz, /!own\.has\(i\.key\) && !saved\.has\(i\.key\)/);
+  assert.match(matriz, /disabled=\{!advancedRoles \|\| saving \|\| lockSelf \|\| lockNotMine\}/);
+  assert.match(matriz, /perms\.notYoursNote/);
 });
 
 // ── 4. Lo que ya frenaba sigue frenando ────────────────────────────────
