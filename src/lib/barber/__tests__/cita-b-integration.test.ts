@@ -408,3 +408,50 @@ test("4 · productos desde la cita: van a su nota, no tocan existencias; el tick
   assert.equal((await post({ productId: A.productId }, cancelada.id)).status, 409);
   session = null;
 });
+
+// ── 5. Anticipo desde la cita ──────────────────────────────────────────
+
+test("5 · anticipo desde la cita: mismo registro que Anticipos (turno, ticket al corte), una vez, y el cobro lo descuenta", { skip }, async () => {
+  const deposit = await import("@/app/api/barber/appointments/[id]/deposit/route");
+  const cash = await import("@/lib/barber/cash");
+  try {
+    await cash.openCashSession(A.ctx, { openingAmount: 0 });
+  } catch {
+    /* ya abierto por la prueba anterior */
+  }
+  const cli = await newClient(A, "Anticipo");
+  const cita = await appt(A, cli, "CONFIRMED", 2 * DAY);
+  const get = async () => (await deposit.GET(req("/x", "GET"), params(cita.id))).json() as Promise<{ status: string | null; amount: number | null; canRegister: boolean }>;
+  const post = (body: unknown, id = cita.id) => deposit.POST(req("/x", "POST", body), params(id));
+
+  session = await staff(A, "RECEPTION");
+  assert.deepEqual(await get(), { status: null, amount: null, totalOfServices: 200, canRegister: true });
+
+  const before = await cash.getCashState(A.ctx);
+  const r = await post({ amount: 100, paymentMethod: "SPEI" });
+  assert.equal(r.status, 201, await r.clone().text());
+  const after = await cash.getCashState(A.ctx);
+  assert.equal(after.open!.byMethod.SPEI.total - before.open!.byMethod.SPEI.total, 100, "el anticipo entra al corte del día");
+  assert.deepEqual(await get(), { status: "PAID", amount: 100, totalOfServices: 200, canRegister: false });
+
+  assert.equal((await post({ amount: 50, paymentMethod: "CASH" })).status, 409, "una sola vez");
+  const otra = await appt(A, cli, "CONFIRMED", 3 * DAY);
+  assert.equal((await post({ amount: 500, paymentMethod: "CASH" }, otra.id)).status, 400, "no más que el total de la cita");
+  assert.equal((await post({ amount: 50, paymentMethod: "BITCOIN" }, otra.id)).status, 400);
+
+  // Sin turno abierto (otra barbería con su propia sesión cerrada): lo dice.
+  session = B.ctx;
+  const deB = await appt(B, await newClient(B, "SinTurno"), "CONFIRMED", 2 * DAY);
+  const sinTurno = await post({ amount: 50, paymentMethod: "CASH" }, deB.id);
+  assert.equal(sinTurno.status, 409, await sinTurno.clone().text());
+  assert.equal((await post({ amount: 50, paymentMethod: "CASH" }, cita.id)).status, 404, "cita de otra barbería");
+
+  session = await staff(A, "BARBER", A.barberId);
+  assert.equal((await post({ amount: 50, paymentMethod: "CASH" }, otra.id)).status, 403, "el Barbero no cobra");
+
+  // Al cobrar la cita, el anticipo se descuenta solo (lo de siempre).
+  await prisma.barberAppointment.update({ where: { id: cita.id }, data: { status: "DONE", startAt: new Date(Date.now() - HOUR), endAt: new Date(Date.now() - 30 * MIN) } });
+  const sale = await cash.createSale(A.ctx, { appointmentId: cita.id, items: [{ kind: "service", id: A.serviceId }], paymentMethod: "CASH" }, FEATURES);
+  assert.equal(sale.total, 100, "200 − 100 de anticipo");
+  session = null;
+});
