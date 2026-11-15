@@ -27,7 +27,7 @@ import "@/components/barber/afiliados/afiliados.css";
  */
 export default async function BarberAfiliadosPage() {
   const ctx = await getBarberContext();
-  if (!ctx) redirect("/login");
+  if (!ctx) redirect("/barber/entrar");
   await requireBarberPaidAccess(ctx);
 
   const locale = ctx.barbershop.locale;

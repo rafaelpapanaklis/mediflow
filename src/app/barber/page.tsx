@@ -3,12 +3,13 @@ export const dynamic = "force-dynamic";
 import { redirect } from "next/navigation";
 import { getBarberContext } from "@/lib/barber-auth";
 import { requireBarberPaidAccess } from "@/lib/barber/paid-access";
+import { BARBER_LOGIN_PATH } from "@/lib/barber/marketing";
 
 // Índice de /barber: enruta según el estado de la sesión (espejo de
 // /laboratorios/page.tsx). El panel real vive bajo el grupo (panel).
 //
-// - Sin sesión de barbería → /login (el login COMPARTIDO; getCurrentUser en
-//   src/lib/auth.ts sabe regresar aquí a los BarberUser).
+// - Sin sesión de barbería → /barber/entrar (BARBER_LOGIN_PATH: la entrada
+//   propia del vertical, que al terminar regresa aquí).
 // - Barbería inactiva o suscripción impaga → pantalla de suscripción.
 // - Todo bien → /barber/inicio.
 //
@@ -17,7 +18,7 @@ import { requireBarberPaidAccess } from "@/lib/barber/paid-access";
 // fila de la SESIÓN; el helper mira la de la MATRIZ, que es quien paga.
 export default async function BarberIndexPage() {
   const ctx = await getBarberContext();
-  if (!ctx) redirect("/login");
+  if (!ctx) redirect(BARBER_LOGIN_PATH);
   await requireBarberPaidAccess(ctx);
   redirect("/barber/inicio");
 }

@@ -25,7 +25,7 @@ import { SupportClient } from "@/components/barber/support/support-client";
  */
 export default async function Page() {
   const ctx = await getBarberContext();
-  if (!ctx) redirect("/login");
+  if (!ctx) redirect("/barber/entrar");
 
   const permUser = { role: ctx.role, permissionsOverride: ctx.user.permissionsOverride };
   if (!hasBarberPermission(permUser, "support.view")) {

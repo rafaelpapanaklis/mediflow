@@ -47,6 +47,13 @@
     "resumeDone": "Your subscription stays active and will renew normally.",
     "goToPanel": "Go to the panel"
   },
+  "chosen": {
+    "title": "You picked the {plan} plan",
+    "bodyContract": "{amount} per month. Pay by card and your panel opens as soon as the payment is confirmed.",
+    "bodyChange": "You are on the {current} plan today. We show you how your charge changes before you confirm.",
+    "contract": "Get {plan}",
+    "change": "Switch to {plan}"
+  },
   "plans": {
     "title": "Plans",
     "monthly": "Monthly",

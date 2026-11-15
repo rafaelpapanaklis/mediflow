@@ -11,6 +11,13 @@ import {
   normalizeBarberPhone,
 } from "@/lib/barber/phone-countries";
 
+/**
+ * Llave de sessionStorage: cuando el correo ya tenía cuenta, el registro lo
+ * deja aquí y /barber/entrar lo recoge para no pedirlo dos veces. No viaja
+ * en la URL (un correo en la URL acaba en los registros del servidor).
+ */
+export const BARBER_ENTRAR_CORREO_KEY = "dcb_entrar_correo";
+
 const TEAM_SIZES = ["1", "2-3", "4-5", "6+"] as const;
 type TeamSize = (typeof TEAM_SIZES)[number];
 
@@ -49,8 +56,14 @@ function Chip({
 
 /**
  * Alta pública de barbería. Sin selector de especialidad, sin nada clínico.
- * POST /api/barber/auth/register → NO inicia sesión: redirige a /login (el
- * login compartido; getCurrentUser sabe mandar BarberUsers a /barber).
+ * POST /api/barber/auth/register → NO inicia sesión: al terminar manda a la
+ * entrada propia del vertical (`loginHref` = /barber/entrar, con el plan
+ * elegido en la portada si lo hay). Las rutas llegan como props desde la
+ * página (server) para no arrastrar src/lib/barber/marketing.ts al navegador.
+ *
+ * CORREO REPETIDO: el servidor responde code "EMAIL_TAKEN" y aquí el error
+ * sale con dos salidas — «Iniciar sesión» y «Recuperar contraseña» —, porque
+ * sin ellas lo natural era probar con otro correo y acabar con dos cuentas.
  *
  * Textos en español DURO, a propósito: esta pantalla no pasa por el
  * diccionario (i18n del vertical vive dentro del panel). No agregar llaves
@@ -61,7 +74,17 @@ function Chip({
  * limpios en México, E.164 completo fuera. El servidor vuelve a validar con
  * esa misma función: aquí no se decide nada, solo se captura.
  */
-export function BarberRegistroForm() {
+export function BarberRegistroForm({
+  loginHref,
+  forgotHref,
+  planName = null,
+}: {
+  /** /barber/entrar (con ?plan= si se eligió plan en la portada). */
+  loginHref: string;
+  forgotHref: string;
+  /** Nombre del plan elegido en la portada (sale de la tabla), o null. */
+  planName?: string | null;
+}) {
   const [shopName, setShopName] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -77,12 +100,24 @@ export function BarberRegistroForm() {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** El correo ya tiene cuenta: el error se pinta con sus dos salidas. */
+  const [emailTaken, setEmailTaken] = useState(false);
   const [success, setSuccess] = useState(false);
+
+  /** Deja el correo listo para /barber/entrar (ver BARBER_ENTRAR_CORREO_KEY). */
+  function recordarCorreo() {
+    try {
+      window.sessionStorage.setItem(BARBER_ENTRAR_CORREO_KEY, email.trim());
+    } catch {
+      /* sin sessionStorage: se vuelve a teclear */
+    }
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (loading) return;
     setError(null);
+    setEmailTaken(false);
     setPhoneError(null);
 
     if (!shopName.trim()) return setError("El nombre de la barbería es requerido.");
@@ -118,14 +153,16 @@ export function BarberRegistroForm() {
 
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
+        setEmailTaken(data?.code === "EMAIL_TAKEN");
         setError(data?.error ?? "No se pudo completar el registro. Intenta de nuevo.");
         setLoading(false);
         return;
       }
 
+      recordarCorreo();
       setSuccess(true);
       setTimeout(() => {
-        window.location.href = "/login";
+        window.location.href = loginHref;
       }, 1800);
     } catch (err: unknown) {
       setError(
@@ -138,7 +175,7 @@ export function BarberRegistroForm() {
   if (success) {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-        <BrandRow />
+        <BarberBrandRow />
         <div
           role="status"
           style={{
@@ -166,7 +203,7 @@ export function BarberRegistroForm() {
           </p>
         </div>
         <Link
-          href="/login"
+          href={loginHref}
           style={{
             width: "100%",
             height: 44,
@@ -188,7 +225,7 @@ export function BarberRegistroForm() {
 
   return (
     <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <BrandRow />
+      <BarberBrandRow />
 
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         <h1
@@ -203,7 +240,9 @@ export function BarberRegistroForm() {
           Registra tu barbería
         </h1>
         <p style={{ fontSize: 13.5, color: "var(--ld-fg-muted)", margin: 0, lineHeight: 1.5 }}>
-          Crea tu cuenta en un minuto. Después eliges tu plan y lo activas con tarjeta.
+          {planName
+            ? `Crea tu cuenta en un minuto. Después activas tu plan ${planName} con tarjeta.`
+            : "Crea tu cuenta en un minuto. Después eliges tu plan y lo activas con tarjeta."}
         </p>
       </div>
 
@@ -221,6 +260,16 @@ export function BarberRegistroForm() {
           }}
         >
           {error}
+          {emailTaken && (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+              <Link href={loginHref} onClick={recordarCorreo} style={SALIDA_PRIMARIA}>
+                Iniciar sesión
+              </Link>
+              <Link href={forgotHref} style={SALIDA_SECUNDARIA}>
+                Recuperar contraseña
+              </Link>
+            </div>
+          )}
         </div>
       )}
 
@@ -339,7 +388,7 @@ export function BarberRegistroForm() {
 
       <p style={{ fontSize: 12.5, color: "var(--ld-fg-muted)", margin: 0, textAlign: "center" }}>
         ¿Ya tienes cuenta?{" "}
-        <Link href="/login" style={{ color: "#A2612F", fontWeight: 600, textDecoration: "none" }}>
+        <Link href={loginHref} style={{ color: "#A2612F", fontWeight: 600, textDecoration: "none" }}>
           Inicia sesión
         </Link>
       </p>
@@ -347,7 +396,27 @@ export function BarberRegistroForm() {
   );
 }
 
-function BrandRow() {
+/** Las dos salidas del error «ese correo ya tiene cuenta». */
+const SALIDA_BASE = {
+  display: "inline-flex",
+  alignItems: "center",
+  height: 34,
+  padding: "0 14px",
+  borderRadius: 9,
+  fontSize: 13,
+  fontWeight: 600,
+  textDecoration: "none",
+} as const;
+const SALIDA_PRIMARIA = { ...SALIDA_BASE, background: "#A2612F", color: "#fff" } as const;
+const SALIDA_SECUNDARIA = {
+  ...SALIDA_BASE,
+  background: "#fff",
+  color: "#814A28",
+  border: "1px solid rgba(162,97,47,0.45)",
+} as const;
+
+/** Marca del vertical sobre el formulario. La comparte /barber/entrar. */
+export function BarberBrandRow() {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
       <div

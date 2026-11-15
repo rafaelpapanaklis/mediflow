@@ -24,7 +24,7 @@ export default async function BarberSchedulePage(
 ) {
   const searchParams = await props.searchParams;
   const ctx = await getBarberContext();
-  if (!ctx) redirect("/login");
+  if (!ctx) redirect("/barber/entrar");
   await requireBarberPaidAccess(ctx);
 
   // ?barbero=<id> llega desde el aviso "Sin horario cargado" de la agenda.

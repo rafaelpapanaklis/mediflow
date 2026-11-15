@@ -47,6 +47,13 @@
     "resumeDone": "Tu suscripción sigue activa: se renovará con normalidad.",
     "goToPanel": "Ir al panel"
   },
+  "chosen": {
+    "title": "Elegiste el plan {plan}",
+    "bodyContract": "{amount} al mes. Págalo con tarjeta y tu panel se abre en cuanto se confirma el pago.",
+    "bodyChange": "Hoy tienes el plan {current}. Antes de confirmar te mostramos cuánto cambia tu cobro.",
+    "contract": "Contratar {plan}",
+    "change": "Cambiar a {plan}"
+  },
   "plans": {
     "title": "Planes",
     "monthly": "Mensual",

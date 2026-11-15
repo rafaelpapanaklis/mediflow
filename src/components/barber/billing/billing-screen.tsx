@@ -63,6 +63,7 @@ export function BillingScreen({
   gate,
   summary,
   checkout,
+  chosenPlanId = null,
 }: {
   locale: string;
   dict: Dictionary;
@@ -71,6 +72,8 @@ export function BillingScreen({
   gate: BarberGateDTO;
   summary: BarberBillingSummary;
   checkout: CheckoutReturn;
+  /** Plan elegido en la portada (viaja en ?plan= por registro y entrada). */
+  chosenPlanId?: BarberPlanCardDTO["id"] | null;
 }) {
   const t = useMemo(() => makeBarberT(dict), [dict]);
   const router = useRouter();
@@ -333,6 +336,43 @@ export function BillingScreen({
     return null;
   })();
 
+  // ── El plan que ya se eligió en la portada ───────────────────────────
+  // Quien pulsó «Empezar con Profesional» no tiene que volver a buscarlo
+  // entre tres tarjetas: sale arriba, con su precio (de la tabla) y un solo
+  // botón. No se pinta si ya es su plan, ni mientras se confirma un pago.
+  const chosen = chosenPlanId ? plans.find((p) => p.id === chosenPlanId && p.isActive) ?? null : null;
+  const chosenAlert =
+    chosen && !(subscribed && chosen.id === gate.planId) && !confirming && checkout.result !== "success" ? (
+      <Alert
+        tone="info"
+        title={t("barber.suscripcion.chosen.title", { plan: chosen.name })}
+        body={
+          hasLive
+            ? t("barber.suscripcion.chosen.bodyChange", { current: gate.planName })
+            : t("barber.suscripcion.chosen.bodyContract", {
+                amount: formatBarberCents(chosen.priceMonthlyCents, "MXN", locale),
+              })
+        }
+      >
+        {!canManage && <p className="dcbb-alert__body" style={{ marginTop: 6 }}>{t("barber.suscripcion.hero.onlyOwner")}</p>}
+        {canManage && summary.configured && (
+          <div className="dcbb-alert__actions">
+            <button
+              type="button"
+              className="dcbb-btn barber-btn-primary"
+              disabled={busy !== null}
+              onClick={() => (hasLive ? openChange(chosen) : contract(chosen.id, "month"))}
+            >
+              {busy === `plan:${chosen.id}` ? <Loader2 size={15} className="dcbb-spin" aria-hidden /> : null}
+              {t(hasLive ? "barber.suscripcion.chosen.change" : "barber.suscripcion.chosen.contract", {
+                plan: chosen.name,
+              })}
+            </button>
+          </div>
+        )}
+      </Alert>
+    ) : null;
+
   const overLimitAlerts = (["barbers", "branches"] as const)
     .filter((key) => gate.limits[key].overLimit)
     .map((key) => (
@@ -388,6 +428,7 @@ export function BillingScreen({
       )}
 
       {stateAlert}
+      {chosenAlert}
       {overLimitAlerts}
 
       <SubscriptionPanel

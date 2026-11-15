@@ -7,7 +7,7 @@ import { normalizeBarberPhone } from "@/lib/barber/phone-countries";
 // Alta pública de barbería (DaleControl Barber) — espejo de
 // /api/laboratorios/auth/register. Crea el usuario en Supabase Auth y, en UNA
 // transacción Prisma: Barbershop + BarberUser OWNER + siembra del catálogo
-// BARBER_DEFAULT_SERVICES. NO inicia sesión (el cliente redirige a /login).
+// BARBER_DEFAULT_SERVICES. NO inicia sesión (el cliente manda a /barber/entrar).
 // Estado inicial de suscripción = igual al dental: sin trial →
 // "pending_payment" (default del schema; se setea explícito por claridad).
 
@@ -119,7 +119,16 @@ export async function POST(req: Request) {
   if (createError || !created?.user) {
     const msg = createError?.message ?? "";
     if (msg.includes("already been registered") || msg.includes("already exists")) {
-      return NextResponse.json({ error: "Este email ya tiene una cuenta." }, { status: 400 });
+      // `code` es para el formulario: con él pinta «Iniciar sesión» y
+      // «Recuperar contraseña» junto al error (G5: sin esas salidas lo
+      // natural era registrarse otra vez con otro correo).
+      return NextResponse.json(
+        {
+          error: "Este correo ya tiene una cuenta. Inicia sesión o recupera tu contraseña.",
+          code: "EMAIL_TAKEN",
+        },
+        { status: 400 },
+      );
     }
     return NextResponse.json({ error: msg || "No se pudo crear la cuenta." }, { status: 400 });
   }
@@ -206,6 +215,6 @@ export async function POST(req: Request) {
     console.error("[barber-register] atribución de socio (ignorada)", err);
   }
 
-  // h) Éxito. El cliente redirige a /login (login compartido).
+  // h) Éxito. El cliente manda a /barber/entrar (la entrada del vertical).
   return NextResponse.json({ ok: true }, { status: 201 });
 }

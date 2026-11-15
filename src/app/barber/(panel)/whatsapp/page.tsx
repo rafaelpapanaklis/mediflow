@@ -33,7 +33,7 @@ export const dynamic = "force-dynamic";
  */
 export default async function Page() {
   const ctx = await getBarberContext();
-  if (!ctx) redirect("/login");
+  if (!ctx) redirect("/barber/entrar");
   await requireBarberPaidAccess(ctx);
 
   const locale = resolveBarberLocale(ctx.barbershop.locale);

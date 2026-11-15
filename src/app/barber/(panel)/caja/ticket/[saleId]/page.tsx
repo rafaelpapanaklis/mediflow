@@ -16,7 +16,7 @@ import { TicketPrint } from "@/components/barber/cash/ticket-print";
 export default async function Page(props: { params: Promise<{ saleId: string }> }) {
   const params = await props.params;
   const ctx = await getBarberContext();
-  if (!ctx) redirect("/login");
+  if (!ctx) redirect("/barber/entrar");
   await requireBarberPaidAccess(ctx);
   const plan = await getBarberPlan(ctx.barbershop.plan);
   const t = getBarberT(ctx.barbershop.locale);

@@ -20,7 +20,7 @@ import { ProductosClient } from "@/components/barber/products/productos-client";
 export default async function Page(props: { searchParams: Promise<{ period?: string }> }) {
   const searchParams = await props.searchParams;
   const ctx = await getBarberContext();
-  if (!ctx) redirect("/login");
+  if (!ctx) redirect("/barber/entrar");
   await requireBarberPaidAccess(ctx);
   const plan = await getBarberPlan(ctx.barbershop.plan);
   const t = getBarberT(ctx.barbershop.locale);

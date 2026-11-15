@@ -7,6 +7,7 @@ import { getBarberPlan } from "@/lib/barber/plans";
 import { hasBarberPaidAccess } from "@/lib/barber/paid-access";
 import { barberNavItemsWhileUnpaid } from "@/lib/barber/plan-shared";
 import { BARBER_NAV_ITEMS, type BarberNavItem } from "@/lib/barber/types";
+import { BARBER_LOGIN_PATH } from "@/lib/barber/marketing";
 import { getBarberT } from "@/i18n/dictionaries/barber";
 import { BarberSidebar } from "@/components/barber/barber-sidebar";
 import { BarberTopbar } from "@/components/barber/barber-topbar";
@@ -14,8 +15,8 @@ import "@/app/panel-chrome-va.css";
 import "../barber-theme.css";
 
 /**
- * Shell del panel BARBER. Guard de sesión (espejo del layout de
- * /laboratorios): sin contexto → /login compartido.
+ * Shell del panel BARBER. Guard de sesión: sin contexto → /barber/entrar,
+ * la entrada propia del vertical (BARBER_LOGIN_PATH), no el /login dental.
  *
  * AQUÍ NO SE CORTA EL PASO. El layout envuelve también a /barber/suscripcion
  * y no sabe en qué ruta está (src/middleware.ts no cubre /barber, así que no
@@ -38,7 +39,7 @@ export default async function BarberPanelLayout({
   children: React.ReactNode;
 }) {
   const ctx = await getBarberContext();
-  if (!ctx) redirect("/login");
+  if (!ctx) redirect(BARBER_LOGIN_PATH);
 
   const plan = await getBarberPlan(ctx.barbershop.plan);
   const t = getBarberT(ctx.barbershop.locale);
@@ -85,6 +86,7 @@ export default async function BarberPanelLayout({
         brandName={t("barber.shell.brand.product")}
         brandSub={t("barber.shell.brand.vertical")}
         logoutLabel={t("barber.shell.logout")}
+        loginHref={BARBER_LOGIN_PATH}
       />
       {/* min-w-0: sin él la columna crece hasta el ancho mínimo de su
           contenido (tablas, agenda) y en celular la página entera se desborda;

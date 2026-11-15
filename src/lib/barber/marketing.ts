@@ -31,6 +31,7 @@ import {
   BARBER_FEATURES,
   barberPlanRank,
   formatBarberPrice,
+  isBarberPlanId,
   isBarberUnlimited,
   type BarberPlanId,
   type BarberResolvedPlan,
@@ -43,8 +44,28 @@ import { BARBER_WEB_MANIFEST_LIST } from "@/components/barber/templates/manifest
 // ── Rutas ───────────────────────────────────────────────────────────────
 export const BARBER_LANDING_PATH = "/barberias" as const;
 export const BARBER_REGISTER_PATH = "/barber/registro" as const;
-/** Login COMPARTIDO: getCurrentUser sabe mandar a un BarberUser a /barber. */
-export const BARBER_LOGIN_PATH = "/login" as const;
+/**
+ * Entrada PROPIA del vertical (src/app/barber/entrar). Es el mismo inicio de
+ * sesión de siempre (POST /api/auth/login) con la cara de Barber: /login es
+ * la pantalla de las clínicas dentales y un barbero que volvía a entrar creía
+ * que se había equivocado de sitio (auditoría 14-nov, G5).
+ */
+export const BARBER_LOGIN_PATH = "/barber/entrar" as const;
+/** Recuperar contraseña: la pantalla es la compartida (no hay una propia). */
+export const BARBER_FORGOT_PASSWORD_PATH = "/forgot-password" as const;
+/** Donde se contrata. Aquí aterriza quien llega con un plan ya elegido. */
+export const BARBER_BILLING_PATH = "/barber/suscripcion" as const;
+/** Parámetro con el que el plan elegido en la portada viaja hasta Suscripción. */
+export const BARBER_PLAN_PARAM = "plan" as const;
+
+/**
+ * Le cuelga `?plan=<ID>` a una ruta SOLO si el plan es uno de los tres de la
+ * casa. Lo que llega de una URL nunca se pega tal cual: si no es un id
+ * conocido, la ruta sale limpia.
+ */
+export function barberPathWithPlan(path: string, plan: unknown): string {
+  return isBarberPlanId(plan) ? `${path}?${BARBER_PLAN_PARAM}=${plan}` : path;
+}
 export const BARBER_PRODUCT_NAME = "DaleControl Barber" as const;
 
 /** Anclas de la página (nav + botones "ver precios"). */

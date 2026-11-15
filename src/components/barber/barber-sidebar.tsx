@@ -59,6 +59,7 @@ export function BarberSidebar({
   brandName,
   brandSub,
   logoutLabel,
+  loginHref,
 }: {
   shopName: string;
   items: BarberNavItem[];
@@ -66,6 +67,8 @@ export function BarberSidebar({
   brandName: string;
   brandSub: string;
   logoutLabel: string;
+  /** A dónde ir al cerrar sesión: la entrada del vertical (/barber/entrar). */
+  loginHref: string;
 }) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -74,8 +77,8 @@ export function BarberSidebar({
     try {
       await fetch("/api/barber/auth/logout", { method: "POST" });
     } finally {
-      // El login es el COMPARTIDO (/login) — barber no tiene login propio.
-      window.location.href = "/login";
+      // A la entrada PROPIA del vertical, no al /login de las clínicas.
+      window.location.href = loginHref;
     }
   }
 
