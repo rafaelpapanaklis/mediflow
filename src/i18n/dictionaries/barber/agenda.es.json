@@ -59,7 +59,8 @@
     "undoFailed": "No se pudo deshacer el movimiento.",
     "remindersCancelled": "Cancelamos el recordatorio anterior; se reprograma con la hora nueva.",
     "blocked": "Ahí no cabe",
-    "rejected": "No se movió a las {time} — {reason}"
+    "rejected": "No se movió a las {time} — {reason}",
+    "movedDay": "Visita movida al {day}, {time}"
   },
   "modal": {
     "newTitle": "Nueva visita",
@@ -327,7 +328,12 @@
     "tooLong": "Demasiado larga",
     "tooShort": "Demasiado corta",
     "noBarber": "Elige barbero",
-    "unavailable": "No disponible"
+    "unavailable": "No disponible",
+    "freeCount": {
+      "one": "{count} libre",
+      "other": "{count} libres"
+    },
+    "nobodyFree": "Nadie libre"
   },
   "resize": {
     "until": "Hasta {time} · {duration}",

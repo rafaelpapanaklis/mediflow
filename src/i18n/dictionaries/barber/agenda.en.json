@@ -59,7 +59,8 @@
     "undoFailed": "We couldn't undo the move.",
     "remindersCancelled": "We cancelled the old reminder; it gets rescheduled for the new time.",
     "blocked": "It doesn't fit there",
-    "rejected": "Not moved to {time} — {reason}"
+    "rejected": "Not moved to {time} — {reason}",
+    "movedDay": "Visit moved to {day}, {time}"
   },
   "modal": {
     "newTitle": "New visit",
@@ -327,7 +328,12 @@
     "tooLong": "Too long",
     "tooShort": "Too short",
     "noBarber": "Pick a barber",
-    "unavailable": "Not available"
+    "unavailable": "Not available",
+    "freeCount": {
+      "one": "{count} free",
+      "other": "{count} free"
+    },
+    "nobodyFree": "Nobody free"
   },
   "resize": {
     "until": "Until {time} · {duration}",

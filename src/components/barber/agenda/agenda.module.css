@@ -455,10 +455,6 @@
   min-width: 0;
 }
 
-.columnClickable {
-  cursor: copy;
-}
-
 /* ── El hueco bajo el mouse ────────────────────────────────────────────
    Dice DÓNDE se va a agendar antes del clic: «+ 10:30 a. m. · Beto». Si
    ahí no se puede, en rojo y con el motivo, y el cursor lo dice también.
@@ -544,20 +540,6 @@
   font-variant-numeric: tabular-nums;
   color: var(--text-4);
   white-space: nowrap;
-}
-
-/* Franja de media hora: sombreado suave en vez de una línea punteada más.
-   Da referencia de "media hora" sin ensuciar el fondo. */
-.halfBand {
-  position: absolute;
-  left: 0;
-  right: 0;
-  background: rgba(18, 16, 16, 0.028);
-  pointer-events: none;
-}
-
-:global(.dark) .halfBand {
-  background: rgba(250, 245, 238, 0.035);
 }
 
 /* Fuera del horario del barbero: rayado sobre un fondo apagado. Más

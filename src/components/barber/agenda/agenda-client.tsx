@@ -246,13 +246,24 @@ export function AgendaClient(props: AgendaClientProps) {
         barberId !== previousBarber
           ? data?.barbers.find((b) => b.id === barberId)
           : null;
+      // Movida a OTRO día (vista Semana): el aviso dice a cuál.
+      const newDay =
+        shopDateISO(startAt, timezone) !== shopDateISO(new Date(previousStart), timezone)
+          ? new Intl.DateTimeFormat(props.locale === "en" ? "en-US" : "es-MX", {
+              timeZone: timezone,
+              weekday: "long",
+              day: "numeric",
+            }).format(startAt)
+          : null;
       setToast({
         message: newBarber
           ? t("barber.agenda.move.movedBarber", {
               barber: newBarber.nickname || newBarber.name,
               time: label,
             })
-          : t("barber.agenda.move.moved", { time: label }),
+          : newDay
+            ? t("barber.agenda.move.movedDay", { day: newDay, time: label })
+            : t("barber.agenda.move.moved", { time: label }),
         note: payload.remindersInvalidated ? t("barber.agenda.move.remindersCancelled") : null,
         actionLabel: t("barber.agenda.actions.undo"),
         onAction: async () => {
@@ -269,7 +280,7 @@ export function AgendaClient(props: AgendaClientProps) {
         },
       });
     },
-    [patchAppointment, replaceAppointment, t, timezone, data?.barbers],
+    [patchAppointment, replaceAppointment, t, timezone, data?.barbers, props.locale],
   );
 
   // ── Alargar / acortar jalando el borde de abajo ──────────────────────
@@ -627,12 +638,26 @@ export function AgendaClient(props: AgendaClientProps) {
             barbers={visibleBarbers}
             appointments={visibleAppointments}
             schedules={data.schedules}
+            timeOff={data.timeOff}
+            charged={charged}
+            canEdit={canEdit}
             t={t}
             onPickDay={(day) => {
               setDateISO(day);
               setView("day");
             }}
-            onCardClick={setDetail}
+            onCardClick={openDetail}
+            onSlotClick={(barberId, startAt) => setCreating({ barberId, startAt })}
+            onSlotRejected={(message) => setToast({ message, tone: "bad" })}
+            onMove={(appt, startAt, barberId) => void handleMove(appt, startAt, barberId)}
+            onResize={(appt, minutes) => void handleResize(appt, minutes)}
+            onDropRejected={(message) => setToast({ message, tone: "bad" })}
+            onDragStart={hover.close}
+            onCardHover={hover.show}
+            onCardHoverEnd={hover.close}
+            quickAction={quickAction}
+            onQuickAction={(appt) => void runQuickAction(appt)}
+            busyId={busyId}
           />
         ) : null}
 
