@@ -211,6 +211,10 @@
   color: var(--brand);
   text-decoration: none;
 }
+/* Dedo: los enlaces de las tarjetas medían 21 px de alto; 36 px se alcanzan sin fallar. */
+.barber-shell .bdash-link,
+.barber-shell .bdash-alert__cta,
+.barber-shell .bdash-callout__cta { min-height: 36px; }
 .barber-shell .bdash-link:hover { text-decoration: underline; text-underline-offset: 2px; }
 .barber-shell .bdash-foot {
   display: flex;
