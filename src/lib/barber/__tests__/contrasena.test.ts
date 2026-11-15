@@ -440,3 +440,72 @@ describe("3 · contraseña temporal: criptográfica y obligatorio cambiarla", ()
     assert.equal(dental, null, `trae texto de clínicas: «${dental?.[0]}»`);
   });
 });
+
+// ── 4. Último acceso ───────────────────────────────────────────────────
+
+describe("4 · «Último acceso» se escribe al entrar", () => {
+  test("qué se escribe: solo un inicio de sesión más nuevo que lo guardado", () => {
+    const t = "2026-11-17T15:00:00.000Z";
+    assert.equal(C.ultimoAccesoPorEscribir(null, t)?.toISOString(), t);
+    assert.equal(C.ultimoAccesoPorEscribir(new Date("2026-11-16T10:00:00Z"), t)?.toISOString(), t);
+    assert.equal(C.ultimoAccesoPorEscribir(new Date(t), t), null, "mismo inicio de sesión: no se reescribe");
+    assert.equal(C.ultimoAccesoPorEscribir(new Date("2026-11-18T00:00:00Z"), t), null, "nunca hacia atrás");
+    assert.equal(C.ultimoAccesoPorEscribir(null, null), null);
+    assert.equal(C.ultimoAccesoPorEscribir(null, undefined), null);
+    assert.equal(C.ultimoAccesoPorEscribir(null, "no-es-fecha"), null);
+  });
+
+  test("al entrar se anota UNA vez por inicio de sesión, no en cada página", async () => {
+    const { getBarberContext } = await import("@/lib/barber-auth");
+    conSesion();
+    estado.sesion!.last_sign_in_at = "2026-11-17T15:00:00.000Z";
+
+    const ctx = await getBarberContext();
+    assert.ok(ctx);
+    assert.equal(estado.filas[0].lastLogin?.toISOString(), "2026-11-17T15:00:00.000Z");
+    assert.equal(llamadas.filter((l) => l.que === "barberUser.updateMany").length, 1);
+
+    // Más páginas con la misma sesión: nada que escribir.
+    await getBarberContext();
+    await getBarberContext();
+    assert.equal(llamadas.filter((l) => l.que === "barberUser.updateMany").length, 1);
+
+    // Vuelve a entrar al día siguiente: se anota otra vez.
+    estado.sesion!.last_sign_in_at = "2026-11-18T09:30:00.000Z";
+    await getBarberContext();
+    assert.equal(estado.filas[0].lastLogin?.toISOString(), "2026-11-18T09:30:00.000Z");
+  });
+
+  test("va a todas las filas de ESA cuenta (una por sede) y a ninguna otra", async () => {
+    const { getBarberContext } = await import("@/lib/barber-auth");
+    conSesion();
+    estado.sesion!.last_sign_in_at = "2026-11-17T15:00:00.000Z";
+    estado.filas.push(
+      { id: "bu-1b", supabaseId: "sb-1", barbershopId: "shop-2", isActive: true, role: "BARBER", permissionsOverride: [], lastLogin: null, createdAt: new Date("2026-11-05") },
+      { id: "bu-2", supabaseId: "sb-2", barbershopId: "shop-1", isActive: true, role: "BARBER", permissionsOverride: [], lastLogin: null, createdAt: new Date("2026-11-02") },
+    );
+    await getBarberContext();
+    const por = Object.fromEntries(estado.filas.map((f) => [f.id, f.lastLogin?.toISOString() ?? null]));
+    assert.deepEqual(por, { "bu-1": "2026-11-17T15:00:00.000Z", "bu-1b": "2026-11-17T15:00:00.000Z", "bu-2": null });
+    const where = llamadas.find((l) => l.que === "barberUser.updateMany")?.args.where;
+    assert.equal(where.supabaseId, "sb-1", "el filtro sale de la sesión");
+  });
+
+  test("si la base falla al anotar, la entrada NO se frena", async () => {
+    const { getBarberContext } = await import("@/lib/barber-auth");
+    conSesion();
+    estado.sesion!.last_sign_in_at = "2026-11-17T15:00:00.000Z";
+    estado.updateManyRevienta = true;
+    const errores: unknown[] = [];
+    const original = console.error;
+    console.error = (...a: unknown[]) => void errores.push(a);
+    try {
+      const ctx = await getBarberContext();
+      assert.ok(ctx, "sin lastLogin se quedó fuera del panel");
+      assert.equal(ctx.barberUserId, "bu-1");
+    } finally {
+      console.error = original;
+    }
+    assert.equal(errores.length, 1, "el fallo tiene que quedar en el log");
+  });
+});

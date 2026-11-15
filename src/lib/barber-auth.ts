@@ -6,7 +6,7 @@ import {
   hasBarberPermission,
   type BarberPermissionKey,
 } from "@/lib/barber/permissions";
-import { barberDebeCambiarContrasena } from "@/lib/barber/contrasena";
+import { barberDebeCambiarContrasena, ultimoAccesoPorEscribir } from "@/lib/barber/contrasena";
 
 export { BarberForbiddenError, hasBarberPermission };
 export type { BarberPermissionKey };
@@ -53,6 +53,8 @@ export async function getBarberContext(): Promise<BarberContext | null> {
     });
     if (!bu) return null;
 
+    await anotarUltimoAcceso(user.id, bu, user.last_sign_in_at);
+
     return {
       barberUserId: bu.id,
       barbershopId: bu.barbershopId,
@@ -67,6 +69,36 @@ export async function getBarberContext(): Promise<BarberContext | null> {
     // barbería". Jamás propagar: este helper corre en páginas públicas de
     // guard y no puede tumbar nada.
     return null;
+  }
+}
+
+/**
+ * «Último acceso» de Equipo y /admin/barberias (auditoría 14-nov, M4).
+ *
+ * El inicio de sesión lo hace el endpoint compartido /api/auth/login (que no
+ * se toca), así que aquí se lee lo que Supabase ya sabe: `last_sign_in_at`
+ * cambia en cada inicio de sesión, no en cada página. Se escribe solo cuando
+ * es más nuevo que lo guardado (ultimoAccesoPorEscribir): una escritura por
+ * inicio de sesión. Va a TODAS las filas de la cuenta (una por sede), igual
+ * que la contraseña es una para todas.
+ *
+ * Nunca frena la entrada: si la base falla, se sigue sin anotar.
+ */
+async function anotarUltimoAcceso(
+  supabaseId: string,
+  bu: { lastLogin: Date | null },
+  lastSignInAt: string | null | undefined,
+): Promise<void> {
+  const cuando = ultimoAccesoPorEscribir(bu.lastLogin, lastSignInAt);
+  if (!cuando || !supabaseId) return;
+  try {
+    await prisma.barberUser.updateMany({
+      where: { supabaseId, OR: [{ lastLogin: null }, { lastLogin: { lt: cuando } }] },
+      data: { lastLogin: cuando },
+    });
+    bu.lastLogin = cuando;
+  } catch (e) {
+    console.error("[barber-auth] no se pudo anotar el último acceso:", e instanceof Error ? e.message : e);
   }
 }
 
