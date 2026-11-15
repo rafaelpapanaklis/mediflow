@@ -347,7 +347,12 @@ export function BarbersClient({
                 <div className={s.memberPay}>
                   <Chip tone="brand">{payChip(b)}</Chip>
                   {!b.isActive ? <Chip tone="muted">{t("common.inactive")}</Chip> : null}
-                  {b.noSchedule ? <Chip tone="warn">{t("team.noScheduleWarn")}</Chip> : null}
+                  {b.noSchedule ? (
+                    // Lleva directo al horario de ESE barbero: el aviso es la tarea pendiente.
+                    <Link href={`/barber/agenda/horarios?barbero=${encodeURIComponent(b.id)}`} title={t("team.noScheduleAction")}>
+                      <Chip tone="warn">{t("team.noScheduleWarn")} →</Chip>
+                    </Link>
+                  ) : null}
                   {isConsolidated ? (
                     <Chip tone="muted">{branchLabelById.get(b.barbershopId) ?? ""}</Chip>
                   ) : null}

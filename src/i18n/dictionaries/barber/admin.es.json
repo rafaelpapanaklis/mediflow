@@ -123,6 +123,7 @@
     "branchAccessOwner": "Es dueño: ve toda la cadena sin marcar nada.",
     "linkedBarberChip": "Ficha: {name}",
     "noScheduleWarn": "No aparece para reservar: no tiene horario",
+    "noScheduleAction": "Ponerle horario",
     "branchAccessCount": {
       "one": "1 sede",
       "other": "{count} sedes"

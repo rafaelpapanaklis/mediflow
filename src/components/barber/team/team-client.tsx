@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { Building2, Copy, KeyRound, Pencil, Plus, ShieldCheck, UserPlus, Users } from "lucide-react";
 import type { BarberRole } from "@/lib/barber/types";
 import type { BarberMemberRow, BarberTeamContext } from "@/lib/barber/team";
@@ -239,7 +240,11 @@ export function TeamClient({
                   {m.barberName ? (
                     <Chip tone="muted">{t("team.linkedBarberChip", { name: m.barberName })}</Chip>
                   ) : null}
-                  {m.noSchedule ? <Chip tone="warn">{t("team.noScheduleWarn")}</Chip> : null}
+                  {m.noSchedule && m.barberId ? (
+                    <Link href={`/barber/agenda/horarios?barbero=${encodeURIComponent(m.barberId)}`} title={t("team.noScheduleAction")}>
+                      <Chip tone="warn">{t("team.noScheduleWarn")} →</Chip>
+                    </Link>
+                  ) : null}
                   {isConsolidated ? (
                     <Chip tone="muted">{branchLabelById.get(m.barbershopId) ?? ""}</Chip>
                   ) : null}
