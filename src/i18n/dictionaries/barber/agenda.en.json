@@ -385,5 +385,170 @@
     "accepted": "You accepted {client}'s request.",
     "notified": "We let them know it's booked.",
     "notNotified": "Let them know yourself: no message reached this client."
+  },
+  "cita": {
+    "title": "{name}'s visit",
+    "titleNoClient": "Visit",
+    "more": "More",
+    "moreGroupVisit": "This visit",
+    "moreGroupStatus": "Change status",
+    "grab": "Drag down to close",
+    "steps": {
+      "PENDING": "Pending",
+      "CONFIRMED": "Confirmed",
+      "IN_PROGRESS": "In the chair",
+      "DONE": "Completed"
+    },
+    "stepNow": "Now",
+    "cancelled": "This visit was cancelled.",
+    "cancelledWith": "This visit was cancelled · {reason}",
+    "noShow": "The client didn't show up.",
+    "arrivedAt": "Arrived at {time}: already waiting.",
+    "tabs": {
+      "visit": "Visit",
+      "client": "Client"
+    },
+    "client": {
+      "new": "New client",
+      "visits": {
+        "one": "{count} visit",
+        "other": "{count} visits"
+      },
+      "whatsapp": "WhatsApp",
+      "call": "Call",
+      "file": "View profile",
+      "none": "This visit isn't linked to a client.",
+      "loading": "Loading their profile…",
+      "loadError": "Couldn't load their profile. The rest of the visit still works."
+    },
+    "stars": {
+      "title": "Stars",
+      "count": "{stars} of {slots}",
+      "next": "{remaining} more to earn: {bonus}",
+      "ready": "Can claim now: {bonus}",
+      "first": "Earns their first star when you charge today.",
+      "stamps": "Stamps",
+      "stampsCount": "{count} of {threshold}",
+      "stampsReady": "Already earned: {reward}"
+    },
+    "likes": {
+      "title": "How they like their cut",
+      "emptyNew": "First time here. Write it down when you finish so whoever serves them next time can see it.",
+      "empty": "Nothing written down yet.",
+      "edit": "Write it in their profile"
+    },
+    "history": {
+      "title": "Their visits",
+      "none": "None yet.",
+      "last": "Last: {date} with {barber}",
+      "lastNoBarber": "Last: {date}",
+      "usual": "Usually comes back every {weeks} weeks.",
+      "usualOne": "Usually comes back every week."
+    },
+    "facts": {
+      "barber": "Barber",
+      "time": "Time",
+      "source": "Source",
+      "changeBarber": "Change barber",
+      "moveTime": "Change time",
+      "plus15": "+15 min",
+      "plus15Title": "Make the visit 15 minutes longer",
+      "plus15Saved": "It now lasts {duration}."
+    },
+    "money": {
+      "title": "Services and payment",
+      "change": "Change services",
+      "addProduct": "Add product",
+      "deposit": "Deposit paid",
+      "depositPending": "Deposit pending",
+      "due": "To charge",
+      "paidBanner": "Already charged: {amount}."
+    },
+    "product": {
+      "title": "Add a product to the bill",
+      "search": "Search product",
+      "qty": "Quantity",
+      "add": "Add",
+      "added": "{product} was added to this visit's pending bill.",
+      "empty": "There are no products for sale.",
+      "noMatch": "No product matches that.",
+      "stock": "{stock} in stock"
+    },
+    "note": {
+      "title": "Note for this visit",
+      "hint": "Only the team sees it",
+      "placeholder": "Write something for the barber: what they asked for, if someone's coming with them…",
+      "save": "Save note",
+      "saved": "Note saved.",
+      "empty": "No note."
+    },
+    "photos": {
+      "title": "Photos of this visit",
+      "empty": "No photos yet.",
+      "kinds": {
+        "BEFORE": "Before",
+        "AFTER": "After",
+        "REFERENCE": "Reference"
+      }
+    },
+    "next": {
+      "title": "Book their next visit",
+      "weeks": "{weeks} wk",
+      "weeksLabel": "In {weeks} weeks",
+      "usual": "usually every {weeks} wk",
+      "searching": "Looking for a slot…",
+      "exact": "{day} at {time} with {barber}",
+      "nearby": "On {day} {barber} is busy at that time. Closest slots:",
+      "none": "On {day} {barber} has no room. Try another week or use “Repeat this visit”.",
+      "confirm": "Book",
+      "created": "Their next visit is booked: {day} at {time}.",
+      "noBarber": "This visit has no barber: use “Repeat this visit” to choose day and barber.",
+      "error": "Couldn't look for a slot. Try again."
+    },
+    "actions": {
+      "repeat": "Repeat this visit",
+      "remind": "Send reminder now",
+      "remindSent": "Reminder sent.",
+      "remindQueued": "Reminder on its way: it goes out in a few minutes.",
+      "remindNot": "Not sent: {reason}",
+      "arrived": "Arrived",
+      "arrivedUndo": "Undo “Arrived”",
+      "arrivedSaved": "Marked: they're waiting.",
+      "noShow": "No-show",
+      "deposit": "Record deposit",
+      "cancel": "Cancel visit…",
+      "nextVisit": "Book their next visit",
+      "charge": "Charge {amount}",
+      "completeAndCharge": "Complete and charge {amount}"
+    },
+    "cancel": {
+      "title": "Cancel {name}'s visit?",
+      "reason": "Reason (optional)",
+      "reasons": {
+        "client": "Client cancelled",
+        "noAnswer": "Didn't answer",
+        "shop": "Shop cancelled"
+      },
+      "other": "Other reason…",
+      "confirm": "Yes, cancel the visit",
+      "back": "No, go back"
+    },
+    "deposit": {
+      "title": "Record deposit",
+      "amount": "Amount",
+      "method": "Paid with",
+      "methods": {
+        "CASH": "Cash",
+        "CARD": "Card",
+        "SPEI": "Bank transfer"
+      },
+      "save": "Record deposit",
+      "saved": "Deposit of {amount} recorded.",
+      "bad": "Enter a valid amount, above zero and not more than the total."
+    },
+    "foot": {
+      "waiting": "Already here? Mark them as “Arrived” and {barber} sees it on the schedule.",
+      "waitingNoBarber": "Already here? Mark them as “Arrived” and it shows on the schedule."
+    }
   }
 }

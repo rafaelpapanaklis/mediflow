@@ -46,7 +46,7 @@ import {
 import { Toast, agendaCss as css, barberColor } from "./agenda-ui";
 import { DayBoard } from "./day-board";
 import { WeekBoard } from "./week-board";
-import { AppointmentDialog } from "./appointment-dialog";
+import { AppointmentDialog, type AppointmentDialogFocus } from "./appointment-dialog";
 import { AppointmentDetail } from "./appointment-detail";
 import { ChargeBridge } from "./charge-bridge";
 import { nextSlotStart } from "./next-slot";
@@ -126,7 +126,14 @@ export function AgendaClient(props: AgendaClientProps) {
 
   const [detail, setDetail] = useState<BarberAppointmentDTO | null>(null);
   const [editing, setEditing] = useState<BarberAppointmentDTO | null>(null);
-  const [creating, setCreating] = useState<{ barberId: string | null; startAt: Date } | null>(null);
+  const [creating, setCreating] = useState<{
+    barberId: string | null;
+    startAt: Date;
+    /** «Repetir esta cita»: la visita que se copia. */
+    prefill?: BarberAppointmentDTO | null;
+  } | null>(null);
+  /** Campo del diálogo de editar que recibe el foco (botones directos de la cita). */
+  const [editFocus, setEditFocus] = useState<AppointmentDialogFocus | null>(null);
   const [charging, setCharging] = useState<{ id: string; clientLabel: string } | null>(null);
 
   const timezone = data?.timezone ?? props.timezone;
@@ -765,6 +772,7 @@ export function AgendaClient(props: AgendaClientProps) {
       {/* ── Modales: FUERA de .screen (container-type atrapa fixed) ── */}
       {detail ? (
         <AppointmentDetail
+          key={detail.id}
           appointment={detail}
           timezone={timezone}
           branchId={props.branchId}
@@ -774,15 +782,34 @@ export function AgendaClient(props: AgendaClientProps) {
           canCharge={canCharge}
           sale={charged[detail.id] ?? null}
           t={t}
+          locale={props.locale}
+          canEditClients={data?.can.createClients ?? false}
+          barbers={data?.barbers ?? []}
           onClose={() => setDetail(null)}
-          onEdit={() => {
+          onEdit={(focus) => {
+            setEditFocus(focus ?? null);
             setEditing(detail);
+            setDetail(null);
+          }}
+          onRepeat={() => {
+            // Misma hora, una semana después (o la semana que viene si ya
+            // pasó): en el diálogo se cambia lo que haga falta.
+            const week = 7 * 86_400_000;
+            let at = new Date(detail.startAt).getTime() + week;
+            while (at < Date.now()) at += week;
+            setCreating({ barberId: detail.barberId, startAt: new Date(at), prefill: detail });
             setDetail(null);
           }}
           onChanged={(next, note) => {
             replaceAppointment(next);
             if (note) setToast({ message: note });
           }}
+          onCreated={(created, note) => {
+            replaceAppointment(created);
+            setToast({ message: note });
+            void load(true);
+          }}
+          onToast={(message, tone) => setToast({ message, tone })}
           onCharge={() => openCharge(detail)}
           canAcceptRequests={data?.can.requests ?? false}
           onAcceptRequest={() => void acceptRequest(detail)}
@@ -823,6 +850,7 @@ export function AgendaClient(props: AgendaClientProps) {
           canSearchClients={data.can.clients}
           initialBarberId={creating.barberId}
           initialStartAt={creating.startAt}
+          prefill={creating.prefill ?? null}
           t={t}
           onClose={() => setCreating(null)}
           onSaved={(appt) => {
@@ -842,6 +870,7 @@ export function AgendaClient(props: AgendaClientProps) {
           services={data.services}
           canSearchClients={data.can.clients}
           appointment={editing}
+          focus={editFocus}
           t={t}
           onClose={() => setEditing(null)}
           onSaved={(appt) => {
