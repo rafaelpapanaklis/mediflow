@@ -22,12 +22,14 @@ export function esFotoSubida(url: string | null | undefined): boolean {
   return Boolean(url && url.includes("/barber/") && url.includes("/barberos/"));
 }
 
-/** La extensión sale del TIPO REAL ya validado, nunca del nombre que mande el navegador. */
-export function extensionFotoBarbero(mime: string): string {
-  if (mime === "image/png") return "png";
-  if (mime === "image/webp") return "webp";
-  return "jpg";
-}
+/** Lado mayor de lo que se guarda: la foto se reprocesa y se achica a esto. */
+export const FOTO_BARBERO_LADO_MAX = 1600;
+
+/**
+ * Content-Length máximo aceptado: el runtime serverless corta el cuerpo en
+ * ~4,5 MB. Más que eso se rechaza con 413 sin leer el cuerpo.
+ */
+export const FOTO_BARBERO_MAX_BODY_BYTES = 4.5 * 1024 * 1024;
 
 /** Carpeta de las fotos de UN barbero. El shopId sale de la fila del barbero, no del body. */
 export function carpetaFotoBarbero(barbershopId: string, barberId: string): string {

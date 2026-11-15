@@ -13,7 +13,8 @@ import { barberApiError, barberUnauthorized } from "@/lib/barber/branches";
 import { rutaWebBarberia } from "@/lib/barber/landing";
 import {
   carpetaFotoBarbero,
-  extensionFotoBarbero,
+  FOTO_BARBERO_LADO_MAX,
+  FOTO_BARBERO_MAX_BODY_BYTES,
   FOTO_BARBERO_MAX_BYTES,
   FOTO_BARBERO_TIPOS,
   objetoFotoAnterior,
@@ -45,7 +46,15 @@ import {
        `photoUrl`; al subir una nueva, BORRA la anterior de ESE barbero (solo
        si vive en su carpeta: nunca una liga ajena ni el objeto de otro);
      · el freno de subidas es persistente (Upstash si está configurado), no
-       un Map por instancia.
+       un Map por instancia;
+     · lo que se SUBE es la imagen REPROCESADA (rotate + resize a 1600 + webp):
+       la foto de un teléfono trae el EXIF con la UBICACIÓN GPS y el bucket
+       es público, así que el archivo original nunca se guarda. De paso el
+       tipo guardado es el real (image/webp), no el que declaró el navegador;
+     · un Content-Length de más de 4,5 MB se corta con 413 ANTES de leer el
+       cuerpo (el tope de 4 MB del archivo se sigue comprobando después);
+     · DELETE: «Quitar foto» borra también el objeto del bucket, con el mismo
+       `objetoFotoAnterior` (solo dentro de la carpeta de ese barbero).
 
    El navegador comprime antes (prepararFoto en components/barber/landing/
    imagen.ts): el tope de 4 MB de aquí es la última red, no la primera.
@@ -61,53 +70,106 @@ function admin() {
 
 const RUTA = "barber/team/barbers/photo";
 
+interface BarberFoto {
+  id: string;
+  barbershopId: string;
+  photoUrl: string | null;
+  barbershop: { slug: string } | null;
+}
+
+/**
+ * Resultado deliberadamente NO discriminado (el repo compila con `strict: false`
+ * y ahí TypeScript no estrecha una unión): o `response` (error ya armado) o
+ * `barber`, nunca los dos.
+ */
+interface Resultado {
+  response: NextResponse | null;
+  barber: BarberFoto | null;
+}
+
+/**
+ * Las puertas comunes a subir y quitar: sesión, permiso, suscripción, freno de
+ * subidas y que el barbero sea de una sede que la sesión alcanza. Devuelve la
+ * respuesta de error ya armada, o el barbero.
+ */
+async function puerta(
+  req: NextRequest,
+  barberId: string,
+): Promise<Resultado> {
+  const ctx = await getBarberContext();
+  if (!ctx) return { response: barberUnauthorized(), barber: null };
+
+  try {
+    assertBarberPermission(ctx, "barbers.manage");
+    await assertBarberSubscriptionActive(ctx);
+  } catch (e) {
+    if (e instanceof BarberForbiddenError) {
+      return {
+        response: NextResponse.json(
+          { error: "No tienes permiso para cambiar la foto de un barbero.", permission: e.permission },
+          { status: 403 },
+        ),
+        barber: null,
+      };
+    }
+    const gate = barberGateErrorPayload(e);
+    if (gate) return { response: NextResponse.json(gate.body, { status: gate.status }), barber: null };
+    throw e;
+  }
+
+  // Freno de subidas (por usuario, no por IP ni por barbero).
+  const frenado = await persistentRateLimit(req, {
+    id: `${ctx.barbershopId}:${ctx.barberUserId}`,
+    limit: 15,
+    windowSec: 10 * 60,
+    scope: "barber:barber-photo",
+  });
+  if (frenado) return { response: frenado as NextResponse, barber: null };
+
+  const ids = await getAccessibleBranchIds(ctx);
+  if (ids.length === 0) {
+    return { response: NextResponse.json({ error: "Barbero no encontrado." }, { status: 404 }), barber: null };
+  }
+  const barber = await prisma.barber.findFirst({
+    where: { id: barberId, barbershopId: { in: ids } },
+    select: {
+      id: true,
+      barbershopId: true,
+      photoUrl: true,
+      barbershop: { select: { slug: true } },
+    },
+  });
+  if (!barber) return { response: NextResponse.json({ error: "Barbero no encontrado." }, { status: 404 }), barber: null };
+  return { response: null, barber: barber as BarberFoto };
+}
+
+/** La mini-web /b/<slug> es ISR: que el cambio se vea ya. */
+function revalidarWeb(slug: string | undefined): void {
+  try {
+    if (slug) revalidatePath(rutaWebBarberia(slug));
+  } catch {
+    /* fuera de un request de Next (pruebas): no pasa nada */
+  }
+}
+
 /** POST multipart { file } → sube, guarda photoUrl y devuelve la liga. */
 export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
   try {
-    const ctx = await getBarberContext();
-    if (!ctx) return barberUnauthorized();
+    const abierta = await puerta(req, params.id);
+    if (abierta.response) return abierta.response;
+    const barber = abierta.barber as BarberFoto;
 
-    // 1 · Permiso de gestionar barberos + suscripción activa.
-    try {
-      assertBarberPermission(ctx, "barbers.manage");
-      await assertBarberSubscriptionActive(ctx);
-    } catch (e) {
-      if (e instanceof BarberForbiddenError) {
-        return NextResponse.json(
-          { error: "No tienes permiso para cambiar la foto de un barbero.", permission: e.permission },
-          { status: 403 },
-        );
-      }
-      const gate = barberGateErrorPayload(e);
-      if (gate) return NextResponse.json(gate.body, { status: gate.status });
-      throw e;
+    // Cuerpo demasiado grande: se corta ANTES de leerlo entero en memoria.
+    const declarado = Number(req.headers.get("content-length") ?? "");
+    if (Number.isFinite(declarado) && declarado > FOTO_BARBERO_MAX_BODY_BYTES) {
+      return NextResponse.json(
+        { error: "La imagen es demasiado pesada (máximo 4 MB). Súbela desde el navegador, que la comprime sola." },
+        { status: 413 },
+      );
     }
 
-    // 2 · Freno de subidas (por usuario, no por IP ni por barbero).
-    const frenado = await persistentRateLimit(req, {
-      id: `${ctx.barbershopId}:${ctx.barberUserId}`,
-      limit: 15,
-      windowSec: 10 * 60,
-      scope: "barber:barber-photo",
-    });
-    if (frenado) return frenado;
-
-    // 3 · El barbero es de una sede que la sesión alcanza.
-    const ids = await getAccessibleBranchIds(ctx);
-    if (ids.length === 0) return NextResponse.json({ error: "Barbero no encontrado." }, { status: 404 });
-    const barber = await prisma.barber.findFirst({
-      where: { id: params.id, barbershopId: { in: ids } },
-      select: {
-        id: true,
-        barbershopId: true,
-        photoUrl: true,
-        barbershop: { select: { slug: true } },
-      },
-    });
-    if (!barber) return NextResponse.json({ error: "Barbero no encontrado." }, { status: 404 });
-
-    // 4 · El archivo, con las mismas puertas que el logo.
+    // El archivo, con las mismas puertas que el logo.
     let form: FormData;
     try {
       form = await req.formData();
@@ -163,12 +225,20 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
       return NextResponse.json({ error: malo }, { status: 400 });
     }
 
-    // Decodificación real: una firma válida con payload corrupto no entra.
+    // REPROCESAR: decodifica de verdad (una firma válida con payload corrupto
+    // no entra), aplica la orientación EXIF, achica a 1600 px y recodifica en
+    // WebP. sharp NO conserva los metadatos por defecto: el EXIF (con el GPS)
+    // se queda fuera. Lo que se sube es esto, no el archivo original.
+    let procesada: Buffer;
     try {
-      const buf = Buffer.from(bytes);
-      const metadata = await sharp(buf).metadata();
+      const entrada = Buffer.from(bytes);
+      const metadata = await sharp(entrada).metadata();
       if (!metadata.width || !metadata.height) throw new Error("sin dimensiones");
-      await sharp(buf).toBuffer();
+      procesada = await sharp(entrada)
+        .rotate()
+        .resize({ width: FOTO_BARBERO_LADO_MAX, height: FOTO_BARBERO_LADO_MAX, fit: "inside", withoutEnlargement: true })
+        .webp({ quality: 82 })
+        .toBuffer();
     } catch {
       await registrarSubidaRechazada({
         ruta: RUTA,
@@ -182,14 +252,14 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
       );
     }
 
-    // 5 · Subir. La carpeta sale de la FILA del barbero; la extensión, del tipo real.
+    // Subir. La carpeta sale de la FILA del barbero; el tipo, de lo que sharp produjo.
     const carpeta = carpetaFotoBarbero(barber.barbershopId, barber.id);
-    const objeto = `${carpeta}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${extensionFotoBarbero(file.type)}`;
+    const objeto = `${carpeta}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.webp`;
 
     const sb = admin();
     const { error: subida } = await sb.storage
       .from(BUCKETS.CLINIC_PUBLIC)
-      .upload(objeto, bytes, { contentType: file.type, upsert: false });
+      .upload(objeto, procesada, { contentType: "image/webp", upsert: false });
     if (subida) {
       console.error("[barber/team/barbers/photo] falló la subida:", subida);
       return NextResponse.json({ error: "No se pudo subir la foto." }, { status: 500 });
@@ -200,7 +270,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
       return NextResponse.json({ error: "No se pudo generar la liga de la foto." }, { status: 500 });
     }
 
-    // 6 · Guardar. Si la base falla, no se queda un objeto huérfano.
+    // Guardar. Si la base falla, no se queda un objeto huérfano.
     try {
       await prisma.barber.updateMany({
         where: { id: barber.id, barbershopId: barber.barbershopId },
@@ -211,7 +281,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
       throw e;
     }
 
-    // 7 · Quitar la anterior de ESE barbero (best-effort, solo en su carpeta).
+    // Quitar la anterior de ESE barbero (best-effort, solo en su carpeta).
     const anterior = objetoFotoAnterior(barber.photoUrl, BUCKETS.CLINIC_PUBLIC, carpeta);
     if (anterior && anterior !== objeto) {
       try {
@@ -221,15 +291,44 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
       }
     }
 
-    // La mini-web /b/<slug> es ISR: que el barbero nuevo se vea ya.
-    try {
-      if (barber.barbershop?.slug) revalidatePath(rutaWebBarberia(barber.barbershop.slug));
-    } catch {
-      /* fuera de un request de Next (pruebas): no pasa nada */
-    }
-
+    revalidarWeb(barber.barbershop?.slug);
     return NextResponse.json({ photoUrl: pub.publicUrl });
   } catch (err) {
     return barberApiError(err, "team/barbers/[id]/photo:POST");
+  }
+}
+
+/**
+ * DELETE → «Quitar foto»: deja `photoUrl` en null y borra el objeto del bucket
+ * (solo si es de la carpeta de ESE barbero: una liga pegada a mano se limpia
+ * de la ficha pero no hay nada nuestro que borrar). Es idempotente.
+ */
+export async function DELETE(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+  try {
+    const abierta = await puerta(req, params.id);
+    if (abierta.response) return abierta.response;
+    const barber = abierta.barber as BarberFoto;
+
+    // Primero la base (la liga deja de apuntar al archivo) y luego el objeto.
+    await prisma.barber.updateMany({
+      where: { id: barber.id, barbershopId: barber.barbershopId },
+      data: { photoUrl: null },
+    });
+
+    const carpeta = carpetaFotoBarbero(barber.barbershopId, barber.id);
+    const objeto = objetoFotoAnterior(barber.photoUrl, BUCKETS.CLINIC_PUBLIC, carpeta);
+    if (objeto) {
+      try {
+        await admin().storage.from(BUCKETS.CLINIC_PUBLIC).remove([objeto]);
+      } catch (e) {
+        console.warn("[barber/team/barbers/photo] no se pudo borrar el archivo:", e);
+      }
+    }
+
+    revalidarWeb(barber.barbershop?.slug);
+    return NextResponse.json({ photoUrl: null });
+  } catch (err) {
+    return barberApiError(err, "team/barbers/[id]/photo:DELETE");
   }
 }

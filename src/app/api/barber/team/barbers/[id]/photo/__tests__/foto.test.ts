@@ -36,6 +36,8 @@ const st = {
   accessible: ["shopA", "shopB"] as string[],
   barbers: [] as Array<{ id: string; barbershopId: string; photoUrl: string | null; barbershop: { slug: string } }>,
   uploads: [] as string[],
+  /** Lo que de verdad llegó al bucket: los bytes y el content-type. */
+  subido: [] as Array<{ objeto: string; bytes: Buffer; contentType: string | undefined }>,
   removed: [] as string[][],
   updates: [] as Array<{ where: Record<string, unknown>; data: Record<string, unknown> }>,
 };
@@ -52,8 +54,9 @@ const PUBLIC_BASE = "https://x.supabase.co/storage/v1/object/public/clinic-publi
 
 const fakeStorage = {
   from: () => ({
-    upload: async (objeto: string) => {
+    upload: async (objeto: string, bytes: Buffer | ArrayBuffer, opts?: { contentType?: string }) => {
       st.uploads.push(objeto);
+      st.subido.push({ objeto, bytes: Buffer.from(bytes as ArrayBuffer), contentType: opts?.contentType });
       return { error: null };
     },
     getPublicUrl: (objeto: string) => ({ data: { publicUrl: PUBLIC_BASE + objeto } }),
@@ -141,12 +144,13 @@ M._load = function (request: string, parent: unknown, isMain: boolean) {
 };
 
 let POST: (req: NextRequest, ctx: { params: Promise<{ id: string }> }) => Promise<Response>;
+let DELETE: (req: NextRequest, ctx: { params: Promise<{ id: string }> }) => Promise<Response>;
 let png: Buffer;
 
 before(async () => {
   process.env.NEXT_PUBLIC_SUPABASE_URL = "https://x.supabase.co";
   process.env.SUPABASE_SERVICE_ROLE_KEY = "service-role-de-mentira";
-  ({ POST } = await import("../route"));
+  ({ POST, DELETE } = await import("../route"));
   png = await sharp({ create: { width: 64, height: 64, channels: 3, background: "#b0733f" } }).png().toBuffer();
 });
 
@@ -158,6 +162,7 @@ beforeEach(() => {
   st.dbFails = false;
   st.accessible = ["shopA", "shopB"];
   st.uploads = [];
+  st.subido = [];
   st.removed = [];
   st.updates = [];
   st.barbers = [
@@ -187,7 +192,8 @@ test("sube, guarda photoUrl y borra la foto anterior de ESE barbero", async () =
   assert.equal(res.status, 200);
   const body = (await res.json()) as { photoUrl: string };
   assert.equal(st.uploads.length, 1);
-  assert.match(st.uploads[0], /^barber\/shopA\/barberos\/b1\/\d+-[a-z0-9]+\.png$/);
+  // Siempre .webp: lo que se sube es la imagen reprocesada, no el original.
+  assert.match(st.uploads[0], /^barber\/shopA\/barberos\/b1\/\d+-[a-z0-9]+\.webp$/);
   assert.equal(body.photoUrl, PUBLIC_BASE + st.uploads[0]);
   assert.deepEqual(st.updates, [
     { where: { id: "b1", barbershopId: "shopA" }, data: { photoUrl: PUBLIC_BASE + st.uploads[0] } },
@@ -295,6 +301,136 @@ test("si la base falla, el objeto recién subido no se queda huérfano", async (
   assert.equal(res.status, 500);
   assert.equal(st.uploads.length, 1);
   assert.deepEqual(st.removed, [[st.uploads[0]]]);
+});
+
+// ── Lo que se sube es la imagen REPROCESADA (M1) ──────────────────────────
+
+const SECRETO = "UBICACION-GPS-SECRETA";
+
+/** Una foto «de celular»: 3000×1000, con EXIF (descripción) y orientación 6. */
+async function fotoConExif(): Promise<Buffer> {
+  return sharp({ create: { width: 3000, height: 1000, channels: 3, background: "#3366aa" } })
+    .jpeg({ quality: 90 })
+    .withMetadata({ orientation: 6, exif: { IFD0: { ImageDescription: SECRETO } } })
+    .toBuffer();
+}
+
+test("CONTROL: la foto de prueba de verdad trae EXIF con el secreto", async () => {
+  const entrada = await fotoConExif();
+  assert.ok((await sharp(entrada).metadata()).exif, "la entrada no trae EXIF: la prueba no probaría nada");
+  assert.ok(entrada.includes(Buffer.from(SECRETO)), "el secreto no está en los bytes de la entrada");
+});
+
+test("una imagen con EXIF entra y SALE SIN EL (ni el secreto en los bytes)", async () => {
+  const entrada = await fotoConExif();
+  const f = new File([new Uint8Array(entrada)], "IMG_0001.JPG", { type: "image/jpeg" });
+  assert.equal((await pedido("b1", { file: f })).status, 200);
+  assert.equal(st.subido.length, 1);
+  const salida = st.subido[0];
+  assert.equal(salida.contentType, "image/webp");
+  const meta = await sharp(salida.bytes).metadata();
+  assert.equal(meta.format, "webp");
+  assert.equal(meta.exif, undefined, "el EXIF no debe llegar al bucket público");
+  assert.ok(!salida.bytes.includes(Buffer.from(SECRETO)), "el secreto del EXIF llegó al bucket");
+});
+
+test("la orientación EXIF se aplica y la foto se achica a 1600 px máx.", async () => {
+  // 3000×1000 con orientación 6 (girar 90°) = 1000×3000 al derecho → cabe en 1600 → 533×1600.
+  const f = new File([new Uint8Array(await fotoConExif())], "IMG_0002.jpg", { type: "image/jpeg" });
+  assert.equal((await pedido("b1", { file: f })).status, 200);
+  const meta = await sharp(st.subido[0].bytes).metadata();
+  assert.equal(meta.height, 1600);
+  assert.equal(meta.width, 533);
+  assert.equal(meta.orientation, undefined);
+});
+
+test("una foto chica no se agranda", async () => {
+  assert.equal((await pedido("b1", { file: imagen() })).status, 200);
+  const meta = await sharp(st.subido[0].bytes).metadata();
+  assert.equal(meta.width, 64);
+  assert.equal(meta.height, 64);
+});
+
+test("el tipo guardado es el real: un JPEG declarado como PNG se guarda como webp", async () => {
+  const jpeg = await sharp({ create: { width: 40, height: 40, channels: 3, background: "#aa5533" } }).jpeg().toBuffer();
+  const mentira = new File([new Uint8Array(jpeg)], "foto.png", { type: "image/png" });
+  assert.equal((await pedido("b1", { file: mentira })).status, 200);
+  assert.equal(st.subido[0].contentType, "image/webp");
+  assert.match(st.uploads[0], /\.webp$/);
+  assert.equal((await sharp(st.subido[0].bytes).metadata()).format, "webp");
+});
+
+// ── Cuerpo demasiado grande: 413 sin leerlo (M2) ──────────────────────────
+
+test("Content-Length de más de 4,5 MB → 413 y ni siquiera se lee el cuerpo", async () => {
+  let leido = false;
+  const falso = {
+    headers: new Headers({ "content-length": String(6 * 1024 * 1024) }),
+    formData: async () => {
+      leido = true;
+      throw new Error("el cuerpo no debía leerse");
+    },
+  } as unknown as NextRequest;
+  const res = await POST(falso, { params: Promise.resolve({ id: "b1" }) });
+  assert.equal(res.status, 413);
+  assert.equal(leido, false);
+  assert.equal(st.uploads.length, 0);
+});
+
+test("Content-Length razonable sigue pasando", async () => {
+  const f = imagen();
+  const form = new FormData();
+  form.append("file", f);
+  const req = new NextRequest("http://localhost/api/barber/team/barbers/b1/photo", { method: "POST", body: form });
+  assert.equal((await POST(req, { params: Promise.resolve({ id: "b1" }) })).status, 200);
+});
+
+// ── «Quitar foto» borra también el objeto (M3) ────────────────────────────
+
+function quitar(id: string) {
+  const req = new NextRequest(`http://localhost/api/barber/team/barbers/${id}/photo`, { method: "DELETE" });
+  return DELETE(req, { params: Promise.resolve({ id }) });
+}
+
+test("DELETE: deja photoUrl en null y borra el objeto de la carpeta del barbero", async () => {
+  const res = await quitar("b1");
+  assert.equal(res.status, 200);
+  assert.deepEqual(await res.json(), { photoUrl: null });
+  assert.deepEqual(st.updates, [{ where: { id: "b1", barbershopId: "shopA" }, data: { photoUrl: null } }]);
+  assert.deepEqual(st.removed, [["barber/shopA/barberos/b1/vieja.jpg"]]);
+});
+
+test("DELETE de una liga pegada a mano: se limpia la ficha y NO se borra nada del bucket", async () => {
+  assert.equal((await quitar("b2")).status, 200);
+  assert.deepEqual(st.updates, [{ where: { id: "b2", barbershopId: "shopB" }, data: { photoUrl: null } }]);
+  assert.deepEqual(st.removed, []);
+});
+
+test("DELETE nunca borra un objeto de otra carpeta aunque photoUrl lo apunte", async () => {
+  st.barbers[0].photoUrl = `${PUBLIC_BASE}barber/shopA/logo/logo.webp`;
+  assert.equal((await quitar("b1")).status, 200);
+  assert.deepEqual(st.removed, []);
+  st.barbers[0].photoUrl = `${PUBLIC_BASE}barber/shopA/barberos/b2/ajena.webp`;
+  assert.equal((await quitar("b1")).status, 200);
+  assert.deepEqual(st.removed, []);
+});
+
+test("DELETE: mismas puertas — 401, 403, 402, 429 y barbero ajeno 404, sin tocar nada", async () => {
+  st.session = false;
+  assert.equal((await quitar("b1")).status, 401);
+  st.session = true;
+  st.allowed = false;
+  assert.equal((await quitar("b1")).status, 403);
+  st.allowed = true;
+  st.paid = false;
+  assert.equal((await quitar("b1")).status, 402);
+  st.paid = true;
+  st.limited = true;
+  assert.equal((await quitar("b1")).status, 429);
+  st.limited = false;
+  assert.equal((await quitar("b9")).status, 404);
+  assert.equal(st.updates.length, 0);
+  assert.equal(st.removed.length, 0);
 });
 
 // ── La pieza pura: qué objeto se puede borrar ─────────────────────────────

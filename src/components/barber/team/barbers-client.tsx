@@ -133,6 +133,9 @@ export function BarbersClient({
   const fileRef = useRef<HTMLInputElement | null>(null);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  // «Quitar foto» en un barbero que ya existe: al guardar, el servidor borra
+  // también el archivo del bucket (no basta con vaciar la liga de la ficha).
+  const [photoRemoved, setPhotoRemoved] = useState(false);
 
   // La vista previa es una URL de objeto: se suelta al cambiarla y al salir.
   useEffect(() => {
@@ -144,6 +147,7 @@ export function BarbersClient({
   function openForm(next: FormState | null) {
     setPhotoFile(null);
     setPhotoPreview(null);
+    setPhotoRemoved(false);
     setForm(next);
   }
 
@@ -161,6 +165,7 @@ export function BarbersClient({
   function removePhoto() {
     setPhotoFile(null);
     setPhotoPreview(null);
+    if (form?.id && form.photoUrl) setPhotoRemoved(true);
     patch({ photoUrl: "" });
   }
 
@@ -179,6 +184,16 @@ export function BarbersClient({
     };
     const ok = await run(async () => {
       let saved: BarberProfileRow;
+      // Primero se borra el archivo (el servidor lo lee de la ficha): si se
+      // vaciara photoUrl antes, ya no sabría cuál objeto quitar del bucket.
+      if (form.id && photoRemoved) {
+        const res = await fetch(`/api/barber/team/barbers/${form.id}/photo`, { method: "DELETE" });
+        if (!res.ok) {
+          const data = (await res.json().catch(() => ({}))) as { error?: string };
+          throw new Error(data.error || t("common.genericError"));
+        }
+        setPhotoRemoved(false);
+      }
       if (form.id) {
         const { barber } = await apiCall<{ barber: BarberProfileRow }>(
           `/api/barber/team/barbers/${form.id}`,
