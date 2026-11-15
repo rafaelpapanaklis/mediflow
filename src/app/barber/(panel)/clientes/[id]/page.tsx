@@ -1,3 +1,4 @@
+import "@/components/barber/cash/money.css";
 import { notFound, redirect } from "next/navigation";
 import { getBarberContext, hasBarberPermission } from "@/lib/barber-auth";
 import { requireBarberPaidAccess } from "@/lib/barber/paid-access";
@@ -93,6 +94,8 @@ export default async function Page(props: { params: Promise<{ id: string }> }) {
       sales={sales?.allowed ? sales : null}
       cobrosDict={cobrosDict}
       canPrintSales={hasBarberPermission(permUser, "cash.view")}
+      canCharge={plan.features.cash === true && hasBarberPermission(permUser, "cash.manage")}
+      cajaDict={((getBarberDict(locale).barber as Dictionary).caja ?? {}) as Dictionary}
     />
   );
 }

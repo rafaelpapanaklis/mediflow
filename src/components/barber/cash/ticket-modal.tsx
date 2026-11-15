@@ -65,6 +65,7 @@ export function TicketModal({
   locale = "es",
   checkout,
   appointment,
+  initialClient = null,
   tz,
   onClose,
   onCharged,
@@ -75,6 +76,8 @@ export function TicketModal({
   locale?: string;
   checkout: CheckoutContext;
   appointment: PendingAppointment | null;
+  /** Cliente ya puesto (el «Nuevo cobro» de su ficha). */
+  initialClient?: ClientLookup | null;
   tz: string;
   onClose: () => void;
   onCharged: (sale: SaleRow) => void;
@@ -86,7 +89,7 @@ export function TicketModal({
   const [barberId, setBarberId] = useState<string>(
     appointment?.barberId ?? (checkout.barbers.length === 1 ? checkout.barbers[0].id : ""),
   );
-  const [client, setClient] = useState<ClientLookup | null>(appointment?.client ?? null);
+  const [client, setClient] = useState<ClientLookup | null>(appointment?.client ?? initialClient);
   const [query, setQuery] = useState("");
   const [suggestions, setSuggestions] = useState<ClientLookup[]>([]);
   const [lines, setLines] = useState<Line[]>(() =>
@@ -104,6 +107,8 @@ export function TicketModal({
   const [addServiceId, setAddServiceId] = useState("");
   const [addProductId, setAddProductId] = useState("");
   const [discountText, setDiscountText] = useState("");
+  // Descuento en pesos o en %: el servidor hace la MISMA cuenta (createSale).
+  const [discountMode, setDiscountMode] = useState<"amount" | "pct">("amount");
   const [tipMode, setTipMode] = useState<TipMode>({ kind: "none" });
   const [tipText, setTipText] = useState("");
   const [method, setMethod] = useState<BarberPaymentMethod>("CASH");
@@ -183,7 +188,10 @@ export function TicketModal({
     else if (bonus?.kind === "percent") bonusOff = Math.round((gross * (bonus.percent ?? 0)) / 100);
     const grossAfterBonus = gross - bonusOff;
     const discountParsed = parseAmountText(discountText);
-    const discount = Math.min(discountParsed === null ? 0 : toCents(discountParsed), grossAfterBonus);
+    const pctInvalid = discountMode === "pct" && discountParsed !== null && discountParsed > 100;
+    const discount = discountMode === "pct"
+      ? Math.round((grossAfterBonus * (discountParsed ?? 0)) / 100)
+      : Math.min(discountParsed === null ? 0 : toCents(discountParsed), grossAfterBonus);
     // Lo que vale el servicio ya con descuento: base de la propina en %.
     const due = grossAfterBonus - discount;
     const deposit = Math.min(depositPaidCents, due);
@@ -195,8 +203,8 @@ export function TicketModal({
       const p = parseAmountText(tipText);
       tip = p === null ? 0 : toCents(p);
     }
-    return { gross, bonusOff, discount, deposit, depositRest: depositPaidCents - deposit, subtotal, tip, total: subtotal + tip, discountInvalid: discountParsed === null };
-  }, [lines, loyaltyKey, membershipKey, discountText, tipMode, tipText, depositPaidCents, bonus]);
+    return { gross, bonusOff, discount, deposit, depositRest: depositPaidCents - deposit, subtotal, tip, total: subtotal + tip, discountInvalid: discountParsed === null || pctInvalid };
+  }, [lines, loyaltyKey, membershipKey, discountText, discountMode, tipMode, tipText, depositPaidCents, bonus]);
 
   function addService() {
     const s = checkout.services.find((x) => x.id === addServiceId);
@@ -242,7 +250,9 @@ export function TicketModal({
         clientId: client?.id ?? null,
         barberId: barberId || null,
         items: lines.map((l) => ({ kind: l.kind, id: l.id, qty: l.qty })),
-        discount: fromCents(totals.discount),
+        // En % viaja el porcentaje: el servidor lo convierte con su redondeo.
+        discount: discountMode === "amount" ? fromCents(totals.discount) : null,
+        discountPct: discountMode === "pct" && totals.discount > 0 ? discountText.trim() : null,
         tip: fromCents(totals.tip),
         paymentMethod: method,
         redeemBonusId: bonus ? bonus.id : null,
@@ -576,9 +586,32 @@ export function TicketModal({
         <div className="bcaja-form__grid">
           {/* Descuento */}
           <div className="field-new">
-            <label className="field-new__label">{t("ticket.discount")}</label>
-            <input className="input-new" inputMode="decimal" value={discountText} onChange={(e) => setDiscountText(e.target.value)} placeholder="0.00" />
-            <div className="bcaja-hint">{t("ticket.discountHint")}</div>
+            <label className="field-new__label" htmlFor="ticket-discount">{t("ticket.discount")}</label>
+            <div style={{ display: "flex", gap: 6 }}>
+              <div className="bcaja-seg" role="radiogroup" aria-label={t("ticket.discountMode")} style={{ flex: "0 0 auto" }}>
+                {(["amount", "pct"] as const).map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    role="radio"
+                    aria-checked={discountMode === m}
+                    className={`bcaja-seg__btn ${discountMode === m ? "bcaja-seg__btn--on" : ""}`}
+                    onClick={() => setDiscountMode(m)}
+                    data-descuento={m}
+                  >
+                    {m === "amount" ? "$" : "%"}
+                  </button>
+                ))}
+              </div>
+              <input id="ticket-discount" className="input-new" inputMode="decimal" value={discountText} onChange={(e) => setDiscountText(e.target.value)} placeholder={discountMode === "pct" ? "10" : "0.00"} />
+            </div>
+            <div className="bcaja-hint">
+              {discountMode === "pct" && totals.discount > 0
+                ? t("ticket.discountPctEquals", { amount: fmtMoney(fromCents(totals.discount)) })
+                : discountMode === "pct"
+                  ? t("ticket.discountPctHint")
+                  : t("ticket.discountHint")}
+            </div>
           </div>
 
           {/* Propina */}

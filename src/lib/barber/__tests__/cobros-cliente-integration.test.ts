@@ -239,3 +239,58 @@ test("1 · la clasificación de líneas: servicio gratis por bono, bono, anticip
   })();
 });
 
+
+// ── 2. Nuevo cobro desde la ficha = el mismo createSale ─────────────────
+
+const cajaError = (code: string) => (e: unknown) => e instanceof caja.BarberCajaError && e.code === code;
+
+test("2 · descuento en %: se convierte a pesos en el servidor, en la misma línea «Descuento» y con el mismo tope", { skip }, async () => {
+  const pepe = await newClient(A, "Pepe");
+  const diez = await charge(A, pepe, { discountPct: "10" });
+  assert.equal(diez.total, 180, "10% de $200");
+  assert.deepEqual(diez.items.map((i) => [i.description, i.unitPrice]), [["Corte", 200], ["Descuento", -20]]);
+
+  // Sobre servicio + producto, con decimales: 12.5% de $350 = $43.75.
+  const mixto = await charge(A, pepe, { items: [{ kind: "service", id: A.serviceId }, { kind: "product", id: A.productId }], discountPct: 12.5 });
+  assert.equal(mixto.total, 306.25);
+
+  // 100% deja el ticket en $0, nunca negativo; la propina se cobra aparte.
+  const todo = await charge(A, pepe, { discountPct: "100", tip: 20 });
+  assert.equal(todo.subtotal, 0);
+  assert.equal(todo.total, 20);
+
+  await assert.rejects(charge(A, pepe, { discountPct: "10", discount: 5 }), cajaError("DISCOUNT_BOTH"));
+  await assert.rejects(charge(A, pepe, { discountPct: "0" }), cajaError("INVALID_INPUT"));
+  await assert.rejects(charge(A, pepe, { discountPct: "100.01" }), cajaError("INVALID_INPUT"));
+  await assert.rejects(charge(A, pepe, { discountPct: "diez" }), cajaError("INVALID_INPUT"));
+  await assert.rejects(charge(A, pepe, { discountPct: "10.555" }), cajaError("INVALID_INPUT"));
+});
+
+test("2 · el cobro de la ficha es un ticket de Caja: entra al turno abierto y a los cobros del cliente", { skip }, async () => {
+  const luz = await newClient(A, "Luz");
+  const hit = await cash.getClientLookup(A.ctx, luz);
+  assert.equal(hit?.id, luz, "la ficha pide al cliente por id, ya listo para el ticket");
+  const sale = await charge(A, luz, { clientId: hit!.id, paymentMethod: "SPEI" });
+  const state = await cash.getCashState(A.ctx);
+  assert.ok(state.open?.sales.some((x) => x.id === sale.id), "está en el corte del turno abierto");
+  assert.equal(state.open?.byMethod.SPEI.total, sale.total);
+  const page = await sales.listClientSales(A.ctx, luz);
+  assert.equal(page.rows[0].id, sale.id, "y en el historial del cliente");
+  const commission = await prisma.barberCommissionEntry.findFirst({ where: { saleId: sale.id } });
+  assert.ok(commission, "y en comisiones");
+});
+
+test("2 · cliente para el cobro: de esta barbería, no bloqueado, y el Barbero solo uno suyo", { skip }, async () => {
+  const moi = await newClient(A, "Moi");
+  assert.equal(await cash.getClientLookup(B.ctx, moi), null, "otra barbería: no");
+  await prisma.barberClient.update({ where: { id: moi }, data: { blockedAt: new Date() } });
+  assert.equal(await cash.getClientLookup(A.ctx, moi), null, "bloqueado: no se le cobra");
+  await prisma.barberClient.update({ where: { id: moi }, data: { blockedAt: null } });
+
+  const beto = await staff(A, "BARBER", { barberId: A.barberId });
+  await assert.rejects(cash.getClientLookup(beto, moi), (e: unknown) => e instanceof BarberForbiddenError, "sin caja, no");
+  const betoCaja = await staff(A, "BARBER", { barberId: A.barberId, override: ["clients.view", "cash.view", "cash.manage"] });
+  assert.equal(await cash.getClientLookup(betoCaja, moi), null, "con caja por permiso personal: solo sus clientes");
+  await charge(A, moi);
+  assert.equal((await cash.getClientLookup(betoCaja, moi))?.id, moi, "ya lo atendió: ahora sí");
+});
