@@ -11,6 +11,7 @@
  * ajenos (dental / T4), la idempotencia de aplicar la misma suscripción dos
  * veces, el veto de tier del prorrateo y el contrato con Stripe.
  */
+import "./_sin-server-only";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -272,22 +273,33 @@ test("una suscripción sin marca barber (dental) no se aplica nunca", async () =
 });
 
 // ── Webhook: filtro de eventos + reenvío ─────────────────────────────────
-test("solo checkout.session.* y customer.subscription.* son nuestros (payment_intent.* es de T4)", () => {
+test("checkout.session.*, customer.subscription.* e invoice.* son nuestros (payment_intent.* es de T4)", () => {
   assert.equal(isBarberWebhookEventType("checkout.session.completed"), true);
   assert.equal(isBarberWebhookEventType("customer.subscription.updated"), true);
   assert.equal(isBarberWebhookEventType("payment_intent.succeeded"), false);
-  assert.equal(isBarberWebhookEventType("invoice.paid"), false);
+  // Desde el registro de cobros (ws6-t6): las facturas también.
+  assert.equal(isBarberWebhookEventType("invoice.paid"), true);
 });
+
+/** Doble de Stripe: el webhook RELEE sesión, suscripción y factura por la API. */
+function stripeDoble(o: { session?: unknown; sub?: () => unknown; invoice?: unknown }) {
+  const falta = () => {
+    throw Object.assign(new Error("No such object"), { code: "resource_missing" });
+  };
+  return {
+    subscriptions: { async retrieve() { return o.sub ? o.sub() : falta(); } },
+    invoices: { async retrieve() { return o.invoice ?? falta(); } },
+    checkout: { sessions: { async retrieve() { return o.session ?? falta(); } } },
+  };
+}
 
 test("handleBarberStripeEvent: reenviar el mismo checkout.session.completed dos veces converge sin duplicar", async () => {
   const { db, writes } = fakeDb([{ id: "shop_root", stripeCustomerId: "cus_1", stripeSubscriptionId: null }]);
   let retrieves = 0;
-  const stripe = { subscriptions: { async retrieve() { retrieves += 1; return stripeSub(); } } };
-  const event = {
-    id: "evt_1",
-    type: "checkout.session.completed",
-    data: { object: { id: "cs_1", mode: "subscription", metadata: { dc_kind: "barber-subscription", barbershopId: "shop_root" }, subscription: "sub_A" } },
-  };
+  const session = { id: "cs_1", mode: "subscription", metadata: { dc_kind: "barber-subscription", barbershopId: "shop_root" }, subscription: "sub_A" };
+  const stripe = stripeDoble({ session, sub: () => { retrieves += 1; return stripeSub(); } });
+  // Del evento solo se usa el id de la sesión: lo demás se relee.
+  const event = { id: "evt_1", type: "checkout.session.completed", data: { object: { id: "cs_1" } } };
   const a = await handleBarberStripeEvent(stripe, db, event);
   const b = await handleBarberStripeEvent(stripe, db, event);
   assert.equal(a.handled, true);
@@ -299,9 +311,13 @@ test("handleBarberStripeEvent: reenviar el mismo checkout.session.completed dos 
 
 test("handleBarberStripeEvent ignora sesiones ajenas (dental, sin dc_kind) y suscripciones sin marca", async () => {
   const { db, writes } = fakeDb([{ id: "shop_root", stripeCustomerId: "cus_1", stripeSubscriptionId: null }]);
-  const stripe = { subscriptions: { async retrieve() { throw new Error("no debe llamarse"); } } };
-  const dentalCheckout = { id: "evt_d", type: "checkout.session.completed", data: { object: { id: "cs_d", metadata: { kind: "platform-subscription", clinicId: "c1" }, subscription: "sub_d" } } };
-  const dentalSub = { id: "evt_s", type: "customer.subscription.updated", data: { object: { id: "sub_d", status: "active", customer: "cus_1", metadata: { clinicId: "c1" }, items: { data: [{ price: { metadata: { plan: "PRO" } } }] } } } };
+  // Misma cuenta de Stripe: lo releído del dental no lleva la marca de barber.
+  const stripe = stripeDoble({
+    session: { id: "cs_d", metadata: { kind: "platform-subscription", clinicId: "c1" }, subscription: "sub_d" },
+    sub: () => ({ id: "sub_d", status: "active", customer: "cus_1", metadata: { clinicId: "c1" }, items: { data: [{ price: { metadata: { plan: "PRO" } } }] } }),
+  });
+  const dentalCheckout = { id: "evt_d", type: "checkout.session.completed", data: { object: { id: "cs_d" } } };
+  const dentalSub = { id: "evt_s", type: "customer.subscription.updated", data: { object: { id: "sub_d" } } };
   const t4 = { id: "evt_pi", type: "payment_intent.succeeded", data: { object: { id: "pi_1" } } };
   for (const ev of [dentalCheckout, dentalSub, t4]) {
     const r = await handleBarberStripeEvent(stripe, db, ev);
@@ -312,7 +328,7 @@ test("handleBarberStripeEvent ignora sesiones ajenas (dental, sin dc_kind) y sus
 
 test("customer.subscription.deleted relee la suscripción y deja 'canceled' en matriz y sucursales", async () => {
   const { db, writes } = fakeDb([{ id: "shop_root", stripeCustomerId: "cus_1", stripeSubscriptionId: "sub_A" }]);
-  const stripe = { subscriptions: { async retrieve() { return stripeSub({ status: "canceled" }); } } };
+  const stripe = stripeDoble({ sub: () => stripeSub({ status: "canceled" }) });
   const r = await handleBarberStripeEvent(stripe, db, { id: "evt_del", type: "customer.subscription.deleted", data: { object: stripeSub({ status: "canceled" }) } });
   assert.equal(r.handled, true);
   assert.equal(writes[0].args.data.subscriptionStatus, "canceled");

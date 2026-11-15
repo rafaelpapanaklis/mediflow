@@ -26,6 +26,8 @@ let webhookPOST: typeof import("@/app/api/barber/stripe/webhook/route")["POST"];
 let marcarReactivacionManualBarber: typeof import("@/lib/barber/cobros")["marcarReactivacionManualBarber"];
 
 const subs = new Map<string, any>();
+const invoices = new Map<string, any>();
+const sesiones = new Map<string, any>();
 const DIA = 24 * 3600 * 1000;
 
 const creadas: string[] = [];
@@ -101,8 +103,16 @@ before(async () => {
   const stripe = getBarberStripe() as any;
   stripe.webhooks.constructEvent = (raw: string) => JSON.parse(raw);
   stripe.subscriptions.retrieve = async (id: string) => subs.get(id);
-  stripe.invoices.retrieve = async () => {
-    throw new Error("sin factura viva: se usa el payload");
+  // El webhook RELEE la factura y la sesión por la API: del evento solo usa el id.
+  stripe.invoices.retrieve = async (id: string) => {
+    const inv = invoices.get(id);
+    if (!inv) throw Object.assign(new Error("No such invoice"), { code: "resource_missing" });
+    return inv;
+  };
+  stripe.checkout.sessions.retrieve = async (id: string) => {
+    const s = sesiones.get(id);
+    if (!s) throw Object.assign(new Error("No such checkout session"), { code: "resource_missing" });
+    return s;
   };
 });
 
@@ -222,7 +232,7 @@ test("Stripe dice «active» pero NO renovó (su periodo es el vencido): no reab
 
   // Paga la factura del periodo nuevo (la misma suscripción, el mismo plan).
   const ahora = Math.floor(Date.now() / 1000);
-  const r = await evento("invoice.paid", {
+  const factura = {
     id: `in_${randomUUID()}`,
     status: "paid",
     customer: matriz.stripeCustomerId,
@@ -232,7 +242,9 @@ test("Stripe dice «active» pero NO renovó (su periodo es el vencido): no reab
     currency: "mxn",
     status_transitions: { paid_at: ahora },
     lines: { data: [{ amount: 74900, period: { start: ahora - 3600, end: ahora + 30 * 86400 }, price: sub.items.data[0].price }] },
-  });
+  };
+  invoices.set(factura.id, factura);
+  const r = await evento("invoice.paid", { id: factura.id, object: "invoice" });
   assert.equal(r.status, 200);
   assert.deepEqual(await estados(matriz.id, sede.id), ["active", "active"]);
   assert.equal(await hasBarberPaidAccess(ctxDe({ ...matriz, subscriptionStatus: "active" })), true);
@@ -288,12 +300,14 @@ test("checkout de reactivación: la suscripción NUEVA abre al confirmarse, sin 
   await cobro(matriz.id, new Date(Date.now() - 60 * DIA));
   const nueva = subViva(matriz, `sub_${RUN}_reactiva`, "active", new Date(Date.now() + 30 * DIA));
 
-  const r = await evento("checkout.session.completed", {
+  const sesion = {
     id: `cs_${randomUUID()}`,
     mode: "subscription",
     metadata: { dc_kind: "barber-subscription", barbershopId: matriz.id },
     subscription: nueva.id,
-  });
+  };
+  sesiones.set(sesion.id, sesion);
+  const r = await evento("checkout.session.completed", { id: sesion.id, object: "checkout.session" });
   assert.equal(r.status, 200);
   assert.deepEqual(await estados(matriz.id, sede.id), ["active", "active"]);
   assert.equal(await hasBarberPaidAccess(ctxDe({ ...matriz, subscriptionStatus: "active" })), true);

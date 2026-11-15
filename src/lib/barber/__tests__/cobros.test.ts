@@ -255,3 +255,55 @@ test("un cobro vigente con la barbería sin acceso (past_due, suspendida) no sum
     assert.equal(clasificarCobro({ id: "x", subscriptionStatus: st, stripeSubscriptionId: "sub_x" }, cobros), "sin_pagar");
   }
 });
+
+// ── Forma de las versiones NUEVAS de la API (2025-03-31.basil en adelante,
+//    p. ej. 2026-05-27.dahlia): por si se sube la versión fijada del cliente.
+
+test("factura forma dahlia: la suscripción en parent.subscription_details, la línea sin price", () => {
+  const inv: InvoiceLike = {
+    id: "in_dahlia",
+    status: "paid",
+    customer: "cus_1",
+    parent: { subscription_details: { subscription: "sub_1", metadata: { dc_vertical: "barber", dc_kind: "barber-subscription", barbershopId: "shop_1", dc_plan: "AVANZADO", dc_interval: "year" } } },
+    amount_paid: 329000,
+    currency: "mxn",
+    status_transitions: { paid_at: s("2026-12-14T17:00:00Z") },
+    lines: {
+      data: [
+        {
+          amount: 329000,
+          period: { start: s("2026-12-14T16:00:00Z"), end: s("2027-12-14T16:00:00Z") },
+          pricing: { price_details: { price: "price_avz_y" } },
+        },
+      ],
+    },
+  };
+  assert.equal(esFacturaBarber(inv), true);
+  const c = leerCobroDeFactura(inv, "invoice.paid")!;
+  assert.deepEqual(
+    [c.subscriptionId, c.amountCents, c.planId, c.interval, c.periodEnd?.toISOString()],
+    ["sub_1", 329000, "AVANZADO", "year", "2027-12-14T16:00:00.000Z"],
+  );
+  // La del dental en esa misma forma: sin marca de barber → no pasa.
+  assert.equal(
+    esFacturaBarber({ ...inv, parent: { subscription_details: { subscription: "sub_d", metadata: { clinicId: "c1" } } } }),
+    false,
+  );
+});
+
+test("suscripción forma dahlia: current_period_end en los items", () => {
+  const t = terminosDeSuscripcion({
+    id: "sub_1",
+    status: "active",
+    items: { data: [{ quantity: 1, current_period_end: s("2027-01-14T16:00:00Z"), price: { unit_amount: 74900, currency: "mxn", recurring: { interval: "month" }, metadata: { dc_plan: "PROFESIONAL" } } }] },
+  });
+  assert.equal(t.currentPeriodEnd?.toISOString(), "2027-01-14T16:00:00.000Z");
+  const viejo = terminosDeSuscripcion({
+    id: "sub_1",
+    status: "active",
+    current_period_end: s("2027-01-14T16:00:00Z"),
+    items: { data: [{ quantity: 1, price: { unit_amount: 74900, currency: "mxn", recurring: { interval: "month" } } }] },
+  });
+  assert.equal(viejo.currentPeriodEnd?.toISOString(), "2027-01-14T16:00:00.000Z");
+});
+
