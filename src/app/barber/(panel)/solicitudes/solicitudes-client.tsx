@@ -205,6 +205,11 @@ export function SolicitudesClient({
                         ? t("barber.reserva.solicitudes.clienteVisitas", { n: r.clientVisits })
                         : t("barber.reserva.solicitudes.clienteNuevo")}
                     </span>
+                    <span style={{ ...PILL, marginLeft: 6 }} data-origen={r.source}>
+                      {r.source === "WHATSAPP"
+                        ? t("barber.reserva.solicitudes.origenWhatsapp")
+                        : t("barber.reserva.solicitudes.origenWeb")}
+                    </span>
                   </p>
                   <p style={{ fontSize: 13.5, color: "var(--text-2)", margin: "4px 0 0", textTransform: "capitalize" }}>
                     {fmtWhen(r.startAt)}

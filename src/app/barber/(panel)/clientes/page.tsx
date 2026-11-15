@@ -5,6 +5,7 @@ import { getBarberPlan } from "@/lib/barber/plans";
 import { getBarberDict, getBarberT, resolveBarberLocale } from "@/i18n/dictionaries/barber";
 import type { Dictionary } from "@/i18n/t";
 import { listBarberClients } from "@/lib/barber/clients";
+import { clientsViewScope, scopeUserFromCtx } from "@/lib/barber/own-visits";
 import { BarberClientsScreen } from "@/components/barber/clients/clients-screen";
 
 export const dynamic = "force-dynamic";
@@ -34,7 +35,13 @@ export default async function Page() {
   if (!hasBarberPermission(permUser, "clients.view")) {
     return <Notice text={t("barber.clientes.errors.noPermission")} />;
   }
+  // Rol Barbero sin su ficha ligada: no ve clientes de nadie (G1).
+  if (clientsViewScope(scopeUserFromCtx(ctx)).kind === "none") {
+    return <Notice text={t("barber.clientes.errors.notLinked")} />;
+  }
 
+  // El rol Barbero recibe SOLO sus clientes: el recorte va dentro de
+  // listBarberClients, igual para esta carga que para la API.
   const initial = await listBarberClients(ctx, { filter: "all", page: 1 });
 
   return (

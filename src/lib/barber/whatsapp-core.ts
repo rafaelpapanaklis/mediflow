@@ -60,6 +60,30 @@ export type BarberWaConnectionState =
   | "NO_PAYMENT_METHOD"
   | "ERROR";
 
+/**
+ * Estados en los que el número PUEDE contestar, o sea en los que la pantalla
+ * del bot deja encenderlo. Lista CERRADA: un estado nuevo queda fuera hasta
+ * que alguien decida meterlo.
+ *   · CONNECTED / UNVERIFIED — UNVERIFIED es «conectado, sin verificación de
+ *     negocio», que NO es un problema (antes dejaba el interruptor bloqueado).
+ *   · NO_PAYMENT_METHOD — el bot contesta con texto libre dentro de la ventana
+ *     de 24 h, que Meta no cobra, y el envío (replyInline) no lo frena antes
+ *     de llamar a Meta: solo exige número y token.
+ * Fuera: DISCONNECTED y ERROR (token vencido o rechazado: el número está
+ * guardado pero no puede mandar nada). En ERROR la pantalla vuelve a «sin
+ * conectar» y la de WhatsApp enseña el aviso rojo con el porqué.
+ */
+export const BARBER_WA_CAN_REPLY_STATES: readonly BarberWaConnectionState[] = [
+  "CONNECTED",
+  "UNVERIFIED",
+  "NO_PAYMENT_METHOD",
+];
+
+/** ¿El número puede contestar? (ver BARBER_WA_CAN_REPLY_STATES) */
+export function isBarberWaLinked(state: BarberWaConnectionState): boolean {
+  return BARBER_WA_CAN_REPLY_STATES.includes(state);
+}
+
 export interface BarberWaConnectionDTO {
   state: BarberWaConnectionState;
   /** Modo de envío guardado en la barbería. */
@@ -1012,12 +1036,18 @@ export function decideBarberReminderReply(
 /**
  * Orígenes cuya cita PENDIENTE es una SOLICITUD que la barbería tiene que
  * aceptar o rechazar (pantalla Solicitudes), no una visita por confirmar.
- * Hoy solo la reserva en línea: es exactamente lo que filtra
- * listBookingRequests() en booking.ts (`source: "PUBLIC"`). Si Solicitudes
- * empieza a incluir las que agenda el bot, se añade "WHATSAPP" AQUÍ y los
- * recordatorios y el «CONFIRMAR» las dejan fuera sin tocar nada más.
+ * La reserva en línea (PUBLIC) y la que agenda el bot (WHATSAPP): con la
+ * política manual las dos nacen PENDIENTES y el bot le dice al cliente
+ * «falta que la barbería la confirme». Es el ÚNICO criterio: lo usan
+ * listBookingRequests() y resolveBookingRequest() en booking.ts, los
+ * recordatorios y el «CONFIRMAR» del cliente. Con la automática nacen
+ * CONFIRMED y no son solicitudes.
+ *
+ * Ojo: el tope diario de teléfonos nuevos y la validación de nombre y
+ * teléfono son SOLO de la web (`fromWeb` en createPublicBooking); esto no
+ * los extiende al bot.
  */
-export const BARBER_REQUEST_SOURCES: readonly string[] = ["PUBLIC"];
+export const BARBER_REQUEST_SOURCES: readonly ("PUBLIC" | "WHATSAPP")[] = ["PUBLIC", "WHATSAPP"];
 
 /**
  * ¿Esta cita es una solicitud que la barbería aún no acepta?
@@ -1028,7 +1058,7 @@ export const BARBER_REQUEST_SOURCES: readonly string[] = ["PUBLIC"];
  * confirma: confirmarla es decisión de la barbería.
  */
 export function isBarberUnacceptedRequest(appt: { status: string; source: string }): boolean {
-  return appt.status === "PENDING" && BARBER_REQUEST_SOURCES.includes(appt.source);
+  return appt.status === "PENDING" && (BARBER_REQUEST_SOURCES as readonly string[]).includes(appt.source);
 }
 
 /**

@@ -277,7 +277,12 @@ test("la agenda le dice a la pantalla de quién son «sus» visitas (y a nadie m
   assert.equal(b.edit, false);
   assert.equal(b.advanceOwnBarberId, uno);
   assert.equal(b.cash, false);
-  assert.equal((await can(barberoSuelto)).advanceOwnBarberId, null);
+  // Sin ficha ligada ya no recibe la agenda (G1 de la ronda 6: ve solo lo
+  // suyo, y no tiene nada suyo): 403 con el motivo.
+  session = barberoSuelto;
+  const suelto = await listRoute.GET(new Request("http://localhost/api/barber/appointments"));
+  assert.equal(suelto.status, 403);
+  assert.equal(((await suelto.json()) as { code: string }).code, "BARBER_NOT_LINKED");
   const r = await can(reception);
   assert.equal(r.edit, true);
   assert.equal(r.advanceOwnBarberId, null, "quien edita la agenda no necesita esta puerta");

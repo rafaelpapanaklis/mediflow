@@ -40,6 +40,9 @@ import {
   type PublicBarbershopDTO,
   type BusyInterval,
 } from "@/lib/barber/booking-core";
+// Qué es una «solicitud»: PENDIENTE con origen web (PUBLIC) o bot (WHATSAPP).
+// Mismo criterio que los recordatorios y el «CONFIRMAR» del cliente.
+import { BARBER_REQUEST_SOURCES } from "@/lib/barber/whatsapp-core";
 
 /**
  * El núcleo PURO (parámetros del embudo, zona horaria, rejilla de huecos,
@@ -1083,6 +1086,8 @@ export interface BarberBookingRequestDTO {
   endAt: string;
   status: "PENDING" | "CONFIRMED" | "CANCELLED" | "NO_SHOW" | "IN_PROGRESS" | "DONE";
   createdAt: string;
+  /** De dónde vino: la página de reservas (PUBLIC) o el bot (WHATSAPP). */
+  source: "PUBLIC" | "WHATSAPP";
   services: { name: string; price: number }[];
   total: number;
   notes: string | null;
@@ -1111,7 +1116,7 @@ export async function listBookingRequests(args: {
   const rows = await prisma.barberAppointment.findMany({
     where: {
       barbershopId: { in: barbershopIds },
-      source: "PUBLIC",
+      source: { in: [...BARBER_REQUEST_SOURCES] },
       ...(scope === "pendientes"
         ? { status: "PENDING" }
         : { status: { not: "PENDING" } }),
@@ -1119,7 +1124,7 @@ export async function listBookingRequests(args: {
     select: {
       id: true, barbershopId: true, clientName: true, clientPhone: true,
       barberId: true, startAt: true, endAt: true, status: true,
-      createdAt: true, notes: true,
+      createdAt: true, notes: true, source: true,
       barbershop: { select: { name: true, branchName: true } },
       barber: { select: { name: true, nickname: true } },
       client: { select: { totalVisits: true } },
@@ -1147,6 +1152,7 @@ export async function listBookingRequests(args: {
       endAt: r.endAt.toISOString(),
       status: r.status,
       createdAt: r.createdAt.toISOString(),
+      source: r.source === "WHATSAPP" ? "WHATSAPP" : "PUBLIC",
       services,
       total: sumMoneyBy(services, (s) => s.price),
       notes: r.notes,
@@ -1192,7 +1198,7 @@ export async function resolveBookingRequest(args: {
   const target = action === "aceptar" ? "CONFIRMED" : "CANCELLED";
 
   const current = await prisma.barberAppointment.findFirst({
-    where: { id: appointmentId, barbershopId: { in: barbershopIds }, source: "PUBLIC" },
+    where: { id: appointmentId, barbershopId: { in: barbershopIds }, source: { in: [...BARBER_REQUEST_SOURCES] } },
     select: {
       id: true,
       status: true,
@@ -1209,7 +1215,7 @@ export async function resolveBookingRequest(args: {
     where: {
       id: appointmentId,
       barbershopId: { in: barbershopIds },
-      source: "PUBLIC",
+      source: { in: [...BARBER_REQUEST_SOURCES] },
       status: "PENDING",
     },
     data: { status: target },
@@ -1219,6 +1225,9 @@ export async function resolveBookingRequest(args: {
   // El aviso al cliente sale DESPUÉS de cambiar el estado y nunca tumba la
   // acción: la barbería ya decidió; un mensaje que no se encola se ve en la
   // pantalla de WhatsApp, no aquí.
+  // Una solicitud del bot (WHATSAPP) pasa por lo mismo: el cliente acaba de
+  // escribir, así que la ventana de 24 h está abierta y los dos avisos salen
+  // como texto (la cola elige texto con la ventana abierta).
   if (target === "CONFIRMED") {
     await notifyBookingCreated({
       barbershopId: current.barbershopId,
@@ -1245,6 +1254,10 @@ export async function resolveBookingRequest(args: {
  *
  * Se encola por la cola normal (enqueueBarberMessage): el despacho vuelve a
  * mirar la ventana y el cupo antes de mandar.
+ *
+ * Es el ÚNICO aviso de rechazo en uso. `notifyBarberBookingRejected`
+ * (whatsapp.ts) hace lo mismo con otro texto y está marcada sin uso: no se
+ * llama además de ésta.
  */
 async function notifyBookingRejected(args: {
   barbershopId: string;

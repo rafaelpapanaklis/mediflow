@@ -242,6 +242,10 @@ before(async () => {
       { barbershopId: A.id, clientName: "M1", barberId: alan, status: "PENDING", startAt: tm(10), endAt: tm(10.5) },
       { barbershopId: A.id, clientName: "M2", barberId: beto, status: "CONFIRMED", startAt: tm(11), endAt: tm(11.5) },
       { barbershopId: A.id, clientName: "Web", barberId: null, status: "PENDING", source: "PUBLIC", startAt: tm(16), endAt: tm(16.5) },
+      // Del bot: en manual espera a la barbería (es solicitud); en automático
+      // nace confirmada (no lo es).
+      { barbershopId: A.id, clientName: "Bot", barberId: null, status: "PENDING", source: "WHATSAPP", startAt: tm(17), endAt: tm(17.5) },
+      { barbershopId: A.id, clientName: "BotAuto", barberId: null, status: "CONFIRMED", source: "WHATSAPP", startAt: tm(18), endAt: tm(18.5) },
     ],
   });
 
@@ -340,9 +344,9 @@ test("Inicio (dueño): ingreso, tickets, propinas y efectivo esperado cuadran co
   assert.deepEqual(s.alerts.barbersNoSchedule?.names, [NAMES.beto]);
   assert.equal(s.alerts.lowStock?.count, 1, "la cera quedó en 0 con mínimo 2");
   assert.equal(s.alerts.membershipsSoon, 1);
-  assert.equal(s.alerts.tomorrowPending, 2, "M1 y la solicitud pública son PENDING");
-  assert.equal(s.alerts.tomorrowTotal, 3);
-  assert.equal(s.alerts.publicRequests, 1);
+  assert.equal(s.alerts.tomorrowPending, 3, "M1, la solicitud pública y la del bot son PENDING");
+  assert.equal(s.alerts.tomorrowTotal, 5);
+  assert.equal(s.alerts.publicRequests, 2, "solicitudes por atender: la de la web y la del bot (no la confirmada)");
   assert.equal(s.setup.isFresh, false);
   if (inicioQueries !== null) assert.ok(inicioQueries <= 8, `Inicio hizo ${inicioQueries} sentencias (tope 8, sin N+1)`);
   console.log(`[stats] Inicio dueño: ${inicioQueries ?? "?"} sentencias SQL`);

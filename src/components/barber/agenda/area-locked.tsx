@@ -9,13 +9,15 @@
 // candado.
 // ═══════════════════════════════════════════════════════════════════════
 import { Lock, Sparkles } from "lucide-react";
+import { BARBER_NOT_LINKED_MESSAGE } from "@/lib/barber/own-visits";
 
 export function BarberAreaLocked({
   reason,
   areaKey,
   planName,
 }: {
-  reason: "plan" | "permission";
+  /** «unlinked»: rol Barbero cuyo usuario no está ligado a su ficha de barbero. */
+  reason: "plan" | "permission" | "unlinked";
   areaKey: "agenda" | "fila";
   planName?: string;
 }) {
@@ -26,15 +28,19 @@ export function BarberAreaLocked({
     ? areaKey === "fila"
       ? "La fila virtual viene en Avanzado"
       : "Tu plan no incluye la agenda"
-    : areaKey === "fila"
-      ? "No tienes acceso a la fila virtual"
-      : "No tienes acceso a la agenda";
+    : reason === "unlinked"
+      ? "Todavía no hay agenda para ti"
+      : areaKey === "fila"
+        ? "No tienes acceso a la fila virtual"
+        : "No tienes acceso a la agenda";
 
   const body = isPlan
     ? areaKey === "fila"
       ? `Con tu plan ${planName ?? ""} no está disponible la fila virtual. Súbete a Avanzado y quien llegue sin cita se anota solo con un QR, ve su lugar y deja de preguntar cuánto falta.`.trim()
       : "Escríbenos y lo activamos para tu barbería."
-    : "Pídele al dueño de la barbería que te dé el permiso desde el equipo.";
+    : reason === "unlinked"
+      ? BARBER_NOT_LINKED_MESSAGE
+      : "Pídele al dueño de la barbería que te dé el permiso desde el equipo.";
 
   return (
     <div style={{ minHeight: "60vh", display: "grid", placeItems: "center", padding: 24 }}>

@@ -5,6 +5,7 @@ import { getBarberPlan } from "@/lib/barber/plans";
 import { barberPlanHasFeature } from "@/lib/barber/plan-shared";
 import { getBarberDict, getBarberT, resolveBarberLocale } from "@/i18n/dictionaries/barber";
 import { getBarberWaConnection } from "@/lib/barber/whatsapp";
+import { isBarberWaLinked } from "@/lib/barber/whatsapp-core";
 import { getBarberBotPanelState } from "@/lib/barber/bot";
 import { BarberBotScreen } from "@/components/barber/bot/bot-screen";
 
@@ -50,7 +51,7 @@ export default async function Page() {
       dict={dict}
       locale={locale}
       initial={state}
-      connected={connection.state === "CONNECTED"}
+      connected={isBarberWaLinked(connection.state)}
       canEdit={hasBarberPermission(permUser, "settings.edit")}
       canAttend={hasBarberPermission(permUser, "whatsapp.send")}
     />

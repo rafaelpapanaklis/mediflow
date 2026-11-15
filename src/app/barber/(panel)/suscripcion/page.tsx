@@ -18,7 +18,9 @@ import {
   barberSupportWhatsappUrl,
   dalecontrolWhatsappDisplay,
 } from "@/lib/barber/marketing";
-import { getBarberDict } from "@/i18n/dictionaries/barber";
+import { getBarberDict, getBarberT, resolveBarberLocale } from "@/i18n/dictionaries/barber";
+import { hasBarberPaidAccess } from "@/lib/barber/paid-access";
+import { BarberDenied } from "@/components/barber/cash/denied";
 import { BillingScreen } from "@/components/barber/billing/billing-screen";
 import {
   toBarberGateDTO,
@@ -49,6 +51,24 @@ export default async function BarberSuscripcionPage(props: PageProps) {
     { role: ctx.role, permissionsOverride: ctx.user.permissionsOverride },
     "billing.manage",
   );
+
+  // Sin billing.manage (Barbero, Recepción, Encargado) la sección no se abre
+  // escribiendo la dirección: «Sin acceso», como las demás. La pantalla y
+  // sus APIs ya lo exigían; ahora también la página.
+  // EXCEPCIÓN a propósito: con la barbería impaga, el candado de pago manda
+  // aquí a TODOS los roles (es la única página que queda abierta). Ahí se
+  // sigue enseñando el estado en solo lectura, para que entiendan por qué
+  // está todo cerrado; contratar sigue siendo solo del dueño.
+  if (!canManage && (await hasBarberPaidAccess(ctx))) {
+    const t = getBarberT(resolveBarberLocale(locale));
+    return (
+      <BarberDenied
+        kind="permission"
+        title={t("barber.suscripcion.noPermissionTitle")}
+        body={t("barber.suscripcion.noPermissionBody")}
+      />
+    );
+  }
 
   const [plans, gate, shop] = await Promise.all([
     getBarberPlans(),

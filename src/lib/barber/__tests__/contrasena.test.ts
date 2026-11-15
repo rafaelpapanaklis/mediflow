@@ -441,6 +441,17 @@ describe("3 · contraseña temporal: criptográfica y obligatorio cambiarla", ()
     assert.match(pagina, /if \(!ctx\.mustChangePassword\) redirect\("\/barber"\)/);
     const form = sinComentarios(leer("src/app/barber/cambiar-contrasena/cambio-obligatorio-form.tsx"));
     assert.match(form, /Cerrar sesión/, "sin salida, quien no es dueño de la cuenta se queda atrapado");
+    // M4 (ronda 6): tras «Guardar y entrar» no se cae al formulario vacío sin
+    // explicación. Va a la entrada con el aviso FIJO de restablecer (con
+    // sesión viva, la entrada lo pasa al panel) y el correo puesto por
+    // sessionStorage — nunca en la URL.
+    assert.match(form, /window\.location\.href = `\$\{loginHref\}\?\$\{name\}=\$\{value\}`/);
+    assert.match(form, /const \{ name, value \} = BARBER_PASSWORD_READY_PARAM/);
+    assert.match(form, /sessionStorage\.setItem\(BARBER_ENTRAR_CORREO_KEY, correo\)/);
+    assert.doesNotMatch(form, /correo\}?[^\n]*location\.href|location\.href[^\n]*correo/, "el correo no va en la URL");
+    assert.match(pagina, /correo=\{ctx\.user\.email/);
+    const entrar = sinComentarios(leer("src/app/barber/entrar/page.tsx"));
+    assert.match(entrar, /if \(ctx\) redirect\(destino\)/, "con sesión viva, la entrada lo pasa al panel");
     const dental = /cl[ií]nica|dental|doctor|paciente|consultorio/i.exec(form + pagina);
     assert.equal(dental, null, `trae texto de clínicas: «${dental?.[0]}»`);
   });

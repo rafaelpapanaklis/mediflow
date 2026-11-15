@@ -228,6 +228,8 @@
   "errors": {
     "generic": "Algo salió mal. Inténtalo otra vez.",
     "load": "No se pudo cargar la lista.",
-    "noPermission": "No tienes permiso para esta sección."
+    "noPermission": "No tienes permiso para esta sección.",
+    "notYourClient": "Sin acceso: solo ves la ficha de los clientes que tú atiendes.",
+    "notLinked": "Tu usuario no está ligado a tu ficha de barbero. Pídele al dueño que lo ligue desde Equipo para ver tus clientes."
   }
 }

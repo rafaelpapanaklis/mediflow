@@ -14,6 +14,7 @@ import { redirect } from "next/navigation";
 import { getBarberContext } from "@/lib/barber-auth";
 import { requireBarberPaidAccess } from "@/lib/barber/paid-access";
 import { hasBarberPermission } from "@/lib/barber/permissions";
+import { agendaViewScope, scopeUserFromCtx } from "@/lib/barber/own-visits";
 import { getBarberPlan } from "@/lib/barber/plans";
 import { barberPlanHasFeature } from "@/lib/barber/plan-shared";
 import { getBarberDict } from "@/i18n/dictionaries/barber";
@@ -40,6 +41,11 @@ export default async function BarberAgendaPage() {
     "agenda.view",
   )) {
     return <BarberAreaLocked reason="permission" areaKey="agenda" />;
+  }
+  // Rol Barbero sin su ficha ligada: no ve la agenda de nadie (la API
+  // tampoco se la da) y se le dice qué hacer.
+  if (agendaViewScope(scopeUserFromCtx(ctx)).kind === "none") {
+    return <BarberAreaLocked reason="unlinked" areaKey="agenda" />;
   }
 
   return (

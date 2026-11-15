@@ -39,7 +39,7 @@ export default async function BarberCambioObligatorioPage() {
         <BarberCambioObligatorioForm
           nombre={ctx.user.firstName}
           apiUrl={BARBER_PASSWORD_API}
-          destino="/barber"
+          correo={ctx.user.email ?? ""}
           loginHref={BARBER_LOGIN_PATH}
         />
       }

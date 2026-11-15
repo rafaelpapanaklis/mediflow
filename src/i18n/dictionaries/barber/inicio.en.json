@@ -89,7 +89,7 @@
       "tomorrowPendingHint": "Confirm them today to avoid gaps.",
       "tomorrowPendingCta": "Open schedule",
       "publicRequests": { "one": "1 booking request to handle", "other": "{count} booking requests to handle" },
-      "publicRequestsHint": "They came in from your website.",
+      "publicRequestsHint": "They came in from your website or WhatsApp.",
       "publicRequestsCta": "View requests"
     },
     "blocker": {

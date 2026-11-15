@@ -8,6 +8,8 @@ import {
   LOYALTY_HISTORY_MAX,
   LOYALTY_LEDGER_KEY,
   NOT_CANCELLED,
+  barberCanSeeClient,
+  barberClientScopeWhere,
   findBarberClient,
   getBarberClientsConfig,
   listBarberClientPhotos,
@@ -412,6 +414,10 @@ export async function getBarberVisitHistory(
   clientId: string,
 ): Promise<BarberVisitHistory> {
   const barbershopId = ctx.barbershopId;
+  // Rol Barbero: el historial de un cliente que no es suyo no sale.
+  if (barberClientScopeWhere(ctx) && !(await barberCanSeeClient(ctx, clientId))) {
+    return { entries: [], loosePhotos: [], latestPhoto: null };
+  }
 
   const [appointments, sales, photos, client] = await Promise.all([
     prisma.barberAppointment.findMany({

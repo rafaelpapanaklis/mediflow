@@ -54,6 +54,8 @@ import {
   isBarberWaClaim,
   isBarberWaSysRow,
   isBarberWaUnlimited,
+  isBarberWaLinked,
+  BARBER_WA_CAN_REPLY_STATES,
   isBarberYesReply,
   nextBarberWaStatus,
   normalizeBarberReply,
@@ -440,15 +442,26 @@ test("🔴 cancelar o mover exige 2 horas de anticipación — la misma regla qu
   assert.match(barberLateChangeReply(null), /llama a la barbería\.$/);
 });
 
-test("una solicitud sin aceptar es la reserva en línea PENDIENTE (lo que lista Solicitudes)", () => {
+test("una solicitud sin aceptar es la reserva PENDIENTE de la web o del bot (lo que lista Solicitudes)", () => {
   assert.equal(isBarberUnacceptedRequest({ status: "PENDING", source: "PUBLIC" }), true);
+  assert.equal(isBarberUnacceptedRequest({ status: "PENDING", source: "WHATSAPP" }), true, "la agendó el bot en modo manual");
   assert.equal(isBarberUnacceptedRequest({ status: "CONFIRMED", source: "PUBLIC" }), false, "ya aceptada");
+  assert.equal(isBarberUnacceptedRequest({ status: "CONFIRMED", source: "WHATSAPP" }), false, "bot en automático / ya aceptada");
   assert.equal(isBarberUnacceptedRequest({ status: "PENDING", source: "PANEL" }), false, "la creó la barbería");
   assert.equal(isBarberUnacceptedRequest({ status: "PENDING", source: "WALKIN" }), false);
-  assert.deepEqual([...BARBER_REQUEST_SOURCES], ["PUBLIC"]);
-  // booking.ts (de otra pantalla) define Solicitudes con este mismo filtro.
+  assert.deepEqual([...BARBER_REQUEST_SOURCES], ["PUBLIC", "WHATSAPP"]);
+  // booking.ts define Solicitudes (listar, y aceptar/rechazar en dos pasos)
+  // con ESTA constante, no con un origen escrito a mano.
   const booking = readFileSync("src/lib/barber/booking.ts", "utf8");
-  assert.ok(booking.includes('source: "PUBLIC"'), "si Solicitudes cambia de filtro, BARBER_REQUEST_SOURCES tiene que seguirlo");
+  const usos = booking.split("source: { in: [...BARBER_REQUEST_SOURCES] }").length - 1;
+  assert.equal(usos, 3, "listBookingRequests + findFirst y updateMany de resolveBookingRequest");
+  // El único `source: "PUBLIC"` que queda es el del tope diario: es SOLO de la web.
+  assert.equal(booking.split('source: "PUBLIC",').length - 1, 1);
+  assert.match(booking, /async function countNewPhoneRequestsToday[\s\S]{0,400}source: "PUBLIC",/);
+  // Y la alerta de Inicio cuenta con la MISMA constante, no con un literal.
+  const stats = sinComentarios(readFileSync("src/lib/barber/stats.ts", "utf8"));
+  assert.ok(stats.includes('a."source"::text IN (${Prisma.join([...BARBER_REQUEST_SOURCES])})'));
+  assert.ok(!/source"\s*=\s*'PUBLIC'/.test(stats), "sin `source = 'PUBLIC'` a mano");
 });
 
 /* ═════════════════ 6. ADJUNTOS Y MARCAS DE SISTEMA ═══════════════════ */
@@ -852,4 +865,52 @@ test("G4 — las marcas del turno se leen de vuelta y no se confunden con un err
     assert.equal(parseBarberBotTurnMark(raro), null, String(raro));
   }
   assert.equal(isBarberBotTurnMark("(#100) Invalid parameter"), false);
+});
+
+test("la pantalla del bot deja encenderlo solo en los estados que pueden contestar (también «sin verificación»)", () => {
+  for (const s of ["CONNECTED", "UNVERIFIED", "NO_PAYMENT_METHOD"] as const) {
+    assert.equal(isBarberWaLinked(s), true, s);
+  }
+  assert.equal(isBarberWaLinked("DISCONNECTED"), false);
+  assert.equal(isBarberWaLinked("ERROR"), false, "token vencido: no podría contestar");
+  assert.deepEqual([...BARBER_WA_CAN_REPLY_STATES], ["CONNECTED", "UNVERIFIED", "NO_PAYMENT_METHOD"]);
+  // NO_PAYMENT_METHOD cuenta como «puede contestar» porque el envío del bot
+  // no lo frena antes de llamar a Meta. Si algún día lo frena, esta prueba
+  // obliga a sacarlo de la lista.
+  const wa = sinComentarios(readFileSync("src/lib/barber/whatsapp.ts", "utf8"));
+  const cuerpo = (nombre: string) => {
+    const i = wa.indexOf(`async function ${nombre}(`);
+    assert.ok(i >= 0, nombre);
+    const j = wa.indexOf("\nasync function ", i + 10);
+    const k = wa.indexOf("\nexport async function ", i + 10);
+    return wa.slice(i, Math.min(...[j, k].filter((n) => n > 0)));
+  };
+  for (const fn of ["runBotIfEnabled", "replyInline"]) {
+    assert.doesNotMatch(cuerpo(fn), /NO_PAYMENT_METHOD|BILLING_REQUIRED|getBarberWaConnection/, fn);
+  }
+  // La página del bot usa este criterio y no el `=== "CONNECTED"` de antes.
+  const page = readFileSync("src/app/barber/(panel)/whatsapp/bot/page.tsx", "utf8");
+  assert.ok(page.includes("connected={isBarberWaLinked(connection.state)}"));
+  assert.ok(!page.includes('=== "CONNECTED"'));
+});
+
+test("un solo aviso de rechazo en uso: el que encola booking.ts; el de whatsapp.ts no tiene llamadores", () => {
+  const usan: string[] = [];
+  const walk = (p: string) => {
+    const st = statSync(p);
+    if (st.isDirectory()) {
+      if (p.endsWith("__tests__") || p.endsWith("node_modules")) return;
+      for (const child of readdirSync(p)) walk(join(p, child));
+      return;
+    }
+    if (!/\.(ts|tsx)$/.test(p)) return;
+    if (/notifyBarberBookingRejected\b/.test(sinComentarios(readFileSync(p, "utf8")))) usan.push(p);
+  };
+  walk("src");
+  assert.deepEqual(usan, [join("src/lib/barber/whatsapp.ts")], "solo su definición, ningún llamador");
+
+  const wa = readFileSync("src/lib/barber/whatsapp.ts", "utf8");
+  assert.match(wa, /SIN USO — NO LA LLAMES[\s\S]{0,1500}export async function notifyBarberBookingRejected/);
+  const booking = sinComentarios(readFileSync("src/lib/barber/booking.ts", "utf8"));
+  assert.match(booking, /export async function resolveBookingRequest[\s\S]*await notifyBookingRejected\(/);
 });

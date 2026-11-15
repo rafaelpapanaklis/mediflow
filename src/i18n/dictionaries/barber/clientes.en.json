@@ -228,6 +228,8 @@
   "errors": {
     "generic": "Something went wrong. Try again.",
     "load": "The list couldn't be loaded.",
-    "noPermission": "You don't have permission for this section."
+    "noPermission": "You don't have permission for this section.",
+    "notYourClient": "No access: you only see the profiles of clients you serve.",
+    "notLinked": "Your user isn't linked to your barber profile. Ask the owner to link it from Team to see your clients."
   }
 }

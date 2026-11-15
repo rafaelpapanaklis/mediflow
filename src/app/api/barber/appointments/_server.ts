@@ -24,6 +24,7 @@ import {
 } from "@/lib/barber-auth";
 import { hasBarberPermission } from "@/lib/barber/permissions";
 import { isSaleCancelled } from "@/lib/barber/commissions";
+import { scopeAppointmentsWhere, type BarberViewScope } from "@/lib/barber/own-visits";
 import { mxTenDigits } from "@/lib/phone-mx";
 import { getBarberPlan } from "@/lib/barber/plans";
 import { barberPlanHasFeature, type BarberResolvedPlan } from "@/lib/barber/plan-shared";
@@ -175,10 +176,19 @@ export async function loadAgendaWindow(
   shopId: string,
   fromUtc: Date,
   toUtc: Date,
+  /**
+   * Qué parte de la agenda ve quien pregunta (agendaViewScope). El rol
+   * Barbero ve SOLO su columna: de lo ajeno no sale nada de aquí — ni
+   * visitas, ni nombres, ni teléfonos, ni horarios de otros.
+   */
+  scope: BarberViewScope = { kind: "all" },
 ): Promise<AgendaWindow> {
+  const own = scope.kind === "own" ? scope.barberId : null;
+  const nobody = scope.kind === "none";
+  const barberOnly = own ? { id: own } : nobody ? { id: { in: [] as string[] } } : {};
   const [barbers, services, schedules, timeOff, appointments] = await Promise.all([
     prisma.barber.findMany({
-      where: { barbershopId: shopId },
+      where: { barbershopId: shopId, ...barberOnly },
       orderBy: [{ isActive: "desc" }, { sortOrder: "asc" }, { name: "asc" }],
     }),
     prisma.barberService.findMany({
@@ -186,18 +196,29 @@ export async function loadAgendaWindow(
       orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
     }),
     prisma.barberSchedule.findMany({
-      where: { barbershopId: shopId },
+      where: { barbershopId: shopId, ...scopeAppointmentsWhere(scope) },
       orderBy: [{ dayOfWeek: "asc" }, { startMinute: "asc" }],
     }),
     prisma.barberTimeOff.findMany({
       // Un bloqueo cuenta si TOCA el rango, aunque empiece antes o acabe
       // después (unas vacaciones de dos semanas tapan cualquier día de en
-      // medio).
-      where: { barbershopId: shopId, startAt: { lt: toUtc }, endAt: { gt: fromUtc } },
+      // medio). Al barbero le llegan los suyos y los de la barbería entera.
+      where: {
+        barbershopId: shopId,
+        startAt: { lt: toUtc },
+        endAt: { gt: fromUtc },
+        ...(own ? { OR: [{ barberId: own }, { barberId: null }] } : {}),
+        ...(nobody ? { id: { in: [] as string[] } } : {}),
+      },
       orderBy: { startAt: "asc" },
     }),
     prisma.barberAppointment.findMany({
-      where: { barbershopId: shopId, startAt: { lt: toUtc }, endAt: { gt: fromUtc } },
+      where: {
+        barbershopId: shopId,
+        startAt: { lt: toUtc },
+        endAt: { gt: fromUtc },
+        ...scopeAppointmentsWhere(scope),
+      },
       include: APPOINTMENT_INCLUDE,
       orderBy: { startAt: "asc" },
     }),

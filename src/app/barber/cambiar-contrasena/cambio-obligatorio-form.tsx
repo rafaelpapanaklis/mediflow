@@ -1,13 +1,15 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { BarberBrandRow } from "@/components/barber/barber-registro-form";
+import { BARBER_ENTRAR_CORREO_KEY, BarberBrandRow } from "@/components/barber/barber-registro-form";
+import { BARBER_PASSWORD_READY_PARAM } from "@/lib/barber/contrasena";
 import { Aviso, BotonCaramelo, CARAMELO, CamposNueva, Encabezado, nuevaLista } from "../restablecer/piezas";
 
 /**
  * Formulario del cambio obligatorio. Sin «contraseña actual»: acaba de
  * entrar con la temporal (el servidor comprueba que la nueva sea distinta).
- * Al terminar entra al panel con la sesión de siempre.
+ * Al terminar va a la entrada con el aviso «Listo…» (o al panel, si la
+ * sesión sigue viva: la entrada lo pasa sola).
  *
  * Textos en español duro, como /barber/entrar (fuera del panel no hay
  * diccionario). El servidor ya contesta en español.
@@ -15,13 +17,14 @@ import { Aviso, BotonCaramelo, CARAMELO, CamposNueva, Encabezado, nuevaLista } f
 export function BarberCambioObligatorioForm({
   nombre,
   apiUrl,
-  destino,
   loginHref,
+  correo = "",
 }: {
   nombre: string;
   apiUrl: string;
-  destino: string;
   loginHref: string;
+  /** Correo con el que entra, para dejarlo puesto en la entrada (nunca por la URL). */
+  correo?: string;
 }) {
   const [nueva, setNueva] = useState("");
   const [repetida, setRepetida] = useState("");
@@ -56,8 +59,21 @@ export function BarberCambioObligatorioForm({
         setGuardando(false);
         return;
       }
-      // Navegación dura: el panel se monta otra vez y ya sin la marca.
-      window.location.href = destino;
+      // M4 (ronda 6): el cambio puede cerrar la sesión, y entonces /barber
+      // acababa en la entrada con el formulario vacío y sin explicación (lo
+      // natural era teclear otra vez la temporal). Ahora va a la entrada con
+      // el aviso fijo de /barber/restablecer: si la sesión sigue viva, esa
+      // página lo pasa directo al panel (`destino`); si no, dice «Listo, ya
+      // puedes entrar con tu contraseña nueva» con su correo ya puesto. El
+      // correo viaja por sessionStorage, igual que desde el registro: nunca
+      // en la URL. Nada del servidor de contraseñas cambia.
+      try {
+        if (correo) window.sessionStorage.setItem(BARBER_ENTRAR_CORREO_KEY, correo);
+      } catch {
+        /* sin sessionStorage: el aviso sale igual y el correo se teclea */
+      }
+      const { name, value } = BARBER_PASSWORD_READY_PARAM;
+      window.location.href = `${loginHref}?${name}=${value}`;
     } catch {
       setError("No pudimos conectar. Revisa tu internet e inténtalo de nuevo.");
       setGuardando(false);

@@ -10,6 +10,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { mergeWindows, toBarberDTO, toScheduleDTO, toTimeOffDTO } from "@/lib/barber/agenda";
+import { BARBER_NOT_LINKED_MESSAGE, agendaViewScope, scopeUserFromCtx } from "@/lib/barber/own-visits";
 import {
   asString,
   jsonError,
@@ -31,7 +32,14 @@ export async function GET(req: Request) {
     branchId: url.searchParams.get("branchId"),
   });
   if (gate.response) return gate.response;
-  const { shopId, timezone } = gate.gate;
+  const { shopId, timezone, ctx } = gate.gate;
+
+  // Rol Barbero: solo su columna, como en la agenda (agendaViewScope).
+  const scope = agendaViewScope(scopeUserFromCtx(ctx));
+  if (scope.kind === "none") {
+    return jsonError(BARBER_NOT_LINKED_MESSAGE, 403, { code: "BARBER_NOT_LINKED" });
+  }
+  const own = scope.kind === "own" ? scope.barberId : null;
 
   const now = Date.now();
   const from = new Date(now - TIME_OFF_PAST_DAYS * 86_400_000);
@@ -39,15 +47,20 @@ export async function GET(req: Request) {
 
   const [barbers, schedules, timeOff] = await Promise.all([
     prisma.barber.findMany({
-      where: { barbershopId: shopId },
+      where: { barbershopId: shopId, ...(own ? { id: own } : {}) },
       orderBy: [{ isActive: "desc" }, { sortOrder: "asc" }, { name: "asc" }],
     }),
     prisma.barberSchedule.findMany({
-      where: { barbershopId: shopId },
+      where: { barbershopId: shopId, ...(own ? { barberId: own } : {}) },
       orderBy: [{ dayOfWeek: "asc" }, { startMinute: "asc" }],
     }),
     prisma.barberTimeOff.findMany({
-      where: { barbershopId: shopId, endAt: { gt: from }, startAt: { lt: to } },
+      where: {
+        barbershopId: shopId,
+        endAt: { gt: from },
+        startAt: { lt: to },
+        ...(own ? { OR: [{ barberId: own }, { barberId: null }] } : {}),
+      },
       orderBy: { startAt: "asc" },
     }),
   ]);
