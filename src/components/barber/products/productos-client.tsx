@@ -107,7 +107,23 @@ export function ProductosClient({
           </label>
         }
       >
-        {visible.length === 0 ? (
+        {products.length === 0 ? (
+          // Barbería nueva: que entienda QUÉ se da de alta aquí y dónde se
+          // cobra (auditoría 15-nov, punto 3 de ws6-t3).
+          <div style={{ padding: 18, display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 8 }} data-productos-vacio>
+            {canManage ? (
+              <>
+                <strong style={{ fontSize: 14, color: "var(--text-1)" }}>{t("productos.emptyTitle")}</strong>
+                <p className="bcaja-hint" style={{ margin: 0 }}>{t("productos.emptyBody")}</p>
+                <button type="button" className="btn-new barber-btn-primary" onClick={() => setModal({ kind: "form", product: null })}>
+                  <PackagePlus size={15} /> {t("productos.newProduct")}
+                </button>
+              </>
+            ) : (
+              <p className="bcaja-hint" style={{ margin: 0 }}>{t("productos.emptyReadOnly")}</p>
+            )}
+          </div>
+        ) : visible.length === 0 ? (
           <p className="bcaja-hint" style={{ margin: 0, padding: 18 }}>{t("productos.empty")}</p>
         ) : (
           <div className="bcaja-table-wrap">
