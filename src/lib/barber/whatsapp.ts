@@ -8,6 +8,27 @@ import {
   normalizeMxWhatsAppPhone,
 } from "@/lib/whatsapp";
 import { parseWaError, WA_ERROR_CODE, WhatsAppApiError } from "@/lib/whatsapp/errors";
+// Del WhatsApp del dental se IMPORTA (no se edita) solo lo que es puro: el
+// armado de botones/listas con los límites de Meta y el flujo de la nota de
+// voz, que recibe por inyección todo lo que toca el mundo de fuera.
+import {
+  construirInteractivo,
+  interactivoParaOpciones,
+  lineaDeOpciones,
+  type MensajeInteractivo,
+} from "@/lib/whatsapp/interactivo";
+import {
+  VENTANA_VOZ_SEG,
+  VOZ_POR_REMITENTE,
+  procesarNotaDeVoz,
+  type DepsNotaDeVoz,
+  type ResultadoNotaDeVoz,
+} from "@/lib/whatsapp/bot/nota-de-voz-core";
+import {
+  BARBER_BOT_OPTION_ID_PREFIX,
+  isBarberBotOptionId,
+  type BarberBotOption,
+} from "@/lib/barber/bot-core";
 import { mxTenDigits } from "@/lib/phone-mx";
 import { getBarberPlan } from "@/lib/barber/plans";
 import { isBarbershopSubscriptionActive, barberPlanHasFeature } from "@/lib/barber/plan-shared";
@@ -27,6 +48,11 @@ import {
   BARBER_WA_LANG,
   BARBER_WA_OPT_OUT_REPLY,
   BARBER_WA_SYS_PREFIX,
+  BARBER_WA_VOICE_BODY_PREFIXES,
+  BARBER_WA_VOICE_FAILED_REPLY,
+  BARBER_WA_VOICE_HINT,
+  BARBER_WA_VOICE_TOO_LONG_REPLY,
+  barberWaOptionsAsText,
   BARBER_WA_TEMPLATES,
   BARBER_WA_UNARCHIVE_MARK,
   barberClientOptedOut,
@@ -1868,6 +1894,10 @@ const AMBIGUOUS_REPLY =
  * Devuelve true si el mensaje era de una barbería (para el log del webhook).
  */
 export async function ingestBarberInbound(value: any, msg: any): Promise<boolean> {
+  // Todo lo que pase aquí (nota de voz + turno del bot) tiene que caber en
+  // el tiempo de la función del webhook compartido (maxDuration = 60 s).
+  const deadlineAt = Date.now() + INGEST_BUDGET_MS;
+
   const shop = await shopByPhoneNumberId(value?.metadata?.phone_number_id);
   if (!shop) return false;
 
@@ -1877,13 +1907,19 @@ export async function ingestBarberInbound(value: any, msg: any): Promise<boolean
 
   const wamid = typeof msg?.id === "string" && msg.id ? msg.id : null;
 
-  const rawText = String(
+  // `let`: una nota de voz transcrita entra más abajo como texto.
+  let rawText = String(
     msg?.text?.body ??
       msg?.interactive?.button_reply?.title ??
       msg?.interactive?.list_reply?.title ??
       msg?.button?.text ??
       "",
   ).trim();
+  // ¿Tocó un botón o una fila que le ofreció el BOT? El id lo dice sin
+  // adivinar por el texto: un «Sí, agéndala» no es un «sí» al recordatorio.
+  const tappedBotOption = isBarberBotOptionId(
+    msg?.interactive?.button_reply?.id ?? msg?.interactive?.list_reply?.id,
+  );
   const incoming = rawText ? null : describeBarberIncoming(msg);
   if (!rawText && !incoming) return true;
 
@@ -1942,9 +1978,36 @@ export async function ingestBarberInbound(value: any, msg: any): Promise<boolean
     void markWhatsAppMessageRead(creds.phoneNumberId, creds.accessToken, wamid).catch(() => {});
   }
 
-  // Multimedia: llegó, quedó en el Inbox y AQUÍ TERMINA. Una foto no es un
-  // "CONFIRMAR" y no puede tocar la agenda de nadie.
-  if (incoming) return true;
+  if (incoming) {
+    // Multimedia que no es audio: llegó, quedó en el Inbox y AQUÍ TERMINA.
+    // Una foto no es un "CONFIRMAR" y no puede tocar la agenda de nadie.
+    if (msg?.type !== "audio") return true;
+
+    // NOTA DE VOZ: si el bot está atendiendo este hilo se transcribe y sigue
+    // el camino de un mensaje escrito (el Inbox ya dice «🎤 Nota de voz: …»
+    // y conserva el audio). Si no se pudo escuchar, se le pide que lo
+    // escriba. Si no toca transcribir (bot apagado o en pausa, sin tope de
+    // IA…), el audio se queda en la bandeja para el equipo, como antes.
+    const voz = await understandBarberVoice(shop, creds, phone, msg.audio, stored.id);
+    if (voz.accion === "avisar") {
+      await replyInline(
+        shop,
+        creds,
+        phone,
+        voz.motivo === "largo" ? BARBER_WA_VOICE_TOO_LONG_REPLY : BARBER_WA_VOICE_FAILED_REPLY,
+      );
+      return true;
+    }
+    if (voz.accion === "como_antes") {
+      // Fuera del horario del bot no se transcribe (no se gasta), pero el
+      // cliente recibe el mismo aviso que si hubiera escrito.
+      if (voz.fueraDeHorario) {
+        await runBotIfEnabled(shop, creds, phone, incoming.body, deadlineAt);
+      }
+      return true;
+    }
+    rawText = voz.texto;
+  }
 
   // "BAJA" / "ya no me manden promociones": se respeta ANTES que nada y no
   // se le consulta a ninguna IA. Solo aplica a quien ya es cliente (sin
@@ -1954,13 +2017,140 @@ export async function ingestBarberInbound(value: any, msg: any): Promise<boolean
     return true;
   }
 
-  const handled = await applyReminderReply(shop, creds, phone, rawText);
+  // Un toque en una opción del bot va DIRECTO al bot: es la respuesta a lo
+  // que él preguntó, no a un recordatorio.
+  const handled = tappedBotOption
+    ? false
+    : await applyReminderReply(shop, creds, phone, rawText);
 
   // El BOT es el último en la fila, a propósito: primero manda lo que el
   // cliente respondió a un recordatorio nuestro (eso ya tiene dueño y no
   // se le consulta a ninguna IA). Solo lo que nadie atendió llega al bot.
-  if (!handled) await runBotIfEnabled(shop, creds, phone, rawText);
+  if (!handled) await runBotIfEnabled(shop, creds, phone, rawText, deadlineAt);
   return true;
+}
+
+/**
+ * Cuánto puede durar la ingesta de UN mensaje (nota de voz + bot). El
+ * webhook compartido declara maxDuration = 60 s; se deja margen para que
+ * conteste 200 por las buenas.
+ */
+const INGEST_BUDGET_MS = 52_000;
+/** Bajar el audio de Meta y transcribirlo, acotados aparte. */
+const VOICE_DOWNLOAD_TIMEOUT_MS = 12_000;
+const VOICE_TRANSCRIBE_TIMEOUT_MS = 20_000;
+
+type BarberVoiceResult = ResultadoNotaDeVoz & { fueraDeHorario?: boolean };
+
+/**
+ * NOTA DE VOZ → texto, con las reglas del dental y el dinero de barber.
+ *
+ * El flujo (puertas, tope de duración y de tamaño, qué se le dice al cliente
+ * cuando no se pudo) es `procesarNotaDeVoz`, el núcleo puro del bot del
+ * dental, IMPORTADO tal cual. Aquí solo se le inyecta lo propio de barber:
+ *   · "¿el bot está atendiendo?" lo contesta bot.ts (barberBotGate): si el
+ *     bot no va a contestar, no se gasta en transcribir;
+ *   · el COSTO cuenta contra el tope diario de IA de la barbería
+ *     (barber_bot_usage), no contra ningún saldo;
+ *   · el audio NO se guarda en ningún lado: entra en memoria, se transcribe
+ *     y se descarta. La bandeja lo sigue sirviendo desde Meta por media id.
+ *
+ * Nunca lanza.
+ */
+async function understandBarberVoice(
+  shop: ShopWaRow,
+  creds: BarberWaCredentials | null,
+  phone: string,
+  audio: unknown,
+  inMsgId: string,
+): Promise<BarberVoiceResult> {
+  let gate: { open: boolean; reason: string | null };
+  let charge: (barbershopId: string, seconds: number) => Promise<void>;
+  try {
+    const bot = await import("@/lib/barber/bot");
+    gate = await bot.barberBotGate(shop.id, phone);
+    charge = bot.chargeBarberBotVoice;
+  } catch (err) {
+    console.error(`[barber/wa-voz] no se pudo consultar al bot (${shop.id}):`, err);
+    return { accion: "como_antes", motivo: "puerta_fallo" };
+  }
+
+  // Motivos por los que el bot no atendería NI un mensaje escrito.
+  const botOff = ["disabled", "planLocked", "subscriptionInactive", "storageMissing", "offHours", "notConnected", "error"];
+  // Motivos por los que sí atendería, pero no hay con qué pagar la IA.
+  const noBudget = ["aiCapReached", "aiUnavailable", "quotaExhausted"];
+
+  const deps: DepsNotaDeVoz = {
+    botEncendido: async () => !botOff.includes(gate.reason ?? ""),
+    // En barber no hay un interruptor aparte para el dictado.
+    dictadoApagado: async () => false,
+    sinCupo: async () => noBudget.includes(gate.reason ?? ""),
+    // Anti-abuso: no más de VOZ_POR_REMITENTE audios transcritos por número
+    // en la ventana. Se cuenta sobre la propia bandeja (los ya transcritos
+    // quedaron con su prefijo), sin tabla nueva.
+    permitirRemitente: async () => {
+      const recent = await prisma.barberMessage.count({
+        where: {
+          barbershopId: shop.id,
+          phone,
+          direction: "INBOUND",
+          createdAt: { gt: new Date(Date.now() - VENTANA_VOZ_SEG * 1000) },
+          OR: BARBER_WA_VOICE_BODY_PREFIXES.map((prefix) => ({ body: { startsWith: prefix } })),
+        },
+      });
+      return recent < VOZ_POR_REMITENTE;
+    },
+    transcriptorConfigurado: () => Boolean(process.env.OPENAI_API_KEY),
+    metaDelAudio: (accessToken, mediaId) => getWhatsAppMediaMeta(accessToken, mediaId),
+    descargar: async (accessToken, url, maxBytes) => {
+      const res = await fetch(url, {
+        // User-Agent explícito: sin él el CDN de Meta a veces devuelve HTML
+        // en vez del archivo (mismo detalle que el proxy de multimedia).
+        headers: { Authorization: `Bearer ${accessToken}`, "User-Agent": "curl/8.4.0" },
+        signal: AbortSignal.timeout(VOICE_DOWNLOAD_TIMEOUT_MS),
+      });
+      if (!res.ok) throw new Error(`descarga_${res.status}`);
+      if ((Number(res.headers.get("content-length")) || 0) > maxBytes) throw new Error("demasiado_grande");
+      const buf = Buffer.from(await res.arrayBuffer());
+      if (buf.length > maxBytes) throw new Error("demasiado_grande");
+      return buf;
+    },
+    transcribir: async ({ audio: bytes, filename, mime }) => {
+      // import() perezoso: el transcriptor es `server-only`.
+      const { transcribeAudio } = await import("@/lib/integrations/whisper");
+      return transcribeAudio({
+        audio: bytes,
+        filename,
+        mime,
+        prompt: BARBER_WA_VOICE_HINT,
+        signal: AbortSignal.timeout(VOICE_TRANSCRIBE_TIMEOUT_MS),
+      });
+    },
+    cobrar: (barbershopId, segundos) => charge(barbershopId, segundos),
+    reescribirEntrada: async (barbershopId, messageId, body) => {
+      await prisma.barberMessage.updateMany({ where: { id: messageId, barbershopId }, data: { body } });
+    },
+    // Nunca el texto ni el audio: solo qué pasó.
+    log: (evento, datos) => console.info(`[barber/wa-voz] ${evento}`, datos),
+  };
+
+  const result = await procesarNotaDeVoz(
+    {
+      // El núcleo es del dental y llama `clinicId` al inquilino: aquí es la
+      // barbería. Solo viaja de vuelta a las dependencias de arriba.
+      clinicId: shop.id,
+      threadId: phone,
+      inMsgId,
+      from: phone,
+      audio: audio && typeof audio === "object" ? (audio as Record<string, unknown>) : null,
+      botActive: gate.reason === "paused" ? false : true,
+      accessToken: creds?.accessToken ?? null,
+    },
+    deps,
+  );
+  return result.accion === "como_antes"
+    ? { ...result, fueraDeHorario: gate.reason === "offHours" }
+    : result;
 }
 
 /**
@@ -1980,6 +2170,7 @@ async function runBotIfEnabled(
   creds: BarberWaCredentials | null,
   phone: string,
   text: string,
+  deadlineAt?: number,
 ): Promise<void> {
   try {
     const { runBarberBotTurn } = await import("@/lib/barber/bot");
@@ -1987,8 +2178,10 @@ async function runBotIfEnabled(
       barbershopId: shop.id,
       phone,
       text,
+      // Se le deja un margen para mandar la respuesta después del turno.
+      deadlineAt: deadlineAt ? deadlineAt - 4000 : undefined,
     });
-    if (turn.reply) await replyInline(shop, creds, phone, turn.reply);
+    if (turn.reply) await replyInline(shop, creds, phone, turn.reply, turn.options);
   } catch (err) {
     console.error(`[barber/wa] el bot no pudo atender (${shop.id}):`, err);
   }
@@ -2168,24 +2361,61 @@ async function applyReminderReply(
 }
 
 /**
+ * De las opciones que pide el bot al mensaje interactivo de Meta: botones
+ * de respuesta (hasta 3, títulos de hasta 20 caracteres) o lista (hasta 10
+ * filas). Los límites y el armado son los del dental (interactivo.ts), ya
+ * probados contra Meta. null = no se puede armar uno válido → va texto.
+ *
+ * El id de cada opción lleva el prefijo del bot: es lo que le dice a la
+ * ingesta, cuando el cliente la toca, que esa respuesta es para el bot.
+ */
+function buildBotInteractive(
+  body: string,
+  options: BarberBotOption[],
+): { interactive: Record<string, unknown>; shape: MensajeInteractivo } | null {
+  if (options.length === 0) return null;
+  const shape = interactivoParaOpciones(
+    options.map((o, i) => ({
+      id: `${BARBER_BOT_OPTION_ID_PREFIX}${i + 1}`,
+      titulo: o.title,
+      ...(o.description ? { descripcion: o.description } : {}),
+    })),
+    "Ver opciones",
+  );
+  if (!shape) return null;
+  const interactive = construirInteractivo(body, shape);
+  return interactive ? { interactive, shape } : null;
+}
+
+/**
  * Contesta al cliente EN EL MOMENTO. Solo se usa dentro de la ventana de
  * 24 h (acaba de escribirnos), así que va como texto: gratis y natural.
  * Best-effort — una respuesta que no sale no puede tumbar la ingesta.
+ *
+ * Con `options` sale como mensaje INTERACTIVO (botones o lista) para que el
+ * cliente toque en vez de escribir. Si Meta lo RECHAZA, sale el mismo
+ * mensaje como texto con las opciones numeradas: el cliente nunca se queda
+ * sin respuesta por un botón. (Un timeout NO cuenta como rechazo: el mensaje
+ * pudo haber salido, y mandar el respaldo lo duplicaría.)
  */
 async function replyInline(
   shop: ShopWaRow,
   creds: BarberWaCredentials | null,
   phone: string,
   body: string,
+  options: BarberBotOption[] = [],
 ): Promise<void> {
   if (!creds) return;
+  const rich = buildBotInteractive(body, options);
   const row = await prisma.barberMessage
     .create({
       data: {
         barbershopId: shop.id,
         direction: "OUTBOUND",
         phone,
-        body,
+        // En la bandeja (y en lo que lee el bot en el turno siguiente) queda
+        // también QUÉ se le ofreció: «🔘 Opciones: Corte · Barba».
+        body: rich ? `${body}\n${lineaDeOpciones(rich.shape)}` : body,
         status: "PENDING",
         // Nace RECLAMADA: el drenado no puede mandarla una segunda vez.
         errorMessage: barberWaClaimMark(),
@@ -2195,11 +2425,37 @@ async function replyInline(
     .catch(() => null);
 
   try {
-    const { wamid } = await sendText(creds, phone, body);
+    let wamid: string | null;
+    let sentBody: string | null = null;
+    if (rich) {
+      try {
+        wamid = (
+          await postGraph(creds, {
+            messaging_product: "whatsapp",
+            to: normalizeMxWhatsAppPhone(phone),
+            type: "interactive",
+            interactive: rich.interactive,
+          })
+        ).wamid;
+      } catch (err) {
+        if (!(err instanceof WhatsAppApiError)) throw err;
+        console.warn(`[barber/wa] Meta rechazó los botones, va texto (${shop.id}): ${err.message}`);
+        sentBody = barberWaOptionsAsText(body, options);
+        wamid = (await sendText(creds, phone, sentBody)).wamid;
+      }
+    } else {
+      wamid = (await sendText(creds, phone, body)).wamid;
+    }
     if (row) {
       await prisma.barberMessage.update({
         where: { id: row.id },
-        data: { status: "SENT", waMessageId: wamid, errorMessage: null },
+        data: {
+          status: "SENT",
+          waMessageId: wamid,
+          errorMessage: null,
+          // Si salió el respaldo, la bandeja guarda lo que el cliente leyó.
+          ...(sentBody ? { body: sentBody } : {}),
+        },
       });
     }
     await consumeQuota(shop);
@@ -2600,6 +2856,15 @@ export async function sendBarberManualMessage(args: {
       data: { status: "SENT", waMessageId: wamid, errorMessage: null },
     });
     await consumeQuota(shop);
+    // Alguien de la barbería tomó la conversación: el bot se calla en este
+    // hilo para no pisarle la respuesta (lo reanudan desde la pantalla del
+    // bot). Import dinámico y sin lanzar, igual que runBotIfEnabled.
+    try {
+      const { noteBarberStaffReply } = await import("@/lib/barber/bot");
+      await noteBarberStaffReply(shop.id, phone);
+    } catch (err) {
+      console.error(`[barber/wa] no se pudo pausar el bot tras responder (${shop.id}):`, err);
+    }
     return { ok: true, messageId: row.id };
   } catch (err) {
     const message = err instanceof Error ? err.message : "No se pudo enviar";

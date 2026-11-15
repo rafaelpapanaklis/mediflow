@@ -29,15 +29,24 @@ import { join } from "node:path";
 import {
   BARBER_BOT_AI_CAP_DEFAULT,
   BARBER_BOT_AI_CAP_MAX,
+  BARBER_BOT_AUTO_PAUSE_MS,
   BARBER_BOT_DEFAULT_MODEL,
   BARBER_BOT_MODEL_PRICES,
+  BARBER_BOT_OPTIONS_MAX,
+  BARBER_BOT_PAUSE_OFF_HOURS,
   DEFAULT_BARBER_BOT_SETTINGS,
   MICROS_PER_MXN,
   asksForHuman,
+  autoPauseReason,
   botAnswersNow,
   botModelPrice,
   botModelRequestExtras,
+  botPauseExpired,
   botTurnCostMicros,
+  botVoiceCostMicros,
+  isAutoBotPause,
+  isBarberBotOptionId,
+  normalizeBotOptions,
   normalizeBotSettings,
   quotaIsTight,
 } from "../bot-core";
@@ -430,4 +439,85 @@ test("a la familia 5 se le baja el razonamiento; a los 4.x no se les manda nada"
     assert.ok(!("temperature" in extra) && !("top_p" in extra) && !("budget_tokens" in extra));
   }
   assert.ok(!/temperature|budget_tokens|top_p/.test(BOT_TS), "bot.ts tampoco los manda");
+});
+
+/* ═══════════════ 11. Pausas que caducan ═══════════════ */
+
+test("🔴 la pausa de una persona nunca caduca; la del bot, a las 12 h", () => {
+  const now = new Date("2026-11-14T18:00:00.000Z");
+  const hace = (h: number) => new Date(now.getTime() - h * 3_600_000);
+  const delBot = autoPauseReason("El cliente pidió hablar con una persona");
+  assert.equal(isAutoBotPause(delBot), true);
+  assert.equal(isAutoBotPause("La barbería tomó la conversación"), false);
+  assert.equal(isAutoBotPause(null), false);
+
+  assert.equal(botPauseExpired({ reason: delBot, pausedAt: hace(11.9) }, now, true), false);
+  assert.equal(botPauseExpired({ reason: delBot, pausedAt: hace(12) }, now, true), true);
+  assert.equal(BARBER_BOT_AUTO_PAUSE_MS, 12 * 3_600_000);
+
+  for (const reason of ["La barbería tomó la conversación", "Alguien respondió desde el panel", null]) {
+    assert.equal(botPauseExpired({ reason, pausedAt: hace(24 * 30) }, now, true), false, String(reason));
+  }
+});
+
+test("la pausa por fuera de horario se acaba cuando vuelve el horario, no a las 12 h", () => {
+  const now = new Date("2026-11-14T18:00:00.000Z");
+  const pausa = { reason: BARBER_BOT_PAUSE_OFF_HOURS, pausedAt: new Date(now.getTime() - 60_000) };
+  assert.equal(botPauseExpired(pausa, now, false), false, "sigue fuera de horario");
+  assert.equal(botPauseExpired(pausa, now, true), true, "ya abrió: el bot vuelve");
+  // Y aunque pasen días, mientras siga fuera de horario no se reanuda.
+  const vieja = { ...pausa, pausedAt: new Date(now.getTime() - 72 * 3_600_000) };
+  assert.equal(botPauseExpired(vieja, now, false), false);
+});
+
+test("el motivo de una pausa del bot lleva la marca una sola vez", () => {
+  assert.equal(autoPauseReason(BARBER_BOT_PAUSE_OFF_HOURS), BARBER_BOT_PAUSE_OFF_HOURS);
+  assert.equal(autoPauseReason("  Se alcanzó   el tope "), "🤖 Se alcanzó el tope");
+  assert.equal(autoPauseReason(""), "🤖 El bot pasó la conversación");
+  assert.ok(autoPauseReason("x".repeat(500)).length <= 180, "cabe en la columna del motivo");
+});
+
+/* ═══════════════ 12. Opciones con botones y notas de voz ═══════════════ */
+
+test("las opciones del bot se limpian: sin vacías, sin repetidas, máximo 10 y mínimo 2", () => {
+  assert.deepEqual(
+    normalizeBotOptions([{ titulo: " Corte " }, { titulo: "corte" }, { titulo: "" }, { titulo: "Barba", descripcion: "$120" }]),
+    [{ title: "Corte" }, { title: "Barba", description: "$120" }],
+  );
+  assert.deepEqual(normalizeBotOptions(["4 pm", "5 pm"]), [{ title: "4 pm" }, { title: "5 pm" }]);
+  assert.deepEqual(normalizeBotOptions([{ titulo: "Solo una" }]), [], "con una sola no hay entre qué elegir");
+  assert.deepEqual(normalizeBotOptions("no es lista"), []);
+  assert.deepEqual(normalizeBotOptions(null), []);
+  const muchas = normalizeBotOptions(Array.from({ length: 25 }, (_, i) => ({ titulo: `Hora ${i}` })));
+  assert.equal(muchas.length, BARBER_BOT_OPTIONS_MAX);
+  assert.equal(BARBER_BOT_OPTIONS_MAX, 10, "el límite de filas de una lista de Meta");
+});
+
+test("el id de una opción del bot se reconoce por su prefijo", () => {
+  assert.equal(isBarberBotOptionId("bot:1"), true);
+  assert.equal(isBarberBotOptionId("rec.confirmar:abc"), false);
+  assert.equal(isBarberBotOptionId(undefined), false);
+  assert.equal(isBarberBotOptionId(7), false);
+});
+
+test("transcribir una nota de voz cuesta 0.006 USD por minuto, contra el mismo tope", () => {
+  // 60 s a 18 pesos por dólar = 0.108 pesos = 108,000 micros.
+  assert.equal(botVoiceCostMicros(60, 18), 108_000);
+  assert.equal(botVoiceCostMicros(6, 18), 10_800);
+  assert.equal(botVoiceCostMicros(0, 18), 1, "ningún audio sale gratis del contador");
+  assert.equal(botVoiceCostMicros(Number.NaN, 18), 1);
+  // Tres minutos (el máximo que se transcribe) no llegan ni a 35 centavos.
+  assert.ok(botVoiceCostMicros(180, 18) < 0.35 * MICROS_PER_MXN);
+});
+
+test("el transporte de la voz y de los botones NO vive en el bot: lo importa whatsapp.ts del dental sin editarlo", () => {
+  const wa = readFileSync(join(ROOT, "src", "lib", "barber", "whatsapp.ts"), "utf8");
+  assert.ok(wa.includes('from "@/lib/whatsapp/bot/nota-de-voz-core"'));
+  assert.ok(wa.includes('from "@/lib/whatsapp/interactivo"'));
+  // El costo de la voz va al contador del bot de barber, no a un saldo.
+  assert.ok(wa.includes("chargeBarberBotVoice"));
+  for (const prohibido of ["addAiTokens", "ai-billing", "canSpend", "aiTokenLimitError"]) {
+    assert.ok(!wa.includes(prohibido), `barber no toca el Saldo IA del dental (${prohibido})`);
+    assert.ok(!BOT_TS.includes(prohibido), `ni desde el bot (${prohibido})`);
+  }
 });

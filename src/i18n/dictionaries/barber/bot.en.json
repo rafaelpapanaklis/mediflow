@@ -48,12 +48,12 @@
     "from": "From",
     "to": "To",
     "days": "Days",
-    "offHint": "Outside those hours it says you'll reply when you open and flags the chat for you.",
+    "offHint": "Outside those hours it says you'll reply when you open and flags the chat for you. Once the hours are back, the bot picks it up again on its own.",
     "noDays": "Pick at least one day or the bot will never answer."
   },
   "spend": {
     "title": "AI spending cap",
-    "hint": "Per day, per barbershop. Once it hits the cap the bot stops using AI and hands chats to you, so one persistent customer can't run up the bill.",
+    "hint": "Per day and per barbershop. When the cap is reached the bot stops using AI and hands the chats to you, so an insistent client can't run up the bill. Voice notes the bot transcribes count here too.",
     "capLabel": "Daily cap",
     "today": "{spent} of {cap} so far today",
     "reached": "Today's cap has been reached. Chats are going to your inbox.",
@@ -69,7 +69,7 @@
   "pauses": {
     "title": "Chats you're handling",
     "empty": "None. The bot is handling every chat.",
-    "hint": "Chats where the customer asked for a person, or the bot chose not to risk it.",
+    "hint": "Chats where the client asked for a person, you replied yourself, or the bot chose not to risk it. The ones the bot flagged (🤖) go back to it on their own after 12 hours if nobody takes them; the ones you took stay with you until you hand them back.",
     "resume": "Give back to the bot",
     "pausedAt": "Since {when}",
     "reasonLabel": "Reason"

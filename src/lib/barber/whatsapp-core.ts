@@ -523,6 +523,41 @@ export function walkInTemplateNotice(shopName: string, body: string): string {
   return text || "Ya casi es tu turno.";
 }
 
+// ── Notas de voz ────────────────────────────────────────────────────────
+
+/** Lo que se le dice al cliente cuando su audio no se pudo escuchar. */
+export const BARBER_WA_VOICE_FAILED_REPLY = "No pude escuchar tu audio, ¿me lo escribes? 🙏";
+
+/** …y cuando es demasiado largo para transcribirlo. */
+export const BARBER_WA_VOICE_TOO_LONG_REPLY =
+  "Tu audio es un poco largo para mí 🙏. ¿Me lo escribes o me mandas uno de menos de 3 minutos?";
+
+/** Pista de vocabulario para el transcriptor: lo que se le dice a una barbería. */
+export const BARBER_WA_VOICE_HINT =
+  "Mensaje de voz de un cliente a su barbería en México: cita, agendar, " +
+  "reagendar, confirmar, cancelar, mañana, el sábado, corte, barba, fade, " +
+  "degradado, delineado, ¿cuánto cuesta?, ¿a qué hora abren?";
+
+/** Prefijos con los que queda en la bandeja un audio YA transcrito. */
+export const BARBER_WA_VOICE_BODY_PREFIXES = ["🎤 Nota de voz:", "🎵 Audio:"] as const;
+
+// ── Opciones que se le ofrecen al cliente con botones o lista ───────────
+
+/**
+ * Lo que sale por TEXTO cuando Meta rechaza el mensaje con botones: el
+ * mismo mensaje con las opciones numeradas, para que el cliente pueda
+ * elegir escribiendo.
+ */
+export function barberWaOptionsAsText(
+  body: string,
+  options: { title: string; description?: string }[],
+): string {
+  const lines = options.map(
+    (o, i) => `${i + 1}. ${o.title}${o.description ? ` — ${o.description}` : ""}`,
+  );
+  return `${body.trim()}\n\n${lines.join("\n")}`;
+}
+
 // ── Baja de promociones ─────────────────────────────────────────────────
 
 /**

@@ -38,6 +38,7 @@ import {
   barberOutboxStaleReason,
   barberWaClaimMark,
   barberWaFits,
+  barberWaOptionsAsText,
   barberWaTemplate,
   barberWaTemplateByName,
   barberWaWindowOpen,
@@ -484,6 +485,16 @@ test("la baja se lee de las preferencias sin tronar con datos raros", () => {
   assert.equal(barberClientOptedOut(null), false);
   assert.equal(barberClientOptedOut("texto"), false);
   assert.equal(barberClientOptedOut([]), false);
+});
+
+test("el respaldo de los botones es el mismo mensaje con las opciones numeradas", () => {
+  assert.equal(
+    barberWaOptionsAsText("¿Qué te vas a hacer? ", [
+      { title: "Corte" },
+      { title: "Barba", description: "$120 · 20 min" },
+    ]),
+    "¿Qué te vas a hacer?\n\n1. Corte\n2. Barba — $120 · 20 min",
+  );
 });
 
 /* ══════════ 9. TERMINOLOGÍA: es una barbería, no una clínica ═════════ */

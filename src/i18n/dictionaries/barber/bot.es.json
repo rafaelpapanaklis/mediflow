@@ -48,12 +48,12 @@
     "from": "Desde",
     "to": "Hasta",
     "days": "Días",
-    "offHint": "Fuera de ese horario avisa que contestan al abrir y deja el chat marcado para ti.",
+    "offHint": "Fuera de ese horario avisa que contestan al abrir y deja el chat marcado para ti. Cuando vuelve el horario, el bot lo retoma solo.",
     "noDays": "Elige al menos un día o el bot no contestará nunca."
   },
   "spend": {
     "title": "Tope de gasto de IA",
-    "hint": "Por día y por barbería. Al llegar al tope el bot deja de usar IA y te pasa los chats, para que un cliente insistente no dispare la cuenta.",
+    "hint": "Por día y por barbería. Al llegar al tope el bot deja de usar IA y te pasa los chats, para que un cliente insistente no dispare la cuenta. Las notas de voz que el bot transcribe también cuentan aquí.",
     "capLabel": "Tope diario",
     "today": "Hoy llevas {spent} de {cap}",
     "reached": "Ya se alcanzó el tope de hoy. Los chats están pasando a tu bandeja.",
@@ -69,7 +69,7 @@
   "pauses": {
     "title": "Conversaciones que atiendes tú",
     "empty": "Ninguna. El bot está atendiendo todos los chats.",
-    "hint": "Aquí caen los chats en los que el cliente pidió una persona o el bot prefirió no arriesgarse.",
+    "hint": "Aquí caen los chats en los que el cliente pidió una persona, contestaste tú o el bot prefirió no arriesgarse. Los que marcó el bot (🤖) vuelven a él solos a las 12 horas si nadie los toma; los que tomaste tú se quedan contigo hasta que los devuelvas.",
     "resume": "Devolver al bot",
     "pausedAt": "Desde {when}",
     "reasonLabel": "Motivo"

@@ -345,6 +345,25 @@ export function botTurnCostMicros(args: {
   return Math.ceil(usd * rate * MICROS_PER_MXN);
 }
 
+/**
+ * Whisper cobra por MINUTO de audio (0.006 USD en whisper-1, la misma cifra
+ * que usa el dictado del dental en src/lib/integrations/whisper-tarifa.ts).
+ */
+export const BARBER_BOT_WHISPER_USD_PER_MIN = 0.006;
+
+/**
+ * Costo de transcribir una nota de voz, en micros de peso. Cuenta contra el
+ * MISMO tope diario de IA de la barbería que las respuestas del bot
+ * (barber_bot_usage): aquí no hay saldo aparte. Mínimo 1 micro: ningún audio
+ * sale gratis del contador.
+ */
+export function botVoiceCostMicros(seconds: number, usdMxn: number): number {
+  const secs = Number.isFinite(seconds) && seconds > 0 ? seconds : 0;
+  const rate = usdMxn > 0 ? usdMxn : BARBER_BOT_USD_MXN_FALLBACK;
+  const usd = (secs / 60) * BARBER_BOT_WHISPER_USD_PER_MIN;
+  return Math.max(1, Math.ceil(usd * rate * MICROS_PER_MXN));
+}
+
 /** Micros → pesos con 2 decimales, para enseñarlo en el panel. */
 export function microsToMxn(micros: number): number {
   return Math.round((micros / MICROS_PER_MXN) * 100) / 100;
@@ -362,6 +381,118 @@ export function quotaIsTight(used: number, limit: number): boolean {
   if (limit < 0) return false; // -1 = ilimitado
   if (limit === 0) return true;
   return used / limit >= BARBER_BOT_QUOTA_WARN_RATIO;
+}
+
+/* ── Pausas: cuáles se quitan solas ────────────────────────────────── */
+
+/**
+ * Marca de las pausas que puso EL BOT (no una persona). Va al principio del
+ * motivo, que es lo que el panel enseña: «🤖 Escribió fuera del horario».
+ */
+export const BARBER_BOT_AUTO_PAUSE_PREFIX = "🤖 ";
+
+/** Pausa por haber escrito fuera del horario del bot. */
+export const BARBER_BOT_PAUSE_OFF_HOURS = `${BARBER_BOT_AUTO_PAUSE_PREFIX}Escribió fuera del horario del bot`;
+
+/**
+ * Cuánto dura una pausa que puso el bot si nadie de la barbería toma la
+ * conversación. Mismo plazo que decidió Rafael para el bot del dental el
+ * 1-oct-2026 (HANDOFF_REACTIVAR_MS en src/lib/whatsapp/bot/handoff.ts).
+ */
+export const BARBER_BOT_AUTO_PAUSE_MS = 12 * 60 * 60 * 1000;
+
+export function isAutoBotPause(reason: string | null | undefined): boolean {
+  return typeof reason === "string" && reason.startsWith(BARBER_BOT_AUTO_PAUSE_PREFIX);
+}
+
+/** Motivo de una pausa del bot, ya con su marca. */
+export function autoPauseReason(text: string): string {
+  let clean = (text ?? "").replace(/\s+/g, " ").trim();
+  // Idempotente: un motivo que ya trae la marca no la lleva dos veces.
+  while (clean.startsWith(BARBER_BOT_AUTO_PAUSE_PREFIX.trim())) {
+    clean = clean.slice(BARBER_BOT_AUTO_PAUSE_PREFIX.trim().length).trim();
+  }
+  return `${BARBER_BOT_AUTO_PAUSE_PREFIX}${clean.slice(0, 170) || "El bot pasó la conversación"}`;
+}
+
+/**
+ * ¿Esta pausa ya no cuenta y el bot puede volver a contestar?
+ *
+ * 🔴 Antes TODA pausa era para siempre: bastaba que un cliente escribiera
+ * una noche fuera de horario, o que la IA tardara una vez, para que el bot
+ * no le volviera a contestar jamás hasta que alguien lo reanudara a mano en
+ * el panel. En una semana el bot se habría apagado solo, cliente por
+ * cliente.
+ *
+ *   · Pausa de una PERSONA (tomó la conversación, respondió desde el panel)
+ *       → nunca caduca sola: la quita quien la puso.
+ *   · Pausa del bot por FUERA DE HORARIO → se acaba cuando el bot vuelve a
+ *       estar en horario.
+ *   · Cualquier otra pausa del bot (pidió una persona, tope de IA, la IA no
+ *       respondió) → 12 horas. Si para entonces nadie la tomó, el siguiente
+ *       mensaje del cliente lo vuelve a atender el bot.
+ */
+export function botPauseExpired(
+  pause: { reason: string | null; pausedAt: Date },
+  now: Date,
+  botInHoursNow: boolean,
+): boolean {
+  if (!isAutoBotPause(pause.reason)) return false;
+  if (pause.reason === BARBER_BOT_PAUSE_OFF_HOURS) return botInHoursNow;
+  return now.getTime() - pause.pausedAt.getTime() >= BARBER_BOT_AUTO_PAUSE_MS;
+}
+
+/* ── Opciones que el bot ofrece con botones o lista ────────────────── */
+
+/** Una opción que el cliente puede tocar en vez de escribir. */
+export interface BarberBotOption {
+  /** Lo que ve en el botón o en la fila (y lo que nos llega si la toca). */
+  title: string;
+  /** Solo listas: segunda línea gris de la fila. */
+  description?: string;
+}
+
+/** Tope de Meta: una lista admite 10 filas en total. */
+export const BARBER_BOT_OPTIONS_MAX = 10;
+
+/**
+ * Prefijo del id de cada opción. Es lo que le dice a la ingesta que ese
+ * toque es la respuesta a una pregunta DEL BOT (y no, por ejemplo, un
+ * «Sí» al recordatorio de una visita).
+ */
+export const BARBER_BOT_OPTION_ID_PREFIX = "bot:";
+
+export function isBarberBotOptionId(id: unknown): boolean {
+  return typeof id === "string" && id.startsWith(BARBER_BOT_OPTION_ID_PREFIX);
+}
+
+/**
+ * Lo que el modelo pidió ofrecer → opciones válidas. Quita vacías y
+ * repetidas (Meta rechaza dos títulos iguales) y corta en 10. Con menos de
+ * dos no hay nada entre qué elegir: devuelve [] y el mensaje sale como
+ * texto normal.
+ */
+export function normalizeBotOptions(raw: unknown): BarberBotOption[] {
+  if (!Array.isArray(raw)) return [];
+  const out: BarberBotOption[] = [];
+  const seen = new Set<string>();
+  for (const item of raw) {
+    const src: Record<string, unknown> =
+      typeof item === "string"
+        ? { titulo: item }
+        : item && typeof item === "object" && !Array.isArray(item)
+          ? (item as Record<string, unknown>)
+          : {};
+    const title = cleanText(src.titulo ?? src.title, 60);
+    if (!title) continue;
+    const key = title.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const description = cleanText(src.descripcion ?? src.description, 72);
+    out.push(description ? { title, description } : { title });
+    if (out.length >= BARBER_BOT_OPTIONS_MAX) break;
+  }
+  return out.length >= 2 ? out : [];
 }
 
 /* ── Lo que el panel recibe (client-safe, sin prisma) ───────────────── */
