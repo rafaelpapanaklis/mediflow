@@ -18,7 +18,7 @@
 import "./_sin-server-only";
 import Module from "node:module";
 import path from "node:path";
-import { createHmac } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import { test, before, after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { NextRequest } from "next/server";
@@ -181,12 +181,31 @@ const ITEMS = [
   { productId: "p2", name: "Shampoo de menta", unitPrice: 120, qty: 1 },
 ];
 
+/**
+ * Un pedido como lo deja la tienda (sql/barber_tienda.sql de ws6-t1):
+ *   · `id` TEXT NOT NULL SIN valor por defecto (lo pone el código de la
+ *     tienda con gen_random_uuid()), así que aquí también se da;
+ *   · CHECK «pagado en línea ⇒ con paid_at» y «entregado ⇔ con venta de Caja»:
+ *     un PAID_ONLINE nace con paid_at y un PICKED_UP con su venta.
+ */
 async function pedido(barbershopId: string, o: { status?: string; total?: number; creado?: Date; items?: unknown } = {}) {
+  const status = o.status ?? "PENDING";
+  const total = o.total ?? 499;
+  const paidAt = status === "PAID_ONLINE" ? new Date() : null;
+  let saleId: string | null = null;
+  if (status === "PICKED_UP") {
+    const venta = await prisma.barberSale.create({
+      data: { barbershopId, soldByUserId: duenoAUserId, subtotal: total, total, notes: "pedido de la tienda (prueba MP)" } as never,
+      select: { id: true },
+    });
+    saleId = venta.id;
+  }
   const filas = await prisma.$queryRaw<{ id: string }[]>(Prisma.sql`
-    INSERT INTO barber_product_orders (barbershop_id, branch_id, folio, client_name, client_phone, items, total, status, pay_method, created_at, updated_at)
-    VALUES (${barbershopId}, ${barbershopId}, ${`F-${++reqSeq}`}, 'Luis Pérez', '5512345678',
-            ${JSON.stringify(o.items ?? ITEMS)}::jsonb, ${o.total ?? 499}, ${o.status ?? "PENDING"}, 'MERCADOPAGO',
-            ${o.creado ?? new Date()}, ${new Date("2026-01-01T00:00:00Z")})
+    INSERT INTO barber_product_orders (id, barbershop_id, branch_id, folio, client_name, client_phone, items, total, status, pay_method,
+                                       paid_at, sale_id, created_at, updated_at)
+    VALUES (${randomUUID()}, ${barbershopId}, ${barbershopId}, ${`F-${++reqSeq}`}, 'Luis Pérez', '5512345678',
+            ${JSON.stringify(o.items ?? ITEMS)}::jsonb, ${total}, ${status}, 'MERCADOPAGO',
+            ${paidAt}, ${saleId}, ${o.creado ?? new Date()}, ${new Date("2026-01-01T00:00:00Z")})
     RETURNING id
   `);
   return filas[0].id;
@@ -261,6 +280,8 @@ after(async () => {
   if (skip) return;
   await prisma.$executeRaw(Prisma.sql`DELETE FROM barber_product_orders WHERE barbershop_id = ANY(${creadas})`);
   await prisma.$executeRaw(Prisma.sql`DELETE FROM barber_mercadopago_accounts WHERE barbershop_id = ANY(${creadas})`);
+  // Las ventas de los pedidos entregados apuntan al usuario (sin cascada): van antes.
+  await prisma.barberSale.deleteMany({ where: { barbershopId: { in: creadas } } });
   await prisma.barberUser.deleteMany({ where: { barbershopId: { in: creadas } } });
   await prisma.barbershop.deleteMany({ where: { id: { in: creadas }, parentId: { not: null } } });
   await prisma.barbershop.deleteMany({ where: { id: { in: creadas } } });
