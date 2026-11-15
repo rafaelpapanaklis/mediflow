@@ -32,6 +32,7 @@ import { Field, Modal, Pill, agendaCss } from "@/components/barber/agenda/agenda
 import { formatBarberPhone } from "@/lib/barber/phone-format";
 import { WalkinQr } from "./walkin-qr";
 import css from "./walkin.module.css";
+import { formatBarberPhone } from "@/lib/barber/phone-format";
 
 interface QueueRow extends BarberWalkInDTO {
   rank: number;

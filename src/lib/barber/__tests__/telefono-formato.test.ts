@@ -80,3 +80,18 @@ test("Mensajes, clientes, agenda, caja, fila y demás escriben con formatBarberP
     assert.doesNotMatch(s, /function (prettyPhone|telefonoLegible)[\s\S]{0,120}slice\(/, f);
   }
 });
+
+test("Solicitudes, la fila del panel y la ficha de la visita escriben el teléfono bonito (QA A, 15-nov)", () => {
+  // Antes pintaban «9995550177» tal cual; el href (tel:/wa.me) sigue con los dígitos.
+  const casos: Array<[string, RegExp]> = [
+    ["src/app/barber/(panel)/solicitudes/solicitudes-client.tsx", /<Phone size=\{14\} \/> \{formatBarberPhone\(r\.clientPhone\)\}/],
+    ["src/components/barber/walkin/walkin-panel.tsx", /formatBarberPhone\(row\.phone\)/],
+    ["src/components/barber/agenda/appointment-detail.tsx", /\{formatBarberPhone\(appt\.clientPhone\)\}/],
+  ];
+  for (const [archivo, re] of casos) {
+    const s = readFileSync(archivo, "utf8");
+    assert.match(s, re, archivo);
+    // Ningún teléfono crudo como texto visible.
+    assert.doesNotMatch(s, /\/> \{(r\.clientPhone|appt\.clientPhone|aviso\.telefono)\}/, archivo);
+  }
+});

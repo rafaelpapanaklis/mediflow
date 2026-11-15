@@ -26,9 +26,12 @@ export function VisitTimeline({
   locale,
   t,
   onOpenPhoto,
+  timezone,
 }: {
   entries: BarberVisitEntry[];
   locale: string;
+  /** Zona de la barbería: la misma hora en el servidor y en el navegador. */
+  timezone?: string;
   t: BarberT;
   onOpenPhoto: (photo: BarberVisitPhotoView) => void;
 }) {
@@ -56,7 +59,7 @@ export function VisitTimeline({
 
             <div className={s.tlBody}>
               <div className={s.tlHead}>
-                <span className={s.tlDate}>{formatDateTime(entry.at, locale)}</span>
+                <span className={s.tlDate}>{formatDateTime(entry.at, locale, timezone)}</span>
 
                 {isRedemption ? (
                   <Badge tone="brand">

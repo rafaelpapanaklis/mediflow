@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check, Copy, Link2, MessageCircle, Phone, X } from "lucide-react";
+import { formatBarberPhone } from "@/lib/barber/phone-format";
 import { getBarberT } from "@/i18n/dictionaries/barber";
 import { upperFirst } from "@/components/barber/upper-first";
 import { formatBarberPhone } from "@/lib/barber/phone-format";

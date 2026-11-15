@@ -646,7 +646,11 @@ export function BookingFlow({
             </ul>
           </div>
 
+          {/* noValidate: el aviso lo da submit() en el idioma de la barbería
+              («Escribe tu nombre.»), no la burbuja del navegador, que con el
+              celular en inglés salía «Please fill out this field» (QA A). */}
           <form
+            noValidate
             onSubmit={(e) => {
               e.preventDefault();
               void submit();

@@ -41,6 +41,7 @@
       "other": "{count} visits"
     },
     "dayTotal": "Day total",
+    "weekTotal": "Week total",
     "hours": "Hours"
   },
   "card": {
@@ -132,7 +133,10 @@
     "completeAndCharge": "Complete and charge",
     "alreadyCharged": "Already paid: {amount}.",
     "viewTicket": "See the receipt",
-    "chargeSkipHint": "Paying later? You can close without charging; the visit stays under “Visits to charge” in the register."
+    "chargeSkipHint": "Paying later? You can close without charging; the visit stays under “Visits to charge” in the register.",
+    "cancelConfirm": "Cancel the visit for {name}?",
+    "cancelYes": "Yes, cancel",
+    "cancelNo": "No, go back"
   },
   "schedule": {
     "title": "Hours and time off",

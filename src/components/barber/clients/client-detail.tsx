@@ -206,7 +206,7 @@ export function BarberClientDetailScreen({
             <div>
               <p className={s.blockWarnText}>
                 <strong>{t("block.warning")}</strong>
-                {block?.at ? ` ${t("block.blockedOn", { date: formatDate(block.at, locale) })}.` : ""}
+                {block?.at ? ` ${t("block.blockedOn", { date: formatDate(block.at, locale, timezone) })}.` : ""}
               </p>
               {block?.reason ? (
                 <p className={s.blockWarnText}>
@@ -258,7 +258,7 @@ export function BarberClientDetailScreen({
                       <UserRound size={13} />
                     </span>
                     {client.lastVisitAt
-                      ? t("detail.lastVisit", { date: formatDate(client.lastVisitAt, locale) })
+                      ? t("detail.lastVisit", { date: formatDate(client.lastVisitAt, locale, timezone) })
                       : t("detail.neverVisited")}
                     {" · "}
                     {t("detail.visits", { count: client.totalVisits })}
@@ -292,7 +292,7 @@ export function BarberClientDetailScreen({
                       </span>
                       {t("detail.membershipUntil", {
                         name: detail.membership.name,
-                        date: formatDate(detail.membership.endAt, locale),
+                        date: formatDate(detail.membership.endAt, locale, timezone),
                       })}
                     </span>
                   ) : null}
@@ -473,6 +473,7 @@ export function BarberClientDetailScreen({
                 <VisitTimeline
                   entries={entries}
                   locale={locale}
+                  timezone={timezone}
                   t={t}
                   onOpenPhoto={setLightbox}
                 />

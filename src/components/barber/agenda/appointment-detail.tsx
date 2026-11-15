@@ -42,6 +42,7 @@ import {
   shopMinuteOfDay,
 } from "@/lib/barber/agenda";
 import { sumMoneyBy } from "@/lib/barber/money";
+import { formatBarberPhone } from "@/lib/barber/phone-format";
 import { isOwnVisitStatus } from "@/lib/barber/own-visits";
 import { isBarberUnacceptedRequest } from "@/lib/barber/whatsapp-core";
 import { Field, Modal, Pill, agendaCss as css } from "./agenda-ui";
@@ -80,6 +81,9 @@ const FORWARD: BarberAppointmentStatus[] = ["CONFIRMED", "IN_PROGRESS", "DONE"];
 export function AppointmentDetail(props: AppointmentDetailProps) {
   const { appointment: appt, t, timezone } = props;
   const [busy, setBusy] = useState<string | null>(null);
+  // «Cancelar cita» pide confirmación (QA A, 15-nov): antes cancelaba al
+  // primer clic, aun con el cliente en la silla. Igual que Solicitudes.
+  const [confirmCancel, setConfirmCancel] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const savedMinutes = appointmentMinutes(appt);
@@ -433,12 +437,39 @@ export function AppointmentDetail(props: AppointmentDetailProps) {
               type="button"
               key={status}
               className={`${css.btn} ${css.btnSm} ${status === "CANCELLED" ? css.btnDanger : ""}`}
-              onClick={() => move(status)}
-              disabled={busy !== null}
+              onClick={() => (status === "CANCELLED" ? setConfirmCancel(true) : move(status))}
+              disabled={busy !== null || confirmCancel}
             >
               {BARBER_APPOINTMENT_ACTION_LABELS[status]}
             </button>
           ))}
+        </div>
+      ) : null}
+
+      {props.canEdit && confirmCancel && secondary.includes("CANCELLED") ? (
+        <div className={css.actionsRow} role="alertdialog" aria-label={t("barber.agenda.detail.cancelConfirm", { name: appt.clientName || "—" })}>
+          <p className={css.hint} style={{ flexBasis: "100%", margin: 0, color: "var(--text-1)" }}>
+            {t("barber.agenda.detail.cancelConfirm", { name: appt.clientName || "—" })}
+          </p>
+          <button
+            type="button"
+            className={`${css.btn} ${css.btnSm} ${css.btnDanger}`}
+            onClick={() => {
+              setConfirmCancel(false);
+              move("CANCELLED");
+            }}
+            disabled={busy !== null}
+          >
+            {t("barber.agenda.detail.cancelYes")}
+          </button>
+          <button
+            type="button"
+            className={`${css.btn} ${css.btnSm}`}
+            onClick={() => setConfirmCancel(false)}
+            disabled={busy !== null}
+          >
+            {t("barber.agenda.detail.cancelNo")}
+          </button>
         </div>
       ) : null}
 

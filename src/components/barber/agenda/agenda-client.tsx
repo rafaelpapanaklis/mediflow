@@ -571,7 +571,8 @@ export function AgendaClient(props: AgendaClientProps) {
               <p className={css.dateSub}>
                 {t("barber.agenda.summary.appointments", { count: visibleAppointments.length })}
                 {dayTotal > 0
-                  ? ` · ${t("barber.agenda.summary.dayTotal")} ${formatMXN(dayTotal)}`
+                  ? // En Semana suma los 7 días: decía «Total del día» (QA A, 15-nov).
+                    ` · ${t(days > 1 ? "barber.agenda.summary.weekTotal" : "barber.agenda.summary.dayTotal")} ${formatMXN(dayTotal)}`
                   : ""}
               </p>
             </div>
