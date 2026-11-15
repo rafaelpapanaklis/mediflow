@@ -156,6 +156,14 @@
     "readOnly": "Solo quien puede cambiar la configuración edita este ajuste.",
     "storageMissing": "Este ajuste todavía no se puede guardar: falta un paso de nuestro lado. Ya estamos en ello."
   },
+  "signup": {
+    "canceled": "Cerraste la ventana de Meta antes de terminar: vuelve a intentarlo y termina con el botón azul.",
+    "metaError": "Meta no pudo terminar la conexión. Espera unos minutos y vuelve a intentarlo.",
+    "noNumber": "Meta no nos dijo qué número conectaste y no lo encontramos en tu cuenta. Vuelve a intentarlo y, al final, elige tu número.",
+    "manyNumbers": "Tu cuenta de WhatsApp Business tiene varios números y Meta no nos dijo cuál elegiste. Vuelve a intentarlo y elige tu número al final.",
+    "server": "No pudimos terminar la conexión con Meta. Intenta de nuevo en un momento; si se repite, escríbenos a soporte.",
+    "network": "Se cortó la conexión mientras terminábamos. Revisa tu internet e intenta de nuevo."
+  },
   "common": {
     "cancel": "Cancelar"
   }

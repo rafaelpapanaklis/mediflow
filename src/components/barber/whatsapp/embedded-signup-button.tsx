@@ -4,6 +4,20 @@ import { useEffect, useRef, useState } from "react";
 import { MessageCircle } from "lucide-react";
 import { Btn } from "../team/admin-ui";
 import { useWaT } from "./ui";
+import {
+  barberSignupFailureText,
+  barberSignupWarnLine,
+  decideBarberSignupStep,
+  readBarberSignupMessage,
+  type BarberSignupSession,
+} from "@/lib/barber/wa-signup-core";
+
+/**
+ * A veces Meta entrega el evento FINISH (con la cuenta y el número) un poco
+ * DESPUÉS de la respuesta de FB.login. Se le espera este rato antes de
+ * mandar el código sin ellos (el servidor los buscaría igual).
+ */
+const FINISH_GRACE_MS = 1500;
 
 // ═══════════════════════════════════════════════════════════════════════
 // Botón "Conectar mi WhatsApp" con el Embedded Signup de Meta.
@@ -44,29 +58,15 @@ export function BarberEmbeddedSignupButton({
   const t = useWaT();
   const [sdkReady, setSdkReady] = useState(false);
   const [loading, setLoading] = useState(false);
-  const session = useRef<{ wabaId?: string; phoneNumberId?: string }>({});
+  const session = useRef<BarberSignupSession>({});
 
-  // Datos del WABA/número que emite el popup del Embedded Signup.
+  // Lo que avisa la ventana de Meta: FINISH (cuenta y número), CANCEL (en qué
+  // paso se cerró) o ERROR. La lectura es pura (wa-signup-core.ts).
   useEffect(() => {
     function onMessage(ev: MessageEvent) {
       if (typeof ev.origin !== "string" || !ev.origin.endsWith("facebook.com")) return;
-      try {
-        const data = typeof ev.data === "string" ? JSON.parse(ev.data) : ev.data;
-        // Coexistence emite FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING; el flujo
-        // clásico emite FINISH — se aceptan los dos.
-        if (
-          data?.type === "WA_EMBEDDED_SIGNUP" &&
-          typeof data?.event === "string" &&
-          data.event.startsWith("FINISH")
-        ) {
-          session.current = {
-            wabaId: data.data?.waba_id,
-            phoneNumberId: data.data?.phone_number_id,
-          };
-        }
-      } catch {
-        /* mensajes no-JSON del SDK: ignorar */
-      }
+      const next = readBarberSignupMessage(session.current, ev.data);
+      if (next) session.current = next;
     }
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
@@ -104,26 +104,7 @@ export function BarberEmbeddedSignupButton({
     session.current = {};
     window.FB.login(
       (response: any) => {
-        const code = response?.authResponse?.code;
-        const { wabaId, phoneNumberId } = session.current;
-        if (!code || !wabaId || !phoneNumberId) {
-          setLoading(false);
-          onError(t("errors.generic"));
-          return;
-        }
-        fetch("/api/barber/whatsapp/connect", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ code, wabaId, phoneNumberId }),
-        })
-          .then(async (r) => {
-            const d = await r.json().catch(() => null);
-            if (!r.ok || !d?.ok) throw new Error(d?.error ?? t("errors.generic"));
-            return d;
-          })
-          .then((d) => onDone({ displayName: d.displayName ?? null, verified: d.verified === true }))
-          .catch((e: Error) => onError(e.message))
-          .finally(() => setLoading(false));
+        void finish(response?.authResponse?.code);
       },
       {
         config_id: CONFIG_ID,
@@ -136,6 +117,57 @@ export function BarberEmbeddedSignupButton({
         },
       },
     );
+  }
+
+  /** Texto para la barbería: el de la llave, o el que mandó el servidor. */
+  function failText(r: ReturnType<typeof barberSignupFailureText>): string {
+    return "key" in r ? t(`signup.${r.key}`) : r.message;
+  }
+
+  async function finish(code: unknown) {
+    try {
+      // Hay código pero aún no el número: se le da un momento al FINISH.
+      if (typeof code === "string" && (!session.current.wabaId || !session.current.phoneNumberId)) {
+        const until = Date.now() + FINISH_GRACE_MS;
+        while (Date.now() < until && (!session.current.wabaId || !session.current.phoneNumberId)) {
+          await new Promise((r) => setTimeout(r, 100));
+        }
+      }
+      const s = session.current;
+      const step = decideBarberSignupStep(code, s);
+      // Qué faltó, para quien revise la consola. Sin código, token ni ids.
+      const warn = barberSignupWarnLine(step, s);
+      if (warn) console.warn(warn);
+      if (step.kind === "canceled") {
+        onError(failText(barberSignupFailureText({ step })));
+        return;
+      }
+
+      let res: Response;
+      try {
+        res = await fetch("/api/barber/whatsapp/connect", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          // Sin cuenta o número, el servidor los busca con el token.
+          body: JSON.stringify({ code, wabaId: s.wabaId ?? null, phoneNumberId: s.phoneNumberId ?? null }),
+        });
+      } catch {
+        console.warn("[barber/whatsapp] Conectar WhatsApp: no hubo respuesta del servidor (red)");
+        onError(failText(barberSignupFailureText({ network: true })));
+        return;
+      }
+      const d = await res.json().catch(() => null);
+      if (!res.ok || !d?.ok) {
+        console.warn(
+          `[barber/whatsapp] Conectar WhatsApp: el servidor respondió ${res.status}${d?.code ? ` (${d.code})` : ""}`,
+        );
+        onError(failText(barberSignupFailureText({ status: res.status, body: d })));
+        return;
+      }
+      onDone({ displayName: d.displayName ?? null, verified: d.verified === true });
+    } finally {
+      setLoading(false);
+    }
   }
 
   if (!APP_ID || !CONFIG_ID) return null;

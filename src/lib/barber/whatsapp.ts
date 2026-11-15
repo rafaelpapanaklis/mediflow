@@ -53,6 +53,7 @@ import {
   type BarberWaAckDecision,
 } from "@/lib/barber/wa-acuse-core";
 import { getBarberWaAck } from "@/lib/barber/wa-acuse";
+import { wabaIdsFromDebugToken } from "@/lib/barber/wa-signup-core";
 import {
   BARBER_WA_ARCHIVE_MARK,
   BARBER_WA_CLAIM_LOST_MESSAGE,
@@ -463,6 +464,57 @@ export async function barberWabaOwnsPhone(
     return false;
   }
   return false;
+}
+
+/**
+ * Los números que `GET /{wabaId}/phone_numbers` lista con ESE token (hasta
+ * 5 páginas). null = Meta no contestó bien (no es lo mismo que «ninguno»).
+ */
+export async function listBarberWabaPhones(wabaId: string, accessToken: string): Promise<string[] | null> {
+  let url: string | null = `${GRAPH}/${encodeURIComponent(wabaId)}/phone_numbers?fields=id&limit=100`;
+  const out: string[] = [];
+  try {
+    for (let page = 0; url && page < 5; page++) {
+      const res: Response = await fetch(url, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        signal: AbortSignal.timeout(15000),
+      });
+      if (!res.ok) return null;
+      const json: any = await res.json().catch(() => null);
+      for (const n of Array.isArray(json?.data) ? json.data : []) {
+        const id = String(n?.id ?? "");
+        if (id && !out.includes(id)) out.push(id);
+      }
+      const next = json?.paging?.next;
+      url = typeof next === "string" && next.startsWith(`${GRAPH}/`) ? next : null;
+    }
+  } catch {
+    return null;
+  }
+  return out;
+}
+
+/**
+ * Las cuentas de WhatsApp Business que la persona compartió con la app al
+ * terminar el Embedded Signup, leídas del propio token (`GET /debug_token`,
+ * `granular_scopes`). Es la vía que Meta documenta para cuando el navegador
+ * no recibió el evento FINISH con el waba_id. [] si Meta no contesta.
+ */
+export async function sharedBarberWabaIds(
+  accessToken: string,
+  app: { id: string; secret: string },
+): Promise<string[]> {
+  try {
+    const res = await fetch(
+      `${GRAPH}/debug_token?input_token=${encodeURIComponent(accessToken)}` +
+        `&access_token=${encodeURIComponent(`${app.id}|${app.secret}`)}`,
+      { signal: AbortSignal.timeout(15000) },
+    );
+    if (!res.ok) return [];
+    return wabaIdsFromDebugToken(await res.json().catch(() => null));
+  } catch {
+    return [];
+  }
 }
 
 /**

@@ -157,6 +157,14 @@
     "readOnly": "Only people who can change the settings can edit this.",
     "storageMissing": "This setting can’t be saved yet: a step is still pending on our side. We’re on it."
   },
+  "signup": {
+    "canceled": "You closed the Meta window before finishing: try again and finish with the blue button.",
+    "metaError": "Meta couldn’t finish the connection. Wait a few minutes and try again.",
+    "noNumber": "Meta didn’t tell us which number you connected and we couldn’t find it in your account. Try again and pick your number at the end.",
+    "manyNumbers": "Your WhatsApp Business account has several numbers and Meta didn’t tell us which one you picked. Try again and pick your number at the end.",
+    "server": "We couldn’t finish connecting with Meta. Try again in a moment; if it keeps happening, contact support.",
+    "network": "The connection dropped while we were finishing. Check your internet and try again."
+  },
   "common": {
     "cancel": "Cancel"
   }
