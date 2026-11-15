@@ -18,7 +18,6 @@ import {
   readLoyaltyLedger,
   tallyVisitsForClient,
   toBarberClientDTO,
-  withReservedPreference,
   type BarberClientPreferences,
   type BarberClientRow,
   type BarberClientsConfig,
@@ -358,19 +357,20 @@ export async function redeemBarberLoyalty(
     redemptions: [entry, ...ledger.redemptions].slice(0, LOYALTY_HISTORY_MAX),
   };
 
-  const written = await prisma.barberClient.updateMany({
-    where: {
-      id: client.id,
-      barbershopId: ctx.barbershopId,
-      loyaltyCount: { gte: config.loyaltyThreshold },
-    },
-    data: {
-      loyaltyCount: { decrement: config.loyaltyThreshold },
-      preferences: withReservedPreference(client.preferences, LOYALTY_LEDGER_KEY, nextLedger),
-    },
-  });
+  // Un solo UPDATE condicionado: descuenta y escribe SOLO la llave __loyalty
+  // (ronda 2, M3), sin pisar estrellas a mano ni la versión del enlace.
+  const written = await prisma.$executeRaw`
+    UPDATE "barber_clients"
+    SET "loyaltyCount" = "loyaltyCount" - ${config.loyaltyThreshold}::int,
+        "preferences" = jsonb_set(
+          CASE WHEN jsonb_typeof("preferences") = object THEN "preferences" ELSE {}::jsonb END,
+          ARRAY[${LOYALTY_LEDGER_KEY}::text], ${JSON.stringify(nextLedger)}::jsonb, true),
+        "updatedAt" = NOW()
+    WHERE "id" = ${client.id} AND "barbershopId" = ${ctx.barbershopId}
+      AND "loyaltyCount" >= ${config.loyaltyThreshold}::int
+  `;
 
-  if (written.count === 0) {
+  if (written === 0) {
     return { ok: false, error: "Ese premio ya se canjeó. Vuelve a abrir la ficha." };
   }
 

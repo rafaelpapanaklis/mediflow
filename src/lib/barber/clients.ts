@@ -414,6 +414,61 @@ export function withReservedPreference(
   return existing as Prisma.InputJsonValue;
 }
 
+// ── Escribir preferences SIN pisar a nadie (ronda 2, M3) ────────────────
+//
+// `preferences` guarda llaves de varios dueños: las públicas (cómo le gusta
+// el corte) y las reservadas (__loyalty, __stars, __card, __block,
+// __campaigns, __optOut…). Leer el JSON, cambiar una llave y escribirlo
+// ENTERO borra lo que otro escribió en medio: una estrella dada a mano, o un
+// enlace revocado que vuelve a abrir. Estas dos funciones cambian SOLO lo
+// suyo en un único UPDATE: Postgres lo aplica sobre la versión vigente de la
+// fila (con su candado de fila), así que nada se pierde.
+
+const RESERVED_KEY_RE = /^__[A-Za-z]+$/;
+
+/** Escribe (o quita, con value null) UNA llave reservada, atómicamente. */
+export async function setReservedPreferenceAtomic(
+  db: Pick<Prisma.TransactionClient, "$executeRaw">,
+  args: { barbershopId: string; clientId: string; key: string; value: unknown },
+): Promise<number> {
+  if (!RESERVED_KEY_RE.test(args.key)) throw new Error(`Llave reservada inválida: ${args.key}`);
+  if (!args.barbershopId || !args.clientId) return 0;
+  if (args.value === null || args.value === undefined) {
+    return db.$executeRaw`
+      UPDATE "barber_clients"
+      SET "preferences" = (CASE WHEN jsonb_typeof("preferences") = 'object' THEN "preferences" ELSE '{}'::jsonb END) - ${args.key}::text,
+          "updatedAt" = NOW()
+      WHERE "id" = ${args.clientId} AND "barbershopId" = ${args.barbershopId}
+    `;
+  }
+  return db.$executeRaw`
+    UPDATE "barber_clients"
+    SET "preferences" = jsonb_set(
+          CASE WHEN jsonb_typeof("preferences") = 'object' THEN "preferences" ELSE '{}'::jsonb END,
+          ARRAY[${args.key}::text], ${JSON.stringify(args.value)}::jsonb, true),
+        "updatedAt" = NOW()
+    WHERE "id" = ${args.clientId} AND "barbershopId" = ${args.barbershopId}
+  `;
+}
+
+/** Sustituye las preferencias PÚBLICAS conservando las reservadas vigentes, atómicamente. */
+async function savePublicPreferencesAtomic(
+  barbershopId: string,
+  clientId: string,
+  publicPrefs: BarberClientPreferences,
+): Promise<number> {
+  return prisma.$executeRaw`
+    UPDATE "barber_clients"
+    SET "preferences" = COALESCE((
+          SELECT jsonb_object_agg(e.key, e.value)
+          FROM jsonb_each(CASE WHEN jsonb_typeof("preferences") = 'object' THEN "preferences" ELSE '{}'::jsonb END) e
+          WHERE left(e.key, 2) = ${RESERVED_PREFERENCE_PREFIX}
+        ), '{}'::jsonb) || ${JSON.stringify(publicPrefs)}::jsonb,
+        "updatedAt" = NOW()
+    WHERE "id" = ${clientId} AND "barbershopId" = ${barbershopId}
+  `;
+}
+
 // ── Teléfono ───────────────────────────────────────────────────────────
 
 /**
@@ -869,18 +924,18 @@ export async function createOrLinkBarberClient(
     if (!row.notes && notes) data.notes = notes;
     const currentPrefs = readClientPreferences(row.preferences);
     const missing = Object.entries(prefs).filter(([k]) => !(k in currentPrefs));
-    if (missing.length) {
-      data.preferences = mergeClientPreferences(row.preferences, {
-        ...currentPrefs,
-        ...Object.fromEntries(missing),
-      });
+    if (Object.keys(data).length === 0 && missing.length === 0) return row;
+    if (Object.keys(data).length > 0) {
+      await prisma.barberClient.update({ where: { id: row.id, barbershopId }, data, select: { id: true } });
     }
-    if (Object.keys(data).length === 0) return row;
-    return prisma.barberClient.update({
-      where: { id: row.id, barbershopId },
-      data,
-      select: CLIENT_SELECT,
-    });
+    // Las preferencias van aparte y atómicas (ronda 2, M3): no pisan las
+    // llaves reservadas que alguien haya escrito mientras tanto.
+    if (missing.length) {
+      await savePublicPreferencesAtomic(barbershopId, row.id, { ...currentPrefs, ...Object.fromEntries(missing) });
+    }
+    return (
+      (await prisma.barberClient.findFirst({ where: { id: row.id, barbershopId }, select: CLIENT_SELECT })) ?? row
+    );
   };
 
   const existing = await prisma.barberClient.findFirst({
@@ -1032,11 +1087,10 @@ export async function saveClientPreferences(
     if (!barber) delete prefs.favoriteBarberId;
   }
 
-  return prisma.barberClient.update({
-    where: { id: clientId, barbershopId: ctx.barbershopId },
-    data: { preferences: mergeClientPreferences(row.preferences, prefs) },
-    select: CLIENT_SELECT,
-  });
+  // Solo las públicas, en un UPDATE: no pisa una estrella ni una revocación
+  // que se hayan escrito mientras tanto (ronda 2, M3).
+  await savePublicPreferencesAtomic(ctx.barbershopId, clientId, prefs);
+  return findBarberClient(ctx, clientId);
 }
 
 // ── Bloquear (que NO es borrar) ────────────────────────────────────────
@@ -1063,14 +1117,20 @@ export async function setBarberClientBlocked(
       }
     : null;
 
-  return prisma.barberClient.update({
-    where: { id: clientId, barbershopId: ctx.barbershopId },
-    data: {
-      blockedAt: blocked ? new Date() : null,
-      preferences: withReservedPreference(row.preferences, BLOCK_INFO_KEY, info),
-    },
-    select: CLIENT_SELECT,
+  await prisma.$transaction(async (tx) => {
+    await tx.barberClient.updateMany({
+      where: { id: clientId, barbershopId: ctx.barbershopId },
+      data: { blockedAt: blocked ? new Date() : null },
+    });
+    // Solo la llave __block (ronda 2, M3).
+    await setReservedPreferenceAtomic(tx, {
+      barbershopId: ctx.barbershopId,
+      clientId,
+      key: BLOCK_INFO_KEY,
+      value: info,
+    });
   });
+  return findBarberClient(ctx, clientId);
 }
 
 /**

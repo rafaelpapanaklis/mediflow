@@ -657,3 +657,51 @@ test("6 · Barbero: ve la tarjeta de sus clientes, no la de los demás", { skip 
   assert.equal(await stars.getStaffStarsView(beto, ajeno), null);
   assert.equal(await stars.getStaffStarsView(B.ctx, suyo), null, "otra barbería, tampoco");
 });
+
+// ── RONDA 2 · M3: nadie pisa una estrella a mano ni un enlace revocado ──
+
+/**
+ * Deja escrita (sin confirmar) una llave reservada dentro de una transacción
+ * con la fila tomada, lanza `other` mientras tanto y confirma después. Con el
+ * código viejo `other` leía el JSON de antes y, al escribirlo entero, borraba
+ * lo que acababa de confirmarse.
+ */
+async function raceAgainst(clientId: string, key: string, value: unknown, other: () => Promise<unknown>) {
+  let pending: Promise<unknown> | null = null;
+  await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT "id" FROM "barber_clients" WHERE "id" = ${clientId} FOR UPDATE`;
+    await tx.$executeRaw`
+      UPDATE "barber_clients"
+      SET "preferences" = jsonb_set(COALESCE("preferences", '{}'::jsonb), ARRAY[${key}::text], ${JSON.stringify(value)}::jsonb, true)
+      WHERE "id" = ${clientId}`;
+    pending = other();
+    await new Promise((r) => setTimeout(r, 400));
+  });
+  await pending;
+}
+
+test("RONDA 2 · M3: guardar preferencias, bloquear o anotar campañas ya no borra estrellas ni revocaciones", { skip }, async () => {
+  const clients = await import("@/lib/barber/clients");
+  const campaigns = await import("@/lib/barber/campaigns");
+  const ines = await withStars(A, "Inés", 2);
+
+  await raceAgainst(ines, "__stars", { net: 1, entries: [] }, () =>
+    clients.saveClientPreferences(A.ctx, ines, { fade: "medio" }));
+  let prefs = (await prisma.barberClient.findUniqueOrThrow({ where: { id: ines }, select: { preferences: true } })).preferences as Record<string, unknown>;
+  assert.deepEqual(prefs.__stars, { net: 1, entries: [] }, "la estrella dada a mano sobrevive");
+  assert.equal(prefs.fade, "medio", "y la preferencia se guardó");
+
+  await raceAgainst(ines, "__card", { v: 3 }, () => clients.setBarberClientBlocked(A.ctx, ines, true, "no llega"));
+  prefs = (await prisma.barberClient.findUniqueOrThrow({ where: { id: ines }, select: { preferences: true } })).preferences as Record<string, unknown>;
+  assert.deepEqual(prefs.__card, { v: 3 }, "el enlace revocado sigue revocado");
+  assert.ok(prefs.__block, "y el bloqueo quedó anotado");
+  assert.equal(prefs.fade, "medio");
+  await clients.setBarberClientBlocked(A.ctx, ines, false);
+
+  await raceAgainst(ines, "__stars", { net: 2, entries: [] }, () =>
+    campaigns.setBarberCampaignOptOut(A.ctx, { clientId: ines, optOut: true }));
+  prefs = (await prisma.barberClient.findUniqueOrThrow({ where: { id: ines }, select: { preferences: true } })).preferences as Record<string, unknown>;
+  assert.deepEqual(prefs.__stars, { net: 2, entries: [] });
+  assert.ok(prefs.__optout, "la baja de campañas quedó");
+  assert.equal(prefs.__block, undefined, "desbloquear quitó solo __block");
+});
