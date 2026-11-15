@@ -29,15 +29,32 @@ export function fmtPct(n: number | null | undefined): string {
   return `${n.toLocaleString("es-MX", { maximumFractionDigits: 1 })}%`;
 }
 
+/**
+ * "3:00 p. m." — la MISMA forma que la agenda (minuteToLabel): sin cero a
+ * la izquierda y con «a. m.»/«p. m.» espaciado. Antes Inicio y Caja decían
+ * «03:00 p.m.» y la Agenda «3:00 p. m.» (rediseño 15-nov, punto 12).
+ * La hora y el minuto se sacan en la zona de la barbería.
+ */
 export function fmtTime(iso: string | null | undefined, tz?: string): string {
   if (!iso) return "—";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
+  let h24 = d.getHours();
+  let mm = d.getMinutes();
   try {
-    return d.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", timeZone: tz });
+    const parts = new Intl.DateTimeFormat("en-US", {
+      hour: "numeric",
+      minute: "numeric",
+      hourCycle: "h23",
+      timeZone: tz,
+    }).formatToParts(d);
+    h24 = Number(parts.find((p) => p.type === "hour")?.value ?? h24) % 24;
+    mm = Number(parts.find((p) => p.type === "minute")?.value ?? mm);
   } catch {
-    return d.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
+    // zona inválida: hora local del servidor, como antes
   }
+  const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+  return `${h12}:${String(mm).padStart(2, "0")} ${h24 < 12 ? "a. m." : "p. m."}`;
 }
 
 export function fmtDateTime(iso: string | null | undefined, tz?: string): string {
