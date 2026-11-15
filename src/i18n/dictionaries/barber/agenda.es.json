@@ -514,7 +514,18 @@
       "confirm": "Agendar",
       "created": "Quedó agendada su próxima: {day} a las {time}",
       "noBarber": "Esta visita no tiene barbero: usa «Repetir esta cita» para elegir día y barbero.",
-      "error": "No se pudo buscar lugar. Inténtalo otra vez."
+      "error": "No se pudo buscar lugar. Inténtalo otra vez.",
+      "otherDate": "Otra fecha",
+      "otherDateLabel": "Elegir otro día en el calendario",
+      "calTitle": "Elige el día de su próxima",
+      "calPrev": "Mes anterior",
+      "calNext": "Mes siguiente",
+      "calLoading": "Cargando calendario…",
+      "calClosed": "{day}: la barbería cierra",
+      "calPast": "{day}: ya pasó",
+      "calUsual": "{day}: le toca (suele volver cada {weeks} sem)",
+      "calLegendUsual": "Le toca según su ritmo",
+      "calLegendClosed": "Cerrado"
     },
     "actions": {
       "repeat": "Repetir esta cita",

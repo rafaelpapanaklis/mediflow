@@ -8,6 +8,7 @@
 //   · usualReturnWeeks() → «suele volver cada X semanas», de sus visitas
 //   · findNextVisitSlot()→ «Agendar su próxima»: misma hora y barbero N semanas
 //                          después, o los huecos más cercanos de ese día
+//   · findNextVisitSlotOnDate / monthGrid / calendarDayState → «Otra fecha»
 //   · parseDepositAmount → el monto del anticipo, en centavos enteros
 //   · routeSupports()    → si una ruta del servidor ya existe (botones nuevos)
 // ═══════════════════════════════════════════════════════════════════════
@@ -23,7 +24,7 @@ import {
   type AvailabilityData,
   type BusyInterval,
 } from "@/lib/barber/booking-core";
-import { addDaysISO, shopDateISO, shopLocalToUtc, shopMinuteOfDay } from "@/lib/barber/agenda";
+import { addDaysISO, shopDateISO, shopLocalToUtc, shopMinuteOfDay, weekdayOfISO } from "@/lib/barber/agenda";
 
 // ── Lo que agrega ws6-t5 al DTO (contrato fijo) ─────────────────────────
 // Mientras su rama no esté unida, estos campos no llegan y todo se pinta
@@ -180,14 +181,31 @@ export function findNextVisitSlot(args: {
   day: DayWindow;
   now: Date;
 }): NextVisitResult | null {
-  const { appointment, weeks, timezone, day, now } = args;
+  const { appointment, weeks, timezone } = args;
+  return findNextVisitSlotOnDate({
+    ...args,
+    dateISO: nextVisitDateISO(appointment.startAt, weeks, timezone),
+  });
+}
+
+/**
+ * Lo mismo para un día ELEGIDO en el calendario («Otra fecha», ws6-t8):
+ * misma hora y mismo barbero ese día, o los huecos más cercanos.
+ */
+export function findNextVisitSlotOnDate(args: {
+  appointment: Pick<BarberAppointmentDTO, "startAt" | "endAt" | "barberId">;
+  dateISO: string;
+  timezone: string;
+  day: DayWindow;
+  now: Date;
+}): NextVisitResult | null {
+  const { appointment, dateISO, timezone, day, now } = args;
   const barberId = appointment.barberId;
   if (!barberId) return null;
   const durationMin = Math.round(
     (new Date(appointment.endAt).getTime() - new Date(appointment.startAt).getTime()) / 60_000,
   );
   if (durationMin <= 0) return null;
-  const dateISO = nextVisitDateISO(appointment.startAt, weeks, timezone);
   const wanted = shopMinuteOfDay(new Date(appointment.startAt), timezone);
 
   const free = computeFreeBarbersForDay(
@@ -216,6 +234,70 @@ export function findNextVisitSlot(args: {
     .sort((a, b) => a - b)
     .map((m) => slotAt(m, false));
   return { dateISO, exact: null, nearby };
+}
+
+// ── «Otra fecha»: el calendario de su próxima (ws6-t8) ──────────────────
+/** Hasta dónde se deja agendar desde el calendario (un año). */
+export const NEXT_VISIT_MAX_DAYS = 365;
+
+/**
+ * Días de la semana (0 = domingo) en que la barbería CIERRA: ningún barbero
+ * activo tiene turno activo ese día. Es el horario semanal de la agenda; un
+ * día festivo suelto (bloqueo de toda la barbería) se ve al buscar el hueco.
+ * Sin ningún horario cargado no se apaga nada (mejor dejar elegir que
+ * dejar el calendario muerto).
+ */
+export function closedWeekdays(
+  schedules: Pick<BarberScheduleDTO, "barberId" | "dayOfWeek" | "isActive">[],
+  barbers: { id: string; isActive: boolean }[],
+): Set<number> {
+  const activos = new Set(barbers.filter((b) => b.isActive).map((b) => b.id));
+  const abiertos = new Set(
+    schedules.filter((s) => s.isActive && activos.has(s.barberId)).map((s) => s.dayOfWeek),
+  );
+  if (abiertos.size === 0) return new Set();
+  return new Set([0, 1, 2, 3, 4, 5, 6].filter((d) => !abiertos.has(d)));
+}
+
+export type CalendarDayState = "past" | "closed" | "far" | "open";
+
+export function calendarDayState(args: {
+  dateISO: string;
+  /** Hoy en la barbería (YYYY-MM-DD). Hoy SÍ se puede (quedan huecos de la tarde). */
+  todayISO: string;
+  closed: Set<number>;
+}): CalendarDayState {
+  const { dateISO, todayISO, closed } = args;
+  if (dateISO < todayISO) return "past";
+  if (dateISO > addDaysISO(todayISO, NEXT_VISIT_MAX_DAYS)) return "far";
+  if (closed.has(weekdayOfISO(dateISO))) return "closed";
+  return "open";
+}
+
+/** "2026-11" del día dado, y el mes anterior/siguiente. */
+export function monthOfISO(dateISO: string): string {
+  return dateISO.slice(0, 7);
+}
+export function addMonthsISO(month: string, delta: number): string {
+  const [y, m] = month.split("-").map(Number);
+  const idx = y * 12 + (m - 1) + delta;
+  return `${Math.floor(idx / 12)}-${String((idx % 12) + 1).padStart(2, "0")}`;
+}
+
+/**
+ * La rejilla del mes, en semanas que empiezan en LUNES (como la agenda).
+ * Los huecos antes del día 1 y después del último son null.
+ */
+export function monthGrid(month: string): (string | null)[][] {
+  const first = `${month}-01`;
+  const lead = (weekdayOfISO(first) + 6) % 7; // lunes = 0
+  const days: string[] = [];
+  for (let d = first; monthOfISO(d) === month; d = addDaysISO(d, 1)) days.push(d);
+  const cells: (string | null)[] = [...Array<null>(lead).fill(null), ...days];
+  while (cells.length % 7) cells.push(null);
+  const weeks: (string | null)[][] = [];
+  for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
+  return weeks;
 }
 
 // ── Anticipo: el monto que se escribe ───────────────────────────────────
