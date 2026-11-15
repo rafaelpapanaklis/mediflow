@@ -64,7 +64,7 @@ import { isOwnVisitStatus } from "@/lib/barber/own-visits";
 import { isBarberUnacceptedRequest } from "@/lib/barber/whatsapp-core";
 import { barberColor, initials } from "./agenda-ui";
 import type { AppointmentDialogFocus } from "./appointment-dialog";
-import { citaSteps, routeSupports, usualReturnWeeks, type CitaDTO } from "./cita-core";
+import { citaSteps, depositBody, routeSupports, usualReturnWeeks, type CitaDTO } from "./cita-core";
 import {
   CancelPanel,
   ClientColumn,
@@ -895,6 +895,7 @@ export function AppointmentDetail(props: AppointmentDetailProps) {
         {/* ── Paneles encima ── */}
         {sub === "cancel" ? (
           <CancelPanel
+            error={error}
             name={clientLabel}
             withReason={routes.cancelReason}
             busy={busy !== null}
@@ -905,11 +906,12 @@ export function AppointmentDetail(props: AppointmentDetailProps) {
         ) : null}
         {sub === "deposit" ? (
           <DepositPanel
+            error={error}
             max={total > 0 ? total : null}
             busy={busy !== null}
             onBack={() => setSub(null)}
             onConfirm={async (amount, method) => {
-              const data = await postAction("deposit", "POST", { amount, method });
+              const data = await postAction("deposit", "POST", depositBody(amount, method));
               if (!data) return;
               setSub(null);
               const note = t("barber.agenda.cita.deposit.saved", { amount: formatMXN(amount) });
@@ -921,6 +923,7 @@ export function AppointmentDetail(props: AppointmentDetailProps) {
         ) : null}
         {sub === "product" ? (
           <ProductPanel
+            error={error}
             busy={busy !== null}
             onBack={() => setSub(null)}
             onConfirm={async (product, qty) => {

@@ -612,7 +612,7 @@ export function NextVisit(props: {
 
 
 // ═══ Paneles encima de la ventana ══════════════════════════════════════
-function SubPanel(props: { title: string; children: React.ReactNode; onBack: () => void }) {
+function SubPanel(props: { title: string; children: React.ReactNode; onBack: () => void; error?: string | null }) {
   return (
     <div
       className={css.subVelo}
@@ -622,6 +622,12 @@ function SubPanel(props: { title: string; children: React.ReactNode; onBack: () 
     >
       <div className={css.sub} role="dialog" aria-modal="true" aria-label={props.title}>
         <h3 className={css.subTitle}>{props.title}</h3>
+        {/* El error del servidor se ve AQUÍ: el de la ventana de atrás queda tapado por el velo. */}
+        {props.error ? (
+          <div className={css.errorBox} role="alert">
+            {props.error}
+          </div>
+        ) : null}
         {props.children}
       </div>
     </div>
@@ -629,6 +635,7 @@ function SubPanel(props: { title: string; children: React.ReactNode; onBack: () 
 }
 
 export function CancelPanel(props: {
+  error?: string | null;
   name: string;
   withReason: boolean;
   busy: boolean;
@@ -640,7 +647,7 @@ export function CancelPanel(props: {
   const [picked, setPicked] = useState<string | null>(null);
   const [typed, setTyped] = useState("");
   return (
-    <SubPanel title={t("barber.agenda.cita.cancel.title", { name: props.name })} onBack={props.onBack}>
+    <SubPanel title={t("barber.agenda.cita.cancel.title", { name: props.name })} onBack={props.onBack} error={props.error}>
       {props.withReason ? (
         <div className={css.field}>
           {t("barber.agenda.cita.cancel.reason")}
@@ -689,6 +696,7 @@ export function CancelPanel(props: {
 }
 
 export function DepositPanel(props: {
+  error?: string | null;
   max: number | null;
   busy: boolean;
   onBack: () => void;
@@ -700,7 +708,7 @@ export function DepositPanel(props: {
   const [method, setMethod] = useState<BarberPaymentMethod>("CASH");
   const [bad, setBad] = useState(false);
   return (
-    <SubPanel title={t("barber.agenda.cita.deposit.title")} onBack={props.onBack}>
+    <SubPanel title={t("barber.agenda.cita.deposit.title")} onBack={props.onBack} error={props.error}>
       <label className={css.field}>
         {t("barber.agenda.cita.deposit.amount")}
         <input
@@ -755,6 +763,7 @@ export function DepositPanel(props: {
 }
 
 export function ProductPanel(props: {
+  error?: string | null;
   busy: boolean;
   onBack: () => void;
   onConfirm: (product: BarberProductDTO, qty: number) => Promise<void>;
@@ -781,7 +790,7 @@ export function ProductPanel(props: {
   const list = (products ?? []).filter((p) => !needle || p.name.toLowerCase().includes(needle)).slice(0, 30);
 
   return (
-    <SubPanel title={t("barber.agenda.cita.product.title")} onBack={props.onBack}>
+    <SubPanel title={t("barber.agenda.cita.product.title")} onBack={props.onBack} error={props.error}>
       <input
         className={css.input}
         value={q}
