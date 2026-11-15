@@ -217,6 +217,7 @@ export function ReportesView({
             labels={{
               services: t("revenue.services"),
               products: t("revenue.products"),
+              other: t("revenue.other"),
               tips: t("revenue.tips"),
               discounts: t("revenue.discounts"),
               tickets: t("revenue.tickets"),
@@ -233,6 +234,8 @@ export function ReportesView({
                   <th className="bdash-num">{t("revenue.tickets")}</th>
                   <th className="bdash-num">{t("revenue.services")}</th>
                   <th className="bdash-num">{t("revenue.products")}</th>
+                  {/* Membresías vendidas y anticipos (recibidos, aplicados o devueltos): aparte de Servicios. */}
+                  <th className="bdash-num">{t("revenue.other")}</th>
                   <th className="bdash-num">{t("revenue.tips")}</th>
                   <th className="bdash-num">{t("revenue.discounts")}</th>
                   <th className="bdash-num">{t("kpi.revenue")}</th>
@@ -246,6 +249,7 @@ export function ReportesView({
                     <td className="bdash-num">{fmtInt(d.tickets, locale)}</td>
                     <td className="bdash-num">{fmtMoney(d.services)}</td>
                     <td className="bdash-num">{fmtMoney(d.products)}</td>
+                    <td className="bdash-num">{d.other === 0 ? "—" : d.other < 0 ? `−${fmtMoney(-d.other)}` : fmtMoney(d.other)}</td>
                     <td className="bdash-num">{fmtMoney(d.tips)}</td>
                     <td className="bdash-num">{d.discounts > 0 ? `−${fmtMoney(d.discounts)}` : "—"}</td>
                     <td className="bdash-num">{fmtMoney(d.revenue)}</td>

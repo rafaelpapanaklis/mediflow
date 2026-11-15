@@ -812,9 +812,16 @@ export function resolveReportPeriod(
 export interface ReportDayRow {
   day: string;
   tickets: number;
-  /** Servicios NETOS de descuentos (misma base que la comisión: servicios + ajustes). */
+  /** Servicios NETOS de descuentos. NO incluye membresías ni anticipos. */
   services: number;
   products: number;
+  /**
+   * Membresías y anticipos: lo que no es un servicio ni un producto ni un
+   * descuento. Suma las membresías vendidas y los anticipos recibidos, y
+   * resta los anticipos aplicados al cobrar la cita y los devueltos (puede
+   * ser negativo). Servicios + Productos + esto = Ingresos.
+   */
+  other: number;
   tips: number;
   /** Descuentos aplicados (positivo). */
   discounts: number;
@@ -921,6 +928,8 @@ export interface ReportsSummary {
     tickets: number;
     services: number;
     products: number;
+    /** Membresías y anticipos (ver ReportDayRow.other). */
+    other: number;
     tips: number;
     discounts: number;
     revenue: number;
@@ -1208,7 +1217,7 @@ export async function getReportsSummary(ctx: BarberContext, opts: ReportsOptions
   const fromYmd = parseDateKey(period.from)!;
   const fromDays = ymdToUtcDays(fromYmd);
   const byDay: ReportDayRow[] = [];
-  const tot = { tickets: 0, services: ZERO, products: ZERO, tips: ZERO, discounts: ZERO, revenue: ZERO, total: ZERO };
+  const tot = { tickets: 0, services: ZERO, products: ZERO, other: ZERO, tips: ZERO, discounts: ZERO, revenue: ZERO, total: ZERO };
   for (let i = 0; i < period.days; i++) {
     const key = ymdKey(ymdFromUtcDays(fromDays + i));
     const r = byDayMap.get(key);
@@ -1220,12 +1229,19 @@ export async function getReportsSummary(ctx: BarberContext, opts: ReportsOptions
     const tips = D(r?.tips as never);
     const revenue = D(r?.revenue as never);
     const total = D(r?.total as never);
-    const netServices = services.plus(adjustments);
-    // «Descuentos» = solo los descuentos de verdad, no el neto de arriba.
-    const discounts = D(r?.discounts as never).negated();
+    // Los descuentos de verdad (negativo): lo único que baja «Servicios».
+    const rawDiscounts = D(r?.discounts as never);
+    const netServices = services.plus(rawDiscounts);
+    const discounts = rawDiscounts.negated();
+    // El resto de esas líneas NO es un servicio: membresías vendidas y
+    // anticipos recibidos (+), anticipos aplicados o devueltos (−). Va en
+    // su propio renglón, así un día con un corte de $180 y una membresía de
+    // $500 dice Servicios $180 y Membresías y anticipos $500 — no «$680».
+    const other = adjustments.minus(rawDiscounts);
     tot.tickets += intOf(r?.tickets);
     tot.services = tot.services.plus(netServices);
     tot.products = tot.products.plus(products);
+    tot.other = tot.other.plus(other);
     tot.tips = tot.tips.plus(tips);
     tot.discounts = tot.discounts.plus(discounts);
     tot.revenue = tot.revenue.plus(revenue);
@@ -1235,6 +1251,7 @@ export async function getReportsSummary(ctx: BarberContext, opts: ReportsOptions
       tickets: intOf(r?.tickets),
       services: toNum(netServices),
       products: toNum(products),
+      other: toNum(other),
       tips: toNum(tips),
       discounts: toNum(discounts),
       revenue: toNum(revenue),
@@ -1418,6 +1435,7 @@ export async function getReportsSummary(ctx: BarberContext, opts: ReportsOptions
       tickets: tot.tickets,
       services: toNum(tot.services),
       products: toNum(tot.products),
+      other: toNum(tot.other),
       tips: toNum(tot.tips),
       discounts: toNum(tot.discounts),
       revenue: revenue.toNumber(),
@@ -1457,6 +1475,8 @@ export interface ReportsCsvLabels {
   tickets: string;
   services: string;
   products: string;
+  /** «Membresías y anticipos». */
+  other: string;
   tips: string;
   discounts: string;
   revenue: string;
@@ -1544,8 +1564,8 @@ export function buildReportsCsv(s: ReportsSummary, L: ReportsCsvLabels): string 
   blank();
 
   push([L.sections.byDay]);
-  push([L.day, L.tickets, L.services, L.products, L.tips, L.discounts, L.revenue, L.total]);
-  for (const d of s.byDay) push([d.day, d.tickets, d.services, d.products, d.tips, d.discounts, d.revenue, d.total]);
+  push([L.day, L.tickets, L.services, L.products, L.other, L.tips, L.discounts, L.revenue, L.total]);
+  for (const d of s.byDay) push([d.day, d.tickets, d.services, d.products, d.other, d.tips, d.discounts, d.revenue, d.total]);
   blank();
 
   push([L.sections.byBarber]);

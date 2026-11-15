@@ -7,6 +7,8 @@ import { fmtInt, fmtLongDay, fmtMediumDay, fmtMoney, fmtMoneyCompact, fmtShortDa
 export interface RevenueChartLabels {
   services: string;
   products: string;
+  /** «Membresías y anticipos»: aparte de Servicios. */
+  other: string;
   tips: string;
   discounts: string;
   tickets: string;
@@ -21,6 +23,8 @@ interface Bucket {
   title: string;
   services: number;
   products: number;
+  /** Membresías y anticipos del periodo (puede ser negativo: se pinta solo si suma). */
+  other: number;
   tips: number;
   discounts: number;
   revenue: number;
@@ -28,9 +32,11 @@ interface Bucket {
   tickets: number;
 }
 
-const SERIES: Array<{ key: "services" | "products" | "tips"; cssVar: string; labelKey: keyof RevenueChartLabels }> = [
+const SERIES: Array<{ key: "services" | "products" | "other" | "tips"; cssVar: string; labelKey: keyof RevenueChartLabels }> = [
   { key: "services", cssVar: "var(--bdash-s1)", labelKey: "services" },
   { key: "products", cssVar: "var(--bdash-s2)", labelKey: "products" },
+  // Membresías vendidas y anticipos: su propio color, no dentro de Servicios.
+  { key: "other", cssVar: "var(--bdash-s4)", labelKey: "other" },
   { key: "tips", cssVar: "var(--bdash-s3)", labelKey: "tips" },
 ];
 
@@ -55,6 +61,7 @@ export function bucketize(rows: ReportDayRow[], locale: string, labels: RevenueC
       title: fmtLongDay(r.day, locale),
       services: r.services,
       products: r.products,
+      other: r.other,
       tips: r.tips,
       discounts: r.discounts,
       revenue: r.revenue,
@@ -71,6 +78,7 @@ export function bucketize(rows: ReportDayRow[], locale: string, labels: RevenueC
       title: labels.week.replace("{date}", fmtMediumDay(chunk[0].day, locale)),
       services: 0,
       products: 0,
+      other: 0,
       tips: 0,
       discounts: 0,
       revenue: 0,
@@ -80,6 +88,7 @@ export function bucketize(rows: ReportDayRow[], locale: string, labels: RevenueC
     for (const r of chunk) {
       b.services = round2(b.services + r.services);
       b.products = round2(b.products + r.products);
+      b.other = round2(b.other + r.other);
       b.tips = round2(b.tips + r.tips);
       b.discounts = round2(b.discounts + r.discounts);
       b.revenue = round2(b.revenue + r.revenue);
@@ -142,7 +151,7 @@ export function RevenueChart({
   const n = buckets.length;
   const plotW = Math.max(40, width - PAD_L - PAD_R);
   const plotH = H - PAD_T - PAD_B;
-  const maxStack = buckets.reduce((m, b) => Math.max(m, b.services + b.products + b.tips), 0);
+  const maxStack = buckets.reduce((m, b) => Math.max(m, b.services + b.products + Math.max(0, b.other) + b.tips), 0);
   const yMax = niceMax(maxStack);
   const y = (v: number) => PAD_T + plotH - (v / yMax) * plotH;
   const band = plotW / Math.max(1, n);

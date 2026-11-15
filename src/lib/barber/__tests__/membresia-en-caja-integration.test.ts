@@ -216,6 +216,27 @@ test("aparece en Inicio y en Reportes: +$500 de ingreso con 1 ticket", { skip },
   assert.equal(reportes.totals.tickets, 1);
   assert.equal(reportes.totals.total, 500);
   assert.equal(reportes.totals.discounts, 0, "no se disfraza de descuento");
+  // Ronda 3 · M3: tampoco se mete dentro de «Servicios».
+  assert.equal(reportes.totals.services, 0, "una membresía no es un servicio");
+  assert.equal(reportes.totals.other, 500, "va en «Membresías y anticipos»");
+});
+
+test("Reportes: un corte de $180 y una membresía de $500 el mismo día → Servicios $180 y Membresías y anticipos $500 (no «Servicios $680»)", { skip }, async () => {
+  const cut = await createSale(A.ctx, { barberId: A.barberId, items: [{ kind: "service", id: A.serviceId }], discount: 20, paymentMethod: "CARD" }, FEATURES);
+  const r = await getReportsSummary(A.ctx, { range: "today", features: FEATURES });
+  assert.equal(r.totals.services, 160, "$180 − $20 de descuento");
+  assert.equal(r.totals.discounts, 20);
+  assert.equal(r.totals.other, 500);
+  assert.equal(r.totals.products, 0);
+  assert.equal(r.totals.revenue, 660);
+  assert.equal(r.totals.services + r.totals.products + r.totals.other, r.totals.revenue, "los tres renglones suman el ingreso");
+  const today = r.byDay.find((d) => d.tickets > 0)!;
+  assert.deepEqual(
+    { services: today.services, other: today.other, revenue: today.revenue },
+    { services: 160, other: 500, revenue: 660 },
+  );
+  // Se deja el turno como estaba para las pruebas que siguen.
+  await cancelSale(A.ctx, cut.id, { reason: "solo era para el reporte" });
 });
 
 test("tarjeta de mostrador y transferencia caen en su método, no en el efectivo", { skip }, async () => {

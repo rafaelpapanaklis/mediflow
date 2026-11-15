@@ -553,7 +553,7 @@ test("resolveReportPeriod: hoy, semana calendario, mes y rango con tope", () => 
 function csvLabels(): ReportsCsvLabels {
   const id = (s: string) => s;
   return {
-    section: id("section"), day: "day", tickets: "tickets", services: "services", products: "products", tips: "tips",
+    section: id("section"), day: "day", tickets: "tickets", services: "services", products: "products", other: "other", tips: "tips",
     discounts: "discounts", revenue: "revenue", total: "total", barber: "barber", produced: "produced", avgTicket: "avg",
     commission: "commission", item: "item", qty: "qty", cost: "cost", margin: "margin", marginPct: "marginPct",
     weekday: "weekday", hour: "hour", visits: "visits", client: "client", phone: "phone", noShows: "noShows", lastAt: "lastAt",

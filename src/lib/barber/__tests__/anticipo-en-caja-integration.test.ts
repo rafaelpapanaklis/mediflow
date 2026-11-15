@@ -491,7 +491,13 @@ test("Reportes: el anticipo aplicado no se cuenta como descuento, y el ingreso d
   const sum = (k: "subtotal" | "tip" | "total") => Math.round(live.reduce((s, t) => s + Number(t[k]), 0) * 100) / 100;
   assert.equal(r.totals.revenue, sum("subtotal"), "ingreso = Σ subtotal de los tickets (anticipos incluidos, una sola vez)");
   assert.equal(r.totals.total, sum("total"));
-  assert.equal(Math.round((r.totals.services + r.totals.products) * 100) / 100, r.totals.revenue, "Servicios + Productos = Ingresos");
+  // Ronda 3 · M3: los anticipos van en su propio renglón, no dentro de «Servicios».
+  assert.equal(r.totals.services, 420, "tres cortes de $180 menos el descuento de $120: los anticipos no entran aquí");
+  assert.equal(
+    Math.round((r.totals.services + r.totals.products + r.totals.other) * 100) / 100,
+    r.totals.revenue,
+    "Servicios + Productos + Membresías y anticipos = Ingresos",
+  );
 });
 
 test("un anticipo que NO está pagado no descuenta nada", { skip }, async () => {
