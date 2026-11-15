@@ -4,6 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { opcionesDeFicha } from "@/lib/barber/team-fichas";
+import { horarioDelLocalDesdeTurnos, turnosDesdeHorarioDelLocal } from "@/lib/barber/landing";
 
 const barberos = [
   { id: "b1", name: "Luis", barbershopId: "s1" },
@@ -37,4 +38,35 @@ test("Equipo: solo fichas de la sede de la persona (el servidor rechaza las otra
 test("Equipo: la ficha actual de otra sede se conserva para no desligarla al guardar", () => {
   const o = opcionesDeFicha(barberos, miembros, { barbershopId: "s2", miembroId: "u1", actual: "b1" });
   assert.deepEqual(o.map((x) => x.id), ["b1", "b3"]);
+});
+
+// ── Mi web: el horario de la puerta sale de los turnos de los barberos ──
+
+test("Mi web: cada día abre con el primero que entra y cierra con el último que sale", () => {
+  const h = horarioDelLocalDesdeTurnos([
+    { dayOfWeek: 1, startMinute: 600, endMinute: 840 }, // lunes 10–14 (Luis)
+    { dayOfWeek: 1, startMinute: 960, endMinute: 1200 }, // lunes 16–20 (Luis, segundo turno)
+    { dayOfWeek: 1, startMinute: 540, endMinute: 1140 }, // lunes 9–19 (Toño)
+    { dayOfWeek: 6, startMinute: 540, endMinute: 900 }, // sábado 9–15
+    { dayOfWeek: 0, startMinute: 600, endMinute: 600 }, // turno roto: no abre el domingo
+  ]);
+  assert.ok(h);
+  assert.equal(h.length, 7);
+  assert.deepEqual(h[0], { dia: 0, abierto: true, desde: "09:00", hasta: "20:00" }); // lunes
+  assert.deepEqual(h[5], { dia: 5, abierto: true, desde: "09:00", hasta: "15:00" }); // sábado
+  assert.equal(h[6].abierto, false); // domingo
+  assert.equal(h[1].abierto, false); // martes sin nadie
+});
+
+test("Mi web: sin turnos no se inventa una semana cerrada", () => {
+  assert.equal(horarioDelLocalDesdeTurnos([]), null);
+});
+
+test("Mi web: ida y vuelta con el horario que hereda un barbero nuevo", () => {
+  const turnos = [
+    { dayOfWeek: 2, startMinute: 600, endMinute: 1200 },
+    { dayOfWeek: 5, startMinute: 570, endMinute: 1140 },
+  ];
+  const h = horarioDelLocalDesdeTurnos(turnos)!;
+  assert.deepEqual(turnosDesdeHorarioDelLocal({ horario: h }), turnos);
 });

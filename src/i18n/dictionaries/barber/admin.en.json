@@ -211,7 +211,7 @@
     "ownUserBody": "Add its manager in Team. Whoever signs in to a branch sees its calendar, cash register and clients; as the owner, you see Home and Reports for the whole chain.",
     "ownUserCta": "Go to Team",
     "hoursTitle": "Opening hours",
-    "hoursBody": "Hours are set per barber from the Calendar: a location is open when someone has a schedule.",
+    "hoursBody": "Who works and when is set per barber in the Calendar: a location is open when someone has a schedule. The hours clients see on your page are set in My website (copy them from your barbers in one click).",
     "hoursLink": "Go to the calendar",
     "barbersCount": "{count} barbers",
     "usersCount": "{count} in the panel",

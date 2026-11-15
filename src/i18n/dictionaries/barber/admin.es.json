@@ -211,7 +211,7 @@
     "ownUserBody": "Da de alta a su encargado en Equipo. Quien entra a una sede ve su agenda, su caja y sus clientes; tú, como dueño, ves Inicio y Reportes de toda la cadena.",
     "ownUserCta": "Ir a Equipo",
     "hoursTitle": "Horario de atención",
-    "hoursBody": "El horario se define por barbero desde la Agenda: cada sede abre cuando hay alguien con horario.",
+    "hoursBody": "Quién atiende y a qué hora se define por barbero en la Agenda: cada sede abre cuando hay alguien con horario. El horario que ve el cliente en tu página se pone en Mi web (ahí lo copias de tus barberos con un clic).",
     "hoursLink": "Ir a la agenda",
     "barbersCount": "{count} barberos",
     "usersCount": "{count} en el panel",
