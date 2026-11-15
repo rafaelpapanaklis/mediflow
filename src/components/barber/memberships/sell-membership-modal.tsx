@@ -13,7 +13,7 @@ import { membershipSaleMethods } from "@/lib/barber/payments-core";
 import { CheckCard, Field, Modal, apiCall } from "./ui";
 import { formatBarberPhone } from "@/lib/barber/phone-format";
 
-interface ClientHit {
+export interface ClientHit {
   id: string;
   name: string;
   phone: string;
@@ -43,6 +43,7 @@ export function SellMembershipModal({
   open,
   onClose,
   onSold,
+  initial,
 }: {
   t: TFunction;
   locale: string;
@@ -51,14 +52,18 @@ export function SellMembershipModal({
   open: boolean;
   onClose: () => void;
   onSold: () => void;
+  /** «Volver a contratar»: arranca con el cliente y el plan de la membresía cancelada. */
+  initial?: { client: ClientHit; planId: string };
 }) {
   const [q, setQ] = useState("");
   const [hits, setHits] = useState<ClientHit[]>([]);
   const [searching, setSearching] = useState(false);
-  const [client, setClient] = useState<ClientHit | null>(null);
+  const [client, setClient] = useState<ClientHit | null>(initial?.client ?? null);
   // Arranca en el primer plan VENDIBLE: la lista trae también los
   // desactivados (el panel los carga con ?all=1 para poder editarlos).
-  const [planId, setPlanId] = useState<string>(plans.find((p) => p.isActive)?.id ?? "");
+  const [planId, setPlanId] = useState<string>(
+    plans.find((p) => p.isActive && p.id === initial?.planId)?.id ?? plans.find((p) => p.isActive)?.id ?? "",
+  );
   const [method, setMethod] = useState<BarberPaymentMethod>("CASH");
   const [recurring, setRecurring] = useState(true);
   const [saving, setSaving] = useState(false);
