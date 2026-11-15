@@ -55,3 +55,14 @@ test("Campañas › Plantillas: ya no dice «Plantilla aprobada por Meta» (nadi
   // y el nombre real de la barbería llega desde la página
   assert.match(readFileSync("src/app/barber/(panel)/campanas/page.tsx", "utf8"), /shopName=\{ctx\.barbershop\.name\}/);
 });
+
+test("WhatsApp › Conexión: el aviso de llave ilegible no promete un botón que puede no estar, y el id de Meta no se llama «número»", () => {
+  for (const l of ["es", "en"] as const) {
+    const c = dict("whatsapp", l).connection;
+    assert.doesNotMatch(c.tokenUnreadable, /botón de abajo|button below/);
+    assert.ok(c.metaId);
+  }
+  const panel = readFileSync("src/components/barber/whatsapp/connection-panel.tsx", "utf8");
+  assert.doesNotMatch(panel, /connection\.displayPhone \?\? connection\.phoneNumberId/);
+  assert.match(panel, /connection\.metaId/);
+});

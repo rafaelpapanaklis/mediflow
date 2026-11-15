@@ -117,14 +117,18 @@ export function ConnectionPanel({
 
         {connected ? (
           <div className={s.meta}>
-            {connection.displayPhone || connection.phoneNumberId ? (
+            {connection.displayPhone ? (
               <span className={s.metaItem}>
                 {t("connection.number")}:
-                {/* El número como lo ve el cliente; el id interno de Meta solo
-                    si Meta no contestó a tiempo. */}
-                <span className={s.metaValue}>
-                  {connection.displayPhone ?? connection.phoneNumberId}
-                </span>
+                <span className={s.metaValue}>{connection.displayPhone}</span>
+              </span>
+            ) : connection.phoneNumberId ? (
+              // Meta no dio el número visible (no contestó o la llave no se
+              // pudo leer): el id interno NO es un teléfono, así que no se
+              // llama «Número conectado» (QA C, 15-nov: salía 1114599495077464).
+              <span className={s.metaItem}>
+                {t("connection.metaId")}:
+                <span className={s.metaValue}>{connection.phoneNumberId}</span>
               </span>
             ) : null}
             <span className={s.metaItem}>
