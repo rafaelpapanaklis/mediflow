@@ -15,6 +15,8 @@ import {
   BARBER_BUSY_STATUSES,
   BARBER_MAX_DAYS_AHEAD,
   BARBER_MAX_OPEN_PER_PHONE,
+  BARBER_PUBLIC_NEW_PHONE_DAILY_CAP,
+  newPhoneDailyCapApplies,
   BARBER_MIN_LEAD_MIN,
   advisoryLockKey,
   addIsoDays,
@@ -592,7 +594,9 @@ export type BookingErrorCode =
   | "tooManyOpen"
   | "clientBlocked"
   /** Ya hay una cita viva de ese teléfono a esa hora, con OTRO nombre. */
-  | "phoneConflict";
+  | "phoneConflict"
+  /** Sin captcha verificado, la barbería llegó a BARBER_PUBLIC_NEW_PHONE_DAILY_CAP hoy. */
+  | "dailyCap";
 
 // ── Historial del teléfono ──────────────────────────────────────────────
 
@@ -605,9 +609,11 @@ export type BookingErrorCode =
  * desconocido puede fabricar), ni siquiera si la barbería la aceptó: aceptar
  * es ver una solicitud, no conocer al cliente.
  *
- * Decide si a un teléfono nuevo le sale la confirmación por WhatsApp en la
- * política automática (shouldConfirmOnBooking): sin captcha, solo al que
- * tiene historial.
+ * Es la MISMA condición para decidir si un teléfono tiene historial
+ * (clientHasHistory: confirmación en automático sin captcha) y para contar
+ * el tope del día sin captcha (countNewPhoneRequestsToday): si se separaran,
+ * una cita podría no contar en el tope y aun así ser tratada como de un
+ * cliente nuevo.
  */
 function noHistoryClientWhere(barbershopId: string): Prisma.BarberClientWhereInput {
   return {
@@ -631,6 +637,33 @@ async function clientHasHistory(db: Db, barbershopId: string, clientId: string):
     where: { id: clientId, ...noHistoryClientWhere(barbershopId) },
   });
   return sinHistorial === 0;
+}
+
+/**
+ * Solicitudes de la página pública que nacieron HOY (día de la barbería),
+ * siguen vivas y son de teléfonos sin historial. Con la política manual
+ * vivas = PENDING; con la automática nacen CONFIRMED y cuentan las dos.
+ * (Cuentan todas, también las que pasaron el captcha: el tope mide cuántas
+ * hay, y solo se APLICA a la que llega sin captcha.)
+ */
+async function countNewPhoneRequestsToday(
+  db: Db,
+  args: {
+    barbershopId: string;
+    policy: BarberBookingPolicy;
+    dayStart: Date;
+    dayEnd: Date;
+  },
+): Promise<number> {
+  return db.barberAppointment.count({
+    where: {
+      barbershopId: args.barbershopId,
+      source: "PUBLIC",
+      status: { in: args.policy === "auto" ? ["PENDING", "CONFIRMED"] : ["PENDING"] },
+      createdAt: { gte: args.dayStart, lt: args.dayEnd },
+      client: { is: noHistoryClientWhere(args.barbershopId) },
+    },
+  });
 }
 
 export interface BookingResultOk {
@@ -793,6 +826,14 @@ export async function createPublicBooking(
 
   // ── La transacción: candado + re-verificación + escritura ────────────
   const [lockA, lockB] = advisoryLockKey(`barber:booking:${shop.id}:${dateISO}`);
+  // Segundo candado, SOLO para el tope diario (sin captcha): la llave es el
+  // día de HOY (cuándo se pide), no el de la cita. Dos peticiones para días
+  // distintos toman candados de día distintos y sin esto las dos verían "49"
+  // y pasarían. Siempre se toma ANTES que el del día de la cita y el del día
+  // nunca espera por éste, así que no hay ciclo posible (no hay interbloqueo).
+  const [capA, capB] = advisoryLockKey(`barber:booking-cap:${shop.id}:${todayISO}`);
+  const capDayStart = barberTzLocalToUtc(todayISO, 0, 0, shop.timezone);
+  const capDayEnd = barberTzLocalToUtc(addIsoDays(todayISO, 1), 0, 0, shop.timezone);
 
   try {
     const created = await prisma.$transaction(async (tx) => {
@@ -801,6 +842,20 @@ export async function createPublicBooking(
         select: { id: true, blockedAt: true },
       });
       const hasHistory = client ? await clientHasHistory(tx, shop.id, client.id) : false;
+
+      // ── Tope diario de la barbería: solo la web y solo SIN captcha ────
+      if (newPhoneDailyCapApplies({ fromWeb, hasHistory, humanVerified: input.humanVerified === true })) {
+        await tx.$executeRawUnsafe(
+          `SELECT pg_advisory_xact_lock(${Math.trunc(capA)}, ${Math.trunc(capB)})`,
+        );
+        const today = await countNewPhoneRequestsToday(tx, {
+          barbershopId: shop.id,
+          policy,
+          dayStart: capDayStart,
+          dayEnd: capDayEnd,
+        });
+        if (today >= BARBER_PUBLIC_NEW_PHONE_DAILY_CAP) return { capped: true as const };
+      }
 
       // Los dos argumentos son enteros calculados aquí mismo (nunca entrada
       // del usuario), así que van como literales: así Postgres resuelve la
@@ -937,6 +992,7 @@ export async function createPublicBooking(
     // el trabajo de dentro (que son milisegundos).
     { maxWait: 10_000, timeout: 15_000 });
 
+    if ("capped" in created) return { ok: false, code: "dailyCap" };
     if ("tooMany" in created) return { ok: false, code: "tooManyOpen" };
     if ("conflict" in created) return { ok: false, code: "phoneConflict" };
     if ("duplicateOf" in created) {

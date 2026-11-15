@@ -29,8 +29,11 @@ import {
  *     sin sus dos variables la reserva sigue como antes;
  *   · solo un freno MUY alto por IP y barbería, para ráfagas (el
  *     persistente del dental: persistentRateLimit, Upstash; sin sus
- *     variables cae a memoria — ver @/lib/failban). Ya NO hay tope diario
- *     por barbería;
+ *     variables cae a memoria — ver @/lib/failban);
+ *   · tope DIARIO por barbería de teléfonos sin historial
+ *     (BARBER_PUBLIC_NEW_PHONE_DAILY_CAP) SOLO cuando la reserva no quedó
+ *     verificada por el captcha (sin variables, o Cloudflare sin contestar);
+ *     con captcha verificado, sin tope;
  *   · tope de citas futuras vivas por teléfono (dentro de la transacción),
  *   · nombre solo con letras y teléfono mexicano real,
  *   · con la política automática, la confirmación por WhatsApp a un
@@ -78,7 +81,19 @@ const ERROR_UI: Record<BookingErrorCode, { status: number; message: string; code
   tooManyOpen: PHONE_UNAVAILABLE,
   clientBlocked: PHONE_UNAVAILABLE,
   phoneConflict: PHONE_UNAVAILABLE,
+  dailyCap: {
+    status: 429,
+    message: "Por hoy ya no recibimos más reservas en línea. Escríbenos por WhatsApp o llámanos.",
+  },
 };
+
+/** El mensaje del tope lleva el teléfono de la barbería cuando lo hay. */
+function dailyCapMessage(shopPhone: string | null): string {
+  const phone = (shopPhone ?? "").trim();
+  return phone
+    ? `Por hoy ya no recibimos más reservas en línea. Escríbenos por WhatsApp o llámanos al ${phone}.`
+    : ERROR_UI.dailyCap.message;
+}
 
 export async function POST(req: NextRequest, props: { params: Promise<{ slug: string }> }) {
   const params = await props.params;
@@ -137,8 +152,9 @@ export async function POST(req: NextRequest, props: { params: Promise<{ slug: st
 
     if (isBookingError(result)) {
       const ui = ERROR_UI[result.code];
+      const message = result.code === "dailyCap" ? dailyCapMessage(gate.shop.phone) : ui.message;
       return NextResponse.json(
-        { error: ui.message, code: ui.code ?? result.code },
+        { error: message, code: ui.code ?? result.code },
         { status: ui.status },
       );
     }

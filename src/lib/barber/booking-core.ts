@@ -24,13 +24,31 @@ export const BARBER_MAX_DAYS_AHEAD = 60;
 export const BARBER_MIN_LEAD_MIN = 30;
 /** Tope de citas futuras vivas por teléfono y barbería (anti-abuso). */
 export const BARBER_MAX_OPEN_PER_PHONE = 3;
-/*
- * Ya NO hay tope diario de reservas por barbería (lo hubo del 14 al 15-nov,
- * BARBER_PUBLIC_NEW_PHONE_DAILY_CAP = 50). Decisión de Rafael, 15-nov-2026:
- * «que dejen reservar a cualquiera sin ningún problema». Contra los bots
- * está el captcha (src/lib/barber/captcha.ts) y, para ráfagas, el freno por
- * IP de la ruta.
+/**
+ * TOPE DIARIO DE LA RESERVA EN LÍNEA — SOLO MIENTRAS NO HAY CAPTCHA.
+ *
+ * Cuántas solicitudes vivas puede recibir UNA barbería en UN día (el día de
+ * la barbería, no el de la cita) desde teléfonos SIN historial en ella.
+ * Pasado el tope, la página manda a escribir por WhatsApp o a llamar. El
+ * cliente de siempre no cuenta ni choca con él. "Vivas" = PENDING con la
+ * política manual; con la automática nacen CONFIRMED y cuentan las dos.
+ *
+ * CUÁNDO APLICA (revisión ronda 15, M3): solo a la reserva que NO quedó
+ * verificada por el captcha — despliegue sin las variables de Turnstile, o
+ * Cloudflare sin contestar (M1). Con captcha verificado NO hay tope:
+ * «que dejen reservar a cualquiera sin ningún problema» (Rafael, 15-nov).
+ * Así, sin captcha, la reserva nunca queda con menos frenos que antes.
  */
+export const BARBER_PUBLIC_NEW_PHONE_DAILY_CAP = 50;
+
+/** ¿Esta reserva de la web cuenta contra el tope diario? */
+export function newPhoneDailyCapApplies(args: {
+  fromWeb: boolean;
+  hasHistory: boolean;
+  humanVerified: boolean;
+}): boolean {
+  return args.fromWeb && !args.hasHistory && !args.humanVerified;
+}
 
 /**
  * Nombre de quien reserva en la página pública: SOLO letras (con acentos,

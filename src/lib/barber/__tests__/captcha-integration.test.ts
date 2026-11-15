@@ -274,3 +274,48 @@ test("Cloudflare caído: la fila y «mi cuenta» también siguen funcionando", {
   );
   assert.equal(cuenta.status, 200);
 });
+
+/* ═══════ M3 (ronda 15): el tope diario solo cuando NO hubo captcha ═══════ */
+
+async function sembrarNuevasDeHoy(t: Tienda, n: number) {
+  for (let i = 0; i < n; i++) {
+    const phone = telefono();
+    const cl = await prisma.barberClient.create({ data: { barbershopId: t.id, name: "Fantasma", phone, portalEnabled: true } });
+    const startAt = new Date(Date.now() + (40 + i) * 86_400_000);
+    await prisma.barberAppointment.create({
+      data: {
+        barbershopId: t.id, clientId: cl.id, clientName: "Fantasma", clientPhone: phone,
+        startAt, endAt: new Date(startAt.getTime() + 30 * 60_000), status: "PENDING", source: "PUBLIC",
+      },
+    });
+  }
+}
+
+test("con llaves y captcha pasado: 60 solicitudes nuevas de hoy y la siguiente ENTRA (sin tope)", { skip }, async () => {
+  const S = await crearTienda();
+  await sembrarNuevasDeHoy(S, 60);
+  llaves(true);
+  cf = { success: true, action: "barber-booking" };
+  const r = await reservarPorRuta(S, telefono(), "10:00", "tok");
+  assert.equal(r.status, 200, JSON.stringify(r.json));
+});
+
+test("SIN llaves (despliegue sin variables): con 50 de hoy, la 51.ª se topa con el teléfono de la barbería", { skip }, async () => {
+  const S = await crearTienda();
+  await sembrarNuevasDeHoy(S, 50);
+  llaves(false);
+  const r = await reservarPorRuta(S, telefono(), "10:30");
+  assert.equal(r.status, 429, JSON.stringify(r.json));
+  assert.equal(r.json.code, "dailyCap");
+  assert.match(String(r.json.error), /llámanos al 55 1234 5678/);
+});
+
+test("con llaves pero Cloudflare CAÍDO (pasa sin captcha, M1): el tope diario vuelve a frenar", { skip }, async () => {
+  const S = await crearTienda();
+  await sembrarNuevasDeHoy(S, 50);
+  llaves(true);
+  cf = "caido";
+  const r = await reservarPorRuta(S, telefono(), "11:30", "tok");
+  assert.equal(r.status, 429, JSON.stringify(r.json));
+  assert.equal(r.json.code, "dailyCap");
+});

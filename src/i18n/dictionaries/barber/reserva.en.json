@@ -209,5 +209,10 @@
     "ayudaPortal": "If you can’t sign in here, call us at",
     "ayudaPortalSinTelefono": "If you can’t sign in here, ask the barbershop for help.",
     "ayudaFila": "If you can’t join here, ask at the front desk and they’ll add you."
+  },
+  "tope": {
+    "titulo": "No more online bookings for today",
+    "cuerpo": "Message us on WhatsApp or give us a call and we'll find you a spot.",
+    "cuerpoConTelefono": "Message us on WhatsApp or call {phone} and we'll find you a spot."
   }
 }

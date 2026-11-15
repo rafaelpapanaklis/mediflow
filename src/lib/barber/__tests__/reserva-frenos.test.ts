@@ -18,8 +18,16 @@ import {
   shouldConfirmOnBooking,
 } from "../booking-core";
 
-test("ya NO hay tope diario de reservas por barbería (Rafael, 15-nov)", () => {
-  assert.equal("BARBER_PUBLIC_NEW_PHONE_DAILY_CAP" in core, false);
+test("el tope diario (50) vuelve SOLO para la reserva sin captcha (ronda 15, M3)", () => {
+  assert.equal(core.BARBER_PUBLIC_NEW_PHONE_DAILY_CAP, 50);
+  const aplica = core.newPhoneDailyCapApplies;
+  // Web, teléfono nuevo, sin captcha (sin variables o Cloudflare caído): tope.
+  assert.equal(aplica({ fromWeb: true, hasHistory: false, humanVerified: false }), true);
+  // Con captcha verificado: sin tope (Rafael, 15-nov).
+  assert.equal(aplica({ fromWeb: true, hasHistory: false, humanVerified: true }), false);
+  // El cliente de siempre nunca choca; el bot tampoco.
+  assert.equal(aplica({ fromWeb: true, hasHistory: true, humanVerified: false }), false);
+  assert.equal(aplica({ fromWeb: false, hasHistory: false, humanVerified: false }), false);
 });
 
 test("nombre: letras con acentos, ñ, diéresis, espacios, apóstrofo y guion", () => {
