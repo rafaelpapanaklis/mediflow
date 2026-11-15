@@ -12,6 +12,7 @@
 // helper. El precio que se ve aquí es el VIVO del catálogo; al guardar, el
 // servidor lo congela en BarberAppointmentService.priceAtBooking.
 // ═══════════════════════════════════════════════════════════════════════
+import { soloDigitosTelefono } from "@/lib/barber/phone-format";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, Minus, Plus, RotateCcw, Search, UserPlus } from "lucide-react";
 import type { BarberAppointmentDTO, BarberDTO, BarberServiceDTO } from "@/lib/barber/types";
@@ -137,6 +138,14 @@ export function AppointmentDialog(props: AppointmentDialogProps) {
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // El aviso va arriba del formulario, que se desplaza: sin esto, quien
+  // pulsa «Agendar» desde el pie no ve por qué no pasó nada.
+  const errorRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (error) errorRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [error]);
+  // Texto que se está tecleando en «Duración» (permite borrar y reescribir).
+  const [durDraft, setDurDraft] = useState<string | null>(null);
 
   // ── Buscador de clientes (con freno para no pegarle a cada tecla) ────
   const abortRef = useRef<AbortController | null>(null);
@@ -284,10 +293,10 @@ export function AppointmentDialog(props: AppointmentDialogProps) {
         </>
       }
     >
-      {error ? <div className={css.errorBox}>{error}</div> : null}
+      {error ? <div ref={errorRef} className={css.errorBox}>{error}</div> : null}
 
       {/* ── Cliente ── */}
-      {clientName && (clientId || manual) ? (
+      {clientId && clientName ? (
         <Field label={t("barber.agenda.modal.client")}>
           <div className={css.chosen}>
             <span>
@@ -299,6 +308,16 @@ export function AppointmentDialog(props: AppointmentDialogProps) {
             </button>
           </div>
         </Field>
+      ) : manual ? (
+        // Cliente nuevo: los campos de abajo SON la captura; no se repite el nombre en
+        // una tarjeta mientras se teclea. La tarjeta solo sale al elegir de la lista.
+        editing || !props.canSearchClients ? null : (
+          <Field label={t("barber.agenda.modal.client")}>
+            <button type="button" className={css.btn} onClick={clearClient} style={{ alignSelf: "flex-start" }}>
+              <Search size={14} /> {t("barber.agenda.modal.searchExisting")}
+            </button>
+          </Field>
+        )
       ) : (
         <Field
           label={t("barber.agenda.modal.client")}
@@ -379,7 +398,7 @@ export function AppointmentDialog(props: AppointmentDialogProps) {
             <input
               className={css.input}
               value={clientPhone}
-              onChange={(e) => setClientPhone(e.target.value)}
+              onChange={(e) => setClientPhone(soloDigitosTelefono(e.target.value))}
               inputMode="numeric"
               autoComplete="off"
             />
@@ -474,13 +493,16 @@ export function AppointmentDialog(props: AppointmentDialogProps) {
               <input
                 className={css.stepperValue}
                 inputMode="numeric"
-                value={durationMin}
+                value={durDraft ?? durationMin}
                 aria-label={t("barber.agenda.modal.duration")}
                 onChange={(e) => {
-                  const raw = parseInt(e.target.value.replace(/\D/g, ""), 10);
+                  const digits = e.target.value.replace(/\D/g, "").slice(0, 4);
+                  setDurDraft(digits);
+                  const raw = parseInt(digits, 10);
                   if (Number.isFinite(raw)) setCustomMinutes(raw);
                 }}
                 onBlur={() => {
+                  setDurDraft(null);
                   if (customMinutes !== null) setDuration(customMinutes);
                 }}
               />

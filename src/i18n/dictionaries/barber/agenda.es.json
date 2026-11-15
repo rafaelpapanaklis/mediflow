@@ -18,6 +18,7 @@
     "schedules": "Horarios y bloqueos",
     "backToAgenda": "Volver a la agenda",
     "retry": "Reintentar",
+    "refresh": "Actualizar",
     "close": "Cerrar",
     "cancel": "Cancelar",
     "undo": "Deshacer"
@@ -83,6 +84,7 @@
       "other": "{count} visitas"
     },
     "changeClient": "Cambiar",
+    "searchExisting": "Buscar en mis clientes",
     "services": "Servicios",
     "servicesEmpty": "Todavía no tienes servicios en el catálogo.",
     "barber": "Barbero",
@@ -135,10 +137,11 @@
     "durationSaved": "Duración actualizada a {duration}.",
     "minutes": "min",
     "charge": "Cobrar",
+    "chargeNow": "Cobrar ahora",
     "completeAndCharge": "Completar y cobrar",
     "alreadyCharged": "Ya se cobró: {amount}.",
     "viewTicket": "Ver el ticket",
-    "chargeSkipHint": "¿Va a pagar después? Puedes cerrar sin cobrar; la visita queda en “Citas por cobrar” de la caja.",
+    "chargeSkipHint": "Si paga después, solo cierra: queda en «Citas por cobrar» de la caja.",
     "cancelConfirm": "¿Cancelar la visita de {name}?",
     "cancelYes": "Sí, cancelar",
     "cancelNo": "No, volver"
@@ -216,8 +219,8 @@
     "waitingSince": "Lleva {wait} esperando",
     "actions": {
       "call": "Llamar",
-      "uncall": "Regresar a la fila",
-      "serve": "Pasar a la silla",
+      "uncall": "Aún no llega · regresar a la fila",
+      "serve": "Sentar en la silla",
       "left": "Se fue",
       "notify": "Avisar por WhatsApp"
     },
@@ -243,6 +246,7 @@
     },
     "errors": {
       "name": "Escribe el nombre.",
+      "serveService": "Elige al menos un servicio: sin él la visita queda en $0 y no hay qué cobrar.",
       "generic": "No se pudo actualizar la fila."
     }
   },

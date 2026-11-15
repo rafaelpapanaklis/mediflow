@@ -18,6 +18,7 @@
     "schedules": "Hours and time off",
     "backToAgenda": "Back to the schedule",
     "retry": "Try again",
+    "refresh": "Refresh",
     "close": "Close",
     "cancel": "Cancel",
     "undo": "Undo"
@@ -83,6 +84,7 @@
       "other": "{count} visits"
     },
     "changeClient": "Change",
+    "searchExisting": "Search my clients",
     "services": "Services",
     "servicesEmpty": "You don't have any services in the catalog yet.",
     "barber": "Barber",
@@ -135,10 +137,11 @@
     "durationSaved": "Duration set to {duration}.",
     "minutes": "min",
     "charge": "Charge",
+    "chargeNow": "Charge now",
     "completeAndCharge": "Complete and charge",
     "alreadyCharged": "Already paid: {amount}.",
     "viewTicket": "See the receipt",
-    "chargeSkipHint": "Paying later? You can close without charging; the visit stays under “Visits to charge” in the register.",
+    "chargeSkipHint": "Paying later? Just close: it stays under “Visits to charge” in the register.",
     "cancelConfirm": "Cancel the visit for {name}?",
     "cancelYes": "Yes, cancel",
     "cancelNo": "No, go back"
@@ -216,8 +219,8 @@
     "waitingSince": "Waiting for {wait}",
     "actions": {
       "call": "Call",
-      "uncall": "Back to the queue",
-      "serve": "Take the chair",
+      "uncall": "Not here yet · back to the queue",
+      "serve": "Seat in the chair",
       "left": "Left",
       "notify": "Ping on WhatsApp"
     },
@@ -243,6 +246,7 @@
     },
     "errors": {
       "name": "Type a name.",
+      "serveService": "Pick at least one service: without it the visit stays at $0 and there is nothing to charge.",
       "generic": "We couldn't update the queue."
     }
   },

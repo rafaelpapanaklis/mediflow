@@ -12,6 +12,7 @@
 // El aviso por WhatsApp de esta ola solo REGISTRA el evento (encola una
 // fila BarberMessage PENDING). El envío lo conecta la ola de WhatsApp.
 // ═══════════════════════════════════════════════════════════════════════
+import { soloDigitosTelefono } from "@/lib/barber/phone-format";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { BellRing, LogOut, Plus, RefreshCw, Scissors, Volume2 } from "lucide-react";
 import { type Dictionary } from "@/i18n/t";
@@ -30,6 +31,7 @@ import {
 } from "@/lib/barber/agenda";
 import { Field, Modal, Pill, agendaCss } from "@/components/barber/agenda/agenda-ui";
 import { formatBarberPhone } from "@/lib/barber/phone-format";
+import { mxTenDigits } from "@/lib/phone-mx";
 import { WalkinQr } from "./walkin-qr";
 import css from "./walkin.module.css";
 
@@ -172,7 +174,8 @@ export function WalkinPanel(props: WalkinPanelProps) {
           type="button"
           className={`${agendaCss.btn} ${agendaCss.btnIcon}`}
           onClick={() => void load()}
-          aria-label={t("barber.agenda.actions.retry")}
+          aria-label={t(error ? "barber.agenda.actions.retry" : "barber.agenda.actions.refresh")}
+          title={t(error ? "barber.agenda.actions.retry" : "barber.agenda.actions.refresh")}
         >
           <RefreshCw size={15} />
         </button>
@@ -197,7 +200,6 @@ export function WalkinPanel(props: WalkinPanelProps) {
           <div className={css.panel}>
             <div className={css.panelHead}>
               <div>
-                <h2 className={css.panelTitle}>{t("barber.agenda.queue.title")}</h2>
                 <p className={css.panelSub}>{t("barber.agenda.queue.subtitle")}</p>
               </div>
             </div>
@@ -260,15 +262,7 @@ export function WalkinPanel(props: WalkinPanelProps) {
                           >
                             <Volume2 size={14} /> {t("barber.agenda.queue.actions.call")}
                           </button>
-                        ) : (
-                          <button
-                            type="button"
-                            className={agendaCss.btn}
-                            onClick={() => void act(row, "wait")}
-                          >
-                            {t("barber.agenda.queue.actions.uncall")}
-                          </button>
-                        )}
+                        ) : null}
                         <button
                           type="button"
                           className={`${agendaCss.btn} ${agendaCss.btnPrimary}`}
@@ -276,6 +270,16 @@ export function WalkinPanel(props: WalkinPanelProps) {
                         >
                           <Scissors size={14} /> {t("barber.agenda.queue.actions.serve")}
                         </button>
+                        {row.status !== "WAITING" ? (
+                          // Ya se llamó: lo principal es sentarlo; volver a la fila es lo raro.
+                          <button
+                            type="button"
+                            className={agendaCss.btn}
+                            onClick={() => void act(row, "wait")}
+                          >
+                            {t("barber.agenda.queue.actions.uncall")}
+                          </button>
+                        ) : null}
                         {row.phone ? (
                           <button
                             type="button"
@@ -385,6 +389,8 @@ function AddWalkInDialog(props: {
 
   const submit = async () => {
     if (!name.trim()) return setError(t("barber.agenda.queue.errors.name"));
+    // Un teléfono a medias no se descarta en silencio: se avisa (igual que en la agenda).
+    if (phone.trim() && !mxTenDigits(phone)) return setError(t("barber.agenda.modal.errors.phone"));
     setBusy(true);
     setError(null);
     try {
@@ -440,7 +446,7 @@ function AddWalkInDialog(props: {
         <input
           className={agendaCss.input}
           value={phone}
-          onChange={(e) => setPhone(e.target.value)}
+          onChange={(e) => setPhone(soloDigitosTelefono(e.target.value))}
           inputMode="numeric"
         />
       </Field>
@@ -476,6 +482,7 @@ function ServeDialog(props: {
   const [barberId, setBarberId] = useState(props.row.barberId ?? props.barbers[0]?.id ?? "");
   const [selected, setSelected] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   return (
     <Modal
@@ -492,6 +499,9 @@ function ServeDialog(props: {
             className={`${agendaCss.btn} ${agendaCss.btnPrimary}`}
             disabled={busy || !barberId}
             onClick={async () => {
+              // Una visita de $0 por olvido no sirve para cobrar ni para la comisión.
+              if (selected.length === 0) return setError(t("barber.agenda.queue.errors.serveService"));
+              setError(null);
               setBusy(true);
               await props.onConfirm(barberId, selected);
               setBusy(false);
@@ -502,6 +512,7 @@ function ServeDialog(props: {
         </>
       }
     >
+      {error ? <div className={agendaCss.errorBox}>{error}</div> : null}
       <p className={agendaCss.hint}>{t("barber.agenda.queue.serveBody")}</p>
       <Field label={t("barber.agenda.queue.barber")}>
         <select

@@ -25,7 +25,7 @@ import type { TFunction } from "@/i18n/t";
 import type { InicioSummary } from "@/lib/barber/stats";
 import { fmtInt, fmtLongDay, fmtMoney, fmtPctSigned, fmtTime, weekdayOfKey } from "./format";
 import { RefreshButton } from "./refresh-button";
-import { BranchSelect, BRANCH_ALL_VALUE, type BranchOption } from "./branch-select";
+import type { BranchOption } from "./branch-select";
 
 /**
  * /barber/inicio — resumen del día. Componente de SERVIDOR: pinta lo que ya
@@ -144,8 +144,6 @@ export function InicioView({
     { key: "web", done: s.setup.hasWeb, href: "/barber/mi-web", icon: Globe },
   ];
 
-  const branchValue = s.scope.consolidated ? BRANCH_ALL_VALUE : s.scope.activeBranchId ?? "";
-
   return (
     <div className="bdash-page">
       <div className="bdash-head">
@@ -154,9 +152,7 @@ export function InicioView({
           <p className="bdash-head__sub">{k(s.scope.selfOnly ? "subtitleSelf" : "subtitle", { date: fmtLongDay(s.date, locale) })}</p>
         </div>
         <div className="bdash-head__actions">
-          {s.scope.canConsolidate && branches.length > 1 && (
-            <BranchSelect options={branches} value={branchValue} allLabel={k("consolidated")} ariaLabel={k("branchLabel")} />
-          )}
+          {/* La sede (y «Toda la cadena») se elige en la barra de arriba: un solo selector. */}
           <RefreshButton label={k("refresh")} busyLabel={k("refreshing")} />
           {s.can.reports && (
             <Link href="/barber/reportes" className="btn-new btn-new--sm barber-btn-primary bdash-btn-icon">

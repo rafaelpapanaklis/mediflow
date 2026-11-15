@@ -76,3 +76,11 @@ export function formatBarberPhone(phone: string | null | undefined): string {
   if (digits.length > 10) return internacional(digits);
   return raw;
 }
+
+/**
+ * Lo que queda en un campo de teléfono al teclear o pegar: solo dígitos, con
+ * tope de 13 (521 + 10). «+52 999 123 4567» pegado queda en 529991234567.
+ */
+export function soloDigitosTelefono(raw: string): string {
+  return String(raw ?? "").replace(/\D/g, "").slice(0, 13);
+}

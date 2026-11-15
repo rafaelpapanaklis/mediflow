@@ -92,6 +92,7 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
   if (!barber) return jsonError("Ese barbero no existe en tu barbería.", 404);
 
   const serviceIds = asStringArray(body.serviceIds);
+  if (serviceIds.length === 0) return jsonError("Elige al menos un servicio.", 400);
   const services = serviceIds.length
     ? await prisma.barberService.findMany({
         where: { id: { in: serviceIds }, barbershopId: shopId, isActive: true },

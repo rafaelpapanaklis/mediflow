@@ -103,6 +103,8 @@ export interface AgendaClientProps {
   dict: Dictionary;
   /** Sub-diccionario `barber.caja`: lo hablan los modales de dinero. */
   cajaDict: Dictionary;
+  /** Sub-diccionario `barber.estrellas` (estrellas y bonos en el ticket). */
+  starsDict?: Dictionary;
   locale: string;
   timezone: string;
   branchId: string;
@@ -627,7 +629,8 @@ export function AgendaClient(props: AgendaClientProps) {
               type="button"
               className={`${css.btn} ${css.btnIcon}`}
               onClick={() => void load()}
-              aria-label={t("barber.agenda.actions.retry")}
+              aria-label={t(error ? "barber.agenda.actions.retry" : "barber.agenda.actions.refresh")}
+              title={t(error ? "barber.agenda.actions.retry" : "barber.agenda.actions.refresh")}
             >
               <RefreshCw size={15} />
             </button>
@@ -819,13 +822,15 @@ export function AgendaClient(props: AgendaClientProps) {
       {charging ? (
         <ChargeBridge
           cajaDict={props.cajaDict}
+          starsDict={props.starsDict}
           appointmentId={charging.id}
           clientLabel={charging.clientLabel}
           timezone={timezone}
           t={t}
           onClose={() => setCharging(null)}
           onCharged={(sale: SaleRow) => {
-            setCharging(null);
+            // El modal NO se cierra aquí: su pantalla de «Ticket cobrado» trae las
+            // estrellas ganadas, la tarjeta y «Imprimir»; se cierra con «Listo».
             // El ticket se ofrece, no se abre solo: quien cobra a la fila
             // de gente no quiere una pestaña nueva en cada cobro.
             setToast({
