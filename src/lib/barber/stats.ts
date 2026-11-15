@@ -555,7 +555,8 @@ export async function getInicioSummary(ctx: BarberContext, opts: InicioOptions =
     canQueue
       ? prisma.barberWalkIn.groupBy({
           by: ["status"],
-          where: { barbershopId: { in: branchIds }, status: { in: ["WAITING", "CALLED"] } },
+          // La fila es del día (fila-del-dia.ts): lo de ayer sin cerrar no está esperando.
+          where: { barbershopId: { in: branchIds }, status: { in: ["WAITING", "CALLED"] }, joinedAt: { gte: todayStart } },
           _count: { _all: true },
         })
       : Promise.resolve([]),

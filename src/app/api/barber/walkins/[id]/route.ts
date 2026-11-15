@@ -100,7 +100,7 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
       })
     : [];
 
-  const snapshot = await loadQueueSnapshot(shopId);
+  const snapshot = await loadQueueSnapshot(shopId, timezone);
   const durationMin = services.length
     ? totalServiceMinutes(services)
     : snapshot.avgServiceMin;

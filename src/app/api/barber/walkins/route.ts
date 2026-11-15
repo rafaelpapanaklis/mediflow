@@ -47,7 +47,7 @@ export async function GET(req: Request) {
   const narrowed = clientScope.kind !== "all";
 
   const [snapshot, barbers, services, recent] = await Promise.all([
-    loadQueueSnapshot(shopId),
+    loadQueueSnapshot(shopId, timezone),
     prisma.barber.findMany({
       where: { barbershopId: shopId, isActive: true },
       orderBy: [{ sortOrder: "asc" }, { name: "asc" }],

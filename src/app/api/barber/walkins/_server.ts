@@ -12,6 +12,7 @@ import { barberPlanHasFeature } from "@/lib/barber/plan-shared";
 import { barberiaAlCorriente } from "@/lib/barber/cobros";
 import { getBarberPlan } from "@/lib/barber/plans";
 import type { BarberWalkInStatus } from "@/lib/barber/types";
+import { walkInDayStart } from "@/lib/barber/fila-del-dia";
 
 /** Feature de plan que abre la fila virtual (Avanzado y Profesional). */
 export const WALKIN_FEATURE = "walkinQueue" as const;
@@ -149,11 +150,24 @@ export interface QueueSnapshot {
   avgServiceMin: number;
 }
 
-/** Foto de la fila activa + los datos con los que se estima la espera. */
-export async function loadQueueSnapshot(shopId: string): Promise<QueueSnapshot> {
+/**
+ * Condición de «está en la fila HOY»: esperando o llamado Y anotado desde
+ * la medianoche local (ver fila-del-dia.ts). Úsala en todo lo que cuente
+ * la fila: la foto, el «ya estás formado» y el tope de la página pública.
+ */
+export function activeWalkInWhere(shopId: string, timezone: string, now: Date = new Date()) {
+  return {
+    barbershopId: shopId,
+    status: { in: ACTIVE_WALKIN_STATUSES },
+    joinedAt: { gte: walkInDayStart(timezone, now) },
+  };
+}
+
+/** Foto de la fila activa (la de HOY) + los datos con los que se estima la espera. */
+export async function loadQueueSnapshot(shopId: string, timezone: string): Promise<QueueSnapshot> {
   const [rows, barbers, services] = await Promise.all([
     prisma.barberWalkIn.findMany({
-      where: { barbershopId: shopId, status: { in: ACTIVE_WALKIN_STATUSES } },
+      where: activeWalkInWhere(shopId, timezone),
       orderBy: { position: "asc" },
     }),
     prisma.barber.count({ where: { barbershopId: shopId, isActive: true } }),
