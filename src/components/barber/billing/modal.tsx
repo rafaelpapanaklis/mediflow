@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { useDialogo } from "../dialogo";
 
 /**
  * Modal mínimo de la pantalla de suscripción. Se monta por portal DENTRO de
@@ -22,32 +23,14 @@ export function BillingModal({
 }) {
   const [host, setHost] = useState<HTMLElement | null>(null);
   const boxRef = useRef<HTMLDivElement | null>(null);
-  const restoreRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     setHost((document.querySelector(".barber-shell") as HTMLElement | null) ?? document.body);
   }, []);
 
-  // Escape cierra (se re-suscribe si cambia onClose, sin tocar el foco).
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
-
-  // Foco: entra al diálogo al abrir y vuelve al disparador SOLO al cerrar.
-  useEffect(() => {
-    if (!open) return;
-    restoreRef.current = document.activeElement as HTMLElement | null;
-    const raf = requestAnimationFrame(() => boxRef.current?.focus());
-    return () => {
-      cancelAnimationFrame(raf);
-      restoreRef.current?.focus?.();
-    };
-  }, [open]);
+  // Esc, foco inicial y foco de vuelta UNA vez por apertura (ver ../dialogo.ts).
+  // El foco va al primer campo o botón; si no hay, a la caja (tabIndex -1).
+  useDialogo({ panel: boxRef, onClose, abierta: open && host !== null, bloquearScroll: false });
 
   if (!open || !host) return null;
 
