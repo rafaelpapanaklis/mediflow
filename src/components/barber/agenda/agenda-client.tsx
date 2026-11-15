@@ -622,7 +622,8 @@ export function AgendaClient(props: AgendaClientProps) {
               type="button"
               className={`${css.btn} ${css.btnIcon}`}
               onClick={() => void load()}
-              aria-label={t("barber.agenda.actions.retry")}
+              aria-label={t(error ? "barber.agenda.actions.retry" : "barber.agenda.actions.refresh")}
+              title={t(error ? "barber.agenda.actions.retry" : "barber.agenda.actions.refresh")}
             >
               <RefreshCw size={15} />
             </button>
