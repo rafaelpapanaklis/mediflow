@@ -1972,6 +1972,16 @@ export async function notifyBarberBookingAccepted(args: {
 }
 
 /**
+ * ⛔ SIN USO — NO LA LLAMES. El aviso de rechazo que SÍ sale es
+ * `notifyBookingRejected` en src/lib/barber/booking.ts, la que llama
+ * resolveBookingRequest al rechazar (encola un texto, solo dentro de la
+ * ventana de 24 h). Ésta se escribió en paralelo para lo mismo, con otro
+ * texto, y quedó sin llamadores al unir las ramas. Se deja (no se borra) y
+ * la siguen ejercitando sus pruebas de whatsapp-integration; llamarla ADEMÁS
+ * de la de booking.ts le mandaría al cliente dos avisos de rechazo.
+ *
+ * @deprecated Usa la de booking.ts (resolveBookingRequest). Ver arriba.
+ *
  * LA BARBERÍA RECHAZÓ UNA SOLICITUD → se le avisa al cliente, SI SE PUEDE.
  *
  * Para llamarla DESPUÉS de pasar la cita a CANCELLED (resolveBookingRequest

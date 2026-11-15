@@ -872,3 +872,24 @@ test("la pantalla del bot da por conectado todo lo que no sea «sin conectar» (
   assert.ok(page.includes("connected={isBarberWaLinked(connection.state)}"));
   assert.ok(!page.includes('=== "CONNECTED"'));
 });
+
+test("un solo aviso de rechazo en uso: el que encola booking.ts; el de whatsapp.ts no tiene llamadores", () => {
+  const usan: string[] = [];
+  const walk = (p: string) => {
+    const st = statSync(p);
+    if (st.isDirectory()) {
+      if (p.endsWith("__tests__") || p.endsWith("node_modules")) return;
+      for (const child of readdirSync(p)) walk(join(p, child));
+      return;
+    }
+    if (!/\.(ts|tsx)$/.test(p)) return;
+    if (/notifyBarberBookingRejected\b/.test(sinComentarios(readFileSync(p, "utf8")))) usan.push(p);
+  };
+  walk("src");
+  assert.deepEqual(usan, [join("src/lib/barber/whatsapp.ts")], "solo su definición, ningún llamador");
+
+  const wa = readFileSync("src/lib/barber/whatsapp.ts", "utf8");
+  assert.match(wa, /SIN USO — NO LA LLAMES[\s\S]{0,1500}export async function notifyBarberBookingRejected/);
+  const booking = sinComentarios(readFileSync("src/lib/barber/booking.ts", "utf8"));
+  assert.match(booking, /export async function resolveBookingRequest[\s\S]*await notifyBookingRejected\(/);
+});

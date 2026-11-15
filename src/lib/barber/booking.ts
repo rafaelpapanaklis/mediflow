@@ -1254,6 +1254,10 @@ export async function resolveBookingRequest(args: {
  *
  * Se encola por la cola normal (enqueueBarberMessage): el despacho vuelve a
  * mirar la ventana y el cupo antes de mandar.
+ *
+ * Es el ÚNICO aviso de rechazo en uso. `notifyBarberBookingRejected`
+ * (whatsapp.ts) hace lo mismo con otro texto y está marcada sin uso: no se
+ * llama además de ésta.
  */
 async function notifyBookingRejected(args: {
   barbershopId: string;
