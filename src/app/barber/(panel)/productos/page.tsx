@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import "@/components/barber/cash/money.css";
+import "@/components/barber/products/tienda.css";
 import { redirect } from "next/navigation";
 import { getBarberContext, hasBarberPermission } from "@/lib/barber-auth";
 import { requireBarberPaidAccess } from "@/lib/barber/paid-access";
@@ -9,16 +10,19 @@ import { getBarberDict, getBarberT } from "@/i18n/dictionaries/barber";
 import type { Dictionary } from "@/i18n/t";
 import { currentPeriodKey, DEFAULT_BARBER_TZ, isValidPeriodKey } from "@/lib/barber/commissions";
 import { getInventoryStats, listProducts } from "@/lib/barber/inventory";
+import { canHandleOrders, countNewProductOrders, loadProductExtras } from "@/lib/barber/tienda";
 import { BarberDenied } from "@/components/barber/cash/denied";
 import { ProductosClient } from "@/components/barber/products/productos-client";
 
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.dalecontrol.com";
+
 /**
- * /barber/productos?period=YYYY-MM — catálogo e inventario. Gate en
+ * /barber/productos?period=YYYY-MM&tab=pedidos — catálogo, inventario y pedidos de la tienda. Gate en
  * SERVIDOR: feature `products` (AVANZADO+) + products.view (ver) o
  * products.manage (catálogo, precio y costo). Los
  * movimientos manuales exigen además inventory.manage (lo verifica la API).
  */
-export default async function Page(props: { searchParams: Promise<{ period?: string }> }) {
+export default async function Page(props: { searchParams: Promise<{ period?: string; tab?: string }> }) {
   const searchParams = await props.searchParams;
   const ctx = await getBarberContext();
   if (!ctx) redirect("/barber/entrar");
@@ -44,6 +48,10 @@ export default async function Page(props: { searchParams: Promise<{ period?: str
     listProducts(ctx, { includeInactive: true }),
     getInventoryStats(ctx, period),
   ]);
+  // Tienda (ws6-t1): fotos, categorías, apartados y pedidos nuevos. Sin
+  // sql/barber_tienda.sql vuelve `ready: false` y la pantalla sigue como hoy.
+  const extras = await loadProductExtras(ctx.barbershopId);
+  const newCount = extras.ordersReady ? await countNewProductOrders(ctx.barbershopId) : 0;
 
   return (
     <ProductosClient
@@ -54,6 +62,20 @@ export default async function Page(props: { searchParams: Promise<{ period?: str
       maxPeriod={current}
       canInventory={hasBarberPermission(permUser, "inventory.manage")}
       canManage={hasBarberPermission(permUser, "products.manage")}
+      tienda={{
+        ready: extras.ready,
+        ordersReady: extras.ordersReady,
+        extras: extras.extras,
+        reserved: extras.reserved,
+        newCount,
+        slug: ctx.barbershop.slug,
+        siteUrl: SITE_URL,
+        shopName: ctx.barbershop.branchName ? `${ctx.barbershop.name} · ${ctx.barbershop.branchName}` : ctx.barbershop.name,
+        canHandleOrders: canHandleOrders(ctx),
+        canOpenSession: hasBarberPermission(permUser, "cash.manage"),
+        timezone: tz,
+        initialTab: searchParams.tab === "pedidos" ? "orders" : "catalog",
+      }}
     />
   );
 }

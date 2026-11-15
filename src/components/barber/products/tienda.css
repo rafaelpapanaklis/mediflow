@@ -1,0 +1,251 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   DaleControl BARBER — Productos en TARJETAS + Pedidos de la tienda (ws6-t1).
+   Scope: .barber-shell .btienda-*  · solo tokens del rediseño (nada de hex).
+   La rejilla se acomoda por el ancho de .bcaja-page (container bcaja-page):
+   2 por fila en celular, 3 en tableta, 4 en escritorio (1440).
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.barber-shell .btienda-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--border-soft);
+  overflow-x: auto;
+}
+.barber-shell .btienda-tab {
+  appearance: none;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-3);
+  padding: 10px 12px;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.barber-shell .btienda-tab[aria-selected="true"] {
+  color: var(--text-1);
+  border-bottom-color: var(--brand);
+}
+.barber-shell .btienda-tab:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; border-radius: var(--radius-sm); }
+.barber-shell .btienda-count {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--brand);
+  color: var(--on-brand);
+  font-size: 11px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Texto solo para lectores de pantalla (sin depender de Tailwind). */
+.barber-shell .btienda-sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+/* Enlaces con cara de botón: sin subrayado. */
+.barber-shell a.btn-new { text-decoration: none; }
+
+/* Filtros: buscador + categorías */
+.barber-shell .btienda-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  align-items: center;
+}
+.barber-shell .btienda-search { flex: 1 1 220px; min-width: 0; max-width: 360px; }
+.barber-shell .btienda-chips { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; flex: 1 1 100%; }
+@container bcaja-page (min-width: 720px) {
+  .barber-shell .btienda-chips { flex: 1 1 auto; }
+}
+.barber-shell .btienda-chip {
+  appearance: none;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-elev);
+  color: var(--text-2);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.barber-shell .btienda-chip[aria-pressed="true"] {
+  background: var(--brand-soft);
+  border-color: var(--border-brand);
+  color: var(--brand-ink);
+}
+.barber-shell .btienda-chip:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+
+/* Rejilla de tarjetas */
+.barber-shell .btienda-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+@container bcaja-page (min-width: 640px) {
+  .barber-shell .btienda-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+}
+@container bcaja-page (min-width: 960px) {
+  .barber-shell .btienda-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+}
+
+.barber-shell .btienda-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-1);
+  overflow: visible;
+}
+.barber-shell .btienda-card--off { opacity: 0.6; }
+.barber-shell .btienda-photo {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  overflow: hidden;
+  background: var(--bg-elev-2);
+}
+.barber-shell .btienda-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* Sin foto: un marcador digno (inicial + icono) sobre el café suave. */
+.barber-shell .btienda-ph {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: linear-gradient(160deg, var(--brand-softer), var(--brand-soft));
+  color: var(--brand-ink);
+}
+.barber-shell .btienda-ph__letter { font-size: clamp(28px, 7cqi, 44px); font-weight: 700; letter-spacing: -0.02em; line-height: 1; }
+.barber-shell .btienda-ph__hint { font-size: 11px; color: var(--text-3); }
+.barber-shell .btienda-tag { position: absolute; top: 8px; left: 8px; }
+.barber-shell .btienda-web {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--bg-elev);
+  color: var(--text-2);
+  box-shadow: var(--shadow-1);
+}
+.barber-shell .btienda-body { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.barber-shell .btienda-cat { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.barber-shell .btienda-name { font-size: 14px; font-weight: 600; color: var(--text-1); line-height: 1.3; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.barber-shell .btienda-price { font-size: 15px; font-weight: 700; color: var(--text-1); font-variant-numeric: tabular-nums; margin-top: 4px; }
+.barber-shell .btienda-meta { font-size: 12px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+
+/* Menú «…» */
+.barber-shell .btienda-menu { position: absolute; top: 6px; right: 6px; z-index: 2; }
+.barber-shell .btienda-menu__btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  border: 0;
+  background: var(--bg-elev);
+  color: var(--text-1);
+  box-shadow: var(--shadow-1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.barber-shell .btienda-menu__btn:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.barber-shell .btienda-menu__list {
+  position: absolute;
+  right: 0;
+  top: 36px;
+  min-width: 220px;
+  max-width: min(280px, 80vw);
+  padding: 6px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-3);
+  display: flex;
+  flex-direction: column;
+}
+.barber-shell .btienda-menu__item {
+  appearance: none;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text-1);
+  text-align: left;
+  padding: 9px 10px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  text-decoration: none;
+}
+.barber-shell .btienda-menu__item:hover,
+.barber-shell .btienda-menu__item:focus-visible { background: var(--bg-hover); outline: none; }
+.barber-shell .btienda-menu__item--danger { color: var(--danger); }
+.barber-shell .btienda-menu__sep { height: 1px; background: var(--border-soft); margin: 4px 2px; }
+
+/* Formulario: foto + interruptores */
+.barber-shell .btienda-photo-field { display: flex; gap: 12px; align-items: center; }
+.barber-shell .btienda-photo-thumb {
+  width: 76px;
+  height: 76px;
+  flex: 0 0 76px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-3);
+}
+.barber-shell .btienda-photo-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.barber-shell .btienda-switch { display: flex; gap: 10px; align-items: flex-start; font-size: 13px; color: var(--text-1); cursor: pointer; }
+.barber-shell .btienda-switch input { margin-top: 2px; width: 16px; height: 16px; accent-color: var(--brand); }
+.barber-shell .btienda-switch small { display: block; font-size: 11.5px; color: var(--text-3); margin-top: 2px; }
+.barber-shell .btienda-switch--off { opacity: 0.55; cursor: not-allowed; }
+
+/* Pedidos */
+.barber-shell .btienda-orders { display: flex; flex-direction: column; gap: 10px; }
+.barber-shell .btienda-order {
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  padding: 12px 14px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  container-type: inline-size;
+}
+.barber-shell .btienda-order--closed { opacity: 0.7; }
+.barber-shell .btienda-order__top { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+.barber-shell .btienda-folio { font-size: 15px; font-weight: 700; letter-spacing: 0.06em; color: var(--text-1); font-variant-numeric: tabular-nums; }
+.barber-shell .btienda-order__who { font-size: 13px; color: var(--text-2); }
+.barber-shell .btienda-order__items { font-size: 13px; color: var(--text-1); line-height: 1.5; }
+.barber-shell .btienda-order__total { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text-1); }
+.barber-shell .btienda-order__meta { font-size: 12px; color: var(--text-3); }
+.barber-shell .btienda-order__actions { display: flex; flex-wrap: wrap; gap: 8px; }
+@container (min-width: 760px) {
+  .barber-shell .btienda-order__row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; }
+}
