@@ -18,6 +18,7 @@
 // permiso de edición: justo la completada es la que hay que abrir para
 // cobrarla.
 // ═══════════════════════════════════════════════════════════════════════
+import { useState } from "react";
 import { CheckCircle2 } from "lucide-react";
 import {
   BARBER_APPOINTMENT_STATUS_UI,
@@ -62,6 +63,11 @@ export interface AppointmentCardProps {
 
 export function AppointmentCard(props: AppointmentCardProps) {
   const { appointment: appt, t, variant } = props;
+  // La acción rápida se enseña con el MOUSE encima o con el foco de TECLADO.
+  // Con el dedo no: el :hover se queda «pegado» tras un toque y el botón
+  // taparía el nombre en una tarjeta angosta (ahí todo sigue en el detalle).
+  const [mouseOver, setMouseOver] = useState(false);
+  const [keyboardIn, setKeyboardIn] = useState(false);
   const ui = BARBER_APPOINTMENT_STATUS_UI[appt.status];
   const compact = props.height < BARBER_CARD_COMPACT_PX;
   const week = variant === "week";
@@ -97,9 +103,27 @@ export function AppointmentCard(props: AppointmentCardProps) {
         width: `calc(${width}% - ${gap * 2}px)`,
       }}
       onPointerEnter={(e) => {
-        if (e.pointerType === "mouse" && e.buttons === 0) props.onHoverStart?.(e.currentTarget, e);
+        if (e.pointerType !== "mouse") return;
+        setMouseOver(true);
+        if (e.buttons === 0) props.onHoverStart?.(e.currentTarget, e);
       }}
-      onPointerLeave={() => props.onHoverEnd?.()}
+      onPointerLeave={(e) => {
+        if (e.pointerType === "mouse") setMouseOver(false);
+        props.onHoverEnd?.();
+      }}
+      onFocus={(e) => {
+        // Solo el foco de TECLADO enseña la acción rápida: el de un toque no.
+        let keyboard = false;
+        try {
+          keyboard = (e.target as HTMLElement).matches(":focus-visible");
+        } catch {
+          keyboard = false;
+        }
+        if (keyboard) setKeyboardIn(true);
+      }}
+      onBlur={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setKeyboardIn(false);
+      }}
     >
       <button
         type="button"
@@ -194,7 +218,7 @@ export function AppointmentCard(props: AppointmentCardProps) {
         ) : null}
       </button>
 
-      {props.quick ? (
+      {props.quick && (mouseOver || keyboardIn) && !props.dragging ? (
         <button
           type="button"
           className={`${css.cardQuick} ${props.quick.tone === "money" ? css.btnMoney : css.btnPrimary} ${

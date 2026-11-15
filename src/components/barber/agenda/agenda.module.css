@@ -687,13 +687,14 @@
 /* La acción rápida del estado siguiente: aparece al pasar el mouse o al
    llegar con el teclado, abajo a la derecha (arriba están la hora y el
    estado). Con el dedo no hay «pasar por encima»: ahí todo sigue en el
-   detalle, que se abre tocando la visita. */
+   detalle, que se abre tocando la visita. La pinta appointment-card.tsx
+   solo con mouse encima o foco de teclado (aquí no hay @media hover). */
 .cardQuick {
   position: absolute;
   right: 6px;
   bottom: 10px;
   z-index: 7;
-  display: none;
+  display: inline-flex;
   align-items: center;
   gap: 4px;
   height: 22px;
@@ -707,16 +708,6 @@
   white-space: nowrap;
   cursor: pointer;
   box-shadow: var(--shadow-2);
-}
-
-.cardSlot:hover .cardQuick,
-.cardSlot:focus-within .cardQuick {
-  display: inline-flex;
-}
-
-.cardSlotDragging .cardQuick,
-.cardSlotDragging:hover .cardQuick {
-  display: none;
 }
 
 .cardQuick:hover:not(:disabled) {
