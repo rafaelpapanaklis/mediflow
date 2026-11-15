@@ -12,6 +12,10 @@
 //    explícito y ocurre UNA vez, al final, con money().
 //  · La comisión se calcula sobre el SUBTOTAL del ticket SIN propina. La
 //    propina es del barbero íntegra (BarberSale.tip) y jamás entra a la base.
+//  · Excepción (decisión de Rafael, 14-nov-2026): un corte cubierto por
+//    membresía o gratis por lealtad se cobra en $0, pero SÍ comisiona sobre
+//    el precio normal del servicio (cash.ts guarda ese precio solo para la
+//    base). El ingreso de la barbería no cambia: el ticket sigue en $0.
 //  · Base configurable por barbería (CommissionPolicy): "SERVICES" = solo
 //    servicios (+ descuentos del ticket); "SERVICES_AND_PRODUCTS" = también el
 //    retail. Ver getCommissionPolicy: hoy la política persiste en código
@@ -45,7 +49,8 @@ import type {
   BarberPaymentMethod,
 } from "@/lib/barber/types";
 // Núcleo puro (sin prisma): no rompe el DAG commissions ← inventory ← cash.
-import { isDepositLine } from "@/lib/barber/memberships-core";
+import { isDepositLine, isMembershipLine } from "@/lib/barber/memberships-core";
+import { isLoyaltyLine } from "@/lib/barber/loyalty-core";
 
 // ── Dinero ──────────────────────────────────────────────────────────────
 
@@ -782,6 +787,12 @@ export interface CommissionEntryRow extends BarberCommissionEntryDTO {
   saleCancelled: boolean;
   clientName: string | null;
   itemsSummary: string | null;
+  /**
+   * El ticket trae un corte cubierto por membresía o gratis por lealtad: se
+   * cobró en $0 pero comisiona sobre el precio normal del servicio (por eso
+   * la base puede ser mayor que el total del ticket).
+   */
+  coveredCut: boolean;
 }
 
 export function toCommissionEntryDTO(e: {
@@ -847,6 +858,7 @@ export async function getCommissionEntries(
     itemsSummary: e.sale
       ? e.sale.items.map((it) => (it.qty > 1 ? `${it.qty}× ${it.description}` : it.description)).join(", ") || null
       : null,
+    coveredCut: e.sale ? e.sale.items.some((it) => isMembershipLine(it.description) || isLoyaltyLine(it.description)) : false,
   }));
 }
 

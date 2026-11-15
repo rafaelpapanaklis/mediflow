@@ -220,7 +220,11 @@ export function ComisionesClient({
                                     <tr key={e.id}>
                                       <td>{fmtDateTime(e.createdAt, tz)}</td>
                                       <td>{e.clientName ?? "—"}</td>
-                                      <td style={{ whiteSpace: "normal" }}>{e.itemsSummary ?? "—"}</td>
+                                      <td style={{ whiteSpace: "normal" }}>
+                                        {e.itemsSummary ?? "—"}
+                                        {/* Corte cubierto: el ticket vale $0 pero comisiona sobre el precio normal. */}
+                                        {e.coveredCut && <div className="bcaja-hint">{t("comisiones.entryCovered")}</div>}
+                                      </td>
                                       <td className="bcaja-num">{fmtMoney(e.base)}</td>
                                       <td className="bcaja-num">{fmtPct(e.pct)}</td>
                                       <td className="bcaja-num">{fmtMoney(e.amount)}</td>

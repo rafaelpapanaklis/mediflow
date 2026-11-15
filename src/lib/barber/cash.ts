@@ -928,6 +928,13 @@ export interface CreateSaleInput {
 interface BuiltLine {
   /** "deposit" = crédito del anticipo: resta del total, NO de la base de comisión. */
   kind: "service" | "product" | "adjustment" | "deposit";
+  /**
+   * Precio NORMAL del servicio cuando la línea va cubierta (membresía o
+   * premio de lealtad) y por eso se cobra en $0. Solo lo usa la comisión: el
+   * barbero hizo el corte y comisiona sobre lo que vale, aunque el cliente
+   * no pague nada en este ticket. El ingreso de la barbería no lo ve.
+   */
+  commissionUnitPrice?: Money;
   serviceId: string | null;
   productId: string | null;
   description: string;
@@ -1135,6 +1142,7 @@ export async function createSale(
           throw new BarberCajaError(409, "LOYALTY_NOT_ELIGIBLE", `El cliente tiene ${stamps} de ${rule.threshold} sellos`, { stamps, threshold: rule.threshold });
         }
         if (target.qty !== 1) throw new BarberCajaError(400, "INVALID_INPUT", "El premio de lealtad aplica a una línea de cantidad 1");
+        target.commissionUnitPrice = target.unitPrice;
         target.unitPrice = ZERO;
         // El sufijo guarda cuántos sellos costó ESTE canje: es lo que se
         // resta al recontar (y lo que vuelve si el ticket se cancela).
@@ -1152,6 +1160,7 @@ export async function createSale(
           throw new BarberCajaError(409, "MEMBERSHIP_NOT_ACTIVE", "El cliente no tiene una membresía activa con cupo");
         }
         if (target.qty !== 1) throw new BarberCajaError(400, "INVALID_INPUT", "La membresía cubre una línea de cantidad 1");
+        target.commissionUnitPrice = target.unitPrice;
         target.unitPrice = ZERO;
         target.description = `${target.description}${MEMBERSHIP_SUFFIX}`;
         membershipUsed = { id: lookup.activeMembership.id };
@@ -1242,7 +1251,11 @@ export async function createSale(
         // completo y comisiona sobre él, se haya apartado con anticipo o no.
         const commissionLines: CommissionLine[] = built
           .filter((b): b is BuiltLine & { kind: CommissionLine["kind"] } => b.kind !== "deposit")
-          .map((b) => ({ kind: b.kind, qty: b.qty, unitPrice: b.unitPrice }));
+          // Corte cubierto por membresía o gratis por lealtad (decisión de
+          // Rafael, 14-nov-2026): SÍ comisiona, sobre el precio normal del
+          // servicio. Solo cambia la base de comisión; la línea del ticket y
+          // el ingreso de la barbería siguen en $0.
+          .map((b) => ({ kind: b.kind, qty: b.qty, unitPrice: b.commissionUnitPrice ?? b.unitPrice }));
         const base = commissionBaseFor(commissionLines, policy);
         const result = computeCommission(barber, base);
         await tx.barberCommissionEntry.create({

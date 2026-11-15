@@ -209,14 +209,15 @@
     "generated": "Generado el {date}",
     "receiptPeriodTotal": "Total del periodo",
     "receiptAlreadyPaid": "Ya pagado",
-    "receiptPartial": "Pago parcial el {date}; hay pendiente"
+    "receiptPartial": "Pago parcial el {date}; hay pendiente",
+    "receiptCoveredNote": "Incluye cortes cubiertos por membresía o lealtad: el cliente pagó $0 en ese ticket y la comisión se calcula sobre el precio normal del servicio."
   },
   "comisiones": {
     "title": "Comisiones",
     "subtitle": "Lo que cada barbero produjo, lo que ya se le pagó y lo que falta por pagarle, por periodo.",
     "selfOnly": "Estás viendo solo tus comisiones.",
     "policy": "Base de comisión",
-    "policyHint": "La propina nunca entra a la base. El % se aplica al subtotal de cada ticket.",
+    "policyHint": "La propina nunca entra a la base. El % se aplica al subtotal de cada ticket. Un corte cubierto por membresía o gratis por lealtad comisiona sobre el precio normal del servicio.",
     "policySERVICES": "Solo servicios",
     "policySERVICES_AND_PRODUCTS": "Servicios y productos",
     "kpiProduced": "Producido",
@@ -271,7 +272,8 @@
     "payRent": "Renta de silla del periodo",
     "payAlreadyPaid": "Ya pagado antes en este periodo: {amount}.",
     "markedPaidAmount": "Pago registrado: {amount}",
-    "nothingToPay": "No había nada pendiente por pagar."
+    "nothingToPay": "No había nada pendiente por pagar.",
+    "entryCovered": "Cubierto por membresía o lealtad: comisiona sobre el precio normal"
   },
   "productos": {
     "title": "Productos",

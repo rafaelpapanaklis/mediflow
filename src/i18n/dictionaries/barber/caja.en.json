@@ -209,14 +209,15 @@
     "generated": "Generated on {date}",
     "receiptPeriodTotal": "Period total",
     "receiptAlreadyPaid": "Already paid",
-    "receiptPartial": "Partly paid on {date}; some is pending"
+    "receiptPartial": "Partly paid on {date}; some is pending",
+    "receiptCoveredNote": "Includes cuts covered by membership or loyalty: the client paid $0 on that ticket and commission is worked out on the service's normal price."
   },
   "comisiones": {
     "title": "Commissions",
     "subtitle": "What each barber produced, what has already been paid and what is still owed, per period.",
     "selfOnly": "You're seeing only your own commissions.",
     "policy": "Commission base",
-    "policyHint": "Tips never enter the base. The % applies to each ticket's subtotal.",
+    "policyHint": "Tips never go into the base. The % applies to each ticket's subtotal. A cut covered by a membership or free through loyalty earns commission on the service's normal price.",
     "policySERVICES": "Services only",
     "policySERVICES_AND_PRODUCTS": "Services and products",
     "kpiProduced": "Produced",
@@ -271,7 +272,8 @@
     "payRent": "Chair rent for the period",
     "payAlreadyPaid": "Already paid earlier this period: {amount}.",
     "markedPaidAmount": "Payment recorded: {amount}",
-    "nothingToPay": "There was nothing pending to pay."
+    "nothingToPay": "There was nothing pending to pay.",
+    "entryCovered": "Covered by membership or loyalty: commission on the normal price"
   },
   "productos": {
     "title": "Products",

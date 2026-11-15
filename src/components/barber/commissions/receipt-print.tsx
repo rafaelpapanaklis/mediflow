@@ -59,6 +59,7 @@ export function ReceiptPrint({
 
         <hr className="bcaja-print__rule" />
         <div className="bcaja-print__row"><span>{t("print.receiptBase")}</span><span>{fmtMoney(row.commissionBase)}</span></div>
+        {live.some((e) => e.coveredCut) && <div className="bcaja-print__meta" style={{ padding: "4px 0" }}>{t("print.receiptCoveredNote")}</div>}
         <div className="bcaja-print__row"><span>{t("print.receiptCommission")}</span><span>{fmtMoney(row.commissionTotal)}</span></div>
         <div className="bcaja-print__row"><span>{t("print.receiptTips")}</span><span>{fmtMoney(row.tips)}</span></div>
         {row.chairRent !== null && <div className="bcaja-print__row"><span>{t("print.receiptRent")}</span><span>−{fmtMoney(row.chairRent)}</span></div>}
@@ -89,7 +90,7 @@ export function ReceiptPrint({
               live.map((e) => (
                 <tr key={e.id}>
                   <td>{fmtDateTime(e.createdAt, tz)}</td>
-                  <td>{e.itemsSummary ?? "—"}{e.clientName ? ` · ${e.clientName}` : ""}</td>
+                  <td>{e.itemsSummary ?? "—"}{e.clientName ? ` · ${e.clientName}` : ""}{e.coveredCut ? ` — ${t("comisiones.entryCovered")}` : ""}</td>
                   <td style={{ textAlign: "right" }}>{fmtMoney(e.base)}</td>
                   <td style={{ textAlign: "right" }}>{fmtPct(e.pct)}</td>
                   <td style={{ textAlign: "right" }}>{fmtMoney(e.amount)}</td>
