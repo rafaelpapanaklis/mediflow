@@ -27,6 +27,12 @@ export interface SaleDraftPayload {
   /** Descuento en % (texto decimal) o null. Excluye a `discount`. */
   discountPct: string | null;
   notes: string | null;
+  /**
+   * Nota LIGADA A UNA CITA (cita «B»): los productos que se agregaron desde la
+   * cita para su cobro. Solo la salda el ticket de ESA cita, y no sale en las
+   * listas generales de «Por cobrar». null = nota suelta (la de siempre).
+   */
+  appointmentId?: string | null;
 }
 
 export class SaleDraftInputError extends Error {
@@ -72,7 +78,7 @@ export function normalizeSaleDraftPayload(raw: unknown): SaleDraftPayload {
   if (discount && discountPct) throw new SaleDraftInputError("El descuento va en pesos o en porcentaje, no los dos.");
   const notes = typeof r.notes === "string" ? r.notes.trim().slice(0, SALE_DRAFT_NOTES_MAX) || null : null;
   if (notes && notes.startsWith("[CANCELADA]")) throw new SaleDraftInputError("La nota no puede empezar con la marca de cancelación.");
-  return { items, barberId: idOf(r.barberId), discount, discountPct, notes };
+  return { items, barberId: idOf(r.barberId), discount, discountPct, notes, appointmentId: idOf(r.appointmentId) };
 }
 
 /** ¿Existe la tabla? `to_regclass` nunca falla (no aborta una transacción). */
@@ -94,14 +100,25 @@ export async function saleDraftsReady(db: Pick<Prisma.TransactionClient, "$query
  */
 export async function markSaleDraftChargedTx(
   tx: Pick<Prisma.TransactionClient, "$executeRaw">,
-  args: { draftId: string; barbershopId: string; clientId: string | null; saleId: string; userId: string },
+  args: {
+    draftId: string;
+    barbershopId: string;
+    clientId: string | null;
+    saleId: string;
+    userId: string;
+    /** La cita del ticket (null en un cobro sin cita). Tiene que ser la de la nota. */
+    appointmentId?: string | null;
+  },
 ): Promise<boolean> {
+  // La nota de una cita solo la salda el ticket de ESA cita; una nota suelta,
+  // solo un ticket sin cita (cita «B», ws6-t5).
   const n = await tx.$executeRaw`
     UPDATE "barber_sale_drafts"
     SET "status" = 'CHARGED', "saleId" = ${args.saleId}, "closedAt" = NOW(),
         "closedByUserId" = ${args.userId}, "updatedAt" = NOW()
     WHERE "id" = ${args.draftId} AND "barbershopId" = ${args.barbershopId}
       AND "status" = 'OPEN' AND "clientId" IS NOT DISTINCT FROM ${args.clientId}::text
+      AND ("payload"->>'appointmentId') IS NOT DISTINCT FROM ${args.appointmentId ?? null}::text
   `;
   return n === 1;
 }
@@ -124,4 +141,33 @@ export async function reopenSaleDraftOfCancelledSaleTx(
         "updatedByUserId" = ${args.userId}, "updatedAt" = NOW()
     WHERE "saleId" = ${args.saleId} AND "barbershopId" = ${args.barbershopId} AND "status" = 'CHARGED'
   `;
+}
+
+/**
+ * Las notas «Por cobrar» abiertas de VARIAS citas (cita «B»): lo que Caja
+ * necesita para que el ticket de cada cita traiga sus productos. Una lectura.
+ */
+export async function loadAppointmentDraftLines(
+  db: Pick<Prisma.TransactionClient, "$queryRaw">,
+  barbershopId: string,
+  appointmentIds: string[],
+): Promise<Map<string, { draftId: string; items: SaleDraftLine[] }>> {
+  const out = new Map<string, { draftId: string; items: SaleDraftLine[] }>();
+  if (!barbershopId || appointmentIds.length === 0 || !(await saleDraftsReady(db))) return out;
+  const rows = await db.$queryRaw<Array<{ id: string; payload: unknown }>>`
+    SELECT "id", "payload" FROM "barber_sale_drafts"
+    WHERE "barbershopId" = ${barbershopId} AND "status" = 'OPEN'
+      AND ("payload"->>'appointmentId') = ANY(${appointmentIds}::text[])
+    ORDER BY "createdAt" ASC`;
+  for (const r of rows) {
+    const p = r.payload && typeof r.payload === "object" ? (r.payload as Record<string, unknown>) : {};
+    const appt = typeof p.appointmentId === "string" ? p.appointmentId : null;
+    if (!appt || out.has(appt)) continue;
+    const items = (Array.isArray(p.items) ? p.items : [])
+      .map((it) => (it && typeof it === "object" ? (it as Record<string, unknown>) : {}))
+      .filter((o) => (o.kind === "product" || o.kind === "service") && typeof o.id === "string")
+      .map((o) => ({ kind: o.kind as "service" | "product", id: o.id as string, qty: Math.max(1, Math.floor(Number(o.qty) || 1)) }));
+    out.set(appt, { draftId: r.id, items });
+  }
+  return out;
 }

@@ -80,7 +80,12 @@ import {
   refreshLoyalty,
   type LoyaltyRule,
 } from "@/lib/barber/loyalty-core";
-import { markSaleDraftChargedTx, reopenSaleDraftOfCancelledSaleTx, saleDraftsReady } from "@/lib/barber/sale-drafts-core";
+import {
+  loadAppointmentDraftLines,
+  markSaleDraftChargedTx,
+  reopenSaleDraftOfCancelledSaleTx,
+  saleDraftsReady,
+} from "@/lib/barber/sale-drafts-core";
 import {
   activeBonuses,
   availableBonuses,
@@ -324,6 +329,12 @@ export interface PendingAppointment {
   services: Array<{ serviceId: string; name: string; priceAtBooking: number }>;
   /** Anticipo PAGADO y todavía sin aplicar: se descuenta solo al cobrar. */
   deposit: { amount: number } | null;
+  /**
+   * Nota «Por cobrar» de la cita (cita «B»): los productos que se agregaron
+   * desde la cita. El ticket los trae y, al cobrar, la nota queda saldada.
+   * Solo productos activos del catálogo de hoy (con su precio de hoy).
+   */
+  draft?: { id: string; items: Array<{ productId: string; name: string; qty: number; unitPrice: number }> } | null;
 }
 
 export interface CheckoutContext {
@@ -816,6 +827,23 @@ export async function getCheckoutContext(
   const rule = catalog.rule;
   const bonuses = activeBonuses(catalog.bonuses);
 
+  // Productos agregados desde la cita (nota «Por cobrar» ligada a ella).
+  const apptDrafts = features.products === true
+    ? await loadAppointmentDraftLines(prisma, ctx.barbershopId, pendingRows.map((a) => a.id))
+    : new Map<string, { draftId: string; items: Array<{ kind: "service" | "product"; id: string; qty: number }> }>();
+  const productById = new Map(products.map((p) => [p.id, p]));
+  const draftOf = (appointmentId: string): PendingAppointment["draft"] => {
+    const d = apptDrafts.get(appointmentId);
+    if (!d) return null;
+    const items = d.items
+      .filter((i) => i.kind === "product" && productById.has(i.id))
+      .map((i) => {
+        const p = productById.get(i.id)!;
+        return { productId: p.id, name: p.name, qty: i.qty, unitPrice: p.price };
+      });
+    return { id: d.draftId, items };
+  };
+
   const pending: PendingAppointment[] = pendingRows
     .map((a) => ({
       id: a.id,
@@ -835,6 +863,7 @@ export async function getCheckoutContext(
       })),
       // Sin ticket vivo (filtro de arriba) el anticipo pagado está sin aplicar.
       deposit: paidDepositOf(a) ? { amount: toNum(paidDepositOf(a)) } : null,
+      draft: draftOf(a.id),
     }));
 
   return {
@@ -1476,6 +1505,7 @@ export async function createSale(
           clientId: client?.id ?? null,
           saleId: created.id,
           userId: ctx.barberUserId,
+          appointmentId,
         });
         if (!marked) throw new BarberCajaError(409, "DRAFT_NOT_OPEN", "Esa nota ya se cobró o se descartó");
       }

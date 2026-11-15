@@ -118,16 +118,24 @@ export function TicketModal({
   const [lines, setLines] = useState<Line[]>(() =>
     draft && !appointment
       ? draftLines(draft, checkout)
-      : (appointment?.services ?? []).map((s) => ({
-      key: nextKey(),
-      kind: "service",
-      id: s.serviceId,
-      name: s.name,
-      qty: 1,
-      unitPrice: s.priceAtBooking,
-      frozen: true,
-      stock: null,
-    })),
+      : [
+          ...(appointment?.services ?? []).map((s): Line => ({
+            key: nextKey(),
+            kind: "service",
+            id: s.serviceId,
+            name: s.name,
+            qty: 1,
+            unitPrice: s.priceAtBooking,
+            frozen: true,
+            stock: null,
+          })),
+          // Productos agregados desde la cita (cita «B»): el ticket ya los trae.
+          ...(appointment?.draft?.items ?? []).flatMap((i): Line[] => {
+            const p = checkout.products.find((x) => x.id === i.productId);
+            if (!p || p.stock <= 0) return [];
+            return [{ key: nextKey(), kind: "product", id: p.id, name: p.name, qty: Math.min(i.qty, p.stock), unitPrice: p.price, frozen: false, stock: p.stock }];
+          }),
+        ],
   );
   const [addServiceId, setAddServiceId] = useState("");
   const [addProductId, setAddProductId] = useState("");
@@ -292,7 +300,7 @@ export function TicketModal({
         redeemLoyaltyItemIndex: bonus?.kind === "service" && loyaltyKey ? lines.findIndex((l) => l.key === loyaltyKey) : null,
         membershipItemIndex: membershipKey ? lines.findIndex((l) => l.key === membershipKey) : null,
         // La nota «Por cobrar» que este ticket salda (se marca en la misma transacción).
-        draftId: draft?.id ?? null,
+        draftId: draft?.id ?? appointment?.draft?.id ?? null,
         notes: notes.trim() || null,
       };
       const res = await fetch("/api/barber/sales", {
