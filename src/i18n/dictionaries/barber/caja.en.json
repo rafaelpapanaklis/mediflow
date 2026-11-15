@@ -151,7 +151,6 @@
     "remove": "Remove",
     "discount": "Ticket discount",
     "discountHint": "Recorded as a negative line.",
-    "discountMode": "Discount in pesos or percent",
     "discountPctHint": "In % it is taken from what is left on the ticket (0.01 to 100).",
     "discountPctEquals": "That is {amount} off.",
     "saveDraft": "Save without charging",
