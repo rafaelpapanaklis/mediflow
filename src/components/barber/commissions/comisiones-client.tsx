@@ -52,6 +52,9 @@ export function ComisionesClient({
   // que se le debe a los barberos de lo que los de renta de silla le deben al
   // dueño. El «A pagar» por fila y el recibo siguen siendo los de siempre.
   const { toPayBarbers, rentOwed } = splitToPay(summary.rows);
+  // Al dueño la tarjeta de renta le sale siempre (como hasta ahora); al
+  // Barbero, solo si de verdad debe renta.
+  const showRentCard = !summary.selfOnly || rentOwed > 0;
 
   function goPeriod(p: string) {
     router.push(`/barber/comisiones?period=${p}`);
@@ -128,12 +131,26 @@ export function ComisionesClient({
 
       {summary.selfOnly && <div className="bcaja-alert bcaja-alert--info">{noBarberLinked ? t("comisiones.noBarberLinked") : t("comisiones.selfOnly")}</div>}
 
-      <div className="bcaja-kpis bcaja-kpis--5">
+      {/* El Barbero (selfOnly) ve SU pantalla: «A pagarte» y «Debes de renta»
+          (C-M1). Para él, la renta pendiente la debe ÉL, no «te deben»; y si
+          no debe renta, esa tarjeta no sale. */}
+      <div className={showRentCard ? "bcaja-kpis bcaja-kpis--5" : "bcaja-kpis"}>
         <KpiCard label={t("comisiones.kpiProduced")} value={fmtMoney(summary.totals.produced)} icon={Scissors} hero />
         <KpiCard label={t("comisiones.kpiCommission")} value={fmtMoney(summary.totals.commissionTotal)} icon={Percent} />
         <KpiCard label={t("comisiones.kpiTips")} value={fmtMoney(summary.totals.tips)} />
-        <KpiCard label={t("comisiones.kpiToPayBarbers")} value={fmtMoney(toPayBarbers)} icon={Wallet} hint={t("comisiones.kpiToPayBarbersHint", { paid: fmtMoney(summary.totals.paidTotal) })} />
-        <KpiCard label={t("comisiones.kpiRentOwed")} value={fmtMoney(rentOwed)} hint={t("comisiones.kpiRentOwedHint")} />
+        <KpiCard
+          label={summary.selfOnly ? t("comisiones.kpiToPayYou") : t("comisiones.kpiToPayBarbers")}
+          value={fmtMoney(toPayBarbers)}
+          icon={Wallet}
+          hint={t("comisiones.kpiToPayBarbersHint", { paid: fmtMoney(summary.totals.paidTotal) })}
+        />
+        {showRentCard && (
+          <KpiCard
+            label={summary.selfOnly ? t("comisiones.kpiRentYouOwe") : t("comisiones.kpiRentOwed")}
+            value={fmtMoney(rentOwed)}
+            hint={summary.selfOnly ? t("comisiones.kpiRentYouOweHint") : t("comisiones.kpiRentOwedHint")}
+          />
+        )}
       </div>
 
       <div className="bcaja-alert bcaja-alert--info">
