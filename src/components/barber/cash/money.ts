@@ -129,6 +129,18 @@ export function parseAmountText(text: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+/**
+ * Como parseAmountText, pero VACÍO no es $0: es «todavía no escribe nada»
+ * (null). Para las cifras que se cuentan a mano y no se pueden deshacer: el
+ * fondo al abrir turno y el efectivo contado al cerrarlo. Con vacío = $0, un
+ * toque de más en «Cerrar turno» dejaba un faltante de todo el efectivo en un
+ * turno que ya no se puede reabrir (QA B, 15-nov). Quien empieza sin fondo
+ * escribe 0.
+ */
+export function parseRequiredAmountText(text: string): number | null {
+  return text.trim() === "" ? null : parseAmountText(text);
+}
+
 export const PAYMENT_METHOD_KEYS: Record<BarberPaymentMethod, string> = {
   CASH: "common.cash",
   CARD: "common.card",

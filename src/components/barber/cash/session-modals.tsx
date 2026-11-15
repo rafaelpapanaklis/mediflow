@@ -8,7 +8,7 @@ import { closeExpectedView } from "./close-expected";
 import { CloseExpectedBreakdown } from "./close-expected-breakdown";
 import { BarberModal } from "./modal";
 import { useBarberT } from "./use-barber-t";
-import { fmtMoney, fmtSigned, fmtTime, parseAmountText, toCents, fromCents, PAYMENT_METHOD_KEYS } from "./money";
+import { fmtMoney, fmtSigned, fmtTime, parseRequiredAmountText, toCents, fromCents, PAYMENT_METHOD_KEYS } from "./money";
 
 // Forma única (sin unión discriminada): con strict:false TS no estrecha
 // `ok: true | false`, así que el caller mira `error` directamente.
@@ -36,7 +36,7 @@ export function OpenSessionModal({ dict, onClose, onDone }: { dict: Dictionary; 
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const amount = parseAmountText(amountText);
+  const amount = parseRequiredAmountText(amountText);
 
   async function submit() {
     if (amount === null || busy) return;
@@ -72,6 +72,7 @@ export function OpenSessionModal({ dict, onClose, onDone }: { dict: Dictionary; 
         <div className="field-new">
           <label className="field-new__label">{t("session.openingAmount")}</label>
           <input className="input-new bcaja-amount" inputMode="decimal" autoFocus value={amountText} onChange={(e) => setAmountText(e.target.value)} placeholder="0.00" />
+          {amountText.trim() === "" && <div className="bcaja-hint">{t("session.openingRequired")}</div>}
         </div>
         <div className="field-new">
           <label className="field-new__label">{t("session.openNotes")}</label>
@@ -102,7 +103,7 @@ export function CloseSessionModal({
   const [error, setError] = useState<string | null>(null);
   const [closed, setClosed] = useState<CashSessionSummary | null>(null);
 
-  const counted = parseAmountText(countedText);
+  const counted = parseRequiredAmountText(countedText);
   const expectedCents = toCents(summary.expectedCash);
   const diffCents = counted === null ? null : toCents(counted) - expectedCents;
   const live = useMemo(() => summary.sales.filter((s) => !s.cancelled), [summary.sales]);
@@ -161,6 +162,7 @@ export function CloseSessionModal({
           <div className="field-new">
             <label className="field-new__label">{t("session.countedAmount")}</label>
             <input className="input-new bcaja-amount" inputMode="decimal" autoFocus value={countedText} onChange={(e) => setCountedText(e.target.value)} placeholder="0.00" />
+            {countedText.trim() === "" && <div className="bcaja-hint">{t("session.countedRequired")}</div>}
           </div>
           <div className="field-new">
             <label className="field-new__label">{t("session.difference")}</label>
