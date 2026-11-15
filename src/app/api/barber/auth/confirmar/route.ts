@@ -3,6 +3,12 @@ import { origenPublicoDe } from "@/lib/url-publica";
 import { createClient } from "@/lib/supabase/server";
 import { borrarDesbloqueos } from "@/lib/sede-clave/core";
 import { BARBER_RESET_PATH } from "@/lib/barber/contrasena";
+import {
+  BARBER_RECOVERY_COOKIE,
+  BARBER_RECOVERY_COOKIE_BORRAR,
+  BARBER_RECOVERY_COOKIE_OPTS,
+  firmarRecuperacion,
+} from "@/lib/barber/recuperacion-cookie";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +23,9 @@ export const dynamic = "force-dynamic";
  *    (exchangeCodeForSession; el verificador es la cookie que dejó
  *    /api/barber/auth/recuperar en este navegador).
  *
- * Bien → /barber/restablecer con la sesión de recuperación puesta.
+ * Bien → /barber/restablecer con la sesión de recuperación puesta y la
+ * cookie firmada «vienes de un enlace» (ver @/lib/barber/recuperacion-cookie),
+ * que es lo único que abre el restablecer.
  * Mal (caducado, ya usado, otro navegador) → /barber/restablecer con
  * ?error=link_invalido, que ofrece pedir otro. La de allá, en el caso «mal»
  * sin type=recovery, mandaba al inicio de sesión de las clínicas.
@@ -29,9 +37,22 @@ export async function GET(request: NextRequest) {
   const type = searchParams.get("type");
   const code = searchParams.get("code");
 
-  const fallo = () => NextResponse.redirect(`${origin}${BARBER_RESET_PATH}?error=link_invalido`);
-  const listo = () => {
+  const fallo = () => {
+    const res = NextResponse.redirect(`${origin}${BARBER_RESET_PATH}?error=link_invalido`);
+    // Un enlace malo no deja viva la constancia de uno bueno anterior.
+    res.cookies.set(BARBER_RECOVERY_COOKIE, "", BARBER_RECOVERY_COOKIE_BORRAR);
+    return res;
+  };
+  /**
+   * El enlace era bueno: la constancia «vienes de un enlace de recuperación»
+   * para ESTE usuario (ronda 7, M1). Sin ella /barber/restablecer no deja
+   * cambiar nada. Sin secreto para firmarla, falla cerrado.
+   */
+  const listo = (supabaseId: string | null | undefined) => {
+    const constancia = supabaseId ? firmarRecuperacion(supabaseId) : null;
+    if (!constancia) return fallo();
     const res = NextResponse.redirect(`${origin}${BARBER_RESET_PATH}`);
+    res.cookies.set(BARBER_RECOVERY_COOKIE, constancia, BARBER_RECOVERY_COOKIE_OPTS);
     // Sesión nueva: igual que /auth/confirm, fuera los desbloqueos de la
     // clave de sede de una sesión anterior en este navegador.
     borrarDesbloqueos(res, request.headers.get("cookie"));
@@ -43,12 +64,12 @@ export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient();
     if (tokenHash && type === "recovery") {
-      const { error } = await supabase.auth.verifyOtp({ type: "recovery", token_hash: tokenHash });
-      return error ? fallo() : listo();
+      const { data, error } = await supabase.auth.verifyOtp({ type: "recovery", token_hash: tokenHash });
+      return error ? fallo() : listo(data?.user?.id ?? data?.session?.user?.id);
     }
     if (code) {
-      const { error } = await supabase.auth.exchangeCodeForSession(code);
-      return error ? fallo() : listo();
+      const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+      return error ? fallo() : listo(data?.user?.id ?? data?.session?.user?.id);
     }
   } catch {
     return fallo();

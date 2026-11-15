@@ -17,6 +17,8 @@ type Ruta = (req: NextRequest) => Promise<Response>;
 let recuperar: Ruta;
 let confirmar: Ruta;
 let cambiar: Ruta;
+let guardarRestablecer: Ruta;
+let RC: typeof import("@/lib/barber/recuperacion-cookie");
 let C: typeof import("@/lib/barber/contrasena");
 let MK: typeof import("@/lib/barber/marketing");
 
@@ -24,6 +26,8 @@ before(async () => {
   recuperar = (await import("@/app/api/barber/auth/recuperar/route")).POST as Ruta;
   confirmar = (await import("@/app/api/barber/auth/confirmar/route")).GET as Ruta;
   cambiar = (await import("@/app/api/barber/auth/contrasena/route")).POST as Ruta;
+  guardarRestablecer = (await import("@/app/barber/restablecer/guardar/route")).POST as Ruta;
+  RC = await import("@/lib/barber/recuperacion-cookie");
   C = await import("@/lib/barber/contrasena");
   MK = await import("@/lib/barber/marketing");
 });
@@ -143,11 +147,12 @@ describe("1 · recuperar la contraseña sin salir de Barber", () => {
       assert.equal(dental, null, `${rel} trae texto de clínicas: «${dental?.[0]}»`);
     }
     // La pantalla de recuperar llama a la ruta propia; la de restablecer
-    // cambia la contraseña igual que el dental (updateUser con la sesión de
-    // recuperación) y termina en la entrada de Barber con el aviso.
+    // manda la nueva al SERVIDOR (ronda 2: nunca updateUser desde el
+    // navegador) y termina en la entrada de Barber con el aviso.
     assert.match(leer("src/app/barber/recuperar/page.tsx"), /apiUrl="\/api\/barber\/auth\/recuperar"/);
     const form = sinComentarios(leer("src/app/barber/restablecer/restablecer-form.tsx"));
-    assert.match(form, /auth\.updateUser\(\{ password: nueva \}\)/);
+    assert.match(form, /await fetch\(guardarUrl,/);
+    assert.ok(!/updateUser|supabase\/client/.test(form), "el navegador vuelve a cambiar la contraseña por su cuenta");
     assert.match(form, /window\.location\.href = loginListoHref/);
   });
 
@@ -507,5 +512,164 @@ describe("4 · «Último acceso» se escribe al entrar", () => {
       console.error = original;
     }
     assert.equal(errores.length, 1, "el fallo tiene que quedar en el log");
+  });
+});
+
+// ── RONDA 2 · /barber/restablecer solo viniendo de un enlace ───────────
+
+/** POST a /barber/restablecer/guardar, con o sin la cookie de recuperación. */
+function guardar(body: unknown, cookie?: string | null): NextRequest {
+  const headers: Record<string, string> = {};
+  if (cookie) headers.cookie = `${RC.BARBER_RECOVERY_COOKIE}=${cookie}`;
+  return post("/barber/restablecer/guardar", body, headers);
+}
+
+describe("RONDA 2 · el restablecer exige el enlace (M1) y quita la marca (M3)", () => {
+  test("la constancia: firmada, de ESE usuario, con caducidad, sin secreto no hay", () => {
+    const env = { COOKIE_SECRET: "secreto-de-prueba" };
+    const t0 = Date.UTC(2026, 10, 17, 15, 0, 0);
+    const v = RC.firmarRecuperacion("sb-1", t0, env)!;
+    assert.ok(v);
+    assert.equal(RC.recuperacionValidaPara(v, "sb-1", t0, env), true);
+    assert.equal(RC.recuperacionValidaPara(v, "sb-1", t0 + 9 * 60_000, env), true);
+    assert.equal(RC.recuperacionValidaPara(v, "sb-1", t0 + 10 * 60_000, env), false, "a los 10 min ya no vale");
+    assert.equal(RC.recuperacionValidaPara(v, "sb-2", t0, env), false, "es de otro usuario");
+    assert.equal(RC.recuperacionValidaPara(v, "sb-1", t0, { COOKIE_SECRET: "otro" }), false, "otra llave");
+    const [id, exp, firma] = v.split(".");
+    assert.equal(RC.recuperacionValidaPara(`sb-2.${exp}.${firma}`, "sb-2", t0, env), false, "firma ajena");
+    assert.equal(RC.recuperacionValidaPara(`${id}.${Number(exp) + 3600}.${firma}`, "sb-1", t0, env), false, "caducidad alargada");
+    assert.equal(RC.recuperacionValidaPara(`${id}.${exp}.${firma.slice(0, -2)}xx`, "sb-1", t0, env), false);
+    for (const basura of ["", "a.b", "a.b.c.d", null, undefined]) assert.equal(RC.recuperacionValidaPara(basura, "sb-1", t0, env), false);
+    assert.equal(RC.firmarRecuperacion("sb-1", t0, {}), null, "sin secreto no se firma (falla cerrado)");
+    assert.equal(RC.recuperacionValidaPara(v, "sb-1", t0, {}), false);
+  });
+
+  test("el enlace bueno deja la cookie: httpOnly, Secure, SameSite=Lax, de pocos minutos y ligada al usuario", async () => {
+    reiniciar({ usuarioDelEnlace: { id: "sb-1" } });
+    const res = await confirmar(new NextRequest("https://www.dalecontrol.com/api/barber/auth/confirmar?code=abc"));
+    const sc = res.headers.get("set-cookie") ?? "";
+    const m = new RegExp(`${RC.BARBER_RECOVERY_COOKIE}=([^;]+)`).exec(sc);
+    assert.ok(m, `no dejó la cookie: ${sc}`);
+    assert.equal(RC.recuperacionValidaPara(decodeURIComponent(m[1]), "sb-1"), true);
+    assert.equal(RC.recuperacionValidaPara(decodeURIComponent(m[1]), "sb-otro"), false);
+    assert.match(sc, /HttpOnly/i);
+    assert.match(sc, /Secure/i);
+    assert.match(sc, /SameSite=lax/i);
+    assert.match(sc, /Path=\/barber\/restablecer/);
+    assert.match(sc, /Max-Age=600/);
+  });
+
+  test("el enlace malo no deja constancia (y borra una anterior)", async () => {
+    reiniciar({ errorCanje: { message: "expired" } });
+    const res = await confirmar(new NextRequest("https://www.dalecontrol.com/api/barber/auth/confirmar?code=viejo"));
+    const sc = res.headers.get("set-cookie") ?? "";
+    assert.match(sc, new RegExp(`${RC.BARBER_RECOVERY_COOKIE}=;`));
+    assert.match(sc, /Max-Age=0/);
+  });
+
+  test("M1: con una sesión NORMAL y sin cookie, no cambia nada", async () => {
+    conSesion({ rol: "OWNER" });
+    const res = await guardarRestablecer(guardar({ password: NUEVA, confirmacion: NUEVA }));
+    assert.equal(res.status, 401);
+    assert.equal((await res.json()).code, "enlace_invalido");
+    assert.equal(estado.contrasenaVigente, "Vieja-Clave-2026");
+    assert.ok(!llamadas.some((l) => /updateUser|signOut/.test(l.que)), "tocó la cuenta sin enlace");
+  });
+
+  test("M1: cookie de OTRO usuario, caducada o alterada → no cambia nada", async () => {
+    const t = Date.now();
+    const casos: Array<[string, string]> = [
+      ["de otro", RC.firmarRecuperacion("sb-otro")!],
+      ["caducada", RC.firmarRecuperacion("sb-1", t - 11 * 60_000)!],
+      ["alterada", RC.firmarRecuperacion("sb-1")!.replace(/.$/, (c) => (c === "A" ? "B" : "A"))],
+      ["inventada", "sb-1.9999999999.abc"],
+    ];
+    for (const [nombre, cookie] of casos) {
+      conSesion();
+      const res = await guardarRestablecer(guardar({ password: NUEVA, confirmacion: NUEVA }, cookie));
+      assert.equal(res.status, 401, nombre);
+      assert.equal(estado.contrasenaVigente, "Vieja-Clave-2026", nombre);
+      assert.ok(!llamadas.some((l) => l.que === "sesion.updateUser"), nombre);
+    }
+  });
+
+  test("con la cookie buena: cambia la de ESE usuario, cierra la sesión y la cookie no sirve dos veces", async () => {
+    conSesion();
+    const cookie = RC.firmarRecuperacion("sb-1")!;
+    const res = await guardarRestablecer(guardar({ password: NUEVA, confirmacion: NUEVA, supabaseId: "sb-otro" }, cookie));
+    assert.equal(res.status, 200);
+    assert.equal(estado.contrasenaVigente, NUEVA);
+    assert.deepEqual(llamadas.find((l) => l.que === "sesion.updateUser")?.args, { password: NUEVA });
+    assert.ok(llamadas.some((l) => l.que === "sesion.signOut"), "no cerró la sesión de recuperación");
+    assert.ok(!llamadas.some((l) => l.que === "admin.updateUserById"), "sin marca no hace falta la service role");
+    const sc = res.headers.get("set-cookie") ?? "";
+    assert.match(sc, new RegExp(`${RC.BARBER_RECOVERY_COOKIE}=;`), "no borró la cookie");
+    assert.match(sc, /Max-Age=0/);
+    assert.match(sc, /Path=\/barber\/restablecer/);
+
+    // La sesión de recuperación ya se cerró: la misma cookie, sin sesión, no abre nada.
+    estado.sesion = null;
+    const otra = await guardarRestablecer(guardar({ password: "Otra-Clave-2026", confirmacion: "Otra-Clave-2026" }, cookie));
+    assert.equal(otra.status, 401);
+    assert.equal(estado.contrasenaVigente, NUEVA);
+  });
+
+  test("con la cookie buena valen las mismas reglas: débil, no coinciden, igual → 400 y la cookie sigue", async () => {
+    const cookie = () => RC.firmarRecuperacion("sb-1")!;
+    for (const [cuerpo, code] of [
+      [{ password: "abcdefgh", confirmacion: "abcdefgh" }, "debil"],
+      [{ password: NUEVA, confirmacion: NUEVA + "x" }, "no_coinciden"],
+    ] as const) {
+      conSesion();
+      const res = await guardarRestablecer(guardar(cuerpo, cookie()));
+      assert.equal(res.status, 400);
+      assert.equal((await res.json()).code, code);
+      assert.equal(res.headers.get("set-cookie"), null, "un error de captura no gasta el enlace");
+    }
+    conSesion();
+    estado.errorUpdate = { message: "New password should be different from the old password.", code: "same_password" };
+    const res = await guardarRestablecer(guardar({ password: NUEVA, confirmacion: NUEVA }, cookie()));
+    assert.equal(res.status, 400);
+    assert.equal((await res.json()).code, "igual");
+  });
+
+  test("M3: quien recupera con la marca puesta ya no tiene que poner otra al entrar", async () => {
+    conSesion({ marca: true });
+    const res = await guardarRestablecer(guardar({ password: NUEVA, confirmacion: NUEVA }, RC.firmarRecuperacion("sb-1")!));
+    assert.equal(res.status, 200);
+    assert.deepEqual(llamadas.find((l) => l.que === "admin.updateUserById")?.args, {
+      id: "sb-1",
+      attrs: { app_metadata: { barber_must_change_password: false } },
+    });
+    const { getBarberContext } = await import("@/lib/barber-auth");
+    assert.equal((await getBarberContext())?.mustChangePassword, false);
+  });
+
+  test("M3: si quitar la marca falla, la contraseña ya quedó y se avisa en el log", async () => {
+    conSesion({ marca: true });
+    estado.errorAdmin = { message: "boom" };
+    const errores: unknown[] = [];
+    const original = console.error;
+    console.error = (...a: unknown[]) => void errores.push(a);
+    try {
+      const res = await guardarRestablecer(guardar({ password: NUEVA, confirmacion: NUEVA }, RC.firmarRecuperacion("sb-1")!));
+      assert.equal(res.status, 200);
+    } finally {
+      console.error = original;
+    }
+    assert.equal(estado.contrasenaVigente, NUEVA);
+    assert.equal(errores.length, 1);
+  });
+
+  test("la pantalla exige la cookie del usuario de la sesión; sin ella, a pedir el enlace", () => {
+    const pagina = sinComentarios(leer("src/app/barber/restablecer/page.tsx"));
+    assert.match(pagina, /valida = !!user && recuperacionValidaPara\(constancia, user\.id\)/);
+    assert.match(pagina, /if \(!valida\) redirect\(BARBER_RECOVER_PATH\)/);
+    assert.match(pagina, /guardarUrl=\{`\$\{BARBER_RESET_PATH\}\/guardar`\}/);
+    // La cookie solo viaja a la pantalla y a su ruta de guardar.
+    assert.equal(RC.BARBER_RECOVERY_COOKIE_PATH, C.BARBER_RESET_PATH);
+    assert.ok(existsSync(join(RAIZ, "src/app/barber/restablecer/guardar/route.ts")));
+    // Sin respaldo fijo para firmar.
+    assert.doesNotMatch(sinComentarios(leer("src/lib/barber/recuperacion-cookie.ts")), /fallback|\|\| "/);
   });
 });

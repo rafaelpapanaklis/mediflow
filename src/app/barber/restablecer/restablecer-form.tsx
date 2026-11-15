@@ -1,65 +1,44 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, type FormEvent } from "react";
-import { createClient } from "@/lib/supabase/client";
-import { leerErrorContrasena } from "@/lib/auth/errores-contrasena";
+import { useState, type FormEvent } from "react";
 import { BarberBrandRow } from "@/components/barber/barber-registro-form";
 import { Aviso, BotonCaramelo, CARAMELO, CamposNueva, Encabezado, nuevaLista } from "./piezas";
 
-type Estado = "revisando" | "lista" | "invalido";
-
 /**
- * Paso 2 de «Olvidé mi contraseña» en Barber. Mismo mecanismo que
- * /reset-password del dental: se llega con la sesión de recuperación YA en
- * cookies (la dejó /api/barber/auth/confirmar) y la contraseña se cambia con
- * supabase.auth.updateUser desde el navegador. Sin sesión → el enlace
- * caducó → ofrecer otro.
+ * Paso 2 de «Olvidé mi contraseña» en Barber.
  *
- * Al terminar cierra la sesión de recuperación y manda a /barber/entrar con
- * «Listo, ya puedes entrar» (no al inicio de sesión de las clínicas).
+ * La pantalla ya NO cambia la contraseña desde el navegador (revisión ronda 7,
+ * M1): eso servía con cualquier sesión abierta. Manda la nueva a
+ * POST /barber/restablecer/guardar, que exige la cookie firmada del enlace de
+ * recuperación, cambia la de ese usuario, quita la marca de la temporal (M3),
+ * borra la cookie y cierra la sesión de recuperación. Después, /barber/entrar
+ * con «Listo, ya puedes entrar».
+ *
+ * La página del servidor ya comprobó la cookie antes de pintar esto; si
+ * caduca mientras se escribe, el servidor contesta `enlace_invalido` y se
+ * ofrece pedir otro.
  */
 export function BarberRestablecerForm({
-  errorEnUrl,
+  enlaceValido,
+  guardarUrl,
   recuperarHref,
   loginHref,
   loginListoHref,
 }: {
-  /** /api/barber/auth/confirmar regresó con ?error=: enlace caducado o ya usado. */
-  errorEnUrl: boolean;
+  /** false = /api/barber/auth/confirmar regresó con ?error= (caducado o ya usado). */
+  enlaceValido: boolean;
+  guardarUrl: string;
   recuperarHref: string;
   loginHref: string;
   loginListoHref: string;
 }) {
-  const [estado, setEstado] = useState<Estado>(errorEnUrl ? "invalido" : "revisando");
+  const [invalido, setInvalido] = useState(!enlaceValido);
   const [nueva, setNueva] = useState("");
   const [repetida, setRepetida] = useState("");
   const [tocado, setTocado] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // ¿Hay sesión de recuperación? También cubre el error que Supabase manda
-  // en el HASH (#error_code=otp_expired): el servidor nunca lo ve.
-  useEffect(() => {
-    if (estado === "invalido") return;
-    if (typeof window !== "undefined" && window.location.hash.includes("error")) {
-      setEstado("invalido");
-      return;
-    }
-    let cancelado = false;
-    createClient()
-      .auth.getUser()
-      .then(({ data }) => {
-        if (!cancelado) setEstado(data.user ? "lista" : "invalido");
-      })
-      .catch(() => {
-        if (!cancelado) setEstado("invalido");
-      });
-    return () => {
-      cancelado = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -68,27 +47,21 @@ export function BarberRestablecerForm({
     setError(null);
     setGuardando(true);
     try {
-      const supabase = createClient();
-      const { error: fallo } = await supabase.auth.updateUser({ password: nueva });
-      if (fallo) {
-        const deContrasena = leerErrorContrasena(fallo);
-        if (deContrasena?.motivo === "igual") {
-          setError("La contraseña nueva tiene que ser distinta de la anterior.");
-        } else if (deContrasena) {
-          setError(deContrasena.mensaje);
-        } else if (/session/i.test(fallo.message ?? "")) {
-          setEstado("invalido");
+      const res = await fetch(guardarUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: nueva, confirmacion: repetida }),
+        cache: "no-store",
+      });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => null)) as { error?: string; code?: string } | null;
+        if (data?.code === "enlace_invalido") {
+          setInvalido(true);
         } else {
-          setError("No pudimos guardar la contraseña. Inténtalo de nuevo.");
+          setError(data?.error ?? "No pudimos guardar la contraseña. Inténtalo de nuevo.");
         }
         setGuardando(false);
         return;
-      }
-      // Igual que el dental: se cierra la sesión de recuperación y se entra limpio.
-      try {
-        await supabase.auth.signOut();
-      } catch {
-        /* no importa: la entrada pide la contraseña igual */
       }
       window.location.href = loginListoHref;
     } catch {
@@ -112,18 +85,7 @@ export function BarberRestablecerForm({
     </>
   );
 
-  if (estado === "revisando") {
-    return (
-      <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-        {encabezado}
-        <p style={{ fontSize: 13, color: "var(--ld-fg-muted)", textAlign: "center", margin: "16px 0" }}>
-          Revisando tu enlace…
-        </p>
-      </div>
-    );
-  }
-
-  if (estado === "invalido") {
+  if (invalido) {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 18 }} data-barber-restablecer="invalido">
         {encabezado}

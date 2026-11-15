@@ -38,6 +38,10 @@ export interface Estado {
   frenar: (llave: string) => boolean;
   /** Filas barber_users. */
   filas: Array<Record<string, any>>;
+  /** Usuario que devuelve el canje del enlace (verifyOtp / exchangeCodeForSession). */
+  usuarioDelEnlace: { id: string } | null;
+  /** Error SOLO de admin.updateUserById (null = usa errorUpdate). */
+  errorAdmin: { message: string } | null;
   /** Si la escritura de lastLogin revienta. */
   updateManyRevienta: boolean;
 }
@@ -55,6 +59,8 @@ function nuevoEstado(): Estado {
     frenar: () => false,
     filas: [],
     updateManyRevienta: false,
+    usuarioDelEnlace: { id: "sb-1" },
+    errorAdmin: null,
   };
 }
 
@@ -76,11 +82,11 @@ const supabaseServidor = {
       },
       verifyOtp: async (args: unknown) => {
         anota("verifyOtp", args);
-        return { data: {}, error: estado.errorCanje };
+        return estado.errorCanje ? { data: {}, error: estado.errorCanje } : { data: { user: estado.usuarioDelEnlace, session: null }, error: null };
       },
       exchangeCodeForSession: async (code: string) => {
         anota("exchangeCodeForSession", code);
-        return { data: {}, error: estado.errorCanje };
+        return estado.errorCanje ? { data: {}, error: estado.errorCanje } : { data: { user: estado.usuarioDelEnlace, session: null }, error: null };
       },
       updateUser: async (args: { password?: string }) => {
         anota("sesion.updateUser", args);
@@ -112,6 +118,7 @@ const supabaseJs = {
       admin: {
         updateUserById: async (id: string, attrs: any) => {
           anota("admin.updateUserById", { id, attrs });
+          if (estado.errorAdmin) return { data: {}, error: estado.errorAdmin };
           if (estado.errorUpdate) return { data: {}, error: estado.errorUpdate };
           if (attrs.password) estado.contrasenaVigente = attrs.password;
           if (attrs.app_metadata && estado.sesion) {
