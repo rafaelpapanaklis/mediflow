@@ -307,7 +307,7 @@ export function WeekBoard(props: WeekBoardProps) {
   return (
     <div className={css.board}>
       <div className={css.scroller} ref={scrollerRef} data-scroller="">
-        <div className={css.grid} style={{ gridTemplateColumns: "58px repeat(7, minmax(0, 1fr))" }}>
+        <div className={css.grid} style={{ gridTemplateColumns: "58px repeat(7, minmax(var(--agenda-dia-min, 0px), 1fr))" }}>
           <div className={css.headCorner} />
           {perDay.map(({ day, items }) => {
             const isToday = day === todayISO;

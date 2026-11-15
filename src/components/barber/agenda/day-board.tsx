@@ -310,7 +310,9 @@ export function DayBoard(props: DayBoardProps) {
       <div className={css.scroller} ref={scrollerRef} data-scroller="">
         <div
           className={css.grid}
-          style={{ gridTemplateColumns: `58px repeat(${columns.length}, minmax(0, 1fr))` }}
+          // El mínimo de cada columna lo pone el CSS (0 en escritorio, legible en
+          // celular, donde la rejilla se desplaza de lado con la hora fija).
+          style={{ gridTemplateColumns: `58px repeat(${columns.length}, minmax(var(--agenda-col-min, 0px), 1fr))` }}
         >
           {/* Encabezado */}
           <div className={css.headCorner} />
