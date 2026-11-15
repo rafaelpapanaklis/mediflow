@@ -801,7 +801,8 @@ export function AgendaClient(props: AgendaClientProps) {
           t={t}
           onClose={() => setCharging(null)}
           onCharged={(sale: SaleRow) => {
-            setCharging(null);
+            // El modal NO se cierra aquí: su pantalla de «Ticket cobrado» trae las
+            // estrellas ganadas, la tarjeta y «Imprimir»; se cierra con «Listo».
             // El ticket se ofrece, no se abre solo: quien cobra a la fila
             // de gente no quiere una pestaña nueva en cada cobro.
             setToast({
