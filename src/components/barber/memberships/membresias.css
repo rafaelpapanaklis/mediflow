@@ -580,3 +580,147 @@
   margin-bottom: 12px;
 }
 .bmem-search { flex: 1 1 200px; max-width: 320px; }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   REDISEÑO D · tanda 3 — MEMBRESÍAS (15-nov-2026). Mismos tamaños de letra.
+   Cifras en una banda, pestañas subrayadas (como Barberos y Campañas),
+   renglones con raya en vez de cajas, semánticos y radios del tema.
+   Prefijo .barber-shell: gana a las reglas de arriba sin editarlas.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* Cifras: UNA tarjeta con celdas separadas por raya (la primera manda). */
+.barber-shell .bmem-stats {
+  gap: 1px;
+  background: var(--border-soft);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-1);
+  overflow: hidden;
+}
+.barber-shell .bmem-stat {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: var(--bg-elev);
+}
+.barber-shell .bmem-stat:first-child {
+  background: linear-gradient(var(--brand-softer), var(--brand-softer)), var(--bg-elev);
+}
+.barber-shell .bmem-stat-value { font-weight: 650; }
+.barber-shell .bmem-stat-label {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 500;
+  order: -1; /* la etiqueta arriba de la cifra, como en las demás bandas */
+}
+.barber-shell .bmem-stat.is-warn .bmem-stat-value { color: var(--warning); }
+
+/* Pestañas subrayadas, sin la caja alrededor. */
+.barber-shell .bmem-tabs {
+  gap: 2px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--border-soft);
+  border-radius: 0;
+}
+.barber-shell .bmem-tab {
+  flex: 0 0 auto;
+  min-width: 0;
+  border-radius: 0;
+  padding: 10px 14px;
+  margin-bottom: -1px;
+  border-bottom: 2px solid transparent;
+}
+.barber-shell .bmem-tab:hover { background: transparent; color: var(--text-1); }
+.barber-shell .bmem-tab[aria-selected="true"] {
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-1);
+  border-bottom-color: var(--brand);
+}
+.barber-shell .bmem-tab:focus-visible { border-radius: var(--radius-sm); }
+
+/* Superficies y controles con los radios del tema. */
+.barber-shell .bmem-card { border-radius: var(--radius-lg); }
+.barber-shell .bmem-plan { border-radius: var(--radius-lg); background: var(--bg-elev); }
+.barber-shell .bmem-plan-price { color: var(--brand-ink); }
+.barber-shell .bmem-btn,
+.barber-shell .bmem-textarea,
+.barber-shell .bmem-check,
+.barber-shell .bmem-result,
+.barber-shell .bmem-note { border-radius: var(--radius-md); }
+.barber-shell .bmem-btn-sm,
+.barber-shell .bmem-modal-close { border-radius: var(--radius-sm); }
+.barber-shell .bmem-money-prefix { border-radius: var(--radius-md) 0 0 var(--radius-md); }
+.barber-shell .bmem-modal { border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
+@media (min-width: 640px) {
+  .barber-shell .bmem-modal { border-radius: var(--radius-lg); }
+}
+.barber-shell .bmem-step {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 600;
+}
+
+/* Renglones (miembros y anticipos): raya fina en vez de caja por renglón. */
+.barber-shell .bmem-rows { gap: 0; }
+.barber-shell .bmem-row {
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  padding: 12px 12px;
+}
+.barber-shell .bmem-row:first-child { border-top: 0; }
+.barber-shell .bmem-cell > .bmem-badge { align-self: flex-start; }
+/* La columna de acciones era `auto`: un renglón con dos botones corría las
+   demás columnas. Ancho fijo y botones a la derecha. */
+@container bmem (min-width: 760px) {
+  .barber-shell .bmem-row { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1.2fr) minmax(0, 1fr) 190px; }
+  .barber-shell .bmem-row-actions { justify-content: flex-end; }
+}
+.barber-shell .bmem-row.is-warn {
+  background: var(--brand-softer);
+  box-shadow: inset 3px 0 0 var(--brand);
+}
+.barber-shell .bmem-row.is-late {
+  box-shadow: inset 3px 0 0 var(--danger);
+}
+.barber-shell .bmem-bar-fill { background: var(--brand); }
+.barber-shell .bmem-bar-fill.is-full { background: var(--danger); }
+
+/* Semánticos por token (antes hex sueltos). */
+.barber-shell .bmem-badge { font-weight: 600; letter-spacing: 0; }
+.barber-shell .bmem-badge.t-brand { color: var(--brand-ink); }
+.barber-shell .bmem-badge.t-ok,
+.dark .barber-shell .bmem-badge.t-ok {
+  background: var(--success-soft);
+  color: var(--success);
+  border-color: color-mix(in srgb, var(--success) 28%, transparent);
+}
+.barber-shell .bmem-badge.t-warn,
+.dark .barber-shell .bmem-badge.t-warn {
+  background: var(--warning-soft);
+  color: var(--warning);
+  border-color: color-mix(in srgb, var(--warning) 28%, transparent);
+}
+.barber-shell .bmem-badge.t-bad,
+.dark .barber-shell .bmem-badge.t-bad {
+  background: var(--danger-soft);
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 28%, transparent);
+}
+.barber-shell .bmem-note.t-bad {
+  background: var(--danger-soft);
+  border-color: color-mix(in srgb, var(--danger) 28%, transparent);
+}
+.barber-shell .bmem-btn-danger,
+.dark .barber-shell .bmem-btn-danger {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 35%, transparent);
+}
+.barber-shell .bmem-btn-danger:hover:not(:disabled),
+.dark .barber-shell .bmem-btn-danger:hover:not(:disabled) { background: var(--danger-soft); }
+.barber-shell .bmem-error,
+.dark .barber-shell .bmem-error { color: var(--danger); }
