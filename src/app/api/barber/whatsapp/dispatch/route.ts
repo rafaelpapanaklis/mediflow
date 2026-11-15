@@ -9,10 +9,9 @@
 //   2. DRENA la cola: manda lo PENDING y lo pasa a SENT o a FAILED con el
 //      motivo REAL de Meta.
 //
-// ⚠️ El cron NO está dado de alta todavía: vercel.json está fuera del
-// vertical barber y no se toca desde aquí. El bloque exacto que hay que
-// pegar va en el reporte. Mientras tanto el botón del panel hace
-// exactamente lo mismo para una barbería.
+// El cron SÍ está dado de alta: vercel.json llama este GET cada 5 min
+// ("*/5 * * * *"). El botón del panel hace exactamente lo mismo, pero
+// solo para la barbería de la sesión.
 //
 // EL GET AGUANTA SER LLAMADO CADA POCOS MINUTOS, incluso encimado consigo
 // mismo (una pasada lenta + la siguiente): programar es idempotente
