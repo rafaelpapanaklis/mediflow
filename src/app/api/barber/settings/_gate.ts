@@ -7,6 +7,7 @@ import {
   type BarberContext,
 } from "@/lib/barber-auth";
 import { rutaWebBarberia } from "@/lib/barber/landing";
+import { assertBarberSubscriptionActive, barberGateErrorPayload } from "@/lib/barber/gating";
 
 /**
  * Puerta ÚNICA de /api/barber/settings/*.
@@ -16,6 +17,8 @@ import { rutaWebBarberia } from "@/lib/barber/landing";
  *   2. Permiso `settings.edit` (assertBarberPermission, el punto único).
  *
  * La configuración no depende del plan: cada barbería administra la suya.
+ * Lo que sube archivos o cambia la dirección pública pide además
+ * suscripción al día: ver gatePaidSubscription.
  */
 export type SettingsGate = { ctx: BarberContext } | { response: NextResponse };
 
@@ -36,6 +39,29 @@ export async function gateSettings(): Promise<SettingsGate> {
     throw e;
   }
   return { ctx };
+}
+
+/**
+ * Lo que PUBLICA o SUBE algo exige además suscripción al día (active |
+ * trialing | paid, sobre la fila que paga): subir el logo (va a un bucket
+ * público) y cambiar la dirección de la página. Una cuenta recién
+ * registrada que nunca pagó podía subir imágenes sin tope real y montarse
+ * una página con el nombre de otra barbería.
+ *
+ * Es la puerta de pago que ya usa el resto del vertical
+ * (assertBarberSubscriptionActive de @/lib/barber/gating): 402 con el mismo
+ * mensaje que ve la barbería en las demás funciones de pago.
+ * Devuelve la respuesta de rechazo, o null si puede seguir.
+ */
+export async function gatePaidSubscription(ctx: BarberContext): Promise<NextResponse | null> {
+  try {
+    await assertBarberSubscriptionActive(ctx);
+    return null;
+  } catch (e) {
+    const gate = barberGateErrorPayload(e);
+    if (gate) return NextResponse.json(gate.body, { status: gate.status });
+    throw e;
+  }
 }
 
 /** JSON del body, tolerante: un cuerpo vacío o roto es {} y no un 500. */

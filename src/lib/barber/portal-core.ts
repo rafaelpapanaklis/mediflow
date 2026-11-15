@@ -173,3 +173,47 @@ export function canClientCancel(
   if (!canTransition(status, "CANCELLED")) return false;
   return startAt.getTime() - now.getTime() > BARBER_CANCEL_WINDOW_HOURS * 3_600_000;
 }
+
+// ── «Quiero cambiar mi hora»: la nota en la cita ────────────────────────
+
+/**
+ * Cuántas peticiones de reagendar del cliente se guardan en la nota de UNA
+ * cita (las más recientes). Sirve para que la nota no crezca sin fin; lo
+ * que escribió el personal no cuenta contra esto y nunca se recorta.
+ */
+export const PORTAL_RESCHEDULE_NOTES_MAX = 3;
+/** Largo máximo del texto libre de cada petición. */
+export const PORTAL_RESCHEDULE_MESSAGE_MAX = 240;
+
+const RESCHEDULE_LINE = /^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}\] El cliente pidió reagendar/;
+
+/**
+ * Añade a la nota de la cita la línea «[fecha] El cliente pidió reagendar…»
+ * SIN tocar lo que escribió la barbería.
+ *
+ * Antes: cada petición se pegaba al final y se guardaba `notes.slice(-4000)`;
+ * con ~17 peticiones el recorte se comía, por el PRINCIPIO, las notas del
+ * personal. Ahora las líneas del cliente se reconocen por su forma, se
+ * guardan solo las PORTAL_RESCHEDULE_NOTES_MAX más recientes y el resto de
+ * la nota (lo del personal) se conserva entero y en su orden.
+ *
+ * El texto del cliente va en UNA línea (sin saltos): con un salto podía
+ * fabricar una línea que pareciera del personal.
+ */
+export function appendRescheduleRequest(
+  notes: string | null | undefined,
+  message: string | null | undefined,
+  now: Date,
+): string {
+  const stamp = now.toISOString().slice(0, 16).replace("T", " ");
+  const extra = (message ?? "").replace(/\s+/g, " ").trim().slice(0, PORTAL_RESCHEDULE_MESSAGE_MAX);
+  const line = `[${stamp}] El cliente pidió reagendar${extra ? `: ${extra}` : "."}`;
+
+  const lines = (notes ?? "").split("\n");
+  const staff = lines.filter((l) => !RESCHEDULE_LINE.test(l));
+  const requests = lines.filter((l) => RESCHEDULE_LINE.test(l));
+  const kept = requests.concat(line).slice(-PORTAL_RESCHEDULE_NOTES_MAX);
+
+  const staffText = staff.join("\n").replace(/\s+$/, "");
+  return staffText ? `${staffText}\n${kept.join("\n")}` : kept.join("\n");
+}

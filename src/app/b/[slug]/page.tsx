@@ -82,6 +82,9 @@ export default async function PaginaBarberia(props: Props) {
   const params = await props.params;
   const carga = await cargarBarberWeb(params.slug);
   if (!carga) notFound();
+  // Registrada y sin haber pagado nunca: no hay página. Sin esto, cualquiera
+  // se registraba gratis y publicaba /b/<nombre-de-otra-barbería>.
+  if (carga.nuncaPagada) notFound();
 
   // Apagada a propósito desde el editor. No es un 404: el slug existe y la
   // barbería puede volver a encenderla en un clic, así que se le deja al

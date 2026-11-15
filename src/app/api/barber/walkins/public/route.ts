@@ -13,7 +13,12 @@
 //   · NO se devuelve NADA de los demás en la fila: ni nombres, ni
 //     teléfonos, ni ids. Solo CUÁNTOS hay. Lo único personal que sale es lo
 //     de quien trae su propio ticket (un cuid no adivinable).
-//   · Rate-limit por IP para que nadie llene la fila de fantasmas.
+//   · Rate-limit PERSISTENTE por IP (el de failban, el del dental) y un
+//     tope de gente en espera para anotarse desde la calle, para que nadie
+//     llene la fila de fantasmas.
+//   · Quien manda un teléfono que YA está formado recibe «ya estás en la
+//     fila» y NADA más: ni el ticket ni el nombre de quien se anotó (el
+//     ticket ya vive en el navegador de esa persona).
 // ═══════════════════════════════════════════════════════════════════════
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
@@ -31,6 +36,7 @@ import {
   loadQueueSnapshot,
   publicRateLimited,
   resolvePublicShop,
+  PUBLIC_WALKIN_WAITING_CAP,
 } from "../_server";
 
 export const dynamic = "force-dynamic";
@@ -45,10 +51,11 @@ function shopError(error: "NOT_FOUND" | "CLOSED" | "NO_FEATURE") {
   if (error === "NOT_FOUND") {
     return NextResponse.json({ error: "Esta barbería no existe." }, { status: 404 });
   }
-  // CLOSED y NO_FEATURE se contestan igual hacia afuera: desde la calle no
-  // hay por qué saber si dejó de pagar o si su plan no trae la función.
+  // CLOSED y NO_FEATURE se contestan IGUAL hacia afuera (mismo status, mismo
+  // texto y sin `code`): desde la calle no hay por qué saber si dejó de
+  // pagar o si su plan no trae la función.
   return NextResponse.json(
-    { error: "La fila virtual de esta barbería no está disponible.", code: error },
+    { error: "La fila virtual de esta barbería no está disponible." },
     { status: 404 },
   );
 }
@@ -59,7 +66,7 @@ export async function GET(req: Request) {
   const slug = (url.searchParams.get("slug") ?? "").trim().toLowerCase();
   if (!slug) return NextResponse.json({ error: "Falta la barbería." }, { status: 400 });
 
-  if (publicRateLimited(`walkin-read:${clientIp(req)}`, READ_MAX, READ_WINDOW_MS)) {
+  if (await publicRateLimited(`walkin-read:${clientIp(req)}`, READ_MAX, READ_WINDOW_MS)) {
     return NextResponse.json({ error: "Demasiadas solicitudes." }, { status: 429 });
   }
 
@@ -150,7 +157,7 @@ export async function POST(req: Request) {
   const slug = String(body.slug ?? "").trim().toLowerCase();
   if (!slug) return NextResponse.json({ error: "Falta la barbería." }, { status: 400 });
 
-  if (publicRateLimited(`walkin-join:${clientIp(req)}`, JOIN_MAX, JOIN_WINDOW_MS)) {
+  if (await publicRateLimited(`walkin-join:${clientIp(req)}`, JOIN_MAX, JOIN_WINDOW_MS)) {
     return NextResponse.json(
       { error: "Ya te anotaste varias veces. Pregunta en el mostrador." },
       { status: 429 },
@@ -185,17 +192,37 @@ export async function POST(req: Request) {
     barberId = barber?.id ?? null;
   }
 
-  // Si ya está formado con el mismo teléfono, se le devuelve SU ticket en
-  // vez de duplicarlo (volver a escanear el QR es lo más normal del mundo).
+  // Si ya está formado con ese teléfono NO se duplica… y tampoco se le
+  // entrega el ticket: cualquiera puede teclear el teléfono de otra persona,
+  // y con el ticket se veía su nombre y su lugar. Quien se anotó ya tiene el
+  // ticket guardado en su navegador; si lo perdió, el mostrador lo ve.
+  // Va como 409 para que la página lo pinte como aviso, sin tocarla.
   const existing = await prisma.barberWalkIn.findFirst({
     where: { barbershopId: shop.id, phone, status: { in: ["WAITING", "CALLED"] } },
     select: { id: true },
-    orderBy: { position: "asc" },
   });
+  if (existing) {
+    return NextResponse.json(
+      {
+        alreadyInQueue: true,
+        error: "Ya estás en la fila con este número. Si no ves tu lugar aquí, pregunta en el mostrador.",
+      },
+      { status: 409 },
+    );
+  }
 
-  const entry = existing
-    ? await prisma.barberWalkIn.findUniqueOrThrow({ where: { id: existing.id } })
-    : await createWalkIn(shop.id, { clientName, phone, barberId });
+  // Tope de gente en espera para anotarse desde la calle.
+  const waitingNow = await prisma.barberWalkIn.count({
+    where: { barbershopId: shop.id, status: "WAITING" },
+  });
+  if (waitingNow >= PUBLIC_WALKIN_WAITING_CAP) {
+    return NextResponse.json(
+      { error: "La fila en línea está llena por ahora. Acércate al mostrador y te anotamos." },
+      { status: 409 },
+    );
+  }
+
+  const entry = await createWalkIn(shop.id, { clientName, phone, barberId });
 
   const snapshot = await loadQueueSnapshot(shop.id);
   const queue = snapshot.rows.map(toWalkInDTO);
@@ -209,7 +236,7 @@ export async function POST(req: Request) {
   return NextResponse.json(
     {
       ticketId: entry.id,
-      alreadyInQueue: Boolean(existing),
+      alreadyInQueue: false,
       clientName: entry.clientName,
       status: entry.status,
       barberId: entry.barberId,
@@ -219,6 +246,6 @@ export async function POST(req: Request) {
       etaLabel: formatWaitMinutes(etaMinutes),
       waiting: queue.length,
     },
-    { status: existing ? 200 : 201 },
+    { status: 201 },
   );
 }

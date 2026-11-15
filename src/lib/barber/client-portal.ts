@@ -12,6 +12,7 @@ import {
   BARBER_LOYALTY_GOAL,
   BARBER_PORTAL_COOKIE,
   PORTAL_CODE_MAX_ATTEMPTS,
+  appendRescheduleRequest,
   PORTAL_CODE_MAX_PER_WINDOW,
   PORTAL_CODE_TTL_MIN,
   PORTAL_CODE_WINDOW_MIN,
@@ -240,24 +241,31 @@ export async function verifyPortalCode(args: {
     await bcrypt.compare(code, DUMMY_HASH);
     return { ok: false };
   }
-  if (token.attempts >= PORTAL_CODE_MAX_ATTEMPTS) {
-    await prisma.barberClientAuthToken.update({
-      where: { id: token.id },
+  // EL INTENTO SE COBRA ANTES DE COMPARAR, y en UNA sentencia: solo pasa
+  // quien consigue subir el contador sin rebasar el tope. Antes se leía
+  // `attempts` y se escribía `attempts + 1`: N verificaciones a la vez
+  // leían el mismo número y contaban como UNA, así que los 5 intentos eran
+  // muchos más. Ahora el UPDATE … WHERE attempts < 5 de Postgres decide.
+  const charged = await prisma.barberClientAuthToken.updateMany({
+    where: { id: token.id, usedAt: null, attempts: { lt: PORTAL_CODE_MAX_ATTEMPTS } },
+    data: { attempts: { increment: 1 } },
+  });
+  if (charged.count === 0) {
+    // Ya no le quedan intentos (o lo quemó otro): se quema y no se compara.
+    await prisma.barberClientAuthToken.updateMany({
+      where: { id: token.id, usedAt: null },
       data: { usedAt: new Date() },
     });
+    await bcrypt.compare(code, DUMMY_HASH);
     return { ok: false };
   }
 
   const match = await bcrypt.compare(code, token.codeHash);
   if (!match) {
-    const attempts = token.attempts + 1;
-    await prisma.barberClientAuthToken.update({
-      where: { id: token.id },
-      data: {
-        attempts,
-        // Al último intento el código se quema: no se queda vivo esperando.
-        ...(attempts >= PORTAL_CODE_MAX_ATTEMPTS ? { usedAt: new Date() } : {}),
-      },
+    // Al último intento el código se quema: no se queda vivo esperando.
+    await prisma.barberClientAuthToken.updateMany({
+      where: { id: token.id, usedAt: null, attempts: { gte: PORTAL_CODE_MAX_ATTEMPTS } },
+      data: { usedAt: new Date() },
     });
     return { ok: false };
   }
@@ -669,31 +677,38 @@ export async function requestPortalReschedule(args: {
   now?: Date;
 }): Promise<PortalActionResult> {
   const now = args.now ?? new Date();
-  const appointment = await prisma.barberAppointment.findFirst({
-    where: {
-      id: args.appointmentId,
-      barbershopId: args.barbershopId,
-      clientId: args.clientId,
-    },
-    select: { id: true, status: true, notes: true },
-  });
-  if (!appointment) return { ok: false, code: "notFound" };
-  if (appointment.status !== "PENDING" && appointment.status !== "CONFIRMED") {
-    return { ok: false, code: "badStatus" };
+  // Leer → armar → escribir SOLO si la nota sigue igual. Si la barbería la
+  // editó en medio, se vuelve a leer y se arma sobre la nueva: nunca se pisa
+  // lo que escribió el personal.
+  for (let intento = 0; intento < 3; intento++) {
+    const appointment = await prisma.barberAppointment.findFirst({
+      where: {
+        id: args.appointmentId,
+        barbershopId: args.barbershopId,
+        clientId: args.clientId,
+      },
+      select: { id: true, status: true, notes: true },
+    });
+    if (!appointment) return { ok: false, code: "notFound" };
+    if (appointment.status !== "PENDING" && appointment.status !== "CONFIRMED") {
+      return { ok: false, code: "badStatus" };
+    }
+
+    // Las notas del personal se conservan enteras; del cliente solo quedan
+    // sus últimas peticiones (ver appendRescheduleRequest).
+    const notes = appendRescheduleRequest(appointment.notes, args.message, now);
+
+    const res = await prisma.barberAppointment.updateMany({
+      where: {
+        id: appointment.id,
+        barbershopId: args.barbershopId,
+        clientId: args.clientId,
+        status: { in: ["PENDING", "CONFIRMED"] },
+        notes: appointment.notes,
+      },
+      data: { notes },
+    });
+    if (res.count === 1) return { ok: true };
   }
-
-  const stamp = now.toISOString().slice(0, 16).replace("T", " ");
-  const extra = (args.message ?? "").trim().slice(0, 240);
-  const line = `[${stamp}] El cliente pidió reagendar${extra ? `: ${extra}` : "."}`;
-  const notes = appointment.notes ? `${appointment.notes}\n${line}` : line;
-
-  await prisma.barberAppointment.updateMany({
-    where: {
-      id: appointment.id,
-      barbershopId: args.barbershopId,
-      clientId: args.clientId,
-    },
-    data: { notes: notes.slice(-4000) },
-  });
-  return { ok: true };
+  return { ok: false, code: "badStatus" };
 }

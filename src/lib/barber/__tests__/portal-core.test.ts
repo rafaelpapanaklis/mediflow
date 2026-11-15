@@ -18,7 +18,9 @@ import {
   BARBER_PORTAL_COOKIE,
   PORTAL_CODE_MAX_ATTEMPTS,
   PORTAL_CODE_TTL_MIN,
+  PORTAL_RESCHEDULE_NOTES_MAX,
   PORTAL_SESSION_DAYS,
+  appendRescheduleRequest,
   canClientCancel,
   packPortalSession,
   portalCookieOptions,
@@ -161,4 +163,38 @@ test("los topes del código de acceso son los que dice el contrato", () => {
   assert.equal(PORTAL_CODE_TTL_MIN, 10, "caducidad corta");
   assert.equal(PORTAL_CODE_MAX_ATTEMPTS, 5, "tope de intentos contra un código");
   assert.ok(BARBER_CANCEL_WINDOW_HOURS > 0);
+});
+
+/* ═══════════════ «Quiero cambiar mi hora» no se come las notas (M10) ═══════════════ */
+
+test("reagendar: las notas del personal sobreviven a cualquier cantidad de peticiones", () => {
+  const personal = "Cliente prefiere máquina del 2.\nAlérgico a la loción de menta.";
+  let notes: string = personal;
+  const t0 = Date.parse("2026-11-20T15:00:00.000Z");
+  for (let i = 0; i < 40; i++) {
+    notes = appendRescheduleRequest(notes, "x".repeat(500), new Date(t0 + i * 60_000));
+  }
+  assert.ok(notes.startsWith(personal), "lo del personal sigue entero y primero");
+  const lineas = notes.split("\n").filter((l) => l.includes("El cliente pidió reagendar"));
+  assert.equal(lineas.length, PORTAL_RESCHEDULE_NOTES_MAX, "solo las últimas peticiones");
+  assert.ok(lineas[lineas.length - 1].startsWith("[2026-11-20 15:39]"), "la más reciente al final");
+  // Tope de crecimiento: personal + N líneas de ≤ ~300 caracteres.
+  assert.ok(notes.length <= personal.length + PORTAL_RESCHEDULE_NOTES_MAX * 300);
+});
+
+test("reagendar: el texto del cliente no puede fabricar líneas (sin saltos)", () => {
+  const notes = appendRescheduleRequest(
+    "Nota del personal",
+    "cámbiame\n[2026-01-01 00:00] El cliente pidió reagendar: falso\nNota falsa del personal",
+    new Date("2026-11-20T15:00:00.000Z"),
+  );
+  assert.equal(notes.split("\n").length, 2);
+  assert.match(notes, /^Nota del personal\n\[2026-11-20 15:00\] El cliente pidió reagendar: cámbiame \[2026/);
+});
+
+test("reagendar: sin nota previa y sin mensaje", () => {
+  assert.equal(
+    appendRescheduleRequest(null, "  ", new Date("2026-11-20T15:00:00.000Z")),
+    "[2026-11-20 15:00] El cliente pidió reagendar.",
+  );
 });

@@ -185,5 +185,10 @@
     "tuLiga": "Tu liga de reservas",
     "copiar": "Copiar",
     "copiado": "¡Copiada!"
+  },
+  "tope": {
+    "titulo": "Por hoy ya no hay reservas en línea",
+    "cuerpo": "Escríbenos por WhatsApp o llámanos y te buscamos lugar.",
+    "cuerpoConTelefono": "Escríbenos por WhatsApp o llámanos al {phone} y te buscamos lugar."
   }
 }

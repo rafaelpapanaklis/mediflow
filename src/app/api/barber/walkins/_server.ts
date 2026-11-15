@@ -7,6 +7,7 @@
 // extensión del aviso por WhatsApp que conecta T7.
 // ═══════════════════════════════════════════════════════════════════════
 import { prisma } from "@/lib/prisma";
+import { persistentRateLimitKey } from "@/lib/failban";
 import {
   barberPlanHasFeature,
   isBarbershopSubscriptionActive,
@@ -170,22 +171,34 @@ export async function loadQueueSnapshot(shopId: string): Promise<QueueSnapshot> 
   return { rows, chairs: Math.max(1, barbers), avgServiceMin: avg };
 }
 
-// ── Rate-limit en memoria para los endpoints públicos ──────────────────
-// Se reinicia con cada arranque del runtime. Es un freno anti-abuso, no una
-// garantía dura (mismo criterio que /api/barber/auth/register).
+// ── Frenos de los endpoints públicos ───────────────────────────────────
 
-const buckets = new Map<string, { count: number; resetAt: number }>();
-
-export function publicRateLimited(key: string, max: number, windowMs: number): boolean {
-  const now = Date.now();
-  const entry = buckets.get(key);
-  if (!entry || now > entry.resetAt) {
-    buckets.set(key, { count: 1, resetAt: now + windowMs });
-    return false;
-  }
-  entry.count += 1;
-  return entry.count > max;
+/**
+ * Rate-limit de la página pública de la fila: el freno PERSISTENTE del
+ * dental (persistentRateLimitKey de @/lib/failban — ventana deslizante en
+ * Upstash, compartida entre instancias). Antes era un Map en memoria por
+ * instancia: en Vercel cada instancia contaba por su lado y el tope real
+ * era varias veces el escrito. Sin las variables de Upstash, failban cae a
+ * memoria igual que antes (no empeora nada).
+ *
+ * true = se pasó del tope.
+ */
+export async function publicRateLimited(key: string, max: number, windowMs: number): Promise<boolean> {
+  const windowSec = Math.max(1, Math.ceil(windowMs / 1000));
+  const ok = await persistentRateLimitKey(`barber-walkin:${key}`, max, windowSec);
+  return !ok;
 }
+
+/**
+ * Cuántas personas EN ESPERA puede tener la fila para que alguien se anote
+ * desde la calle (el QR). Pasado eso, la página pide acercarse al
+ * mostrador; el personal sigue pudiendo anotar desde el panel.
+ *
+ * Cuenta TODAS las entradas WAITING, no solo las que llegaron por el QR: la
+ * fila no guarda de dónde vino cada quien (y el schema no se toca aquí).
+ * El número es propuesta pendiente de Rafael (30 mientras tanto).
+ */
+export const PUBLIC_WALKIN_WAITING_CAP = 30;
 
 export function clientIp(req: Request): string {
   return req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";

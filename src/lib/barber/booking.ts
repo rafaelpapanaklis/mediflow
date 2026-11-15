@@ -16,8 +16,14 @@ import {
   BARBER_MAX_DAYS_AHEAD,
   BARBER_MAX_OPEN_PER_PHONE,
   BARBER_MIN_LEAD_MIN,
+  BARBER_PUBLIC_NEW_PHONE_DAILY_CAP,
   advisoryLockKey,
   addIsoDays,
+  bookingRejectedText,
+  cleanBarberClientName,
+  realMxPhone,
+  sameTypedName,
+  shouldConfirmOnBooking,
   barberNowMinutes,
   barberTodayISO,
   barberTzLocalToUtc,
@@ -569,13 +575,84 @@ export type BookingErrorCode =
   | "shopInactive"
   | "planOff"
   | "badRequest"
+  | "badName"
+  | "badPhone"
   | "noServices"
   | "badBarber"
   | "pastDate"
   | "tooFar"
   | "slotTaken"
   | "tooManyOpen"
-  | "clientBlocked";
+  | "clientBlocked"
+  /** Ya hay una cita viva de ese teléfono a esa hora, con OTRO nombre. */
+  | "phoneConflict"
+  /** La barbería llegó a BARBER_PUBLIC_NEW_PHONE_DAILY_CAP por hoy. */
+  | "dailyCap";
+
+// ── Historial del teléfono y tope diario ────────────────────────────────
+
+/**
+ * Un cliente SIN historial en la barbería: nada de lo que tiene lo hizo la
+ * propia barbería. Historial = alguna visita contada, una venta, una cita
+ * que el personal dio de alta (panel o fila) o una cita ya atendida.
+ *
+ * Una reserva pública o del bot, sola, NO da historial (es justo lo que un
+ * desconocido puede fabricar), ni siquiera si la barbería la aceptó: aceptar
+ * es ver una solicitud, no conocer al cliente.
+ *
+ * Es la MISMA condición para decidir si un teléfono tiene historial
+ * (clientHasHistory) y para contar el tope del día
+ * (countNewPhoneRequestsToday): si se separaran, una cita podría no contar
+ * en el tope y aun así ser tratada como de un cliente nuevo.
+ */
+function noHistoryClientWhere(barbershopId: string): Prisma.BarberClientWhereInput {
+  return {
+    barbershopId,
+    totalVisits: 0,
+    lastVisitAt: null,
+    sales: { none: {} },
+    appointments: {
+      none: {
+        OR: [
+          { source: { in: ["PANEL", "WALKIN"] } },
+          { status: { in: ["IN_PROGRESS", "DONE"] } },
+        ],
+      },
+    },
+  };
+}
+
+async function clientHasHistory(db: Db, barbershopId: string, clientId: string): Promise<boolean> {
+  const sinHistorial = await db.barberClient.count({
+    where: { id: clientId, ...noHistoryClientWhere(barbershopId) },
+  });
+  return sinHistorial === 0;
+}
+
+/**
+ * Solicitudes de la página pública que nacieron HOY (día de la barbería),
+ * siguen vivas y son de teléfonos sin historial. Con la política manual
+ * vivas = PENDING; con la automática nacen CONFIRMED y cuentan las dos.
+ */
+async function countNewPhoneRequestsToday(
+  db: Db,
+  args: {
+    barbershopId: string;
+    policy: BarberBookingPolicy;
+    dayStart: Date;
+    dayEnd: Date;
+  },
+): Promise<number> {
+  return db.barberAppointment.count({
+    where: {
+      barbershopId: args.barbershopId,
+      source: "PUBLIC",
+      status: { in: args.policy === "auto" ? ["PENDING", "CONFIRMED"] : ["PENDING"] },
+      createdAt: { gte: args.dayStart, lt: args.dayEnd },
+      client: { is: noHistoryClientWhere(args.barbershopId) },
+    },
+  });
+}
 
 export interface BookingResultOk {
   ok: true;
@@ -663,11 +740,23 @@ export async function createPublicBooking(
   const startMinute = parseHhMm(time);
   if (startMinute === null) return { ok: false, code: "badRequest" };
 
-  const name = input.clientName.trim().replace(/\s+/g, " ");
-  if (name.length < 2 || name.length > 80) return { ok: false, code: "badRequest" };
+  const source = input.source ?? "PUBLIC";
+  const fromWeb = source === "PUBLIC";
 
-  const phone = normalizeBarberPhone(input.phone);
-  if (!phone) return { ok: false, code: "badRequest" };
+  // La página pública es de cualquiera: nombre solo con letras y teléfono
+  // mexicano real. El bot ya trae el teléfono de quien escribe (Meta lo
+  // garantiza) y el nombre lo saca de la conversación: ahí sigue la regla
+  // de antes, para no tumbar una cita por un emoji en el perfil.
+  const name = fromWeb
+    ? cleanBarberClientName(input.clientName)
+    : (() => {
+        const n = (input.clientName ?? "").trim().replace(/\s+/g, " ");
+        return n.length >= 2 && n.length <= 80 ? n : null;
+      })();
+  if (!name) return { ok: false, code: fromWeb ? "badName" : "badRequest" };
+
+  const phone = fromWeb ? realMxPhone(input.phone) : normalizeBarberPhone(input.phone);
+  if (!phone) return { ok: false, code: fromWeb ? "badPhone" : "badRequest" };
 
   const serviceIds = Array.from(
     new Set((input.serviceIds ?? []).filter((s): s is string => typeof s === "string" && !!s)),
@@ -712,50 +801,6 @@ export async function createPublicBooking(
   );
   const endAt = new Date(startAt.getTime() + durationMin * 60_000);
 
-  // ── Anti-abuso por teléfono ──────────────────────────────────────────
-  // Un límite por IP no alcanza: una IP móvil rota sola. El tope real es
-  // "cuántas citas futuras vivas puede tener UN teléfono en ESTA barbería".
-  const openForPhone = await prisma.barberAppointment.count({
-    where: {
-      barbershopId: shop.id,
-      clientPhone: phone,
-      startAt: { gte: now },
-      status: { in: ["PENDING", "CONFIRMED"] },
-    },
-  });
-  if (openForPhone >= BARBER_MAX_OPEN_PER_PHONE) return { ok: false, code: "tooManyOpen" };
-
-  // ── Doble envío (doble clic, reintento del navegador) ────────────────
-  const already = await prisma.barberAppointment.findFirst({
-    where: {
-      barbershopId: shop.id,
-      clientPhone: phone,
-      startAt,
-      status: { in: ["PENDING", "CONFIRMED"] },
-    },
-    select: { id: true, status: true, barberId: true },
-  });
-  if (already) {
-    const barber = already.barberId
-      ? await prisma.barber.findUnique({
-          where: { id: already.barberId },
-          select: { name: true, nickname: true },
-        })
-      : null;
-    return {
-      ok: true,
-      duplicate: true,
-      reference: shortReference(already.id),
-      status: already.status === "CONFIRMED" ? "CONFIRMED" : "PENDING",
-      policy: already.status === "CONFIRMED" ? "auto" : "manual",
-      startAt: startAt.toISOString(),
-      endAt: endAt.toISOString(),
-      barberName: barber ? barber.nickname || barber.name : null,
-      services: services.map((s) => ({ name: s.name, price: Number(s.price) })),
-      total,
-    };
-  }
-
   const policy = await resolveBookingPolicy(shop.id);
   const deposit = await resolveDepositForBooking({
     barbershopId: shop.id, serviceIds, total,
@@ -763,15 +808,88 @@ export async function createPublicBooking(
 
   // ── La transacción: candado + re-verificación + escritura ────────────
   const [lockA, lockB] = advisoryLockKey(`barber:booking:${shop.id}:${dateISO}`);
+  // Segundo candado, SOLO para el tope diario: la llave es el día de HOY
+  // (cuándo se pide), no el de la cita. Dos peticiones para días distintos
+  // toman candados de día distintos y sin esto las dos verían "49" y
+  // pasarían. Siempre se toma ANTES que el del día de la cita y el del día
+  // nunca espera por éste, así que no hay ciclo posible (no hay interbloqueo).
+  const [capA, capB] = advisoryLockKey(`barber:booking-cap:${shop.id}:${todayISO}`);
+  const capDayStart = barberTzLocalToUtc(todayISO, 0, 0, shop.timezone);
+  const capDayEnd = barberTzLocalToUtc(addIsoDays(todayISO, 1), 0, 0, shop.timezone);
 
   try {
     const created = await prisma.$transaction(async (tx) => {
+      const client = await tx.barberClient.findUnique({
+        where: { barbershopId_phone: { barbershopId: shop.id, phone } },
+        select: { id: true, blockedAt: true },
+      });
+      const hasHistory = client ? await clientHasHistory(tx, shop.id, client.id) : false;
+
+      // ── Tope diario de la barbería (solo la página pública) ──────────
+      if (fromWeb && !hasHistory) {
+        await tx.$executeRawUnsafe(
+          `SELECT pg_advisory_xact_lock(${Math.trunc(capA)}, ${Math.trunc(capB)})`,
+        );
+        const today = await countNewPhoneRequestsToday(tx, {
+          barbershopId: shop.id,
+          policy,
+          dayStart: capDayStart,
+          dayEnd: capDayEnd,
+        });
+        if (today >= BARBER_PUBLIC_NEW_PHONE_DAILY_CAP) return { capped: true as const };
+      }
+
       // Los dos argumentos son enteros calculados aquí mismo (nunca entrada
       // del usuario), así que van como literales: así Postgres resuelve la
       // sobrecarga (int4, int4) sin ambigüedad de tipos de parámetro.
       await tx.$executeRawUnsafe(
         `SELECT pg_advisory_xact_lock(${Math.trunc(lockA)}, ${Math.trunc(lockB)})`,
       );
+
+      // ── Anti-abuso por teléfono (ya con el candado) ───────────────────
+      // Un límite por IP no alcanza: una IP móvil rota sola. El tope real es
+      // "cuántas citas futuras vivas puede tener UN teléfono en ESTA barbería".
+      const openForPhone = await tx.barberAppointment.count({
+        where: {
+          barbershopId: shop.id,
+          clientPhone: phone,
+          startAt: { gte: now },
+          status: { in: ["PENDING", "CONFIRMED"] },
+        },
+      });
+      if (openForPhone >= BARBER_MAX_OPEN_PER_PHONE) return { tooMany: true as const };
+
+      // ── Doble envío (doble clic, reintento, dos turnos del bot) ───────
+      // DENTRO del candado: fuera de él dos peticiones a la vez pasaban las
+      // dos esta comprobación y, con "cualquiera" y dos barberos libres,
+      // nacían dos citas del mismo cliente a la misma hora.
+      const already = await tx.barberAppointment.findFirst({
+        where: {
+          barbershopId: shop.id,
+          clientPhone: phone,
+          startAt,
+          status: { in: ["PENDING", "CONFIRMED"] },
+        },
+        select: { id: true, status: true, barberId: true, clientName: true },
+      });
+      if (already) {
+        // Solo se le enseña la cita (folio, estado, barbero) a quien la hizo
+        // con ESE nombre. Con teléfono + hora de otro, no se confirma nada.
+        if (!sameTypedName(already.clientName, name)) return { conflict: true as const };
+        const b = already.barberId
+          ? await tx.barber.findUnique({
+              where: { id: already.barberId },
+              select: { name: true, nickname: true },
+            })
+          : null;
+        return {
+          duplicateOf: {
+            id: already.id,
+            status: already.status === "CONFIRMED" ? ("CONFIRMED" as const) : ("PENDING" as const),
+            barberName: b ? b.nickname || b.name : null,
+          },
+        };
+      }
 
       // Se recalcula DENTRO del candado: lo que se pintó en la pantalla no
       // decide nada.
@@ -794,10 +912,6 @@ export async function createPublicBooking(
         tx, shop.id, candidates, dateISO, shop.timezone,
       ));
 
-      const client = await tx.barberClient.findUnique({
-        where: { barbershopId_phone: { barbershopId: shop.id, phone } },
-        select: { id: true, blockedAt: true },
-      });
       if (client?.blockedAt) return { blocked: true as const };
 
       // El nombre que la barbería curó en su ficha NO se pisa con lo que el
@@ -827,7 +941,7 @@ export async function createPublicBooking(
           startAt,
           endAt,
           status: policy === "auto" ? "CONFIRMED" : "PENDING",
-          source: input.source ?? "PUBLIC",
+          source,
           notes: input.notes,
           ...(deposit ? { depositAmount: deposit.amount, depositStatus: deposit.status } : {}),
           services: {
@@ -851,6 +965,7 @@ export async function createPublicBooking(
         taken: false as const,
         id: appointment.id,
         barberName: barber ? barber.nickname || barber.name : null,
+        hasHistory,
       };
     },
     // El candado hace ESPERAR a la segunda reserva del mismo día; con el
@@ -859,10 +974,28 @@ export async function createPublicBooking(
     // el trabajo de dentro (que son milisegundos).
     { maxWait: 10_000, timeout: 15_000 });
 
+    if ("capped" in created) return { ok: false, code: "dailyCap" };
+    if ("tooMany" in created) return { ok: false, code: "tooManyOpen" };
+    if ("conflict" in created) return { ok: false, code: "phoneConflict" };
+    if ("duplicateOf" in created) {
+      const d = created.duplicateOf;
+      return {
+        ok: true,
+        duplicate: true,
+        reference: shortReference(d.id),
+        status: d.status,
+        policy: d.status === "CONFIRMED" ? "auto" : "manual",
+        startAt: startAt.toISOString(),
+        endAt: endAt.toISOString(),
+        barberName: d.barberName,
+        services: services.map((s) => ({ name: s.name, price: Number(s.price) })),
+        total,
+      };
+    }
     if ("blocked" in created) return { ok: false, code: "clientBlocked" };
     if (created.taken) return { ok: false, code: "slotTaken" };
 
-    if (!input.skipNotify) {
+    if (!input.skipNotify && shouldConfirmOnBooking({ policy, hasHistory: created.hasHistory })) {
       await notifyBookingCreated({ barbershopId: shop.id, appointmentId: created.id, policy });
     }
 
@@ -1060,7 +1193,14 @@ export async function resolveBookingRequest(args: {
 
   const current = await prisma.barberAppointment.findFirst({
     where: { id: appointmentId, barbershopId: { in: barbershopIds }, source: "PUBLIC" },
-    select: { id: true, status: true },
+    select: {
+      id: true,
+      status: true,
+      barbershopId: true,
+      clientId: true,
+      clientPhone: true,
+      startAt: true,
+    },
   });
   if (!current) return { ok: false, code: "notFound" };
   if (!canTransition(current.status, target)) return { ok: false, code: "badStatus" };
@@ -1075,5 +1215,72 @@ export async function resolveBookingRequest(args: {
     data: { status: target },
   });
   if (res.count === 0) return { ok: false, code: "badStatus" };
+
+  // El aviso al cliente sale DESPUÉS de cambiar el estado y nunca tumba la
+  // acción: la barbería ya decidió; un mensaje que no se encola se ve en la
+  // pantalla de WhatsApp, no aquí.
+  if (target === "CONFIRMED") {
+    await notifyBookingCreated({
+      barbershopId: current.barbershopId,
+      appointmentId: current.id,
+      policy: "manual",
+    });
+  } else {
+    await notifyBookingRejected({
+      barbershopId: current.barbershopId,
+      appointmentId: current.id,
+      clientId: current.clientId,
+      phone: current.clientPhone,
+      startAt: current.startAt,
+    });
+  }
   return { ok: true, status: target };
+}
+
+/**
+ * Aviso de solicitud RECHAZADA. Solo si el cliente escribió por WhatsApp en
+ * las últimas 24 h (ventana de servicio): ahí va como texto, sin plantilla.
+ * Fuera de la ventana no se manda nada — hoy no existe una plantilla
+ * aprobada para «no pudimos apartar tu cita» (decisión pendiente de Rafael).
+ *
+ * Se encola por la cola normal (enqueueBarberMessage): el despacho vuelve a
+ * mirar la ventana y el cupo antes de mandar.
+ */
+async function notifyBookingRejected(args: {
+  barbershopId: string;
+  appointmentId: string;
+  clientId: string | null;
+  phone: string | null;
+  startAt: Date;
+  now?: Date;
+}): Promise<void> {
+  try {
+    const phone = normalizeBarberPhone(args.phone ?? "");
+    if (!phone) return;
+    const lastIn = await prisma.barberMessage.findFirst({
+      where: { barbershopId: args.barbershopId, phone, direction: "INBOUND" },
+      orderBy: { createdAt: "desc" },
+      select: { createdAt: true },
+    });
+    const { barberWaWindowOpen } = await import("@/lib/barber/whatsapp-core");
+    if (!barberWaWindowOpen(lastIn?.createdAt ?? null, args.now ?? new Date())) return;
+
+    const shop = await prisma.barbershop.findUnique({
+      where: { id: args.barbershopId },
+      select: { name: true, timezone: true },
+    });
+    if (!shop) return;
+
+    const { enqueueBarberMessage } = await import("@/lib/barber/whatsapp");
+    await enqueueBarberMessage({
+      barbershopId: args.barbershopId,
+      phone,
+      body: bookingRejectedText({ shopName: shop.name, startAt: args.startAt, timezone: shop.timezone }),
+      templateName: null,
+      clientId: args.clientId,
+      appointmentId: args.appointmentId,
+    });
+  } catch (err) {
+    console.error(`[barber/solicitudes] aviso de rechazo no encolado (${args.appointmentId}):`, err);
+  }
 }

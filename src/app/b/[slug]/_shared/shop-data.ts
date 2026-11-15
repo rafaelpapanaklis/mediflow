@@ -5,6 +5,7 @@ import {
   normalizarConfigBarberWeb,
   type BarberWebConfig,
 } from "@/lib/barber/landing";
+import { isBarbershopSubscriptionActive } from "@/lib/barber/plan-shared";
 import { manifiestoBarberWeb } from "@/components/barber/templates/manifest";
 import type { BarberWebData } from "@/components/barber/templates/types";
 
@@ -21,8 +22,10 @@ import type { BarberWebData } from "@/components/barber/templates/types";
    futuro — una columna secreta nueva no se filtra sola.
 
    La lista es exactamente `BarberWebShop`
-   (components/barber/templates/types.ts) más `isActive`, que se usa aquí
-   y no viaja. Un campo nuevo se agrega en los DOS sitios.
+   (components/barber/templates/types.ts) más `isActive` y
+   `subscriptionStatus`, que se usan aquí y no viajan (de este último solo
+   sale el booleano `nuncaPagada`). Un campo nuevo se agrega en los DOS
+   sitios.
 
    El tenant sale del SLUG DE LA URL. No hay sesión que consultar y no
    hay barbershopId en ningún parámetro: una barbería no puede pedir los
@@ -37,6 +40,12 @@ export interface BarberWebCarga {
   oculta: boolean;
   /** Marca de bloqueo optimista. 0 = todavía no hay fila. Solo la usa el editor. */
   version: number;
+  /**
+   * true = la barbería se registró y NUNCA ha pagado. La página pública
+   * responde «no encontrada» (decisión de Rafael, 14-nov-2026); el editor
+   * del panel la sigue cargando. Ver barberiaNuncaPagada.
+   */
+  nuncaPagada: boolean;
   /**
    * true = la tabla barber_landing_configs NO existe todavía en la base.
    * La página pública no se entera (sale con todo por defecto); el editor
@@ -55,6 +64,28 @@ export interface BarberWebCarga {
  * que no tiene editor — y por eso no puede depender de que exista una
  * fila que solo escribe el editor.
  */
+/**
+ * Estados de una barbería que se registró y todavía no paga NADA:
+ * `pending_payment` (así nace en /barber/registro) y los dos con que Stripe
+ * marca un primer cobro que nunca se completó.
+ */
+const ESTADOS_SIN_PRIMER_PAGO = new Set(["pending_payment", "incomplete", "incomplete_expired"]);
+
+/**
+ * ¿Esta barbería NUNCA ha pagado? Solo esas pierden la página pública.
+ *
+ * Una que pagó y hoy está vencida (`past_due`, `unpaid`) o cancelada
+ * (`canceled`) NO entra aquí: su página sigue como estaba (decisión de
+ * Rafael, 14-nov-2026; el sitemap ya la deja de anunciar, ver seo-query.ts).
+ * Un estado vacío (filas viejas) tampoco: ante la duda, no se apaga la
+ * página de nadie.
+ */
+export function barberiaNuncaPagada(shop: { subscriptionStatus?: string | null }): boolean {
+  if (isBarbershopSubscriptionActive(shop)) return false;
+  const status = shop.subscriptionStatus ?? null;
+  return status !== null && ESTADOS_SIN_PRIMER_PAGO.has(status);
+}
+
 export async function cargarBarberWeb(slug: string): Promise<BarberWebCarga | null> {
   const s = (slug ?? "").trim().toLowerCase();
   if (!s || s.length > 120) return null;
@@ -71,6 +102,7 @@ export async function cargarBarberWeb(slug: string): Promise<BarberWebCarga | nu
       state: true,
       logoUrl: true,
       isActive: true,
+      subscriptionStatus: true,
     },
   });
 
@@ -105,6 +137,7 @@ export async function cargarBarberWeb(slug: string): Promise<BarberWebCarga | nu
     publishedAt: landing?.publishedAt ?? null,
     oculta: config.oculta,
     version: landing?.version ?? 0,
+    nuncaPagada: barberiaNuncaPagada(shop),
     sinTabla: landing === SIN_TABLA,
     data: {
       shop: {
