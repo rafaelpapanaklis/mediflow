@@ -633,6 +633,10 @@ export function BookingFlow({
                   <b>{money.format(s.price)}</b>
                 </li>
               ))}
+              <li>
+                <span>{t("barber.reserva.datos.resumenBarbero")}</span>
+                <b>{chosenBarber ? chosenBarber.nickname ?? chosenBarber.name : t("barber.reserva.barbero.cualquiera")}</b>
+              </li>
               <li className="dcb-summary__total">
                 <span>{whenLabel(dateISO, time, shop.locale)}</span>
                 <b>{money.format(totalPrice)}</b>
