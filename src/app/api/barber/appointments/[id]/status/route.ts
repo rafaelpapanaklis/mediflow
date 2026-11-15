@@ -10,6 +10,11 @@
 // agenda.edit) puede marcar «En silla» y «Completada» SOLO en sus propias
 // visitas (decisión de Rafael, 14-nov-2026; regla en lib/barber/own-visits.ts).
 //
+// CITA «B» (ws6-t5): también responde a PATCH, y al CANCELAR acepta
+// `reason` (opcional, hasta 200 caracteres) que se guarda en «cancelReason»
+// (sql/barber_cita_b.sql). Sin ese SQL pegado, cancela igual que siempre y
+// responde `reasonSaved: false`.
+//
 // M-22 (dental): cancelar, marcar "no llegó" o completar INVALIDA los
 // recordatorios pendientes de esa visita. Nadie recibe un aviso de una
 // visita que ya no va a pasar.
@@ -26,6 +31,11 @@ import { toAppointmentDTO, type BarberReminderInvalidationCause } from "@/lib/ba
 import { refreshLoyaltySafe } from "@/lib/barber/loyalty-core";
 import { canAdvanceOwnVisit } from "@/lib/barber/own-visits";
 import { hasBarberPermission } from "@/lib/barber/permissions";
+import {
+  AppointmentExtrasInputError,
+  cleanCancelReason,
+  saveCancelReason,
+} from "@/lib/barber/appointment-extras";
 import {
   APPOINTMENT_INCLUDE,
   asString,
@@ -73,6 +83,17 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
   const to = asString(body.to) as BarberAppointmentStatus | null;
   if (!to || !VALID.includes(to)) return jsonError("Ese estado no existe.", 400);
 
+  // Motivo: solo tiene sentido al cancelar; se valida ANTES de tocar la visita.
+  let reason: string | null = null;
+  if (to === "CANCELLED") {
+    try {
+      reason = cleanCancelReason(body.reason);
+    } catch (e) {
+      if (e instanceof AppointmentExtrasInputError) return jsonError(e.message, 400, { code: "BAD_REASON" });
+      throw e;
+    }
+  }
+
   const current = await prisma.barberAppointment.findFirst({
     where: { id: params.id, barbershopId: shopId },
     select: { id: true, status: true, barberId: true },
@@ -115,6 +136,13 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
     include: APPOINTMENT_INCLUDE,
   });
 
+  // El motivo va DESPUÉS del cambio de estado y fuera de su escritura: si la
+  // columna no existe todavía, la cancelación ya quedó (como hoy).
+  const reasonSaved =
+    to === "CANCELLED" && reason
+      ? await saveCancelReason(prisma, { barbershopId: shopId, appointmentId: current.id, reason })
+      : false;
+
   const cause = INVALIDATES[to];
   const remindersInvalidated = cause
     ? await invalidateAppointmentReminders(shopId, current.id, cause)
@@ -132,5 +160,9 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
     appointment: toAppointmentDTO(updated),
     remindersInvalidated,
     previousStatus: current.status,
+    ...(to === "CANCELLED" ? { reasonSaved } : {}),
   });
 }
+
+/** Mismo contrato por PATCH (la cita «B» lo llama así). */
+export const PATCH = POST;
