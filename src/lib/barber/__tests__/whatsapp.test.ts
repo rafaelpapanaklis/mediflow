@@ -28,9 +28,15 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import {
   BARBER_WA_ARCHIVE_MARK,
+  BARBER_WA_CLAIM_STALE_MS,
+  BARBER_WA_PARAM_MAX,
   BARBER_WA_PRICE_USD,
   BARBER_WA_TEMPLATES,
   BARBER_WA_UNARCHIVE_MARK,
+  BARBER_WALKIN_NOTICE_TTL_MS,
+  barberClientOptedOut,
+  barberOutboxStaleReason,
+  barberWaClaimMark,
   barberWaFits,
   barberWaTemplate,
   barberWaTemplateByName,
@@ -40,14 +46,24 @@ import {
   classifyBarberReply,
   countBarberWaVariables,
   encodeBarberWaAttachment,
+  isBareBarberReply,
+  isBarberOptOutText,
+  isBarberWaClaim,
   isBarberWaSysRow,
   isBarberWaUnlimited,
   nextBarberWaStatus,
   parseBarberWaAttachment,
+  parseBarberWaClaim,
   reminderAlreadyHandled,
+  sanitizeBarberWaParam,
+  walkInTemplateNotice,
   type BarberWaAttachment,
 } from "@/lib/barber/whatsapp-core";
-import { isInvalidatedReminder, BARBER_REMINDER_INVALIDATED_MARK } from "@/lib/barber/agenda";
+import {
+  isInvalidatedReminder,
+  BARBER_REMINDER_INVALIDATED_MARK,
+  walkInNotifyBody,
+} from "@/lib/barber/agenda";
 
 /* ═══════════════ 1. CATEGORÍAS: la factura de la barbería ═════════════ */
 
@@ -347,6 +363,127 @@ test("la ventana de 24 h abre con el mensaje del cliente y cierra sola", () => {
   // Justo en el filo: 24 h exactas ya está CERRADA (Meta responde 131047).
   assert.equal(barberWaWindowOpen(new Date("2026-08-23T12:00:00.000Z"), ahora), false);
   assert.equal(barberWaWindowOpen(new Date("2026-08-23T12:00:01.000Z"), ahora), true);
+});
+
+/* ═══════ 8b. PARÁMETROS: lo que hace que Meta rechace el mensaje ══════ */
+
+test("🔴 un parámetro nunca lleva saltos, tabulaciones ni espacios dobles (132018)", () => {
+  assert.equal(sanitizeBarberWaParam("Av. Juárez 120\nLocal 4"), "Av. Juárez 120 Local 4");
+  assert.equal(sanitizeBarberWaParam("uno\r\n\tdos      tres"), "uno dos tres");
+  assert.equal(sanitizeBarberWaParam("línea" + String.fromCharCode(0x2028) + "otra"), "línea otra");
+  assert.equal(sanitizeBarberWaParam("  Luis  "), "Luis");
+});
+
+test("un parámetro vacío se cambia por un relleno (131008) y uno enorme se recorta", () => {
+  assert.equal(sanitizeBarberWaParam(""), "—");
+  assert.equal(sanitizeBarberWaParam(" \n "), "—");
+  assert.equal(sanitizeBarberWaParam(null), "—");
+  assert.equal(sanitizeBarberWaParam("", "Tu servicio"), "Tu servicio");
+  const largo = sanitizeBarberWaParam("x".repeat(BARBER_WA_PARAM_MAX + 50));
+  assert.equal(Array.from(largo).length, BARBER_WA_PARAM_MAX);
+});
+
+/* ════════════ 8c. LA COLA: reclamar antes de mandar ═══════════════════ */
+
+test("el reclamo de una fila se reconoce, trae su hora y caduca", () => {
+  const ahora = new Date("2026-11-14T18:00:00.000Z");
+  const marca = barberWaClaimMark(ahora);
+  assert.equal(isBarberWaClaim(marca), true);
+  assert.equal(parseBarberWaClaim(marca)?.toISOString(), ahora.toISOString());
+  assert.equal(isBarberWaClaim(null), false);
+  assert.equal(isBarberWaClaim("(#131026) Message undeliverable"), false);
+  assert.equal(parseBarberWaClaim("(#131026) Message undeliverable"), null);
+  // Una marca ilegible cuenta como viejísima: no puede atorar la fila.
+  const rara = parseBarberWaClaim("[enviando] no-es-fecha");
+  assert.ok(rara && ahora.getTime() - rara.getTime() > BARBER_WA_CLAIM_STALE_MS);
+  // Un reclamo NO es un recordatorio invalidado (son marcas distintas).
+  assert.equal(isInvalidatedReminder(marca), false);
+});
+
+test("🔴 lo que ya no tiene sentido NO se manda: visita pasada, cancelada o aviso viejo", () => {
+  const now = new Date("2026-11-14T18:00:00.000Z");
+  const enDosHoras = new Date("2026-11-14T20:00:00.000Z");
+  const haceUnaHora = new Date("2026-11-14T17:00:00.000Z");
+  const viva = { status: "CONFIRMED", startAt: enDosHoras };
+  const base = { createdAt: now, now };
+
+  for (const kind of ["reminder", "bookingConfirmed"] as const) {
+    assert.equal(barberOutboxStaleReason({ ...base, kind, appointment: viva }), null);
+    assert.equal(
+      barberOutboxStaleReason({ ...base, kind, appointment: { ...viva, status: "PENDING" } }),
+      null,
+    );
+    assert.ok(barberOutboxStaleReason({ ...base, kind, appointment: { ...viva, startAt: haceUnaHora } }));
+    assert.ok(barberOutboxStaleReason({ ...base, kind, appointment: { ...viva, startAt: now } }));
+    for (const status of ["CANCELLED", "NO_SHOW", "DONE", "IN_PROGRESS"]) {
+      assert.ok(barberOutboxStaleReason({ ...base, kind, appointment: { ...viva, status } }), status);
+    }
+    assert.ok(barberOutboxStaleReason({ ...base, kind, appointment: null }), "la visita ya no existe");
+  }
+
+  // Aviso de la fila: vale media hora.
+  const reciente = new Date(now.getTime() - BARBER_WALKIN_NOTICE_TTL_MS + 60_000);
+  const viejo = new Date(now.getTime() - BARBER_WALKIN_NOTICE_TTL_MS - 60_000);
+  assert.equal(barberOutboxStaleReason({ kind: "walkinTurn", createdAt: reciente, now, appointment: null }), null);
+  assert.ok(barberOutboxStaleReason({ kind: "walkinTurn", createdAt: viejo, now, appointment: null }));
+
+  // Un texto suelto que alguien encoló no caduca solo.
+  assert.equal(barberOutboxStaleReason({ kind: "other", createdAt: viejo, now, appointment: null }), null);
+});
+
+test("el aviso de la fila no repite en la plantilla lo que la plantilla ya dice", () => {
+  const shop = "Barbería El Corte";
+  const tpl = barberWaTemplate("walkinTurn");
+  const armar = (aviso: string) => tpl.body.replace("{{1}}", shop).replace("{{2}}", aviso);
+
+  const yaEs = walkInNotifyBody({ shopName: shop, clientName: "Luis Pérez", ahead: 0, etaMinutes: 0 });
+  assert.equal(walkInTemplateNotice(shop, yaEs), "Luis, ya es tu turno.");
+  const final1 = armar(walkInTemplateNotice(shop, yaEs));
+  assert.equal(final1.split("Te esperamos en la silla").length - 1, 1, "una sola vez");
+  assert.equal(final1.split(shop).length - 1, 1, "el nombre de la barbería una sola vez");
+
+  const faltan = walkInNotifyBody({ shopName: shop, clientName: "Luis", ahead: 2, etaMinutes: 20 });
+  assert.equal(
+    walkInTemplateNotice(shop, faltan),
+    "Luis, faltan 2 personas para tu turno. Vente en unos 20 min.",
+  );
+  assert.equal(walkInTemplateNotice(shop, "   "), "Ya casi es tu turno.");
+});
+
+/* ═══════ 8d. RESPUESTAS SUELTAS Y BAJA DE PROMOCIONES ═════════════════ */
+
+test("🔴 «sí», «ok» y los dígitos son respuestas SUELTAS; las palabras explícitas no", () => {
+  for (const t of ["si", "Sí", "SI", "ok", "Okay", "va", "vale", "claro", "de acuerdo", "1", "2", "3"]) {
+    assert.equal(isBareBarberReply(t), true, t);
+  }
+  for (const t of ["confirmar", "CONFIRMO", "cancelar", "cambiar", "sí, confirmo", "ahí estaré", "hola"]) {
+    assert.equal(isBareBarberReply(t), false, t);
+  }
+});
+
+test("la baja se reconoce por lo que la gente escribe, y no por accidente", () => {
+  for (const t of ["BAJA", "baja.", "Stop", "darme de baja", "ya no me manden mensajes", "No quiero promociones!"]) {
+    assert.equal(isBarberOptOutText(t), true, t);
+  }
+  for (const t of [
+    "¿a qué hora baja la cortina?",
+    "stop, mejor el jueves",
+    "me doy de baja de la fila",
+    "quiero un corte bajo",
+    "",
+  ]) {
+    assert.equal(isBarberOptOutText(t), false, t);
+  }
+});
+
+test("la baja se lee de las preferencias sin tronar con datos raros", () => {
+  assert.equal(barberClientOptedOut({ __optout: { at: "2026-11-14T00:00:00.000Z" } }), true);
+  assert.equal(barberClientOptedOut({ __optout: null }), false);
+  assert.equal(barberClientOptedOut({ __optout: { at: "" } }), false);
+  assert.equal(barberClientOptedOut({ otra: 1 }), false);
+  assert.equal(barberClientOptedOut(null), false);
+  assert.equal(barberClientOptedOut("texto"), false);
+  assert.equal(barberClientOptedOut([]), false);
 });
 
 /* ══════════ 9. TERMINOLOGÍA: es una barbería, no una clínica ═════════ */

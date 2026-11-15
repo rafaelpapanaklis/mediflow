@@ -100,12 +100,24 @@ export function ConnectionPanel({
           </Banner>
         ) : null}
 
+        {/* Conectado pero Meta no nos entrega los mensajes entrantes: se ve
+            "todo bien" y no llega nada. Tiene que decirse aquí arriba. */}
+        {connected && connection.webhookSubscribed === false ? (
+          <Banner tone="danger" icon={<AlertTriangle size={16} />}>
+            {t("connection.webhookOff")}
+          </Banner>
+        ) : null}
+
         {connected ? (
           <div className={s.meta}>
-            {connection.phoneNumberId ? (
+            {connection.displayPhone || connection.phoneNumberId ? (
               <span className={s.metaItem}>
                 {t("connection.number")}:
-                <span className={s.metaValue}>{connection.phoneNumberId}</span>
+                {/* El número como lo ve el cliente; el id interno de Meta solo
+                    si Meta no contestó a tiempo. */}
+                <span className={s.metaValue}>
+                  {connection.displayPhone ?? connection.phoneNumberId}
+                </span>
               </span>
             ) : null}
             <span className={s.metaItem}>

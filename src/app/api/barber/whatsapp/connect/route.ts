@@ -19,9 +19,11 @@
 // ═══════════════════════════════════════════════════════════════════════
 import { NextResponse } from "next/server";
 import {
+  barberWabaOwnsPhone,
   disconnectBarberWa,
   provisionBarberTemplates,
   saveBarberWaConnection,
+  subscribeBarberWaba,
 } from "@/lib/barber/whatsapp";
 import { asString, jsonError, openWaGate, readJson } from "../_server";
 
@@ -51,23 +53,6 @@ export async function POST(req: Request) {
     return jsonError("El servidor no tiene configurado el acceso a Meta.", 503);
   }
 
-  // Un número ya conectado a OTRA barbería no puede reasignarse solo: el
-  // webhook enruta por phoneNumberId y dos filas con el mismo valor harían
-  // que los mensajes cayeran en la barbería equivocada.
-  const { prisma } = await import("@/lib/prisma");
-  const taken = await prisma.barbershop.findFirst({
-    where: { phoneNumberId, NOT: { id: shopId } },
-    select: { id: true },
-  });
-  if (taken) {
-    return jsonError(
-      "Ese número de WhatsApp ya está conectado en otra cuenta de DaleControl. " +
-        "Desconéctalo ahí antes de conectarlo aquí.",
-      409,
-      { code: "PHONE_TAKEN" },
-    );
-  }
-
   try {
     // 1) code → token de negocio (el secret NUNCA sale al navegador).
     const tokenRes = await fetch(
@@ -85,16 +70,51 @@ export async function POST(req: Request) {
     const token: string = tokenJson.access_token;
     const auth = { Authorization: `Bearer ${token}` };
 
-    // 2) Suscribir la app al WABA — REQUISITO para recibir los mensajes.
-    try {
-      await fetch(`${GRAPH}/${encodeURIComponent(wabaId)}/subscribed_apps`, {
-        method: "POST",
-        headers: auth,
-        signal: AbortSignal.timeout(15000),
-      });
-    } catch {
-      /* se reintenta al reconectar; no se pierden las credenciales por esto */
+    // 1b) 🔴 El número tiene que ser de ESA cuenta, leído con el token que
+    //     Meta acaba de dar. `wabaId` y `phoneNumberId` llegan del navegador
+    //     y el webhook enruta por phoneNumberId: sin esta prueba, una
+    //     barbería podía guardar el número de otro negocio y quedarse con
+    //     lo que le escriben. Sin la prueba no se suscribe, no se registra y
+    //     no se guarda nada. (Misma comprobación que el alta del dental.)
+    if (!(await barberWabaOwnsPhone(wabaId, phoneNumberId, token))) {
+      return jsonError(
+        "Ese número no pertenece a la cuenta de WhatsApp Business que conectaste.",
+        403,
+        { code: "PHONE_NOT_IN_WABA" },
+      );
     }
+
+    // 1c) Un número ya conectado en OTRA cuenta de DaleControl no puede
+    //     reasignarse solo: el webhook enruta por phoneNumberId y dos filas
+    //     con el mismo valor harían que los mensajes cayeran en el negocio
+    //     equivocado. Va DESPUÉS de la prueba de propiedad: antes, cualquiera
+    //     con sesión podía preguntar si un número ajeno ya estaba conectado.
+    //     Se mira también entre las clínicas: el webhook resuelve primero a
+    //     la clínica, así que una barbería con ese mismo número se vería
+    //     "conectada" y jamás recibiría un solo mensaje.
+    const { prisma } = await import("@/lib/prisma");
+    const [otherShop, otherClinic] = await Promise.all([
+      prisma.barbershop.findFirst({
+        where: { phoneNumberId, NOT: { id: shopId } },
+        select: { id: true },
+      }),
+      prisma.clinic.findFirst({ where: { waPhoneNumberId: phoneNumberId }, select: { id: true } }),
+    ]);
+    if (otherShop || otherClinic) {
+      return jsonError(
+        "Ese número de WhatsApp ya está conectado en otra cuenta de DaleControl. " +
+          "Desconéctalo ahí antes de conectarlo aquí.",
+        409,
+        { code: "PHONE_TAKEN" },
+      );
+    }
+
+    // 2) Suscribir la app al WABA — REQUISITO para recibir los mensajes. Si
+    //    falla NO se pierden las credenciales, pero se le dice a la pantalla:
+    //    una conexión que manda y no recibe es media conexión (ni
+    //    confirmaciones, ni bandeja, ni bot). La pantalla lo vuelve a
+    //    intentar sola cada vez que se abre (ver probeBarberWa).
+    const subscribed = await subscribeBarberWaba(wabaId, token);
 
     // 3) Registrar el número en la Cloud API. Best-effort: en coexistence
     //    (el número sigue viviendo en la app de WhatsApp Business del
@@ -136,7 +156,7 @@ export async function POST(req: Request) {
       console.error(`[barber/whatsapp/connect] alta de plantillas (${shopId}):`, e);
     });
 
-    return NextResponse.json({ ok: true, displayName, verified });
+    return NextResponse.json({ ok: true, displayName, verified, subscribed });
   } catch (err) {
     console.error("[POST barber/whatsapp/connect]", err);
     return jsonError("No se pudo conectar con Meta. Intenta de nuevo.", 500);

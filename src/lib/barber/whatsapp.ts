@@ -12,17 +12,26 @@ import { mxTenDigits } from "@/lib/phone-mx";
 import { getBarberPlan } from "@/lib/barber/plans";
 import { isBarbershopSubscriptionActive, barberPlanHasFeature } from "@/lib/barber/plan-shared";
 import {
+  BARBER_REMINDER_INVALIDATED_MARK,
   BARBER_WALKIN_NOTIFY_TEMPLATE,
   isInvalidatedReminder,
   pendingReminderInvalidationWhere,
   reminderInvalidationData,
 } from "@/lib/barber/agenda";
 import { canTransition, type BarberAppointmentStatus } from "@/lib/barber/types";
+import { advisoryLockKey } from "@/lib/barber/booking-core";
 import {
   BARBER_WA_ARCHIVE_MARK,
+  BARBER_WA_CLAIM_LOST_MESSAGE,
+  BARBER_WA_CLAIM_STALE_MS,
   BARBER_WA_LANG,
+  BARBER_WA_OPT_OUT_REPLY,
+  BARBER_WA_SYS_PREFIX,
   BARBER_WA_TEMPLATES,
   BARBER_WA_UNARCHIVE_MARK,
+  barberClientOptedOut,
+  barberOutboxStaleReason,
+  barberWaClaimMark,
   barberWaFits,
   barberWaTemplate,
   barberWaWindowOpen,
@@ -30,10 +39,17 @@ import {
   classifyBarberReply,
   countBarberWaVariables,
   encodeBarberWaAttachment,
+  isBareBarberReply,
+  isBarberOptOutText,
+  isBarberWaClaim,
   isBarberWaSysRow,
   nextBarberWaStatus,
   parseBarberWaAttachment,
+  parseBarberWaClaim,
   reminderAlreadyHandled,
+  sanitizeBarberWaParam,
+  walkInTemplateNotice,
+  type BarberOutboxKind,
   type BarberWaAttachment,
   type BarberWaAttachmentKind,
   type BarberWaConnectionDTO,
@@ -248,6 +264,7 @@ export async function getBarberWaConnection(barbershopId: string): Promise<Barbe
       verifiedAt: null,
       problem: null,
       canConnect,
+      webhookSubscribed: null,
     };
   }
 
@@ -258,6 +275,8 @@ export async function getBarberWaConnection(barbershopId: string): Promise<Barbe
       : "UNVERIFIED"
     : "DISCONNECTED";
   let problem: string | null = null;
+  let displayPhone: string | null = null;
+  let webhookSubscribed: boolean | null = null;
 
   if (connected) {
     // Último fallo REAL de Meta (excluye los recordatorios que invalidamos
@@ -277,18 +296,154 @@ export async function getBarberWaConnection(barbershopId: string): Promise<Barbe
         problem = msg;
       }
     }
+
+    // Y lo que Meta dice AHORA MISMO: ¿el token sigue vivo?, ¿nos entrega lo
+    // que escriben los clientes? Una conexión puede verse perfecta aquí y
+    // estar muerta allá; esto es lo que lo delata sin esperar al primer
+    // mensaje fallido.
+    const creds = resolveSenderCredentials(shop);
+    if (creds) {
+      const live = await probeBarberWa(creds);
+      displayPhone = live.displayPhone;
+      webhookSubscribed = live.webhookSubscribed;
+      if (live.tokenError) {
+        state = "ERROR";
+        problem = live.tokenError;
+      }
+    }
   }
 
   return {
     state,
     senderMode: shop.whatsappSenderMode,
-    displayPhone: null,
+    displayPhone,
     wabaId: shop.wabaId,
     phoneNumberId: shop.phoneNumberId,
     verifiedAt: shop.whatsappVerifiedAt ? shop.whatsappVerifiedAt.toISOString() : null,
     problem,
     canConnect,
+    webhookSubscribed,
   };
+}
+
+/** Lo que tarda como mucho la comprobación en vivo (la pantalla espera). */
+const PROBE_TIMEOUT_MS = 6000;
+
+/**
+ * Suscribe NUESTRA app a la cuenta de WhatsApp (WABA) de la barbería. Sin
+ * esto Meta no nos manda a nuestro webhook lo que escriben sus clientes.
+ * Devuelve si quedó suscrita.
+ */
+export async function subscribeBarberWaba(wabaId: string, accessToken: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${GRAPH}/${encodeURIComponent(wabaId)}/subscribed_apps`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${accessToken}` },
+      signal: AbortSignal.timeout(15000),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * ¿`GET /{wabaId}/phone_numbers`, con ESE token, lista el número? Es la
+ * prueba de que el número que llega del navegador es de la cuenta que se
+ * acaba de autorizar. Cualquier respuesta que no sea ok cuenta como «no».
+ * (Misma comprobación que el alta del dental, que la añadió tras una
+ * auditoría de seguridad.)
+ */
+export async function barberWabaOwnsPhone(
+  wabaId: string,
+  phoneNumberId: string,
+  accessToken: string,
+): Promise<boolean> {
+  let url: string | null = `${GRAPH}/${encodeURIComponent(wabaId)}/phone_numbers?fields=id&limit=100`;
+  try {
+    for (let page = 0; url && page < 5; page++) {
+      const res: Response = await fetch(url, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        signal: AbortSignal.timeout(15000),
+      });
+      if (!res.ok) return false;
+      const json: any = await res.json().catch(() => null);
+      const ids: string[] = Array.isArray(json?.data)
+        ? json.data.map((n: any) => String(n?.id ?? ""))
+        : [];
+      if (ids.includes(phoneNumberId)) return true;
+      const next = json?.paging?.next;
+      url = typeof next === "string" && next.startsWith(`${GRAPH}/`) ? next : null;
+    }
+  } catch {
+    return false;
+  }
+  return false;
+}
+
+/**
+ * Comprobación EN VIVO de una conexión. Nunca lanza y nunca tarda más que
+ * PROBE_TIMEOUT_MS: lo que no se pudo saber vuelve como null, no como error.
+ *
+ * Si nuestra app NO está suscrita a la WABA se intenta suscribirla aquí
+ * mismo (es idempotente): que la barbería tenga que "reconectar" para algo
+ * que se arregla con una llamada sería trabajo de más.
+ */
+async function probeBarberWa(creds: BarberWaCredentials): Promise<{
+  displayPhone: string | null;
+  webhookSubscribed: boolean | null;
+  tokenError: string | null;
+}> {
+  const headers = { Authorization: `Bearer ${creds.accessToken}` };
+
+  const phone = (async () => {
+    try {
+      const res = await fetch(
+        `${GRAPH}/${encodeURIComponent(creds.phoneNumberId)}?fields=display_phone_number,verified_name`,
+        { headers, signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) },
+      );
+      const json: any = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const err = parseWaError(json, res.status);
+        // Solo el token caducado/revocado es un veredicto. Cualquier otro
+        // tropiezo (Meta lento, 5xx) no dice nada de la conexión.
+        return {
+          displayPhone: null,
+          tokenError: err.code === WA_ERROR_CODE.TOKEN_EXPIRED ? err.message : null,
+        };
+      }
+      const shown =
+        typeof json?.display_phone_number === "string" && json.display_phone_number
+          ? json.display_phone_number
+          : null;
+      return { displayPhone: shown, tokenError: null };
+    } catch {
+      return { displayPhone: null, tokenError: null };
+    }
+  })();
+
+  const subscription = (async (): Promise<boolean | null> => {
+    if (!creds.wabaId) return null;
+    try {
+      const res = await fetch(`${GRAPH}/${encodeURIComponent(creds.wabaId)}/subscribed_apps`, {
+        headers,
+        signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+      });
+      if (!res.ok) return null;
+      const json: any = await res.json().catch(() => null);
+      const apps: any[] = Array.isArray(json?.data) ? json.data : [];
+      const ourId = process.env.META_APP_ID ?? process.env.NEXT_PUBLIC_META_APP_ID ?? null;
+      const ids = apps.map((a) => String(a?.whatsapp_business_api_data?.id ?? ""));
+      const subscribed = ourId ? ids.includes(String(ourId)) : apps.length > 0;
+      if (subscribed) return true;
+      return await subscribeBarberWaba(creds.wabaId, creds.accessToken);
+    } catch {
+      return null;
+    }
+  })();
+
+  const [p, webhookSubscribed] = await Promise.all([phone, subscription]);
+  return { displayPhone: p.displayPhone, webhookSubscribed, tokenError: p.tokenError };
 }
 
 /* ─────────────────────────────── cuota ───────────────────────────────── */
@@ -408,11 +563,15 @@ async function sendTemplate(
   tpl: BarberWaTemplate,
   params: string[],
 ) {
+  // 🔴 Un salto de línea, una tabulación o un parámetro vacío hacen que
+  // Meta rechace el mensaje ENTERO (132018 / 131008). Se sanea aquí, en el
+  // único punto por el que sale toda plantilla, y no en cada emisor.
+  const clean = params.map((text) => sanitizeBarberWaParam(text));
   const components: Record<string, unknown>[] = [];
-  if (params.length > 0) {
+  if (clean.length > 0) {
     components.push({
       type: "body",
-      parameters: params.map((text) => ({ type: "text", text })),
+      parameters: clean.map((text) => ({ type: "text", text })),
     });
   }
   if (tpl.category === "AUTHENTICATION") {
@@ -420,7 +579,7 @@ async function sendTemplate(
       type: "button",
       sub_type: "url",
       index: "0",
-      parameters: [{ type: "text", text: params[0] ?? "" }],
+      parameters: [{ type: "text", text: clean[0] ?? "" }],
     });
   }
 
@@ -660,132 +819,165 @@ async function lastInboundAt(barbershopId: string, phone: string): Promise<Date 
   return row?.createdAt ?? null;
 }
 
+/** Lo que la cola necesita leer de cada fila. */
+const OUTBOX_ROW_SELECT = {
+  id: true,
+  phone: true,
+  body: true,
+  templateName: true,
+  appointmentId: true,
+  errorMessage: true,
+  createdAt: true,
+} as const;
+
+type OutboxRow = {
+  id: string;
+  phone: string;
+  body: string | null;
+  templateName: string | null;
+  appointmentId: string | null;
+  errorMessage: string | null;
+  createdAt: Date;
+};
+
+function outboxKindOf(templateName: string | null): BarberOutboxKind {
+  // La fila que encola T1 desde la fila virtual trae SU propio discriminador.
+  if (templateName === BARBER_WALKIN_NOTIFY_TEMPLATE) return "walkinTurn";
+  if (templateName === barberWaTemplate("reminder").name) return "reminder";
+  if (templateName === barberWaTemplate("bookingConfirmed").name) return "bookingConfirmed";
+  return "other";
+}
+
 /**
- * Decide con qué manda una fila de la cola y la manda.
+ * De la fila de la cola a lo que se manda: el TEXTO (para la ventana
+ * abierta) y la PLANTILLA con sus parámetros (para fuera de ella).
+ *
+ * Los dos se RECALCULAN aquí leyendo la cita: así el mensaje sale siempre
+ * con la hora que la cita tiene AHORA, no con la que tenía cuando se
+ * encoló. (En el dental ese desfase es el bug M-22: al reagendar, al
+ * paciente le llegaba el aviso de la hora vieja. T1 además invalida la fila
+ * anterior — ver scheduleBarberReminders.)
+ */
+function planDelivery(
+  shop: ShopWaRow,
+  row: OutboxRow,
+  kind: BarberOutboxKind,
+  appt: ApptForMessage | null,
+): { text: string | null; template: { tpl: BarberWaTemplate; params: string[] } | null } {
+  if (kind === "walkinTurn") {
+    const body = (row.body ?? "").trim() || "Ya casi es tu turno.";
+    return {
+      text: body,
+      template: {
+        tpl: barberWaTemplate("walkinTurn"),
+        params: [shop.name, walkInTemplateNotice(shop.name, body)],
+      },
+    };
+  }
+  if (kind === "reminder" && appt) {
+    const params = reminderParamsFrom(shop, appt);
+    return { text: renderReminderText(params), template: { tpl: barberWaTemplate("reminder"), params } };
+  }
+  if (kind === "bookingConfirmed" && appt) {
+    const params = bookingParamsFrom(shop, appt);
+    return {
+      text: renderBookingText(params),
+      template: { tpl: barberWaTemplate("bookingConfirmed"), params },
+    };
+  }
+  return { text: (row.body ?? "").trim() || null, template: null };
+}
+
+type OutboxOutcome = "sent" | "failed" | "stale" | "busy" | "lost" | "noQuota";
+
+/**
+ * Procesa UNA fila de la cola: decide si todavía tiene sentido, la RECLAMA
+ * y la manda.
  *
  * REGLA DE COSTO: si la ventana de 24 h está abierta va como TEXTO — Meta no
  * cobra las plantillas de utilidad entregadas dentro de una ventana de
  * servicio abierta, y el texto además se lee mejor. Fuera de la ventana, la
  * plantilla es la ÚNICA vía.
+ *
+ * 🔴 SIN DUPLICADOS: la fila se reclama con un updateMany condicionado
+ * (status PENDING + errorMessage null → marca "[enviando]"). Si dos pasadas
+ * se enciman, solo una lo consigue; la otra la deja pasar. Nunca lanza.
  */
-async function deliverRow(
+async function processOutboxRow(
   shop: ShopWaRow,
   creds: BarberWaCredentials,
-  row: {
-    id: string;
-    phone: string;
-    body: string | null;
-    templateName: string | null;
-    appointmentId: string | null;
-  },
-): Promise<void> {
-  const windowOpen = barberWaWindowOpen(await lastInboundAt(shop.id, row.phone));
+  row: OutboxRow,
+  opts: { hasQuota: boolean; now?: Date },
+): Promise<{ outcome: OutboxOutcome; error: string | null }> {
+  const now = opts.now ?? new Date();
 
-  let result: { wamid: string | null };
-  if (windowOpen && row.body) {
-    result = await sendText(creds, row.phone, row.body);
-  } else {
-    const plan = await resolveTemplateForRow(shop, creds, row);
-    if (!plan) {
-      throw new WhatsAppApiError({
-        message:
-          "Fuera de la ventana de 24 h y sin plantilla utilizable para este aviso. " +
-          "Da de alta las plantillas en la pantalla de WhatsApp.",
-        httpStatus: 0,
+  try {
+    // ── ¿La está mandando otra pasada? ────────────────────────────────
+    const claimedAt = parseBarberWaClaim(row.errorMessage);
+    if (claimedAt) {
+      if (now.getTime() - claimedAt.getTime() < BARBER_WA_CLAIM_STALE_MS) {
+        return { outcome: "busy", error: null };
+      }
+      // Reclamo viejo: quien la tomó murió a mitad del envío. No se sabe si
+      // Meta la aceptó, así que NO se reintenta (no-duplicar pesa más que
+      // no-perder): queda como fallida con el motivo a la vista.
+      await prisma.barberMessage.updateMany({
+        where: { id: row.id, status: "PENDING", errorMessage: row.errorMessage },
+        data: { status: "FAILED", errorMessage: BARBER_WA_CLAIM_LOST_MESSAGE },
       });
-    }
-    result = await sendTemplate(creds, row.phone, plan.tpl, plan.params);
-  }
-
-  await prisma.barberMessage.update({
-    where: { id: row.id },
-    data: { status: "SENT", waMessageId: result.wamid, errorMessage: null },
-  });
-  await consumeQuota(shop);
-}
-
-/**
- * De la fila de la cola a (plantilla, parámetros).
- *
- * Los parámetros del recordatorio y de la confirmación se RECALCULAN aquí
- * leyendo la cita: así el mensaje sale siempre con la hora que la cita tiene
- * AHORA, no con la que tenía cuando se encoló. (En el dental ese desfase es
- * el bug M-22: al reagendar, al paciente le llegaba el aviso de la hora
- * vieja. T1 además invalida la fila anterior — ver scheduleBarberReminders.)
- */
-async function resolveTemplateForRow(
-  shop: ShopWaRow,
-  _creds: BarberWaCredentials,
-  row: { phone: string; body: string | null; templateName: string | null; appointmentId: string | null },
-): Promise<{ tpl: BarberWaTemplate; params: string[] } | null> {
-  // La fila que encola T1 desde la fila virtual trae SU propio discriminador.
-  if (row.templateName === BARBER_WALKIN_NOTIFY_TEMPLATE) {
-    return {
-      tpl: barberWaTemplate("walkinTurn"),
-      params: [shop.name, (row.body ?? "").trim() || "Ya casi es tu turno."],
-    };
-  }
-
-  const reminder = barberWaTemplate("reminder");
-  const booking = barberWaTemplate("bookingConfirmed");
-
-  if (row.templateName === reminder.name && row.appointmentId) {
-    const params = await reminderParams(shop, row.appointmentId);
-    return params ? { tpl: reminder, params } : null;
-  }
-  if (row.templateName === booking.name && row.appointmentId) {
-    const params = await bookingParams(shop, row.appointmentId);
-    return params ? { tpl: booking, params } : null;
-  }
-  return null;
-}
-
-/**
- * Drena la cola de UNA barbería. Devuelve cuántas salieron y cuántas
- * fallaron. Nunca lanza: un mensaje que revienta no puede llevarse por
- * delante los demás.
- */
-export async function drainBarberOutbox(barbershopId: string): Promise<{ sent: number; failed: number; skipped: number }> {
-  const shop = await loadShop(barbershopId);
-  if (!shop || !shop.isActive) return { sent: 0, failed: 0, skipped: 0 };
-
-  const creds = resolveSenderCredentials(shop);
-  if (!creds) return { sent: 0, failed: 0, skipped: 0 };
-
-  const rows = await prisma.barberMessage.findMany({
-    where: { barbershopId, direction: "OUTBOUND", status: "PENDING" },
-    orderBy: { createdAt: "asc" },
-    take: DRAIN_LIMIT,
-    select: { id: true, phone: true, body: true, templateName: true, appointmentId: true, errorMessage: true },
-  });
-
-  let sent = 0;
-  let failed = 0;
-  let skipped = 0;
-
-  for (let i = 0; i < rows.length; i++) {
-    const row = rows[i];
-    // Recordatorio que T1 invalidó al mover/cancelar la cita: NUNCA sale.
-    // (No debería estar PENDING —T1 lo pasa a FAILED— pero el contrato dice
-    // "no tomes nada con esta marca" y aquí se cumple al pie de la letra.)
-    if (isInvalidatedReminder(row.errorMessage)) {
-      skipped++;
-      continue;
+      return { outcome: "lost", error: BARBER_WA_CLAIM_LOST_MESSAGE };
     }
 
-    const quota = await getBarberWaQuota(barbershopId);
-    if (!barberWaFits(quota.limit, quota.used)) {
-      // Cupo agotado: NO se falla la fila ni se borra. Se queda esperando al
-      // siguiente periodo y la pantalla ya venía avisando desde el 80 %.
-      skipped += rows.length - i;
-      break;
+    // ── ¿Todavía tiene sentido mandarla? ──────────────────────────────
+    const kind = outboxKindOf(row.templateName);
+    const appt =
+      (kind === "reminder" || kind === "bookingConfirmed") && row.appointmentId
+        ? await loadAppt(shop.id, row.appointmentId)
+        : null;
+    const stale = barberOutboxStaleReason({
+      kind,
+      createdAt: row.createdAt,
+      now,
+      appointment: appt ? { status: appt.status, startAt: appt.startAt } : null,
+    });
+    if (stale) {
+      // Misma marca que usa T1 al mover una cita: no es un rechazo de Meta y
+      // la pantalla no lo enseña como un problema de la conexión.
+      await prisma.barberMessage.updateMany({
+        where: { id: row.id, status: "PENDING", errorMessage: null },
+        data: { status: "FAILED", errorMessage: `${BARBER_REMINDER_INVALIDATED_MARK} ${stale}` },
+      });
+      return { outcome: "stale", error: stale };
     }
 
+    // Cupo agotado: NO se falla la fila ni se borra. Se queda esperando al
+    // siguiente periodo y la pantalla ya venía avisando desde el 80 %.
+    if (!opts.hasQuota) return { outcome: "noQuota", error: null };
+
+    // ── Reclamo: de aquí en adelante la fila es de ESTA pasada ────────
+    const claim = await prisma.barberMessage.updateMany({
+      where: { id: row.id, status: "PENDING", errorMessage: null },
+      data: { errorMessage: barberWaClaimMark(now) },
+    });
+    if (claim.count === 0) return { outcome: "busy", error: null };
+
+    let wamid: string | null;
     try {
-      await deliverRow(shop, creds, row);
-      sent++;
+      const plan = planDelivery(shop, row, kind, appt);
+      const windowOpen = barberWaWindowOpen(await lastInboundAt(shop.id, row.phone), now);
+      if (windowOpen && plan.text) {
+        wamid = (await sendText(creds, row.phone, plan.text)).wamid;
+      } else if (plan.template) {
+        wamid = (await sendTemplate(creds, row.phone, plan.template.tpl, plan.template.params)).wamid;
+      } else {
+        throw new WhatsAppApiError({
+          message:
+            "Fuera de la ventana de 24 h y sin plantilla utilizable para este aviso. " +
+            "Da de alta las plantillas en la pantalla de WhatsApp.",
+          httpStatus: 0,
+        });
+      }
     } catch (err) {
-      failed++;
       const message =
         err instanceof WhatsAppApiError
           ? err.message
@@ -795,10 +987,158 @@ export async function drainBarberOutbox(barbershopId: string): Promise<{ sent: n
       await prisma.barberMessage
         .update({ where: { id: row.id }, data: { status: "FAILED", errorMessage: message } })
         .catch(() => {});
+      return { outcome: "failed", error: message };
+    }
+
+    // El mensaje YA salió. Si esta escritura fallara, el reclamo viejo lo
+    // dejaría como "no se pudo confirmar" en vez de mandarlo otra vez.
+    await prisma.barberMessage
+      .update({
+        where: { id: row.id },
+        data: { status: "SENT", waMessageId: wamid, errorMessage: null },
+      })
+      .catch((e) => console.error(`[barber/wa] enviado pero no marcado (${row.id}):`, e));
+    await consumeQuota(shop);
+    return { outcome: "sent", error: null };
+  } catch (err) {
+    console.error(`[barber/wa] fila ${row.id} no procesada:`, err);
+    return { outcome: "failed", error: err instanceof Error ? err.message : "No se pudo enviar" };
+  }
+}
+
+/** Mensajes que caben todavía en el periodo (Infinity = plan ilimitado). */
+function quotaRoom(quota: BarberWaQuotaDTO): number {
+  return quota.limit < 0 ? Number.POSITIVE_INFINITY : Math.max(0, quota.limit - quota.used);
+}
+
+/**
+ * Drena la cola de UNA barbería. Devuelve cuántas salieron y cuántas
+ * fallaron. Nunca lanza: un mensaje que revienta no puede llevarse por
+ * delante los demás.
+ *
+ * `deadline` (epoch ms) corta la pasada antes de que la función se quede sin
+ * tiempo: lo que no alcanzó sigue PENDING y lo toma la siguiente.
+ */
+export async function drainBarberOutbox(
+  barbershopId: string,
+  opts: { deadline?: number } = {},
+): Promise<{ sent: number; failed: number; skipped: number }> {
+  const shop = await loadShop(barbershopId);
+  if (!shop || !shop.isActive) return { sent: 0, failed: 0, skipped: 0 };
+
+  const creds = resolveSenderCredentials(shop);
+  if (!creds) return { sent: 0, failed: 0, skipped: 0 };
+
+  const rows = (await prisma.barberMessage.findMany({
+    where: { barbershopId, direction: "OUTBOUND", status: "PENDING" },
+    orderBy: { createdAt: "asc" },
+    take: DRAIN_LIMIT,
+    select: OUTBOX_ROW_SELECT,
+  })) as OutboxRow[];
+  if (rows.length === 0) return { sent: 0, failed: 0, skipped: 0 };
+
+  // El cupo se lee UNA vez y se va descontando aquí: una consulta por fila
+  // era lo que más tiempo se comía de la pasada.
+  let room = quotaRoom(await getBarberWaQuota(barbershopId));
+
+  let sent = 0;
+  let failed = 0;
+  let skipped = 0;
+
+  for (let i = 0; i < rows.length; i++) {
+    if (opts.deadline && Date.now() >= opts.deadline) {
+      skipped += rows.length - i;
+      break;
+    }
+    const row = rows[i];
+    // Recordatorio que T1 invalidó al mover/cancelar la cita: NUNCA sale.
+    // (No debería estar PENDING —T1 lo pasa a FAILED— pero el contrato dice
+    // "no tomes nada con esta marca" y aquí se cumple al pie de la letra.)
+    if (isInvalidatedReminder(row.errorMessage)) {
+      skipped++;
+      continue;
+    }
+
+    const { outcome } = await processOutboxRow(shop, creds, row, { hasQuota: room > 0 });
+    if (outcome === "sent") {
+      sent++;
+      room--;
+    } else if (outcome === "failed" || outcome === "lost") {
+      failed++;
+    } else {
+      skipped++;
     }
   }
 
   return { sent, failed, skipped };
+}
+
+export interface DeliverNowResult {
+  /** SENT = Meta lo aceptó. FAILED = no salió. PENDING = sigue en la cola. */
+  status: "SENT" | "FAILED" | "PENDING";
+  /** Por qué no salió (texto para la pantalla), o null si salió. */
+  error: string | null;
+  code: "NOT_CONNECTED" | "QUOTA" | "STALE" | "BUSY" | "NOT_FOUND" | "SEND_FAILED" | null;
+}
+
+/**
+ * Manda AHORA una fila que acaba de encolarse (el aviso "casi es tu turno"
+ * de la fila virtual). Es el MISMO camino que el drenado —reclamo, ventana
+ * de 24 h o plantilla, cupo, estados— acotado a una fila: quien toca
+ * "Avisar" no puede esperar al siguiente cron.
+ *
+ * Nunca lanza. Si no hay número conectado o no hay cupo, la fila NO se
+ * queda en la cola a propósito: un "ya casi es tu turno" que sale una hora
+ * tarde es peor que uno que no sale.
+ */
+export async function deliverBarberMessageNow(
+  barbershopId: string,
+  messageId: string,
+): Promise<DeliverNowResult> {
+  const fail = async (
+    code: NonNullable<DeliverNowResult["code"]>,
+    error: string,
+  ): Promise<DeliverNowResult> => {
+    await prisma.barberMessage
+      .updateMany({
+        where: { id: messageId, barbershopId, status: "PENDING", errorMessage: null },
+        data: { status: "FAILED", errorMessage: error },
+      })
+      .catch(() => {});
+    return { status: "FAILED", error, code };
+  };
+
+  try {
+    const shop = await loadShop(barbershopId);
+    if (!shop || !shop.isActive) return await fail("NOT_CONNECTED", "La barbería no está activa.");
+    const creds = resolveSenderCredentials(shop);
+    if (!creds) {
+      return await fail(
+        "NOT_CONNECTED",
+        "Conecta el WhatsApp de la barbería para poder mandar avisos.",
+      );
+    }
+
+    const row = (await prisma.barberMessage.findFirst({
+      where: { id: messageId, barbershopId, direction: "OUTBOUND", status: "PENDING" },
+      select: OUTBOX_ROW_SELECT,
+    })) as OutboxRow | null;
+    if (!row) return { status: "FAILED", error: "Ese aviso ya no está en la cola.", code: "NOT_FOUND" };
+
+    const room = quotaRoom(await getBarberWaQuota(barbershopId));
+    if (room <= 0) {
+      return await fail("QUOTA", "Se acabaron los mensajes incluidos de este periodo.");
+    }
+
+    const { outcome, error } = await processOutboxRow(shop, creds, row, { hasQuota: true });
+    if (outcome === "sent") return { status: "SENT", error: null, code: null };
+    if (outcome === "busy") return { status: "PENDING", error: null, code: "BUSY" };
+    if (outcome === "stale") return { status: "FAILED", error: `El aviso ya no se mandó: ${error}.`, code: "STALE" };
+    return { status: "FAILED", error: error ?? "No se pudo enviar el aviso.", code: "SEND_FAILED" };
+  } catch (err) {
+    console.error(`[barber/wa] aviso ${messageId} no enviado:`, err);
+    return { status: "FAILED", error: "No se pudo enviar el aviso.", code: "SEND_FAILED" };
+  }
 }
 
 /* ──────────────────────── recordatorios de cita ──────────────────────── */
@@ -824,15 +1164,21 @@ function formatWhen(date: Date, timezone: string, locale: string): string {
   }
 }
 
+/**
+ * Nombre de pila para el saludo. Sin nombre devuelve un saludo neutro: las
+ * plantillas ya empiezan con "Hola {{1}}" / "¡Listo {{1}}!", así que
+ * devolver "Hola" aquí mandaba un "Hola Hola, te recordamos…".
+ */
 function firstName(name: string | null | undefined): string {
   const clean = String(name ?? "").trim();
-  if (!clean) return "Hola";
+  if (!clean) return "👋";
   return clean.split(/\s+/)[0];
 }
 
 type ApptForMessage = {
   id: string;
   startAt: Date;
+  status: string;
   clientName: string | null;
   client: { name: string } | null;
   barber: { name: string; nickname: string | null } | null;
@@ -871,18 +1217,8 @@ function bookingParamsFrom(shop: ShopWaRow, appt: ApptForMessage): string[] {
 async function loadAppt(shopId: string, appointmentId: string): Promise<ApptForMessage | null> {
   return (await prisma.barberAppointment.findFirst({
     where: { id: appointmentId, barbershopId: shopId },
-    select: { id: true, startAt: true, clientName: true, ...APPT_MESSAGE_INCLUDE },
+    select: { id: true, startAt: true, status: true, clientName: true, ...APPT_MESSAGE_INCLUDE },
   })) as ApptForMessage | null;
-}
-
-async function reminderParams(shop: ShopWaRow, appointmentId: string): Promise<string[] | null> {
-  const appt = await loadAppt(shop.id, appointmentId);
-  return appt ? reminderParamsFrom(shop, appt) : null;
-}
-
-async function bookingParams(shop: ShopWaRow, appointmentId: string): Promise<string[] | null> {
-  const appt = await loadAppt(shop.id, appointmentId);
-  return appt ? bookingParamsFrom(shop, appt) : null;
 }
 
 /** Texto del recordatorio para la ventana abierta (y para la vista previa). */
@@ -938,76 +1274,133 @@ export async function scheduleBarberReminders(barbershopId: string): Promise<{ q
   const from = new Date(now + REMINDER_MIN_LEAD_MS);
   const to = new Date(now + REMINDER_MAX_LEAD_MS);
 
+  // UNA lectura con todo lo que hace falta para redactar: antes era una
+  // consulta por cita, y con 200 citas eso solo ya se comía la pasada.
   const appointments = await prisma.barberAppointment.findMany({
     where: {
       barbershopId,
       status: { in: ["PENDING", "CONFIRMED"] },
       startAt: { gte: from, lte: to },
     },
-    select: { id: true, clientId: true, clientPhone: true, client: { select: { phone: true } } },
+    select: {
+      id: true,
+      startAt: true,
+      status: true,
+      clientId: true,
+      clientName: true,
+      clientPhone: true,
+      client: { select: { name: true, phone: true } },
+      barber: { select: { name: true, nickname: true } },
+      services: { select: { service: { select: { name: true } } } },
+    },
+    orderBy: { startAt: "asc" },
     take: 200,
   });
   if (appointments.length === 0) return { queued: 0 };
 
   const template = barberWaTemplate("reminder");
-  const existing = await prisma.barberMessage.findMany({
-    where: {
-      barbershopId,
-      templateName: template.name,
-      appointmentId: { in: appointments.map((a) => a.id) },
+
+  // 🔴 SIN DUPLICADOS AUNQUE EL CRON SE ENCIME. "¿Ya tiene recordatorio?" y
+  // "encólalo" van dentro de UNA transacción con candado por barbería: dos
+  // pasadas a la vez se serializan en Postgres y la segunda ya ve lo que
+  // encoló la primera. Sin esto, las dos leían "no tiene" y al cliente le
+  // llegaban dos recordatorios. La transacción es corta (tres sentencias,
+  // cero llamadas a Meta), así que el candado se suelta en milisegundos.
+  const [lockA, lockB] = advisoryLockKey(`barber:wa:reminders:${barbershopId}`);
+  const queued = await prisma.$transaction(
+    async (tx) => {
+      await tx.$executeRawUnsafe(
+        `SELECT pg_advisory_xact_lock(${Math.trunc(lockA)}, ${Math.trunc(lockB)})`,
+      );
+
+      const existing = await tx.barberMessage.findMany({
+        where: {
+          barbershopId,
+          templateName: template.name,
+          appointmentId: { in: appointments.map((a) => a.id) },
+        },
+        select: { appointmentId: true, status: true, errorMessage: true },
+      });
+
+      // La decisión es PURA y está probada sin BD (whatsapp-core.ts):
+      // reminderAlreadyHandled. Aquí solo se agrupa por cita.
+      const byAppointment = new Map<
+        string,
+        { status: (typeof existing)[number]["status"]; errorMessage: string | null }[]
+      >();
+      for (const row of existing) {
+        if (!row.appointmentId) continue;
+        const list = byAppointment.get(row.appointmentId) ?? [];
+        list.push({ status: row.status, errorMessage: row.errorMessage });
+        byAppointment.set(row.appointmentId, list);
+      }
+      const handled = new Set<string>();
+      for (const [appointmentId, rows] of Array.from(byAppointment.entries())) {
+        if (reminderAlreadyHandled(rows, isInvalidatedReminder)) handled.add(appointmentId);
+      }
+
+      const data: Prisma.BarberMessageCreateManyInput[] = [];
+      for (const appt of appointments) {
+        if (handled.has(appt.id)) continue;
+        const phone = mxTenDigits(appt.client?.phone ?? appt.clientPhone ?? "");
+        if (!phone) continue;
+        data.push({
+          barbershopId,
+          direction: "OUTBOUND",
+          phone,
+          // Lo que se ve en la bandeja mientras está en cola. Al enviar se
+          // vuelve a redactar leyendo la cita (ver planDelivery).
+          body: renderReminderText(reminderParamsFrom(shop, appt as unknown as ApptForMessage)),
+          templateName: template.name,
+          status: "PENDING",
+          clientId: appt.clientId,
+          appointmentId: appt.id,
+        });
+      }
+      if (data.length === 0) return 0;
+      return (await tx.barberMessage.createMany({ data })).count;
     },
-    select: { appointmentId: true, status: true, errorMessage: true },
-  });
-
-  // La decisión es PURA y está probada sin BD (whatsapp-core.ts):
-  // reminderAlreadyHandled. Aquí solo se agrupa por cita.
-  const byAppointment = new Map<string, { status: (typeof existing)[number]["status"]; errorMessage: string | null }[]>();
-  for (const row of existing) {
-    if (!row.appointmentId) continue;
-    const list = byAppointment.get(row.appointmentId) ?? [];
-    list.push({ status: row.status, errorMessage: row.errorMessage });
-    byAppointment.set(row.appointmentId, list);
-  }
-  const handled = new Set<string>();
-  for (const [appointmentId, rows] of Array.from(byAppointment.entries())) {
-    if (reminderAlreadyHandled(rows, isInvalidatedReminder)) handled.add(appointmentId);
-  }
-
-  let queued = 0;
-  for (const appt of appointments) {
-    if (handled.has(appt.id)) continue;
-    const phone = mxTenDigits(appt.client?.phone ?? appt.clientPhone ?? "");
-    if (!phone) continue;
-
-    const params = await reminderParams(shop, appt.id);
-    if (!params) continue;
-
-    await enqueueBarberMessage({
-      barbershopId,
-      phone,
-      body: renderReminderText(params),
-      templateName: template.name,
-      clientId: appt.clientId,
-      appointmentId: appt.id,
-    });
-    queued++;
-  }
+    { maxWait: 10_000, timeout: 20_000 },
+  );
 
   return { queued };
 }
 
 /**
+ * Cuánto puede durar una pasada del cron. La ruta declara maxDuration = 300;
+ * se corta bastante antes para que la función termine por las buenas y
+ * conteste lo que hizo, en vez de morir a media barbería.
+ */
+export const DISPATCH_BUDGET_MS = 240_000;
+
+/**
  * Una pasada completa para TODAS las barberías conectadas: programa lo que
  * falte y drena la cola. Es lo que llama el cron (y el botón "enviar
  * pendientes" de la pantalla, acotado a una sola barbería).
+ *
+ * AGUANTA SER LLAMADA CADA POCOS MINUTOS Y ENCIMADA CONSIGO MISMA:
+ *   · programar es idempotente (candado + "¿ya tiene recordatorio?");
+ *   · cada fila de la cola se reclama antes de mandarse, así que dos
+ *     pasadas nunca mandan la misma;
+ *   · al agotarse el presupuesto de tiempo la pasada se corta y avisa con
+ *     `partial: true`; lo pendiente lo toma la siguiente. Se empieza cada
+ *     vez por una barbería distinta para que el corte no deje siempre a las
+ *     mismas al final.
  */
-export async function runBarberWaDispatch(only?: string): Promise<{
+export async function runBarberWaDispatch(
+  only?: string,
+  opts: { budgetMs?: number } = {},
+): Promise<{
   shops: number;
   queued: number;
   sent: number;
   failed: number;
+  partial: boolean;
 }> {
-  const shops = await prisma.barbershop.findMany({
+  const started = Date.now();
+  const deadline = started + (opts.budgetMs ?? DISPATCH_BUDGET_MS);
+
+  const found = await prisma.barbershop.findMany({
     where: {
       isActive: true,
       phoneNumberId: { not: null },
@@ -1015,16 +1408,24 @@ export async function runBarberWaDispatch(only?: string): Promise<{
       ...(only ? { id: only } : {}),
     },
     select: { id: true },
+    orderBy: { id: "asc" },
     take: 500,
   });
+  const offset = found.length > 1 ? Math.floor(Math.random() * found.length) : 0;
+  const shops = [...found.slice(offset), ...found.slice(0, offset)];
 
   let queued = 0;
   let sent = 0;
   let failed = 0;
+  let partial = false;
   for (const shop of shops) {
+    if (Date.now() >= deadline) {
+      partial = true;
+      break;
+    }
     try {
       queued += (await scheduleBarberReminders(shop.id)).queued;
-      const drained = await drainBarberOutbox(shop.id);
+      const drained = await drainBarberOutbox(shop.id, { deadline });
       sent += drained.sent;
       failed += drained.failed;
     } catch (e) {
@@ -1032,7 +1433,7 @@ export async function runBarberWaDispatch(only?: string): Promise<{
       console.error(`[barber/wa] barbería ${shop.id} no despachada:`, e);
     }
   }
-  return { shops: shops.length, queued, sent, failed };
+  return { shops: shops.length, queued, sent, failed, partial };
 }
 
 /* ─────────────────── envíos que otras terminales piden ───────────────── */
@@ -1072,6 +1473,9 @@ export async function sendBarberPortalCode(args: {
       body: "Código de acceso al portal (no se guarda por seguridad).",
       templateName: tpl.name,
       status: "PENDING",
+      // Nace RECLAMADA: sale aquí mismo, y el drenado no puede tomarla
+      // mientras tanto y mandarla una segunda vez (ver processOutboxRow).
+      errorMessage: barberWaClaimMark(),
     },
     select: { id: true },
   });
@@ -1080,7 +1484,7 @@ export async function sendBarberPortalCode(args: {
     const { wamid } = await sendTemplate(creds, phone, tpl, [args.code]);
     await prisma.barberMessage.update({
       where: { id: row.id },
-      data: { status: "SENT", waMessageId: wamid },
+      data: { status: "SENT", waMessageId: wamid, errorMessage: null },
     });
     await consumeQuota(shop);
     return true;
@@ -1176,16 +1580,21 @@ export async function sendBarberCampaign(args: {
   const tpl = barberWaTemplate(args.kind);
   const clients = await prisma.barberClient.findMany({
     where: { barbershopId: shop.id, id: { in: ids }, blockedAt: null },
-    select: { id: true, name: true, phone: true },
+    select: { id: true, name: true, phone: true, preferences: true },
   });
 
-  const promo = args.promo.trim().slice(0, 300) || "Te esperamos cuando gustes.";
+  const promo = sanitizeBarberWaParam(args.promo, "").slice(0, 300) || "Te esperamos cuando gustes.";
   let sent = 0;
   let failed = 0;
 
   for (const client of clients) {
     const phone = mxTenDigits(client.phone);
     if (!phone) continue;
+    // 🔴 LA BAJA SE RESPETA AQUÍ, EN EL EMISOR. La pantalla nueva de campañas
+    // ya filtra a los que pidieron no recibir promociones, pero la de
+    // WhatsApp → Campañas manda los ids que le llegan: sin esta línea, a un
+    // cliente dado de baja le seguía llegando la felicitación.
+    if (barberClientOptedOut(client.preferences)) continue;
 
     const quota = await getBarberWaQuota(shop.id);
     if (!barberWaFits(quota.limit, quota.used)) break;
@@ -1199,6 +1608,7 @@ export async function sendBarberCampaign(args: {
         body: renderCampaignText(args.kind, params),
         templateName: tpl.name,
         status: "PENDING",
+        errorMessage: barberWaClaimMark(),
         clientId: client.id,
       },
       select: { id: true },
@@ -1208,7 +1618,7 @@ export async function sendBarberCampaign(args: {
       const { wamid } = await sendTemplate(creds, phone, tpl, params);
       await prisma.barberMessage.update({
         where: { id: row.id },
-        data: { status: "SENT", waMessageId: wamid },
+        data: { status: "SENT", waMessageId: wamid, errorMessage: null },
       });
       await consumeQuota(shop);
       sent++;
@@ -1359,15 +1769,7 @@ export async function ingestBarberInbound(value: any, msg: any): Promise<boolean
   const phone = mxTenDigits(from);
   if (!phone) return true;
 
-  // Dedup por wamid: Meta reintenta el webhook ante timeouts y 5xx.
-  const wamid = typeof msg?.id === "string" ? msg.id : null;
-  if (wamid) {
-    const duplicate = await prisma.barberMessage.findFirst({
-      where: { barbershopId: shop.id, waMessageId: wamid, direction: "INBOUND" },
-      select: { id: true },
-    });
-    if (duplicate) return true;
-  }
+  const wamid = typeof msg?.id === "string" && msg.id ? msg.id : null;
 
   const rawText = String(
     msg?.text?.body ??
@@ -1386,26 +1788,46 @@ export async function ingestBarberInbound(value: any, msg: any): Promise<boolean
     select: { id: true },
   });
 
-  try {
-    await prisma.barberMessage.create({
-      data: {
-        barbershopId: shop.id,
-        direction: "INBOUND",
-        phone,
-        body: rawText || incoming!.body,
-        waMessageId: wamid,
-        status: "DELIVERED",
-        clientId: client?.id ?? null,
-        // El adjunto viaja en templateName con prefijo `attach:` porque
-        // BarberMessage no tiene columna para adjuntos y el schema no se
-        // toca. Ver whatsapp-core.ts.
-        templateName: incoming?.attachment ? encodeBarberWaAttachment(incoming.attachment) : null,
-      },
-    });
-  } catch (err) {
-    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") return true;
-    throw err;
-  }
+  // 🔴 DEDUP POR wamid, DENTRO DE POSTGRES. Meta reintenta el webhook ante
+  // timeouts y 5xx, y un turno con nota de voz puede tardar lo suficiente
+  // para que el reintento llegue mientras el primero sigue trabajando.
+  // `waMessageId` no tiene índice único (y el schema no se toca), así que
+  // "¿ya lo tengo?" + "guárdalo" van en una transacción con candado por
+  // wamid: el segundo espera, ve la fila del primero y se va. Sin esto el
+  // bot contestaba dos veces el mismo mensaje.
+  const stored = await prisma.$transaction(
+    async (tx) => {
+      if (wamid) {
+        const [lockA, lockB] = advisoryLockKey(`barber:wa:in:${wamid}`);
+        await tx.$executeRawUnsafe(
+          `SELECT pg_advisory_xact_lock(${Math.trunc(lockA)}, ${Math.trunc(lockB)})`,
+        );
+        const duplicate = await tx.barberMessage.findFirst({
+          where: { barbershopId: shop.id, waMessageId: wamid, direction: "INBOUND" },
+          select: { id: true },
+        });
+        if (duplicate) return null;
+      }
+      return tx.barberMessage.create({
+        data: {
+          barbershopId: shop.id,
+          direction: "INBOUND",
+          phone,
+          body: rawText || incoming!.body,
+          waMessageId: wamid,
+          status: "DELIVERED",
+          clientId: client?.id ?? null,
+          // El adjunto viaja en templateName con prefijo `attach:` porque
+          // BarberMessage no tiene columna para adjuntos y el schema no se
+          // toca. Ver whatsapp-core.ts.
+          templateName: incoming?.attachment ? encodeBarberWaAttachment(incoming.attachment) : null,
+        },
+        select: { id: true },
+      });
+    },
+    { maxWait: 10_000, timeout: 15_000 },
+  );
+  if (!stored) return true;
 
   // Palomitas azules en el teléfono del cliente. Best-effort: una palomita
   // nunca puede tumbar la ingesta.
@@ -1417,6 +1839,14 @@ export async function ingestBarberInbound(value: any, msg: any): Promise<boolean
   // Multimedia: llegó, quedó en el Inbox y AQUÍ TERMINA. Una foto no es un
   // "CONFIRMAR" y no puede tocar la agenda de nadie.
   if (incoming) return true;
+
+  // "BAJA" / "ya no me manden promociones": se respeta ANTES que nada y no
+  // se le consulta a ninguna IA. Solo aplica a quien ya es cliente (sin
+  // ficha no hay a quién dar de baja, y el mensaje sigue su camino).
+  if (isBarberOptOutText(rawText) && (await optOutByPhone(shop.id, phone))) {
+    await replyInline(shop, creds, phone, BARBER_WA_OPT_OUT_REPLY);
+    return true;
+  }
 
   const handled = await applyReminderReply(shop, creds, phone, rawText);
 
@@ -1459,6 +1889,47 @@ async function runBotIfEnabled(
 }
 
 /**
+ * Da de baja de promociones al cliente de ese teléfono. La escritura es de
+ * campaigns.ts (dueño de la llave y de la bitácora); import DINÁMICO porque
+ * aquel módulo importa éste. Nunca lanza: false = no se dio de baja a nadie.
+ */
+async function optOutByPhone(barbershopId: string, phone: string): Promise<boolean> {
+  try {
+    const { optOutBarberClientByPhone } = await import("@/lib/barber/campaigns");
+    return await optOutBarberClientByPhone(barbershopId, phone);
+  } catch (err) {
+    console.error(`[barber/wa] no se pudo registrar la baja (${barbershopId}):`, err);
+    return false;
+  }
+}
+
+/**
+ * ¿El recordatorio fue lo ÚLTIMO que le dijimos a este número? Se mira la
+ * última fila saliente que de verdad le llegó (ni marcas de sistema, ni
+ * fallidas, ni las que siguen en cola).
+ */
+async function reminderWasLastWord(
+  barbershopId: string,
+  phone: string,
+  reminderTemplate: string,
+): Promise<boolean> {
+  const last = await prisma.barberMessage.findFirst({
+    where: {
+      barbershopId,
+      phone,
+      direction: "OUTBOUND",
+      status: { in: ["SENT", "DELIVERED", "READ"] },
+      // OR explícito: en SQL `NOT (NULL LIKE 'sys:%')` es NULL y dejaría
+      // fuera justo las filas sin templateName, que son las respuestas.
+      OR: [{ templateName: null }, { NOT: { templateName: { startsWith: BARBER_WA_SYS_PREFIX } } }],
+    },
+    orderBy: { createdAt: "desc" },
+    select: { templateName: true },
+  });
+  return last?.templateName === reminderTemplate;
+}
+
+/**
  * Aplica la respuesta del cliente sobre la visita que le recordamos.
  *
  * La transición SIEMPRE pasa por canTransition() del contrato: si el estado
@@ -1479,6 +1950,15 @@ async function applyReminderReply(
   if (action === "unclear") return false;
 
   const template = barberWaTemplate("reminder");
+
+  // 🔴 Un "sí" / "ok" / "1" suelto solo responde al recordatorio si el
+  // recordatorio fue lo último que le dijimos. Si después ya hubo
+  // conversación (el bot le preguntó «¿te agendo a las 5?»), ese "sí" es
+  // para el bot: tomarlo aquí confirmaba la visita de mañana y dejaba sin
+  // respuesta la pregunta que el cliente sí estaba contestando.
+  if (isBareBarberReply(text) && !(await reminderWasLastWord(shop.id, phone, template.name))) {
+    return false;
+  }
   const sentReminders = await prisma.barberMessage.findMany({
     where: {
       barbershopId: shop.id,
@@ -1601,6 +2081,8 @@ async function replyInline(
         phone,
         body,
         status: "PENDING",
+        // Nace RECLAMADA: el drenado no puede mandarla una segunda vez.
+        errorMessage: barberWaClaimMark(),
       },
       select: { id: true },
     })
@@ -1611,7 +2093,7 @@ async function replyInline(
     if (row) {
       await prisma.barberMessage.update({
         where: { id: row.id },
-        data: { status: "SENT", waMessageId: wamid },
+        data: { status: "SENT", waMessageId: wamid, errorMessage: null },
       });
     }
     await consumeQuota(shop);
@@ -1719,7 +2201,11 @@ function toMessageDTO(row: {
     body: row.body,
     // Un recordatorio que invalidamos nosotros NO es un fallo que enseñarle a
     // la barbería como si Meta lo hubiera rechazado.
-    error: isInvalidatedReminder(row.errorMessage) ? null : row.errorMessage,
+    // …y la marca "[enviando]" tampoco: es un mensaje que está saliendo.
+    error:
+      isInvalidatedReminder(row.errorMessage) || isBarberWaClaim(row.errorMessage)
+        ? null
+        : row.errorMessage,
     // Los adjuntos y las marcas de sistema no son "una plantilla".
     templateName:
       attachment || isBarberWaSysRow(row.templateName) ? null : row.templateName,
@@ -1995,6 +2481,7 @@ export async function sendBarberManualMessage(args: {
       phone,
       body,
       status: "PENDING",
+      errorMessage: barberWaClaimMark(),
       clientId: client?.id ?? null,
     },
     select: { id: true },
@@ -2004,7 +2491,7 @@ export async function sendBarberManualMessage(args: {
     const { wamid } = await sendText(creds, phone, body);
     await prisma.barberMessage.update({
       where: { id: row.id },
-      data: { status: "SENT", waMessageId: wamid },
+      data: { status: "SENT", waMessageId: wamid, errorMessage: null },
     });
     await consumeQuota(shop);
     return { ok: true, messageId: row.id };

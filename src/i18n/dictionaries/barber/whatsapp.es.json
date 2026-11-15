@@ -32,6 +32,7 @@
     },
     "number": "Número conectado",
     "verifiedAt": "Verificado el",
+    "webhookOff": "Meta todavía no nos está entregando lo que te escriben tus clientes, así que las confirmaciones, las conversaciones y el bot no reciben nada. Toca «Volver a conectar»; si sigue igual, escríbenos.",
     "notVerified": "Sin verificación de negocio (opcional)"
   },
   "quota": {

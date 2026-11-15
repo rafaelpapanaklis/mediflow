@@ -32,6 +32,7 @@
     },
     "number": "Connected number",
     "verifiedAt": "Verified on",
+    "webhookOff": "Meta is not delivering your clients' messages to us yet, so confirmations, conversations and the bot receive nothing. Tap “Reconnect”; if it stays the same, write to us.",
     "notVerified": "Business not verified (optional)"
   },
   "quota": {

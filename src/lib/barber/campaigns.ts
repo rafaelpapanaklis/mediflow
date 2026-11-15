@@ -13,6 +13,7 @@ import {
   type BarberOutreachTarget,
 } from "@/lib/barber/clients";
 import {
+  BARBER_WA_OPT_OUT_KEY,
   BARBER_WA_PRICE_USD,
   barberWaTemplate,
   type BarberWaKind,
@@ -72,7 +73,9 @@ import { sendBarberCampaign, CAMPAIGN_BATCH_MAX } from "@/lib/barber/whatsapp";
 // ── Llaves reservadas dentro de BarberClient.preferences ───────────────
 
 /** Baja: el cliente pidió no recibir campañas. */
-export const CAMPAIGN_OPT_OUT_KEY = "__optout";
+// La llave vive en whatsapp-core porque el EMISOR también la comprueba antes
+// de mandar (ver sendBarberCampaign): un solo literal para los dos.
+export const CAMPAIGN_OPT_OUT_KEY = BARBER_WA_OPT_OUT_KEY;
 /** Bitácora: cuándo se le mandó cada campaña. Es el candado anti-repetido. */
 export const CAMPAIGN_LEDGER_KEY = "__campaigns";
 

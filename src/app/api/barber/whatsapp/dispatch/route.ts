@@ -11,8 +11,15 @@
 //
 // ⚠️ El cron NO está dado de alta todavía: vercel.json está fuera del
 // vertical barber y no se toca desde aquí. El bloque exacto que hay que
-// pegar va en el reporte de ORQUESTA. Mientras tanto el botón del panel
-// hace exactamente lo mismo para una barbería.
+// pegar va en el reporte. Mientras tanto el botón del panel hace
+// exactamente lo mismo para una barbería.
+//
+// EL GET AGUANTA SER LLAMADO CADA POCOS MINUTOS, incluso encimado consigo
+// mismo (una pasada lenta + la siguiente): programar es idempotente
+// (candado por barbería), cada fila de la cola se reclama antes de mandarse
+// (dos pasadas nunca mandan la misma) y la pasada se corta sola a los 240 s
+// —`partial: true`— muy por debajo de los 300 s de maxDuration. Probado
+// contra Postgres en __tests__/whatsapp-integration.test.ts.
 // ═══════════════════════════════════════════════════════════════════════
 import { NextResponse } from "next/server";
 import { runBarberWaDispatch } from "@/lib/barber/whatsapp";

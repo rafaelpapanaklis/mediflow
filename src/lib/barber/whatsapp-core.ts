@@ -73,6 +73,13 @@ export interface BarberWaConnectionDTO {
   problem: string | null;
   /** ¿Está disponible el Embedded Signup en este despliegue? */
   canConnect: boolean;
+  /**
+   * ¿Nuestra app está suscrita a la cuenta de WhatsApp de la barbería?
+   * `false` = Meta NO nos está entregando lo que escriben los clientes: ni
+   * la bandeja, ni las confirmaciones, ni el bot reciben nada aunque todo se
+   * vea "conectado". `null` = no se pudo comprobar (Meta no respondió).
+   */
+  webhookSubscribed: boolean | null;
 }
 
 // ── Cuota de mensajes del plan ──────────────────────────────────────────
@@ -383,6 +390,190 @@ export function checkBarberWaTemplate(tpl: BarberWaTemplate): string | null {
   return null;
 }
 
+// ── Parámetros de una plantilla ─────────────────────────────────────────
+
+/** Tope de Meta para el texto de UN parámetro del cuerpo. */
+export const BARBER_WA_PARAM_MAX = 1024;
+
+/**
+ * Deja un parámetro tal como Meta lo acepta.
+ *
+ * 🔴 Meta rechaza el mensaje ENTERO con 132018 si un parámetro trae un salto
+ * de línea, una tabulación o más de cuatro espacios seguidos, y con 131008
+ * si llega vacío. Una dirección capturada en dos renglones en la
+ * configuración bastaba para que NINGÚN recordatorio de esa barbería
+ * saliera. Aquí todo se colapsa a espacios simples y lo vacío se cambia por
+ * `fallback`.
+ */
+export function sanitizeBarberWaParam(value: unknown, fallback = "—"): string {
+  const clean = String(value ?? "")
+    // Saltos de línea, tabulaciones y los separadores Unicode de línea y de
+    // párrafo (U+2028 / U+2029), escritos por código para que ningún editor
+    // los convierta en un salto real dentro de la expresión.
+    .replace(new RegExp("[\\r\\n\\t\\u2028\\u2029]+", "g"), " ")
+    .replace(/ {2,}/g, " ")
+    .trim();
+  if (!clean) return fallback;
+  const chars = Array.from(clean);
+  return chars.length > BARBER_WA_PARAM_MAX
+    ? `${chars.slice(0, BARBER_WA_PARAM_MAX - 1).join("")}…`
+    : clean;
+}
+
+// ── La cola: reclamar una fila antes de mandarla ────────────────────────
+//
+// BarberMessage no tiene un estado "enviando" y el schema no se toca. Sin
+// reclamo, dos pasadas del despacho que se encimen (el cron cada pocos
+// minutos + el botón del panel) leen la MISMA fila PENDING y el cliente
+// recibe el recordatorio dos veces. El reclamo es una marca en
+// `errorMessage` puesta con un updateMany condicionado: solo UNA pasada la
+// consigue.
+
+/** Prefijo de la marca "esta fila la está mandando alguien ahora mismo". */
+export const BARBER_WA_CLAIM_MARK = "[enviando]" as const;
+
+/**
+ * Pasado este tiempo, un reclamo es de un proceso que murió a mitad del
+ * envío. NO se reintenta (no se sabe si Meta ya lo aceptó, y no-duplicar
+ * pesa más que no-perder): la fila pasa a FAILED con el motivo.
+ */
+export const BARBER_WA_CLAIM_STALE_MS = 10 * 60 * 1000;
+
+export function barberWaClaimMark(now: Date = new Date()): string {
+  return `${BARBER_WA_CLAIM_MARK} ${now.toISOString()}`;
+}
+
+/** Cuándo se reclamó la fila, o null si `errorMessage` no es un reclamo. */
+export function parseBarberWaClaim(errorMessage: string | null | undefined): Date | null {
+  if (typeof errorMessage !== "string" || !errorMessage.startsWith(BARBER_WA_CLAIM_MARK)) {
+    return null;
+  }
+  const at = new Date(errorMessage.slice(BARBER_WA_CLAIM_MARK.length).trim());
+  // Marca ilegible = reclamo de fecha desconocida: se trata como viejísimo
+  // para que no deje una fila atorada para siempre.
+  return Number.isNaN(at.getTime()) ? new Date(0) : at;
+}
+
+export function isBarberWaClaim(errorMessage: string | null | undefined): boolean {
+  return typeof errorMessage === "string" && errorMessage.startsWith(BARBER_WA_CLAIM_MARK);
+}
+
+export const BARBER_WA_CLAIM_LOST_MESSAGE =
+  "El envío se interrumpió a la mitad y no se pudo confirmar si salió. " +
+  "No se reintenta solo para no mandarlo dos veces.";
+
+// ── La cola: lo que ya no tiene sentido mandar ──────────────────────────
+
+/** Un "casi es tu turno" de hace más de esto ya no ayuda a nadie. */
+export const BARBER_WALKIN_NOTICE_TTL_MS = 30 * 60 * 1000;
+
+export type BarberOutboxKind = "reminder" | "bookingConfirmed" | "walkinTurn" | "other";
+
+/**
+ * ¿Esta fila de la cola YA NO debe salir? Devuelve el motivo, o null si se
+ * manda.
+ *
+ * 🔴 La cola puede tardar: el cron se retrasa, el cupo se agota y vuelve con
+ * el periodo nuevo, la barbería conecta su número días después. Sin esta
+ * regla, lo primero que hace una barbería al conectar es recordarle a sus
+ * clientes una cita de la semana pasada.
+ *   · recordatorio / confirmación → la visita tiene que seguir viva
+ *     (PENDING o CONFIRMED) y no haber empezado;
+ *   · aviso de la fila → caduca a los 30 minutos;
+ *   · lo demás (texto suelto que alguien encoló) → se manda.
+ */
+export function barberOutboxStaleReason(args: {
+  kind: BarberOutboxKind;
+  createdAt: Date;
+  now: Date;
+  /** null = la visita ya no existe (o la fila nunca tuvo una). */
+  appointment: { status: string; startAt: Date } | null;
+}): string | null {
+  if (args.kind === "walkinTurn") {
+    return args.now.getTime() - args.createdAt.getTime() > BARBER_WALKIN_NOTICE_TTL_MS
+      ? "el aviso de la fila caducó antes de poder enviarse"
+      : null;
+  }
+  if (args.kind === "reminder" || args.kind === "bookingConfirmed") {
+    if (!args.appointment) return "la visita ya no existe";
+    const alive = args.appointment.status === "PENDING" || args.appointment.status === "CONFIRMED";
+    if (!alive) return "la visita ya no está vigente";
+    if (args.appointment.startAt.getTime() <= args.now.getTime()) {
+      return "la visita ya empezó o ya pasó";
+    }
+  }
+  return null;
+}
+
+/**
+ * El aviso de la fila tal como entra en {{2}} de `dc_barber_turno_fila`.
+ *
+ * El cuerpo que redacta walkInNotifyBody() (agenda.ts) ya nombra a la
+ * barbería y a veces cierra con "Te esperamos en la silla." — y la plantilla
+ * dice las dos cosas por su cuenta. Mandarlo tal cual entregaba «Aviso de tu
+ * turno en El Corte: Luis, ya es tu turno en El Corte. Te esperamos en la
+ * silla. Te esperamos en la silla.» Aquí se quita lo repetido; el texto
+ * libre (ventana abierta) sigue saliendo completo.
+ */
+export function walkInTemplateNotice(shopName: string, body: string): string {
+  let text = String(body ?? "").replace(/\s+/g, " ").trim();
+  const name = String(shopName ?? "").trim();
+  if (name) text = text.split(` en ${name}`).join("");
+  text = text.replace(/\s*Te esperamos en la silla\.?\s*$/i, "").trim();
+  return text || "Ya casi es tu turno.";
+}
+
+// ── Baja de promociones ─────────────────────────────────────────────────
+
+/**
+ * Llave reservada en BarberClient.preferences con la baja de campañas. Vive
+ * aquí (y campaigns.ts la reexporta) porque el EMISOR también tiene que
+ * respetarla: la baja se comprueba donde sale el mensaje, no solo donde se
+ * arma la lista.
+ */
+export const BARBER_WA_OPT_OUT_KEY = "__optout" as const;
+
+/** ¿Este cliente pidió no recibir promociones? */
+export function barberClientOptedOut(preferences: unknown): boolean {
+  if (!preferences || typeof preferences !== "object" || Array.isArray(preferences)) return false;
+  const node = (preferences as Record<string, unknown>)[BARBER_WA_OPT_OUT_KEY];
+  if (!node || typeof node !== "object" || Array.isArray(node)) return false;
+  const at = (node as Record<string, unknown>).at;
+  return typeof at === "string" && at.length > 0;
+}
+
+const OPT_OUT_EXACT = ["baja", "stop", "unsubscribe", "darme de baja", "dar de baja", "dame de baja"];
+const OPT_OUT_PHRASES = [
+  "no quiero promociones",
+  "no quiero publicidad",
+  "no me manden promociones",
+  "no me manden publicidad",
+  "no mas promociones",
+  "no mas publicidad",
+  "ya no me manden mensajes",
+  "ya no me escriban",
+  "dejen de escribirme",
+  "quiero darme de baja",
+];
+
+/**
+ * ¿El cliente está pidiendo que ya no le manden promociones?
+ *
+ * Las palabras sueltas ("baja", "stop") solo por igualdad EXACTA: un "me
+ * doy de baja de la fila" o un "stop, mejor el jueves" no pueden dar de
+ * baja a nadie.
+ */
+export function isBarberOptOutText(text: string): boolean {
+  const t = fold(String(text ?? "")).replace(/[.!¡]+$/g, "").trim();
+  if (!t) return false;
+  if (OPT_OUT_EXACT.includes(t)) return true;
+  return OPT_OUT_PHRASES.some((p) => t.includes(p));
+}
+
+/** Lo que se le contesta al cliente que pidió la baja. */
+export const BARBER_WA_OPT_OUT_REPLY =
+  "Listo, ya no te mandaremos promociones. Los avisos de tus citas te seguirán llegando. 👌";
+
 // ── Respuesta del cliente al recordatorio ───────────────────────────────
 
 /**
@@ -481,6 +672,25 @@ export function classifyBarberReply(text: string): BarberWaReply {
   if (has(["confirmar", "confirmo", "confirmado", "ahi estare", "ahí estaré"])) return "confirm";
 
   return "unclear";
+}
+
+/** Respuestas que solo significan algo según lo último que se dijo. */
+const BARE_REPLY_WORDS = ["si", "sip", "ok", "okay", "va", "vale", "claro", "de acuerdo"];
+
+/**
+ * ¿La respuesta es una palabra SUELTA ("sí", "ok", "1") que por sí sola no
+ * dice a qué contesta?
+ *
+ * 🔴 Con el bot encendido, un "sí" puede ser la respuesta a «¿te agendo a
+ * las 5?» y no al recordatorio de la visita de mañana. Estas respuestas solo
+ * cuentan como respuesta al recordatorio cuando el recordatorio fue LO
+ * ÚLTIMO que le dijimos a ese número (ver applyReminderReply). Las palabras
+ * explícitas —CONFIRMAR, CANCELAR, CAMBIAR— valen siempre.
+ */
+export function isBareBarberReply(text: string): boolean {
+  const t = fold(String(text ?? ""));
+  if (t === "1" || t === "2" || t === "3") return true;
+  return BARE_REPLY_WORDS.includes(t);
 }
 
 // ── Programar recordatorios: la decisión, sin BD ────────────────────────
