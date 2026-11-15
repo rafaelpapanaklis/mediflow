@@ -780,4 +780,7 @@ body:has(.barber-shell) {
 @container (max-width: 719px) {
   :root .barber-panel .bd-band > .kpi--hero { grid-column: 1 / -1; }
   :root .barber-panel .bd-band > .kpi { padding: 14px; }
+  /* Con la hero a lo ancho y un número PAR de celdas, la última quedaba
+     sola con un hueco al lado (Caja: 4 cifras). Esa se estira. */
+  :root .barber-panel .bd-band > .kpi--hero:first-child ~ .kpi:last-child:nth-child(even) { grid-column: 1 / -1; }
 }

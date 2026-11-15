@@ -349,3 +349,88 @@
     color: var(--text-3);
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   REDISEÑO D · tanda 3 — CAJA (15-nov-2026). Mismos tamaños de letra.
+   Todo cuelga de .bcaja-page--caja (solo la raíz de caja-client.tsx):
+   este archivo también lo cargan Productos, Comisiones y la Agenda, y
+   ellos no cambian. Las cifras van en la banda de bd-band y las tarjetas
+   y tablas con bd-page (barber-theme.css).
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* Estado del turno: tarjeta del tema, punto verde con halo por token. */
+.barber-shell .bcaja-page--caja .bcaja-session {
+  border-radius: var(--radius-lg);
+  border-color: var(--border-soft);
+}
+.barber-shell .bcaja-page--caja .bcaja-session__dot {
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--success) 18%, transparent);
+}
+.barber-shell .bcaja-page--caja .bcaja-session__dot--off { box-shadow: none; }
+.barber-shell .bcaja-page--caja .bcaja-session__meta strong { color: var(--text-1); font-weight: 650; }
+
+/* Por método de pago: pastillas quietas (antes con el ámbar del «bajo
+   mínimo» de Productos de base, tapado en línea). */
+.barber-shell .bcaja-page--caja .bcaja-low__item {
+  border-radius: 999px;
+  font-weight: 500;
+}
+
+/* Citas por cobrar: renglones con raya fina en vez de cajas sueltas. */
+.barber-shell .bcaja-page--caja .bcaja-appt {
+  padding: 10px 2px;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+}
+.barber-shell .bcaja-page--caja .bcaja-appt:first-child { border-top: 0; padding-top: 0; }
+.barber-shell .bcaja-page--caja .bcaja-appt:hover { box-shadow: none; }
+.barber-shell .bcaja-page--caja .bcaja-appt__time { color: var(--brand-ink); font-weight: 650; white-space: nowrap; flex: none; }
+.barber-shell .bcaja-page--caja .bcaja-appt__price { color: var(--text-1); font-weight: 650; }
+
+/* Tickets cancelados: tachados pero legibles (antes --text-4, decorativo). */
+.barber-shell .bcaja-page--caja .bcaja-strike { color: var(--text-3); }
+
+/* Las tablas miden su propia tarjeta (no la página): así «Tickets del
+   turno», que en escritorio va en la columna derecha, también se vuelve
+   ficha cuando esa columna es angosta. */
+.barber-shell .bcaja-page--caja .bcaja-table-wrap { container: bcaja-tabla / inline-size; }
+
+@container bcaja-tabla (max-width: 640px) {
+  .barber-shell .bcaja-tickets thead { display: none; }
+  .barber-shell .bcaja-tickets,
+  .barber-shell .bcaja-tickets tbody { display: block; width: 100%; }
+  .barber-shell .bcaja-tickets tr {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px 16px;
+    padding: 12px 16px;
+    border-top: 1px solid var(--line);
+  }
+  .barber-shell .bcaja-tickets tr:first-child { border-top: 0; }
+  .barber-shell .bcaja-table-wrap .bcaja-tickets td {
+    display: block;
+    padding: 0;
+    border: 0;
+    white-space: normal;
+    text-align: left;
+    min-width: 0;
+    max-width: none !important; /* el «Conceptos» trae max-width en línea */
+  }
+  .barber-shell .bcaja-tickets td:nth-child(4) { grid-column: 1 / -1; }
+  .barber-shell .bcaja-tickets td:nth-child(8) { grid-column: 1 / -1; justify-self: end; }
+  /* Cancelado en ficha: el tachado del renglón también tacharía las
+     etiquetas; se tacha solo el total y la ficha va en gris. */
+  .barber-shell .bcaja-tickets tr.bcaja-strike { text-decoration: none; }
+  .barber-shell .bcaja-tickets tr.bcaja-strike td:nth-child(7) strong { text-decoration: line-through; }
+  .barber-shell .bcaja-tickets td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 1px;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-3);
+    text-decoration: none;
+  }
+}
