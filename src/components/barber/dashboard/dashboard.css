@@ -510,3 +510,164 @@
 .barber-shell .bdash-num { text-align: right; font-variant-numeric: tabular-nums; }
 .barber-shell .bdash-muted { color: var(--text-3); }
 .barber-shell .bdash-card-actions { display: inline-flex; gap: 6px; align-items: center; }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   INICIO — rediseño D (15-nov-2026, aprobado por Rafael).
+   Mismos tamaños de letra que el panel de hoy; cambia la jerarquía:
+   una banda de cifras en vez de 4 cajas iguales, líneas en vez de cajas
+   dentro de las tarjetas, «En silla» con la silla del oficio y lo urgente
+   en rojo. Clases propias (.bdash-band, .bdash-upcoming, .bdash-alerts)
+   para no mover Reportes, que comparte .bdash-row y .bdash-kpis.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* Encabezado de las tarjetas de Inicio: sin la raya de debajo; el título manda. */
+.barber-shell .bdash-page .card__header {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+.barber-shell .bdash-page .card__header + .card__body {
+  padding-top: 12px;
+}
+
+/* ── Banda de cifras (punto 10) ── */
+.barber-shell .bdash-band {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+@container bdash (min-width: 720px) {
+  .barber-shell .bdash-band { grid-template-columns: minmax(0, 1.5fr) repeat(3, minmax(0, 1fr)); }
+}
+.barber-shell .bdash-band__cell {
+  min-width: 0;
+  padding: 14px 12px;
+  border-top: 1px solid var(--line);
+}
+.barber-shell .bdash-band__cell + .bdash-band__cell:not(:nth-child(2)) { border-left: 1px solid var(--line); }
+.barber-shell .bdash-band__cell--hero {
+  grid-column: 1 / -1;
+  padding: 16px 18px;
+  border-top: 0;
+  background: var(--brand-softer);
+}
+@container bdash (min-width: 720px) {
+  .barber-shell .bdash-band__cell { padding: 16px 18px; border-top: 0; }
+  .barber-shell .bdash-band__cell--hero { grid-column: auto; }
+  .barber-shell .bdash-band__cell + .bdash-band__cell { border-left: 1px solid var(--line); }
+}
+.barber-shell .bdash-band__label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-3);
+}
+.barber-shell .bdash-band__label svg { flex: none; color: var(--caramel-600); }
+@container bdash (max-width: 719px) {
+  .barber-shell .bdash-band__cell:not(.bdash-band__cell--hero) .bdash-band__label svg { display: none; }
+}
+.barber-shell .bdash-band__value {
+  margin-top: 6px;
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  color: var(--text-1);
+}
+/* El valor que manda conserva los 28 px de la KpiCard de hoy; los demás bajan. */
+.barber-shell .bdash-band__cell--hero .bdash-band__value { font-size: 28px; font-weight: 650; }
+.barber-shell .bdash-cents { font-size: 0.55em; font-weight: 500; letter-spacing: 0; color: var(--text-3); }
+.barber-shell .bdash-band__hint { margin-top: 4px; font-size: 11.5px; line-height: 1.4; color: var(--text-3); }
+.barber-shell .bdash-band__delta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 600;
+}
+.barber-shell .bdash-band__delta span { font-weight: 500; color: var(--text-3); }
+.barber-shell .bdash-band__delta--up { background: var(--success-soft); color: var(--success); }
+.barber-shell .bdash-band__delta--down { background: var(--danger-soft); color: var(--danger); }
+
+/* ── Chips de conteo: borde de línea, «En silla» con su silla ── */
+.barber-shell .bdash-page .bdash-chip { border: 1px solid var(--line); background: var(--bg-elev-2); }
+.barber-shell .bdash-chip__icon { color: var(--caramel-600); }
+
+/* ── Avisos: raya de color a la izquierda en vez de caja (punto 15) ── */
+.barber-shell .bdash-page .bdash-callout { border: 0; border-radius: var(--radius-md); }
+.barber-shell .bdash-page .bdash-callout--danger { box-shadow: inset 3px 0 0 var(--danger); }
+.barber-shell .bdash-callout__cta { flex: none; }
+
+/* ── Próximas visitas: renglones con línea; «En silla» sombreado (punto 14) ── */
+.barber-shell .bdash-upcoming { list-style: none; margin: 0; padding: 0; }
+.barber-shell .bdash-upcoming__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+.barber-shell .bdash-upcoming__row:first-child { border-top: 0; padding-top: 2px; }
+.barber-shell .bdash-upcoming__row--chair {
+  margin: 0 -18px;
+  padding: 10px 18px;
+  border-top-color: transparent;
+  background: var(--brand-softer);
+}
+.barber-shell .bdash-upcoming__row--chair:first-child { padding-top: 10px; }
+.barber-shell .bdash-upcoming__row--chair + .bdash-upcoming__row { border-top-color: transparent; }
+.barber-shell .bdash-upcoming__time {
+  flex: none;
+  width: 64px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.barber-shell .bdash-upcoming__time span { display: block; font-size: 11.5px; font-weight: 500; color: var(--text-3); }
+.barber-shell .bdash-badge-chair {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--brand-soft);
+  color: var(--caramel-800);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.barber-shell .bdash-page .bdash-foot { border-top: 1px solid var(--line); }
+
+/* ── Fila virtual: el mismo icono que su entrada del menú ── */
+.barber-shell .bdash-queue__icon {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  display: grid;
+  place-items: center;
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+
+/* ── Pendientes: renglones con línea; el aviso, debajo de su texto ── */
+.barber-shell .bdash-alerts { display: flex; flex-direction: column; }
+.barber-shell .bdash-alerts .bdash-alert {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  align-items: start;
+  column-gap: 12px;
+  row-gap: 4px;
+  padding: 12px 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+}
+.barber-shell .bdash-alerts .bdash-alert:first-child { border-top: 0; padding-top: 2px; }
+.barber-shell .bdash-alerts .bdash-alert__cta { grid-column: 2; justify-self: start; }
+.barber-shell .bdash-alert__icon--urgent { background: var(--danger-soft); color: var(--danger); }

@@ -1,6 +1,8 @@
 import Link from "next/link";
 import {
+  ArrowDownRight,
   ArrowRight,
+  ArrowUpRight,
   BarChart3,
   CalendarClock,
   CalendarDays,
@@ -13,14 +15,12 @@ import {
   Package,
   Receipt,
   Scissors,
-  Timer,
   Users,
   Wallet,
   type LucideIcon,
 } from "lucide-react";
-import { KpiCard } from "@/components/ui/design-system/kpi-card";
+import { BarberIcon } from "@/components/barber/barber-icons";
 import { CardNew } from "@/components/ui/design-system/card-new";
-import { BadgeNew } from "@/components/ui/design-system/badge-new";
 import type { TFunction } from "@/i18n/t";
 import type { InicioSummary } from "@/lib/barber/stats";
 import { fmtInt, fmtLongDay, fmtMoney, fmtPctSigned, fmtTime, weekdayOfKey } from "./format";
@@ -214,33 +214,36 @@ export function InicioView({
           </div>
         </CardNew>
       ) : (
-        <div className="bdash-kpis">
-          <KpiCard
+        // Rediseño D (punto 10): UNA tarjeta con cuatro celdas separadas por
+        // líneas, y el ingreso del día manda. Mismos datos que las 4 KpiCard
+        // de antes; markup propio para no tocar el KpiCard del dental.
+        <section className="card bdash-band">
+          <BandCell
+            hero
             label={k(s.scope.selfOnly ? "kpi.revenueSelf" : "kpi.revenue")}
             value={fmtMoney(s.scope.selfOnly ? s.today.produced : s.today.revenue)}
             icon={Wallet}
-            hero
             hint={revenueHint}
             delta={revenueDelta}
           />
           {v ? (
-            <KpiCard
+            <BandCell
               label={k("kpi.visits")}
               value={fmtInt(v.total, locale)}
               icon={Users}
               hint={k("kpi.visitsHint", { count: v.done, done: v.done, pending: v.pending + v.inProgress })}
             />
           ) : (
-            <KpiCard label={k("kpi.tips")} value={fmtMoney(s.today.tips)} icon={Scissors} hint={k("kpi.tipsHint")} />
+            <BandCell label={k("kpi.tips")} value={fmtMoney(s.today.tips)} icon={Scissors} hint={k("kpi.tipsHint")} />
           )}
-          <KpiCard label={k("kpi.tickets")} value={fmtInt(s.today.tickets, locale)} icon={Receipt} hint={k("kpi.ticketsHint")} />
-          <KpiCard
+          <BandCell label={k("kpi.tickets")} value={fmtInt(s.today.tickets, locale)} icon={Receipt} hint={k("kpi.ticketsHint")} />
+          <BandCell
             label={k("kpi.avgTicket")}
             value={s.today.avgTicket === null ? "—" : fmtMoney(s.today.avgTicket)}
             icon={BarChart3}
             hint={k(s.scope.selfOnly ? "kpi.avgTicketHintSelf" : "kpi.avgTicketHint")}
           />
-        </div>
+        </section>
       )}
 
       <div className="bdash-grid">
@@ -262,7 +265,7 @@ export function InicioView({
                     <span className="bdash-chip bdash-chip--success"><span className="bdash-chip__dot" /> {k("visits.done")} <span className="bdash-chip__n">{v.done}</span></span>
                     <span className="bdash-chip bdash-chip--info"><span className="bdash-chip__dot" /> {k("visits.pending")} <span className="bdash-chip__n">{v.pending}</span></span>
                     {v.inProgress > 0 && (
-                      <span className="bdash-chip bdash-chip--brand"><span className="bdash-chip__dot" /> {k("visits.inProgress")} <span className="bdash-chip__n">{v.inProgress}</span></span>
+                      <span className="bdash-chip bdash-chip--brand"><BarberIcon name="silla" size={13} className="bdash-chip__icon" /> {k("visits.inProgress")} <span className="bdash-chip__n">{v.inProgress}</span></span>
                     )}
                     {v.cancelled > 0 && (
                       <span className="bdash-chip"><span className="bdash-chip__dot" /> {k("visits.cancelled")} <span className="bdash-chip__n">{v.cancelled}</span></span>
@@ -299,24 +302,33 @@ export function InicioView({
               {s.upcoming.length === 0 ? (
                 <div className="bdash-empty">{k("upcoming.empty")}</div>
               ) : (
-                <div className="bdash-list">
-                  {s.upcoming.map((u) => (
-                    <div className="bdash-row" key={u.id}>
-                      <div className="bdash-row__time">{fmtTime(u.startAt, tz)}</div>
-                      <div className="bdash-row__main">
-                        <div className="bdash-row__name">{u.clientName ?? k("upcoming.noClient")}</div>
-                        <div className="bdash-row__meta">
-                          {u.barberName ?? k("upcoming.noBarber")} · {u.services || k("upcoming.noServices")}
+                // Rediseño D (punto 14): renglones con línea, no cajitas; el
+                // que está «En silla» se sombrea y lleva la silla del oficio.
+                <ul className="bdash-upcoming">
+                  {s.upcoming.map((u) => {
+                    const inChair = u.status === "IN_PROGRESS";
+                    const [hora, ...sufijo] = fmtTime(u.startAt, tz).split(" ");
+                    return (
+                      <li className={`bdash-upcoming__row${inChair ? " bdash-upcoming__row--chair" : ""}`} key={u.id}>
+                        <div className="bdash-upcoming__time">
+                          {hora}
+                          {sufijo.length > 0 && <span> {sufijo.join(" ")}</span>}
                         </div>
-                      </div>
-                      {u.status === "IN_PROGRESS" && (
-                        <BadgeNew tone="brand" dot>
-                          {k("upcoming.inChair")}
-                        </BadgeNew>
-                      )}
-                    </div>
-                  ))}
-                </div>
+                        <div className="bdash-row__main">
+                          <div className="bdash-row__name">{u.clientName ?? k("upcoming.noClient")}</div>
+                          <div className="bdash-row__meta">
+                            {u.barberName ?? k("upcoming.noBarber")} · {u.services || k("upcoming.noServices")}
+                          </div>
+                        </div>
+                        {inChair && (
+                          <span className="bdash-badge-chair">
+                            <BarberIcon name="silla" size={13} /> {k("upcoming.inChair")}
+                          </span>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
               )}
               {a.tomorrowTotal !== null && (
                 <div className="bdash-foot">
@@ -351,7 +363,7 @@ export function InicioView({
                   <div className="bdash-status">
                     <span className="bdash-status__dot" /> {k("cash.open")}
                   </div>
-                  <div className="bdash-big" style={{ marginTop: 10 }}>{fmtMoney(c.expectedCash)}</div>
+                  <div className="bdash-big" style={{ marginTop: 10 }}><Money value={fmtMoney(c.expectedCash)} /></div>
                   <div className="bdash-big__label">
                     {k("cash.expected")} · {k("cash.expectedHint", { opening: fmtMoney(c.openingAmount) })}
                   </div>
@@ -397,8 +409,8 @@ export function InicioView({
                 <div className="bdash-empty">{k("queue.empty")}</div>
               ) : (
                 <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                  <div className="bdash-alert__icon" style={{ background: "var(--brand-soft)", color: "var(--brand)", width: 40, height: 40 }}>
-                    <Timer size={20} aria-hidden />
+                  <div className="bdash-queue__icon">
+                    <BarberIcon name="silla" size={20} />
                   </div>
                   <div>
                     <div className="bdash-big">{q.waiting}</div>
@@ -439,12 +451,15 @@ function AlertsBody({
     );
   }
   return (
-    <div className="bdash-list">
+    <div className="bdash-alerts">
       {items.map((it) => {
         const Icon = it.icon;
+        // Rediseño D (punto 15): primero lo que cuesta dinero. Un barbero sin
+        // horario no sale en la reserva en línea → rojo; lo demás, ámbar.
+        const urgent = it.key === "schedule";
         return (
           <div className="bdash-alert" key={it.key}>
-            <div className="bdash-alert__icon">
+            <div className={`bdash-alert__icon${urgent ? " bdash-alert__icon--urgent" : ""}`}>
               <Icon size={16} aria-hidden />
             </div>
             <div className="bdash-alert__body">
@@ -457,6 +472,59 @@ function AlertsBody({
           </div>
         );
       })}
+    </div>
+  );
+}
+
+/**
+ * Dinero con los centavos en chico: «$990» manda y «.00» acompaña
+ * (rediseño D, punto 10). Si el texto no termina en centavos (p. ej. «—»)
+ * se pinta tal cual.
+ */
+function Money({ value }: { value: string }) {
+  const m = /^(.*?)([.,]\d{2})$/.exec(value);
+  if (!m) return <>{value}</>;
+  return (
+    <>
+      {m[1]}
+      <small className="bdash-cents">{m[2]}</small>
+    </>
+  );
+}
+
+/** Una celda de la banda de cifras de Inicio (antes, una KpiCard). */
+function BandCell({
+  label,
+  value,
+  icon: Icon,
+  hint,
+  delta,
+  hero,
+}: {
+  label: string;
+  value: string;
+  icon: LucideIcon;
+  hint?: string;
+  delta?: { value: string; direction: "up" | "down"; sub?: string };
+  hero?: boolean;
+}) {
+  return (
+    <div className={`bdash-band__cell${hero ? " bdash-band__cell--hero" : ""}`}>
+      <div className="bdash-band__label">
+        <Icon size={15} aria-hidden />
+        {label}
+      </div>
+      <div className="bdash-band__value">
+        <Money value={value} />
+      </div>
+      {hint && <div className="bdash-band__hint">{hint}</div>}
+      {delta && (
+        <div className={`bdash-band__delta bdash-band__delta--${delta.direction}`}>
+          {delta.direction === "up" ? <ArrowUpRight size={13} aria-hidden /> : <ArrowDownRight size={13} aria-hidden />}
+          {delta.value}
+          {delta.sub && <span>{delta.sub}</span>}
+        </div>
+      )}
     </div>
   );
 }
