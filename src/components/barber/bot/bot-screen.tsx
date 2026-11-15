@@ -494,7 +494,7 @@ function prettyPhone(phone: string): string {
   return phone ? formatBarberPhone(phone) : "—";
 }
 
-/** Igual que formatWhen: con la zona de la barbería, servidor y navegador coinciden (#418). */
+/** Igual que formatWhen: con la zona de la barbería, servidor y navegador coinciden (error 418 de hidratación). */
 function shortWhen(iso: string, locale: string, timeZone?: string | null): string {
   return formatBarberShortWhen(iso, locale, timeZone);
 }

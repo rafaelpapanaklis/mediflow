@@ -49,7 +49,7 @@ export function BarberWhatsAppScreen({
 }: {
   dict: Dictionary;
   locale: string;
-  /** Zona de la barbería: las fechas salen igual en servidor y navegador (#418). */
+  /** Zona de la barbería: las fechas salen igual en servidor y navegador (error 418 de hidratación). */
   timezone?: string | null;
   initial: WaStatusPayload;
   /** El acuse automático (apagado por defecto). Sin dato = no se pinta. */

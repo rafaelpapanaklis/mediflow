@@ -431,7 +431,7 @@ export function useSaving() {
  * Fecha corta legible. Con `timeZone` (la de la barbería) el texto es el MISMO
  * en el servidor y en el navegador: sin ella, el servidor (UTC en Vercel)
  * y el navegador (hora de México) escribían horas distintas y React tiraba el
- * HTML del servidor (error #418 de hidratación, QA C 15-nov). Sin `timeZone`
+ * HTML del servidor (error 418 de hidratación, QA C 15-nov). Sin `timeZone`
  * se comporta como antes.
  */
 export function formatWhen(iso: string, locale: string, timeZone?: string | null): string {
