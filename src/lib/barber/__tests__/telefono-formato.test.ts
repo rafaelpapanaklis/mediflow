@@ -65,7 +65,7 @@ test("Mensajes, clientes, agenda, caja, fila y demás escriben con formatBarberP
     "src/components/barber/campanas/ui.tsx",
     "src/components/barber/clients/ui.tsx", // lista y ficha (prettyPhone → formatBarberPhone)
     "src/components/barber/bot/bot-screen.tsx",
-    "src/components/barber/agenda/appointment-detail.tsx",
+    "src/components/barber/agenda/cita-piezas.tsx", // la ventana de la cita (B) pinta el teléfono aquí
     "src/components/barber/agenda/appointment-dialog.tsx",
     "src/components/barber/cash/ticket-modal.tsx",
     "src/components/barber/walkin/walkin-panel.tsx",
@@ -86,7 +86,7 @@ test("Solicitudes, la fila del panel y la ficha de la visita escriben el teléfo
   const casos: Array<[string, RegExp]> = [
     ["src/app/barber/(panel)/solicitudes/solicitudes-client.tsx", /<Phone size=\{14\} \/> \{formatBarberPhone\(r\.clientPhone\)\}/],
     ["src/components/barber/walkin/walkin-panel.tsx", /formatBarberPhone\(row\.phone\)/],
-    ["src/components/barber/agenda/appointment-detail.tsx", /\{formatBarberPhone\(appt\.clientPhone\)\}/],
+    ["src/components/barber/agenda/cita-piezas.tsx", /\{formatBarberPhone\(appt\.clientPhone\)\}/],
   ];
   for (const [archivo, re] of casos) {
     const s = readFileSync(archivo, "utf8");
