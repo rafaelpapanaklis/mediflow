@@ -799,3 +799,85 @@
   --camp-warn: #e0a558;
   --camp-bad: #ef8b7f;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   REDISEÑO D · tanda 2 (15-nov-2026). Mismos tamaños de letra.
+   Pestañas subrayadas, resultados en una banda, sin MAYÚSCULAS, tokens.
+   ═══════════════════════════════════════════════════════════════════════ */
+/* Los tres semánticos propios pasan a los del tema (antes hex). */
+.page,
+:global(.dark) .page {
+  --camp-ok: var(--success);
+  --camp-warn: var(--warning);
+  --camp-bad: var(--danger);
+}
+
+/* Pestañas: subrayado, no caja dentro de caja (como Barberos/Equipo). */
+.tabs {
+  padding: 0;
+  gap: 2px;
+  border: 0;
+  border-bottom: 1px solid var(--border-soft);
+  border-radius: 0;
+  background: transparent;
+}
+.tab {
+  margin-bottom: -1px;
+  padding: 10px 12px;
+  border-radius: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--text-3);
+}
+.tab:focus-visible { border-radius: var(--radius-sm); }
+.tabActive {
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-1);
+  border-bottom-color: var(--brand);
+}
+
+/* Tarjetas y bloques con los radios del tema. */
+.audienceCard,
+.targets,
+.promo,
+.templateCard,
+.cooldown,
+.optoutList { border-radius: var(--radius-lg); }
+.previewBox,
+.templateBody { border-radius: var(--radius-md); }
+.cost,
+.confirmCost { border-radius: var(--radius-lg); }
+.audienceCard:hover { border-color: var(--border-strong); background: var(--bg-elev-2); }
+
+/* Resultados: las cifras en UNA tarjeta con celdas separadas por raya. */
+.totals {
+  gap: 1px;
+  background: var(--border-soft);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-1);
+}
+.stat {
+  border: 0;
+  border-radius: 0;
+  background: var(--bg-elev);
+}
+.stat:last-child { grid-column-end: -1; }
+.statStrong {
+  background: linear-gradient(var(--brand-softer), var(--brand-softer)), var(--bg-elev);
+}
+.statValue { font-weight: 650; }
+
+/* Sin MAYÚSCULAS espaciadas en etiquetas ni en la tabla. */
+.previewLabel,
+.costLabel,
+.statLabel,
+.table thead th {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-3);
+}
+.tableWrap { border-radius: var(--radius-lg); }
