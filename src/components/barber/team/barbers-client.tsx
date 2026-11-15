@@ -121,7 +121,11 @@ export function BarbersClient({
     ? t("barbers.seatUnlimited", { used, plan: seat.planName })
     : t("barbers.seat", { used, max: seat.max, plan: seat.planName });
 
-  const writeBranchId = activeBranchId ?? branches[0]?.id ?? "";
+  // Alta por defecto en la sede que se ve, salvo que esté cerrada: entonces la
+  // primera abierta (una sede cerrada no recibe altas).
+  const openBranches = branches.filter((b) => b.isActive);
+  const writeBranchId =
+    (activeBranchId && openBranches.some((b) => b.id === activeBranchId) ? activeBranchId : openBranches[0]?.id) ?? activeBranchId ?? branches[0]?.id ?? "";
   const canCreate = seatCanCreate && !isConsolidated;
 
   function patch(next: Partial<FormState>) {
@@ -551,8 +555,10 @@ export function BarbersClient({
                   onChange={(e) => patch({ barbershopId: e.target.value })}
                 >
                   {branches.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.label}
+                    // Una sede cerrada no recibe altas (el servidor responde 409):
+                    // se ve, marcada, pero no se puede elegir (QA B, 15-nov).
+                    <option key={b.id} value={b.id} disabled={!b.isActive}>
+                      {b.isActive ? b.label : `${b.label} (${t("branch.closed").toLowerCase()})`}
                     </option>
                   ))}
                 </Select>

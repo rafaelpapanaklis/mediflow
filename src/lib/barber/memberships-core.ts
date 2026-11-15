@@ -120,6 +120,74 @@ export function daysUntil(endAt: Date, now: Date): number {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// Periodos (decisión D1 de Rafael, 15-nov-2026)
+// ═══════════════════════════════════════════════════════════════════════
+//
+// «Tiene 2 meses de membresía, tendría enero y febrero, 4 cortes y 4
+// cortes.» Cada periodo PAGADO es una fila de barber_client_memberships con
+// sus fechas y su cupo: renovar antes de que venza AGREGA una fila que empieza
+// donde termina la última, en vez de reiniciar el cupo de toda la ventana.
+//  · Los cortes se gastan del periodo VIGENTE (startAt ≤ ahora < endAt).
+//  · Los del siguiente se ven como «próximo periodo» y no se pueden adelantar.
+//  · Si un periodo vence con cortes sin usar, se pierden (como en un mes
+//    normal): el siguiente arranca con los suyos.
+//  · LEGADO: antes del cambio, renovar antes de tiempo movía startAt al
+//    futuro en la MISMA fila. Esa fila no tiene un periodo anterior que
+//    termine en su startAt, así que sigue cubriendo desde ya con su contador:
+//    nadie pierde cortes y no hace falta convertir datos.
+
+export interface MembershipPeriodRow {
+  id: string;
+  status: string;
+  startAt: Date;
+  endAt: Date;
+  cutsUsed: number;
+  /** Plan; las filas de planes distintos no se encadenan entre sí. */
+  membershipId?: string;
+}
+
+/** ¿Algún periodo NO cancelado de la misma cadena termina justo donde empieza éste? */
+function hasPredecessor<T extends MembershipPeriodRow>(row: T, rows: readonly T[]): boolean {
+  return rows.some(
+    (o) =>
+      o.id !== row.id &&
+      o.status !== "CANCELLED" &&
+      (row.membershipId === undefined || o.membershipId === row.membershipId) &&
+      o.endAt.getTime() === row.startAt.getTime(),
+  );
+}
+
+/**
+ * El periodo VIGENTE de un cliente (o null): activo, sin vencer y ya empezado
+ * — o una fila de legado (ver arriba). Recibe TODAS las filas del cliente que
+ * se tengan a mano; las vencidas o canceladas solo sirven para reconocer la
+ * cadena.
+ */
+export function pickCurrentPeriod<T extends MembershipPeriodRow>(rows: readonly T[], now: Date): T | null {
+  const live = rows
+    .filter((r) => r.status === "ACTIVE" && r.endAt.getTime() > now.getTime())
+    .sort((a, b) => a.startAt.getTime() - b.startAt.getTime());
+  for (const r of live) {
+    if (r.startAt.getTime() <= now.getTime()) return r;
+    if (!hasPredecessor(r, rows)) return r; // legado: renovada antes del cambio
+  }
+  return null;
+}
+
+/** Periodos pagados que todavía no empiezan (los «próximos»), en orden. */
+export function upcomingPeriods<T extends MembershipPeriodRow>(rows: readonly T[], now: Date): T[] {
+  const current = pickCurrentPeriod(rows, now);
+  return rows
+    .filter(
+      (r) =>
+        r.id !== current?.id &&
+        (r.status === "ACTIVE" || r.status === "PAUSED") &&
+        r.startAt.getTime() > now.getTime(),
+    )
+    .sort((a, b) => a.startAt.getTime() - b.startAt.getTime());
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // Estado de la membresía de un cliente
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -371,7 +439,12 @@ export type BarberSaleTag =
   | { k: "refund"; appt: string }
   | {
       k: "membership";
-      op: "sell" | "renew";
+      /**
+       * sell = venta; renew = renovación que REINICIÓ la misma fila (ya
+       * vencida); extend = renovación anticipada que agregó un periodo NUEVO
+       * (fila propia, con sus fechas y su cupo — decisión D1, 15-nov).
+       */
+      op: "sell" | "renew" | "extend";
       /** id de BarberClientMembership. */
       cm: string;
       /** endAt que dejó este ticket: si ya no coincide, alguien la movió después. */
@@ -417,7 +490,7 @@ export function parseSaleTag(notes: string | null | undefined): BarberSaleTag | 
       }
       if (
         raw.k === "membership" &&
-        (raw.op === "sell" || raw.op === "renew") &&
+        (raw.op === "sell" || raw.op === "renew" || raw.op === "extend") &&
         typeof raw.cm === "string" &&
         raw.cm &&
         typeof raw.end === "string"
@@ -635,6 +708,11 @@ export interface BarberClientMembershipView {
   daysLeft: number;
   price: number;
   periodDays: number;
+  /**
+   * Periodos ya pagados que empiezan cuando termina éste (renovación
+   * anticipada, D1). Cada uno trae SU cupo; no se gastan antes de tiempo.
+   */
+  nextPeriods?: Array<{ id: string; startAt: string; endAt: string; includedCuts: number | null }>;
 }
 
 /** Resultado de intentar cubrir una visita con la membresía. */

@@ -98,8 +98,10 @@ import {
   isDepositLine,
   isDepositRefundLine,
   parseSaleTag,
+  pickCurrentPeriod,
   saleKindOf,
   stripSaleTag,
+  upcomingPeriods,
   type BarberSaleKind,
   type BarberSaleTag,
 } from "@/lib/barber/memberships-core";
@@ -301,6 +303,11 @@ export interface ClientLookup {
     cutsLeft: number | null;
     endAt: string;
   } | null;
+  /**
+   * Próximo periodo YA PAGADO (renovación anticipada, D1): empieza cuando
+   * termina el vigente y trae su propio cupo. No se gasta antes de tiempo.
+   */
+  nextMembershipPeriod?: { startAt: string; includedCuts: number | null; periods: number } | null;
 }
 
 export interface PendingAppointment {
@@ -644,8 +651,10 @@ function toClientLookup(c: {
   memberships: Array<{
     id: string;
     status: string;
+    startAt: Date;
     endAt: Date;
     cutsUsed: number;
+    membershipId: string;
     membership: { name: string; includedCuts: number | null };
   }>;
 }, now: Date, rule: LoyaltyRule, freshCount?: number, bonuses: StarBonus[] = [legacyBonus(rule)]): ClientLookup {
@@ -653,12 +662,14 @@ function toClientLookup(c: {
   // a la columna, que quien llama acaba de refrescar o va a validar aparte.
   const loyaltyCount = freshCount ?? c.loyaltyCount;
   const ready = rule.enabled ? availableBonuses(loyaltyCount, bonuses) : [];
-  const active = c.memberships.find(
-    (m) =>
-      m.status === "ACTIVE" &&
-      m.endAt > now &&
-      (m.membership.includedCuts === null || m.cutsUsed < m.membership.includedCuts),
-  );
+  // El periodo VIGENTE (D1): con renovaciones anticipadas hay varias filas
+  // activas y solo la que ya empezó se gasta; las demás son «próximo periodo».
+  const current = pickCurrentPeriod(c.memberships, now);
+  const active =
+    current && (current.membership.includedCuts === null || current.cutsUsed < current.membership.includedCuts)
+      ? current
+      : null;
+  const upcoming = upcomingPeriods(c.memberships, now);
   return {
     id: c.id,
     name: c.name,
@@ -679,6 +690,9 @@ function toClientLookup(c: {
           endAt: active.endAt.toISOString(),
         }
       : null,
+    nextMembershipPeriod: upcoming.length
+      ? { startAt: upcoming[0].startAt.toISOString(), includedCuts: upcoming[0].membership.includedCuts, periods: upcoming.length }
+      : null,
   };
 }
 
@@ -688,13 +702,15 @@ const clientLookupSelect = {
   phone: true,
   loyaltyCount: true,
   memberships: {
-    where: { status: "ACTIVE" as const },
-    orderBy: { endAt: "desc" as const },
+    where: { status: { in: ["ACTIVE", "PAUSED"] as Array<"ACTIVE" | "PAUSED"> } },
+    orderBy: { startAt: "asc" as const },
     select: {
       id: true,
       status: true,
+      startAt: true,
       endAt: true,
       cutsUsed: true,
+      membershipId: true,
       membership: { select: { name: true, includedCuts: true } },
     },
   },
@@ -1532,7 +1548,9 @@ async function revertMembershipTicketTx(
     );
   }
 
-  if (tag.op === "sell") {
+  // Venta, o renovación anticipada que agregó un periodo propio (D1): se
+  // cancela ESA fila; el periodo vigente queda como estaba.
+  if (tag.op === "sell" || tag.op === "extend") {
     await tx.barberClientMembership.updateMany({
       where: { id: row.id, barbershopId },
       data: { status: "CANCELLED" },

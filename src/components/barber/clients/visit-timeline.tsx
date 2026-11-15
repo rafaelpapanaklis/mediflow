@@ -73,7 +73,19 @@ export function VisitTimeline({
                   </Badge>
                 ) : null}
 
-                {entry.kind === "sale" ? <Badge>{t("history.walkIn")}</Badge> : null}
+                {entry.kind === "sale" ? (
+                  // Anticipo, su devolución y membresías son movimientos de
+                  // mostrador con nombre propio (D2): no «sin cita».
+                  <Badge>
+                    {entry.movement === "deposit"
+                      ? t("history.movementDeposit")
+                      : entry.movement === "refund"
+                        ? t("history.movementRefund")
+                        : entry.movement === "membership"
+                          ? t("history.movementMembership")
+                          : t("history.walkIn")}
+                  </Badge>
+                ) : null}
 
                 {/* El canje cobrado en caja (T6) también tiene que verse aquí. */}
                 {!isRedemption && entry.loyaltyRedeemed ? (

@@ -132,7 +132,10 @@
       "recurring": "Charge automatically each period (subscription)",
       "recurringHint": "The card is charged by itself each period, so you never have to chase anyone.",
       "cashHint": "A {amount} ticket is recorded in the open shift in Cash: it shows in the cash count, on Home and in Reports. You cannot sell without an open shift."
-    }
+    },
+    "nextPeriod": "Next period: {from} – {to} · {cuts}",
+    "nextPeriodCuts": "{count} cuts",
+    "nextPeriodUnlimited": "unlimited cuts"
   },
   "payment": {
     "CASH": "Cash",

@@ -184,6 +184,20 @@ export function SubscriptionsTab({
                       />
                     </div>
                   )}
+                  {/* Periodos ya pagados que siguen (renovación anticipada, D1):
+                      cada uno con su cupo, se gastan cuando empiecen. */}
+                  {(m.nextPeriods ?? []).map((p) => (
+                    <span key={p.id} className="bmem-cell-sub" data-proximo-periodo>
+                      {t("barber.membresias.clientes.nextPeriod", {
+                        from: new Date(p.startAt).toLocaleDateString(locale === "en" ? "en-US" : "es-MX", { day: "numeric", month: "short", timeZone: "America/Mexico_City" }),
+                        to: new Date(p.endAt).toLocaleDateString(locale === "en" ? "en-US" : "es-MX", { day: "numeric", month: "short", timeZone: "America/Mexico_City" }),
+                        cuts:
+                          p.includedCuts === null
+                            ? t("barber.membresias.clientes.nextPeriodUnlimited")
+                            : t("barber.membresias.clientes.nextPeriodCuts", { count: p.includedCuts }),
+                      })}
+                    </span>
+                  ))}
                 </div>
 
                 <div className="bmem-cell">

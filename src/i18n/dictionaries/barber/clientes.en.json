@@ -110,7 +110,9 @@
     "notesEmpty": "No notes.",
     "membershipUntil": "{name} membership until {date}",
     "portalOn": "This client can sign in to their portal.",
-    "birthdayOn": "Birthday on {month} {day}."
+    "birthdayOn": "Birthday on {month} {day}.",
+    "membershipCutsLeft": "{left} of {total} cuts left this period",
+    "membershipNext": "next one already paid: {date} to {until}, with its own cuts"
   },
   "block": {
     "block": "Block client",
@@ -223,7 +225,10 @@
       "NO_SHOW": "No-show",
       "CANCELLED": "Cancelled"
     },
-    "paidWithReward": "Paid with their reward"
+    "paidWithReward": "Paid with their reward",
+    "movementDeposit": "Deposit",
+    "movementRefund": "Deposit refund",
+    "movementMembership": "Membership"
   },
   "errors": {
     "generic": "Something went wrong. Try again.",

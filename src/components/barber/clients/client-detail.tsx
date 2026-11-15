@@ -294,6 +294,18 @@ export function BarberClientDetailScreen({
                         name: detail.membership.name,
                         date: formatDate(detail.membership.endAt, locale, timezone),
                       })}
+                      {detail.membership.includedCuts !== null
+                        ? ` · ${t("detail.membershipCutsLeft", {
+                            left: Math.max(detail.membership.includedCuts - detail.membership.cutsUsed, 0),
+                            total: detail.membership.includedCuts,
+                          })}`
+                        : ""}
+                      {detail.membership.nextPeriods && detail.membership.nextPeriods.length > 0
+                        ? ` · ${t("detail.membershipNext", {
+                            date: formatDate(detail.membership.nextPeriods[0].startAt, locale),
+                            until: formatDate(detail.membership.nextPeriods[detail.membership.nextPeriods.length - 1].endAt, locale),
+                          })}`
+                        : ""}
                     </span>
                   ) : null}
                 </div>

@@ -649,9 +649,28 @@ async function seedsForAudience(
       take: CAMPAIGN_AUDIENCE_MAX,
     });
 
+    // Quien ya pagó el periodo SIGUIENTE (renovación anticipada, D1: un
+    // periodo por fila) no está «por vencer» ni «vencido»: tiene una fila
+    // viva que termina después de la ventana. Se queda fuera.
+    const renewed = rows.length
+      ? new Set(
+          (
+            await prisma.barberClientMembership.findMany({
+              where: {
+                barbershopId,
+                clientId: { in: Array.from(new Set(rows.map((r) => r.clientId))) },
+                status: "ACTIVE",
+                endAt: { gt: audience === "membershipExpiring" ? horizon : now },
+              },
+              select: { clientId: true },
+            })
+          ).map((r) => r.clientId),
+        )
+      : new Set<string>();
+
     // Un cliente puede tener más de una membresía en la ventana: se queda
     // con la primera (la más urgente por el orderBy) y no se duplica.
-    const seen = new Set<string>();
+    const seen = new Set<string>(renewed);
     const seeds: AudienceSeed[] = [];
     for (const row of rows) {
       if (seen.has(row.clientId)) continue;

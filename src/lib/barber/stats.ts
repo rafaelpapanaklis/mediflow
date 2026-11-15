@@ -210,10 +210,13 @@ function liveSale(alias: string): Prisma.Sql {
 }
 
 /**
- * ¿Esta fila cuenta como un «ticket» en los CONTEOS de Inicio y Reportes
- * (Tickets y ticket promedio)? No cuenta la devolución de un anticipo: es un
- * ticket de subtotal NEGATIVO que devuelve dinero, no una venta. Solo afecta
- * al conteo; el ingreso sigue sumando (y restando) todas las filas vivas.
+ * ¿Esta fila es un ticket de VENTA (para el ticket PROMEDIO)? La devolución de
+ * un anticipo es un ticket de subtotal NEGATIVO: es un movimiento y SÍ se
+ * cuenta en «Tickets» (D2 de Rafael, 15-nov: «debe estar el ticket con el
+ * pago del anticipo y luego que fue reembolsado, o sea ambos movimientos»;
+ * así Caja, Inicio y Reportes dan el MISMO número), pero no entra al
+ * denominador del promedio: 3 cortes de $100 y una devolución de −$100 dan
+ * 4 movimientos, ingreso $200 y promedio $66.67 (200 ÷ 3 ventas).
  */
 function countsAsTicket(alias: string): Prisma.Sql {
   return Prisma.sql`${Prisma.raw(`${alias}."subtotal"`)} >= 0`;
@@ -403,6 +406,8 @@ export interface InicioSummary {
 interface DayMoneyRow {
   day: string;
   tickets: unknown;
+  /** Tickets de venta (sin devoluciones): denominador del promedio. */
+  sale_tickets?: unknown;
   subtotal: unknown;
   produced: unknown;
   tip: unknown;
@@ -512,7 +517,8 @@ export async function getInicioSummary(ctx: BarberContext, opts: InicioOptions =
   const [dayRows, todayAppointments, queueGroups, alertsRows, openSessionRows] = await Promise.all([
     prisma.$queryRaw<DayMoneyRow[]>`
       SELECT to_char(${localTs(tz, 's."createdAt"')}, 'YYYY-MM-DD') AS day,
-             COUNT(*) FILTER (WHERE ${liveSale("s")} AND ${countsAsTicket("s")})::int AS tickets,
+             COUNT(*) FILTER (WHERE ${liveSale("s")})::int AS tickets,
+             COUNT(*) FILTER (WHERE ${liveSale("s")} AND ${countsAsTicket("s")})::int AS sale_tickets,
              COALESCE(SUM(s."subtotal"), 0) AS subtotal,
              ${producedSum("s", "dc")} AS produced,
              COALESCE(SUM(s."tip"), 0) AS tip,
@@ -641,7 +647,8 @@ export async function getInicioSummary(ctx: BarberContext, opts: InicioOptions =
   // El promedio se saca de la cifra que la persona tiene delante: la barbería
   // ve su ingreso; el rol Barbero ve su producción (ver producedSum).
   const avgBase = selfOnly ? today.producedDec : today.revenueDec;
-  const avgTicket = today.tickets > 0 ? toNum(avgBase.div(today.tickets)) : null;
+  const todaySales = intOf(byDay.get(todayKey)?.sale_tickets ?? byDay.get(todayKey)?.tickets);
+  const avgTicket = todaySales > 0 ? toNum(avgBase.div(todaySales)) : null;
 
   // Visitas de hoy: conteos (no dinero) sobre las filas del día.
   let visits: InicioSummary["visits"] = null;
@@ -993,7 +1000,8 @@ export interface ReportsSummary {
   timezone: string;
   period: ReportPeriod;
   scope: InicioSummary["scope"];
-  can: { commissions: boolean; products: boolean };
+  /** productCost: ve costo y margen de productos (products.manage); sin él viajan en null. */
+  can: { commissions: boolean; products: boolean; productCost?: boolean };
   totals: {
     tickets: number;
     services: number;
@@ -1029,6 +1037,8 @@ export interface ReportsOptions extends StatsScopeInput {
 interface ReportDaySql {
   day: string;
   tickets: unknown;
+  /** Tickets de venta (sin devoluciones): denominador del promedio. */
+  sale_tickets?: unknown;
   services: unknown;
   products: unknown;
   adjustments: unknown;
@@ -1112,6 +1122,10 @@ export async function getReportsSummary(ctx: BarberContext, opts: ReportsOptions
 
   const includeCommission = can(ctx, "commissions.view");
   const includeProducts = features.products === true;
+  // Costo y margen de productos: solo quien administra el catálogo (QA B,
+  // 15-nov). Recepción y el Barbero veían «Margen $109.50 (54.9%)» aquí y la
+  // columna Costo en el CSV, aunque en Productos ya no les llega el costo.
+  const includeProductCost = can(ctx, "products.manage");
   const ids = Prisma.join(branchIds);
   const rangeSql = (col: string) =>
     Prisma.sql`${Prisma.raw(col)} >= ${utcTs(start)} AND ${Prisma.raw(col)} < ${utcTs(end)}`;
@@ -1119,7 +1133,8 @@ export async function getReportsSummary(ctx: BarberContext, opts: ReportsOptions
   const [dayRows, barberRows, itemRows, heatRows, noShowRows, statusGroups] = await Promise.all([
     prisma.$queryRaw<ReportDaySql[]>`
       SELECT to_char(${localTs(tz, 's."createdAt"')}, 'YYYY-MM-DD') AS day,
-             COUNT(*) FILTER (WHERE ${countsAsTicket("s")})::int AS tickets,
+             COUNT(*)::int AS tickets,
+             COUNT(*) FILTER (WHERE ${countsAsTicket("s")})::int AS sale_tickets,
              COALESCE(SUM(i.services), 0) AS services,
              COALESCE(SUM(i.products), 0) AS products,
              COALESCE(SUM(i.adjustments), 0) AS adjustments,
@@ -1287,7 +1302,7 @@ export async function getReportsSummary(ctx: BarberContext, opts: ReportsOptions
   const fromYmd = parseDateKey(period.from)!;
   const fromDays = ymdToUtcDays(fromYmd);
   const byDay: ReportDayRow[] = [];
-  const tot = { tickets: 0, services: ZERO, products: ZERO, other: ZERO, tips: ZERO, discounts: ZERO, revenue: ZERO, total: ZERO };
+  const tot = { tickets: 0, saleTickets: 0, services: ZERO, products: ZERO, other: ZERO, tips: ZERO, discounts: ZERO, revenue: ZERO, total: ZERO };
   for (let i = 0; i < period.days; i++) {
     const key = ymdKey(ymdFromUtcDays(fromDays + i));
     const r = byDayMap.get(key);
@@ -1309,6 +1324,7 @@ export async function getReportsSummary(ctx: BarberContext, opts: ReportsOptions
     // $500 dice Servicios $180 y Membresías y anticipos $500 — no «$680».
     const other = adjustments.minus(rawDiscounts);
     tot.tickets += intOf(r?.tickets);
+    tot.saleTickets += intOf(r?.sale_tickets ?? r?.tickets);
     tot.services = tot.services.plus(netServices);
     tot.products = tot.products.plus(products);
     tot.other = tot.other.plus(other);
@@ -1364,7 +1380,7 @@ export async function getReportsSummary(ctx: BarberContext, opts: ReportsOptions
     const revenue = money(D(it.revenue as never));
     const kind: "service" | "product" = it.productId ? "product" : "service";
     const base = kind === "product" ? productsRevenue : servicesRevenue;
-    const cost = kind === "product" && it.cost !== null && it.cost !== undefined ? money(D(it.cost as never)) : null;
+    const cost = kind === "product" && includeProductCost && it.cost !== null && it.cost !== undefined ? money(D(it.cost as never)) : null;
     const margin = cost === null ? null : money(revenue.minus(cost));
     const row: ReportItemRow = {
       id: (it.productId ?? it.serviceId) as string,
@@ -1500,7 +1516,7 @@ export async function getReportsSummary(ctx: BarberContext, opts: ReportsOptions
       selfOnly,
       barberLinked: !selfOnly || Boolean(ctx.barber),
     },
-    can: { commissions: includeCommission, products: includeProducts },
+    can: { commissions: includeCommission, products: includeProducts, productCost: includeProductCost },
     totals: {
       tickets: tot.tickets,
       services: toNum(tot.services),
@@ -1510,7 +1526,8 @@ export async function getReportsSummary(ctx: BarberContext, opts: ReportsOptions
       discounts: toNum(tot.discounts),
       revenue: revenue.toNumber(),
       total: toNum(tot.total),
-      avgTicket: tot.tickets > 0 ? toNum(revenue.div(tot.tickets)) : null,
+      // Promedio sobre tickets de VENTA (una devolución es movimiento, no venta).
+      avgTicket: tot.saleTickets > 0 ? toNum(revenue.div(tot.saleTickets)) : null,
       prevRevenue: prevRevenue.toNumber(),
       vsPrevPct: pctChange(revenue, prevRevenue),
     },
@@ -1656,8 +1673,14 @@ export function buildReportsCsv(s: ReportsSummary, L: ReportsCsvLabels): string 
 
   if (s.can.products) {
     push([L.sections.products]);
-    push([L.item, L.qty, L.revenue, L.cost, L.margin, L.marginPct, L.share]);
-    for (const it of s.topProducts) push([it.name, it.qty, it.revenue, it.cost ?? "", it.margin ?? "", it.marginPct ?? "", it.share ?? ""]);
+    if (s.can.productCost === false) {
+      // Sin costo ni margen (Recepción, Barbero): ni columnas vacías.
+      push([L.item, L.qty, L.revenue, L.share]);
+      for (const it of s.topProducts) push([it.name, it.qty, it.revenue, it.share ?? ""]);
+    } else {
+      push([L.item, L.qty, L.revenue, L.cost, L.margin, L.marginPct, L.share]);
+      for (const it of s.topProducts) push([it.name, it.qty, it.revenue, it.cost ?? "", it.margin ?? "", it.marginPct ?? "", it.share ?? ""]);
+    }
     blank();
   }
 

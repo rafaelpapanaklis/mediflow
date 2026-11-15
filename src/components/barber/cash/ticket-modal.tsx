@@ -13,7 +13,7 @@ import type { BarberPaymentMethod } from "@/lib/barber/types";
 import { loyaltyRedeemText } from "./loyalty-redeem-text";
 import { BarberModal } from "./modal";
 import { useBarberT } from "./use-barber-t";
-import { fmtMoney, fmtTime, fromCents, parseAmountText, toCents, PAYMENT_METHOD_KEYS } from "./money";
+import { fmtMoney, fmtTime, fromCents, parseAmountText, ticketDiscountCents, toCents, PAYMENT_METHOD_KEYS, type TicketDiscountMode } from "./money";
 import { formatBarberPhone } from "@/lib/barber/phone-format";
 
 interface Line {
@@ -132,8 +132,18 @@ export function TicketModal({
   const [addServiceId, setAddServiceId] = useState("");
   const [addProductId, setAddProductId] = useState("");
   const [discountText, setDiscountText] = useState(draft?.payload.discountPct ?? draft?.payload.discount ?? "");
-  // Descuento en pesos o en %: el servidor hace la MISMA cuenta (createSale).
-  const [discountMode, setDiscountMode] = useState<"amount" | "pct">(draft?.payload.discountPct ? "pct" : "amount");
+  // Descuento en pesos o en %: el SERVIDOR hace la cuenta (createSale, discountPct); aquí solo se ve y se valida.
+  const [discountMode, setDiscountMode] = useState<TicketDiscountMode>(draft?.payload.discountPct ? "pct" : "amount");
+  // «10%» escrito con el selector en $: el selector pasa solo a % y el texto se queda sin el signo, así se manda
+  // discountPct y el % lo convierte el servidor (unión pase 8, opción (a) del gerente: un solo cálculo).
+  function onDiscountText(value: string) {
+    if (/%\s*$/.test(value)) {
+      setDiscountMode("pct");
+      setDiscountText(value.replace(/\s*%\s*$/, ""));
+      return;
+    }
+    setDiscountText(value);
+  }
   const [tipMode, setTipMode] = useState<TipMode>({ kind: "none" });
   const [tipText, setTipText] = useState("");
   const [method, setMethod] = useState<BarberPaymentMethod>("CASH");
@@ -213,11 +223,8 @@ export function TicketModal({
     if (bonus?.kind === "amount") bonusOff = Math.min(toCents(bonus.amount ?? 0), gross);
     else if (bonus?.kind === "percent") bonusOff = Math.round((gross * (bonus.percent ?? 0)) / 100);
     const grossAfterBonus = gross - bonusOff;
-    const discountParsed = parseAmountText(discountText);
-    const pctInvalid = discountMode === "pct" && discountParsed !== null && discountParsed > 100;
-    const discount = discountMode === "pct"
-      ? Math.round((grossAfterBonus * (discountParsed ?? 0)) / 100)
-      : Math.min(discountParsed === null ? 0 : toCents(discountParsed), grossAfterBonus);
+    const disc = ticketDiscountCents(grossAfterBonus, discountText, discountMode);
+    const discount = disc.cents;
     // Lo que vale el servicio ya con descuento: base de la propina en %.
     const due = grossAfterBonus - discount;
     const deposit = Math.min(depositPaidCents, due);
@@ -229,7 +236,7 @@ export function TicketModal({
       const p = parseAmountText(tipText);
       tip = p === null ? 0 : toCents(p);
     }
-    return { gross, bonusOff, discount, deposit, depositRest: depositPaidCents - deposit, subtotal, tip, total: subtotal + tip, discountInvalid: discountParsed === null || pctInvalid };
+    return { gross, bonusOff, discount, deposit, depositRest: depositPaidCents - deposit, subtotal, tip, total: subtotal + tip, discountInvalid: disc.invalid, discountReason: disc.reason, discountCapped: disc.capped };
   }, [lines, loyaltyKey, membershipKey, discountText, discountMode, tipMode, tipText, depositPaidCents, bonus]);
 
   function addService() {
@@ -512,6 +519,10 @@ export function TicketModal({
                     {client.activeMembership
                       ? ` · ${t("ticket.membershipActive", { name: client.activeMembership.name })} (${client.activeMembership.cutsLeft === null ? t("ticket.membershipUnlimited") : t("ticket.membershipCutsLeft", { count: client.activeMembership.cutsLeft })})`
                       : ""}
+                    {/* Próximo periodo ya pagado (D1): sus cortes se usan cuando empiece. */}
+                    {client.nextMembershipPeriod
+                      ? ` · ${t("ticket.membershipNext", { date: new Date(client.nextMembershipPeriod.startAt).toLocaleDateString("es-MX", { day: "numeric", month: "short", timeZone: "America/Mexico_City" }) })}`
+                      : ""}
                   </div>
                 </div>
                 <button type="button" className="btn-new btn-new--ghost btn-new--sm" onClick={() => setClient(null)}>{t("ticket.clientClear")}</button>
@@ -663,32 +674,26 @@ export function TicketModal({
           {/* Descuento */}
           <div className="field-new">
             <label className="field-new__label" htmlFor="ticket-discount">{t("ticket.discount")}</label>
-            <div style={{ display: "flex", gap: 6 }}>
-              <div className="bcaja-seg" role="radiogroup" aria-label={t("ticket.discountMode")} style={{ flex: "0 0 auto", display: "inline-flex", width: "auto", gap: 2 }}>
-                {(["amount", "pct"] as const).map((m) => (
-                  <button
-                    key={m}
-                    type="button"
-                    role="radio"
-                    aria-checked={discountMode === m}
-                    className={`bcaja-seg__btn ${discountMode === m ? "bcaja-seg__btn--on" : ""}`}
-                    style={{ minWidth: 38, flex: "0 0 auto" }}
-                    onClick={() => setDiscountMode(m)}
-                    data-descuento={m}
-                  >
-                    {m === "amount" ? "$" : "%"}
-                  </button>
-                ))}
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <div className="bcaja-chips" role="radiogroup" aria-label={t("ticket.discountMode")}>
+                <button type="button" role="radio" aria-checked={discountMode === "amount"} className={`bcaja-chip ${discountMode === "amount" ? "bcaja-chip--on" : ""}`} onClick={() => setDiscountMode("amount")}>$</button>
+                <button type="button" role="radio" aria-checked={discountMode === "pct"} className={`bcaja-chip ${discountMode === "pct" ? "bcaja-chip--on" : ""}`} onClick={() => setDiscountMode("pct")}>%</button>
               </div>
-              <input id="ticket-discount" className="input-new" inputMode="decimal" value={discountText} onChange={(e) => setDiscountText(e.target.value)} placeholder={discountMode === "pct" ? "10" : "0.00"} />
+              <input id="ticket-discount" className="input-new" inputMode="decimal" value={discountText} onChange={(e) => onDiscountText(e.target.value)} placeholder={discountMode === "pct" ? "0" : "0.00"} aria-invalid={totals.discountInvalid || undefined} style={{ flex: 1, minWidth: 0 }} />
             </div>
-            <div className="bcaja-hint">
-              {discountMode === "pct" && totals.discount > 0
-                ? t("ticket.discountPctEquals", { amount: fmtMoney(fromCents(totals.discount)) })
-                : discountMode === "pct"
-                  ? t("ticket.discountPctHint")
+            {totals.discountInvalid ? (
+              <div className="bcaja-hint" role="alert" style={{ color: "var(--danger)" }}>
+                {t(totals.discountReason === "percent" ? "ticket.discountPercentMax" : "ticket.discountInvalid")}
+              </div>
+            ) : totals.discountCapped ? (
+              <div className="bcaja-hint" role="status">{t("ticket.discountCapped")}</div>
+            ) : (
+              <div className="bcaja-hint">
+                {discountMode === "pct" && totals.discount > 0
+                  ? t("ticket.discountPctApplied", { amount: fmtMoney(fromCents(totals.discount)) })
                   : t("ticket.discountHint")}
-            </div>
+              </div>
+            )}
           </div>
 
           {/* Propina */}

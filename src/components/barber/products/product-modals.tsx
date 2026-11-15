@@ -201,7 +201,7 @@ export function MovementModal({ dict, product, onClose, onDone }: { dict: Dictio
           <div className="field-new">
             <label className="field-new__label">{type === "ADJUST" ? t("productos.movementNewStock") : t("productos.movementQty")}</label>
             <input className="input-new" inputMode="numeric" autoFocus value={qtyText} onChange={(e) => setQtyText(e.target.value)} />
-            <div className="bcaja-hint">{type === "ADJUST" ? t("productos.movementAdjustHint") : t("productos.signConvention")}</div>
+            <div className="bcaja-hint">{type === "ADJUST" ? t("productos.movementAdjustHint") : t(type === "OUT" ? "productos.movementOutHint" : "productos.movementInHint")}</div>
           </div>
         </div>
         {negative && <div className="bcaja-alert bcaja-alert--danger">{t("productos.negativeStock")}</div>}

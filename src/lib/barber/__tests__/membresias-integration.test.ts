@@ -317,10 +317,15 @@ test("la membresía de efectivo vence sola y sale en 'por vencer' (sin tocar Str
     clientMembershipId: vencida.id,
     paymentMethod: "CASH",
   });
-  assert.equal(renovada.cutsUsed, 0, "renovar reinicia el contador de cortes");
+  // D1 (15-nov): renovar una vigente AGREGA un periodo propio (otra fila) que
+  // empieza cuando termina ésta, con su cupo en cero; la vigente no se toca.
+  assert.equal(renovada.cutsUsed, 0, "el periodo nuevo trae su cupo completo");
   assert.ok(new Date(renovada.endAt).getTime() > antes.getTime());
+  const vigente = await prisma.barberClientMembership.findFirstOrThrow({ where: { id: vencida.id } });
+  assert.notEqual(renovada.id, vencida.id, "es otra fila: otro periodo");
+  assert.equal(new Date(renovada.startAt).getTime(), vigente.endAt.getTime(), "empieza donde termina la vigente");
 
-  await prisma.barberClientMembership.deleteMany({ where: { id: vencida.id } });
+  await prisma.barberClientMembership.deleteMany({ where: { clientId: A.clientId, membershipId: planId } });
 });
 
 // ═══════════════════════════════════════════════════════════════════════

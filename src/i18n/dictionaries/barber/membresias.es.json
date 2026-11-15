@@ -132,7 +132,10 @@
       "recurring": "Cobrar solo cada periodo (suscripción)",
       "recurringHint": "Con esto la tarjeta se cobra sola cada periodo y no tienes que perseguir a nadie.",
       "cashHint": "Se registra un ticket de {amount} en el turno abierto de Caja: aparece en el corte, en Inicio y en Reportes. Sin turno abierto no se puede vender."
-    }
+    },
+    "nextPeriod": "Próximo periodo: {from} – {to} · {cuts}",
+    "nextPeriodCuts": "{count} cortes",
+    "nextPeriodUnlimited": "cortes ilimitados"
   },
   "payment": {
     "CASH": "Efectivo",

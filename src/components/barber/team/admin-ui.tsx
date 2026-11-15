@@ -7,6 +7,7 @@ import {
   useEffect,
   useId,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -327,10 +328,20 @@ export function Chip({
   return <span className={[s.chip, toneClass].filter(Boolean).join(" ")}>{children}</span>;
 }
 
+/**
+ * Error de un formulario. Se trae a la vista al aparecer (QA B, 15-nov): en
+ * los diálogos largos, a 390 px, el aviso queda ARRIBA mientras el dedo está
+ * en «Guardar» abajo, y el alta parecía no hacer nada (p. ej. «Esa sede está
+ * cerrada»).
+ */
 export function ErrorText({ children }: { children: ReactNode }) {
+  const ref = useRef<HTMLParagraphElement | null>(null);
+  useEffect(() => {
+    if (children) ref.current?.scrollIntoView?.({ block: "nearest", behavior: "smooth" });
+  }, [children]);
   if (!children) return null;
   return (
-    <p className={s.errorText} role="alert">
+    <p ref={ref} className={s.errorText} role="alert">
       {children}
     </p>
   );
