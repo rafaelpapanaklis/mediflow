@@ -1131,26 +1131,32 @@ async function toolAgendar(ctx: ToolCtx, input: Record<string, unknown>): Promis
     });
   }
 
+  // 🔴 LA VERDAD SOBRE EL ESTADO. Con la política «manual» (la de fábrica)
+  // la cita nace PENDIENTE: es una SOLICITUD que la barbería todavía tiene
+  // que confirmar. Decirle «quedó agendada» o «te confirman en un momento»
+  // era prometer un aviso que no existe. Se le dice lo que hay: el horario
+  // quedó apartado y falta que la barbería lo confirme.
+  const firme = result.status === "CONFIRMED";
+  const cuando =
+    `${humanDate(dateISO)} a las ${humanTime(time)}` +
+    (result.barberName ? ` con ${result.barberName}` : "");
   if (!result.duplicate) {
     ctx.effects.booked.push(result.reference);
     ctx.effects.summary.push(
-      `✅ Tu cita quedó ${result.status === "CONFIRMED" ? "confirmada" : "apartada"} para el ` +
-        `${humanDate(dateISO)} a las ${humanTime(time)}` +
-        (result.barberName ? ` con ${result.barberName}` : "") +
-        `. Tu folio es ${result.reference}.` +
-        (result.status === "CONFIRMED" ? "" : " La barbería te la confirma en un momento."),
+      firme
+        ? `✅ Tu cita quedó confirmada para el ${cuando}. Tu folio es ${result.reference}.`
+        : `📝 Tu solicitud quedó enviada para el ${cuando}. Falta que la barbería la confirme. Tu folio es ${result.reference}.`,
     );
   }
   return {
     ok: true,
     referencia: result.reference,
-    estado: result.status === "CONFIRMED" ? "confirmada" : "por confirmar",
-    // Cuando la barbería revisa a mano, la cita nace PENDING: decirle
-    // "confirmada" al cliente sería mentirle.
-    aclaracion:
-      result.status === "CONFIRMED"
-        ? "La cita quedó confirmada."
-        : "La cita quedó apartada y la barbería la confirma en un momento.",
+    estado: firme ? "confirmada" : "solicitud por confirmar",
+    aclaracion: firme
+      ? "La cita quedó confirmada."
+      : "Es una SOLICITUD: el horario quedó apartado, pero falta que la barbería la confirme. " +
+        "Díselo así («tu solicitud quedó enviada; falta que la barbería la confirme»). " +
+        "NO digas que la cita quedó agendada ni confirmada, y NO le prometas que le llegará un aviso ni cuándo.",
     fechaBonita: humanDate(dateISO),
     horaBonita: humanTime(time),
     barbero: result.barberName,

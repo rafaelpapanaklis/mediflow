@@ -33,10 +33,15 @@ import {
   applyBarberDeliveryStatuses,
   barberWabaOwnsPhone,
   drainBarberOutbox,
+  enqueueBarberMessage,
   getBarberWaConnection,
   ingestBarberInbound,
   listBarberThreadMessages,
+  notifyBarberBookingAccepted,
+  notifyBarberBookingRejected,
   notifyBarberWalkIn,
+  queueBarberBookingConfirmation,
+  REMINDER_MIN_AGE_MS,
   runBarberWaDispatch,
   scheduleBarberReminders,
   sendBarberCampaign,
@@ -1106,4 +1111,210 @@ test("un aviso viejo que siguiera en cola ya no se manda", { skip }, async () =>
   const fila = await prisma.barberMessage.findUniqueOrThrow({ where: { id: vieja.id } });
   assert.equal(fila.status, "FAILED");
   assert.ok(isInvalidatedReminder(fila.errorMessage));
+});
+
+/* ═══════ G3 — solicitudes que la barbería todavía no acepta ═══════ */
+
+const CONFIRMACION = barberWaTemplate("bookingConfirmed").name;
+
+test("🔴 G3 — una reserva en línea PENDIENTE no recibe «quedó agendada»; al aceptarla, sí", { skip }, async () => {
+  const phone = telefono();
+  const solicitud = await crearCita(A, { phone, enMinutos: 26 * 60, source: "PUBLIC" });
+
+  // Al reservar (política manual): nada en la cola.
+  assert.equal(await queueBarberBookingConfirmation({ barbershopId: A.id, appointmentId: solicitud.id }), null);
+  assert.equal((await mensajes(A, phone)).length, 0, "ni «¡Listo! Tu visita quedó agendada» ni nada");
+
+  // La barbería la acepta (lo hace booking.ts) y avisa con la función nueva.
+  await prisma.barberAppointment.update({ where: { id: solicitud.id }, data: { status: "CONFIRMED" } });
+  const aviso = await notifyBarberBookingAccepted({ barbershopId: A.id, appointmentId: solicitud.id });
+  assert.deepEqual(aviso, { sent: true, reason: "sent" });
+  const [envio] = enviados();
+  assert.equal(envio.body.template.name, CONFIRMACION, "el cliente no ha escrito: va la plantilla de utilidad");
+  assert.equal(envio.body.to, `52${phone}`);
+  const [fila] = await mensajes(A, phone);
+  assert.equal(fila.status, "SENT");
+  assert.equal(fila.appointmentId, solicitud.id);
+
+  // Aceptar dos veces (doble clic) no confirma dos veces.
+  limpiar();
+  const otra = await notifyBarberBookingAccepted({ barbershopId: A.id, appointmentId: solicitud.id });
+  assert.deepEqual(otra, { sent: false, reason: "not_applicable" });
+  assert.equal(enviados().length, 0);
+
+  // Con política «auto» la cita nace CONFIRMADA y la confirmación se encola al reservar, como siempre.
+  const p2 = telefono();
+  const directa = await crearCita(A, { phone: p2, enMinutos: 26 * 60, source: "PUBLIC", status: "CONFIRMED" });
+  assert.ok(await queueBarberBookingConfirmation({ barbershopId: A.id, appointmentId: directa.id }));
+  assert.equal((await mensajes(A, p2))[0].status, "PENDING");
+});
+
+test("G3 — aceptar con la plantilla aún sin aprobar: la confirmación espera en cola, no se pierde", { skip }, async () => {
+  const phone = telefono();
+  const cita = await crearCita(A, { phone, enMinutos: 26 * 60, source: "PUBLIC", status: "CONFIRMED" });
+  onGraph((call) =>
+    call.url.includes("/messages")
+      ? { status: 404, json: { error: { code: 132001, message: "(#132001) Template name does not exist" } } }
+      : null,
+  );
+  const aviso = await notifyBarberBookingAccepted({ barbershopId: A.id, appointmentId: cita.id });
+  assert.deepEqual(aviso, { sent: false, reason: "queued" });
+  const [fila] = await mensajes(A, phone);
+  assert.equal(fila.status, "PENDING");
+  assert.equal(fila.errorMessage, null);
+
+  // Meta la aprueba: la siguiente pasada del despacho la manda.
+  onGraph(null);
+  limpiar();
+  await drainBarberOutbox(A.id);
+  assert.equal(enviados().filter((c) => c.body.to === `52${phone}`).length, 1);
+});
+
+test("🔴 G3 — al RECHAZAR: texto si el cliente escribió en las últimas 24 h; si no, nada (no hay plantilla)", { skip }, async () => {
+  // Con la ventana abierta.
+  const p1 = telefono();
+  const s1 = await crearCita(A, { phone: p1, enMinutos: 26 * 60, source: "PUBLIC", name: "Memo Ruiz" });
+  await prisma.barberMessage.create({
+    data: { barbershopId: A.id, direction: "INBOUND", phone: p1, body: "¿sí quedó mi cita?", status: "DELIVERED" },
+  });
+  // Todavía no está rechazada: no se avisa de algo que no ha pasado.
+  assert.deepEqual(
+    await notifyBarberBookingRejected({ barbershopId: A.id, appointmentId: s1.id }),
+    { sent: false, reason: "not_applicable" },
+  );
+  await prisma.barberAppointment.update({ where: { id: s1.id }, data: { status: "CANCELLED" } });
+  assert.deepEqual(
+    await notifyBarberBookingRejected({ barbershopId: A.id, appointmentId: s1.id }),
+    { sent: true, reason: "sent" },
+  );
+  const [envio] = enviados();
+  assert.equal(envio.body.type, "text");
+  assert.match(envio.body.text.body, /^Hola Memo\. Barbería El Corte no pudo tomar tu solicitud del .+, así que ese horario NO quedó apartado\./);
+
+  // Sin ventana: no se manda nada y se dice por qué, para que la barbería le llame.
+  limpiar();
+  const p2 = telefono();
+  const s2 = await crearCita(A, { phone: p2, enMinutos: 26 * 60, source: "PUBLIC", status: "CANCELLED" });
+  assert.deepEqual(
+    await notifyBarberBookingRejected({ barbershopId: A.id, appointmentId: s2.id }),
+    { sent: false, reason: "window_closed" },
+  );
+  assert.equal(enviados().length, 0, "ni texto (Meta lo rechazaría) ni plantilla (no existe)");
+  assert.equal((await mensajes(A, p2)).length, 0);
+
+  // Una cita de OTRA barbería no existe para ésta.
+  assert.deepEqual(
+    await notifyBarberBookingRejected({ barbershopId: B.id, appointmentId: s1.id }),
+    { sent: false, reason: "not_found" },
+  );
+  // Sin WhatsApp conectado.
+  const sinNumero = await crearTienda({ conectada: false });
+  const s3 = await crearCita(sinNumero, { phone: telefono(), enMinutos: 600, source: "PUBLIC", status: "CANCELLED" });
+  assert.deepEqual(
+    await notifyBarberBookingRejected({ barbershopId: sinNumero.id, appointmentId: s3.id }),
+    { sent: false, reason: "not_connected" },
+  );
+});
+
+test("🔴 G3 — a una solicitud sin aceptar NO se le recuerda, y un «CONFIRMAR» del cliente no la confirma", { skip }, async () => {
+  await vaciarCola(A);
+  const pSolicitud = telefono();
+  const pPanel = telefono();
+  const solicitud = await crearCita(A, { phone: pSolicitud, enMinutos: 5 * 60, source: "PUBLIC" });
+  await crearCita(A, { phone: pPanel, enMinutos: 5 * 60, source: "PANEL" });
+
+  // Solo se recuerda la que creó la barbería.
+  assert.deepEqual(await scheduleBarberReminders(A.id), { queued: 1 });
+  assert.equal((await mensajes(A, pSolicitud)).length, 0);
+  assert.equal((await mensajes(A, pPanel)).length, 1);
+
+  // Aunque hubiera un recordatorio viejo en el hilo, CONFIRMAR no la acepta
+  // por la barbería (escrito o con el botón).
+  await prisma.barberMessage.create({
+    data: {
+      barbershopId: A.id,
+      direction: "OUTBOUND",
+      phone: pSolicitud,
+      body: "Hola Luis, te recordamos tu visita…",
+      templateName: REMINDER,
+      status: "DELIVERED",
+      appointmentId: solicitud.id,
+    },
+  });
+  limpiar();
+  const m = entrante(A, pSolicitud, "CONFIRMAR");
+  await ingestBarberInbound(m.value, m.msg);
+  assert.equal(await estadoDe(solicitud.id), "PENDING", "sigue siendo una solicitud");
+  const t = entranteToque(A, pSolicitud, { id: `rec.confirmar:${solicitud.id}`, title: "✅ Confirmar" });
+  await ingestBarberInbound(t.value, t.msg);
+  assert.equal(await estadoDe(solicitud.id), "PENDING");
+
+  // En cuanto la barbería la acepta, entra a los recordatorios.
+  await prisma.barberAppointment.update({ where: { id: solicitud.id }, data: { status: "CONFIRMED" } });
+  await prisma.barberMessage.deleteMany({ where: { barbershopId: A.id, phone: pSolicitud } });
+  assert.deepEqual(await scheduleBarberReminders(A.id), { queued: 1 });
+});
+
+test("🔴 no se recuerda una visita creada hace menos de 3 horas", { skip }, async () => {
+  await vaciarCola(A);
+  const reciente = telefono();
+  const casi = telefono();
+  const madura = telefono();
+  await crearCita(A, { phone: reciente, enMinutos: 5 * 60, creadaHaceMin: 10 });
+  await crearCita(A, { phone: casi, enMinutos: 5 * 60, creadaHaceMin: 175 });
+  await crearCita(A, { phone: madura, enMinutos: 5 * 60, creadaHaceMin: 185 });
+
+  assert.deepEqual(await scheduleBarberReminders(A.id), { queued: 1 });
+  assert.equal((await mensajes(A, madura)).length, 1, "la de hace más de 3 h sí");
+  assert.equal((await mensajes(A, reciente)).length, 0, "la recién creada no: acaba de recibir su confirmación");
+  assert.equal((await mensajes(A, casi)).length, 0);
+  assert.equal(REMINDER_MIN_AGE_MS, 3 * 3_600_000);
+
+  // Cuando cumple las 3 horas, la siguiente pasada la recuerda.
+  await prisma.barberAppointment.updateMany({
+    where: { barbershopId: A.id, clientPhone: casi },
+    data: { createdAt: new Date(Date.now() - 181 * 60_000) },
+  });
+  assert.deepEqual(await scheduleBarberReminders(A.id), { queued: 1 });
+});
+
+test("G3 — el aviso de rechazo que encola booking.ts: sale si la ventana sigue abierta; si se cerró, caduca sin ruido", { skip }, async () => {
+  await vaciarCola(A);
+  // Así lo encola la otra pantalla (ws6-t8) al rechazar: texto, sin plantilla.
+  const abierta = telefono();
+  const cerrada = telefono();
+  const cita1 = await crearCita(A, { phone: abierta, enMinutos: 600, source: "PUBLIC", status: "CANCELLED" });
+  const cita2 = await crearCita(A, { phone: cerrada, enMinutos: 600, source: "PUBLIC", status: "CANCELLED" });
+  await prisma.barberMessage.create({
+    data: { barbershopId: A.id, direction: "INBOUND", phone: abierta, body: "hola", status: "DELIVERED" },
+  });
+  // El otro cliente escribió hace 25 horas: su ventana ya se cerró.
+  await prisma.barberMessage.create({
+    data: {
+      barbershopId: A.id,
+      direction: "INBOUND",
+      phone: cerrada,
+      body: "hola",
+      status: "DELIVERED",
+      createdAt: new Date(Date.now() - 25 * 3_600_000),
+    },
+  });
+  const texto = "Barbería El Corte: no pudimos apartar tu cita del sábado. Escríbenos por aquí y te buscamos otro horario.";
+  const id1 = await enqueueBarberMessage({ barbershopId: A.id, phone: abierta, body: texto, templateName: null, appointmentId: cita1.id });
+  const id2 = await enqueueBarberMessage({ barbershopId: A.id, phone: cerrada, body: texto, templateName: null, appointmentId: cita2.id });
+
+  const drenado = await drainBarberOutbox(A.id);
+  assert.equal(drenado.sent, 1);
+  assert.equal(drenado.failed, 0, "el que caducó no cuenta como fallo de envío");
+  assert.equal(enviados().length, 1);
+  assert.equal(enviados()[0].body.to, `52${abierta}`);
+  assert.equal(enviados()[0].body.text.body, texto, "aunque la cita esté cancelada: es justo el aviso de eso");
+
+  const sale = await prisma.barberMessage.findUniqueOrThrow({ where: { id: id1! } });
+  const caduca = await prisma.barberMessage.findUniqueOrThrow({ where: { id: id2! } });
+  assert.equal(sale.status, "SENT");
+  assert.equal(caduca.status, "FAILED");
+  assert.ok(isInvalidatedReminder(caduca.errorMessage), "caducado, no «Meta lo rechazó»");
+  const hilo = await listBarberThreadMessages(A.id, cerrada);
+  assert.equal(hilo.messages.find((m) => m.id === id2)?.error, null);
 });

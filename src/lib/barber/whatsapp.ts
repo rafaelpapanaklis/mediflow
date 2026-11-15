@@ -62,7 +62,9 @@ import {
   barberWaTemplate,
   barberWaWindowOpen,
   buildBarberWaQuota,
+  BARBER_REQUEST_SOURCES,
   BARBER_WA_CANCEL_ASK,
+  barberBookingRejectedText,
   barberCancelAskButtons,
   barberLateChangeReply,
   barberReminderButtons,
@@ -140,6 +142,13 @@ const REMINDER_MAX_LEAD_MS = 24 * 60 * 60 * 1000;
  * necesita recordatorio: el cliente acaba de agendarla.
  */
 const REMINDER_MIN_LEAD_MS = 45 * 60 * 1000;
+/**
+ * No se recuerda una visita creada hace menos de esto (decisión de Rafael,
+ * ronda 2). Una cita de hoy para dentro de dos horas ya no recibe
+ * recordatorio: le basta la confirmación. Una de hoy para mañana lo recibe a
+ * partir de las tres horas de haberse agendado.
+ */
+export const REMINDER_MIN_AGE_MS = 3 * 60 * 60 * 1000;
 
 /** Tope de mensajes por pasada del drenaje (protege el tiempo de la función). */
 const DRAIN_LIMIT = 60;
@@ -1134,12 +1143,20 @@ async function processOutboxRow(
         }
         wamid = sent.wamid;
       } else {
-        throw new WhatsAppApiError({
-          message:
-            "Fuera de la ventana de 24 h y sin plantilla utilizable para este aviso. " +
-            "Da de alta las plantillas en la pantalla de WhatsApp.",
-          httpStatus: 0,
-        });
+        // Un TEXTO que alguien encoló (hoy: el aviso «no pudimos tomar tu
+        // solicitud» que encola booking.ts al rechazar) y la ventana de 24 h
+        // se cerró antes de que le tocara salir. Mandarlo sería un rechazo
+        // seguro de Meta y no hay plantilla para esto: caduca, con la misma
+        // marca que lo demás que ya no tiene sentido mandar. No es un fallo
+        // de la conexión y la pantalla no lo enseña como tal.
+        const expired = "se cerró la ventana de 24 h antes de poder enviarse";
+        await prisma.barberMessage
+          .update({
+            where: { id: row.id },
+            data: { status: "FAILED", errorMessage: `${BARBER_REMINDER_INVALIDATED_MARK} ${expired}` },
+          })
+          .catch(() => {});
+        return { outcome: "stale", error: expired };
       }
     } catch (err) {
       const message =
@@ -1566,6 +1583,14 @@ export async function scheduleBarberReminders(barbershopId: string): Promise<{ q
       barbershopId,
       status: { in: ["PENDING", "CONFIRMED"] },
       startAt: { gte: from, lte: to },
+      // 🔴 Una SOLICITUD que la barbería todavía no acepta (reserva en línea
+      // pendiente) no se recuerda: recordarle al cliente una cita que quizá
+      // le rechacen es decirle que la tiene.
+      NOT: { status: "PENDING", source: { in: [...BARBER_REQUEST_SOURCES] as never } },
+      // Y no se recuerda una visita recién creada: quien agendó hace diez
+      // minutos acaba de recibir su confirmación, y el «te recordamos»
+      // pegado a ella eran dos mensajes seguidos (y dos del cupo).
+      createdAt: { lte: new Date(now - REMINDER_MIN_AGE_MS) },
     },
     select: {
       id: true,
@@ -1788,32 +1813,50 @@ export async function sendBarberPortalCode(args: {
 }
 
 /**
- * Confirmación de reserva (gancho de T5). Va por la cola: el cliente acaba
- * de ver la pantalla de "listo", así que un minuto de diferencia no rompe
- * nada y a cambio el flujo de reserva nunca se queda esperando a Meta.
+ * Confirmación de reserva: «¡Listo! Tu visita quedó agendada».
+ *
+ * 🔴 RESPETA LA POLÍTICA DE LA BARBERÍA. Con la política por defecto
+ * («manual») la reserva en línea nace como una SOLICITUD pendiente de que la
+ * barbería la acepte. Antes esta función encolaba «quedó agendada» igual, y
+ * al cliente le llegaba la confirmación de algo que nadie había aceptado (y
+ * que podían rechazarle a la mañana siguiente sin avisarle). Ahora:
+ *   · solicitud sin aceptar → NO encola nada;
+ *   · visita ya firme (política «auto», o solicitud ya aceptada) → encola.
+ * Por eso sirve para los DOS momentos sin parámetros de más: al reservar
+ * (createPublicBooking ya la llama) y al ACEPTAR en Solicitudes.
+ *
+ * Va por la cola (sale en la siguiente pasada del despacho). Es idempotente:
+ * una visita no se confirma dos veces aunque el flujo reintente. Devuelve el
+ * id del mensaje encolado, o null si no se encoló nada.
  */
 export async function queueBarberBookingConfirmation(args: {
   barbershopId: string;
   appointmentId: string;
-}): Promise<void> {
+}): Promise<string | null> {
   const shop = await loadShop(args.barbershopId);
-  if (!shop || !resolveSenderCredentials(shop)) return;
+  if (!shop || !resolveSenderCredentials(shop)) return null;
 
   const appt = await prisma.barberAppointment.findFirst({
     where: { id: args.appointmentId, barbershopId: shop.id },
     select: {
       id: true,
       startAt: true,
+      status: true,
+      source: true,
       clientId: true,
       clientName: true,
       clientPhone: true,
       ...APPT_MESSAGE_INCLUDE,
     },
   });
-  if (!appt) return;
+  if (!appt) return null;
+  // Solo se confirma lo que está firme: ni una solicitud sin aceptar, ni una
+  // visita cancelada o ya terminada.
+  if (isBarberUnacceptedRequest(appt)) return null;
+  if (appt.status !== "PENDING" && appt.status !== "CONFIRMED") return null;
 
   const phone = mxTenDigits(appt.clientPhone ?? "");
-  if (!phone) return;
+  if (!phone) return null;
 
   const tpl = barberWaTemplate("bookingConfirmed");
   // Idempotencia: una reserva no confirma dos veces aunque el flujo reintente.
@@ -1821,10 +1864,10 @@ export async function queueBarberBookingConfirmation(args: {
     where: { barbershopId: shop.id, appointmentId: appt.id, templateName: tpl.name },
     select: { id: true },
   });
-  if (already) return;
+  if (already) return null;
 
   const params = bookingParamsFrom(shop, appt as unknown as ApptForMessage);
-  await enqueueBarberMessage({
+  return enqueueBarberMessage({
     barbershopId: shop.id,
     phone,
     body: renderBookingText(params),
@@ -1832,6 +1875,137 @@ export async function queueBarberBookingConfirmation(args: {
     clientId: appt.clientId,
     appointmentId: appt.id,
   });
+}
+
+export interface BookingNoticeResult {
+  /** true = el mensaje salió (Meta lo aceptó). */
+  sent: boolean;
+  /**
+   * Por qué no salió, o `sent` / `queued`:
+   *   queued        → quedó en la cola; sale en la siguiente pasada del despacho
+   *   window_closed → el cliente no ha escrito en 24 h y no hay plantilla para esto
+   *   not_connected → la barbería no tiene su WhatsApp conectado
+   *   no_phone      → la cita no tiene un celular a 10 dígitos
+   *   not_found     → la cita no es de esa barbería
+   *   not_applicable→ la cita no está en el estado que corresponde a este aviso
+   *   quota         → se acabó el cupo de mensajes del plan
+   *   failed        → Meta lo rechazó (el motivo queda en la bandeja)
+   */
+  reason:
+    | "sent"
+    | "queued"
+    | "window_closed"
+    | "not_connected"
+    | "no_phone"
+    | "not_found"
+    | "not_applicable"
+    | "quota"
+    | "failed";
+}
+
+/**
+ * LA BARBERÍA ACEPTÓ UNA SOLICITUD → se le confirma al cliente.
+ *
+ * Para llamarla DESPUÉS de pasar la cita a CONFIRMED (resolveBookingRequest
+ * con «aceptar»). Encola «¡Listo! Tu visita quedó agendada» y lo intenta
+ * mandar en el momento (texto si el cliente escribió en las últimas 24 h; si
+ * no, la plantilla dc_barber_reserva_confirmada). Si no pudo salir ahora
+ * mismo (plantilla aún sin aprobar), se queda en la cola y sale sola.
+ *
+ * NUNCA lanza: aceptar la solicitud no puede fallar por un WhatsApp.
+ */
+export async function notifyBarberBookingAccepted(args: {
+  barbershopId: string;
+  appointmentId: string;
+}): Promise<BookingNoticeResult> {
+  try {
+    const shop = await loadShop(args.barbershopId);
+    if (!shop || !resolveSenderCredentials(shop)) return { sent: false, reason: "not_connected" };
+    const messageId = await queueBarberBookingConfirmation(args);
+    if (!messageId) return { sent: false, reason: "not_applicable" };
+    const now = await deliverBarberMessageNow(shop.id, messageId);
+    if (now.status === "SENT") return { sent: true, reason: "sent" };
+    if (now.code === "TEMPLATE_PENDING") {
+      // deliverBarberMessageNow no espera a Meta; la confirmación sí puede
+      // esperar unos minutos: vuelve a la cola para la siguiente pasada.
+      await prisma.barberMessage.updateMany({
+        where: { id: messageId, barbershopId: shop.id, status: "FAILED" },
+        data: { status: "PENDING", errorMessage: null },
+      });
+      return { sent: false, reason: "queued" };
+    }
+    if (now.status === "PENDING") return { sent: false, reason: "queued" };
+    return { sent: false, reason: now.code === "QUOTA" ? "quota" : "failed" };
+  } catch (err) {
+    console.error(`[barber/wa] aviso de solicitud aceptada no enviado (${args.appointmentId}):`, err);
+    return { sent: false, reason: "failed" };
+  }
+}
+
+/**
+ * LA BARBERÍA RECHAZÓ UNA SOLICITUD → se le avisa al cliente, SI SE PUEDE.
+ *
+ * Para llamarla DESPUÉS de pasar la cita a CANCELLED (resolveBookingRequest
+ * con «rechazar»). Antes no se mandaba nada y el cliente llegaba a la
+ * barbería con una cita que ya no existía.
+ *
+ * Decisión ya tomada: NO hay plantilla de rechazo. Así que:
+ *   · el cliente escribió en las últimas 24 h → texto libre, ahora mismo;
+ *   · fuera de esa ventana → NO se manda nada (Meta rechazaría el texto) y
+ *     se devuelve `window_closed` para que la pantalla le diga a la barbería
+ *     que a este cliente hay que llamarle.
+ *
+ * NUNCA lanza: rechazar la solicitud no puede fallar por un WhatsApp.
+ */
+export async function notifyBarberBookingRejected(args: {
+  barbershopId: string;
+  appointmentId: string;
+}): Promise<BookingNoticeResult> {
+  try {
+    const shop = await loadShop(args.barbershopId);
+    const creds = shop ? resolveSenderCredentials(shop) : null;
+    if (!shop || !creds) return { sent: false, reason: "not_connected" };
+
+    const appt = await prisma.barberAppointment.findFirst({
+      where: { id: args.appointmentId, barbershopId: shop.id },
+      select: {
+        id: true,
+        startAt: true,
+        status: true,
+        clientName: true,
+        clientPhone: true,
+        client: { select: { name: true, phone: true } },
+      },
+    });
+    if (!appt) return { sent: false, reason: "not_found" };
+    // Solo se avisa de un rechazo que YA ocurrió.
+    if (appt.status !== "CANCELLED") return { sent: false, reason: "not_applicable" };
+
+    const phone = mxTenDigits(appt.clientPhone ?? appt.client?.phone ?? "");
+    if (!phone) return { sent: false, reason: "no_phone" };
+
+    if (!barberWaWindowOpen(await lastInboundAt(shop.id, phone))) {
+      return { sent: false, reason: "window_closed" };
+    }
+    const quota = await getBarberWaQuota(shop.id);
+    if (!barberWaFits(quota.limit, quota.used)) return { sent: false, reason: "quota" };
+
+    const sent = await replyInline(
+      shop,
+      creds,
+      phone,
+      barberBookingRejectedText({
+        clientName: appt.client?.name ?? appt.clientName,
+        when: formatWhen(appt.startAt, shop.timezone, shop.locale),
+        shopName: shop.name,
+      }),
+      { appointmentId: appt.id },
+    );
+    return sent ? { sent: true, reason: "sent" } : { sent: false, reason: "failed" };
+  } catch (err) {
+    console.error(`[barber/wa] aviso de solicitud rechazada no enviado (${args.appointmentId}):`, err);
+    return { sent: false, reason: "failed" };
+  }
 }
 
 /* ─────────────────────── campañas (marketing) ────────────────────────── */
@@ -2664,8 +2838,9 @@ async function replyInline(
   phone: string,
   body: string,
   extras: InlineExtras = {},
-): Promise<void> {
-  if (!creds) return;
+  /** true = Meta lo aceptó. La mayoría de quienes llaman no lo necesitan. */
+): Promise<boolean> {
+  if (!creds) return false;
   const options = extras.options ?? [];
   const buttons = extras.buttons ?? [];
   const rich =
@@ -2729,6 +2904,7 @@ async function replyInline(
       });
     }
     await consumeQuota(shop);
+    return true;
   } catch (err) {
     const message = err instanceof Error ? err.message : "No se pudo responder";
     if (row) {
@@ -2736,6 +2912,7 @@ async function replyInline(
         .update({ where: { id: row.id }, data: { status: "FAILED", errorMessage: message } })
         .catch(() => {});
     }
+    return false;
   }
 }
 

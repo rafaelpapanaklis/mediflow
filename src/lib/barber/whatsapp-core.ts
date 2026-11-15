@@ -920,6 +920,24 @@ export function isBarberUnacceptedRequest(appt: { status: string; source: string
   return appt.status === "PENDING" && BARBER_REQUEST_SOURCES.includes(appt.source);
 }
 
+/**
+ * Lo que se le dice al cliente cuando la barbería RECHAZA su solicitud. Solo
+ * sale como texto libre, si el cliente escribió en las últimas 24 h: no hay
+ * plantilla para esto (decisión de Rafael, ronda 2).
+ */
+export function barberBookingRejectedText(args: {
+  clientName: string | null | undefined;
+  when: string;
+  shopName: string;
+}): string {
+  const first = String(args.clientName ?? "").trim().split(/\s+/)[0];
+  return (
+    `${first ? `Hola ${first}. ` : ""}` +
+    `${args.shopName} no pudo tomar tu solicitud del ${args.when}, así que ese horario NO quedó apartado. ` +
+    "Si quieres, dinos qué otro día u hora te queda y lo vemos."
+  );
+}
+
 // ── Programar recordatorios: la decisión, sin BD ────────────────────────
 
 /**

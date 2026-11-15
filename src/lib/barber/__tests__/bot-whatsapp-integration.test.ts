@@ -361,7 +361,8 @@ test("🔴 el modelo agenda y luego la IA se cae: el cliente recibe la confirmac
   const cita = await prisma.barberAppointment.findFirst({ where: { barbershopId: P.id, clientId: cliente.id } });
   assert.ok(cita, "la cita SÍ se creó");
   const texto = ultimoEnvio().body.text.body as string;
-  assert.match(texto, /✅ Tu cita quedó (apartada|confirmada) para el/);
+  // La barbería de la prueba tiene la política de fábrica (manual): es una solicitud.
+  assert.match(texto, /📝 Tu solicitud quedó enviada para el .+\. Falta que la barbería la confirme\./);
   assert.match(texto, /Tu folio es /);
   assert.ok(!/paso esto con alguien/.test(texto));
   assert.equal(llamadas, 4, "la llamada caída se reintentó UNA vez");
@@ -887,4 +888,51 @@ test("G2 — el webhook compartido deriva los ecos a barber SOLO cuando el núme
   assert.ok(rama.trimEnd().endsWith("return;\n  }"), "y la rama termina en return, como antes");
   // Nada de barber fuera de esa rama dentro de la función de ecos.
   assert.equal(funcion.split("barber").length - 1, rama.split("barber").length - 1);
+});
+
+/* ═══════ G3 — el bot dice la verdad cuando la cita nace PENDIENTE ═══════ */
+
+test("🔴 G3 — política manual: el bot dice «solicitud», no «agendada», y no promete un aviso", { skip }, async () => {
+  const phone = telefono();
+  modelQueue.push(() => useTool("buscar_horarios", { fecha: addIsoDays(MANANA, 3), servicioIds: [P.corteId] }));
+  modelQueue.push((seen) =>
+    useTool("agendar", {
+      fecha: addIsoDays(MANANA, 3),
+      hora: seen[seen.length - 1].horarios[2].hora,
+      servicioIds: [P.corteId],
+      nombre: "Toño Vega",
+    }),
+  );
+  modelQueue.push(say("Listo."));
+  await escribe(P, phone, "agéndame un corte");
+
+  const resultado = toolResults.find((r) => r && r.referencia);
+  assert.equal(resultado.estado, "solicitud por confirmar");
+  assert.match(resultado.aclaracion, /Es una SOLICITUD/);
+  assert.match(resultado.aclaracion, /NO digas que la cita quedó agendada ni confirmada/);
+  assert.match(resultado.aclaracion, /NO le prometas que le llegará un aviso/);
+  assert.ok(!/te la confirma en un momento/.test(JSON.stringify(resultado)), "ya no promete un aviso que no existe");
+  const cita = await prisma.barberAppointment.findFirst({ where: { barbershopId: P.id, clientPhone: phone } });
+  assert.equal(cita?.status, "PENDING");
+
+  // Con política «auto» la cita nace confirmada y así se dice.
+  const auto = await crearTienda({ plan: "PROFESIONAL" });
+  await prisma.barbershop.update({ where: { id: auto.id }, data: { bookingPolicy: "auto" } });
+  await saveBarberBotSettings(auto.id, BOT_ON);
+  limpiar();
+  const p2 = telefono();
+  modelQueue.push(() => useTool("buscar_horarios", { fecha: MANANA, servicioIds: [auto.corteId] }));
+  modelQueue.push((seen) =>
+    useTool("agendar", {
+      fecha: MANANA,
+      hora: seen[seen.length - 1].horarios[0].hora,
+      servicioIds: [auto.corteId],
+      nombre: "Rulo",
+    }),
+  );
+  modelQueue.push(say("Listo."));
+  await escribe(auto, p2, "agéndame un corte mañana");
+  const r2 = toolResults.find((r) => r && r.referencia);
+  assert.equal(r2.estado, "confirmada");
+  assert.equal(r2.aclaracion, "La cita quedó confirmada.");
 });

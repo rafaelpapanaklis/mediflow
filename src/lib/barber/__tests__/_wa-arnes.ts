@@ -336,12 +336,21 @@ export async function crearCita(
     clientId?: string | null;
     name?: string;
     conBarbero?: boolean;
+    /** PANEL (default, la creó la barbería) · PUBLIC (reserva en línea) · WHATSAPP (el bot). */
+    source?: "PANEL" | "PUBLIC" | "WHATSAPP";
+    /**
+     * Hace cuántos minutos se creó. Default 4 h: una visita recién creada no
+     * recibe recordatorio (regla de las 3 horas), y casi ninguna prueba va de eso.
+     */
+    creadaHaceMin?: number;
   },
 ) {
   const startAt = new Date(Date.now() + args.enMinutos * 60_000);
   return prisma.barberAppointment.create({
     data: {
       barbershopId: t.id,
+      source: (args.source ?? "PANEL") as never,
+      createdAt: new Date(Date.now() - (args.creadaHaceMin ?? 240) * 60_000),
       clientId: args.clientId ?? null,
       clientName: args.name ?? "Luis Pérez",
       clientPhone: args.phone,
