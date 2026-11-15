@@ -129,6 +129,37 @@ export function parseAmountText(text: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+export type TicketDiscountMode = "amount" | "pct";
+
+/**
+ * Descuento del ticket en centavos, en pesos o en % de lo que se cobra
+ * (QA B, 15-nov: el ticket solo aceptaba pesos y «10%» deshabilitaba
+ * «Cobrar» sin decir por qué). Al servidor sigue llegando un MONTO: el % se
+ * resuelve aquí, sobre la misma base que el monto (después del bono).
+ *  · invalid → texto que no es número (o % fuera de 0–100): no se cobra y la
+ *    pantalla dice por qué (`reason`).
+ *  · capped → el monto escrito pasaba del total: se cobra $0 y se avisa.
+ */
+export function ticketDiscountCents(
+  baseCents: number,
+  text: string,
+  mode: TicketDiscountMode,
+): { cents: number; invalid: boolean; capped: boolean; reason: "format" | "percent" | null } {
+  const base = Math.max(0, baseCents);
+  const raw = text.trim();
+  // «10%» escrito a mano en modo pesos: se entiende como porcentaje.
+  const pctTyped = mode === "amount" && /^\d+(\.\d{0,2})?\s*%$/.test(raw);
+  const effMode: TicketDiscountMode = pctTyped ? "pct" : mode;
+  const value = parseAmountText(pctTyped ? raw.replace("%", "").trim() : raw);
+  if (value === null) return { cents: 0, invalid: true, capped: false, reason: "format" };
+  if (effMode === "pct") {
+    if (value > 100) return { cents: 0, invalid: true, capped: false, reason: "percent" };
+    return { cents: Math.round((base * value) / 100), invalid: false, capped: false, reason: null };
+  }
+  const asked = toCents(value);
+  return { cents: Math.min(asked, base), invalid: false, capped: asked > base && base >= 0 && asked > 0, reason: null };
+}
+
 /**
  * Como parseAmountText, pero VACÍO no es $0: es «todavía no escribe nada»
  * (null). Para las cifras que se cuentan a mano y no se pueden deshacer: el

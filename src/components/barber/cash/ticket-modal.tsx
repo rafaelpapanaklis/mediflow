@@ -12,7 +12,7 @@ import type { BarberPaymentMethod } from "@/lib/barber/types";
 import { loyaltyRedeemText } from "./loyalty-redeem-text";
 import { BarberModal } from "./modal";
 import { useBarberT } from "./use-barber-t";
-import { fmtMoney, fmtTime, fromCents, parseAmountText, toCents, PAYMENT_METHOD_KEYS } from "./money";
+import { fmtMoney, fmtTime, fromCents, parseAmountText, ticketDiscountCents, toCents, PAYMENT_METHOD_KEYS, type TicketDiscountMode } from "./money";
 import { formatBarberPhone } from "@/lib/barber/phone-format";
 
 interface Line {
@@ -105,6 +105,7 @@ export function TicketModal({
   const [addServiceId, setAddServiceId] = useState("");
   const [addProductId, setAddProductId] = useState("");
   const [discountText, setDiscountText] = useState("");
+  const [discountMode, setDiscountMode] = useState<TicketDiscountMode>("amount");
   const [tipMode, setTipMode] = useState<TipMode>({ kind: "none" });
   const [tipText, setTipText] = useState("");
   const [method, setMethod] = useState<BarberPaymentMethod>("CASH");
@@ -183,8 +184,8 @@ export function TicketModal({
     if (bonus?.kind === "amount") bonusOff = Math.min(toCents(bonus.amount ?? 0), gross);
     else if (bonus?.kind === "percent") bonusOff = Math.round((gross * (bonus.percent ?? 0)) / 100);
     const grossAfterBonus = gross - bonusOff;
-    const discountParsed = parseAmountText(discountText);
-    const discount = Math.min(discountParsed === null ? 0 : toCents(discountParsed), grossAfterBonus);
+    const disc = ticketDiscountCents(grossAfterBonus, discountText, discountMode);
+    const discount = disc.cents;
     // Lo que vale el servicio ya con descuento: base de la propina en %.
     const due = grossAfterBonus - discount;
     const deposit = Math.min(depositPaidCents, due);
@@ -196,8 +197,8 @@ export function TicketModal({
       const p = parseAmountText(tipText);
       tip = p === null ? 0 : toCents(p);
     }
-    return { gross, bonusOff, discount, deposit, depositRest: depositPaidCents - deposit, subtotal, tip, total: subtotal + tip, discountInvalid: discountParsed === null };
-  }, [lines, loyaltyKey, membershipKey, discountText, tipMode, tipText, depositPaidCents, bonus]);
+    return { gross, bonusOff, discount, deposit, depositRest: depositPaidCents - deposit, subtotal, tip, total: subtotal + tip, discountInvalid: disc.invalid, discountReason: disc.reason, discountCapped: disc.capped };
+  }, [lines, loyaltyKey, membershipKey, discountText, discountMode, tipMode, tipText, depositPaidCents, bonus]);
 
   function addService() {
     const s = checkout.services.find((x) => x.id === addServiceId);
@@ -578,8 +579,26 @@ export function TicketModal({
           {/* Descuento */}
           <div className="field-new">
             <label className="field-new__label">{t("ticket.discount")}</label>
-            <input className="input-new" inputMode="decimal" value={discountText} onChange={(e) => setDiscountText(e.target.value)} placeholder="0.00" />
-            <div className="bcaja-hint">{t("ticket.discountHint")}</div>
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <div className="bcaja-chips" role="radiogroup" aria-label={t("ticket.discountMode")}>
+                <button type="button" role="radio" aria-checked={discountMode === "amount"} className={`bcaja-chip ${discountMode === "amount" ? "bcaja-chip--on" : ""}`} onClick={() => setDiscountMode("amount")}>$</button>
+                <button type="button" role="radio" aria-checked={discountMode === "pct"} className={`bcaja-chip ${discountMode === "pct" ? "bcaja-chip--on" : ""}`} onClick={() => setDiscountMode("pct")}>%</button>
+              </div>
+              <input className="input-new" inputMode="decimal" value={discountText} onChange={(e) => setDiscountText(e.target.value)} placeholder={discountMode === "pct" ? "0" : "0.00"} aria-invalid={totals.discountInvalid || undefined} style={{ flex: 1, minWidth: 0 }} />
+            </div>
+            {totals.discountInvalid ? (
+              <div className="bcaja-hint" role="alert" style={{ color: "var(--danger)" }}>
+                {t(totals.discountReason === "percent" ? "ticket.discountPercentMax" : "ticket.discountInvalid")}
+              </div>
+            ) : totals.discountCapped ? (
+              <div className="bcaja-hint" role="status">{t("ticket.discountCapped")}</div>
+            ) : (
+              <div className="bcaja-hint">
+                {discountMode === "pct" && totals.discount > 0
+                  ? t("ticket.discountPctApplied", { amount: fmtMoney(fromCents(totals.discount)) })
+                  : t("ticket.discountHint")}
+              </div>
+            )}
           </div>
 
           {/* Propina */}
