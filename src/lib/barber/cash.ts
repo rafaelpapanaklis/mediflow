@@ -80,7 +80,7 @@ import {
   refreshLoyalty,
   type LoyaltyRule,
 } from "@/lib/barber/loyalty-core";
-import { markSaleDraftChargedTx, saleDraftsReady } from "@/lib/barber/sale-drafts-core";
+import { markSaleDraftChargedTx, reopenSaleDraftOfCancelledSaleTx, saleDraftsReady } from "@/lib/barber/sale-drafts-core";
 import {
   activeBonuses,
   availableBonuses,
@@ -1711,6 +1711,11 @@ export async function cancelSaleTx(
       notes: s.notes ? `${marker}\n${s.notes}` : marker,
     },
   });
+
+  // Nota «Por cobrar» (ronda 2, M1): si este ticket la saldó, vuelve a quedar
+  // pendiente —para cobrarse otra vez o descartarse—, como todo lo demás que
+  // el ticket se llevó. Misma transacción que la cancelación.
+  await reopenSaleDraftOfCancelledSaleTx(tx, { saleId: s.id, barbershopId, userId: actor.userId });
 
   // Lealtad: con el ticket ya cancelado se recuentan los sellos del cliente
   // (deja de contar la visita de mostrador y vuelve lo que se había canjeado).

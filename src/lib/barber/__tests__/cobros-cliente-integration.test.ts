@@ -453,3 +453,39 @@ test("4 · rutas: Recepción cobra y guarda notas; el Barbero solo ve sus cobros
   );
   session = null;
 });
+
+// ── RONDA 2 · M1: cancelar el ticket de una nota la reabre ─────────────
+
+test("RONDA 2 · M1: cancelar el ticket que salió de una nota la devuelve a «Por cobrar» (misma transacción) y se puede cobrar otra vez", { skip }, async () => {
+  const drafts = await import("@/lib/barber/sale-drafts");
+  const rita = await staff(A, "RECEPTION");
+  const ana = await newClient(A, "AnaNota");
+  const { id } = await drafts.saveSaleDraft(rita, { clientId: ana, payload: { items: [{ kind: "service", id: A.serviceId }], barberId: A.barberId } });
+
+  const first = await charge(A, ana, { draftId: id }, rita);
+  assert.deepEqual(await draftStatus(id), { status: "CHARGED", saleId: first.id });
+
+  await cash.cancelSale(rita, first.id, { reason: "se cobró al cliente equivocado" });
+  assert.deepEqual(await draftStatus(id), { status: "OPEN", saleId: null }, "vuelve a estar pendiente, sin ticket");
+  const open = await drafts.listSaleDrafts(A.ctx, { clientId: ana });
+  assert.deepEqual(open.drafts.map((d) => d.id), [id], "y sale otra vez en «Por cobrar»");
+  assert.equal((await sales.listClientSales(A.ctx, ana)).summary.spent, 0, "el ticket cancelado no es ingreso");
+
+  // Se cobra de nuevo, una sola vez, con otro ticket.
+  const second = await charge(A, ana, { draftId: id }, rita);
+  assert.notEqual(second.id, first.id);
+  assert.deepEqual(await draftStatus(id), { status: "CHARGED", saleId: second.id });
+
+  // Cancelar un ticket que NO salió de una nota no toca ninguna nota.
+  const other = await newClient(A, "SinNota");
+  const { id: idle } = await drafts.saveSaleDraft(rita, { clientId: other, payload: { items: [{ kind: "service", id: A.serviceId }] } });
+  const plain = await charge(A, other);
+  await cash.cancelSale(rita, plain.id, { reason: "error" });
+  assert.deepEqual(await draftStatus(idle), { status: "OPEN", saleId: null });
+  assert.deepEqual(await draftStatus(id), { status: "CHARGED", saleId: second.id }, "la nota cobrada de Ana sigue cobrada");
+
+  // O se descarta, ya reabierta.
+  await cash.cancelSale(rita, second.id, { reason: "otra vez" });
+  await drafts.discardSaleDraft(rita, id);
+  assert.deepEqual(await draftStatus(id), { status: "DISCARDED", saleId: null });
+});

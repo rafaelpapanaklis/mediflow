@@ -105,3 +105,23 @@ export async function markSaleDraftChargedTx(
   `;
   return n === 1;
 }
+
+/**
+ * Cancelar el ticket que salió de una nota «Por cobrar» la REABRE: vuelve a
+ * OPEN, sin ticket, para cobrarse de nuevo o descartarse (ronda 2, M1). Es lo
+ * coherente con Caja: cancelar regresa lo que el ticket se llevó (stock,
+ * membresía, estrellas, anticipo). Va en la MISMA transacción que la
+ * cancelación. Devuelve cuántas notas reabrió (0 si el ticket no venía de una).
+ */
+export async function reopenSaleDraftOfCancelledSaleTx(
+  tx: Pick<Prisma.TransactionClient, "$executeRaw" | "$queryRaw">,
+  args: { saleId: string; barbershopId: string; userId: string },
+): Promise<number> {
+  if (!(await saleDraftsReady(tx))) return 0;
+  return tx.$executeRaw`
+    UPDATE "barber_sale_drafts"
+    SET "status" = 'OPEN', "saleId" = NULL, "closedAt" = NULL, "closedByUserId" = NULL,
+        "updatedByUserId" = ${args.userId}, "updatedAt" = NOW()
+    WHERE "saleId" = ${args.saleId} AND "barbershopId" = ${args.barbershopId} AND "status" = 'CHARGED'
+  `;
+}
