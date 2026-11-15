@@ -105,6 +105,7 @@
     "empty": {
       "all": "Nobody has a membership yet. Sell the first one to a regular.",
       "active": "No active memberships right now.",
+      "search": "Nobody matches that search. Check the name or the phone number.",
       "soon": "Nobody is about to expire. Check back in a few days.",
       "expired": "No expired memberships. Nicely done."
     },

@@ -144,7 +144,7 @@ export function SubscriptionsTab({
       {items.length === 0 ? (
         <EmptyState
           title={t("barber.membresias.clientes.heading")}
-          body={t(`barber.membresias.clientes.empty.${filter}`)}
+          body={t(query.trim() ? "barber.membresias.clientes.empty.search" : `barber.membresias.clientes.empty.${filter}`)}
         />
       ) : (
         <div className="bmem-rows" aria-busy={loading}>
