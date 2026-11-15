@@ -465,7 +465,7 @@ body:has(.barber-shell) {
   border-right: 0;
   color: var(--menu-text);
   gap: 0;
-  padding: 18px 10px 10px;
+  padding: 14px 10px 8px;
 }
 .barber-shell .barber-menu__cab {
   display: flex;
@@ -561,13 +561,32 @@ body:has(.barber-shell) {
 
 .barber-shell .barber-menu__nav {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   margin-right: -4px;
   padding-right: 4px;
   scrollbar-width: thin;
   scrollbar-color: rgba(244, 232, 210, 0.18) transparent;
 }
-.barber-shell .barber-menu__grupo { margin-top: 12px; }
+/* Tanda 3 (pase 6): a 1440×900 la lista no cabía y el pie cortaba «Socios»
+   a la mitad sin que se notara que había más. Ahora cabe (entradas de 30 px
+   con la MISMA letra de 13.5 y grupos más juntos) y, cuando la ventana es
+   más baja o es el cajón del celular, la orilla que esconde algo se
+   desvanece. barber-sidebar.tsx pone data-mas-arriba / data-mas-abajo. */
+.barber-shell .barber-menu__nav[data-mas-abajo] {
+  -webkit-mask-image: linear-gradient(to bottom, black calc(100% - 40px), transparent);
+  mask-image: linear-gradient(to bottom, black calc(100% - 40px), transparent);
+}
+.barber-shell .barber-menu__nav[data-mas-arriba] {
+  -webkit-mask-image: linear-gradient(to bottom, transparent, black 32px);
+  mask-image: linear-gradient(to bottom, transparent, black 32px);
+}
+.barber-shell .barber-menu__nav[data-mas-arriba][data-mas-abajo] {
+  -webkit-mask-image: linear-gradient(to bottom, transparent, black 32px, black calc(100% - 40px), transparent);
+  mask-image: linear-gradient(to bottom, transparent, black 32px, black calc(100% - 40px), transparent);
+}
+.barber-shell .barber-menu__grupo { margin-top: 8px; }
+.barber-shell .barber-menu__grupo:first-child { margin-top: 4px; }
 .barber-shell .barber-menu__titulo {
   margin: 0 0 3px;
   padding: 0 12px;
@@ -588,7 +607,7 @@ body:has(.barber-shell) {
   align-items: center;
   gap: 10px;
   width: 100%;
-  height: 34px;
+  height: 30px;
   padding: 0 12px;
   border: 0;
   border-radius: var(--radius-md);
@@ -641,14 +660,15 @@ body:has(.barber-shell) {
 }
 
 .barber-shell .barber-menu__pie {
+  flex: none;
   margin-top: auto;
-  padding-top: var(--sp-2);
+  padding-top: 6px;
   border-top: 1px solid var(--menu-line);
 }
 .barber-shell .barber-menu__salir,
 .barber-shell .barber-menu__salir > svg { color: var(--menu-logout); }
 .barber-shell .barber-menu__marca {
-  padding: 6px 12px 2px;
+  padding: 4px 12px 0;
   font-size: 11px;
   font-weight: 600;
   color: var(--menu-muted);

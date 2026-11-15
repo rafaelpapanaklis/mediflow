@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { BarberNavItem } from "@/lib/barber/types";
 import { BARBER_NAV_ICON, BarberIcon } from "./barber-icons";
 import { useMensajesSinLeer } from "./mensajes/sin-leer";
@@ -66,6 +66,37 @@ export function BarberSidebar({
     mostrar: conMensajes,
     sondear: conMensajes && !enMensajes && (escritorio || mobileOpen),
   });
+  const navRef = useRef<HTMLElement | null>(null);
+
+  // ¿Queda menú escondido arriba o abajo? El CSS desvanece esa orilla para
+  // que se note que hay más (pase 6: «Soporte» no se veía y nada lo decía).
+  // Y la entrada activa siempre a la vista, aunque esté al final.
+  useEffect(() => {
+    const nav = navRef.current;
+    if (!nav) return;
+    const medir = () => {
+      const arriba = nav.scrollTop > 2;
+      const abajo = nav.scrollTop + nav.clientHeight < nav.scrollHeight - 2;
+      nav.toggleAttribute("data-mas-arriba", arriba);
+      nav.toggleAttribute("data-mas-abajo", abajo);
+    };
+    // Solo el scroll del menú (scrollIntoView también movería la página).
+    const activa = nav.querySelector<HTMLElement>("[aria-current=\"page\"]");
+    if (activa) {
+      const n = nav.getBoundingClientRect();
+      const r = activa.getBoundingClientRect();
+      if (r.bottom > n.bottom - 40) nav.scrollTop += r.bottom - n.bottom + 48;
+      else if (r.top < n.top) nav.scrollTop -= n.top - r.top + 8;
+    }
+    medir();
+    nav.addEventListener("scroll", medir, { passive: true });
+    const ro = new ResizeObserver(medir);
+    ro.observe(nav);
+    return () => {
+      nav.removeEventListener("scroll", medir);
+      ro.disconnect();
+    };
+  }, [mobileOpen, pathname]);
 
   async function handleLogout() {
     try {
@@ -152,7 +183,7 @@ export function BarberSidebar({
         </div>
 
         {/* Navegación (gating por plan + rol ya resuelto en el layout server) */}
-        <nav className="barber-menu__nav" aria-label={navLabel}>
+        <nav className="barber-menu__nav" aria-label={navLabel} ref={navRef}>
           {sections.map((s) => (
             <div key={s.section} className="barber-menu__grupo">
               <p className="barber-menu__titulo" id={`barber-menu-${s.section}`}>
