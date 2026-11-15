@@ -267,8 +267,12 @@ const view = (shop: Shop, clientId: string, audience: "client" | "staff" = "clie
 
 const SQL_FILE = path.join(ROOT, "sql/barber_estrellas.sql");
 
+/** Pega el SQL como lo haría Rafael: sentencia por sentencia, tal cual. */
 async function applyStarsSql() {
-  await prisma.$executeRawUnsafe(fs.readFileSync(SQL_FILE, "utf8").replace(/^\s*--.*$/gm, ""));
+  const sql = fs.readFileSync(SQL_FILE, "utf8").replace(/^\s*--.*$/gm, "");
+  for (const stmt of sql.split(/;\s*\n/).map((x) => x.trim()).filter(Boolean)) {
+    await prisma.$executeRawUnsafe(stmt);
+  }
 }
 
 before(async () => {
@@ -352,4 +356,276 @@ test("1 · cobrar la cita y cancelar su ticket le quita la estrella (y volver a 
   assert.equal(v?.history[0].reason, "ticket_cancelled");
   await cash.createSale(A.ctx, { appointmentId: a.id, items: [{ kind: "service", id: A.serviceId }], paymentMethod: "CASH" }, FEATURES);
   assert.equal((await view(A, leo))?.stars, 1, "cobrada otra vez: la estrella vuelve");
+});
+
+// ── Piezas que se cargan solo cuando hacen falta (puntos 2–6) ───────────
+
+const load = async () => ({
+  stars: await import("@/lib/barber/stars"),
+  starsRoute: await import("@/app/api/barber/clients/[id]/stars/route"),
+  bonosRoute: await import("@/app/api/barber/clients/bonos/route"),
+});
+
+const isStarsError = (code: string) => (e: unknown) =>
+  !!e && typeof e === "object" && (e as { code?: string }).code === code;
+const forbidden = (e: unknown) => e instanceof BarberForbiddenError;
+
+async function withStars(shop: Shop, name: string, n: number): Promise<string> {
+  const id = await newClient(shop, name);
+  for (let i = 0; i < n; i++) await appt(shop, id, "DONE", 40 + i);
+  return id;
+}
+
+// ── 2. Enlace personal ─────────────────────────────────────────────────
+
+test("2 · el enlace abre SOLO la tarjeta de ese cliente, no sirve en otra barbería y se revoca", { skip }, async () => {
+  const { stars } = await load();
+  const rita = await staffCtx(A, "RECEPTION");
+  const eva = await withStars(A, "Eva María", 2);
+  const otro = await withStars(A, "Otro", 1);
+
+  const link = await stars.getClientCardLink(rita, eva);
+  assert.match(link.path, new RegExp(`^/b/${A.slug}/tarjeta/`));
+  const token = link.path.split("/").pop() as string;
+
+  assert.deepEqual(await starsCore.resolveCardToken(prisma, A.id, token), { clientId: eva });
+  assert.equal(await starsCore.resolveCardToken(prisma, B.id, token), null, "en otra barbería no abre");
+  const otherTok = (await stars.getClientCardLink(rita, otro)).path.split("/").pop() as string;
+  const mixed = `${eva}.${otherTok.split(".")[1]}.${otherTok.split(".")[2]}`;
+  assert.equal(await starsCore.resolveCardToken(prisma, A.id, mixed), null, "la firma de otro cliente no sirve");
+
+  const v = await view(A, eva);
+  assert.equal(v?.firstName, "Eva", "solo el nombre de pila");
+  const { phone } = await prisma.barberClient.findUniqueOrThrow({ where: { id: eva }, select: { phone: true } });
+  assert.equal(JSON.stringify(v).includes(phone), false, "ni rastro del teléfono");
+  assert.equal(JSON.stringify(v).includes("María"), false, "ni del apellido / segundo nombre");
+
+  const fresh = await stars.revokeClientCard(rita, eva);
+  assert.equal(await starsCore.resolveCardToken(prisma, A.id, token), null, "revocado: el enlace viejo ya no abre");
+  assert.deepEqual(await starsCore.resolveCardToken(prisma, A.id, fresh.path.split("/").pop()), { clientId: eva });
+
+  await prisma.barberClient.update({ where: { id: eva }, data: { blockedAt: new Date() } });
+  assert.equal(await starsCore.resolveCardToken(prisma, A.id, fresh.path.split("/").pop()), null, "cliente bloqueado: no abre");
+  await prisma.barberClient.update({ where: { id: eva }, data: { blockedAt: null } });
+
+  const beto = await staffCtx(A, "BARBER", A.barberId);
+  await assert.rejects(stars.getClientCardLink(beto, eva), forbidden, "el rol Barbero no saca enlaces");
+});
+
+// ── 3. Bonos de la barbería ────────────────────────────────────────────
+
+test("3 · antes del SQL: el premio de siempre es el único bono y se puede renombrar; crear más pide el SQL", { skip }, async () => {
+  const { stars } = await load();
+  const cat = await starsCore.loadBonusCatalog(prisma, A.id);
+  assert.equal(cat.tableReady, false);
+  assert.equal(cat.legacy, true);
+  assert.deepEqual(cat.bonuses.map((b) => [b.id, b.name, b.cost]), [["premio", "Barba gratis", 5]]);
+
+  await assert.rejects(
+    stars.saveBonusCatalog(A.ctx, [
+      { id: "premio", name: "Barba gratis", cost: 5, kind: "service" },
+      { name: "Cera", cost: 2, kind: "other", description: "Cera" },
+    ]),
+    isStarsError("SQL_PENDIENTE"),
+  );
+  await stars.saveBonusCatalog(A.ctx, [{ id: "premio", name: "Barba de regalo", cost: 6, kind: "service" }]);
+  const shop = await prisma.barbershop.findUniqueOrThrow({ where: { id: A.id }, select: { loyaltyThreshold: true, loyaltyReward: true } });
+  assert.deepEqual(shop, { loyaltyThreshold: 6, loyaltyReward: "Barba de regalo" });
+  await stars.saveBonusCatalog(A.ctx, [{ id: "premio", name: "Barba gratis", cost: 5, kind: "service" }]);
+});
+
+test("3 · el SQL (dos veces) convierte el premio en el primer bono sin mover una sola estrella", { skip }, async () => {
+  const fiel = await withStars(A, "Fiel", 4);
+  const before = (await view(A, fiel))?.stars;
+  await applyStarsSql();
+  await applyStarsSql();
+  const rows = await prisma.$queryRaw<Array<{ id: string; name: string; cost: number; kind: string }>>`
+    SELECT "id", "name", "cost", "kind" FROM "barber_loyalty_rewards" WHERE "barbershopId" = ${A.id}`;
+  assert.deepEqual(rows, [{ id: `premio-${A.id}`, name: "Barba gratis", cost: 5, kind: "service" }], "uno solo aunque se pegue dos veces");
+  const cat = await starsCore.loadBonusCatalog(prisma, A.id);
+  assert.equal(cat.tableReady, true);
+  assert.equal(cat.legacy, false);
+  const after = await view(A, fiel);
+  assert.equal(after?.stars, before, "nadie pierde estrellas");
+  assert.equal(after?.next?.bonus.name, "Barba gratis");
+});
+
+test("3 · varios bonos: servicio, pesos, %, otro; activo/inactivo; el más barato queda como «el premio»", { skip }, async () => {
+  const { bonosRoute } = await load();
+  const seeded = `premio-${A.id}`;
+  const put = (ctx: BarberContext, bonuses: unknown) => {
+    session = ctx;
+    return bonosRoute.PUT(new Request("http://localhost/api/barber/clients/bonos", {
+      method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ bonuses }),
+    }));
+  };
+  const list = [
+    { id: seeded, name: "Corte gratis", cost: 10, kind: "service", serviceId: A.serviceId },
+    { name: "Barba gratis", cost: 3, kind: "service", serviceId: A.beardId },
+    { name: "$50 menos", cost: 4, kind: "amount", amount: 50 },
+    { name: "15% menos", cost: 6, kind: "percent", percent: 15 },
+    { name: "Cera", cost: 2, kind: "other", description: "Una cera para el cabello", active: false },
+  ];
+
+  const rita = await staffCtx(A, "RECEPTION");
+  assert.equal((await put(rita, list)).status, 403, "Recepción cobra, pero no crea bonos");
+  const bad = await put(A.ctx, [{ name: "x", cost: 4, kind: "service", serviceId: B.serviceId }]);
+  assert.equal(bad.status, 400, "un servicio de otra barbería no se puede regalar");
+
+  const ok = await put(A.ctx, list);
+  assert.equal(ok.status, 200);
+  const body = (await ok.json()) as { catalog: { bonuses: StarBonus[] } };
+  assert.deepEqual(
+    body.catalog.bonuses.map((b) => [b.name, b.cost, b.kind, b.active]),
+    [["Corte gratis", 10, "service", true], ["Barba gratis", 3, "service", true], ["$50 menos", 4, "amount", true],
+     ["15% menos", 6, "percent", true], ["Cera", 2, "other", false]],
+  );
+  assert.equal(body.catalog.bonuses[0].id, seeded, "el premio de siempre se editó, no se duplicó");
+  assert.equal(body.catalog.bonuses[1].serviceName, "Barba");
+  const shop = await prisma.barbershop.findUniqueOrThrow({ where: { id: A.id }, select: { loyaltyThreshold: true, loyaltyReward: true } });
+  assert.deepEqual(shop, { loyaltyThreshold: 3, loyaltyReward: "Barba gratis" }, "el activo más barato, para lo que lee las columnas de siempre");
+
+  const sinPlata = await withStars(A, "Nuevo", 1);
+  const v = await view(A, sinPlata);
+  assert.equal(v?.next?.bonus.name, "Barba gratis");
+  assert.equal(v?.next?.remaining, 2, "«Te faltan 2 para: Barba gratis»");
+  assert.equal(v?.catalog.some((b) => b.name === "Cera"), false, "el inactivo no se ofrece");
+});
+
+// ── 4. La estrella se VE ───────────────────────────────────────────────
+
+test("4 · Caja: «+1 estrella para X: lleva N de M», y avisa cuando alcanza un bono", { skip }, async () => {
+  // Lo mismo que hace POST /api/barber/sales: cobrar y luego armar el resumen.
+  const juan = await withStars(A, "Juan Pérez", 2);
+  const charged = await walkIn(A, juan);
+  const sale = { stars: (await starsCore.saleStarsOutcome(prisma, { barbershopId: A.id, slug: A.slug, saleId: charged.id }))! };
+  assert.equal(sale.stars.firstName, "Juan");
+  assert.equal(sale.stars.gained, 1);
+  assert.equal(sale.stars.stars, 3);
+  assert.deepEqual(sale.stars.reached, ["Barba gratis"], "con la tercera alcanza «Barba gratis» (3)");
+  assert.deepEqual(sale.stars.next, { name: "$50 menos", cost: 4, remaining: 1 });
+  assert.match(sale.stars.cardPath, new RegExp(`^/b/${A.slug}/tarjeta/`));
+
+  const productoSolo = await starsCore.saleStarsOutcome(prisma, { barbershopId: A.id, slug: A.slug, saleId: "no-existe" });
+  assert.equal(productoSolo, null);
+});
+
+test("4 · dar y quitar estrella a mano: motivo obligatorio, quién y cuándo; nunca por debajo de 0", { skip }, async () => {
+  const { stars, starsRoute } = await load();
+  const rita = await staffCtx(A, "RECEPTION");
+  const lu = await withStars(A, "Lu", 0);
+
+  await assert.rejects(stars.adjustClientStars(rita, { clientId: lu, delta: 1, reason: " " }), isStarsError("REASON_REQUIRED"));
+  await assert.rejects(stars.adjustClientStars(rita, { clientId: lu, delta: -1, reason: "error" }), isStarsError("NO_STARS"));
+  await assert.rejects(stars.adjustClientStars(rita, { clientId: lu, delta: 5, reason: "regalo" }), isStarsError("INVALID_INPUT"));
+
+  const v = await stars.adjustClientStars(rita, { clientId: lu, delta: 1, reason: "Trajo a un amigo" });
+  assert.equal(v.stars, 1);
+  assert.equal(v.history[0].kind, "manual");
+  assert.equal(v.history[0].note, "Trajo a un amigo");
+  assert.equal(v.history[0].by, "Rita Staff");
+  const client = await view(A, lu, "client");
+  assert.equal(client?.history[0].note, undefined, "el cliente no ve el motivo");
+  assert.equal(client?.history[0].by, undefined, "ni quién");
+
+  // Por la ruta, y dos «quitar» a la vez: solo uno pasa (candado).
+  session = rita;
+  const call = (body: unknown) => starsRoute.POST(new Request(`http://localhost/api/barber/clients/${lu}/stars`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+  }), { params: Promise.resolve({ id: lu }) });
+  const both = await Promise.all([
+    call({ action: "adjust", delta: -1, reason: "Se sumó por error" }),
+    call({ action: "adjust", delta: -1, reason: "Se sumó por error" }),
+  ]);
+  assert.deepEqual(both.map((r) => r.status).sort(), [200, 409]);
+  assert.equal((await view(A, lu))?.stars, 0);
+
+  // La lista de clientes y la caja ven lo mismo.
+  const hit = (await cash.lookupClients(rita, `Lu ${RUN}`))[0];
+  assert.equal(hit.loyaltyCount, 0);
+
+  session = await staffCtx(A, "BARBER", A.barberId);
+  assert.equal((await call({ action: "adjust", delta: 1, reason: "quiero" })).status, 403, "Barbero: no cobra, no da estrellas");
+});
+
+// ── 5. La barbería aplica el bono ──────────────────────────────────────
+
+test("5 · Caja aplica cada tipo de bono en la misma transacción; cancelar lo devuelve", { skip }, async () => {
+  const cat = await starsCore.loadBonusCatalog(prisma, A.id);
+  const byName = (n: string) => cat.bonuses.find((b) => b.name === n)!.id;
+  const ana = await withStars(A, "Ana Bono", 20);
+  const sell = (extra: Record<string, unknown>, items = [{ kind: "service", id: A.serviceId }]) =>
+    cash.createSale(A.ctx, { barberId: A.barberId, clientId: ana, items, paymentMethod: "CASH", ...extra }, FEATURES);
+
+  const hit = (await cash.lookupClients(A.ctx, `Ana Bono ${RUN}`))[0];
+  assert.equal(hit.loyaltyCount, 20);
+  assert.equal(hit.availableBonusIds.length, 4, "los 4 activos; el inactivo no");
+
+  // Pesos: −$50 y la comisión NO baja (el premio lo paga la barbería).
+  const s1 = await sell({ redeemBonusId: byName("$50 menos") });
+  assert.equal(s1.total, 150);
+  assert.equal(s1.items.at(-1)?.description, "Bono: $50 menos · Descuento (lealtad · 4 estrellas)");
+  const c1 = await prisma.barberCommissionEntry.findFirstOrThrow({ where: { saleId: s1.id } });
+  assert.equal(Number(c1.base), 200);
+  assert.equal((await view(A, ana))?.stars, 20 + 1 - 4);
+
+  // Porcentaje: 15% de $200.
+  const s2 = await sell({ redeemBonusId: byName("15% menos") });
+  assert.equal(s2.total, 170);
+  assert.equal((await view(A, ana))?.stars, 21 - 4 + 1 - 6);
+
+  // Servicio fijo (Barba): sin barba en el ticket no se puede; con barba, gratis solo.
+  await assert.rejects(sell({ redeemBonusId: byName("Barba gratis") }), (e: unknown) => e instanceof caja.BarberCajaError && e.code === "BONUS_NEEDS_SERVICE");
+  const s3 = await sell({ redeemBonusId: byName("Barba gratis") }, [{ kind: "service", id: A.serviceId }, { kind: "service", id: A.beardId }]);
+  assert.equal(s3.total, 200, "el corte se cobra; la barba va gratis");
+  assert.ok(s3.items.some((i) => i.description.startsWith("Barba · Gratis (lealtad")));
+  const c3 = await prisma.barberCommissionEntry.findFirstOrThrow({ where: { saleId: s3.id } });
+  assert.equal(Number(c3.base), 320, "la barba gratis comisiona sobre su precio normal");
+
+  const antes = (await view(A, ana))!.stars;
+  await cash.cancelSale(A.ctx, s3.id, { reason: "error" });
+  const despues = await view(A, ana);
+  assert.equal(despues?.stars, antes - 1 + 3, "cancelar: se va la estrella de la visita y vuelven las 3 del bono");
+  assert.ok(despues?.history.some((e) => e.kind === "returned"), "y el historial dice que el bono volvió");
+
+  // Sin estrellas suficientes: no.
+  const pobre = await withStars(A, "Pobre", 1);
+  await assert.rejects(
+    cash.createSale(A.ctx, { clientId: pobre, items: [{ kind: "service", id: A.serviceId }], paymentMethod: "CASH", redeemBonusId: byName("$50 menos") }, FEATURES),
+    (e: unknown) => e instanceof caja.BarberCajaError && e.code === "LOYALTY_NOT_ELIGIBLE",
+  );
+  // Inactivo: no.
+  await assert.rejects(sell({ redeemBonusId: byName("Cera") }), (e: unknown) => e instanceof caja.BarberCajaError && e.code === "BONUS_NOT_FOUND");
+});
+
+test("5 · «Marcar bono como entregado» desde la ficha descuenta y queda en el historial", { skip }, async () => {
+  const { stars } = await load();
+  const rita = await staffCtx(A, "RECEPTION");
+  const pepe = await withStars(A, "Pepe", 5);
+  const cat = await starsCore.loadBonusCatalog(prisma, A.id);
+  const barba = cat.bonuses.find((b) => b.name === "Barba gratis")!;
+  const v = await stars.deliverClientBonus(rita, { clientId: pepe, bonusId: barba.id, note: "Se la llevó para su papá" });
+  assert.equal(v.stars, 2);
+  assert.equal(v.history[0].reason, "desk");
+  assert.equal(v.history[0].detail, "Barba gratis");
+  assert.equal(v.usedCount, 1);
+  await assert.rejects(stars.deliverClientBonus(rita, { clientId: pepe, bonusId: cat.bonuses.find((b) => b.name === "Corte gratis")!.id }), isStarsError("NOT_ENOUGH_STARS"));
+  const beto = await staffCtx(A, "BARBER", A.barberId);
+  await assert.rejects(stars.deliverClientBonus(beto, { clientId: pepe, bonusId: barba.id }), forbidden);
+});
+
+// ── 6. El Barbero solo ve estrellas de SUS clientes ─────────────────────
+
+test("6 · Barbero: ve la tarjeta de sus clientes, no la de los demás", { skip }, async () => {
+  const { stars } = await load();
+  const beto = await staffCtx(A, "BARBER", A.barberId);
+  const suyo = await newClient(A, "Suyo");
+  const start = new Date(Date.now() - 3 * DAY);
+  await prisma.barberAppointment.create({
+    data: { barbershopId: A.id, clientId: suyo, barberId: A.barberId, status: "DONE", startAt: start, endAt: new Date(start.getTime() + 30 * MIN) },
+  });
+  const ajeno = await withStars(A, "Ajeno", 2);
+  assert.equal((await stars.getStaffStarsView(beto, suyo))?.stars, 1);
+  assert.equal(await stars.getStaffStarsView(beto, ajeno), null);
+  assert.equal(await stars.getStaffStarsView(B.ctx, suyo), null, "otra barbería, tampoco");
 });

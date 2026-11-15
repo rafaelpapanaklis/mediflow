@@ -72,8 +72,10 @@ test("al marcarla dice el servicio EXACTO que queda gratis y, aparte, el premio 
 test("el cobro usa esos textos (y ya no arma «Canjear premio de lealtad: {reward}»)", () => {
   const src = readFileSync(join(ROOT, "src/components/barber/cash/ticket-modal.tsx"), "utf8");
   assert.match(src, /loyaltyRedeemText\(t, \{/);
-  assert.match(src, /\{loyaltyText\.label\}/);
-  assert.match(src, /\{loyaltyText\.effect && /);
+  // ws6-t5: la casilla se volvió el selector «Aplicar bono» (varios bonos);
+  // el efecto del servicio gratis sigue saliendo de este mismo texto probado.
+  assert.match(src, /st\("caja\.applyBonus"\)/);
+  assert.match(src, /loyaltyText\.effect \? /);
   assert.doesNotMatch(src, /t\("ticket\.loyaltyRedeem"/, "la casilla no se arma por fuera del texto probado");
   for (const locale of ["es", "en"] as const) {
     const raw = JSON.parse(readFileSync(join(ROOT, `src/i18n/dictionaries/barber/caja.${locale}.json`), "utf8"));

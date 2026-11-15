@@ -257,6 +257,24 @@
   font-weight: 600;
 }
 
+/* Modo oscuro: la rampa caramelo no se invierte, así que las piezas llenas
+   usan sus tonos profundos (si no, quedan como bloques crema que deslumbran). */
+:global(.dark) .slotOn {
+  background: var(--caramel-950);
+  border-color: var(--caramel-600);
+  color: var(--caramel-400);
+}
+
+:global(.dark) .deltaPlus {
+  background: var(--caramel-950);
+  border-color: var(--caramel-700);
+  color: var(--caramel-300);
+}
+
+:global(.dark) .cost {
+  color: var(--caramel-400);
+}
+
 @media (max-width: 380px) {
   .count {
     font-size: 24px;

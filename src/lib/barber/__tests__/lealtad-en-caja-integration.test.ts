@@ -312,7 +312,8 @@ test("canje con el umbral de la barbería (5): servicio en $0, la línea dice 5 
   // Con 1 sello no hay segundo premio, y el mensaje habla de 5, no de 10.
   await assert.rejects(walkIn(A, ana, { redeemLoyaltyItemIndex: 0 }), (e: unknown) => {
     assert.ok(codeIs("LOYALTY_NOT_ELIGIBLE")(e));
-    assert.match((e as Error).message, /1 de 5 sellos/);
+    // ws6-t5: la caja ya habla de ESTRELLAS y nombra el bono.
+    assert.match((e as Error).message, /1 de 5 estrellas/);
     return true;
   });
 
@@ -359,7 +360,7 @@ test("la barbería con el umbral por defecto sigue en 10: con 7 no hay premio, c
   const seven = await lookup(B, `Beto ${RUN}`);
   assert.equal(seven.loyaltyCount, 7);
   assert.equal(seven.loyaltyEligible, false);
-  await assert.rejects(walkIn(B, beto, { redeemLoyaltyItemIndex: 0 }), (e: unknown) => /7 de 10 sellos/.test((e as Error).message));
+  await assert.rejects(walkIn(B, beto, { redeemLoyaltyItemIndex: 0 }), (e: unknown) => /7 de 10 estrellas/.test((e as Error).message));
 
   await pastVisits(B, beto, 3, 40);
   const sale = await walkIn(B, beto, { redeemLoyaltyItemIndex: 0 });
