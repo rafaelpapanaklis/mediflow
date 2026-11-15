@@ -10,6 +10,7 @@ import type {
   PublicServiceDTO,
 } from "@/lib/barber/booking";
 import { sumMoneyBy } from "@/lib/barber/money";
+import { formatoPrecioReserva } from "@/lib/barber/precio-reserva";
 import { BookingDone, type BookingConfirmation } from "./booking-done";
 import { BarberCaptcha, type BarberCaptchaHandle } from "@/components/barber/captcha/barber-captcha";
 import { BARBER_CAPTCHA_ACTIONS } from "@/lib/barber/captcha-core";
@@ -190,15 +191,7 @@ export function BookingFlow({
     noContact: t("barber.reserva.fecha.sinContacto"),
   };
 
-  const money = useMemo(
-    () =>
-      new Intl.NumberFormat(shop.locale === "en" ? "en-US" : "es-MX", {
-        style: "currency",
-        currency: "MXN",
-        maximumFractionDigits: 0,
-      }),
-    [shop.locale],
-  );
+  const money = useMemo(() => formatoPrecioReserva(shop.locale === "en" ? "en-US" : "es-MX"), [shop.locale]);
 
   // ── Carga de días con lugar ────────────────────────────────────────────
   const loadDays = useCallback(async () => {
