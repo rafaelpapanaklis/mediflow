@@ -24,6 +24,7 @@
       "ticketsHint": "Charges recorded at the register",
       "avgTicket": "Average ticket",
       "avgTicketHint": "Revenue ÷ tickets",
+      "avgTicketHintSelf": "Your production ÷ your tickets",
       "tips": "Tips today",
       "tipsHint": "Go entirely to the barbers",
       "visits": "Visits today",

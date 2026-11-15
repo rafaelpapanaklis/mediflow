@@ -171,7 +171,7 @@
       "enabled": "Programa de fidelidad encendido",
       "enabledHint": "Apagado: la tarjeta deja de verse en la ficha y en el portal del cliente, y la caja no ofrece el canje. Los sellos acumulados no se pierden.",
       "threshold": "Visitas para ganar el premio",
-      "thresholdHint": "Con 10, la décima visita se lleva el premio. Cuentan las citas completadas y las ventas de servicio en caja.",
+      "thresholdHint": "Con 10, el cliente gana el premio al juntar 10 sellos. Con cita, el sello cae al completar la visita: la décima cita ya puede salir gratis. Sin cita, el sello cae al cobrar: el premio se usa en la visita siguiente. Cuentan las citas completadas y las ventas de servicio en caja.",
       "reward": "Nombre del premio",
       "rewardHint": "Así se le dice al cliente en su tarjeta y en las campañas: «Corte gratis», «Barba de cortesía»…",
       "summary": "Cada {count} visitas → {reward}",

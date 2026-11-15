@@ -219,6 +219,42 @@ function countsAsTicket(alias: string): Prisma.Sql {
   return Prisma.sql`${Prisma.raw(`${alias}."subtotal"`)} >= 0`;
 }
 
+/**
+ * «Anticipo aplicado · …»: la línea negativa que descuenta, al cobrar la cita,
+ * el anticipo que ya se había cobrado en el mostrador. Es una forma de pago,
+ * no un descuento.
+ */
+const DEPOSIT_CREDIT_LIKE = `${BARBER_DEPOSIT_LINE_PREFIX}%`;
+
+/**
+ * LATERAL con el anticipo aplicado (negativo, o NULL) de UN ticket: la misma
+ * línea que Comisiones reconoce con isDepositLine (sin servicio ni producto).
+ */
+function depositCreditJoin(saleAlias: string, alias: string): Prisma.Sql {
+  return Prisma.sql`
+    LEFT JOIN LATERAL (
+      SELECT SUM(dit."qty" * dit."unitPrice") AS credit
+      FROM "barber_sale_items" dit
+      WHERE dit."saleId" = ${Prisma.raw(`${saleAlias}."id"`)}
+        AND dit."serviceId" IS NULL AND dit."productId" IS NULL
+        AND dit."description" LIKE ${DEPOSIT_CREDIT_LIKE}
+    ) ${Prisma.raw(alias)} ON TRUE`;
+}
+
+/**
+ * «Producido» por los barberos: el valor de su trabajo. Es la MISMA cuenta que
+ * la fila de Comisiones (commissions.ts → ledgerRowFor): Σ subtotal de sus
+ * tickets SIN restar el anticipo aplicado —el servicio se hizo completo; la
+ * otra parte ya se cobró en el mostrador—. Solo tickets con barbero: los de
+ * mostrador (membresías, anticipos, devoluciones) no son trabajo de nadie.
+ * No es el ingreso de la barbería: ese sigue siendo Σ subtotal, intacto.
+ */
+function producedSum(saleAlias: string, creditAlias: string): Prisma.Sql {
+  const s = Prisma.raw(saleAlias);
+  const dc = Prisma.raw(creditAlias);
+  return Prisma.sql`COALESCE(SUM(CASE WHEN ${s}."barberId" IS NOT NULL THEN ${s}."subtotal" - COALESCE(${dc}.credit, 0) END), 0)`;
+}
+
 /** Recorte por barbero para una columna dada; [] = nada (AND FALSE). */
 function barberFilter(column: string, barberIds: string[] | null): Prisma.Sql {
   if (barberIds === null) return Prisma.empty;
@@ -253,6 +289,12 @@ export interface InicioDayMoney {
   tickets: number;
   /** Σ subtotal (sin propina) = "Vendido" de la caja / "Producido" de comisiones. */
   revenue: number;
+  /**
+   * Lo producido por los barberos del alcance: sus tickets SIN restar el
+   * anticipo aplicado. Es el «Producido» de Comisiones y lo que el rol Barbero
+   * ve como «Tu producción de hoy». No es el ingreso (ver producedSum).
+   */
+  produced: number;
   tips: number;
   /** Σ total = revenue + tips (lo que entró). */
   total: number;
@@ -362,6 +404,7 @@ interface DayMoneyRow {
   day: string;
   tickets: unknown;
   subtotal: unknown;
+  produced: unknown;
   tip: unknown;
   total: unknown;
 }
@@ -405,14 +448,17 @@ interface AlertsRow {
   has_web: boolean;
 }
 
-function dayMoneyOf(row: DayMoneyRow | undefined): InicioDayMoney & { revenueDec: Money } {
+function dayMoneyOf(row: DayMoneyRow | undefined): InicioDayMoney & { revenueDec: Money; producedDec: Money } {
   const revenueDec = money(D(row?.subtotal as never));
+  const producedDec = money(D(row?.produced as never));
   return {
     tickets: intOf(row?.tickets),
     revenue: revenueDec.toNumber(),
+    produced: producedDec.toNumber(),
     tips: toNum(D(row?.tip as never)),
     total: toNum(D(row?.total as never)),
     revenueDec,
+    producedDec,
   };
 }
 
@@ -468,9 +514,11 @@ export async function getInicioSummary(ctx: BarberContext, opts: InicioOptions =
       SELECT to_char(${localTs(tz, 's."createdAt"')}, 'YYYY-MM-DD') AS day,
              COUNT(*) FILTER (WHERE ${liveSale("s")} AND ${countsAsTicket("s")})::int AS tickets,
              COALESCE(SUM(s."subtotal"), 0) AS subtotal,
+             ${producedSum("s", "dc")} AS produced,
              COALESCE(SUM(s."tip"), 0) AS tip,
              COALESCE(SUM(s."total"), 0) AS total
       FROM "barber_sales" s
+      ${depositCreditJoin("s", "dc")}
       WHERE s."barbershopId" IN (${ids})
         AND s."createdAt" >= ${utcTs(weekAgoStart)}
         AND s."createdAt" < ${utcTs(tomorrowStart)}
@@ -590,7 +638,10 @@ export async function getInicioSummary(ctx: BarberContext, opts: InicioOptions =
   const today = dayMoneyOf(byDay.get(todayKey));
   const yesterday = dayMoneyOf(byDay.get(yesterdayKey));
   const lastWeek = dayMoneyOf(byDay.get(weekAgoKey));
-  const avgTicket = today.tickets > 0 ? toNum(today.revenueDec.div(today.tickets)) : null;
+  // El promedio se saca de la cifra que la persona tiene delante: la barbería
+  // ve su ingreso; el rol Barbero ve su producción (ver producedSum).
+  const avgBase = selfOnly ? today.producedDec : today.revenueDec;
+  const avgTicket = today.tickets > 0 ? toNum(avgBase.div(today.tickets)) : null;
 
   // Visitas de hoy: conteos (no dinero) sobre las filas del día.
   let visits: InicioSummary["visits"] = null;
@@ -726,12 +777,14 @@ export async function getInicioSummary(ctx: BarberContext, opts: InicioOptions =
       memberships: canMemberships,
       requests: canRequests,
     },
-    today: { tickets: today.tickets, revenue: today.revenue, tips: today.tips, total: today.total, avgTicket },
+    today: { tickets: today.tickets, revenue: today.revenue, produced: today.produced, tips: today.tips, total: today.total, avgTicket },
     compare: {
-      yesterday: { tickets: yesterday.tickets, revenue: yesterday.revenue, tips: yesterday.tips, total: yesterday.total },
-      lastWeek: { tickets: lastWeek.tickets, revenue: lastWeek.revenue, tips: lastWeek.tips, total: lastWeek.total },
-      vsYesterdayPct: pctChange(today.revenueDec, yesterday.revenueDec),
-      vsLastWeekPct: pctChange(today.revenueDec, lastWeek.revenueDec),
+      yesterday: { tickets: yesterday.tickets, revenue: yesterday.revenue, produced: yesterday.produced, tips: yesterday.tips, total: yesterday.total },
+      lastWeek: { tickets: lastWeek.tickets, revenue: lastWeek.revenue, produced: lastWeek.produced, tips: lastWeek.tips, total: lastWeek.total },
+      // El rol Barbero ve su PRODUCCIÓN como cifra principal, así que su
+      // «vs. ayer» compara producción con producción. La barbería: ingresos.
+      vsYesterdayPct: selfOnly ? pctChange(today.producedDec, yesterday.producedDec) : pctChange(today.revenueDec, yesterday.revenueDec),
+      vsLastWeekPct: selfOnly ? pctChange(today.producedDec, lastWeek.producedDec) : pctChange(today.revenueDec, lastWeek.revenueDec),
     },
     visits,
     upcoming,
@@ -854,6 +907,7 @@ export interface ReportBarberRow {
   isActive: boolean;
   commissionType: BarberCommissionType;
   tickets: number;
+  /** El MISMO «Producido» de Comisiones: sin restar el anticipo aplicado (ver producedSum). */
   produced: number;
   tips: number;
   avgTicket: number | null;
@@ -992,7 +1046,6 @@ interface ReportDaySql {
  * ingreso neto del día —por eso Servicios + Productos = Ingresos—, pero ya
  * no inflan ni esconden la cifra de «Descuentos».
  */
-const DEPOSIT_CREDIT_LIKE = `${BARBER_DEPOSIT_LINE_PREFIX}%`;
 /** La devolución de un anticipo (ticket negativo) tampoco es un descuento. */
 const DEPOSIT_REFUND_LIKE = `${BARBER_DEPOSIT_REFUND_LINE_PREFIX}%`;
 
@@ -1098,8 +1151,9 @@ export async function getReportsSummary(ctx: BarberContext, opts: ReportsOptions
              COALESCE(ce.amount, 0) AS commission
       FROM "barber_barbers" b
       LEFT JOIN LATERAL (
-        SELECT COUNT(*) FILTER (WHERE ${countsAsTicket("s")}) AS tickets, SUM(s."subtotal") AS produced, SUM(s."tip") AS tips
+        SELECT COUNT(*) FILTER (WHERE ${countsAsTicket("s")}) AS tickets, ${producedSum("s", "dc")} AS produced, SUM(s."tip") AS tips
         FROM "barber_sales" s
+        ${depositCreditJoin("s", "dc")}
         WHERE s."barberId" = b."id" AND s."barbershopId" IN (${ids}) AND ${rangeSql('s."createdAt"')} AND ${liveSale("s")}
       ) sa ON TRUE
       LEFT JOIN LATERAL (

@@ -3,8 +3,9 @@
 import { useMemo, useState } from "react";
 import type { Dictionary } from "@/i18n/t";
 import type { CashSessionSummary, SaleRow } from "@/lib/barber/cash";
-import type { BarberPaymentMethod } from "@/lib/barber/types";
 import { BadgeNew } from "@/components/ui/design-system/badge-new";
+import { closeExpectedView } from "./close-expected";
+import { CloseExpectedBreakdown } from "./close-expected-breakdown";
 import { BarberModal } from "./modal";
 import { useBarberT } from "./use-barber-t";
 import { fmtMoney, fmtSigned, fmtTime, parseAmountText, toCents, fromCents, PAYMENT_METHOD_KEYS } from "./money";
@@ -134,8 +135,6 @@ export function CloseSessionModal({
     );
   }
 
-  const methods: BarberPaymentMethod[] = ["CASH", "CARD", "SPEI"];
-
   return (
     <BarberModal
       open
@@ -156,17 +155,7 @@ export function CloseSessionModal({
         <p className="bcaja-hint" style={{ margin: 0 }}>{t("session.closeBody")}</p>
         {error && <div className="bcaja-alert bcaja-alert--danger" role="alert">{error}</div>}
 
-        <div className="bcaja-totals">
-          <div className="bcaja-totals__row"><span>{t("caja.openingAmount")}</span><span>{fmtMoney(summary.session.openingAmount)}</span></div>
-          {methods.map((m) => (
-            <div key={m} className="bcaja-totals__row">
-              <span>{t(PAYMENT_METHOD_KEYS[m])} <span className="bcaja-muted">({summary.byMethod[m].count})</span></span>
-              <span>{fmtMoney(summary.byMethod[m].total)}</span>
-            </div>
-          ))}
-          <div className="bcaja-totals__row"><span>{t("caja.cashTips")}</span><span>{fmtMoney(summary.cashTips)}</span></div>
-          <div className="bcaja-totals__row bcaja-totals__row--big"><span>{t("session.expected")}</span><span>{fmtMoney(summary.expectedCash)}</span></div>
-        </div>
+        <CloseExpectedBreakdown view={closeExpectedView(summary)} t={t} />
 
         <div className="bcaja-form__grid">
           <div className="field-new">

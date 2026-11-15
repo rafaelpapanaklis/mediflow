@@ -6,6 +6,7 @@ import { Banknote, CheckCircle2, CreditCard, Landmark, Minus, Plus, Printer, Tra
 import type { Dictionary } from "@/i18n/t";
 import type { CheckoutContext, ClientLookup, PendingAppointment, SaleRow } from "@/lib/barber/cash";
 import type { BarberPaymentMethod } from "@/lib/barber/types";
+import { loyaltyRedeemText } from "./loyalty-redeem-text";
 import { BarberModal } from "./modal";
 import { useBarberT } from "./use-barber-t";
 import { fmtMoney, fmtTime, fromCents, parseAmountText, toCents, PAYMENT_METHOD_KEYS } from "./money";
@@ -106,6 +107,12 @@ export function TicketModal({
   const serviceLines = lines.filter((l) => l.kind === "service" && l.qty === 1);
   const loyaltyAvailable = Boolean(client?.loyaltyEligible) && serviceLines.length > 0;
   const membershipAvailable = Boolean(client?.activeMembership) && serviceLines.length > 0;
+  // La casilla es genérica; el servicio que de verdad queda gratis se dice aparte.
+  const loyaltyText = loyaltyRedeemText(t, {
+    stamps: checkout.loyaltyTarget,
+    reward: checkout.loyaltyReward,
+    serviceName: loyaltyKey ? lines.find((l) => l.key === loyaltyKey)?.name : null,
+  });
 
   // Si desaparece el cliente o la línea, el canje se apaga solo.
   useEffect(() => {
@@ -400,13 +407,14 @@ export function TicketModal({
               <div className="field-new">
                 <label className="field-new__label" style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <input type="checkbox" checked={loyaltyKey !== null} onChange={(e) => setLoyaltyKey(e.target.checked ? (serviceLines.find((l) => l.key !== membershipKey)?.key ?? null) : null)} />
-                  {t("ticket.loyaltyRedeem", { reward: checkout.loyaltyReward, count: checkout.loyaltyTarget })}
+                  {loyaltyText.label}
                 </label>
                 {loyaltyKey && (
                   <select className="input-new" value={loyaltyKey} onChange={(e) => setLoyaltyKey(e.target.value)} aria-label={t("ticket.loyaltyApplyTo")}>
                     {serviceLines.filter((l) => l.key !== membershipKey).map((l) => <option key={l.key} value={l.key}>{l.name}</option>)}
                   </select>
                 )}
+                {loyaltyText.effect && <div className="bcaja-hint" style={{ marginTop: 4 }}>{loyaltyText.effect}</div>}
               </div>
             )}
             {membershipAvailable && (
