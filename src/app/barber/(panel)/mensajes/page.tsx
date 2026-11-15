@@ -4,9 +4,10 @@ import { requireBarberPaidAccess } from "@/lib/barber/paid-access";
 import { getBarberPlan } from "@/lib/barber/plans";
 import { barberPlanHasFeature } from "@/lib/barber/plan-shared";
 import { getBarberDict, getBarberT, resolveBarberLocale } from "@/i18n/dictionaries/barber";
-import { getBarberWaQuota } from "@/lib/barber/whatsapp";
-import { InboxPanel } from "@/components/barber/whatsapp/inbox-panel";
-import { WaI18n } from "@/components/barber/whatsapp/ui";
+import { getBarberWaConnection, getBarberWaQuota, listBarberThreads } from "@/lib/barber/whatsapp";
+import { isBarberWaLinked, isBarberWaUnlimited } from "@/lib/barber/whatsapp-core";
+import { getBarberBotSettings, listBarberBotPauses } from "@/lib/barber/bot";
+import { MensajesScreen } from "@/components/barber/mensajes/mensajes-screen";
 
 export const dynamic = "force-dynamic";
 
@@ -16,11 +17,19 @@ export const dynamic = "force-dynamic";
  *
  * Mismo candado que sus APIs: permiso whatsapp.view + feature whatsappInbox.
  * Y el de pago, como todas las pantallas del panel.
+ *
+ * El servidor resuelve lo que decide qué se ve (sesión, plan, permisos) y
+ * trae la primera pintura: los chats, si hay WhatsApp conectado y, si el
+ * plan trae bot, si está encendido y en qué chats está en pausa. Todo con
+ * las MISMAS funciones que ya usan las APIs; nada nuevo en el servidor.
  */
-export default async function Page() {
+export default async function Page(props: { searchParams: Promise<{ tel?: string | string[] }> }) {
   const ctx = await getBarberContext();
   if (!ctx) redirect("/barber/entrar");
   await requireBarberPaidAccess(ctx);
+
+  // Después del candado (candado-suscripcion lo exige como segundo await).
+  const { tel } = await props.searchParams;
 
   const locale = resolveBarberLocale(ctx.barbershop.locale);
   const t = getBarberT(locale);
@@ -35,16 +44,46 @@ export default async function Page() {
     return <Notice text={t("barber.whatsapp.errors.planLocked")} />;
   }
 
-  const quota = await getBarberWaQuota(ctx.barbershopId);
+  const shopId = ctx.barbershopId;
+  const conBot = barberPlanHasFeature(plan, "whatsappBot");
+  const [connection, quota, threads, botSettings, pauses] = await Promise.all([
+    getBarberWaConnection(shopId),
+    getBarberWaQuota(shopId),
+    listBarberThreads(shopId).catch(() => []),
+    conBot ? getBarberBotSettings(shopId).catch(() => null) : Promise.resolve(null),
+    conBot ? listBarberBotPauses(shopId) : Promise.resolve([]),
+  ]);
+
+  const connected = isBarberWaLinked(connection.state);
+  const canSend = hasBarberPermission(permUser, "whatsapp.send");
+  const telefono = typeof tel === "string" ? tel.replace(/\D/g, "").slice(-10) : "";
 
   return (
-    <WaI18n dict={dict}>
-      <InboxPanel
-        locale={locale}
-        canSend={hasBarberPermission(permUser, "whatsapp.send")}
-        quota={quota}
-      />
-    </WaI18n>
+    <MensajesScreen
+      dict={dict}
+      locale={locale}
+      timezone={ctx.barbershop.timezone}
+      nowISO={new Date().toISOString()}
+      initial={{
+        threads,
+        pauses,
+        bot: {
+          disponible: conBot,
+          encendido: botSettings?.settings.enabled === true,
+          conectado: connected,
+        },
+        connected,
+        quotaExhausted: !isBarberWaUnlimited(quota.limit) && quota.exhausted,
+      }}
+      can={{
+        send: canSend,
+        attend: canSend && conBot,
+        clients:
+          barberPlanHasFeature(plan, "clients") && hasBarberPermission(permUser, "clients.view"),
+        agenda: barberPlanHasFeature(plan, "agenda") && hasBarberPermission(permUser, "agenda.view"),
+      }}
+      initialPhone={telefono.length === 10 ? telefono : null}
+    />
   );
 }
 
