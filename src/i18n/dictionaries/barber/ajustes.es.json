@@ -226,6 +226,44 @@
         "demasiados": "Demasiados intentos. Espera unos minutos y vuelve a intentarlo.",
         "error": "No pudimos cambiar tu contraseña. Inténtalo de nuevo."
       }
+    },
+    "payments": {
+      "title": "Pagos en línea",
+      "sub": "Conecta tu cuenta de Mercado Pago para que tus clientes paguen sus productos en línea.",
+      "howItWorks": "Con Mercado Pago conectado, tu tienda ofrece «Pagar ahora en línea» además de apartar y pagar en la barbería. El cliente paga con tarjeta o con su cuenta de Mercado Pago y el pedido queda pagado solo.",
+      "moneyNote": "El dinero llega directo a tu cuenta de Mercado Pago. DaleControl no lo toca; las devoluciones se hacen desde Mercado Pago.",
+      "connect": "Conectar Mercado Pago",
+      "reconnect": "Volver a conectar",
+      "disconnect": "Desconectar",
+      "disconnecting": "Desconectando…",
+      "accountFallback": "Tu cuenta de Mercado Pago",
+      "accountId": "Cuenta {id}",
+      "chipConnected": "Conectada",
+      "chipReconnect": "Vuelve a conectar",
+      "chipTest": "Modo de pruebas",
+      "connectedSince": "Conectada desde el {date}. Tu tienda ya ofrece pagar en línea.",
+      "connectedNote": "Tu tienda ya ofrece pagar en línea.",
+      "needsReconnect": "La conexión con Mercado Pago ya no funciona (se venció o se revocó el permiso). Vuelve a conectar tu cuenta; mientras tanto, tu tienda solo ofrece pagar en la barbería.",
+      "platformPaused": "Tu cuenta está conectada, pero los pagos en línea están en pausa en DaleControl. Mientras tanto, tu tienda solo ofrece pagar en la barbería.",
+      "platformMissing": "Los pagos en línea todavía no están disponibles en DaleControl. Te avisaremos cuando puedas conectar tu cuenta.",
+      "sqlPending": "Los pagos en línea todavía no se pueden activar: falta aplicar {file} en la base de datos.",
+      "connectedToast": "Listo, tu cuenta de Mercado Pago quedó conectada.",
+      "disconnectedToast": "Mercado Pago quedó desconectado.",
+      "disconnectError": "No pudimos desconectar Mercado Pago. Intenta de nuevo.",
+      "cancelled": "No se conectó Mercado Pago: cancelaste la autorización.",
+      "confirmTitle": "¿Desconectar Mercado Pago?",
+      "confirmBody": "Tu tienda dejará de ofrecer «Pagar ahora en línea» con {account}. Los pedidos que ya se pagaron no cambian. Puedes volver a conectar cuando quieras.",
+      "confirmYes": "Sí, desconectar",
+      "confirmCancel": "Cancelar",
+      "errors": {
+        "permiso": "Solo el dueño de la barbería puede conectar Mercado Pago.",
+        "plataforma": "Los pagos en línea todavía no están disponibles en DaleControl. Intenta más tarde.",
+        "estado": "La conexión tardó demasiado o se abrió en otro navegador. Vuelve a intentarlo.",
+        "sesion": "Tu sesión cambió mientras conectabas Mercado Pago. Vuelve a intentarlo.",
+        "canje": "Mercado Pago no confirmó la conexión. Vuelve a intentarlo.",
+        "guardar": "No pudimos guardar la conexión con Mercado Pago. Vuelve a intentarlo más tarde.",
+        "generic": "No se pudo conectar Mercado Pago. Vuelve a intentarlo."
+      }
     }
   }
 }

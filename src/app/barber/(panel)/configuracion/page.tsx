@@ -9,10 +9,13 @@ import type { Dictionary } from "@/i18n/t";
 import { getBarberSettings } from "@/lib/barber/settings";
 import { ConfiguracionScreen } from "@/components/barber/configuracion/configuracion-screen";
 import { MiCuentaScreen } from "@/components/barber/configuracion/mi-contrasena-card";
+import { estadoCuentaMp } from "@/lib/barber/mercadopago";
+import { matrizDelDueno } from "@/lib/barber/mercadopago-core";
 
 /**
  * /barber/configuracion — datos de la barbería, dirección pública,
- * fidelidad, inactividad, campañas y política de reserva.
+ * fidelidad, inactividad, campañas, política de reserva y —solo para el
+ * DUEÑO de la cadena— «Pagos en línea» (Mercado Pago, ws6-t5).
  *
  * El guard de pantalla es cortesía; el candado real es del servidor: cada
  * endpoint de /api/barber/settings exige settings.edit y escribe SOLO en el
@@ -36,9 +39,13 @@ export default async function Page() {
     return <MiCuentaScreen dict={dict} />;
   }
 
-  const [settings, plan] = await Promise.all([
+  // Pagos en línea: solo el dueño de la cadena la ve; nunca truena (sin
+  // tabla o sin llave de cifrado, la tarjeta lo explica).
+  const mpRoot = matrizDelDueno(ctx);
+  const [settings, plan, mp] = await Promise.all([
     getBarberSettings(ctx),
     getBarberPlan(ctx.barbershop.plan),
+    mpRoot ? estadoCuentaMp(mpRoot).catch(() => null) : Promise.resolve(null),
   ]);
 
   return (
@@ -47,6 +54,7 @@ export default async function Page() {
       starsDict={((getBarberDict(locale).barber as Dictionary).estrellas ?? {}) as Dictionary}
       initial={settings}
       publicBookingInPlan={plan.features.publicBooking === true}
+      payments={mp ? { initial: mp, locale, timeZone: ctx.barbershop.timezone || "America/Mexico_City" } : null}
     />
   );
 }

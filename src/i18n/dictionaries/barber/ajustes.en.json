@@ -226,6 +226,44 @@
         "demasiados": "Too many attempts. Wait a few minutes and try again.",
         "error": "We couldn't change your password. Please try again."
       }
+    },
+    "payments": {
+      "title": "Online payments",
+      "sub": "Connect your Mercado Pago account so your customers can pay for their products online.",
+      "howItWorks": "With Mercado Pago connected, your store offers \"Pay online now\" besides reserving and paying at the shop. The customer pays with a card or their Mercado Pago account and the order is marked paid on its own.",
+      "moneyNote": "The money goes straight to your Mercado Pago account. DaleControl never touches it; refunds are made from Mercado Pago.",
+      "connect": "Connect Mercado Pago",
+      "reconnect": "Reconnect",
+      "disconnect": "Disconnect",
+      "disconnecting": "Disconnecting…",
+      "accountFallback": "Your Mercado Pago account",
+      "accountId": "Account {id}",
+      "chipConnected": "Connected",
+      "chipReconnect": "Reconnect",
+      "chipTest": "Test mode",
+      "connectedSince": "Connected since {date}. Your store now offers online payment.",
+      "connectedNote": "Your store now offers online payment.",
+      "needsReconnect": "The Mercado Pago connection no longer works (it expired or the permission was revoked). Reconnect your account; meanwhile your store only offers paying at the shop.",
+      "platformPaused": "Your account is connected, but online payments are paused in DaleControl. Meanwhile your store only offers paying at the shop.",
+      "platformMissing": "Online payments aren't available in DaleControl yet. We'll let you know when you can connect your account.",
+      "sqlPending": "Online payments can't be turned on yet: {file} still has to be applied to the database.",
+      "connectedToast": "Done, your Mercado Pago account is connected.",
+      "disconnectedToast": "Mercado Pago was disconnected.",
+      "disconnectError": "We couldn't disconnect Mercado Pago. Please try again.",
+      "cancelled": "Mercado Pago wasn't connected: you cancelled the authorization.",
+      "confirmTitle": "Disconnect Mercado Pago?",
+      "confirmBody": "Your store will stop offering \"Pay online now\" with {account}. Orders already paid don't change. You can reconnect whenever you want.",
+      "confirmYes": "Yes, disconnect",
+      "confirmCancel": "Cancel",
+      "errors": {
+        "permiso": "Only the shop owner can connect Mercado Pago.",
+        "plataforma": "Online payments aren't available in DaleControl yet. Please try later.",
+        "estado": "The connection took too long or was opened in another browser. Please try again.",
+        "sesion": "Your session changed while connecting Mercado Pago. Please try again.",
+        "canje": "Mercado Pago didn't confirm the connection. Please try again.",
+        "guardar": "We couldn't save the Mercado Pago connection. Please try again later.",
+        "generic": "Mercado Pago couldn't be connected. Please try again."
+      }
     }
   }
 }
