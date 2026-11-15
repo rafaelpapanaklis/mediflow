@@ -55,6 +55,7 @@ import {
   isBarberWaSysRow,
   isBarberWaUnlimited,
   isBarberWaLinked,
+  BARBER_WA_CAN_REPLY_STATES,
   isBarberYesReply,
   nextBarberWaStatus,
   normalizeBarberReply,
@@ -862,10 +863,26 @@ test("G4 — las marcas del turno se leen de vuelta y no se confunden con un err
   assert.equal(isBarberBotTurnMark("(#100) Invalid parameter"), false);
 });
 
-test("la pantalla del bot da por conectado todo lo que no sea «sin conectar» (también «sin verificación»)", () => {
-  assert.equal(isBarberWaLinked("DISCONNECTED"), false);
-  for (const s of ["CONNECTED", "UNVERIFIED", "NO_PAYMENT_METHOD", "ERROR"] as const) {
+test("la pantalla del bot deja encenderlo solo en los estados que pueden contestar (también «sin verificación»)", () => {
+  for (const s of ["CONNECTED", "UNVERIFIED", "NO_PAYMENT_METHOD"] as const) {
     assert.equal(isBarberWaLinked(s), true, s);
+  }
+  assert.equal(isBarberWaLinked("DISCONNECTED"), false);
+  assert.equal(isBarberWaLinked("ERROR"), false, "token vencido: no podría contestar");
+  assert.deepEqual([...BARBER_WA_CAN_REPLY_STATES], ["CONNECTED", "UNVERIFIED", "NO_PAYMENT_METHOD"]);
+  // NO_PAYMENT_METHOD cuenta como «puede contestar» porque el envío del bot
+  // no lo frena antes de llamar a Meta. Si algún día lo frena, esta prueba
+  // obliga a sacarlo de la lista.
+  const wa = sinComentarios(readFileSync("src/lib/barber/whatsapp.ts", "utf8"));
+  const cuerpo = (nombre: string) => {
+    const i = wa.indexOf(`async function ${nombre}(`);
+    assert.ok(i >= 0, nombre);
+    const j = wa.indexOf("\nasync function ", i + 10);
+    const k = wa.indexOf("\nexport async function ", i + 10);
+    return wa.slice(i, Math.min(...[j, k].filter((n) => n > 0)));
+  };
+  for (const fn of ["runBotIfEnabled", "replyInline"]) {
+    assert.doesNotMatch(cuerpo(fn), /NO_PAYMENT_METHOD|BILLING_REQUIRED|getBarberWaConnection/, fn);
   }
   // La página del bot usa este criterio y no el `=== "CONNECTED"` de antes.
   const page = readFileSync("src/app/barber/(panel)/whatsapp/bot/page.tsx", "utf8");

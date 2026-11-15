@@ -61,15 +61,27 @@ export type BarberWaConnectionState =
   | "ERROR";
 
 /**
- * ¿Hay un número enlazado? Todo lo que no sea DISCONNECTED lo tiene: también
- * UNVERIFIED («conectado, sin verificación de negocio», que NO es un
- * problema), NO_PAYMENT_METHOD y ERROR, que son avisos sobre un número que
- * sí está conectado. La pantalla del bot lo usa para dejar encenderlo; antes
- * solo aceptaba CONNECTED y con UNVERIFIED el interruptor quedaba bloqueado
- * aunque el servidor sí lo permitía.
+ * Estados en los que el número PUEDE contestar, o sea en los que la pantalla
+ * del bot deja encenderlo. Lista CERRADA: un estado nuevo queda fuera hasta
+ * que alguien decida meterlo.
+ *   · CONNECTED / UNVERIFIED — UNVERIFIED es «conectado, sin verificación de
+ *     negocio», que NO es un problema (antes dejaba el interruptor bloqueado).
+ *   · NO_PAYMENT_METHOD — el bot contesta con texto libre dentro de la ventana
+ *     de 24 h, que Meta no cobra, y el envío (replyInline) no lo frena antes
+ *     de llamar a Meta: solo exige número y token.
+ * Fuera: DISCONNECTED y ERROR (token vencido o rechazado: el número está
+ * guardado pero no puede mandar nada). En ERROR la pantalla vuelve a «sin
+ * conectar» y la de WhatsApp enseña el aviso rojo con el porqué.
  */
+export const BARBER_WA_CAN_REPLY_STATES: readonly BarberWaConnectionState[] = [
+  "CONNECTED",
+  "UNVERIFIED",
+  "NO_PAYMENT_METHOD",
+];
+
+/** ¿El número puede contestar? (ver BARBER_WA_CAN_REPLY_STATES) */
 export function isBarberWaLinked(state: BarberWaConnectionState): boolean {
-  return state !== "DISCONNECTED";
+  return BARBER_WA_CAN_REPLY_STATES.includes(state);
 }
 
 export interface BarberWaConnectionDTO {
