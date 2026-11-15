@@ -128,7 +128,7 @@ export function SolicitudesClient({
       {/* Liga pública + modo de confirmación */}
       <div style={CARD}>
         <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10 }}>
-          <Link2 size={16} style={{ color: "var(--brand)" }} />
+          <Link2 size={16} style={{ color: "var(--brand-ink)" }} />
           <b style={{ fontSize: 13 }}>{t("barber.reserva.solicitudes.tuLiga")}</b>
           <code
             style={{
@@ -138,7 +138,7 @@ export function SolicitudesClient({
               color: "var(--text-2)",
               background: "var(--bg-elev-2)",
               border: "1px solid var(--border-soft)",
-              borderRadius: 8,
+              borderRadius: "var(--radius-sm)",
               padding: "6px 10px",
               overflow: "hidden",
               textOverflow: "ellipsis",
@@ -167,7 +167,7 @@ export function SolicitudesClient({
             color: "var(--danger)",
             background: "var(--danger-soft)",
             border: "1px solid var(--danger-border-strong)",
-            borderRadius: 10,
+            borderRadius: "var(--radius-md)",
             padding: "10px 12px",
             margin: "0 0 14px",
           }}
@@ -183,7 +183,7 @@ export function SolicitudesClient({
           style={{
             background: "var(--warning-soft)",
             border: "1px solid var(--warning-border-strong)",
-            borderRadius: 12,
+            borderRadius: "var(--radius-md)",
             padding: "12px 14px",
             margin: "0 0 14px",
           }}
@@ -224,17 +224,17 @@ export function SolicitudesClient({
       ) : null}
 
       {/* Pestañas */}
-      <div style={{ display: "flex", gap: 6, margin: "0 0 16px" }}>
+      <div style={TABS}>
         {(["pendientes", "resueltas"] as const).map((id) => (
           <button
             key={id}
             type="button"
+            aria-pressed={tab === id}
             onClick={() => setTab(id)}
             style={{
               ...TAB,
-              background: tab === id ? "var(--brand-soft)" : "transparent",
-              borderColor: tab === id ? "var(--border-brand)" : "var(--border-soft)",
-              color: tab === id ? "var(--brand)" : "var(--text-2)",
+              borderBottomColor: tab === id ? "var(--brand)" : "transparent",
+              color: tab === id ? "var(--text-1)" : "var(--text-3)",
             }}
           >
             {t(`barber.reserva.solicitudes.${id}`)}
@@ -362,7 +362,7 @@ export function SolicitudesClient({
                         alignItems: "center",
                         gap: 8,
                         padding: "10px 12px",
-                        borderRadius: 10,
+                        borderRadius: "var(--radius-md)",
                         background: "var(--danger-soft)",
                         border: "1px solid var(--danger-border-strong)",
                       }}
@@ -409,18 +409,30 @@ const STATUS_LABEL: Record<string, string> = {
   CANCELLED: "Rechazada",
 };
 
+// Rediseño D (tanda 3): radios del tema (12 tarjeta, 8 control), pestañas
+// subrayadas y etiquetas sin MAYÚSCULAS. Mismos tamaños de letra.
 const CARD: React.CSSProperties = {
   background: "var(--bg-elev)",
   border: "1px solid var(--border-soft)",
-  borderRadius: 14,
+  borderRadius: "var(--radius-lg)",
+  boxShadow: "var(--shadow-1)",
   padding: 16,
   marginBottom: 14,
 };
 
+const TABS: React.CSSProperties = {
+  display: "flex",
+  gap: 2,
+  margin: "0 0 16px",
+  borderBottom: "1px solid var(--border-soft)",
+};
+
 const TAB: React.CSSProperties = {
-  border: "1px solid var(--border-soft)",
-  borderRadius: 10,
-  padding: "8px 14px",
+  background: "transparent",
+  border: 0,
+  borderBottom: "2px solid transparent",
+  marginBottom: -1,
+  padding: "10px 14px",
   fontSize: 13,
   fontWeight: 600,
   cursor: "pointer",
@@ -432,7 +444,7 @@ const SMALL_BTN: React.CSSProperties = {
   alignItems: "center",
   gap: 6,
   padding: "8px 12px",
-  borderRadius: 10,
+  borderRadius: "var(--radius-md)",
   fontSize: 13,
   fontWeight: 600,
   cursor: "pointer",
@@ -449,10 +461,8 @@ const GHOST_BTN: React.CSSProperties = {
 
 const PILL: React.CSSProperties = {
   fontSize: 11,
-  fontWeight: 700,
-  letterSpacing: "0.04em",
-  textTransform: "uppercase",
-  color: "var(--text-3)",
+  fontWeight: 600,
+  color: "var(--text-2)",
   background: "var(--bg-elev-2)",
   borderRadius: 999,
   padding: "3px 9px",
