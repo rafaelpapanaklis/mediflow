@@ -137,10 +137,11 @@
     "durationSaved": "Duration set to {duration}.",
     "minutes": "min",
     "charge": "Charge",
+    "chargeNow": "Charge now",
     "completeAndCharge": "Complete and charge",
     "alreadyCharged": "Already paid: {amount}.",
     "viewTicket": "See the receipt",
-    "chargeSkipHint": "Paying later? You can close without charging; the visit stays under “Visits to charge” in the register.",
+    "chargeSkipHint": "Paying later? Just close: it stays under “Visits to charge” in the register.",
     "cancelConfirm": "Cancel the visit for {name}?",
     "cancelYes": "Yes, cancel",
     "cancelNo": "No, go back"

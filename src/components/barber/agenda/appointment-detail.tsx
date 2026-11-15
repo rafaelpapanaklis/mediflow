@@ -223,7 +223,7 @@ export function AppointmentDetail(props: AppointmentDetailProps) {
               onClick={props.onCharge}
               disabled={busy !== null}
             >
-              <Receipt size={14} /> {t("barber.agenda.detail.charge")}
+              <Receipt size={14} /> {t("barber.agenda.detail.chargeNow")}
             </button>
           ) : null}
           {isRequest && props.canEdit ? (
