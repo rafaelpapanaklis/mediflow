@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowDown, ArrowUp, CalendarClock, Contact, Pencil, Plus, Trash2, Upload } from "lucide-react";
+import { ArrowDown, ArrowUp, CalendarClock, Contact, Info, Pencil, Plus, Trash2, Upload } from "lucide-react";
+// El mismo color con que la Agenda pinta a cada barbero (punto y tarjeta).
+import { barberColor } from "@/components/barber/agenda/agenda-ui";
 import Link from "next/link";
 import type { BarberCommissionType } from "@/lib/barber/types";
 import { esFotoSubida } from "@/lib/barber/barber-photo";
@@ -306,45 +308,45 @@ export function BarbersClient({
           />
         </div>
       ) : (
-        <>
-          <p className={s.hint}>{t("barbers.orderHint")}</p>
-          <div className={s.grid}>
+        // Rediseño D (punto 19): una LISTA en orden dentro de una tarjeta, no
+        // tarjetas sueltas con una huérfana. El número es el lugar en la agenda
+        // y en la página pública («el orden manda»); en la vista de toda la
+        // cadena no hay un orden único, así que ahí no se numera ni se mueve.
+        <section className={[s.card, s.teamCard].join(" ")}>
+          <ol className={s.team}>
             {barbers.map((b, i) => (
-              <article
+              <li
                 key={b.id}
-                className={[s.rowCard, b.isActive ? "" : s.rowCardMuted].filter(Boolean).join(" ")}
+                className={[s.member, isConsolidated ? s.memberNoOrder : "", b.isActive ? "" : s.rowCardMuted]
+                  .filter(Boolean)
+                  .join(" ")}
               >
-                <Avatar name={b.name} url={b.photoUrl} />
-                <div className={s.rowMain}>
-                  <div className={s.rowTitle}>
+                {!isConsolidated ? (
+                  <span className={s.memberPos} aria-hidden="true">
+                    {i + 1}
+                  </span>
+                ) : null}
+                <Avatar name={b.name} url={b.photoUrl} color={barberColor(b.id)} />
+                <div className={s.memberWho}>
+                  <div className={s.memberName}>
                     <span className={s.truncate}>{b.name}</span>
-                    {b.nickname ? (
-                      <span style={{ fontSize: 12.5, fontWeight: 500, color: "var(--text-3)" }}>
-                        {b.nickname}
-                      </span>
-                    ) : null}
                   </div>
-                  <div className={s.rowMeta}>
-                    <Chip tone="brand">{payChip(b)}</Chip>
-                    {!b.isActive ? <Chip tone="muted">{t("common.inactive")}</Chip> : null}
-                    {isConsolidated ? (
-                      <Chip tone="muted">{branchLabelById.get(b.barbershopId) ?? ""}</Chip>
-                    ) : null}
-                  </div>
+                  {b.nickname ? <div className={s.memberNick}>{b.nickname}</div> : null}
                   {b.bio ? (
                     <p className={s.hint} style={{ marginTop: 2 }}>
                       {b.bio.length > 120 ? `${b.bio.slice(0, 120)}...` : b.bio}
                     </p>
                   ) : null}
-                  <div className={s.rowActions}>
-                    <Btn size="sm" onClick={() => openForm(toForm(b))}>
-                      <Pencil size={13} />
-                      {t("common.edit")}
-                    </Btn>
-                  </div>
+                </div>
+                <div className={s.memberPay}>
+                  <Chip tone="brand">{payChip(b)}</Chip>
+                  {!b.isActive ? <Chip tone="muted">{t("common.inactive")}</Chip> : null}
+                  {isConsolidated ? (
+                    <Chip tone="muted">{branchLabelById.get(b.barbershopId) ?? ""}</Chip>
+                  ) : null}
                 </div>
                 {!isConsolidated ? (
-                  <div className={s.orderCol}>
+                  <div className={s.memberOrder}>
                     <Btn
                       size="sm"
                       variant="ghost"
@@ -365,10 +367,20 @@ export function BarbersClient({
                     </Btn>
                   </div>
                 ) : null}
-              </article>
+                <div className={s.memberEdit}>
+                  <Btn size="sm" onClick={() => openForm(toForm(b))}>
+                    <Pencil size={13} />
+                    {t("common.edit")}
+                  </Btn>
+                </div>
+              </li>
             ))}
-          </div>
-        </>
+          </ol>
+          <p className={s.teamHint}>
+            <Info size={14} aria-hidden />
+            {t("barbers.orderHint")}
+          </p>
+        </section>
       )}
 
       <Banner

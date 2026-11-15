@@ -335,7 +335,20 @@ export function ErrorText({ children }: { children: ReactNode }) {
   );
 }
 
-export function Avatar({ name, url }: { name: string; url?: string | null }) {
+export function Avatar({
+  name,
+  url,
+  color,
+}: {
+  name: string;
+  url?: string | null;
+  /**
+   * Color del barbero (barberColor de la agenda): el mismo tono del punto con
+   * que se le reconoce en la Agenda. Tinte de fondo + iniciales en el tono
+   * oscurecido, para que las iniciales lean AA (blanco sobre el tono no).
+   */
+  color?: string;
+}) {
   const initials = name
     .split(/\s+/)
     .slice(0, 2)
@@ -346,8 +359,15 @@ export function Avatar({ name, url }: { name: string; url?: string | null }) {
     // next/image, que exige allowlist de dominios y aquí el dominio es libre).
     return <img className={s.avatar} src={url} alt="" loading="lazy" />;
   }
+  const tint = color
+    ? {
+        background: `color-mix(in srgb, ${color} 16%, var(--bg-elev))`,
+        borderColor: `color-mix(in srgb, ${color} 40%, transparent)`,
+        color: `color-mix(in srgb, ${color} 55%, var(--text-1))`,
+      }
+    : undefined;
   return (
-    <div className={s.avatar} aria-hidden="true">
+    <div className={s.avatar} style={tint} aria-hidden="true">
       {initials || "?"}
     </div>
   );
