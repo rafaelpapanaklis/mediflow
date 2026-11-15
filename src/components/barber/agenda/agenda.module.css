@@ -1850,3 +1850,136 @@
   .cardTime { font-size: 10px; }
   .cardName { font-size: 12px; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   VESTIDO D — rediseño del panel (15-nov-2026, aprobado por Rafael).
+   La rejilla, el hueco bajo el mouse, mover y alargar son de ws6-t8 y NO
+   se tocan: este bloque solo pisa VALORES visuales (color por token, radio,
+   peso, mayúsculas) y va al final, sin editar las reglas de arriba, para
+   que los retoques de lógica de la agenda no choquen con él.
+   Tamaños de letra: los mismos de arriba (no crece nada).
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* Controles con los radios del tema (8 control, 12 tarjeta). */
+.btn { border-radius: var(--radius-md); border-color: var(--border-strong); }
+.segmented { border-radius: var(--radius-md); }
+.seg { border-radius: var(--radius-sm); }
+.board { border-radius: var(--radius-lg); }
+
+/* Filtro de sillas: la elegida, en el café-negro del menú (como el mockup). */
+.chairOn,
+:global(.dark) .chairOn {
+  background: var(--menu-bg);
+  border-color: var(--menu-bg);
+  color: var(--menu-strong);
+}
+
+/* Regleta: la hora en punto se lee primero; la media hora, sin perderse
+   (--text-4 es decorativo y daba 2.9:1). */
+.gutterMark { color: var(--text-2); }
+.gutterHalf { color: var(--text-3); }
+.hourLine { border-top-color: var(--border-strong); }
+.halfLine { border-top-color: var(--border-soft); }
+
+/* Hueco bajo el mouse: recuadro punteado café, como el mockup. */
+.slotGuide {
+  border: 1.5px dashed var(--caramel-600);
+  box-shadow: none;
+  background: var(--brand-softer);
+  border-radius: var(--radius-md);
+}
+.slotGuideText { color: var(--caramel-800); font-weight: 600; }
+.slotGuideBad { border-color: var(--danger); background: var(--danger-soft); }
+
+/* Fuera de horario: en palabras normales, sin MAYÚSCULAS. */
+.closedLabel {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+}
+
+/* Ahora: el rojo del tema (antes #D93B3B suelto en tres reglas). */
+.nowLine { border-top-color: var(--st-now); }
+.nowDot { background: var(--st-now); }
+.nowLabel { background: var(--st-now); color: var(--on-brand); border-radius: var(--radius-sm); }
+
+/* Tarjeta de visita: estados por token del tema (mismos tonos), radio 8,
+   raya de 3 px. Completada más quieta; «En silla» más presente; «No llegó»
+   rayada y tachada. */
+.card {
+  border-radius: var(--radius-md);
+  border-left-width: 3px;
+  background: color-mix(in srgb, var(--st) 10%, var(--bg-elev));
+  border-color: color-mix(in srgb, var(--st) 26%, transparent);
+  border-left-color: var(--st);
+}
+.card[data-status="PENDING"],
+:global(.dark) .card[data-status="PENDING"] { --st: var(--st-pending); }
+.card[data-status="CONFIRMED"],
+:global(.dark) .card[data-status="CONFIRMED"] { --st: var(--st-confirmed); }
+.card[data-status="IN_PROGRESS"],
+:global(.dark) .card[data-status="IN_PROGRESS"] { --st: var(--st-chair); }
+.card[data-status="DONE"],
+:global(.dark) .card[data-status="DONE"] { --st: var(--st-done); }
+.card[data-status="NO_SHOW"],
+:global(.dark) .card[data-status="NO_SHOW"] { --st: var(--st-noshow); }
+.card[data-status="CANCELLED"],
+:global(.dark) .card[data-status="CANCELLED"] { --st: var(--st-cancelled); }
+.card[data-status="IN_PROGRESS"] { background: color-mix(in srgb, var(--st) 16%, var(--bg-elev)); }
+.card[data-status="DONE"] { background: color-mix(in srgb, var(--st) 7%, var(--bg-elev)); }
+.card[data-status="DONE"] .cardName { color: var(--text-2); }
+.card[data-status="NO_SHOW"] {
+  background:
+    repeating-linear-gradient(135deg, var(--danger-soft) 0 6px, transparent 6px 12px),
+    var(--bg-elev);
+}
+.card[data-status="NO_SHOW"] .cardName {
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--st) 45%, transparent);
+}
+.cardStatus { text-transform: none; letter-spacing: 0; font-size: 10.5px; color: color-mix(in srgb, var(--st) 75%, var(--text-1)); }
+.cardTime { color: color-mix(in srgb, var(--st) 75%, var(--text-1)); }
+.cardPaid,
+:global(.dark) .cardPaid { color: var(--st-done); }
+
+/* A medio arrastrar: el lugar viejo queda como silueta punteada (no un
+   fantasma al 30 %) y el destino se ve LEVANTADO, con su hora nueva. */
+.card.cardDragging {
+  opacity: 1;
+  background: transparent;
+  border-style: dashed;
+  border-left-width: 1.5px;
+  border-color: color-mix(in srgb, var(--st) 50%, transparent);
+  box-shadow: none;
+}
+.card.cardDragging > * { opacity: 0.45; }
+.ghost {
+  border: 2px solid var(--brand);
+  border-radius: var(--radius-md);
+  background: linear-gradient(var(--brand-soft), var(--brand-soft)), var(--bg-elev);
+  box-shadow: var(--shadow-3);
+  transform: translateY(-2px);
+}
+.ghostBad { border-color: var(--danger); }
+
+/* Leyenda con los mismos tokens que las tarjetas. */
+.legendSwatch[data-status="PENDING"],
+:global(.dark) .legendSwatch[data-status="PENDING"] { --st: var(--st-pending); }
+.legendSwatch[data-status="CONFIRMED"],
+:global(.dark) .legendSwatch[data-status="CONFIRMED"] { --st: var(--st-confirmed); }
+.legendSwatch[data-status="IN_PROGRESS"],
+:global(.dark) .legendSwatch[data-status="IN_PROGRESS"] { --st: var(--st-chair); }
+.legendSwatch[data-status="DONE"],
+:global(.dark) .legendSwatch[data-status="DONE"] { --st: var(--st-done); }
+.legendSwatch[data-status="NO_SHOW"],
+:global(.dark) .legendSwatch[data-status="NO_SHOW"] { --st: var(--st-noshow); }
+.legendSwatch[data-status="CANCELLED"],
+:global(.dark) .legendSwatch[data-status="CANCELLED"] { --st: var(--st-cancelled); }
+.legendSwatch { border-radius: 3px; border-left-width: 3px; border-left-color: var(--st); }
+
+/* Diálogos de la agenda: radios del tema. */
+.modal { border-radius: var(--radius-lg); }
+.input,
+.select,
+.textarea { border-radius: var(--radius-md); }
