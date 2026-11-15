@@ -50,6 +50,11 @@ import {
 } from "./helpers";
 import type { BarberWebData } from "./types";
 
+/** Letras de la palabra más larga (mínimo 1): lo que manda el ancho del titular. */
+function palabraMasLarga(texto: string): number {
+  return Math.max(1, ...texto.trim().split(/\s+/).map((p) => p.length));
+}
+
 export function PlantillaUrbana({ data }: { data: BarberWebData }) {
   const { shop, config, servicios, barberos, editando } = data;
   const secs = secciones(data);
@@ -69,7 +74,15 @@ export function PlantillaUrbana({ data }: { data: BarberWebData }) {
               <div className="dcbw-ur-hero-in">
                 <div className="dcbw-ur-hero-txt">
                   {marca && <Foto src={marca} alt={shop.name} className="dcbw-marca-img" prioridad />}
-                  <h1 className="dcbw-h1">{shop.name}</h1>
+                  {/* --ur-palabra: la palabra más larga del nombre. El titular es
+                      condensado y a todo el ancho: una palabra larga ya no lo
+                      desborda ni lo recorta, la letra se achica hasta que cabe. */}
+                  <h1
+                    className="dcbw-h1"
+                    style={{ ["--ur-palabra" as string]: palabraMasLarga(shop.name) }}
+                  >
+                    {shop.name}
+                  </h1>
                   <p className="dcbw-kicker">{copia(data, "portada", "portada.eslogan")}</p>
                   <div className="dcbw-acciones">
                     <Boton href={reservar}>
