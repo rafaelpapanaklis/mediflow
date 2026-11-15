@@ -352,11 +352,16 @@ export async function listClientMemberships(
   }
 
   if (q) {
+    // Teléfono solo con 3 dígitos o más, como Caja (lookupClients) y Clientes:
+    // antes bastaba UNO, así que «Ana 5» traía a todo cliente con un 5 en el
+    // teléfono (pase 11: la prueba fallaba cuando el sufijo aleatorio llevaba
+    // un dígito).
+    const digits = q.replace(/\D/g, "");
     const search: Prisma.BarberClientMembershipWhereInput = {
       client: {
         OR: [
           { name: { contains: q, mode: "insensitive" } },
-          { phone: { contains: q.replace(/\D/g, "") || q } },
+          ...(digits.length >= 3 ? [{ phone: { contains: digits } }] : []),
         ],
       },
     };

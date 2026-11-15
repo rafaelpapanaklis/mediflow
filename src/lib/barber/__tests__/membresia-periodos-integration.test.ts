@@ -32,7 +32,10 @@ import { BASE_LOCAL as HAS_DB, skip } from "./_base-local";
 
 const PRO = FALLBACK_BARBER_PLAN_CONFIG.PROFESIONAL.features;
 const DAY = 86_400_000;
-const RUN = `mper${Date.now().toString(36)}`;
+// SIN dígitos (pase 11): los buscadores también comparan los dígitos del
+// texto contra el teléfono, y un sufijo como «…5…» hacía que «Ana <RUN>»
+// encontrara a todos los clientes (teléfonos 55…). Era la prueba inestable.
+const RUN = `mper${Date.now().toString(36).replace(/\d/g, (d) => "abcdefghij"[Number(d)])}`;
 
 // ═══════════════════════════════════════════════════════════════════════
 // 0. La regla, pura
@@ -202,6 +205,8 @@ test("Membresías: una entrada por cliente con su «próximo periodo»; quien ya
   const list = await mem.listClientMemberships(shopId, { filter: "all", q: `Ana ${RUN}` });
   assert.equal(list.length, 1, "los periodos futuros viajan dentro del vigente");
   assert.equal(list[0].nextPeriods?.length, 2);
+  // Un dígito suelto no es un teléfono: «Ana 5» no trae a todos los que tienen un 5.
+  assert.equal((await mem.listClientMemberships(shopId, { filter: "all", q: "Ana 5" })).length, 0, "un dígito no busca por teléfono");
   const soon = await mem.listClientMemberships(shopId, { filter: "soon", q: `Ana ${RUN}` });
   assert.equal(soon.length, 0);
   const stats = await mem.getMembershipStats(shopId);
