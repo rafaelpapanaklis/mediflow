@@ -19,12 +19,13 @@
   backdrop-filter: blur(2px);
   display: grid;
   place-items: center;
-  padding: 24px;
+  /* Sin padding: un contenedor no puede estilarse con su propia @container,
+     así que el margen lo pone la ventana (y la hoja lo quita). */
 }
 
 .win {
   position: relative;
-  width: min(920px, 100%);
+  width: min(920px, calc(100% - 48px));
   max-height: calc(100dvh - 48px);
   display: flex;
   flex-direction: column;
@@ -37,6 +38,9 @@
   font-size: 14px;
   animation: citaIn 160ms ease;
 }
+/* El foco entra a la ventana (tabIndex -1) para que Esc y el lector de
+   pantalla la tomen; el anillo se ve en cada botón, no en todo el marco. */
+.win:focus { outline: none; }
 
 @keyframes citaIn {
   from { opacity: 0; transform: translateY(8px) scale(0.985); }
@@ -131,7 +135,7 @@
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 4px;
 }
-.track li { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--text-3); }
+.track li { display: flex; flex-direction: column; gap: 6px; min-width: 0; font-size: 13px; color: var(--text-3); overflow-wrap: anywhere; }
 .track li::before { content: ""; height: 4px; border-radius: 2px; background: var(--border-soft); }
 .track li[data-state="done"]::before { background: var(--caramel-400); }
 .track li[data-state="done"] { color: var(--text-2); font-weight: 600; }
@@ -375,7 +379,7 @@
 .sum {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 4px 12px;
+  gap: 4px 0;
   padding: 10px 12px;
   background: var(--bg-elev-2);
   border-radius: var(--radius-md);
@@ -383,7 +387,7 @@
   color: var(--text-2);
   font-variant-numeric: tabular-nums;
 }
-.sumR { text-align: right; }
+.sumR { text-align: right; padding-left: 12px; }
 .sumDep { color: var(--success); font-weight: 600; }
 .sumTot { font-size: 15px; font-weight: 650; color: var(--text-1); padding-top: 6px; border-top: 1px solid var(--border-soft); margin-top: 2px; }
 
@@ -582,9 +586,12 @@
 
 /* ═══ HOJA (celular) ═══════════════════════════════════════════════ */
 @container cita (max-width: 720px) {
-  .velo { padding: 0; place-items: end stretch; }
+  /* La hoja se pega abajo: lo decide la ventana, no el velo (el velo es el
+     contenedor y no puede estilarse con su propia @container). */
   .win {
     width: 100%;
+    align-self: end;
+    justify-self: stretch;
     max-height: 92dvh;
     border-radius: 16px 16px 0 0;
     border-bottom: 0;
@@ -605,7 +612,7 @@
   .headClientMobile { display: block; font-size: 13px; font-weight: 600; color: var(--text-1); }
   .headClientMobile span { font-weight: 500; color: var(--text-3); }
   .track { margin-right: 8px; }
-  .track li { font-size: 12px; }
+  .track li { font-size: 12px; hyphens: auto; }
   .tabs {
     display: flex;
     grid-column: 1 / -1;

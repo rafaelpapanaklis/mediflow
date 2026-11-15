@@ -397,7 +397,9 @@
       "PENDING": "Pending",
       "CONFIRMED": "Confirmed",
       "IN_PROGRESS": "In the chair",
-      "DONE": "Completed"
+      "DONE": "Completed",
+      "NO_SHOW": "No-show",
+      "CANCELLED": "Cancelled"
     },
     "stepNow": "Now",
     "cancelled": "This visit was cancelled.",
@@ -501,7 +503,7 @@
       "nearby": "On {day} {barber} is busy at that time. Closest slots:",
       "none": "On {day} {barber} has no room. Try another week or use “Repeat this visit”.",
       "confirm": "Book",
-      "created": "Their next visit is booked: {day} at {time}.",
+      "created": "Their next visit is booked: {day} at {time}",
       "noBarber": "This visit has no barber: use “Repeat this visit” to choose day and barber.",
       "error": "Couldn't look for a slot. Try again."
     },
@@ -549,6 +551,11 @@
     "foot": {
       "waiting": "Already here? Mark them as “Arrived” and {barber} sees it on the schedule.",
       "waitingNoBarber": "Already here? Mark them as “Arrived” and it shows on the schedule."
+    },
+    "go": {
+      "CONFIRMED": "Confirm visit",
+      "IN_PROGRESS": "Start service",
+      "DONE": "Complete visit"
     }
   }
 }

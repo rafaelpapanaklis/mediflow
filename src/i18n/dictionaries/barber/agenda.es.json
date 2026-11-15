@@ -397,7 +397,9 @@
       "PENDING": "Pendiente",
       "CONFIRMED": "Confirmada",
       "IN_PROGRESS": "En silla",
-      "DONE": "Completada"
+      "DONE": "Completada",
+      "NO_SHOW": "No llegó",
+      "CANCELLED": "Cancelada"
     },
     "stepNow": "Ahora",
     "cancelled": "Se canceló esta visita.",
@@ -501,7 +503,7 @@
       "nearby": "El {day} a esa hora {barber} no tiene lugar. Lo más cercano:",
       "none": "El {day} {barber} no tiene lugar. Prueba otra semana o usa «Repetir esta cita».",
       "confirm": "Agendar",
-      "created": "Quedó agendada su próxima: {day} a las {time}.",
+      "created": "Quedó agendada su próxima: {day} a las {time}",
       "noBarber": "Esta visita no tiene barbero: usa «Repetir esta cita» para elegir día y barbero.",
       "error": "No se pudo buscar lugar. Inténtalo otra vez."
     },
@@ -549,6 +551,11 @@
     "foot": {
       "waiting": "¿Ya está aquí? Márcalo con «Ya llegó» y {barber} lo ve en la agenda.",
       "waitingNoBarber": "¿Ya está aquí? Márcalo con «Ya llegó» y se ve en la agenda."
+    },
+    "go": {
+      "CONFIRMED": "Confirmar cita",
+      "IN_PROGRESS": "Iniciar servicio",
+      "DONE": "Completar visita"
     }
   }
 }
