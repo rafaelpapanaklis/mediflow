@@ -87,8 +87,10 @@ export function dalecontrolWhatsappDisplay(): string {
  * barbería va en el texto para que soporte sepa quién escribe sin preguntar.
  */
 export function barberSupportWhatsappUrl(shopName?: string | null): string {
-  const quien = shopName?.trim() ? ` de la barbería ${shopName.trim()}` : "";
-  const texto = `Hola, soy${quien} y necesito ayuda con mi suscripción de DaleControl Barber.`;
+  // Sin nombre (el 500 genérico del cobro no lo tiene) salía «Hola, soy y necesito…».
+  const texto = shopName?.trim()
+    ? `Hola, soy de la barbería ${shopName.trim()} y necesito ayuda con mi suscripción de DaleControl Barber.`
+    : "Hola, necesito ayuda con mi suscripción de DaleControl Barber.";
   return `https://wa.me/${DALECONTROL_WHATSAPP_E164}?text=${encodeURIComponent(texto)}`;
 }
 

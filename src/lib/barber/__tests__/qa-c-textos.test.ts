@@ -23,3 +23,11 @@ test("Suscripción: la cabecera dice Plan / Vigencia / Tarjeta, no «Planes / Fe
   }
   assert.equal(dict("suscripcion", "es").hero.cardLabel, "Tarjeta");
 });
+
+test("WhatsApp a soporte desde el error del cobro: sin nombre ya no dice «Hola, soy y necesito…»", async () => {
+  const { barberSupportWhatsappUrl } = await import("../marketing");
+  const texto = (u: string) => decodeURIComponent(u.split("text=")[1]);
+  assert.equal(texto(barberSupportWhatsappUrl()), "Hola, necesito ayuda con mi suscripción de DaleControl Barber.");
+  assert.equal(texto(barberSupportWhatsappUrl("   ")), "Hola, necesito ayuda con mi suscripción de DaleControl Barber.");
+  assert.match(texto(barberSupportWhatsappUrl("Barbería Prueba")), /^Hola, soy de la barbería Barbería Prueba y necesito ayuda/);
+});
