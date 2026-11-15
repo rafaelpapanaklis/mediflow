@@ -96,6 +96,7 @@
     },
     "today": "hoy",
     "paused": "Pausada",
+    "cancelled": "Cancelada",
     "autoRenew": "Se renueva sola",
     "manualRenew": "Renovación manual",
     "renew": "Renovar",
