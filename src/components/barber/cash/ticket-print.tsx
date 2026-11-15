@@ -9,6 +9,7 @@ import { useBarberT } from "./use-barber-t";
 import { fmtDateTime, fmtMoney, PAYMENT_METHOD_KEYS } from "./money";
 import { ticketPrintLines } from "./print-lines";
 import { PrintSetupControls, printWithWidth, usePrintSetup } from "./print-setup";
+import { ChatClienteLink } from "../wa-chat";
 
 /** Ticket imprimible / compartible. Todo el dinero viene ya calculado del server. */
 export function TicketPrint({ sale, dict }: { sale: SaleDetail; dict: Dictionary }) {
@@ -20,10 +21,8 @@ export function TicketPrint({ sale, dict }: { sale: SaleDetail; dict: Dictionary
   const tz = sale.shop.timezone;
   const shortId = sale.id.slice(-6).toUpperCase();
   const shareText = t("print.shareText", { shop: sale.shop.name, total: fmtMoney(sale.total) });
-  const phoneDigits = (sale.clientPhone ?? "").replace(/\D/g, "");
-  const waHref = phoneDigits
-    ? `https://wa.me/${phoneDigits.length === 10 ? `52${phoneDigits}` : phoneDigits}?text=${encodeURIComponent(shareText)}`
-    : `https://wa.me/?text=${encodeURIComponent(shareText)}`;
+  // Con WhatsApp conectado y la ventana de 24 h abierta, el ticket se manda
+  // desde Mensajes con el texto ya escrito; si no, wa.me como siempre (ws6-t8).
 
   const address = [sale.shop.address, sale.shop.city, sale.shop.state].filter(Boolean).join(", ");
 
@@ -40,7 +39,7 @@ export function TicketPrint({ sale, dict }: { sale: SaleDetail; dict: Dictionary
           withLogo={Boolean(sale.shop.logoUrl)}
           onPrint={() => printWithWidth(printSetup.width, ticketRef)}
         />
-        <a className="btn-new btn-new--secondary" href={waHref} target="_blank" rel="noopener noreferrer"><MessageCircle size={14} /> {t("print.shareWhatsapp")}</a>
+        <ChatClienteLink className="btn-new btn-new--secondary" phone={sale.clientPhone} texto={shareText}><MessageCircle size={14} /> {t("print.shareWhatsapp")}</ChatClienteLink>
       </div>
 
       <div className={`bcaja-print ${printSetup.className}`.trim()} ref={ticketRef} data-ancho-impresion={printSetup.width}>

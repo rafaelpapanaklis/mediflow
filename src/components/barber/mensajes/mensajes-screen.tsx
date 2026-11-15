@@ -86,6 +86,8 @@ interface Props {
   initial: MensajesInicial;
   can: MensajesPermisos;
   initialPhone: string | null;
+  /** Texto ya escrito que trae la dirección (?texto=): ticket de Caja, pedido. */
+  initialText?: string | null;
 }
 
 export function MensajesScreen(props: Props) {
@@ -110,7 +112,7 @@ function telDeLaDireccion(): string | null {
   }
 }
 
-function Bandeja({ locale, timezone, nowISO, initial, can, initialPhone }: Props) {
+function Bandeja({ locale, timezone, nowISO, initial, can, initialPhone, initialText = null }: Props) {
   const t = useMsjT();
   const raiz = useRef<HTMLDivElement | null>(null);
 
@@ -128,6 +130,17 @@ function Bandeja({ locale, timezone, nowISO, initial, can, initialPhone }: Props
   const [ocupado, setOcupado] = useState(false);
   const [aviso, setAviso] = useState<{ texto: string; deshacer?: () => void } | null>(null);
   const [errorAccion, setErrorAccion] = useState<string | null>(null);
+  // El texto prellenado se usa UNA vez, en el chat al que vino (ws6-t8).
+  const [semilla, setSemilla] = useState<{ phone: string; texto: string } | null>(() =>
+    initialPhone && initialText ? { phone: initialPhone, texto: initialText } : null,
+  );
+  useEffect(() => {
+    // Que recargar la página no lo vuelva a escribir.
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has("texto")) return;
+    url.searchParams.delete("texto");
+    window.history.replaceState(window.history.state, "", url);
+  }, []);
 
   const bot = initial.bot;
   const atiende = useCallback((phone: string) => quienAtiende(phone, bot, pausas), [bot, pausas]);
@@ -489,7 +502,9 @@ function Bandeja({ locale, timezone, nowISO, initial, can, initialPhone }: Props
                 onReintentar={() => void cargarChat(activo)}
                 onArchivar={(v) => void archivar(activo, v)}
                 onAtiende={(a) => void cambiarAtiende(activo, a)}
+                borradorInicial={semilla?.phone === activo ? semilla.texto : null}
                 onEnviado={async () => {
+                  setSemilla(null);
                   await cargarChat(activo, true);
                   await cargarLista(true);
                 }}
@@ -794,6 +809,7 @@ interface ChatProps {
   onReintentar: () => void;
   onArchivar: (archivar: boolean) => void;
   onAtiende: (a: "bot" | "persona") => void;
+  borradorInicial: string | null;
   onEnviado: () => Promise<void>;
 }
 
@@ -900,6 +916,7 @@ function Chat(p: ChatProps) {
         t={t}
         locale={p.locale}
         phone={phone}
+        borradorInicial={p.borradorInicial}
         det={det}
         ahora={p.ahora}
         can={p.can}
@@ -1259,6 +1276,7 @@ function Redactor({
   t,
   locale,
   phone,
+  borradorInicial,
   det,
   ahora,
   can,
@@ -1271,6 +1289,7 @@ function Redactor({
   t: MsjT;
   locale: string;
   phone: string;
+  borradorInicial: string | null;
   det: Detalle | null;
   ahora: Date;
   can: MensajesPermisos;
@@ -1280,7 +1299,7 @@ function Redactor({
   onListo: () => Promise<void>;
   onFallo: () => void;
 }) {
-  const [borrador, setBorrador] = useState("");
+  const [borrador, setBorrador] = useState(borradorInicial ?? "");
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const campo = useRef<HTMLTextAreaElement | null>(null);

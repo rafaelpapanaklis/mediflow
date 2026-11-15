@@ -58,6 +58,33 @@ test("teléfono que no es de 10 dígitos → wa.me (Mensajes no lo abriría)", (
   assert.equal(barberWaChatDestino({ acceso: CONECTADO, phone: null }).href, "https://wa.me/");
 });
 
+test("con texto: Mensajes SOLO con ventana de 24 h abierta y permiso de contestar", () => {
+  const texto = "Gracias por tu visita a Barbería Ñ · Total $350";
+  const dentro = barberWaChatDestino({ acceso: CONECTADO, phone: "9992602093", texto, ventanaAbierta: true });
+  assert.equal(dentro.interno, true);
+  assert.equal(new URL(dentro.href, "https://x").searchParams.get("texto"), texto);
+  assert.equal(new URL(dentro.href, "https://x").searchParams.get("tel"), "9992602093");
+
+  const wa = barberWaMeHref("9992602093", texto);
+  for (const ventanaAbierta of [false, null, undefined]) {
+    assert.deepEqual(
+      barberWaChatDestino({ acceso: CONECTADO, phone: "9992602093", texto, ventanaAbierta }),
+      { href: wa, interno: false },
+      String(ventanaAbierta),
+    );
+  }
+  // Puede ver pero no contestar: el texto no se podría mandar → wa.me.
+  assert.equal(
+    barberWaChatDestino({ acceso: SOLO_LEE, phone: "9992602093", texto, ventanaAbierta: true }).interno,
+    false,
+  );
+  // Sin teléfono el ticket se comparte como siempre: WhatsApp pregunta a quién.
+  assert.equal(
+    barberWaChatDestino({ acceso: CONECTADO, phone: "", texto, ventanaAbierta: true }).href,
+    `https://wa.me/?text=${encodeURIComponent(texto)}`,
+  );
+});
+
 test("wa.me y la dirección de Mensajes", () => {
   assert.equal(barberWaMeHref("999-260-2093"), "https://wa.me/529992602093");
   assert.equal(barberWaMeHref("529992602093", "a b"), "https://wa.me/529992602093?text=a%20b");
@@ -107,8 +134,7 @@ test("panel: no queda un wa.me directo en botones de un cliente", () => {
       if (src.includes("https://wa.me") || src.includes("waMeLink(")) sueltos.push(rel);
     }
   }
-  // Ticket y pedidos llevan un texto ya escrito: van en el punto 4.
-  assert.deepEqual(sueltos.sort(), ["src/components/barber/cash/ticket-print.tsx", "src/components/barber/products/pedidos.tsx"]);
+  assert.deepEqual(sueltos, []);
 });
 
 test("los botones del tablero usan ChatClienteLink", () => {
@@ -116,6 +142,8 @@ test("los botones del tablero usan ChatClienteLink", () => {
     "src/components/barber/agenda/cita-piezas.tsx",
     "src/components/barber/clients/client-detail.tsx",
     "src/components/barber/walkin/walkin-panel.tsx",
+    "src/components/barber/products/pedidos.tsx",
+    "src/components/barber/cash/ticket-print.tsx",
     "src/app/barber/(panel)/solicitudes/solicitudes-client.tsx",
   ]) {
     assert.match(readFileSync(join(RAIZ, rel), "utf8"), /<ChatClienteLink[\s>]/, rel);

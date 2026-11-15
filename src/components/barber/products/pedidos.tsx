@@ -5,7 +5,8 @@
 //
 // Lo que el cliente apartó en /b/<slug>/tienda. Acciones:
 //   · «Listo para recoger»  → READY (el cliente se entera por el WhatsApp
-//     que TÚ le mandas: wa.me, enlace, nada sale por la API);
+//     que TÚ le mandas: «WhatsApp» abre su chat en Mensajes con el texto
+//     si la ventana de 24 h está abierta, si no wa.me; nada sale solo);
 //   · «Entregar y cobrar»   → sin pagar: el MISMO TicketModal de Caja con
 //     las piezas a su precio congelado (createSale lo marca entregado en su
 //     transacción). Pagado en línea: no se cobra; se registra la venta como
@@ -21,7 +22,7 @@ import { CheckCircle2, MessageCircle, PackageCheck, RefreshCw, Wallet, XCircle }
 import type { Dictionary } from "@/i18n/t";
 import type { CashState, CheckoutContext, ClientLookup } from "@/lib/barber/cash";
 import type { ProductOrderList, ProductOrderRow } from "@/lib/barber/tienda";
-import { waMeLink } from "@/lib/barber/tienda-core";
+import { ChatClienteLink } from "../wa-chat";
 import { formatBarberPhone } from "@/lib/barber/phone-format";
 import { BadgeNew } from "@/components/ui/design-system/badge-new";
 import { CardNew } from "@/components/ui/design-system/card-new";
@@ -210,9 +211,9 @@ export function PedidosTab({
                           <PackageCheck size={14} /> {o.paidOnline ? t("pedidos.deliver") : t("pedidos.deliverAndCharge")}
                         </button>
                       ) : null}
-                      <a className="btn-new btn-new--ghost" href={waMeLink(waText(o), o.clientPhone)} target="_blank" rel="noopener noreferrer" data-accion="whatsapp">
+                      <ChatClienteLink className="btn-new btn-new--ghost" phone={o.clientPhone} texto={waText(o)} data-accion="whatsapp">
                         <MessageCircle size={14} /> {t("pedidos.whatsapp")}
-                      </a>
+                      </ChatClienteLink>
                       {open && canHandle ? (
                         <button type="button" className="btn-new btn-new--ghost" onClick={() => setDialog({ kind: "cancel", order: o })} data-accion="cancelar">
                           <XCircle size={14} /> {t("pedidos.cancel")}
