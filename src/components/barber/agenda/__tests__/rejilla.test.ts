@@ -243,7 +243,15 @@ test("rulerMarks: medias horas en Día, solo horas en Semana", () => {
 });
 
 // ── Acciones rápidas: los permisos de siempre ────────────────────────
-const base = { barberId: "beto", canEdit: true, ownBarberId: null, canCharge: true, charged: false };
+const base = {
+  barberId: "beto",
+  canEdit: true,
+  ownBarberId: null as string | null,
+  canCharge: true,
+  charged: false,
+  source: "PANEL",
+  canAcceptRequests: true,
+};
 
 test("quien edita: el siguiente paso del flujo", () => {
   assert.equal(quickActions({ ...base, status: "PENDING" }).advance, "CONFIRMED");
@@ -280,5 +288,47 @@ test("sin permisos: nada", () => {
     const q = quickActions({ ...nadie, status });
     assert.equal(q.advance, null, status);
     assert.equal(q.charge, false, status);
+  }
+});
+
+// ── Ronda 2, M1: una SOLICITUD web/bot no se «confirma»: se acepta ────
+// Confirmarla por la ruta de estado se saltaba resolveBookingRequest, el
+// cliente nunca recibía «quedó agendada» y luego sí le llegaba el recordatorio.
+for (const source of ["PUBLIC", "WHATSAPP"] as const) {
+  test(`solicitud ${source} pendiente: nunca «Confirmar»; «Aceptar solicitud» con requests.manage`, () => {
+    const q = quickActions({ ...base, status: "PENDING", source });
+    assert.equal(q.advance, null, "no se ofrece CONFIRMED por la ruta de estado");
+    assert.equal(q.isRequest, true);
+    assert.equal(q.accept, true);
+    assert.equal(q.viewRequests, false);
+  });
+
+  test(`solicitud ${source} sin requests.manage: «Ver en Solicitudes», sin Confirmar`, () => {
+    const q = quickActions({ ...base, status: "PENDING", source, canAcceptRequests: false });
+    assert.equal(q.advance, null);
+    assert.equal(q.accept, false);
+    assert.equal(q.viewRequests, true);
+  });
+
+  test(`solicitud ${source}: ni el rol Barbero ni quien solo mira reciben nada`, () => {
+    const barbero = { ...base, canEdit: false, ownBarberId: "beto", canCharge: false, canAcceptRequests: false };
+    const q = quickActions({ ...barbero, status: "PENDING", source });
+    assert.deepEqual([q.advance, q.accept, q.viewRequests], [null, false, false]);
+  });
+
+  test(`${source} ya aceptada (Confirmada) sigue el flujo normal: «Iniciar»`, () => {
+    const q = quickActions({ ...base, status: "CONFIRMED", source });
+    assert.equal(q.isRequest, false);
+    assert.equal(q.advance, "IN_PROGRESS");
+    assert.equal(q.accept, false);
+  });
+}
+
+test("Pendiente agendada en el panel (no es solicitud): «Confirmar» como siempre", () => {
+  for (const source of ["PANEL", "WALKIN"]) {
+    const q = quickActions({ ...base, status: "PENDING", source });
+    assert.equal(q.advance, "CONFIRMED", source);
+    assert.equal(q.isRequest, false, source);
+    assert.equal(q.accept, false, source);
   }
 });

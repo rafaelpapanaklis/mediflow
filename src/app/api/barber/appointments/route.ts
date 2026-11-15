@@ -107,6 +107,11 @@ export async function GET(req: Request) {
       // createSale() en /api/barber/sales — aquí solo se decide si el
       // botón se pinta.
       cash: hasBarberPermission(permUser, "cash.manage"),
+      // Aceptar una solicitud (web/bot) desde la agenda va por el MISMO
+      // camino que Solicitudes (PATCH /api/barber/booking-requests/[id]),
+      // que exige requests.manage y lo vuelve a revisar. Aquí solo se
+      // decide si se ofrece «Aceptar solicitud» o «Ver en Solicitudes».
+      requests: hasBarberPermission(permUser, "requests.manage"),
     },
   });
 }

@@ -19,6 +19,7 @@
 // cobrarla.
 // ═══════════════════════════════════════════════════════════════════════
 import { useState } from "react";
+import Link from "next/link";
 import { CheckCircle2 } from "lucide-react";
 import {
   BARBER_APPOINTMENT_STATUS_UI,
@@ -35,6 +36,8 @@ export interface CardQuickAction {
   label: string;
   /** «money» = cobra (verde de caja); «go» = avanza el flujo. */
   tone: "go" | "money";
+  /** Si lleva a otra pantalla (p. ej. Solicitudes): es un enlace, no una acción. */
+  href?: string;
 }
 
 export interface AppointmentCardProps {
@@ -218,7 +221,17 @@ export function AppointmentCard(props: AppointmentCardProps) {
         ) : null}
       </button>
 
-      {props.quick && (mouseOver || keyboardIn) && !props.dragging ? (
+      {props.quick?.href && (mouseOver || keyboardIn) && !props.dragging ? (
+        <Link
+          href={props.quick.href}
+          className={`${css.cardQuick} ${css.btnPrimary} ${compact ? css.cardQuickCompact : ""}`}
+          data-quick=""
+          onClick={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          {props.quick.label}
+        </Link>
+      ) : props.quick && (mouseOver || keyboardIn) && !props.dragging ? (
         <button
           type="button"
           className={`${css.cardQuick} ${props.quick.tone === "money" ? css.btnMoney : css.btnPrimary} ${
