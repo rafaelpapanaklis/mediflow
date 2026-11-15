@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { PlantillaBarberWeb } from "@/components/barber/templates";
 import { rutaWebBarberia } from "@/lib/barber/landing";
 import { cargarBarberWeb, cargarSeoBarberWeb } from "./_shared/shop-data";
+import { loadFeaturedProducts } from "@/lib/barber/tienda";
+import { rutaProductoTienda, rutaTienda } from "@/lib/barber/tienda-core";
 import { descripcionSeo, imagenSocial, jsonLdBarberia, serializarJsonLd, tituloSeo } from "./_shared/seo";
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -131,6 +133,17 @@ export default async function PaginaBarberia(props: Props) {
     );
   }
 
+  // Destacados de la tienda (ws6-t1). Nunca truena: sin SQL o sin plan, [].
+  const productos = (await loadFeaturedProducts({ id: carga.data.shop.id })).map((p) => ({
+    id: p.id,
+    nombre: p.name,
+    precio: p.price,
+    fotoUrl: p.photoUrl,
+    categoria: p.category,
+    url: rutaProductoTienda(carga.data.shop.slug, p.id),
+    agotado: p.available <= 0,
+  }));
+
   const ld = jsonLdBarberia({
     shop: carga.data.shop,
     config: carga.data.config,
@@ -144,7 +157,7 @@ export default async function PaginaBarberia(props: Props) {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: serializarJsonLd(ld) }}
       />
-      <PlantillaBarberWeb data={carga.data} />
+      <PlantillaBarberWeb data={{ ...carga.data, productos, tiendaUrl: productos.length > 0 ? rutaTienda(carga.data.shop.slug) : null }} />
     </>
   );
 }

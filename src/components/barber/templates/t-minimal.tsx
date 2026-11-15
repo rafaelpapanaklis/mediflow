@@ -24,7 +24,7 @@ import {
   urlComoLlegar,
   urlWhatsApp,
 } from "@/lib/barber/landing";
-import { Boton, Duracion, Foto, IcoFlecha, IcoMapa, IcoWhatsApp, Pie, Poste, Precio, Redes } from "./pieces";
+import { Boton, Duracion, Foto, IcoFlecha, IcoMapa, IcoWhatsApp, Pie, Poste, Precio, Redes, SeccionProductos } from "./pieces";
 import { Sec, copia, logo, secciones, tieneSeccion, titulo, varsDeAcento } from "./helpers";
 import type { BarberWebData } from "./types";
 
@@ -114,6 +114,7 @@ export function PlantillaMinimal({ data }: { data: BarberWebData }) {
         </Sec>
       )}
 
+      <SeccionProductos data={data} />
       <Pie nombre={shop.name} />
     </div>
   );

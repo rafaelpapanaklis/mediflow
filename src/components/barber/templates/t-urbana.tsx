@@ -32,6 +32,7 @@ import {
   IcoMapa,
   IcoWhatsApp,
   Pie,
+  SeccionProductos,
   Precio,
   Ranura,
   Redes,
@@ -242,6 +243,7 @@ export function PlantillaUrbana({ data }: { data: BarberWebData }) {
         </Fragment>
       ))}
 
+      <SeccionProductos data={data} />
       <Pie nombre={shop.name} />
     </div>
   );
