@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { BarberNavItem } from "@/lib/barber/types";
 import { BARBER_NAV_ICON, BarberIcon } from "./barber-icons";
 import { useMensajesSinLeer } from "./mensajes/sin-leer";
@@ -56,7 +56,16 @@ export function BarberSidebar({
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   // Chats sin leer, solo si «Mensajes» está en el menú (ya pasó su candado).
-  const sinLeer = useMensajesSinLeer(items.some((i) => i.key === "mensajes"));
+  // Se pregunta al servidor solo cuando el contador se ve y nadie más lo
+  // sabe: no en /barber/mensajes (la bandeja lo avisa) ni en celular con el
+  // cajón cerrado. Ver mensajes/sin-leer.ts.
+  const escritorio = useEsEscritorio();
+  const conMensajes = items.some((i) => i.key === "mensajes");
+  const enMensajes = Boolean(pathname?.startsWith("/barber/mensajes"));
+  const sinLeer = useMensajesSinLeer({
+    mostrar: conMensajes,
+    sondear: conMensajes && !enMensajes && (escritorio || mobileOpen),
+  });
 
   async function handleLogout() {
     try {
@@ -194,4 +203,17 @@ export function BarberSidebar({
       </aside>
     </>
   );
+}
+
+/** ¿Pantalla de escritorio (el menú siempre a la vista, ≥ 1024 px)? */
+function useEsEscritorio(): boolean {
+  const [es, setEs] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const cambio = () => setEs(mq.matches);
+    cambio();
+    mq.addEventListener("change", cambio);
+    return () => mq.removeEventListener("change", cambio);
+  }, []);
+  return es;
 }

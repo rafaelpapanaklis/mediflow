@@ -236,3 +236,27 @@ test("estilos: solo tokens (ni un hex), letra nunca mayor que la del panel", () 
   // El título usa la misma escala que las demás pantallas.
   assert.match(css, /font-size: clamp\(19px, 2\.2vw, 23px\)/);
 });
+
+// ── El contador del menú es ligero (revisión ronda 16) ───────────────────
+
+test("contador del menú: pide solo el CONTEO, cada ≥ 2 min y se apaga con la pestaña escondida", () => {
+  const hook = sinComentarios(leer("src/components/barber/mensajes/sin-leer.ts"));
+  assert.match(hook, /"\/api\/barber\/whatsapp\/unread"/);
+  assert.doesNotMatch(hook, /whatsapp\/threads/, "el menú ya no baja la lista de hilos");
+  const cada = /MENSAJES_SIN_LEER_CADA_MS = ([\d_]+)/.exec(hook);
+  assert.ok(cada && Number(cada[1].replace(/_/g, "")) >= 120_000, "intervalo de al menos 2 min");
+  assert.match(hook, /visibilitychange/);
+  assert.match(hook, /clearInterval/, "con la pestaña escondida el reloj se apaga, no solo se salta");
+
+  const menu = sinComentarios(leer("src/components/barber/barber-sidebar.tsx"));
+  assert.match(menu, /sondear: conMensajes && !enMensajes && \(escritorio \|\| mobileOpen\)/);
+});
+
+test("/api/barber/whatsapp/unread: el MISMO candado que /threads y un solo número", () => {
+  const ruta = sinComentarios(leer("src/app/api/barber/whatsapp/unread/route.ts"));
+  assert.match(ruta, /permission: "whatsapp\.view"/);
+  assert.match(ruta, /feature: WA_INBOX_FEATURE/);
+  assert.match(ruta, /COUNT\(\*\)/);
+  assert.match(ruta, /LIMIT 2000/, "las mismas filas que mira la lista");
+  assert.match(ruta, /NextResponse\.json\(\{ chats:/);
+});
