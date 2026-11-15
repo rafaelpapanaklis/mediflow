@@ -265,9 +265,47 @@ export interface BarberBotModelPrice {
 export const BARBER_BOT_MODEL_PRICES: Record<string, BarberBotModelPrice> = {
   "claude-haiku-4-5": { inputPerMTokUsd: 1, outputPerMTokUsd: 5 },
   "claude-sonnet-4-6": { inputPerMTokUsd: 3, outputPerMTokUsd: 15 },
-  "claude-sonnet-5": { inputPerMTokUsd: 3, outputPerMTokUsd: 15 },
+  // Sonnet 5: 2 / 10 USD por millón (la misma tarifa que tiene el bot del
+  // dental en src/lib/ai-billing/pricing-core.ts). Aquí decía 3 / 15, la de
+  // Sonnet 4.6: el tope diario se habría agotado un 50 % antes de tiempo.
+  "claude-sonnet-5": { inputPerMTokUsd: 2, outputPerMTokUsd: 10 },
+  "claude-sonnet-5-5": { inputPerMTokUsd: 2, outputPerMTokUsd: 10 },
   "claude-opus-5": { inputPerMTokUsd: 5, outputPerMTokUsd: 25 },
 };
+
+/**
+ * Modelo por defecto del bot: el Sonnet que usa HOY el bot del dental
+ * (CHAT_MODEL en src/lib/whatsapp/bot/ai.ts). Se cambia sin redeploy con
+ * BARBER_BOT_AI_MODEL; si el que se ponga no está en la tabla de arriba, el
+ * tope diario lo cobra con la tarifa más cara (frena de más, nunca de menos).
+ */
+export const BARBER_BOT_DEFAULT_MODEL = "claude-sonnet-5";
+
+/**
+ * Lo que hay que mandar ADEMÁS en la petición según el modelo.
+ *
+ * En la familia 5, si no se manda `thinking` el modelo razona en modo
+ * adaptativo con esfuerzo ALTO: más latencia y más tokens de los que pide
+ * una respuesta de WhatsApp de tres frases, dentro de un webhook que tiene
+ * los segundos contados. Se deja el razonamiento adaptativo (con
+ * herramientas el modelo decide mejor cuándo consultarlas que con el
+ * razonamiento apagado) pero con el esfuerzo al mínimo.
+ *
+ * `thinking: "off"` (env BARBER_BOT_AI_THINKING=off) lo apaga del todo en
+ * los modelos que lo permiten; Sonnet 5.5 no acepta `disabled`, así que ahí
+ * se queda en adaptativo. Los modelos 4.x no reciben nada: corren sin
+ * razonamiento, igual que hasta ahora.
+ */
+export function botModelRequestExtras(
+  model: string,
+  thinking: "auto" | "off" = "auto",
+): Record<string, unknown> {
+  const m = (model ?? "").trim();
+  if (!/^claude-(sonnet|opus|haiku)-5(-|$)/.test(m)) return {};
+  const canDisable = m === "claude-sonnet-5" || m === "claude-opus-5";
+  if (thinking === "off" && canDisable) return { thinking: { type: "disabled" } };
+  return { thinking: { type: "adaptive" }, output_config: { effort: "low" } };
+}
 
 const MOST_EXPENSIVE: BarberBotModelPrice = { inputPerMTokUsd: 5, outputPerMTokUsd: 25 };
 

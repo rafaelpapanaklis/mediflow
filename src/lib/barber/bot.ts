@@ -37,10 +37,12 @@ import {
   DEFAULT_BARBER_BOT_SETTINGS,
   asksForHuman,
   botAnswersNow,
+  botModelRequestExtras,
   botTurnCostMicros,
   microsToMxn,
   normalizeBotSettings,
   quotaIsTight,
+  BARBER_BOT_DEFAULT_MODEL,
   BARBER_BOT_USD_MXN_FALLBACK,
   MICROS_PER_MXN,
   type BarberBotBooking,
@@ -103,21 +105,27 @@ const AI_CALL_TIMEOUT_MS = 9_000;
 const MAX_TOOL_ROUNDS = 4;
 /** Turnos previos del hilo que viajan como contexto. */
 const MAX_HISTORY = 12;
-const MAX_OUTPUT_TOKENS = 700;
+/**
+ * Techo de salida por llamada. Es un TECHO, no un gasto: se paga lo que el
+ * modelo escribe. En la familia 5 aquí caben también el razonamiento y los
+ * argumentos de las herramientas, y su tokenizador cuenta ~30 % más tokens
+ * por el mismo texto: con los 700 de antes una respuesta podía cortarse.
+ */
+const MAX_OUTPUT_TOKENS = 2000;
 /** Un WhatsApp largo no lo lee nadie. */
 const MAX_REPLY_CHARS = 900;
 
 /**
- * Modelo. El bot del dental usa sonnet-4-6 para exactamente este trabajo
- * (conversación corta, alto volumen) y aquí se mantiene el mismo criterio;
- * se cambia por env sin redeploy. Ver el reporte: la tarifa del modelo que
- * se ponga aquí debe existir en BARBER_BOT_MODEL_PRICES o el tope de gasto
- * lo cobrará con la tarifa más cara.
+ * Modelo: el Sonnet vigente del bot del dental (BARBER_BOT_DEFAULT_MODEL en
+ * bot-core.ts, junto a su tarifa). Se cambia por env sin redeploy.
  */
-const DEFAULT_AI_MODEL = "claude-sonnet-4-6";
-
 function aiModel(): string {
-  return (process.env.BARBER_BOT_AI_MODEL || "").trim() || DEFAULT_AI_MODEL;
+  return (process.env.BARBER_BOT_AI_MODEL || "").trim() || BARBER_BOT_DEFAULT_MODEL;
+}
+
+/** BARBER_BOT_AI_THINKING=off apaga el razonamiento donde el modelo lo permite. */
+function aiThinking(): "auto" | "off" {
+  return (process.env.BARBER_BOT_AI_THINKING || "").trim().toLowerCase() === "off" ? "off" : "auto";
 }
 
 /** Llave propia del vertical, con caída a la del dental (igual que Stripe). */
@@ -1386,6 +1394,8 @@ async function callClaude(args: {
       body: JSON.stringify({
         model: args.model,
         max_tokens: MAX_OUTPUT_TOKENS,
+        // Razonamiento y esfuerzo según el modelo (ver bot-core.ts).
+        ...botModelRequestExtras(args.model, aiThinking()),
         system: args.system,
         messages: args.messages,
         ...(args.tools.length > 0 ? { tools: args.tools } : {}),

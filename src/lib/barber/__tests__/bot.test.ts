@@ -29,11 +29,14 @@ import { join } from "node:path";
 import {
   BARBER_BOT_AI_CAP_DEFAULT,
   BARBER_BOT_AI_CAP_MAX,
+  BARBER_BOT_DEFAULT_MODEL,
+  BARBER_BOT_MODEL_PRICES,
   DEFAULT_BARBER_BOT_SETTINGS,
   MICROS_PER_MXN,
   asksForHuman,
   botAnswersNow,
   botModelPrice,
+  botModelRequestExtras,
   botTurnCostMicros,
   normalizeBotSettings,
   quotaIsTight,
@@ -367,4 +370,64 @@ test("el bot habla de tú y nunca vosea", () => {
   }
   assert.ok(BOT_TS.includes("tuteando"), "el prompt lo dice explícitamente");
   assert.ok(/nada de voseo/i.test(BOT_TS), "y se lo prohíbe al modelo con ejemplos");
+});
+
+/* ═══════════════ 10. El modelo vigente y lo que se le manda ═══════════════ */
+
+test("🔴 el modelo por defecto es el Sonnet que usa hoy el bot del dental, con SU tarifa", () => {
+  const dental = readFileSync(join(ROOT, "src", "lib", "whatsapp", "bot", "ai.ts"), "utf8");
+  const m = dental.match(/export const CHAT_MODEL = "([^"]+)"/);
+  assert.ok(m, "el bot del dental declara CHAT_MODEL");
+  assert.equal(BARBER_BOT_DEFAULT_MODEL, m[1], "barber va con el mismo modelo que el dental");
+
+  // La tarifa tiene que existir en la tabla, o el tope lo cobraría con la más cara.
+  const precio = BARBER_BOT_MODEL_PRICES[BARBER_BOT_DEFAULT_MODEL];
+  assert.ok(precio, "el modelo por defecto está en la tabla de precios");
+
+  // …y ser la misma que la del dental (pricing-core.ts es la referencia de la casa).
+  const tabla = readFileSync(join(ROOT, "src", "lib", "ai-billing", "pricing-core.ts"), "utf8");
+  const fila = tabla.match(
+    new RegExp(`"${BARBER_BOT_DEFAULT_MODEL}":\\s*\\{\\s*inputUsdPerMtok:\\s*([\\d.]+),\\s*outputUsdPerMtok:\\s*([\\d.]+)`),
+  );
+  assert.ok(fila, "el modelo está en la tabla de precios del dental");
+  assert.equal(precio.inputPerMTokUsd, Number(fila[1]));
+  assert.equal(precio.outputPerMTokUsd, Number(fila[2]));
+
+  assert.ok(!BOT_TS.includes('"claude-sonnet-4-6"'), "bot.ts ya no lleva el modelo viejo escrito a mano");
+  assert.ok(BOT_TS.includes("BARBER_BOT_AI_MODEL"), "y sigue siendo configurable por env");
+});
+
+test("un modelo que no está en la tabla se cobra con la tarifa más cara (frena de más)", () => {
+  const caro = botModelPrice("claude-modelo-que-no-existe");
+  for (const precio of Object.values(BARBER_BOT_MODEL_PRICES)) {
+    assert.ok(caro.inputPerMTokUsd >= precio.inputPerMTokUsd);
+    assert.ok(caro.outputPerMTokUsd >= precio.outputPerMTokUsd);
+  }
+});
+
+test("a la familia 5 se le baja el razonamiento; a los 4.x no se les manda nada", () => {
+  assert.deepEqual(botModelRequestExtras("claude-sonnet-5"), {
+    thinking: { type: "adaptive" },
+    output_config: { effort: "low" },
+  });
+  assert.deepEqual(botModelRequestExtras("claude-sonnet-5-5"), {
+    thinking: { type: "adaptive" },
+    output_config: { effort: "low" },
+  });
+  assert.deepEqual(botModelRequestExtras("claude-sonnet-4-6"), {});
+  assert.deepEqual(botModelRequestExtras("claude-haiku-4-5"), {});
+  assert.deepEqual(botModelRequestExtras(""), {});
+
+  // Apagarlo del todo solo donde el modelo acepta `disabled`.
+  assert.deepEqual(botModelRequestExtras("claude-sonnet-5", "off"), { thinking: { type: "disabled" } });
+  assert.deepEqual(
+    botModelRequestExtras("claude-sonnet-5-5", "off"),
+    { thinking: { type: "adaptive" }, output_config: { effort: "low" } },
+    "Sonnet 5.5 rechaza `disabled` con un 400: se queda en adaptativo",
+  );
+  // Nunca se manda temperature / top_p: la familia 5 los rechaza.
+  for (const extra of [botModelRequestExtras("claude-sonnet-5"), botModelRequestExtras("claude-sonnet-5", "off")]) {
+    assert.ok(!("temperature" in extra) && !("top_p" in extra) && !("budget_tokens" in extra));
+  }
+  assert.ok(!/temperature|budget_tokens|top_p/.test(BOT_TS), "bot.ts tampoco los manda");
 });
