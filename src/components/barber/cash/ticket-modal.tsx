@@ -26,6 +26,16 @@ interface Line {
   unitPrice: number;
   frozen: boolean;
   stock: number | null;
+  /** Línea de un pedido de la tienda: precio del pedido, cantidad fija, no se quita. */
+  order?: boolean;
+}
+
+/** Pedido de la tienda que este ticket entrega (sin pagar: se cobra aquí). */
+export interface TicketProductOrder {
+  id: string;
+  folio: string;
+  clientId: string | null;
+  items: Array<{ productId: string; name: string; unitPrice: number; qty: number }>;
 }
 
 let lineSeq = 0;
@@ -85,6 +95,7 @@ export function TicketModal({
   initialClient = null,
   draft = null,
   onDraftSaved,
+  productOrder = null,
   tz,
   onClose,
   onCharged,
@@ -101,6 +112,8 @@ export function TicketModal({
   draft?: SaleDraftRow | null;
   /** Se guardó como «Por cobrar» (el modal se cierra). */
   onDraftSaved?: () => void;
+  /** Pedido de la tienda que se entrega y cobra con este ticket. */
+  productOrder?: TicketProductOrder | null;
   tz: string;
   onClose: () => void;
   onCharged: (sale: SaleRow) => void;
@@ -116,18 +129,28 @@ export function TicketModal({
   const [query, setQuery] = useState("");
   const [suggestions, setSuggestions] = useState<ClientLookup[]>([]);
   const [lines, setLines] = useState<Line[]>(() =>
-    draft && !appointment
+    productOrder && !appointment
+      ? productOrder.items.map((it) => ({ key: nextKey(), kind: "product" as const, id: it.productId, name: it.name, qty: it.qty, unitPrice: it.unitPrice, frozen: true, stock: null, order: true }))
+      : draft && !appointment
       ? draftLines(draft, checkout)
-      : (appointment?.services ?? []).map((s) => ({
-      key: nextKey(),
-      kind: "service",
-      id: s.serviceId,
-      name: s.name,
-      qty: 1,
-      unitPrice: s.priceAtBooking,
-      frozen: true,
-      stock: null,
-    })),
+      : [
+          ...(appointment?.services ?? []).map((s): Line => ({
+            key: nextKey(),
+            kind: "service",
+            id: s.serviceId,
+            name: s.name,
+            qty: 1,
+            unitPrice: s.priceAtBooking,
+            frozen: true,
+            stock: null,
+          })),
+          // Productos agregados desde la cita (cita «B»): el ticket ya los trae.
+          ...(appointment?.draft?.items ?? []).flatMap((i): Line[] => {
+            const p = checkout.products.find((x) => x.id === i.productId);
+            if (!p || p.stock <= 0) return [];
+            return [{ key: nextKey(), kind: "product", id: p.id, name: p.name, qty: Math.min(i.qty, p.stock), unitPrice: p.price, frozen: false, stock: p.stock }];
+          }),
+        ],
   );
   const [addServiceId, setAddServiceId] = useState("");
   const [addProductId, setAddProductId] = useState("");
@@ -249,7 +272,7 @@ export function TicketModal({
     const p = checkout.products.find((x) => x.id === addProductId);
     if (!p || p.stock <= 0) return;
     setLines((prev) => {
-      const existing = prev.find((l) => l.kind === "product" && l.id === p.id);
+      const existing = prev.find((l) => l.kind === "product" && l.id === p.id && !l.order);
       if (existing) {
         return prev.map((l) => (l.key === existing.key ? { ...l, qty: Math.min(l.qty + 1, p.stock) } : l));
       }
@@ -270,8 +293,9 @@ export function TicketModal({
     setLines((prev) => prev.filter((l) => l.key !== key));
   }
 
+  const tipInvalid = tipMode.kind === "custom" && parseAmountText(tipText) === null;
   const tipNeedsBarber = totals.tip > 0 && !barberId;
-  const canSubmit = lines.length > 0 && !submitting && !totals.discountInvalid && !tipNeedsBarber && !bonusNeedsService;
+  const canSubmit = lines.length > 0 && !submitting && !totals.discountInvalid && !tipInvalid && !tipNeedsBarber && !bonusNeedsService;
 
   async function submit() {
     if (!canSubmit) return;
@@ -292,7 +316,9 @@ export function TicketModal({
         redeemLoyaltyItemIndex: bonus?.kind === "service" && loyaltyKey ? lines.findIndex((l) => l.key === loyaltyKey) : null,
         membershipItemIndex: membershipKey ? lines.findIndex((l) => l.key === membershipKey) : null,
         // La nota «Por cobrar» que este ticket salda (se marca en la misma transacción).
-        draftId: draft?.id ?? null,
+        draftId: draft?.id ?? appointment?.draft?.id ?? null,
+        // El pedido de la tienda que este ticket entrega (ídem, una sola vez).
+        productOrderId: productOrder?.id ?? null,
         notes: notes.trim() || null,
       };
       const res = await fetch("/api/barber/sales", {
@@ -318,7 +344,7 @@ export function TicketModal({
 
   // «Guardar sin cobrar»: la nota guarda QUÉ se cobrará, no importes. No
   // toca el corte, ingresos, comisiones ni estrellas (eso lo hace el cobro).
-  const canSaveDraft = checkout.draftsReady === true && Boolean(client) && !appointment && Boolean(onDraftSaved);
+  const canSaveDraft = checkout.draftsReady === true && Boolean(client) && !appointment && !productOrder && Boolean(onDraftSaved);
   async function saveDraft() {
     if (!client || lines.length === 0 || totals.discountInvalid || savingDraft) return;
     setSavingDraft(true);
@@ -369,7 +395,7 @@ export function TicketModal({
     setError(null);
   }
 
-  const title = appointment ? t("ticket.fromAppointment", { time: fmtTime(appointment.startAt, tz) }) : t("ticket.title");
+  const title = appointment ? t("ticket.fromAppointment", { time: fmtTime(appointment.startAt, tz) }) : productOrder ? t("ticket.fromOrder", { folio: productOrder.folio }) : t("ticket.title");
 
   if (result) {
     const out = result.stars ?? null;
@@ -562,17 +588,23 @@ export function TicketModal({
                       <div className="bcaja-line__name">{l.name}</div>
                       <div className="bcaja-line__hint">
                         {covered ? t("ticket.free") : fmtMoney(l.unitPrice)}
-                        {l.frozen ? ` · ${t("ticket.frozenPrice")}` : ""}
+                        {l.order ? ` · ${t("ticket.orderPrice", { folio: productOrder?.folio ?? "" })}` : l.frozen ? ` · ${t("ticket.frozenPrice")}` : ""}
                         {l.stock !== null ? ` · ${t("ticket.stockLeft", { count: l.stock })}` : ""}
                       </div>
                     </div>
+                    {l.order ? (
+                      <span className="bcaja-qty"><span className="bcaja-qty__n">×{l.qty}</span></span>
+                    ) : (
                     <div className="bcaja-qty">
                       <button type="button" className="bcaja-qty__btn" onClick={() => changeQty(l.key, -1)} disabled={l.qty <= 1} aria-label="−"><Minus size={12} /></button>
                       <span className="bcaja-qty__n">{l.qty}</span>
                       <button type="button" className="bcaja-qty__btn" onClick={() => changeQty(l.key, 1)} disabled={l.stock !== null && l.qty >= l.stock} aria-label="+"><Plus size={12} /></button>
                     </div>
+                    )}
                     <span className="bcaja-line__price">{fmtMoney(covered ? 0 : l.unitPrice * l.qty)}</span>
+                    {l.order ? <span aria-hidden="true" style={{ width: 28 }} /> : (
                     <button type="button" className="icon-btn-new" onClick={() => removeLine(l.key)} aria-label={t("ticket.remove")} title={t("ticket.remove")}><Trash2 size={13} /></button>
+                    )}
                   </div>
                 );
               })}
@@ -590,7 +622,7 @@ export function TicketModal({
                   <option key={s.id} value={s.id}>{s.name} · {fmtMoney(s.price)}</option>
                 ))}
               </select>
-              <button type="button" className="btn-new btn-new--secondary" onClick={addService} disabled={!addServiceId}><Plus size={14} /></button>
+              <button type="button" className="btn-new btn-new--secondary" onClick={addService} disabled={!addServiceId} aria-label={t("ticket.addServiceBtn")} title={t("ticket.addServiceBtn")}><Plus size={14} /></button>
             </div>
           </div>
           <div className="field-new">
@@ -601,13 +633,13 @@ export function TicketModal({
               <div style={{ display: "flex", gap: 6 }}>
                 <select className="input-new" value={addProductId} onChange={(e) => setAddProductId(e.target.value)}>
                   <option value="">—</option>
-                  {checkout.products.map((p) => (
+                  {checkout.products.filter((p) => !productOrder || !productOrder.items.some((it) => it.productId === p.id)).map((p) => (
                     <option key={p.id} value={p.id} disabled={p.stock <= 0}>
                       {p.name} · {fmtMoney(p.price)} · {p.stock <= 0 ? t("ticket.outOfStock") : t("ticket.stockLeft", { count: p.stock })}
                     </option>
                   ))}
                 </select>
-                <button type="button" className="btn-new btn-new--secondary" onClick={addProduct} disabled={!addProductId}><Plus size={14} /></button>
+                <button type="button" className="btn-new btn-new--secondary" onClick={addProduct} disabled={!addProductId} aria-label={t("ticket.addProductBtn")} title={t("ticket.addProductBtn")}><Plus size={14} /></button>
               </div>
             ) : (
               <div className="bcaja-hint">{t("ticket.noProductsInPlan")}</div>
@@ -711,9 +743,9 @@ export function TicketModal({
                 <button type="button" className={`bcaja-chip ${tipMode.kind === "custom" ? "bcaja-chip--on" : ""}`} onClick={() => setTipMode({ kind: "custom" })}>{t("ticket.tipCustom")}</button>
               </div>
               {tipMode.kind === "custom" && (
-                <input className="input-new" inputMode="decimal" value={tipText} onChange={(e) => setTipText(e.target.value)} placeholder="0.00" style={{ marginTop: 6 }} />
+                <input className="input-new" inputMode="decimal" value={tipText} onChange={(e) => setTipText(e.target.value)} placeholder="0.00" aria-invalid={tipInvalid || undefined} style={{ marginTop: 6 }} />
               )}
-              <div className="bcaja-hint">{tipNeedsBarber ? t("ticket.tipNeedsBarber") : t("ticket.tipHint")}</div>
+              {tipInvalid ? <div className="bcaja-hint" role="alert" style={{ color: "var(--danger)" }}>{t("ticket.tipInvalid")}</div> : <div className="bcaja-hint">{tipNeedsBarber ? t("ticket.tipNeedsBarber") : t("ticket.tipHint")}</div>}
             </div>
           )}
         </div>

@@ -216,6 +216,7 @@
   },
   "history": {
     "title": "Historial de cortes",
+    "cancelReason": "Motivo de la cancelación: {reason}",
     "empty": "Todavía no hay visitas registradas.",
     "noBarber": "Sin barbero asignado",
     "estimate": "estimado",

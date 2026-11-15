@@ -95,14 +95,18 @@
       "other": "hace {count} días"
     },
     "today": "hoy",
+    "paused": "Pausada",
+    "cancelled": "Cancelada",
     "autoRenew": "Se renueva sola",
     "manualRenew": "Renovación manual",
     "renew": "Renovar",
+    "rehire": "Volver a contratar",
     "pause": "Pausar",
     "resume": "Reactivar",
     "cancel": "Cancelar",
     "cancelConfirm": "¿Cancelar esta membresía? Esto no devuelve el dinero ni cambia el corte: para deshacer el cobro, cancela su ticket en Caja. Si se cobra sola con tarjeta, también se corta el cobro automático.",
     "empty": {
+      "search": "Nadie coincide con esa búsqueda. Revisa el nombre o el teléfono.",
       "all": "Todavía nadie tiene membresía. Véndele la primera a un cliente de confianza.",
       "active": "No hay membresías vigentes ahora mismo.",
       "soon": "Nadie está por vencer. Vuelve en unos días.",

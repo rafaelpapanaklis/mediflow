@@ -44,8 +44,9 @@
     "new": "New barber",
     "empty": "You have not added any barbers yet.",
     "emptyCta": "Add the first one",
-    "seat": "{used} of {max} barbers on your {plan} plan",
-    "seatUnlimited": "{used} barbers · unlimited on your {plan} plan",
+    "seat": "{used} of {max} barbers across the whole chain · {plan} plan",
+    "seatUnlimited": "{used} across the whole chain · unlimited on your {plan} plan",
+    "seatHere": "{here} at this location",
     "seatFull": "You reached the limit of your {plan} plan. Upgrade to add more barbers.",
     "orderHint": "The order drives the calendar and your public page.",
     "scheduleTitle": "Schedules and time off",
@@ -119,6 +120,7 @@
     "branchAccessHome": "Their location (always included)",
     "branchAccessOwner": "Owner: sees the whole chain without checking anything.",
     "linkedBarberChip": "Profile: {name}",
+    "noScheduleWarn": "Not bookable: no working hours set",
     "branchAccessCount": {
       "one": "1 location",
       "other": "{count} locations"
@@ -218,6 +220,8 @@
     "closeBranch": "Close location",
     "openBranch": "Reopen location",
     "confirmClose": "Close {name}? It stops operating, but nothing is deleted.",
+    "closeTitle": "Close {name}",
+    "closeConfirmBtn": "Close location",
     "cannotCloseMain": "The main shop cannot be closed from here.",
     "consolidatedTitle": "Whole chain",
     "consolidatedBody": "{branches} locations · {barbers} barbers · {users} people in the panel",

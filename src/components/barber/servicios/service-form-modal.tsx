@@ -74,6 +74,11 @@ export function ServiceFormModal({
   const [category, setCategory] = useState(service?.category ?? "");
   const [isActive, setIsActive] = useState(service?.isActive ?? true);
   const { saving, error, setError, run } = useSaving();
+  // Campos que ya tocó la persona: el motivo de «Guardar apagado» no sale antes de que escriba.
+  const [touched, setTouched] = useState<{ name?: boolean; duration?: boolean; price?: boolean }>({});
+  const touch = (k: "name" | "duration" | "price") => setTouched((v) => (v[k] ? v : { ...v, [k]: true }));
+  // Precio $0: se permite, pero antes se pregunta («¿Va gratis?»).
+  const [askFree, setAskFree] = useState(false);
 
   const nameOk = name.trim().length > 0;
   const durationValue = parseDuration(duration);
@@ -85,8 +90,13 @@ export function ServiceFormModal({
   // El aviso se enseña en cuanto el precio escrito difiere del guardado.
   const priceChanged = editing && priceOk && priceValue !== service!.price;
 
-  async function submit() {
+  async function submit(freeConfirmed = false) {
     if (!canSave) return;
+    if (priceValue === 0 && !freeConfirmed) {
+      setAskFree(true);
+      return;
+    }
+    setAskFree(false);
     const body: Record<string, unknown> = {
       name: name.trim(),
       description: description.trim(),
@@ -125,7 +135,7 @@ export function ServiceFormModal({
           <Btn variant="ghost" onClick={onClose} disabled={saving}>
             {t("common.cancel")}
           </Btn>
-          <Btn variant="primary" onClick={submit} disabled={!canSave}>
+          <Btn variant="primary" onClick={() => submit()} disabled={!canSave}>
             {saving ? t("common.saving") : t("common.save")}
           </Btn>
         </>
@@ -133,7 +143,7 @@ export function ServiceFormModal({
     >
       <ErrorText>{error}</ErrorText>
 
-      <Field label={t("servicios.form.name")}>
+      <Field label={t("servicios.form.name")} hint={!nameOk && touched.name ? t("servicios.form.errors.name") : undefined}>
         {(id) => (
           <TextInput
             id={id}
@@ -141,7 +151,8 @@ export function ServiceFormModal({
             value={name}
             maxLength={NAME_MAX}
             placeholder={t("servicios.form.namePlaceholder")}
-            onChange={(e) => setName(e.target.value)}
+            onChange={(e) => { setName(e.target.value); touch("name"); }}
+            onBlur={() => touch("name")}
           />
         )}
       </Field>
@@ -189,7 +200,9 @@ export function ServiceFormModal({
           hint={
             !priceOk && price.trim() !== ""
               ? t("servicios.form.errors.price")
-              : t("servicios.form.priceHint")
+              : price.trim() === "" && touched.price
+                ? t("servicios.form.errors.priceEmpty")
+                : t("servicios.form.priceHint")
           }
         >
           {(id) => (
@@ -199,11 +212,30 @@ export function ServiceFormModal({
               inputMode="decimal"
               placeholder="0.00"
               value={price}
-              onChange={(e) => setPrice(e.target.value)}
+              onChange={(e) => { setPrice(e.target.value); setAskFree(false); touch("price"); }}
+              onBlur={() => touch("price")}
             />
           )}
         </Field>
       </div>
+
+      {askFree ? (
+        <div className={s.priceWarn} role="alertdialog" aria-label={t("servicios.form.free.title")}>
+          <AlertTriangle size={16} className={s.priceWarnIcon} />
+          <div>
+            <p className={s.priceWarnTitle}>{t("servicios.form.free.title")}</p>
+            <p className={s.priceWarnBody}>{t("servicios.form.free.body")}</p>
+            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+              <Btn size="sm" variant="primary" onClick={() => submit(true)} disabled={saving}>
+                {t("servicios.form.free.yes")}
+              </Btn>
+              <Btn size="sm" onClick={() => setAskFree(false)} disabled={saving}>
+                {t("servicios.form.free.no")}
+              </Btn>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {priceChanged ? (
         <div className={s.priceWarn} role="status">

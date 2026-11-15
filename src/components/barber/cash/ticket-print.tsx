@@ -1,9 +1,8 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef } from "react";
 import Link from "next/link";
-import toast from "react-hot-toast";
-import { ArrowLeft, Link2, MessageCircle } from "lucide-react";
+import { ArrowLeft, MessageCircle } from "lucide-react";
 import type { Dictionary } from "@/i18n/t";
 import type { SaleDetail } from "@/lib/barber/cash";
 import { useBarberT } from "./use-barber-t";
@@ -14,7 +13,6 @@ import { PrintSetupControls, printWithWidth, usePrintSetup } from "./print-setup
 /** Ticket imprimible / compartible. Todo el dinero viene ya calculado del server. */
 export function TicketPrint({ sale, dict }: { sale: SaleDetail; dict: Dictionary }) {
   const t = useBarberT(dict);
-  const [shareBusy, setShareBusy] = useState(false);
   // Hoja carta o impresora térmica de 80/58 mm (recordado en este navegador).
   const printSetup = usePrintSetup();
   const ticketRef = useRef<HTMLDivElement | null>(null);
@@ -26,24 +24,6 @@ export function TicketPrint({ sale, dict }: { sale: SaleDetail; dict: Dictionary
   const waHref = phoneDigits
     ? `https://wa.me/${phoneDigits.length === 10 ? `52${phoneDigits}` : phoneDigits}?text=${encodeURIComponent(shareText)}`
     : `https://wa.me/?text=${encodeURIComponent(shareText)}`;
-
-  async function copyLink() {
-    if (shareBusy) return;
-    setShareBusy(true);
-    try {
-      const url = typeof window !== "undefined" ? window.location.href : "";
-      if (typeof navigator !== "undefined" && navigator.share) {
-        await navigator.share({ title: `${sale.shop.name} · ${t("print.ticketTitle")} ${shortId}`, text: shareText, url });
-      } else {
-        await navigator.clipboard.writeText(url);
-        toast.success(t("common.copied"));
-      }
-    } catch {
-      /* el usuario canceló el share */
-    } finally {
-      setShareBusy(false);
-    }
-  }
 
   const address = [sale.shop.address, sale.shop.city, sale.shop.state].filter(Boolean).join(", ");
 
@@ -61,7 +41,6 @@ export function TicketPrint({ sale, dict }: { sale: SaleDetail; dict: Dictionary
           onPrint={() => printWithWidth(printSetup.width, ticketRef)}
         />
         <a className="btn-new btn-new--secondary" href={waHref} target="_blank" rel="noopener noreferrer"><MessageCircle size={14} /> {t("print.shareWhatsapp")}</a>
-        <button type="button" className="btn-new btn-new--secondary" onClick={copyLink} disabled={shareBusy}><Link2 size={14} /> {t("print.copyLink")}</button>
       </div>
 
       <div className={`bcaja-print ${printSetup.className}`.trim()} ref={ticketRef} data-ancho-impresion={printSetup.width}>

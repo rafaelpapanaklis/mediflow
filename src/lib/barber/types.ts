@@ -524,6 +524,15 @@ export interface BarberAppointmentDTO {
   depositStatus: BarberDepositStatus | null;
   notes: string | null;
   services: BarberAppointmentServiceDTO[];
+  // ── Cita «B» (ws6-t5). Opcionales: las rutas que no enriquecen no los traen. ──
+  /** «Ya llegó» (ISO) o null. Columna de sql/barber_cita_b.sql. */
+  arrivedAt?: string | null;
+  /** Motivo de la cancelación o null. Columna de sql/barber_cita_b.sql. */
+  cancelReason?: string | null;
+  /** El anticipo de la cita (estado y monto) o null si no tiene. */
+  deposit?: { status: BarberDepositStatus; amount: number | null } | null;
+  /** Del cliente ligado: visitas y estrellas (caché de su ficha), o null. */
+  client?: { totalVisits: number; stars: number } | null;
 }
 
 export interface BarberWalkInDTO {

@@ -35,6 +35,7 @@ import {
   IcoWhatsApp,
   Mapa,
   Pie,
+  SeccionProductos,
   Precio,
   Ranura,
   Redes,
@@ -372,6 +373,7 @@ export function PlantillaClub({ data }: { data: BarberWebData }) {
         </Fragment>
       ))}
 
+      <SeccionProductos data={data} />
       <Pie nombre={shop.name} />
     </div>
   );

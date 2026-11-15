@@ -35,7 +35,7 @@ export const TURNSTILE_SCRIPT_URL =
 export const TURNSTILE_TOKEN_MAX = 2048;
 
 /**
- * Las cuatro puertas públicas con captcha. El nombre viaja como `action` del
+ * Las puertas públicas con captcha (reserva, fila, portal, registro y tienda). El nombre viaja como `action` del
  * widget y Cloudflare lo devuelve al verificar: un token sacado de la fila
  * no sirve para reservar ni para darse de alta.
  */
@@ -44,6 +44,8 @@ export const BARBER_CAPTCHA_ACTIONS = {
   walkin: "barber-walkin",
   portalCode: "barber-portal-code",
   register: "barber-register",
+  /** Apartar un producto en /b/<slug>/tienda (ws6-t1). */
+  shopOrder: "barber-shop-order",
 } as const;
 
 export type BarberCaptchaAction =

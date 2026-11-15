@@ -73,6 +73,7 @@ export function OpenSessionModal({ dict, onClose, onDone }: { dict: Dictionary; 
           <label className="field-new__label">{t("session.openingAmount")}</label>
           <input className="input-new bcaja-amount" inputMode="decimal" autoFocus value={amountText} onChange={(e) => setAmountText(e.target.value)} placeholder="0.00" />
           {amountText.trim() === "" && <div className="bcaja-hint">{t("session.openingRequired")}</div>}
+          {amountText.trim() !== "" && amount === null && <div className="bcaja-hint" role="alert" style={{ color: "var(--danger)" }}>{t("session.amountInvalid")}</div>}
         </div>
         <div className="field-new">
           <label className="field-new__label">{t("session.openNotes")}</label>
@@ -178,6 +179,7 @@ export function CloseSessionModal({
             <label className="field-new__label">{t("session.countedAmount")}</label>
             <input className="input-new bcaja-amount" inputMode="decimal" autoFocus value={countedText} onChange={(e) => setCountedText(e.target.value)} placeholder="0.00" />
             {countedText.trim() === "" && <div className="bcaja-hint">{t("session.countedRequired")}</div>}
+            {countedText.trim() !== "" && counted === null && <div className="bcaja-hint" role="alert" style={{ color: "var(--danger)" }}>{t("session.amountInvalid")}</div>}
           </div>
           <div className="field-new">
             <label className="field-new__label">{t("session.difference")}</label>

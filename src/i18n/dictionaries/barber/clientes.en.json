@@ -216,6 +216,7 @@
   },
   "history": {
     "title": "Haircut history",
+    "cancelReason": "Why it was cancelled: {reason}",
     "empty": "No visits recorded yet.",
     "noBarber": "No barber assigned",
     "estimate": "estimated",

@@ -999,7 +999,8 @@ export interface ReportsSummary {
   generatedAt: string;
   timezone: string;
   period: ReportPeriod;
-  scope: InicioSummary["scope"];
+  /** barberIds: barbero(s) filtrados (null = todos). La pantalla los usa para marcar el filtro y armar el CSV. */
+  scope: InicioSummary["scope"] & { barberIds: string[] | null };
   /** productCost: ve costo y margen de productos (products.manage); sin él viajan en null. */
   can: { commissions: boolean; products: boolean; productCost?: boolean };
   totals: {
@@ -1515,6 +1516,7 @@ export async function getReportsSummary(ctx: BarberContext, opts: ReportsOptions
       canConsolidate: scope.canConsolidate,
       selfOnly,
       barberLinked: !selfOnly || Boolean(ctx.barber),
+      barberIds: scope.barberIds,
     },
     can: { commissions: includeCommission, products: includeProducts, productCost: includeProductCost },
     totals: {

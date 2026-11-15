@@ -29,7 +29,7 @@ import {
   urlWhatsApp,
   type BarberWebConfig,
 } from "@/lib/barber/landing";
-import type { BarberWebServicio } from "./types";
+import type { BarberWebData, BarberWebServicio } from "./types";
 
 /* ══════════════════════════════════════════════════════════════
    Iconos
@@ -480,5 +480,47 @@ export function Pie({ nombre }: { nombre: string }) {
         Hecho con DaleControl
       </a>
     </footer>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Productos (ws6-t1)
+
+   Los destacados de la tienda, antes del pie, en TODAS las plantillas.
+   Hereda la piel de cada una (sus clases dcbw-*); sin productos no se
+   pinta. Los enlaces son <a> (ver Boton): la tienda vive en otra ruta.
+   ══════════════════════════════════════════════════════════════ */
+
+export function SeccionProductos({ data }: { data: BarberWebData }) {
+  const lista = data.productos ?? [];
+  if (lista.length === 0 || !data.tiendaUrl) return null;
+  return (
+    <section id="productos" className="dcbw-sec dcbw-sec-productos">
+      <header className="dcbw-encabezado">
+        <h2 className="dcbw-h2">Productos</h2>
+        <p className="dcbw-bajada">Apártalos en línea y recógelos aquí.</p>
+      </header>
+      <div className="dcbw-productos">
+        {lista.map((p) => (
+          <a key={p.id} href={p.url} className="dcbw-producto">
+            <span className="dcbw-producto-foto">
+              {p.fotoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={p.fotoUrl} alt={p.nombre} loading="lazy" />
+              ) : (
+                <span aria-hidden="true">{(p.nombre.trim().charAt(0) || "?").toUpperCase()}</span>
+              )}
+            </span>
+            {p.categoria ? <span className="dcbw-producto-cat">{p.categoria}</span> : null}
+            <span className="dcbw-producto-nombre">{p.nombre}</span>
+            <Precio n={p.precio} />
+            {p.agotado ? <span className="dcbw-producto-cat">Agotado</span> : null}
+          </a>
+        ))}
+      </div>
+      <p style={{ marginTop: 18 }}>
+        <Boton href={data.tiendaUrl} variante="fantasma">Ver la tienda</Boton>
+      </p>
+    </section>
   );
 }

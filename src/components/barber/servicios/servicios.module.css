@@ -349,3 +349,8 @@
 @container catalogo (max-width: 640px) {
   .row { padding: 14px; }
 }
+
+/* Toque a 390 px: el buscador alcanza los 40 px del resto de controles. */
+@media (max-width: 480px) {
+  .search { min-height: 40px; }
+}

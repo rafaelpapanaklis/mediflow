@@ -1,5 +1,6 @@
 "use client";
 
+import { soloTelefono } from "@/lib/barber/telefono-teclado";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { CalendarOff, Check, ChevronLeft, MapPin, MessageCircle, Phone, Scissors } from "lucide-react";
 import { getBarberT } from "@/i18n/dictionaries/barber";
@@ -10,6 +11,7 @@ import type {
   PublicServiceDTO,
 } from "@/lib/barber/booking";
 import { sumMoneyBy } from "@/lib/barber/money";
+import { formatoPrecioReserva } from "@/lib/barber/precio-reserva";
 import { BookingDone, type BookingConfirmation } from "./booking-done";
 import { BarberCaptcha, type BarberCaptchaHandle } from "@/components/barber/captcha/barber-captcha";
 import { BARBER_CAPTCHA_ACTIONS } from "@/lib/barber/captcha-core";
@@ -190,15 +192,7 @@ export function BookingFlow({
     noContact: t("barber.reserva.fecha.sinContacto"),
   };
 
-  const money = useMemo(
-    () =>
-      new Intl.NumberFormat(shop.locale === "en" ? "en-US" : "es-MX", {
-        style: "currency",
-        currency: "MXN",
-        maximumFractionDigits: 0,
-      }),
-    [shop.locale],
-  );
+  const money = useMemo(() => formatoPrecioReserva(shop.locale === "en" ? "en-US" : "es-MX"), [shop.locale]);
 
   // ── Carga de días con lugar ────────────────────────────────────────────
   const loadDays = useCallback(async () => {
@@ -639,6 +633,10 @@ export function BookingFlow({
                   <b>{money.format(s.price)}</b>
                 </li>
               ))}
+              <li>
+                <span>{t("barber.reserva.datos.resumenBarbero")}</span>
+                <b>{chosenBarber ? chosenBarber.nickname ?? chosenBarber.name : t("barber.reserva.barbero.cualquiera")}</b>
+              </li>
               <li className="dcb-summary__total">
                 <span>{whenLabel(dateISO, time, shop.locale)}</span>
                 <b>{money.format(totalPrice)}</b>
@@ -684,7 +682,7 @@ export function BookingFlow({
                 maxLength={20}
                 placeholder={t("barber.reserva.datos.telefonoPlaceholder")}
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
+                onChange={(e) => setPhone(soloTelefono(e.target.value))}
                 required
               />
               <span className="dcb-help">{whatsappConnected
