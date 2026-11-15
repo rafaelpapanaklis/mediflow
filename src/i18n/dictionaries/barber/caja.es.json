@@ -359,7 +359,6 @@
     "fPrice": "Precio de venta",
     "fCost": "Costo (opcional)",
     "freeAsk": "¿Va gratis? El precio quedó en $0: este producto se entregará sin cobrar. Si es correcto, pulsa «Sí, va gratis».",
-    "freeYes": "Sí, va gratis",
     "costAbovePrice": "Ojo: el costo es mayor que el precio de venta, se vendería con pérdida.",
     "fMin": "Stock mínimo (alerta)",
     "fUnit": "Unidad (pieza, ml, g…)",
