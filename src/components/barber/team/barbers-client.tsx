@@ -1,9 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, CalendarClock, Contact, Pencil, Plus } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ArrowDown, ArrowUp, CalendarClock, Contact, Pencil, Plus, Trash2, Upload } from "lucide-react";
 import Link from "next/link";
 import type { BarberCommissionType } from "@/lib/barber/types";
+import { esFotoSubida } from "@/lib/barber/barber-photo";
+import { prepararFoto } from "@/components/barber/landing/imagen";
 import type { BarberProfileRow, BarberSeatLimit } from "@/lib/barber/team";
 import type { AdminBranchOption } from "./admin-nav";
 import {
@@ -124,6 +126,44 @@ export function BarbersClient({
     setForm((f) => (f ? { ...f, ...next } : f));
   }
 
+  // ── Foto subida desde el teléfono ────────────────────────────────────
+  // La foto se elige y se COMPRIME ya (un celular da 8–15 MB y el servidor
+  // corta en 4), pero se sube al GUARDAR: así un barbero nuevo ya tiene id
+  // para su carpeta y la ficha y la foto se guardan con un solo botón.
+  const fileRef = useRef<HTMLInputElement | null>(null);
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+
+  // La vista previa es una URL de objeto: se suelta al cambiarla y al salir.
+  useEffect(() => {
+    return () => {
+      if (photoPreview) URL.revokeObjectURL(photoPreview);
+    };
+  }, [photoPreview]);
+
+  function openForm(next: FormState | null) {
+    setPhotoFile(null);
+    setPhotoPreview(null);
+    setForm(next);
+  }
+
+  async function pickPhoto(file: File) {
+    setError(null);
+    try {
+      const listo = await prepararFoto(file);
+      setPhotoFile(listo);
+      setPhotoPreview(URL.createObjectURL(listo));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("common.genericError"));
+    }
+  }
+
+  function removePhoto() {
+    setPhotoFile(null);
+    setPhotoPreview(null);
+    patch({ photoUrl: "" });
+  }
+
   async function save() {
     if (!form) return;
     const payload = {
@@ -138,21 +178,40 @@ export function BarbersClient({
       barbershopId: form.barbershopId,
     };
     const ok = await run(async () => {
+      let saved: BarberProfileRow;
       if (form.id) {
         const { barber } = await apiCall<{ barber: BarberProfileRow }>(
           `/api/barber/team/barbers/${form.id}`,
           { method: "PATCH", json: payload },
         );
+        saved = barber;
         setBarbers((list) => list.map((b) => (b.id === barber.id ? barber : b)));
       } else {
         const { barber } = await apiCall<{ barber: BarberProfileRow }>(
           "/api/barber/team/barbers",
           { method: "POST", json: payload },
         );
+        saved = barber;
         setBarbers((list) => [...list, barber]);
+        // Ya existe: si la foto falla, reintentar NO debe crear otro barbero.
+        patch({ id: barber.id });
+      }
+
+      if (photoFile) {
+        const body = new FormData();
+        body.append("file", photoFile);
+        const res = await fetch(`/api/barber/team/barbers/${saved.id}/photo`, { method: "POST", body });
+        const data = (await res.json().catch(() => ({}))) as { photoUrl?: string; error?: string };
+        if (!res.ok || !data.photoUrl) {
+          throw new Error(
+            t("barbers.photoSavedNoUpload", { error: data.error || t("common.genericError") }),
+          );
+        }
+        const photoUrl = data.photoUrl;
+        setBarbers((list) => list.map((b) => (b.id === saved.id ? { ...b, photoUrl } : b)));
       }
     });
-    if (ok) setForm(null);
+    if (ok) openForm(null);
   }
 
   async function move(index: number, delta: number) {
@@ -195,7 +254,7 @@ export function BarbersClient({
           <Chip tone={seatCanCreate ? undefined : "warn"}>{seatText}</Chip>
           <Btn
             variant="primary"
-            onClick={() => setForm(emptyForm(writeBranchId))}
+            onClick={() => openForm(emptyForm(writeBranchId))}
             disabled={!canCreate}
           >
             <Plus size={15} />
@@ -223,7 +282,7 @@ export function BarbersClient({
             title={t("barbers.empty")}
             action={
               canCreate ? (
-                <Btn variant="primary" onClick={() => setForm(emptyForm(writeBranchId))}>
+                <Btn variant="primary" onClick={() => openForm(emptyForm(writeBranchId))}>
                   <Plus size={15} />
                   {t("barbers.emptyCta")}
                 </Btn>
@@ -263,7 +322,7 @@ export function BarbersClient({
                     </p>
                   ) : null}
                   <div className={s.rowActions}>
-                    <Btn size="sm" onClick={() => setForm(toForm(b))}>
+                    <Btn size="sm" onClick={() => openForm(toForm(b))}>
                       <Pencil size={13} />
                       {t("common.edit")}
                     </Btn>
@@ -313,12 +372,12 @@ export function BarbersClient({
         <Modal
           title={form.id ? t("barbers.formEdit") : t("barbers.formNew")}
           onClose={() => {
-            setForm(null);
+            openForm(null);
             setError(null);
           }}
           footer={
             <>
-              <Btn variant="ghost" onClick={() => setForm(null)} disabled={saving}>
+              <Btn variant="ghost" onClick={() => openForm(null)} disabled={saving}>
                 {t("common.cancel")}
               </Btn>
               <Btn variant="primary" onClick={save} disabled={saving}>
@@ -353,16 +412,52 @@ export function BarbersClient({
               )}
             </Field>
             <Field label={t("barbers.photo")} hint={t("barbers.photoHint")} full>
-              {(id) => (
-                <TextInput
-                  id={id}
-                  value={form.photoUrl}
-                  inputMode="url"
-                  placeholder={t("barbers.photoPlaceholder")}
-                  onChange={(e) => patch({ photoUrl: e.target.value })}
-                />
-              )}
+              {() => {
+                const shown = photoPreview ?? (form.photoUrl || null);
+                return (
+                  <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                    <Avatar name={form.name || "?"} url={shown} />
+                    {/* image/* en el celular ofrece la cámara y la galería. */}
+                    <input
+                      ref={fileRef}
+                      type="file"
+                      accept="image/*"
+                      style={{ display: "none" }}
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        e.target.value = "";
+                        if (f) void pickPhoto(f);
+                      }}
+                    />
+                    <Btn size="sm" onClick={() => fileRef.current?.click()} disabled={saving}>
+                      <Upload size={13} />
+                      {shown ? t("barbers.photoChange") : t("barbers.photoUpload")}
+                    </Btn>
+                    {shown ? (
+                      <Btn size="sm" variant="danger" onClick={removePhoto} disabled={saving}>
+                        <Trash2 size={13} />
+                        {t("barbers.photoRemove")}
+                      </Btn>
+                    ) : null}
+                  </div>
+                );
+              }}
             </Field>
+            {/* La liga solo se ofrece a quien YA tenía una pegada: se respeta y se
+                puede editar, pero la forma de poner una foto nueva es subirla. */}
+            {form.photoUrl && !photoFile && !esFotoSubida(form.photoUrl) ? (
+              <Field label={t("barbers.photoLink")} hint={t("barbers.photoLinkHint")} full>
+                {(id) => (
+                  <TextInput
+                    id={id}
+                    value={form.photoUrl}
+                    inputMode="url"
+                    placeholder={t("barbers.photoPlaceholder")}
+                    onChange={(e) => patch({ photoUrl: e.target.value })}
+                  />
+                )}
+              </Field>
+            ) : null}
             <Field label={t("barbers.bio")} hint={t("barbers.bioHint")} full>
               {(id) => (
                 <TextArea
