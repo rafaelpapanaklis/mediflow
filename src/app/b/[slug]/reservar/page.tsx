@@ -27,7 +27,7 @@ export const dynamic = "force-dynamic";
 
 interface PageProps {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ barbero?: string }>;
+  searchParams: Promise<{ barbero?: string; servicio?: string }>;
 }
 
 export async function generateMetadata(props: PageProps): Promise<Metadata> {
@@ -104,6 +104,12 @@ export default async function BarberBookingPage(props: PageProps) {
   const pinned = typeof searchParams.barbero === "string" ? searchParams.barbero : null;
   const pinnedBarberId = pinned && barbers.some((b) => b.id === pinned) ? pinned : null;
 
+  // Liga de un servicio (?servicio=<id>), la del «Reservar» de cada servicio
+  // en la página. Igual: un id que no esté en el catálogo público se ignora.
+  const pinnedService = typeof searchParams.servicio === "string" ? searchParams.servicio : null;
+  const pinnedServiceId =
+    pinnedService && services.some((s) => s.id === pinnedService) ? pinnedService : null;
+
   return (
     <Shell>
       <header className="dcb-head">
@@ -132,6 +138,7 @@ export default async function BarberBookingPage(props: PageProps) {
         barbers={barbers}
         contact={contact}
         pinnedBarberId={pinnedBarberId}
+        pinnedServiceId={pinnedServiceId}
       />
     </Shell>
   );

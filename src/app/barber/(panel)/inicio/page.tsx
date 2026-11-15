@@ -7,6 +7,8 @@ import { requireBarberPaidAccess } from "@/lib/barber/paid-access";
 import { getBarberPlan } from "@/lib/barber/plans";
 import { listBranchOptions, readBranchCookie } from "@/lib/barber/branches";
 import { getInicioSummary } from "@/lib/barber/stats";
+import { prisma } from "@/lib/prisma";
+import { normalizarConfigBarberWeb } from "@/lib/barber/landing";
 import { getBarberT } from "@/i18n/dictionaries/barber";
 import { InicioView } from "@/components/barber/dashboard/inicio-view";
 
@@ -29,9 +31,18 @@ export default async function Page() {
   const summary = await getInicioSummary(ctx, { branchId: await readBranchCookie(), features: plan.features });
   const branches = summary.scope.canConsolidate ? await listBranchOptions(ctx) : [];
 
+  // Paso 6 («Tu página web»): «lista» = la página está EN LÍNEA, que es lo que
+  // dice Mi web. Antes se medía con «alguna vez se publicó un cambio», y una
+  // página que ya se veía en /b/<slug> salía «pendiente». Está en línea
+  // mientras no esté apagada («muy pronto»).
+  const landing = await prisma.barberLandingConfig
+    .findUnique({ where: { barbershopId: ctx.barbershopId }, select: { config: true } })
+    .catch(() => null); // sin tabla/fila: la página base igual se ve
+  const webOnline = ctx.barbershop.isActive && !normalizarConfigBarberWeb(landing?.config).oculta;
+
   return (
     <InicioView
-      summary={summary}
+      summary={{ ...summary, setup: { ...summary.setup, hasWeb: webOnline } }}
       t={t}
       locale={ctx.barbershop.locale}
       firstName={ctx.user.firstName}

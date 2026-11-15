@@ -116,7 +116,7 @@ export function PlantillaUrbana({ data }: { data: BarberWebData }) {
                       {sv.descripcion && <p className="dcbw-carta-desc">{sv.descripcion}</p>}
                     </div>
                     <Precio n={sv.precio} className="dcbw-ur-cifra" />
-                    <a href={reservar} className="dcbw-ur-lista-cta">
+                    <a href={rutaReservaBarberia(shop.slug, null, sv.id)} className="dcbw-ur-lista-cta">
                       {copia(data, "servicios", "servicios.cta")}
                     </a>
                   </li>

@@ -114,8 +114,9 @@
       "appointmentsHint": "Desde la agenda o desde tu página web.",
       "sales": "Abre la caja y cobra",
       "salesHint": "Abre un turno, cobra el ticket y listo.",
-      "web": "Publica tu página web",
-      "webHint": "Con reservas en línea, sin saber de diseño."
+      "web": "Tu página web",
+      "webHint": "Ya está en línea con tus servicios y barberos. Personalízala en Mi web.",
+      "webHintOff": "Está apagada: quien entra ve «muy pronto». Enciéndela en Mi web."
     },
     "reports": {
       "cta": "Ver reportes",

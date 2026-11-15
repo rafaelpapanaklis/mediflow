@@ -114,8 +114,9 @@
       "appointmentsHint": "From the schedule or from your website.",
       "sales": "Open the register and charge",
       "salesHint": "Open a shift, charge the ticket, done.",
-      "web": "Publish your website",
-      "webHint": "With online booking, no design skills needed."
+      "web": "Your web page",
+      "webHint": "It's already online with your services and barbers. Customize it in My web.",
+      "webHintOff": "It's turned off: visitors see \"coming soon\". Turn it on in My web."
     },
     "reports": {
       "cta": "View reports",
