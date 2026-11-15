@@ -158,6 +158,7 @@
     "addShift": "Agregar turno",
     "removeShift": "Quitar turno",
     "splitHint": "¿Cierran a comer? Agrega dos turnos al mismo día (por ejemplo 9:00–14:00 y 16:00–20:00).",
+    "readOnlyHint": "Solo el dueño o el encargado puede cambiar los horarios. Aquí los ves, pero no se pueden editar.",
     "copyToWeek": "Copiar este día a lunes-sábado",
     "save": "Guardar horario",
     "saved": "Horario guardado.",

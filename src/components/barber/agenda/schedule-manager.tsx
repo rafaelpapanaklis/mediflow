@@ -295,7 +295,7 @@ export function ScheduleManager(props: ScheduleManagerProps) {
           ) : (
             <>
               <p className={css.hint} style={{ marginBottom: 12 }}>
-                {t("barber.agenda.schedule.splitHint")}
+                {props.canManage ? t("barber.agenda.schedule.splitHint") : t("barber.agenda.schedule.readOnlyHint")}
               </p>
               {DAYS.map((day) => {
                 const shifts = week[day] ?? [];

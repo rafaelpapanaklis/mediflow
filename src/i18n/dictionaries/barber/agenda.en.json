@@ -158,6 +158,7 @@
     "addShift": "Add shift",
     "removeShift": "Remove shift",
     "splitHint": "Closing for lunch? Add two shifts to the same day (say 9:00–14:00 and 16:00–20:00).",
+    "readOnlyHint": "Only the owner or manager can change the hours. You can see them here but not edit them.",
     "copyToWeek": "Copy this day to Monday-Saturday",
     "save": "Save hours",
     "saved": "Hours saved.",
