@@ -95,6 +95,12 @@ export interface BarberWaConnectionDTO {
   verifiedAt: string | null;
   /** Motivo legible cuando `state` es ERROR o NO_PAYMENT_METHOD. */
   problem: string | null;
+  /**
+   * TOKEN_UNREADABLE = el token guardado no se pudo descifrar (llave
+   * rotada, otro entorno con otra DATA_ENCRYPTION_KEY, dato dañado): hay
+   * que volver a conectar. La pantalla lo dice con su propio texto.
+   */
+  problemCode?: "TOKEN_UNREADABLE" | null;
   /** ¿Está disponible el Embedded Signup en este despliegue? */
   canConnect: boolean;
   /**

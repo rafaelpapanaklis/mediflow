@@ -94,7 +94,11 @@ export function ConnectionPanel({
 
         <p className={s.cardLead}>{t(`connection.help.${connection.state}`)}</p>
 
-        {connection.problem ? (
+        {connection.problemCode === "TOKEN_UNREADABLE" ? (
+          <Banner tone="danger" icon={<AlertTriangle size={16} />}>
+            {t("connection.tokenUnreadable")}
+          </Banner>
+        ) : connection.problem ? (
           <Banner tone="danger" icon={<AlertTriangle size={16} />}>
             {connection.problem}
           </Banner>

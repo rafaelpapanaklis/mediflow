@@ -269,6 +269,48 @@ async function loadShop(barbershopId: string): Promise<ShopWaRow | null> {
   })) as ShopWaRow | null;
 }
 
+/* ─────────────── descifrar el token SIN tumbar a nadie ─────────────── */
+
+/**
+ * `decryptField` (helper compartido con el dental, NO se toca) LANZA si el
+ * dato se cifró con otra llave: llave rotada, un entorno con otra
+ * DATA_ENCRYPTION_KEY (panel.108 con un token de producción, 15-nov-2026),
+ * dato dañado o la variable sin poner. Antes eso tumbaba /barber/whatsapp
+ * entera («No se pudo mostrar esta pantalla») y podía tumbar el cron.
+ *
+ * Aquí se envuelve: el error se registra (sin el token, como mucho una vez
+ * cada 10 min por barbería y proceso) y se devuelve `ok: false`. Quien
+ * llama trata eso como «sin credenciales» = hay que volver a conectar.
+ */
+const TOKEN_WARN_EVERY_MS = 10 * 60 * 1000;
+const tokenWarnedAt = new Map<string, number>();
+
+export function readBarberWaSecret(
+  raw: string | null | undefined,
+  who: string,
+): { ok: true; value: string | null } | { ok: false } {
+  if (!raw) return { ok: true, value: null };
+  try {
+    return { ok: true, value: decryptField(raw) ?? raw };
+  } catch (err) {
+    const now = Date.now();
+    if (now - (tokenWarnedAt.get(who) ?? 0) > TOKEN_WARN_EVERY_MS) {
+      tokenWarnedAt.set(who, now);
+      console.error(
+        `[barber/wa] no se pudo descifrar el token de WhatsApp (${who}): ` +
+          `${err instanceof Error ? err.message : "error"}. Se trata como «hay que volver a conectar».`,
+      );
+    }
+    return { ok: false };
+  }
+}
+
+/** ¿Esta barbería tiene un token guardado que NO se puede descifrar? */
+export function barberWaTokenUnreadable(shop: Pick<ShopWaRow, "id" | "whatsappToken">): boolean {
+  if (!shop.whatsappToken) return false;
+  return readBarberWaSecret(shop.whatsappToken, shop.id).ok === false;
+}
+
 /**
  * Credenciales con las que sale un mensaje de ESTA barbería.
  *
@@ -287,7 +329,10 @@ export function resolveSenderCredentials(shop: ShopWaRow): BarberWaCredentials |
 
   if (shop.whatsappSenderMode === "OWN_WABA" || !platformSenderEnabled()) {
     if (!shop.phoneNumberId || !shop.whatsappToken) return null;
-    const token = decryptField(shop.whatsappToken) ?? shop.whatsappToken;
+    // Nunca lanza: un token que no se puede descifrar = sin credenciales.
+    const read = readBarberWaSecret(shop.whatsappToken, shop.id);
+    if (read.ok === false) return null;
+    const token = read.value;
     if (!token) return null;
     return { ...base, phoneNumberId: shop.phoneNumberId, accessToken: token, wabaId: shop.wabaId };
   }
@@ -296,10 +341,12 @@ export function resolveSenderCredentials(shop: ShopWaRow): BarberWaCredentials |
   const phoneNumberId = process.env.BARBER_WA_PLATFORM_PHONE_NUMBER_ID;
   const rawToken = process.env.BARBER_WA_PLATFORM_TOKEN;
   if (!phoneNumberId || !rawToken) return null;
+  const platform = readBarberWaSecret(rawToken, "plataforma");
+  if (platform.ok === false || !platform.value) return null;
   return {
     ...base,
     phoneNumberId,
-    accessToken: decryptField(rawToken) ?? rawToken,
+    accessToken: platform.value,
     wabaId: process.env.BARBER_WA_PLATFORM_WABA_ID ?? null,
   };
 }
@@ -348,8 +395,27 @@ export async function getBarberWaConnection(barbershopId: string): Promise<Barbe
       : "UNVERIFIED"
     : "DISCONNECTED";
   let problem: string | null = null;
+  let problemCode: BarberWaConnectionDTO["problemCode"] = null;
   let displayPhone: string | null = null;
   let webhookSubscribed: boolean | null = null;
+
+  // El token guardado no se puede descifrar (llave rotada, otro entorno):
+  // la conexión queda en «hay que volver a conectar» y el resto de la
+  // pantalla se pinta igual. Ni se consulta a Meta: no hay con qué.
+  if (connected && barberWaTokenUnreadable(shop)) {
+    return {
+      state: "ERROR",
+      senderMode: shop.whatsappSenderMode,
+      displayPhone: null,
+      wabaId: shop.wabaId,
+      phoneNumberId: shop.phoneNumberId,
+      verifiedAt: shop.whatsappVerifiedAt ? shop.whatsappVerifiedAt.toISOString() : null,
+      problem: "No pudimos leer la llave de tu conexión con WhatsApp. Vuelve a conectar tu número.",
+      problemCode: "TOKEN_UNREADABLE",
+      canConnect,
+      webhookSubscribed: null,
+    };
+  }
 
   if (connected) {
     // Último fallo REAL de Meta (excluye los recordatorios que invalidamos
@@ -414,6 +480,7 @@ export async function getBarberWaConnection(barbershopId: string): Promise<Barbe
     phoneNumberId: shop.phoneNumberId,
     verifiedAt: shop.whatsappVerifiedAt ? shop.whatsappVerifiedAt.toISOString() : null,
     problem,
+    problemCode,
     canConnect,
     webhookSubscribed,
   };
@@ -871,7 +938,9 @@ export async function listBarberTemplates(barbershopId: string): Promise<{
   if (!creds || !creds.wabaId) {
     return {
       ok: false,
-      reason: "Conecta el WhatsApp de la barbería para poder dar de alta las plantillas.",
+      reason: barberWaTokenUnreadable(shop)
+        ? "No pudimos leer la llave de tu conexión con WhatsApp. Vuelve a conectar tu número para ver y dar de alta las plantillas."
+        : "Conecta el WhatsApp de la barbería para poder dar de alta las plantillas.",
       templates: BARBER_WA_TEMPLATES.map((t) => ({
         kind: t.kind,
         name: t.name,

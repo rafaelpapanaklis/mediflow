@@ -10,6 +10,7 @@
     "botHint": "The bot that answers your WhatsApp and books for you"
   },
   "connection": {
+    "tokenUnreadable": "We couldn’t read your WhatsApp connection key (this happens if the security settings changed). Reconnect your number with the button below: your conversations are kept and pending notices go out as soon as you reconnect.",
     "title": "Your WhatsApp number",
     "lead": "Messages go out under your barbershop's name, from your own number. Clients reply to you.",
     "connect": "Connect my WhatsApp",

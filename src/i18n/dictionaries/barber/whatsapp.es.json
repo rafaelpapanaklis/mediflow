@@ -10,6 +10,7 @@
     "botHint": "El bot que contesta tu WhatsApp y agenda por ti"
   },
   "connection": {
+    "tokenUnreadable": "No pudimos leer la llave de tu conexión con WhatsApp (pasa si se cambió la configuración de seguridad). Vuelve a conectar tu número con el botón de abajo: tus conversaciones no se pierden y los avisos pendientes salen en cuanto conectes.",
     "title": "Tu número de WhatsApp",
     "lead": "Los mensajes salen con el nombre de tu barbería, desde tu propio número. El cliente te responde a ti.",
     "connect": "Conectar mi WhatsApp",
