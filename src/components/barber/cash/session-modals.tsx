@@ -89,6 +89,7 @@ export function CloseSessionModal({
   summary,
   tz,
   openDrafts = 0,
+  pendingAppointments = 0,
   onClose,
   onDone,
 }: {
@@ -100,6 +101,8 @@ export function CloseSessionModal({
    * no entran a este corte ni cambian su cuenta.
    */
   openDrafts?: number;
+  /** Citas TERMINADAS sin ticket (lógica L2): cerrar sin cobrarlas descuadra el efectivo. Solo se avisa. */
+  pendingAppointments?: number;
   onClose: () => void;
   onDone: () => void;
 }) {
@@ -162,6 +165,15 @@ export function CloseSessionModal({
       <div className="bcaja-form">
         <p className="bcaja-hint" style={{ margin: 0 }}>{t("session.closeBody")}</p>
         {error && <div className="bcaja-alert bcaja-alert--danger" role="alert">{error}</div>}
+        {pendingAppointments > 0 && (
+          <div className="bcaja-alert bcaja-alert--warning" data-aviso-citas-por-cobrar>
+            <strong>{t("session.apptsPending", { count: pendingAppointments })}</strong>{" "}
+            {t("session.apptsPendingHint")}{" "}
+            <a href="#citas-por-cobrar" onClick={onClose} style={{ fontWeight: 600, color: "inherit", textDecoration: "underline" }}>
+              {t("session.apptsPendingLink")}
+            </a>
+          </div>
+        )}
         {openDrafts > 0 && (
           <div className="bcaja-alert bcaja-alert--info" data-aviso-por-cobrar>
             <strong>{t("session.draftsPending", { count: openDrafts })}</strong>{" "}

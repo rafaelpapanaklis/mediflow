@@ -115,6 +115,12 @@
     },
     "draftsPendingHint": "They don't count in this cash count; charge or discard them when it's time.",
     "draftsPendingLink": "See notes to be charged",
+    "apptsPending": {
+      "one": "1 finished appointment has not been charged.",
+      "other": "{count} finished appointments have not been charged."
+    },
+    "apptsPendingHint": "If they already paid, charge them before closing so the cash adds up.",
+    "apptsPendingLink": "See appointments to charge",
     "countedAmount": "Counted cash",
     "countedRequired": "Type what you counted in the drawer to close. If there is nothing, type 0.",
     "expected": "Expected cash",

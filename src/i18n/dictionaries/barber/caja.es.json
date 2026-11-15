@@ -115,6 +115,12 @@
     },
     "draftsPendingHint": "No entran a este corte; cóbralas o descártalas cuando toque.",
     "draftsPendingLink": "Ver notas por cobrar",
+    "apptsPending": {
+      "one": "Hay 1 cita terminada sin cobrar.",
+      "other": "Hay {count} citas terminadas sin cobrar."
+    },
+    "apptsPendingHint": "Si ya pagaron, cóbralas antes de cerrar para que el efectivo cuadre.",
+    "apptsPendingLink": "Ver citas por cobrar",
     "countedAmount": "Efectivo contado",
     "countedRequired": "Escribe lo que contaste en el cajón para poder cerrar. Si no hay nada, escribe 0.",
     "expected": "Esperado en efectivo",

@@ -177,7 +177,7 @@ export function CajaClient({
 
       {/* Citas por cobrar | Tickets del turno */}
       <div className="bcaja-cols">
-        <CardNew title={t("caja.pendingTitle")} sub={open ? undefined : t("caja.needsSession")}>
+        <CardNew id="citas-por-cobrar" title={t("caja.pendingTitle")} sub={open ? undefined : t("caja.needsSession")}>
           {checkout.pendingAppointments.length === 0 ? (
             <p className="bcaja-hint" style={{ margin: 0 }}>{t("caja.pendingEmpty")}</p>
           ) : (
@@ -393,6 +393,7 @@ export function CajaClient({
           summary={open}
           tz={tz}
           openDrafts={drafts?.ready ? drafts.openCount : 0}
+          pendingAppointments={checkout.pendingAppointments.length}
           onClose={closeModal}
           onDone={() => {
             closeModal();
