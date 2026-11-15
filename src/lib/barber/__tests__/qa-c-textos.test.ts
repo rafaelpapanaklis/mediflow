@@ -31,3 +31,11 @@ test("WhatsApp a soporte desde el error del cobro: sin nombre ya no dice «Hola,
   assert.equal(texto(barberSupportWhatsappUrl("   ")), "Hola, necesito ayuda con mi suscripción de DaleControl Barber.");
   assert.match(texto(barberSupportWhatsappUrl("Barbería Prueba")), /^Hola, soy de la barbería Barbería Prueba y necesito ayuda/);
 });
+
+test("Socios sin permiso: ya no dice el texto de Suscripción («contratar, cambiar o cancelar el plan»)", () => {
+  const page = readFileSync("src/app/barber/(panel)/afiliados/page.tsx", "utf8");
+  assert.doesNotMatch(page, /barber\.suscripcion\.hero\.onlyOwner/);
+  assert.match(page, /barber\.afiliados\.blocker\.onlyOwner/);
+  assert.match(dict("afiliados", "es").blocker.onlyOwner, /programa de socios/);
+  assert.ok(dict("afiliados", "en").blocker.onlyOwner);
+});

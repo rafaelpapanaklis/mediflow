@@ -43,7 +43,7 @@ export default async function BarberAfiliadosPage() {
     return (
       <Locked
         title={t("barber.afiliados.title")}
-        message={t("barber.suscripcion.hero.onlyOwner")}
+        message={t("barber.afiliados.blocker.onlyOwner")}
       />
     );
   }
