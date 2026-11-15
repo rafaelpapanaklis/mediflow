@@ -4,6 +4,8 @@ import { useMemo, useRef, useState } from "react";
 import { MessageCircle } from "lucide-react";
 import { getBarberT } from "@/i18n/dictionaries/barber";
 import type { PortalShopDTO } from "@/lib/barber/client-portal";
+import { BarberCaptcha, type BarberCaptchaHandle } from "@/components/barber/captcha/barber-captcha";
+import { BARBER_CAPTCHA_ACTIONS } from "@/lib/barber/captcha-core";
 
 /* ═══════════════════════════════════════════════════════════════════════
    Entrada al portal: teléfono + código de un solo uso. SIN contraseña.
@@ -18,12 +20,16 @@ export function PortalLogin({
   slug,
   shop,
   codeTtlMin,
+  captchaSiteKey = null,
 }: {
   slug: string;
   shop: PortalShopDTO;
   codeTtlMin: number;
+  /** Llave del SITIO de Turnstile (servidor). null = sin captcha, como antes. */
+  captchaSiteKey?: string | null;
 }) {
   const t = useMemo(() => getBarberT(shop.locale), [shop.locale]);
+  const captcha = useRef<BarberCaptchaHandle>(null);
 
   const [phase, setPhase] = useState<"phone" | "code">("phone");
   const [phone, setPhone] = useState("");
@@ -41,11 +47,19 @@ export function PortalLogin({
       return;
     }
     setBusy(true);
+    let sentToken = false;
     try {
+      // Cada código es un WhatsApp: el captcha va antes de pedirlo (también
+      // al «reenviar»).
+      const check = await captcha.current?.getToken();
+      // Sin token: el aviso con «Reintentar» lo pinta el propio captcha.
+      if (check && !check.ok) return;
+      const captchaToken = check?.ok ? check.token : null;
+      sentToken = !!captchaToken;
       const res = await fetch(`/api/barber/portal/${slug}/code`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone }),
+        body: JSON.stringify({ phone, captchaToken }),
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) {
@@ -59,6 +73,8 @@ export function PortalLogin({
     } catch {
       setError(t("barber.reserva.errores.sinRed"));
     } finally {
+      // Token de un solo uso: el «reenviar» necesita uno nuevo.
+      if (sentToken) captcha.current?.reset();
       setBusy(false);
     }
   };
@@ -202,6 +218,18 @@ export function PortalLogin({
           </div>
         </form>
       )}
+
+      {/* Fuera de los dos formularios: sigue vivo para el «reenviar». */}
+      <BarberCaptcha
+        ref={captcha}
+        siteKey={captchaSiteKey}
+        action={BARBER_CAPTCHA_ACTIONS.portalCode}
+        locale={shop.locale}
+        labels={{
+          error: t("barber.reserva.captcha.error"),
+          retry: t("barber.reserva.captcha.reintentar"),
+        }}
+      />
     </section>
   );
 }

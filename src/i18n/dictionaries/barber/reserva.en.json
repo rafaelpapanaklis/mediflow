@@ -201,6 +201,10 @@
     "avisaTuSinTelefono": "They didn't leave a phone number.",
     "avisaTuCerrar": "Got it"
   },
+  "captcha": {
+    "error": "We couldn’t verify that you’re a person.",
+    "reintentar": "Try again"
+  },
   "tope": {
     "titulo": "No more online bookings for today",
     "cuerpo": "Message us on WhatsApp or give us a call and we'll find you a spot.",

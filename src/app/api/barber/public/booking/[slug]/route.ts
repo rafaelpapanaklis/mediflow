@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { persistentRateLimit } from "@/lib/failban";
+import { checkBarberCaptcha } from "@/lib/barber/captcha";
+import { BARBER_CAPTCHA_ACTIONS } from "@/lib/barber/captcha-core";
 import {
   createPublicBooking,
   isBookingError,
@@ -97,6 +99,11 @@ export async function POST(req: NextRequest, props: { params: Promise<{ slug: st
     if (typeof body.website === "string" && body.website.trim() !== "") {
       return NextResponse.json({ ok: true, reference: "------", status: "PENDING" });
     }
+
+    // Captcha (Cloudflare Turnstile), verificado AQUÍ antes de crear nada.
+    // Sin sus dos variables la reserva sigue como antes y queda en el log.
+    const captcha = await checkBarberCaptcha(req, body.captchaToken, BARBER_CAPTCHA_ACTIONS.booking);
+    if (captcha.response) return captcha.response;
 
     const gate = await resolveBookingGate(params.slug);
     if (!isBookingGateOk(gate)) {

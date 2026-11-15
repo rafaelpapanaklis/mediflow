@@ -201,6 +201,10 @@
     "avisaTuSinTelefono": "No dejó teléfono.",
     "avisaTuCerrar": "Entendido"
   },
+  "captcha": {
+    "error": "No pudimos comprobar que eres una persona.",
+    "reintentar": "Reintentar"
+  },
   "tope": {
     "titulo": "Por hoy ya no hay reservas en línea",
     "cuerpo": "Escríbenos por WhatsApp o llámanos y te buscamos lugar.",
