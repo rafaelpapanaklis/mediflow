@@ -34,6 +34,7 @@
     "root": "Barbershop"
   },
   "logout": "Sign out",
+  "navLabel": "Main menu",
   "placeholder": {
     "soon": "Coming soon",
     "body": "This section is under construction. You will be able to manage it from here very soon.",

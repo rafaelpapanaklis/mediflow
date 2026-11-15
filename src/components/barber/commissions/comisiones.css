@@ -93,3 +93,11 @@
   .barber-shell .bcom-table > tbody > tr.bcom-detail { display: block; }
   .barber-shell .bcom-table > tbody > tr.bcom-detail > td { display: block; overflow-x: auto; }
 }
+
+/* ── Rediseño D · tanda 2 (15-nov-2026): radios y rayas del tema. ── */
+.barber-shell .bcom-act { border-radius: var(--radius-md); }
+.barber-shell .bcom-name { font-weight: 600; }
+@container bcom (max-width: 1180px) {
+  .barber-shell .bcom-table > tbody > tr.bcom-row { border-top-color: var(--line); }
+  .barber-shell .bcom-table > tbody > tr.bcom-row:hover { background: var(--bg-elev-2); }
+}

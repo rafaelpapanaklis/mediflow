@@ -153,6 +153,12 @@ body:has(.barber-panel) .barber-shell {
   --text-3: #6F6153;
   --text-4: #A3958A;                       /* solo decorativo, nunca texto que se lea */
 
+  /* Semánticos con contraste AA como TEXTO chico (los de la raíz del dental,
+     #059669 y #d97706, dan 3.8:1 y 3.2:1 sobre blanco). Mismos tonos que
+     los estados de la agenda: verde 5.3:1, ámbar 5.5:1, rojo 6.5:1. */
+  --success: #1F7A4C;
+  --warning: #8A6110;
+  --danger:  #B3261E;
   /* Semánticos suaves (fondos de aviso) en el mismo cálido. */
   --success-soft: #E7F2EA;
   --danger-soft:  #FBECEA;
@@ -234,6 +240,9 @@ body:has(.barber-panel) .barber-shell {
   --text-2: #CBC0B2;
   --text-3: #A89C8E;
   --text-4: #6E645A;
+  --success: #63C795;
+  --warning: #E3AE4A;
+  --danger:  #F08A82;
   --success-soft: rgba(99, 199, 149, 0.12);
   --danger-soft:  rgba(240, 138, 130, 0.12);
   --warning-soft: rgba(227, 174, 74, 0.12);
@@ -652,4 +661,86 @@ body:has(.barber-shell) {
   .barber-shell .barber-menu__rotulo:hover .barber-menu__poste > span { animation: none; }
   .barber-shell .barber-menu__ent,
   .barber-shell .barber-menu__ent > svg { transition: none; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   UTILIDADES DEL REDISEÑO D (tanda 2) — opt-in por pantalla.
+   Muchas pantallas pintan con piezas COMPARTIDAS con el dental (KpiCard,
+   CardNew, .table-new) que no se tocan. Para vestirlas como el D sin
+   repetir CSS en cada una, la pantalla pone:
+     · .bd-page  en su raíz  → encabezado de tarjeta sin raya, tabla sin
+                                MAYÚSCULAS y con rayas finas, KPI sin
+                                burbuja morada ni etiqueta en mayúsculas.
+     · .bd-band  en su fila de KpiCard → UNA tarjeta con celdas separadas
+                                por raya; la «hero» manda y las demás bajan.
+   Una pantalla que no las pone no cambia (Caja, Clientes… hasta su turno).
+   Prefijo :root .barber-panel (0,2,0)+ para ganar a `:root:not(.dark) .x`.
+   Mismos tamaños de letra que hoy: lo único que baja son las cifras
+   secundarias de la banda (28 → 22 px).
+   ═══════════════════════════════════════════════════════════════════════ */
+:root .barber-panel .bd-page .card { border-radius: var(--radius-lg); }
+:root .barber-panel .bd-page .card__header {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+:root .barber-panel .bd-page .card__header + .card__body,
+:root .barber-panel .bd-page .card__header + div:not([class]) { padding-top: 12px; }
+
+:root .barber-panel .bd-page .table-new th {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text-3);
+  background: transparent;
+  border-bottom-color: var(--border-soft);
+}
+:root .barber-panel .bd-page .table-new td { border-bottom-color: var(--line); }
+:root .barber-panel .bd-page .table-new tbody tr:hover { background: var(--bg-elev-2); }
+
+:root .barber-panel .bd-page .kpi__label {
+  text-transform: none;
+  letter-spacing: 0;
+}
+/* El icono del KPI: sin burbuja ni sombra morada; trazo café. */
+:root .barber-panel .bd-page .kpi__icon,
+:root .barber-panel .bd-page .kpi--hero .kpi__icon {
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  color: var(--caramel-600);
+}
+
+/* ── Banda de cifras ── */
+:root .barber-panel .bd-band {
+  gap: 1px;
+  background: var(--border-soft);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-1);
+  overflow: hidden;
+}
+:root .barber-panel .bd-band > .kpi {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  transform: none;
+  background: var(--bg-elev);
+  padding: 16px 18px;
+}
+:root .barber-panel .bd-band > .kpi:hover { box-shadow: none; transform: none; }
+/* La última celda llena lo que quede de su renglón: sin huecos grises. */
+:root .barber-panel .bd-band > .kpi:last-child { grid-column-end: -1; }
+:root .barber-panel .bd-band > .kpi--hero {
+  background: linear-gradient(var(--brand-softer), var(--brand-softer)), var(--bg-elev);
+}
+:root .barber-panel .bd-band > .kpi .kpi__top { margin-bottom: 8px; }
+:root .barber-panel .bd-band > .kpi:not(.kpi--hero) .kpi__value { font-size: 22px; font-weight: 600; }
+:root .barber-panel .bd-band > .kpi--hero .kpi__value { font-weight: 650; }
+/* Celular: la que manda, a lo ancho; las demás debajo, de dos en dos. */
+@container (max-width: 719px) {
+  :root .barber-panel .bd-band > .kpi--hero { grid-column: 1 / -1; }
+  :root .barber-panel .bd-band > .kpi { padding: 14px; }
 }

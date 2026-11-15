@@ -577,7 +577,7 @@
 /* El valor que manda conserva los 28 px de la KpiCard de hoy; los demás bajan. */
 .barber-shell .bdash-band__cell--hero .bdash-band__value { font-size: 28px; font-weight: 650; }
 .barber-shell .bdash-cents { font-size: 0.55em; font-weight: 500; letter-spacing: 0; color: var(--text-3); }
-.barber-shell .bdash-band__hint { margin-top: 4px; font-size: 11.5px; line-height: 1.4; color: var(--text-3); }
+.barber-shell .bdash-band__hint { margin-top: 4px; font-size: 11px; line-height: 1.4; color: var(--text-3); }
 .barber-shell .bdash-band__delta {
   display: inline-flex;
   align-items: center;
@@ -636,7 +636,7 @@
   border-radius: var(--radius-sm);
   background: var(--brand-soft);
   color: var(--caramel-800);
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 600;
   white-space: nowrap;
 }
@@ -671,3 +671,38 @@
 .barber-shell .bdash-alerts .bdash-alert:first-child { border-top: 0; padding-top: 2px; }
 .barber-shell .bdash-alerts .bdash-alert__cta { grid-column: 2; justify-self: start; }
 .barber-shell .bdash-alert__icon--urgent { background: var(--danger-soft); color: var(--danger); }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   REPORTES — rediseño D · tanda 2 (15-nov-2026). Mismos tamaños.
+   La raíz lleva .bd-page y la fila de KpiCard .bd-band (utilidades del
+   tema). Aquí: sin MAYÚSCULAS, sin cajas dentro de tarjetas, radios del tema.
+   ═══════════════════════════════════════════════════════════════════════ */
+.barber-shell .bdash-filters { border-radius: var(--radius-lg); box-shadow: var(--shadow-1); }
+.barber-shell .bdash-filters__label,
+.barber-shell .bdash-step__state {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 600;
+  color: var(--text-3);
+}
+.barber-shell .bdash-seg { border-radius: var(--radius-md); }
+.barber-shell .bdash-seg__btn { border-radius: var(--radius-sm); }
+.barber-shell .bdash-select { border-radius: var(--radius-md); }
+/* Cifras chicas dentro de una tarjeta: relleno suave, sin borde de caja. */
+.barber-shell .bd-page .bdash-stat {
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--bg-elev-2);
+}
+.barber-shell .bd-page .bdash-stat__hint { color: var(--text-3); }
+/* Listas de Reportes (métodos de pago, «no llegaron»): renglones con raya. */
+.barber-shell .bd-page .bdash-list { gap: 0; }
+.barber-shell .bd-page .bdash-list .bdash-row {
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+.barber-shell .bd-page .bdash-list .bdash-row:first-child { border-top: 0; }

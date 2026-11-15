@@ -110,6 +110,7 @@ export default async function BarberPanelLayout({
         brandName={t("barber.shell.brand.product")}
         brandSub={t("barber.shell.brand.vertical")}
         logoutLabel={t("barber.shell.logout")}
+        navLabel={t("barber.shell.navLabel")}
         loginHref={BARBER_LOGIN_PATH}
       />
       {/* min-w-0: sin él la columna crece hasta el ancho mínimo de su

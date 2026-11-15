@@ -97,7 +97,7 @@ export function ReportesView({
   const noSchedule = occ.openHours.every((h) => h !== null) && occ.openHours.every((h) => h && h.from === occ.openHours[0]!.from && h.to === occ.openHours[0]!.to);
 
   return (
-    <div className="bdash-page">
+    <div className="bdash-page bd-page">
       <div className="bdash-head">
         <div>
           <h1 className="bdash-head__title">{t("title")}</h1>
@@ -180,7 +180,7 @@ export function ReportesView({
         <span style={{ fontSize: 12.5, color: "var(--text-3)" }}>{periodLabel}</span>
       </div>
 
-      <div className="bdash-kpis">
+      <div className="bdash-kpis bd-band">
         <KpiCard label={t("kpi.revenue")} value={fmtMoney(s.totals.revenue)} icon={Wallet} hero hint={t("kpi.revenueHint")} delta={revenueDelta} />
         <KpiCard label={t("kpi.tickets")} value={fmtInt(s.totals.tickets, locale)} icon={Receipt} />
         <KpiCard label={t("kpi.avgTicket")} value={s.totals.avgTicket === null ? "—" : fmtMoney(s.totals.avgTicket)} icon={BarChart3} />

@@ -353,3 +353,39 @@
   color: var(--text-4);
   margin-top: 16px;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   REDISEÑO D · tanda 2 (15-nov-2026) — solo el PANEL de la fila.
+   Las clases .public* (la página del QR que ve el cliente) no se tocan.
+   Mismos tamaños; cambian radios, rayas y el «siguiente».
+   ═══════════════════════════════════════════════════════════════════════ */
+.panel { border-radius: var(--radius-lg); }
+/* Encabezado sin raya: el título manda y la lista empieza con aire. */
+.panelHead { border-bottom: 0; padding-bottom: 4px; }
+.panelBody { padding: 0 0 4px; }
+/* Renglones con la raya fina del tema, no con borde completo. */
+.row { border-bottom-color: var(--line); }
+.row:hover { background: var(--bg-elev-2); }
+.rowCalled,
+.rowCalled:hover { background: var(--brand-softer); box-shadow: inset 3px 0 0 var(--brand); }
+/* El número de turno: chico, cuadrado del tema; el siguiente, en café. */
+.rank {
+  border-radius: var(--radius-md);
+  font-weight: 700;
+  background: var(--bg-elev-2);
+  border-color: var(--line);
+}
+.rankNext {
+  background: var(--brand);
+  border-color: var(--brand-hover);
+  color: var(--on-brand);
+}
+.rowName { font-weight: 600; }
+.etaValue { font-weight: 600; }
+.qrCard { border-radius: var(--radius-lg); }
+.qrBox { border-radius: var(--radius-md); }
+/* Celular: las acciones bajan completas, al ancho, para el pulgar. */
+@container (max-width: 520px) {
+  .row { align-items: flex-start; }
+  .row:has(.rank) .rowActions { flex: 1 1 100%; padding-left: 50px; }
+}

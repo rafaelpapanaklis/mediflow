@@ -34,6 +34,7 @@
     "root": "Barbería"
   },
   "logout": "Cerrar sesión",
+  "navLabel": "Menú principal",
   "placeholder": {
     "soon": "Próximamente",
     "body": "Esta sección está en construcción. Muy pronto vas a poder administrarla desde aquí.",

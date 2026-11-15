@@ -893,3 +893,42 @@ textarea.dcbwe-input {
   line-height: 1.55;
   color: var(--text-2);
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   REDISEÑO D · tanda 2 (15-nov-2026). Mismos tamaños de letra.
+   El LIENZO (la página de la barbería en vista previa) no cambia: sus
+   blancos fijos son de la página pública. Aquí solo el editor alrededor.
+   ═══════════════════════════════════════════════════════════════════════ */
+/* Estados «guardado» / error con los semánticos del tema (antes hex). */
+.dcbwe-estado-guardado { color: var(--success); }
+.dcbwe-estado-error,
+.dcbwe-error { color: var(--danger); }
+
+/* Paneles con el radio de tarjeta y la sombra del tema. */
+.dcbwe-panel { border-radius: var(--radius-lg); box-shadow: var(--shadow-1); }
+.dcbwe-panel > summary { font-weight: 600; }
+.dcbwe-panel[open] > summary { border-bottom: 1px solid var(--line); }
+.dcbwe-panel[open] > .dcbwe-panel-cuerpo { padding-top: 14px; }
+/* Secciones dentro de un panel: bloque con relleno suave, sin caja dentro de caja. */
+.dcbwe-seccion {
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--bg-elev-2);
+}
+.dcbwe-plantilla,
+.dcbwe-resena,
+.dcbwe-alerta { border-radius: var(--radius-md); }
+.dcbwe-marco,
+.dcbwe-upsell-txt { border-radius: var(--radius-lg); }
+
+/* Pastilla sin MAYÚSCULAS espaciadas. */
+.dcbwe-pastilla {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 10.5px;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+}
+
+/* Interruptor y botones: el café del tema (antes caramelo fijo de respaldo). */
+.dcbwe-switch input:checked + .dcbwe-switch-pista { background: var(--brand); }

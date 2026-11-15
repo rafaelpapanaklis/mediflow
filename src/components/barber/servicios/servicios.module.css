@@ -297,3 +297,55 @@
 :global(.dark) .priceWarnIcon { color: #FCD34D; }
 
 .confirmBody { margin: 0; font-size: 13.5px; line-height: 1.55; color: var(--text-2); }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   REDISEÑO D · tanda 2 (15-nov-2026). Solo CSS; mismos tamaños de letra.
+   El catálogo deja de ser tarjetas sueltas: UNA tarjeta con renglones
+   separados por la raya del tema. Sin MAYÚSCULAS, radios del tema.
+   ═══════════════════════════════════════════════════════════════════════ */
+.toolbar { border-radius: var(--radius-lg); }
+.search { border-radius: var(--radius-md); }
+.card { border-radius: var(--radius-lg); }
+
+.list {
+  gap: 0;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-1);
+  overflow: hidden;
+}
+.row {
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+  padding: 12px 16px;
+  transition: background 150ms ease;
+}
+.row:first-child { border-top: 0; }
+.row:hover { background: var(--bg-elev-2); }
+.name { font-weight: 600; }
+.price { font-weight: 650; }
+/* «Usado en…» se lee (antes --text-4, decorativo). */
+.usage { color: var(--text-3); }
+
+.groupTitle,
+.seedTable th {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-3);
+}
+.seedTable th,
+.seedTable td { border-bottom-color: var(--line); }
+
+.priceWarn { border-radius: var(--radius-md); }
+.priceWarnIcon,
+:global(.dark) .priceWarnIcon { color: var(--warning); }
+
+@container catalogo (max-width: 640px) {
+  .row { padding: 14px; }
+}
