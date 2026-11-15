@@ -113,7 +113,7 @@
     "closeWarning": "Un turno cerrado no se puede reabrir. Para corregir algo después, abre un turno nuevo y déjalo anotado.",
     "closedTitle": "Turno cerrado",
     "closedBody": "Esperado {expected} · Contado {counted} · Diferencia {difference}.",
-    "ticketsInSession": "{count} tickets"
+    "ticketsInSession": { "one": "{count} ticket", "other": "{count} tickets" }
   },
   "ticket": {
     "title": "Cobrar",

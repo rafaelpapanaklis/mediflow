@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check, Copy, Link2, MessageCircle, Phone, X } from "lucide-react";
 import { getBarberT } from "@/i18n/dictionaries/barber";
+import { upperFirst } from "@/components/barber/upper-first";
 import type { BarberBookingRequestDTO } from "@/lib/barber/booking";
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -275,12 +276,10 @@ export function SolicitudesClient({
                         : t("barber.reserva.solicitudes.origenWeb")}
                     </span>
                   </p>
-                  <p style={{ fontSize: 13.5, color: "var(--text-2)", margin: "4px 0 0", textTransform: "capitalize" }}>
-                    {fmtWhen(r.startAt)}
+                  <p style={{ fontSize: 13.5, color: "var(--text-2)", margin: "4px 0 0" }}>
+                    {upperFirst(fmtWhen(r.startAt))}
                     {" · "}
-                    <span style={{ textTransform: "none" }}>
-                      {r.barberName ?? t("barber.reserva.solicitudes.cualquierBarbero")}
-                    </span>
+                    {r.barberName ?? t("barber.reserva.solicitudes.cualquierBarbero")}
                   </p>
                   <p style={{ fontSize: 13, color: "var(--text-3)", margin: "3px 0 0" }}>
                     {r.services.map((s) => s.name).join(" + ")}

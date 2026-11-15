@@ -113,7 +113,7 @@
     "closeWarning": "A closed shift can't be reopened. To fix something later, open a new shift and leave a note.",
     "closedTitle": "Shift closed",
     "closedBody": "Expected {expected} · Counted {counted} · Difference {difference}.",
-    "ticketsInSession": "{count} tickets"
+    "ticketsInSession": { "one": "{count} ticket", "other": "{count} tickets" }
   },
   "ticket": {
     "title": "Charge",

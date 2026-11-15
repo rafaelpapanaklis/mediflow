@@ -228,7 +228,7 @@ export function InicioView({
               label={k("kpi.visits")}
               value={fmtInt(v.total, locale)}
               icon={Users}
-              hint={k("kpi.visitsHint", { done: v.done, pending: v.pending + v.inProgress })}
+              hint={k("kpi.visitsHint", { count: v.done, done: v.done, pending: v.pending + v.inProgress })}
             />
           ) : (
             <KpiCard label={k("kpi.tips")} value={fmtMoney(s.today.tips)} icon={Scissors} hint={k("kpi.tipsHint")} />

@@ -252,7 +252,9 @@
 
 /* Periodo */
 .barber-shell .bcaja-period { display: inline-flex; align-items: center; gap: 8px; }
-.barber-shell .bcaja-period__label { font-size: 13.5px; font-weight: 600; color: var(--text-1); text-transform: capitalize; min-width: 130px; text-align: center; }
+/* Solo la primera letra en mayúscula: capitalize daba «Noviembre De 2026». */
+.barber-shell .bcaja-period__label { font-size: 13.5px; font-weight: 600; color: var(--text-1); min-width: 130px; text-align: center; }
+.barber-shell .bcaja-period__label::first-letter { text-transform: uppercase; }
 
 /* Estado de éxito del ticket */
 .barber-shell .bcaja-success { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px; padding: 12px 0; }
