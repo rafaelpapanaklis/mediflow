@@ -716,7 +716,8 @@ export function DepositPanel(props: {
           inputMode="decimal"
           value={raw}
           onChange={(e) => {
-            setRaw(e.target.value);
+            // Solo dígitos, punto y coma: una letra en un monto no se queda.
+            setRaw(e.target.value.replace(/[^\d.,]/g, "").slice(0, 12));
             setBad(false);
           }}
           placeholder="$0.00"
