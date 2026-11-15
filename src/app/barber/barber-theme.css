@@ -156,3 +156,73 @@ body:has(.barber-shell) {
   border-color: var(--caramel-500);
 }
 .dark .barber-shell .barber-btn-primary:hover { background: var(--caramel-300); }
+
+/* ── Menú lateral en CELULAR ───────────────────────────────────────────
+   Va con @media y no con @container a propósito: es el armazón de la
+   página (lo decide el ancho de la pantalla, no el de un contenedor) y
+   tiene que cortar en el MISMO punto que el `lg:hidden` de la hamburguesa
+   (Tailwind lg = 1024px).
+
+   Por debajo de 1024px:
+   · .sidebar-new deja de ocupar sitio (antes eran 196px fijos de 390).
+   · La hamburguesa (.barber-menu-btn) lo abre: el sidebar le pone
+     .barber-sidebar--open y flota sobre la pantalla, con el velo detrás.
+   · La barra superior deja un hueco a la izquierda para que la
+     hamburguesa no tape las migas.
+
+   Vive AQUÍ y no en globals.css porque .sidebar-new es compartida con el
+   panel dental y los demás paneles: bajo .barber-shell solo toca Barber.
+   En escritorio (≥1024px) nada de esto aplica. */
+.barber-shell .barber-menu-btn {
+  position: fixed;
+  top: 6px;   /* centrada en los 52px de .topbar-new */
+  left: 8px;
+  z-index: 40;
+  width: 40px;
+  height: 40px;
+}
+
+@media (max-width: 1023.98px) {
+  .barber-shell .sidebar-new {
+    display: none;
+  }
+  .barber-shell .sidebar-new.barber-sidebar--open {
+    display: flex;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: min(280px, 86vw);
+    height: 100vh;
+    height: 100dvh; /* que «Cerrar sesión» no quede bajo la barra del navegador */
+    padding: 12px 10px;
+    box-shadow: var(--shadow-3);
+  }
+  /* 8px de margen + 40px de botón + 8px de aire. */
+  .barber-shell .topbar-new {
+    padding-left: 56px;
+  }
+  /* Nombres largos de barbería: se cortan con «…» en vez de empujar la barra. */
+  .barber-shell .topbar-new__crumbs {
+    min-width: 0;
+    white-space: nowrap;
+  }
+  .barber-shell .topbar-new__crumbs > span,
+  .barber-shell .topbar-new__crumbs > svg {
+    flex-shrink: 0;
+  }
+  .barber-shell .topbar-new__crumbs > .topbar-new__crumb--current {
+    flex-shrink: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+/* Escritorio: la hamburguesa no existe. Ya la escondía `lg:hidden`; se
+   repite aquí para no depender del orden en que Tailwind emite sus
+   utilidades frente a .icon-btn-new (display: grid). */
+@media (min-width: 1024px) {
+  .barber-shell .barber-menu-btn {
+    display: none;
+  }
+}

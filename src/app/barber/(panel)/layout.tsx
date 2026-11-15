@@ -86,12 +86,18 @@ export default async function BarberPanelLayout({
         brandSub={t("barber.shell.brand.vertical")}
         logoutLabel={t("barber.shell.logout")}
       />
-      <div className="flex min-h-screen flex-1 flex-col lg:max-h-screen lg:overflow-y-auto">
+      {/* min-w-0: sin él la columna crece hasta el ancho mínimo de su
+          contenido (tablas, agenda) y en celular la página entera se desborda;
+          con él, cada tabla hace scroll dentro de su propio contenedor. En
+          escritorio ya valía 0 por el overflow-y-auto. */}
+      <div className="flex min-h-screen min-w-0 flex-1 flex-col lg:max-h-screen lg:overflow-y-auto">
         <BarberTopbar rootLabel={t("barber.shell.topbar.root")} shopName={ctx.barbershop.name} />
+        {/* Sin pt-20: el padding en línea siempre lo pisó. La hamburguesa
+            del celular vive sobre la barra superior, no sobre el contenido. */}
         <main
           id="main-content"
           tabIndex={-1}
-          className="flex-1 pt-20 lg:pt-6"
+          className="flex-1"
           style={{
             padding: "clamp(12px, 1.5vw, 28px)",
             paddingTop: "clamp(16px, 2vw, 24px)",
