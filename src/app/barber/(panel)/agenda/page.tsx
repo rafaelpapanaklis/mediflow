@@ -25,10 +25,17 @@ import { BarberAreaLocked } from "@/components/barber/agenda/area-locked";
 
 export const dynamic = "force-dynamic";
 
-export default async function BarberAgendaPage() {
+export default async function BarberAgendaPage(props: {
+  searchParams: Promise<{ fecha?: string | string[]; visita?: string | string[] }>;
+}) {
   const ctx = await getBarberContext();
   if (!ctx) redirect("/barber/entrar");
   await requireBarberPaidAccess(ctx);
+
+  // Desde Inicio: ?fecha=2026-11-15&visita=<id> abre ese día con la visita
+  // resaltada. Se lee DESPUÉS del candado (candado-suscripcion).
+  const { fecha, visita } = await props.searchParams;
+  const fechaValida = typeof fecha === "string" && /^\d{4}-\d{2}-\d{2}$/.test(fecha) ? fecha : null;
 
   const dict = getBarberDict(ctx.barbershop.locale);
   const plan = await getBarberPlan(ctx.barbershop.plan);
@@ -55,7 +62,8 @@ export default async function BarberAgendaPage() {
       locale={ctx.barbershop.locale}
       timezone={ctx.barbershop.timezone}
       branchId={ctx.barbershopId}
-      initialDateISO={shopDateISO(new Date(), ctx.barbershop.timezone)}
+      initialDateISO={fechaValida ?? shopDateISO(new Date(), ctx.barbershop.timezone)}
+      highlightId={typeof visita === "string" && visita ? visita : null}
       cashEnabled={barberPlanHasFeature(plan, "cash")}
     />
   );

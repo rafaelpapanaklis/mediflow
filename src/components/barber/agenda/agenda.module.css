@@ -2011,3 +2011,20 @@
     box-shadow: 4px 0 6px -4px color-mix(in srgb, var(--text-1) 22%, transparent);
   }
 }
+
+/* ── Visita resaltada al llegar desde Inicio (?visita=<id>) ───────────
+   agenda-client.tsx la lleva a la vista y le pone data-resaltada 4 s:
+   anillo café que late dos veces. Sin animación si se pidió menos
+   movimiento (queda el anillo). */
+.cardSlot[data-resaltada] {
+  z-index: 4;
+  border-radius: var(--radius-md);
+  box-shadow: 0 0 0 3px var(--brand), var(--shadow-2);
+  animation: agendaResalta 900ms ease-in-out 2;
+}
+@keyframes agendaResalta {
+  50% { box-shadow: 0 0 0 7px color-mix(in srgb, var(--brand) 35%, transparent), var(--shadow-2); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cardSlot[data-resaltada] { animation: none; }
+}
