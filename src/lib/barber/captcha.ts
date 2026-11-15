@@ -114,10 +114,7 @@ export async function verifyBarberCaptcha(input: VerifyBarberCaptchaInput): Prom
     });
     json = await res.json().catch(() => null);
   } catch (err) {
-    console.warn(
-      `[barber/captcha] ${input.action}: Cloudflare no respondió (${err instanceof Error ? err.name : "error"}).`,
-    );
-    return { ok: false, code: "captchaUnavailable" };
+    return cloudflareDown(input.action, err instanceof Error ? err.name : "error");
   } finally {
     clearTimeout(timer);
   }
@@ -132,8 +129,26 @@ export async function verifyBarberCaptcha(input: VerifyBarberCaptchaInput): Prom
     );
     return { ok: true, verified: false };
   }
-  if (verdict === "unavailable") return { ok: false, code: "captchaUnavailable" };
+  if (verdict === "unavailable") return cloudflareDown(input.action, "respuesta ilegible o internal-error");
   return { ok: false, code: "captchaFailed" };
+}
+
+/**
+ * Cloudflare (siteverify) no contestó, tardó más de 8 s o contestó basura.
+ *
+ * Se DEJA PASAR como sin captcha (verified:false) y se grita en el log
+ * (revisión ronda 15, M1). Un bot no puede provocar que Cloudflare no
+ * conteste, así que dejar pasar aquí no le abre ninguna puerta; cerrar, en
+ * cambio, dejaba sin reservas en línea a TODOS mientras durara la caída.
+ * Lo que sigue frenando mientras tanto: el freno de emergencia por IP y, en
+ * la reserva, el tope diario de teléfonos nuevos (que vuelve a aplicar
+ * porque la petición NO quedó verificada).
+ */
+function cloudflareDown(action: BarberCaptchaAction, why: string): BarberCaptchaCheck {
+  console.error(
+    `[barber/captcha] ${action}: Cloudflare siteverify NO RESPONDE (${why}). Se deja pasar SIN captcha; quedan el freno por IP y el tope diario.`,
+  );
+  return { ok: true, verified: false };
 }
 
 /** La respuesta JSON para un captcha que no pasó: texto claro + `code`. */

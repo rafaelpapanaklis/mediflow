@@ -39,7 +39,7 @@ const SECRET = "TURNSTILE_SECRET_KEY";
 const DIA = addIsoDays(barberTodayISO(TZ), 3);
 
 /** Lo que contesta Cloudflare, y cuántas veces se le preguntó. */
-let cf: { success: boolean; "error-codes"?: string[]; action?: string } = { success: true };
+let cf: { success: boolean; "error-codes"?: string[]; action?: string } | "caido" = { success: true };
 let cfCalls = 0;
 let ipSeq = 0;
 
@@ -75,6 +75,7 @@ before(async () => {
   globalThis.fetch = (async (url: any, init: any) => {
     if (String(url) === TURNSTILE_SITEVERIFY_URL) {
       cfCalls++;
+      if (cf === "caido") throw new TypeError("fetch failed");
       return new Response(JSON.stringify(cf), { status: 200, headers: { "content-type": "application/json" } });
     }
     return arnes(url, init);
@@ -243,4 +244,33 @@ test("manual + captcha pasado: nace PENDIENTE y la confirmación espera a que la
   assert.equal(r.status, 200, JSON.stringify(r.json));
   assert.equal(r.json.status, "PENDING");
   assert.equal(await confirmaciones(M, nuevo), 0);
+});
+
+/* ═══════ M1 (ronda 15): Cloudflare caído NO cierra la reserva ═══════ */
+
+test("Cloudflare caído: la reserva ENTRA (sin captcha), y en automático no se le escribe al teléfono nuevo", { skip }, async () => {
+  const A = await crearTienda();
+  await prisma.barbershop.update({ where: { id: A.id }, data: { bookingPolicy: "auto" } });
+  llaves(true);
+  cf = "caido";
+  const nuevo = telefono();
+  const r = await reservarPorRuta(A, nuevo, "18:00", "tok");
+  assert.equal(r.status, 200, JSON.stringify(r.json));
+  assert.equal(r.json.status, "CONFIRMED");
+  assert.equal(cfCalls, 1);
+  assert.equal(await confirmaciones(A, nuevo), 0, "no quedó verificada: sin confirmación al teléfono nuevo");
+});
+
+test("Cloudflare caído: la fila y «mi cuenta» también siguen funcionando", { skip }, async () => {
+  llaves(true);
+  cf = "caido";
+  const slug = await slugDe(T);
+  const phone = telefono();
+  const fila = await walkinPOST(req("http://x/api/barber/walkins/public", { slug, name: "Ana", phone, captchaToken: "t" }));
+  assert.equal(fila.status, 201);
+  const cuenta = await portalCodePOST(
+    req(`http://x/api/barber/portal/${slug}/code`, { phone: telefono(), captchaToken: "t" }),
+    { params: Promise.resolve({ slug }) },
+  );
+  assert.equal(cuenta.status, 200);
 });

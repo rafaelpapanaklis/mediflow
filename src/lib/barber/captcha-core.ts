@@ -80,7 +80,8 @@ export function cleanCaptchaToken(raw: unknown): string | null {
  *   misconfigured → la llave SECRETA está mal escrita o vencida. No es culpa
  *                   del cliente ni lo puede provocar un bot: se deja pasar
  *                   (como sin captcha) y se grita en el log.
- *   unavailable   → Cloudflare no supo contestar: reintento.
+ *   unavailable   → Cloudflare no supo contestar. Tampoco lo provoca un bot:
+ *                   se deja pasar (como sin captcha) y se grita en el log.
  */
 export type SiteverifyVerdict = "ok" | "failed" | "misconfigured" | "unavailable";
 
@@ -107,12 +108,11 @@ export function classifySiteverify(json: unknown, expectedAction: string): Sitev
  * Códigos que viajan al navegador. El widget los reconoce para pedir un
  * token nuevo sin que la persona tenga que recargar la página.
  */
-export type BarberCaptchaErrorCode = "captchaRequired" | "captchaFailed" | "captchaUnavailable";
+export type BarberCaptchaErrorCode = "captchaRequired" | "captchaFailed";
 
 export const BARBER_CAPTCHA_ERROR_CODES: readonly BarberCaptchaErrorCode[] = [
   "captchaRequired",
   "captchaFailed",
-  "captchaUnavailable",
 ];
 
 export function isBarberCaptchaErrorCode(code: unknown): code is BarberCaptchaErrorCode {
@@ -134,9 +134,5 @@ export const BARBER_CAPTCHA_ERRORS: Record<
   captchaFailed: {
     status: 400,
     message: "No pudimos comprobar que eres una persona. Vuelve a intentarlo.",
-  },
-  captchaUnavailable: {
-    status: 503,
-    message: "La verificación no responde en este momento. Espera unos segundos y vuelve a intentarlo.",
   },
 };

@@ -6,7 +6,9 @@
    Lo que se demuestra (decisión de Rafael, 15-nov-2026):
      · sin las DOS variables todo sigue como antes y queda en el log;
      · con las dos, el token se verifica en el servidor ANTES de crear nada:
-       sin token, token malo o Cloudflare caído → respuesta clara con `code`,
+       sin token o token malo → respuesta clara con `code`, nunca un 500;
+       Cloudflare caído → se deja pasar (como sin captcha) con grito en el log
+       (revisión ronda 15, M1);
        nunca un 500;
      · una llave secreta mal escrita no tumba la reserva (no lo provoca nadie
        de fuera) pero grita en el log;
@@ -79,7 +81,7 @@ test("los textos de error son claros, de tú y con salida (nunca un error crudo)
   for (const [code, e] of Object.entries(BARBER_CAPTCHA_ERRORS)) {
     assert.ok(isBarberCaptchaErrorCode(code));
     assert.match(e.message, /intenta/i, code);
-    assert.ok(e.status === 400 || e.status === 503, code);
+    assert.equal(e.status, 400, code);
   }
   assert.equal(isBarberCaptchaErrorCode("slotTaken"), false);
 });
@@ -199,20 +201,42 @@ test("con variables: token vencido o repetido → captchaFailed", async () => {
   assert.deepEqual(r, { ok: false, code: "captchaFailed" });
 });
 
-test("Cloudflare no responde (red caída) → captchaUnavailable, nunca una excepción", async () => {
+test("Cloudflare no responde (red caída): se DEJA PASAR sin captcha y se grita en el log (M1)", async () => {
   setKeys(true);
   reply = () => Promise.reject(new TypeError("fetch failed"));
   const { verifyBarberCaptcha } = await import("../captcha");
   const r = await verifyBarberCaptcha({ token: "t", action: BARBER_CAPTCHA_ACTIONS.booking });
-  assert.deepEqual(r, { ok: false, code: "captchaUnavailable" });
+  assert.deepEqual(r, { ok: true, verified: false });
+  assert.ok(errors.some((e) => /siteverify NO RESPONDE/.test(e)), errors.join("\n"));
 });
 
-test("Cloudflare contesta basura (HTML de un 502) → captchaUnavailable", async () => {
+test("Cloudflare contesta basura (HTML de un 502) o internal-error: se deja pasar sin captcha (M1)", async () => {
   setKeys(true);
   reply = async () => new Response("<html>bad gateway</html>", { status: 502 });
   const { verifyBarberCaptcha } = await import("../captcha");
-  const r = await verifyBarberCaptcha({ token: "t", action: BARBER_CAPTCHA_ACTIONS.booking });
-  assert.deepEqual(r, { ok: false, code: "captchaUnavailable" });
+  assert.deepEqual(
+    await verifyBarberCaptcha({ token: "t", action: BARBER_CAPTCHA_ACTIONS.booking }),
+    { ok: true, verified: false },
+  );
+  cloudflare({ success: false, "error-codes": ["internal-error"] });
+  assert.deepEqual(
+    await verifyBarberCaptcha({ token: "t", action: BARBER_CAPTCHA_ACTIONS.booking }),
+    { ok: true, verified: false },
+  );
+});
+
+test("Cloudflare que TARDA más de 8 s cuenta como caído: se deja pasar, no se cuelga", async () => {
+  setKeys(true);
+  const { verifyBarberCaptcha } = await import("../captcha");
+  // Un fetch que solo termina cuando lo abortan (como uno real colgado).
+  const colgado = ((_u: unknown, init?: RequestInit) =>
+    new Promise<Response>((_res, rej) => {
+      init?.signal?.addEventListener("abort", () => rej(new DOMException("aborted", "AbortError")));
+    })) as typeof fetch;
+  const t0 = Date.now();
+  const r = await verifyBarberCaptcha({ token: "t", action: BARBER_CAPTCHA_ACTIONS.booking, fetchImpl: colgado });
+  assert.deepEqual(r, { ok: true, verified: false });
+  assert.ok(Date.now() - t0 < 9_500, "corta a los 8 s");
 });
 
 test("llave SECRETA mal escrita: se deja pasar como sin captcha y se grita en el log", async () => {
@@ -241,7 +265,7 @@ async function json(res: Response): Promise<{ status: number; body: any }> {
 // «Mi cuenta» resuelve la barbería ANTES del captcha (para poder decir «ese
 // teléfono está mal escrito»): su prueba va con base local, en
 // captcha-integration.test.ts.
-test("reserva, fila y registro: sin token → 400 captchaRequired; Cloudflare caído → 503 captchaUnavailable", async () => {
+test("reserva, fila y registro: sin token → 400 captchaRequired; token malo → 400 captchaFailed", async () => {
   setKeys(true);
   // Sin DATABASE_URL: si alguna ruta llegara a la base, la prueba lo vería.
   const { POST: booking } = await import("@/app/api/barber/public/booking/[slug]/route");
@@ -272,11 +296,6 @@ test("reserva, fila y registro: sin token → 400 captchaRequired; Cloudflare ca
     assert.equal(sin.status, 400, `${name}: ${JSON.stringify(sin.body)}`);
     assert.equal(sin.body.code, "captchaRequired", name);
     assert.equal(sin.body.error, BARBER_CAPTCHA_ERRORS.captchaRequired.message, name);
-
-    reply = () => Promise.reject(new TypeError("fetch failed"));
-    const caido = await json(await call({ ...body, captchaToken: "tok" }));
-    assert.equal(caido.status, 503, `${name}: ${JSON.stringify(caido.body)}`);
-    assert.equal(caido.body.code, "captchaUnavailable", name);
 
     cloudflare({ success: false, "error-codes": ["invalid-input-response"] });
     const malo = await json(await call({ ...body, captchaToken: "tok" }));
