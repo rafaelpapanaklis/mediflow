@@ -4,7 +4,11 @@ import { createClient as createSessionClient } from "@/lib/supabase/server";
 import { getBarberContext } from "@/lib/barber-auth";
 import { persistentRateLimit } from "@/lib/failban";
 import { leerErrorContrasena } from "@/lib/auth/errores-contrasena";
-import { problemaContrasenaNueva } from "@/lib/barber/contrasena";
+import {
+  BARBER_MUST_CHANGE_KEY,
+  barberDebeCambiarContrasena,
+  problemaContrasenaNueva,
+} from "@/lib/barber/contrasena";
 
 export const dynamic = "force-dynamic";
 
@@ -110,6 +114,12 @@ export async function POST(req: NextRequest) {
   if (!cuenta || cuenta.id !== ctx.user.supabaseId) return falla("sin_sesion", 401);
   const email = cuenta.email ?? "";
 
+  // ── Obligatorio: sale de la temporal ─────────────────────────────────
+  // La marca se lee de la cuenta (app_metadata), nunca del cuerpo.
+  if (barberDebeCambiarContrasena(cuenta.app_metadata)) {
+    return cambioObligatorio(ctx.barberUserId, cuenta.id, email, password);
+  }
+
   // ── Voluntario: con la contraseña actual ─────────────────────────────
   if (!actual) return falla("falta_actual", 400);
   // Adivinar la actual con una sesión ajena abierta: tope por persona. Misma
@@ -140,5 +150,39 @@ export async function POST(req: NextRequest) {
   }
 
   console.log(JSON.stringify({ type: "barber.password.changed", barberUserId: ctx.barberUserId, forced: false }));
+  return NextResponse.json({ ok: true });
+}
+
+/**
+ * Cambio OBLIGATORIO de la temporal (espejo del forzado del dental): no pide
+ * la actual —acaba de entrar con ella—, rechaza quedarse con la misma, y
+ * cambia contraseña y marca EN LA MISMA llamada de la service role: o quedan
+ * las dos, o ninguna. Si Supabase falla, la marca sigue y se le vuelve a pedir.
+ */
+async function cambioObligatorio(barberUserId: string, supabaseId: string, email: string, password: string) {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const service = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !service) {
+    console.error("[barber/auth/contrasena] falta SUPABASE_SERVICE_ROLE_KEY o NEXT_PUBLIC_SUPABASE_URL");
+    return falla("error", 500);
+  }
+
+  // La temporal no se guarda en ningún lado: la única prueba de «es la
+  // misma» es que abra la cuenta. Ante la duda (sin red) se sigue: GoTrue
+  // también rechaza la contraseña repetida.
+  if ((await abreConEsta(email, password)) === true) return falla("igual", 400);
+
+  const admin = createSupabaseJs(url, service, { auth: { persistSession: false, autoRefreshToken: false } });
+  const { error } = await admin.auth.admin.updateUserById(supabaseId, {
+    password,
+    app_metadata: { [BARBER_MUST_CHANGE_KEY]: false },
+  });
+  if (error) {
+    const code = codigoDeSupabase(error);
+    if (code === "error") console.error("[barber/auth/contrasena] obligatorio: supabase falló:", error.message ?? "");
+    return falla(code, code === "error" ? 500 : 400);
+  }
+
+  console.log(JSON.stringify({ type: "barber.password.changed", barberUserId, forced: true }));
   return NextResponse.json({ ok: true });
 }

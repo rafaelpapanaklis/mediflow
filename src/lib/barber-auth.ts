@@ -6,6 +6,7 @@ import {
   hasBarberPermission,
   type BarberPermissionKey,
 } from "@/lib/barber/permissions";
+import { barberDebeCambiarContrasena } from "@/lib/barber/contrasena";
 
 export { BarberForbiddenError, hasBarberPermission };
 export type { BarberPermissionKey };
@@ -30,6 +31,13 @@ export interface BarberContext {
   /** Fila Barber ligada al usuario (si el usuario ES un barbero operativo). */
   barber: Barber | null;
   role: BarberRole;
+  /**
+   * La cuenta entra con una contraseña TEMPORAL que le dio quien la dio de
+   * alta: el panel la manda a cambiarla antes de dejarla pasar. Sale del
+   * mismo getUser de abajo (app_metadata), sin otra consulta. Opcional para
+   * no romper los contextos de prueba que ya existen.
+   */
+  mustChangePassword?: boolean;
 }
 
 export async function getBarberContext(): Promise<BarberContext | null> {
@@ -52,6 +60,7 @@ export async function getBarberContext(): Promise<BarberContext | null> {
       user: bu,
       barber: bu.barber,
       role: bu.role,
+      mustChangePassword: barberDebeCambiarContrasena(user.app_metadata),
     };
   } catch {
     // Tabla barber_users aún sin migrar / DB caída → sesión "no es de

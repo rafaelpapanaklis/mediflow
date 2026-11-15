@@ -309,3 +309,134 @@ describe("2 · cambiar mi contraseña dentro del panel", () => {
     }
   });
 });
+
+// ── 3. Contraseña temporal del equipo ──────────────────────────────────
+
+describe("3 · contraseña temporal: criptográfica y obligatorio cambiarla", () => {
+  test("la temporal sale de los bytes: forma fija, sin ambiguos y pasa la regla del dental", () => {
+    const ceros = C.barberTempPasswordFromBytes(new Uint8Array(9));
+    assert.equal(ceros, "Barber-AAAAAA222!");
+    const altos = C.barberTempPasswordFromBytes(new Uint8Array(9).fill(255));
+    assert.equal(altos, "Barber-999999999!");
+    const forma = /^Barber-[A-HJ-NP-Z2-9]{6}[2-9]{3}!$/;
+    for (let i = 0; i < 200; i++) {
+      const bytes = Uint8Array.from({ length: 9 }, (_, j) => (i * 37 + j * 101) % 256);
+      const p = C.barberTempPasswordFromBytes(bytes);
+      assert.match(p, forma);
+      assert.equal(C.problemaContrasenaNueva(p), null, `la temporal ${p} no pasa la regla de fuerza`);
+    }
+    assert.throws(() => C.barberTempPasswordFromBytes(new Uint8Array(8)));
+    // 32 y 8 símbolos: byte % n reparte parejo (sin sesgo de módulo).
+    const fuente = leer("src/lib/barber/contrasena.ts");
+    assert.equal(/ALFABETO_TEMPORAL = "([^"]+)"/.exec(fuente)?.[1].length, 32);
+    assert.equal(/DIGITOS_TEMPORAL = "([^"]+)"/.exec(fuente)?.[1].length, 8);
+  });
+
+  test("Equipo ya no usa Math.random: usa randomBytes", () => {
+    const team = sinComentarios(leer("src/lib/barber/team.ts"));
+    assert.ok(!/Math\.random/.test(team), "volvió Math.random a team.ts");
+    assert.match(team, /barberTempPasswordFromBytes\(randomBytes\(BARBER_TEMP_PASSWORD_BYTES\)\)/);
+    assert.match(team, /import \{ randomBytes \} from "node:crypto"/);
+  });
+
+  test("dar de alta crea la cuenta con la temporal y la marca de cambio en app_metadata", async () => {
+    const { inviteMember } = await import("@/lib/barber/team");
+    reiniciar();
+    const ctx = {
+      barberUserId: "bu-dueno",
+      barbershopId: "shop-1",
+      barbershop: { id: "shop-1", name: "La Navaja", parentId: null },
+      user: { id: "bu-dueno", role: "OWNER", permissionsOverride: [] },
+      barber: null,
+      role: "OWNER",
+    } as never;
+    const r1 = await inviteMember(ctx, { email: "Pepe@Barberia.mx", firstName: "Pepe", lastName: "López", role: "BARBER" });
+    const alta = llamadas.find((l) => l.que === "admin.createUser")?.args;
+    assert.ok(alta, "no creó la cuenta");
+    assert.deepEqual(alta.app_metadata, { barber_must_change_password: true });
+    assert.equal(alta.user_metadata.barber_must_change_password, undefined, "la marca no va donde el usuario la puede borrar");
+    assert.equal(alta.password, r1.tempPassword);
+    assert.match(r1.tempPassword, /^Barber-[A-HJ-NP-Z2-9]{6}[2-9]{3}!$/);
+
+    reiniciar();
+    const r2 = await inviteMember(ctx, { email: "otro@barberia.mx", firstName: "Otro", lastName: "Más", role: "BARBER" });
+    assert.notEqual(r1.tempPassword, r2.tempPassword);
+  });
+
+  test("getBarberContext lee la marca de app_metadata (user_metadata no cuenta)", async () => {
+    const { getBarberContext } = await import("@/lib/barber-auth");
+    conSesion({ marca: true });
+    assert.equal((await getBarberContext())?.mustChangePassword, true);
+    conSesion();
+    assert.equal((await getBarberContext())?.mustChangePassword, false);
+    conSesion();
+    (estado.sesion as any).user_metadata = { barber_must_change_password: true };
+    (estado.sesion as any).app_metadata = { barber_must_change_password: "true" };
+    assert.equal((await getBarberContext())?.mustChangePassword, false, "solo un true literal en app_metadata cuenta");
+  });
+
+  test("cambio obligatorio: sin la actual, cambia contraseña Y marca juntas, y la persona sigue dentro", async () => {
+    conSesion({ marca: true, vigente: "Barber-AAAAAA222!" });
+    const res = await cambiar(post("/api/barber/auth/contrasena", { password: NUEVA, confirmacion: NUEVA }));
+    assert.equal(res.status, 200);
+    const admin = llamadas.filter((l) => l.que === "admin.updateUserById");
+    assert.equal(admin.length, 1, "contraseña y marca en UNA sola llamada");
+    assert.deepEqual(admin[0].args, {
+      id: "sb-1",
+      attrs: { password: NUEVA, app_metadata: { barber_must_change_password: false } },
+    });
+    assert.equal(estado.contrasenaVigente, NUEVA);
+    assert.ok(!llamadas.some((l) => l.que === "sesion.signOut"));
+
+    // Y ya sin marca, el contexto deja pasar al panel.
+    const { getBarberContext } = await import("@/lib/barber-auth");
+    assert.equal((await getBarberContext())?.mustChangePassword, false);
+  });
+
+  test("cambio obligatorio: quedarse con la temporal no vale, y la marca sigue", async () => {
+    conSesion({ marca: true, vigente: "Barber-AAAAAA222!" });
+    const res = await cambiar(post("/api/barber/auth/contrasena", { password: "Barber-AAAAAA222!", confirmacion: "Barber-AAAAAA222!" }));
+    assert.equal(res.status, 400);
+    assert.equal((await res.json()).code, "igual");
+    assert.ok(!llamadas.some((l) => l.que === "admin.updateUserById"));
+    assert.equal((estado.sesion?.app_metadata as any).barber_must_change_password, true);
+  });
+
+  test("cambio obligatorio: si Supabase falla, la marca NO se quita", async () => {
+    conSesion({ marca: true, vigente: "Barber-AAAAAA222!" });
+    estado.errorUpdate = { message: "boom" };
+    const res = await cambiar(post("/api/barber/auth/contrasena", { password: NUEVA, confirmacion: NUEVA }));
+    assert.equal(res.status, 500);
+    assert.equal((estado.sesion?.app_metadata as any).barber_must_change_password, true);
+    assert.equal(estado.contrasenaVigente, "Barber-AAAAAA222!");
+  });
+
+  test("la marca sale de la CUENTA: pedir el camino obligatorio desde el cuerpo no salta la actual", async () => {
+    conSesion();
+    const res = await cambiar(
+      post("/api/barber/auth/contrasena", { password: NUEVA, confirmacion: NUEVA, mustChangePassword: true, barber_must_change_password: true }),
+    );
+    assert.equal(res.status, 400);
+    assert.equal((await res.json()).code, "falta_actual");
+    assert.ok(!llamadas.some((l) => l.que === "admin.updateUserById"));
+  });
+
+  test("el panel manda a cambiarla, y la pantalla del cambio vive fuera de (panel)", () => {
+    const layout = sinComentarios(leer("src/app/barber/(panel)/layout.tsx"));
+    const iSesion = layout.indexOf("if (!ctx) redirect(BARBER_LOGIN_PATH);");
+    const iMarca = layout.indexOf("if (ctx.mustChangePassword) redirect(BARBER_CHANGE_PASSWORD_PATH);");
+    assert.ok(iSesion > -1 && iMarca > iSesion, "el layout no manda a cambiar la temporal");
+    assert.ok(iMarca < layout.indexOf("getBarberPlan("), "la marca va antes de cargar nada");
+    assert.equal(C.BARBER_CHANGE_PASSWORD_PATH, "/barber/cambiar-contrasena");
+    assert.ok(existsSync(join(RAIZ, "src/app/barber/cambiar-contrasena/page.tsx")));
+    assert.ok(!existsSync(join(RAIZ, "src/app/barber/(panel)/cambiar-contrasena")), "dentro de (panel) sería un bucle");
+
+    const pagina = sinComentarios(leer("src/app/barber/cambiar-contrasena/page.tsx"));
+    assert.match(pagina, /if \(!ctx\) redirect\(BARBER_LOGIN_PATH\)/);
+    assert.match(pagina, /if \(!ctx\.mustChangePassword\) redirect\("\/barber"\)/);
+    const form = sinComentarios(leer("src/app/barber/cambiar-contrasena/cambio-obligatorio-form.tsx"));
+    assert.match(form, /Cerrar sesión/, "sin salida, quien no es dueño de la cuenta se queda atrapado");
+    const dental = /cl[ií]nica|dental|doctor|paciente|consultorio/i.exec(form + pagina);
+    assert.equal(dental, null, `trae texto de clínicas: «${dental?.[0]}»`);
+  });
+});

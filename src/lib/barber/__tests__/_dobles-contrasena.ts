@@ -186,7 +186,7 @@ const prisma = {
     },
     create: async ({ data }: any) => {
       anota("barberUser.create", data);
-      const fila = { id: "bu-nuevo", createdAt: new Date(), updatedAt: new Date(), lastLogin: null, ...data };
+      const fila = { id: "bu-nuevo", createdAt: new Date(), updatedAt: new Date(), lastLogin: null, branchAccess: [], barber: null, ...data };
       estado.filas.push(fila);
       return fila;
     },
