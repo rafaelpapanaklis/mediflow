@@ -173,11 +173,24 @@ test("el cron de barber corta TODAS las vencidas (y solo esas) antes de despacha
   assert.deepEqual(await estados(vigente.matriz.id, vigente.sede.id), ["active", "active"]);
   assert.deepEqual(await estados(yaCancelada.matriz.id), ["canceled"]);
 
-  // Idempotente: la segunda pasada no cambia nada más.
+  // Idempotente: la segunda pasada no vuelve a tocar las suyas. (El total de
+  // «suspendidas» no se compara: otras suites crean vencidas en esta misma base.)
+  const antes = await prisma.barbershop.findMany({
+    where: { id: { in: [vencida.matriz.id, vencida.sede.id, vigente.matriz.id] } },
+    select: { id: true, updatedAt: true },
+  });
   const otra = await cronGET(
     new Request("http://localhost/api/barber/whatsapp/dispatch", { headers: { authorization: "Bearer cron-de-prueba" } }),
   );
-  assert.equal((await otra.json()).suspendidas, 0);
+  assert.equal((await otra.json()).ok, true);
+  const despues = await prisma.barbershop.findMany({
+    where: { id: { in: antes.map((r) => r.id) } },
+    select: { id: true, updatedAt: true },
+  });
+  assert.deepEqual(
+    despues.map((r) => [r.id, r.updatedAt.getTime()]).sort(),
+    antes.map((r) => [r.id, r.updatedAt.getTime()]).sort(),
+  );
 });
 
 async function evento(type: string, object: any) {

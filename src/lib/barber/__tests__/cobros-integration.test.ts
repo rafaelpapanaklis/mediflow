@@ -277,8 +277,16 @@ test("las sucursales heredan el estado; el cobro se guarda solo en la matriz", {
 test("sin sql/barber_cobros.sql pegado: nada truena, el cobro no se guarda y el registro es null", { skip }, async () => {
   const shop = await barberia();
   const sub = suscripcion(`sub_${RUN}_sintabla`, shop.id, shop.stripeCustomerId!);
-  await prisma.$executeRawUnsafe(`ALTER TABLE barber_subscription_payments RENAME TO barber_subscription_payments_fuera`);
-  await prisma.$executeRawUnsafe(`ALTER TABLE barber_subscriptions RENAME TO barber_subscriptions_fuera`);
+  // El error REAL que da Postgres cuando la tabla no existe (42P01), sin
+  // renombrar las tablas de verdad: otras suites corren a la vez contra esta
+  // misma base y las verían desaparecer.
+  const faltaTabla = await prisma.$queryRawUnsafe("SELECT 1 FROM barber_tabla_que_no_existe").catch((e: unknown) => e);
+  assert.ok(faltaTabla instanceof Error);
+  const raw = prisma as unknown as { $queryRaw: unknown; $executeRaw: unknown };
+  const [q, x] = [raw.$queryRaw, raw.$executeRaw];
+  const tocaCobros = (args: unknown[]) => /barber_subscription(_payments|s)\b/.test(JSON.stringify(args));
+  raw.$queryRaw = (...args: unknown[]) => (tocaCobros(args) ? Promise.reject(faltaTabla) : (q as Function).apply(prisma, args));
+  raw.$executeRaw = (...args: unknown[]) => (tocaCobros(args) ? Promise.reject(faltaTabla) : (x as Function).apply(prisma, args));
   try {
     const r = await enviar("invoice.paid", factura(`in_${RUN}_sintabla`, sub));
     assert.equal(r.status, 200);
@@ -296,7 +304,9 @@ test("sin sql/barber_cobros.sql pegado: nada truena, el cobro no se guarda y el 
       "sin-tabla",
     );
   } finally {
-    await prisma.$executeRawUnsafe(`ALTER TABLE barber_subscription_payments_fuera RENAME TO barber_subscription_payments`);
-    await prisma.$executeRawUnsafe(`ALTER TABLE barber_subscriptions_fuera RENAME TO barber_subscriptions`);
+    raw.$queryRaw = q;
+    raw.$executeRaw = x;
   }
+  // Y de verdad no se guardó nada.
+  assert.equal((await filas(shop.id)).length, 0);
 });
