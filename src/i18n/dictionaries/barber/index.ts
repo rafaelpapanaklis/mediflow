@@ -53,6 +53,8 @@ import ajustesEs from "./ajustes.es.json"; // servicios + configuración de la b
 import ajustesEn from "./ajustes.en.json";
 import estrellasEs from "./estrellas.es.json"; // tarjeta de estrellas y bonos (ws6-t5)
 import estrellasEn from "./estrellas.en.json";
+import cobrosEs from "./cobros.es.json"; // cobros del cliente desde su ficha (ws6-t5)
+import cobrosEn from "./cobros.en.json";
 
 const ES: Dictionary = {
   barber: {
@@ -75,6 +77,7 @@ const ES: Dictionary = {
     comparar: compararEs as unknown as Dictionary,
     ajustes: ajustesEs as unknown as Dictionary,
     estrellas: estrellasEs as unknown as Dictionary,
+    cobros: cobrosEs as unknown as Dictionary,
   },
 };
 
@@ -99,6 +102,7 @@ const EN: Dictionary = {
     comparar: compararEn as unknown as Dictionary,
     ajustes: ajustesEn as unknown as Dictionary,
     estrellas: estrellasEn as unknown as Dictionary,
+    cobros: cobrosEn as unknown as Dictionary,
   },
 };
 

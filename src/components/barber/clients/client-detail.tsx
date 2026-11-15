@@ -25,6 +25,8 @@ import type { BarberClientDetail, BarberLoyaltyState } from "@/lib/barber/loyalt
 import type { BarberClientDTO } from "@/lib/barber/types";
 import { LoyaltyCard } from "./loyalty-card";
 import { StarsPanel } from "./stars-panel";
+import { ClientSales } from "./client-sales";
+import type { ClientSalesPage } from "@/lib/barber/client-sales";
 import type { StarsView } from "@/lib/barber/stars-core";
 import { PhotoUploader, type UploadedPhoto } from "./photo-uploader";
 import { PreferencesPanel } from "./preferences-panel";
@@ -64,6 +66,12 @@ export interface ClientDetailProps {
   /** cash.manage — dar/quitar estrella, entregar bono, enlace de la tarjeta. */
   canHandleStars?: boolean;
   timezone?: string;
+  /** Cobros del cliente (null = sin permiso para ver importes: no se pinta). */
+  sales?: ClientSalesPage | null;
+  /** Sub-árbol barber.cobros. */
+  cobrosDict?: Dictionary;
+  /** cash.view: enlace al ticket imprimible. */
+  canPrintSales?: boolean;
 }
 
 function sortPhotos(list: BarberVisitPhotoView[]): BarberVisitPhotoView[] {
@@ -80,6 +88,9 @@ export function BarberClientDetailScreen({
   starsDict,
   canHandleStars = false,
   timezone = "America/Mexico_City",
+  sales = null,
+  cobrosDict,
+  canPrintSales = false,
 }: ClientDetailProps) {
   const t = useBarberT(dict);
   const toast = useToast();
@@ -452,6 +463,17 @@ export function BarberClientDetailScreen({
                   onOpenPhoto={setLightbox}
                 />
               </section>
+
+              {sales && cobrosDict ? (
+                <ClientSales
+                  clientId={client.id}
+                  initial={sales}
+                  dict={cobrosDict}
+                  locale={locale}
+                  timezone={timezone}
+                  canPrint={canPrintSales}
+                />
+              ) : null}
             </div>
           </div>
         </div>
