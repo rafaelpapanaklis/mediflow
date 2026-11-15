@@ -61,7 +61,12 @@
     "remindersCancelled": "We cancelled the old reminder; it gets rescheduled for the new time.",
     "blocked": "It doesn't fit there",
     "rejected": "Not moved to {time} — {reason}",
-    "movedDay": "Visit moved to {day}, {time}"
+    "movedDay": "Visit moved to {day}, {time}",
+    "denied": {
+      "terminal": "This visit is already “{status}”: it can’t be moved.",
+      "sinBarbero": "Assign a barber to this visit to be able to move it.",
+      "sinPermiso": "Your role can’t move visits."
+    }
   },
   "modal": {
     "newTitle": "New visit",

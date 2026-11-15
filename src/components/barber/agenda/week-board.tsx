@@ -53,6 +53,7 @@ import {
   slotIssueText,
   slotVerdict,
   weekClosedBands,
+  motivoSinArrastre,
 } from "./rejilla";
 import { ClosedBands, DragGhost, GridLines, NowLine, TimeOffBand } from "./rejilla-piezas";
 import { useCardDrag } from "./use-card-drag";
@@ -217,6 +218,15 @@ export function WeekBoard(props: WeekBoardProps) {
       return { ok: check.ok, reason: check.ok ? "" : issueText(check) };
     },
     canDrag,
+    // Apretó y jaló una visita que no se mueve: decir por qué (antes, nada).
+    onDenied: (appt) => {
+      const motivo = motivoSinArrastre({ canEdit, barberId: appt.barberId, status: appt.status });
+      if (motivo) {
+        props.onDropRejected(
+          t(`barber.agenda.move.denied.${motivo}`, { status: t(`barber.agenda.hover.status.${appt.status}`) }),
+        );
+      }
+    },
     onMove: props.onMove,
     onResize: props.onResize,
     onRejected: (_appt, p) =>

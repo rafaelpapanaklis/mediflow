@@ -706,3 +706,24 @@
   padding-right: 0 !important;
 }
 .barber-shell .bd-page .bdash-list .bdash-row:first-child { border-top: 0; }
+
+/* Próximas visitas → Agenda (15-nov, «estoy en HOY»): cada renglón es un
+   enlace a la Agenda en ese día con la visita resaltada; ahí se mueve.
+   El renglón se ve igual; al pasar o enfocar, el nombre se subraya y la
+   flecha se marca. */
+.barber-shell .bdash-upcoming__link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+  border-radius: var(--radius-sm);
+}
+.barber-shell .bdash-upcoming__link .bdash-row__main { flex: 1; min-width: 0; }
+.barber-shell .bdash-upcoming__go { flex: none; color: var(--text-4); transition: color 140ms ease, transform 140ms ease; }
+.barber-shell .bdash-upcoming__link:hover .bdash-row__name { text-decoration: underline; text-underline-offset: 2px; }
+.barber-shell .bdash-upcoming__link:hover .bdash-upcoming__go { color: var(--brand-ink); transform: translateX(2px); }
+.barber-shell .bdash-upcoming__link:focus-visible { outline: none; box-shadow: var(--ring); }
+@media (prefers-reduced-motion: reduce) { .barber-shell .bdash-upcoming__go { transition: none; } }

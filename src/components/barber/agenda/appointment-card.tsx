@@ -99,6 +99,7 @@ export function AppointmentCard(props: AppointmentCardProps) {
     <div
       className={`${css.cardSlot} ${props.dragging ? css.cardSlotDragging : ""}`}
       data-card=""
+      data-appt-id={appt.id}
       style={{
         top: props.top,
         height: props.height,
