@@ -84,7 +84,7 @@
       "payment": "Payment",
       "actions": "Actions"
     },
-    "cutsOf": "{used} of {total}",
+    "cutsOf": "{used} of {total} cuts used",
     "cutsUnlimited": "{used} used · unlimited",
     "expiresIn": {
       "one": "in 1 day",
