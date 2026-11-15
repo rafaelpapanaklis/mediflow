@@ -1,5 +1,6 @@
 "use client";
 
+import { soloDigitosTelefono } from "@/lib/barber/phone-format";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -597,7 +598,7 @@ function NewClientModal({
           value={form.phone}
           inputMode="tel"
           placeholder={t("form.phonePlaceholder")}
-          onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value.replace(/\D/g, "").slice(0, 13) }))}
+          onChange={(e) => setForm((f) => ({ ...f, phone: soloDigitosTelefono(e.target.value) }))}
         />
       </Field>
 

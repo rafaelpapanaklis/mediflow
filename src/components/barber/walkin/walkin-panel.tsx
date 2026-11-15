@@ -12,6 +12,7 @@
 // El aviso por WhatsApp de esta ola solo REGISTRA el evento (encola una
 // fila BarberMessage PENDING). El envío lo conecta la ola de WhatsApp.
 // ═══════════════════════════════════════════════════════════════════════
+import { soloDigitosTelefono } from "@/lib/barber/phone-format";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { BellRing, LogOut, Plus, RefreshCw, Scissors, Volume2 } from "lucide-react";
 import { type Dictionary } from "@/i18n/t";
@@ -445,7 +446,7 @@ function AddWalkInDialog(props: {
         <input
           className={agendaCss.input}
           value={phone}
-          onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 13))}
+          onChange={(e) => setPhone(soloDigitosTelefono(e.target.value))}
           inputMode="numeric"
         />
       </Field>

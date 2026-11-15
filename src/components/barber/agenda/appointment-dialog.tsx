@@ -12,6 +12,7 @@
 // helper. El precio que se ve aquí es el VIVO del catálogo; al guardar, el
 // servidor lo congela en BarberAppointmentService.priceAtBooking.
 // ═══════════════════════════════════════════════════════════════════════
+import { soloDigitosTelefono } from "@/lib/barber/phone-format";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, Minus, Plus, RotateCcw, Search, UserPlus } from "lucide-react";
 import type { BarberAppointmentDTO, BarberDTO, BarberServiceDTO } from "@/lib/barber/types";
@@ -347,7 +348,7 @@ export function AppointmentDialog(props: AppointmentDialogProps) {
             <input
               className={css.input}
               value={clientPhone}
-              onChange={(e) => setClientPhone(e.target.value.replace(/\D/g, "").slice(0, 13))}
+              onChange={(e) => setClientPhone(soloDigitosTelefono(e.target.value))}
               inputMode="numeric"
               autoComplete="off"
             />
