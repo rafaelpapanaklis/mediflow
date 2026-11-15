@@ -9,6 +9,7 @@ import {
 } from "@/lib/barber/memberships";
 import { cancelMembershipSubscription } from "@/lib/barber/payments";
 import type { BarberPaymentMethod } from "@/lib/barber/types";
+import { assertBarberPermission } from "@/lib/barber-auth";
 import { barberApiError, readJson, requireBarberApi } from "../_guard";
 
 export const dynamic = "force-dynamic";
@@ -19,7 +20,7 @@ const MANUAL_METHODS: BarberPaymentMethod[] = ["CASH", "SPEI", "CARD"];
 
 /** Las membresías vendidas: vigentes, por vencer y vencidas. */
 export async function GET(req: Request) {
-  const g = await requireBarberApi({ permission: "memberships.manage", feature: "memberships" });
+  const g = await requireBarberApi({ permission: "memberships.sell", feature: "memberships" });
   if (!g.ok) return g.res;
   try {
     const url = new URL(req.url);
@@ -45,7 +46,7 @@ export async function GET(req: Request) {
  * NO_OPEN_SESSION si no lo hay). Devuelve la membresía y el id del ticket.
  */
 export async function POST(req: Request) {
-  const g = await requireBarberApi({ permission: "memberships.manage", feature: "memberships" });
+  const g = await requireBarberApi({ permission: "memberships.sell", feature: "memberships" });
   if (!g.ok) return g.res;
   try {
     const body = await readJson(req);
@@ -82,7 +83,7 @@ export async function POST(req: Request) {
  * para deshacer un cobro se cancela su ticket en Caja.
  */
 export async function PATCH(req: Request) {
-  const g = await requireBarberApi({ permission: "memberships.manage", feature: "memberships" });
+  const g = await requireBarberApi({ permission: "memberships.sell", feature: "memberships" });
   if (!g.ok) return g.res;
   try {
     const body = await readJson(req);
@@ -105,6 +106,16 @@ export async function PATCH(req: Request) {
         soldByUserId: g.ctx.barberUserId,
       });
       return NextResponse.json({ membership, saleId: membership.saleId });
+    }
+
+    // Pausar, reactivar y cancelar NO son vender: siguen siendo de quien
+    // administra las membresías (Recepción vende y renueva, nada más).
+    if (action === "cancel" || action === "pause" || action === "resume") {
+      try {
+        assertBarberPermission(g.ctx, "memberships.manage");
+      } catch {
+        return NextResponse.json({ error: "Sin permiso" }, { status: 403 });
+      }
     }
 
     if (action === "cancel") {

@@ -272,7 +272,7 @@
   "roleHint": {
     "OWNER": "Runs everything, subscription included.",
     "MANAGER": "Runs the whole shop except the subscription.",
-    "RECEPTION": "Front desk: calendar, clients, queue and register.",
+    "RECEPTION": "Front desk: calendar, clients, queue and register. Sells memberships, products and deposits; does not change prices or plans.",
     "BARBER": "Sees their own: calendar, clients and commissions."
   },
   "ticketStatus": {

@@ -63,7 +63,8 @@
       "saving": "Saving…",
       "preview": "Reads as: {text}"
     },
-    "deleteConfirm": "Delete this membership? If you already sold it, deactivate it instead."
+    "deleteConfirm": "Delete this membership? If you already sold it, deactivate it instead.",
+    "readOnly": "These are the plans you can sell. The owner or manager creates them, changes their price or archives them."
   },
   "clientes": {
     "heading": "Who has one",

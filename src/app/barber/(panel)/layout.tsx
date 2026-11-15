@@ -13,6 +13,10 @@ import { BARBER_CHANGE_PASSWORD_PATH } from "@/lib/barber/contrasena";
 import { getBarberT } from "@/i18n/dictionaries/barber";
 import { BarberSidebar } from "@/components/barber/barber-sidebar";
 import { BarberTopbar } from "@/components/barber/barber-topbar";
+import { BarberBranchBadge } from "@/components/barber/barber-branch-badge";
+import { BarberSedePin } from "@/components/barber/barber-sede-pin";
+import { listBranchOptions, readBranchCookie } from "@/lib/barber/branches";
+import { BARBER_BRANCH_ALL } from "@/lib/barber/branch-cookie";
 import "@/app/panel-chrome-va.css";
 import "../barber-theme.css";
 
@@ -94,6 +98,14 @@ export default async function BarberPanelLayout({
     label: t(`barber.shell.nav.${item.key}`),
   }));
 
+  // Sede activa en la barra de arriba (sucursales de verdad, 15-nov). Las
+  // opciones son las que la sesión YA alcanza (getAccessibleBranchIds); con
+  // una sola sede no se pinta nada.
+  const [branchOptions, branchCookie] = await Promise.all([
+    listBranchOptions(ctx).catch(() => []),
+    readBranchCookie(),
+  ]);
+
   const sectionLabels: Record<string, string> = {
     operacion: t("barber.shell.navSections.operacion"),
     negocio: t("barber.shell.navSections.negocio"),
@@ -103,6 +115,8 @@ export default async function BarberPanelLayout({
 
   return (
     <div className="barber-shell mf-extpanel flex min-h-screen font-sans">
+      {/* Cada escritura lleva la sede de ESTA pantalla (ronda 2, M3). */}
+      <BarberSedePin branchId={ctx.barbershopId} message={t("barber.shell.topbar.branchChanged")} />
       <BarberSidebar
         shopName={ctx.barbershop.name}
         items={items}
@@ -117,7 +131,24 @@ export default async function BarberPanelLayout({
           con él, cada tabla hace scroll dentro de su propio contenedor. En
           escritorio ya valía 0 por el overflow-y-auto. */}
       <div className="flex min-h-screen min-w-0 flex-1 flex-col lg:max-h-screen lg:overflow-y-auto">
-        <BarberTopbar rootLabel={t("barber.shell.topbar.root")} shopName={ctx.barbershop.name} />
+        <BarberTopbar
+          rootLabel={t("barber.shell.topbar.root")}
+          shopName={ctx.barbershop.name}
+          branch={
+            <BarberBranchBadge
+              options={branchOptions.map((b) => ({ id: b.id, label: b.label, isActive: b.isActive }))}
+              activeId={ctx.barbershopId}
+              consolidated={branchCookie === BARBER_BRANCH_ALL && branchOptions.length > 1}
+              selectedId={branchCookie}
+              labels={{
+                branch: t("barber.shell.topbar.branch"),
+                aria: t("barber.shell.topbar.branchAria"),
+                all: t("barber.shell.topbar.branchAll"),
+                closed: t("barber.shell.topbar.branchClosed"),
+              }}
+            />
+          }
+        />
         {/* Sin pt-20: el padding en línea siempre lo pisó. La hamburguesa
             del celular vive sobre la barra superior, no sobre el contenido. */}
         <main

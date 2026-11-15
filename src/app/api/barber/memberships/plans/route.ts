@@ -16,7 +16,7 @@ export const dynamic = "force-dynamic";
  * Los precios los define cada barbería aquí: nada hardcodeado en la UI.
  */
 export async function GET(req: Request) {
-  const g = await requireBarberApi({ permission: "memberships.manage", feature: "memberships" });
+  const g = await requireBarberApi({ permission: "memberships.sell", feature: "memberships" });
   if (!g.ok) return g.res;
   try {
     const url = new URL(req.url);

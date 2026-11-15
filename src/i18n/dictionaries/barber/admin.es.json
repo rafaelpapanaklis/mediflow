@@ -272,7 +272,7 @@
   "roleHint": {
     "OWNER": "Manda en todo, incluida la suscripción.",
     "MANAGER": "Opera la barbería completa menos la suscripción.",
-    "RECEPTION": "Mostrador: agenda, clientes, fila y caja.",
+    "RECEPTION": "Mostrador: agenda, clientes, fila y caja. Vende membresías, productos y anticipos; no cambia precios ni planes.",
     "BARBER": "Ve lo suyo: su agenda, sus clientes y sus comisiones."
   },
   "ticketStatus": {

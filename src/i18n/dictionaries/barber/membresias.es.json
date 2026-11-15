@@ -63,7 +63,8 @@
       "saving": "Guardando…",
       "preview": "Así se lee: {text}"
     },
-    "deleteConfirm": "¿Borrar esta membresía? Si ya la vendiste, mejor desactívala."
+    "deleteConfirm": "¿Borrar esta membresía? Si ya la vendiste, mejor desactívala.",
+    "readOnly": "Aquí ves los planes que puedes vender. Crearlos, cambiarles el precio o archivarlos lo hace el dueño o el encargado."
   },
   "clientes": {
     "heading": "Quién la tiene",

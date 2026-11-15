@@ -1,8 +1,20 @@
 import { ChevronRight } from "lucide-react";
-import { Fragment } from "react";
+import { Fragment, type ReactNode } from "react";
 
-/** Topbar del panel barber — espejo de LabTopbar (crumbs simples). */
-export function BarberTopbar({ rootLabel, shopName }: { rootLabel: string; shopName: string }) {
+/**
+ * Topbar del panel barber — espejo de LabTopbar (crumbs simples).
+ * `branch` es el rótulo de la sede activa (BarberBranchBadge): se pinta a la
+ * derecha de las migas y solo existe en cadenas con más de una sede.
+ */
+export function BarberTopbar({
+  rootLabel,
+  shopName,
+  branch,
+}: {
+  rootLabel: string;
+  shopName: string;
+  branch?: ReactNode;
+}) {
   const crumbs = [rootLabel, shopName];
 
   return (
@@ -17,6 +29,7 @@ export function BarberTopbar({ rootLabel, shopName }: { rootLabel: string; shopN
           </Fragment>
         ))}
       </div>
+      {branch}
     </div>
   );
 }

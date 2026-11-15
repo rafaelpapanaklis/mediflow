@@ -58,7 +58,10 @@ async function rootSubscriptionStatus(ctx: BarberContext): Promise<string> {
  * decidir qué menú pintar.
  */
 export async function hasBarberPaidAccess(ctx: BarberContext): Promise<boolean> {
-  if (!ctx.barbershop.isActive) return false;
+  // Sede cerrada = la PROPIA de la persona (su lugar de trabajo). El dueño que
+  // elige una sucursal cerrada no la opera (withActiveBranch no la adopta,
+  // ronda 2 M1): se queda en su sede, sin quedar encerrado en Suscripción.
+  if (!(ctx.homeBarbershop ?? ctx.barbershop).isActive) return false;
   return isBarbershopSubscriptionActive({ subscriptionStatus: await rootSubscriptionStatus(ctx) });
 }
 

@@ -333,6 +333,10 @@ async function targetBranchId(ctx: BarberContext, requested: unknown): Promise<s
   if (!ids.includes(requested)) {
     throw new BarberAdminError("Esa sede no es de tu barbería.", 404);
   }
+  // Una sede cerrada no se opera (ronda 2, M1): ni altas de barberos ni de
+  // equipo. Para volver a usarla, se reabre en Sucursales.
+  const open = await prisma.barbershop.count({ where: { id: requested, isActive: true } });
+  if (open === 0) throw new BarberAdminError("Esa sede está cerrada. Reábrela en Sucursales para darle de alta gente.", 409);
   return requested;
 }
 
