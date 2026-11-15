@@ -69,7 +69,7 @@ export function CajaClient({
   const methodLabel = (m: BarberPaymentMethod) => t(PAYMENT_METHOD_KEYS[m]);
 
   return (
-    <div className="bcaja-page">
+    <div className="bcaja-page bcaja-page--caja bd-page">
       {/* Encabezado */}
       <div className="bcaja-head">
         <div>
@@ -119,7 +119,7 @@ export function CajaClient({
 
       {/* KPIs del turno */}
       {open && (
-        <div className="bcaja-kpis">
+        <div className="bcaja-kpis bd-band">
           <KpiCard label={t("caja.expectedCash")} value={fmtMoney(open.expectedCash)} icon={Banknote} hero hint={t("caja.expectedCashHint")} />
           <KpiCard label={t("caja.ticketsCount")} value={String(open.session.ticketCount)} icon={Receipt} />
           <KpiCard label={t("caja.salesTotal")} value={fmtMoney(open.session.salesTotal)} />
@@ -189,7 +189,8 @@ export function CajaClient({
             <p className="bcaja-hint" style={{ margin: 0, padding: 18 }}>{t("caja.ticketsEmpty")}</p>
           ) : (
             <div className="bcaja-table-wrap">
-              <table className="table-new">
+              {/* En celular cada ticket es una ficha (bcaja-tickets en money.css). */}
+              <table className="table-new bcaja-tickets">
                 <thead>
                   <tr>
                     <th>{t("caja.colTime")}</th>
@@ -205,15 +206,15 @@ export function CajaClient({
                 <tbody>
                   {open.sales.map((s) => (
                     <tr key={s.id} className={s.cancelled ? "bcaja-strike" : undefined}>
-                      <td>{fmtTime(s.createdAt, tz)}</td>
-                      <td>{s.clientName ?? <span className="bcaja-muted">{t("common.none")}</span>}</td>
-                      <td>{s.barberName ?? <span className="bcaja-muted">{t("common.none")}</span>}</td>
-                      <td style={{ whiteSpace: "normal", maxWidth: 260 }}>
+                      <td data-label={t("caja.colTime")}>{fmtTime(s.createdAt, tz)}</td>
+                      <td data-label={t("caja.colClient")}>{s.clientName ?? <span className="bcaja-muted">{t("common.none")}</span>}</td>
+                      <td data-label={t("caja.colBarber")}>{s.barberName ?? <span className="bcaja-muted">{t("common.none")}</span>}</td>
+                      <td data-label={t("caja.colItems")} style={{ whiteSpace: "normal", maxWidth: 260 }}>
                         {s.cancelled ? <BadgeNew tone="neutral">{t("common.cancelled")}</BadgeNew> : s.itemsSummary}
                       </td>
-                      <td>{methodLabel(s.paymentMethod)}</td>
-                      <td className="bcaja-num">{fmtMoney(s.tip)}</td>
-                      <td className="bcaja-num"><strong>{fmtMoney(s.total)}</strong></td>
+                      <td data-label={t("caja.colMethod")}>{methodLabel(s.paymentMethod)}</td>
+                      <td className="bcaja-num" data-label={t("caja.colTip")}>{fmtMoney(s.tip)}</td>
+                      <td className="bcaja-num" data-label={t("caja.colTotal")}><strong>{fmtMoney(s.total)}</strong></td>
                       <td>
                         <span className="bcaja-row-actions">
                           <Link href={`/barber/caja/ticket/${s.id}`} className="icon-btn-new" title={t("caja.view")} aria-label={t("caja.view")}>
@@ -241,7 +242,9 @@ export function CajaClient({
           <p className="bcaja-hint" style={{ margin: 0, padding: 18 }}>{t("caja.historyEmpty")}</p>
         ) : (
           <div className="bcaja-table-wrap">
-            <table className="table-new">
+            {/* En celular cada turno es una ficha (bcaja-hist en money.css):
+                cada celda lleva su etiqueta en data-label. */}
+            <table className="table-new bcaja-hist">
               <thead>
                 <tr>
                   <th>{t("caja.colOpened")}</th>
@@ -257,14 +260,14 @@ export function CajaClient({
               <tbody>
                 {state.history.map((h) => (
                   <tr key={h.id}>
-                    <td>{fmtDateTime(h.openedAt, tz)}</td>
-                    <td>{fmtDateTime(h.closedAt, tz)}</td>
-                    <td>{h.openedByName}{h.closedByName && h.closedByName !== h.openedByName ? ` / ${h.closedByName}` : ""}</td>
-                    <td className="bcaja-num">{h.ticketCount}{h.cancelledCount > 0 ? <span className="bcaja-muted"> (+{h.cancelledCount})</span> : null}</td>
-                    <td className="bcaja-num">{fmtMoney(h.openingAmount)}</td>
-                    <td className="bcaja-num">{fmtMoney(h.expectedAmount)}</td>
-                    <td className="bcaja-num">{fmtMoney(h.countedAmount)}</td>
-                    <td className="bcaja-num">
+                    <td data-label={t("caja.colOpened")}>{fmtDateTime(h.openedAt, tz)}</td>
+                    <td data-label={t("caja.colClosed")}>{fmtDateTime(h.closedAt, tz)}</td>
+                    <td data-label={t("caja.colWho")}>{h.openedByName}{h.closedByName && h.closedByName !== h.openedByName ? ` / ${h.closedByName}` : ""}</td>
+                    <td className="bcaja-num" data-label={t("caja.colTickets")}>{h.ticketCount}{h.cancelledCount > 0 ? <span className="bcaja-muted"> (+{h.cancelledCount})</span> : null}</td>
+                    <td className="bcaja-num" data-label={t("caja.colOpening")}>{fmtMoney(h.openingAmount)}</td>
+                    <td className="bcaja-num" data-label={t("caja.colExpected")}>{fmtMoney(h.expectedAmount)}</td>
+                    <td className="bcaja-num" data-label={t("caja.colCounted")}>{fmtMoney(h.countedAmount)}</td>
+                    <td className="bcaja-num" data-label={t("caja.colDifference")}>
                       {h.difference === null ? "—" : (
                         <BadgeNew tone={h.difference === 0 ? "success" : h.difference > 0 ? "info" : "danger"}>{fmtSigned(h.difference)}</BadgeNew>
                       )}

@@ -1984,3 +1984,30 @@
 .input,
 .select,
 .textarea { border-radius: var(--radius-md); }
+
+/* ── Tanda 3 (pase 6): celular con varios barberos ─────────────────────
+   A 390 px con 4 barberos las columnas quedaban de ~75 px: «Barbe…»,
+   «Client…», «3:00 a. m. – 3». En angosto cada columna tiene un ancho
+   mínimo legible y la rejilla se desplaza DE LADO dentro de la tarjeta,
+   con la regleta de horas y la esquina fijas (ya son sticky left), como
+   el mockup D. El mínimo entra por la variable que leen day-board.tsx y
+   week-board.tsx en su grid-template-columns; en escritorio vale 0 y nada
+   cambia. overflow-x pasa de clip a auto: el scroller ya era contenedor
+   de scroll (overflow-y), así que los sticky de arriba y de la izquierda
+   siguen pegados a él. */
+@container (max-width: 640px) {
+  .scroller {
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+  }
+  .grid {
+    --agenda-col-min: 132px;
+    --agenda-dia-min: 104px;
+  }
+  /* La regleta trae position:relative en línea (para colgar las horas);
+     sticky también las cuelga y además la deja fija al desplazar de lado. */
+  .gutter {
+    position: sticky !important;
+    box-shadow: 4px 0 6px -4px color-mix(in srgb, var(--text-1) 22%, transparent);
+  }
+}

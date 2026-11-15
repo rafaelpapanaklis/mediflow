@@ -330,3 +330,53 @@
 }
 .optionTitle { font-size: 13.5px; font-weight: 700; margin: 0; }
 .optionHint { font-size: 12.5px; line-height: 1.45; color: var(--text-2); margin: 2px 0 0; }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   REDISEÑO D · tanda 3 — CONFIGURACIÓN (15-nov-2026). Mismos tamaños.
+   Tarjetas como las del tema (radio 12, encabezado sin raya y con el icono
+   sin burbuja), controles con radio 8, semánticos AA del tema en vez de
+   los hex. Va al final y sin editar las reglas de arriba.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.card { border-radius: var(--radius-lg); }
+.cardHead { border-bottom: 0; padding-bottom: 4px; }
+.cardIcon {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--brand-ink);
+}
+.cardFoot {
+  border-top-color: var(--line);
+  background: transparent;
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+}
+
+.urlBox,
+.slugInputWrap,
+.numInput,
+.summary,
+.option,
+.warn { border-radius: var(--radius-md); }
+.logoBox { border-radius: var(--radius-lg); }
+
+.urlSlug,
+.summary { color: var(--brand-ink); }
+
+/* Opción elegida: fondo suave y punto café; las demás, renglón limpio. */
+.option { background: var(--bg-elev); }
+.option[aria-checked="true"] { background: var(--brand-softer); }
+
+/* Semánticos por token (antes verde y rojo en hex). */
+.checkOk,
+:global(.dark) .checkOk { color: var(--success); }
+.checkBad,
+:global(.dark) .checkBad { color: var(--danger); }
+.warn,
+:global(.dark) .warn {
+  background: var(--danger-soft);
+  border-color: color-mix(in srgb, var(--danger) 28%, transparent);
+}
+.warnIcon,
+:global(.dark) .warnIcon { color: var(--danger); }

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import Link from "next/link";
 import type { Dictionary } from "@/i18n/t";
 import type { BarberWaMessageDTO, BarberWaThreadDTO } from "@/lib/barber/whatsapp-core";
+import { formatBarberPhone } from "@/lib/barber/phone-format";
 import { BarberIcon, type BarberIconName } from "../barber-icons";
 import { apiCall } from "../team/admin-ui";
 import { avisarSinLeer, chatsSinLeer } from "./sin-leer";
@@ -21,7 +22,6 @@ import {
   proximaCita,
   quienAtiende,
   telefonoClave,
-  telefonoLegible,
   trozosConEnlaces,
   ventanaRestante,
   vistaPrevia,
@@ -452,7 +452,7 @@ function Bandeja({ locale, timezone, nowISO, initial, can, initialPhone }: Props
             className={s.chat}
             aria-label={
               activo
-                ? t("chat.messages", { name: det?.clientName ?? hiloActivo?.clientName ?? telefonoLegible(activo) })
+                ? t("chat.messages", { name: det?.clientName ?? hiloActivo?.clientName ?? formatBarberPhone(activo) })
                 : t("chat.pick")
             }
           >
@@ -721,7 +721,7 @@ function FilaChat({
   locale: string;
   onAbrir: (phone: string) => void;
 }) {
-  const nombre = th.clientName ?? telefonoLegible(th.phone);
+  const nombre = th.clientName ?? formatBarberPhone(th.phone);
   const out = th.lastDirection === "OUTBOUND";
   const sinLeer = th.unread > 0;
   return (
@@ -836,10 +836,10 @@ function Chat(p: ChatProps) {
         <Avatar nombre={nombre} grande />
         <div className={s.chatQuien}>
           <h2 className={s.chatNombre} ref={titulo} tabIndex={-1}>
-            {nombre ?? telefonoLegible(phone)}
+            {nombre ?? formatBarberPhone(phone)}
           </h2>
           <p className={s.chatSub}>
-            {nombre ? <span>{telefonoLegible(phone)}</span> : <span>{t("chat.noClient")}</span>}
+            {nombre ? <span>{formatBarberPhone(phone)}</span> : <span>{t("chat.noClient")}</span>}
             {clientId && p.can.clients ? (
               <Link href={`/barber/clientes/${encodeURIComponent(clientId)}`} className={s.enlace}>
                 {t("chat.viewClient")}
@@ -880,7 +880,7 @@ function Chat(p: ChatProps) {
 
       <Hilo
         t={t}
-        nombre={nombre ?? telefonoLegible(phone)}
+        nombre={nombre ?? formatBarberPhone(phone)}
         mensajes={mensajes}
         estado={p.estado}
         cargado={det !== null}

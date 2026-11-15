@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { BarberNavItem } from "@/lib/barber/types";
 import { BARBER_NAV_ICON, BarberIcon } from "./barber-icons";
 import { useMensajesSinLeer } from "./mensajes/sin-leer";
@@ -56,7 +56,47 @@ export function BarberSidebar({
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   // Chats sin leer, solo si «Mensajes» está en el menú (ya pasó su candado).
-  const sinLeer = useMensajesSinLeer(items.some((i) => i.key === "mensajes"));
+  // Se pregunta al servidor solo cuando el contador se ve y nadie más lo
+  // sabe: no en /barber/mensajes (la bandeja lo avisa) ni en celular con el
+  // cajón cerrado. Ver mensajes/sin-leer.ts.
+  const escritorio = useEsEscritorio();
+  const conMensajes = items.some((i) => i.key === "mensajes");
+  const enMensajes = Boolean(pathname?.startsWith("/barber/mensajes"));
+  const sinLeer = useMensajesSinLeer({
+    mostrar: conMensajes,
+    sondear: conMensajes && !enMensajes && (escritorio || mobileOpen),
+  });
+  const navRef = useRef<HTMLElement | null>(null);
+
+  // ¿Queda menú escondido arriba o abajo? El CSS desvanece esa orilla para
+  // que se note que hay más (pase 6: «Soporte» no se veía y nada lo decía).
+  // Y la entrada activa siempre a la vista, aunque esté al final.
+  useEffect(() => {
+    const nav = navRef.current;
+    if (!nav) return;
+    const medir = () => {
+      const arriba = nav.scrollTop > 2;
+      const abajo = nav.scrollTop + nav.clientHeight < nav.scrollHeight - 2;
+      nav.toggleAttribute("data-mas-arriba", arriba);
+      nav.toggleAttribute("data-mas-abajo", abajo);
+    };
+    // Solo el scroll del menú (scrollIntoView también movería la página).
+    const activa = nav.querySelector<HTMLElement>("[aria-current=\"page\"]");
+    if (activa) {
+      const n = nav.getBoundingClientRect();
+      const r = activa.getBoundingClientRect();
+      if (r.bottom > n.bottom - 40) nav.scrollTop += r.bottom - n.bottom + 48;
+      else if (r.top < n.top) nav.scrollTop -= n.top - r.top + 8;
+    }
+    medir();
+    nav.addEventListener("scroll", medir, { passive: true });
+    const ro = new ResizeObserver(medir);
+    ro.observe(nav);
+    return () => {
+      nav.removeEventListener("scroll", medir);
+      ro.disconnect();
+    };
+  }, [mobileOpen, pathname]);
 
   async function handleLogout() {
     try {
@@ -143,7 +183,7 @@ export function BarberSidebar({
         </div>
 
         {/* Navegación (gating por plan + rol ya resuelto en el layout server) */}
-        <nav className="barber-menu__nav" aria-label={navLabel}>
+        <nav className="barber-menu__nav" aria-label={navLabel} ref={navRef}>
           {sections.map((s) => (
             <div key={s.section} className="barber-menu__grupo">
               <p className="barber-menu__titulo" id={`barber-menu-${s.section}`}>
@@ -194,4 +234,17 @@ export function BarberSidebar({
       </aside>
     </>
   );
+}
+
+/** ¿Pantalla de escritorio (el menú siempre a la vista, ≥ 1024 px)? */
+function useEsEscritorio(): boolean {
+  const [es, setEs] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const cambio = () => setEs(mq.matches);
+    cambio();
+    mq.addEventListener("change", cambio);
+    return () => mq.removeEventListener("change", cambio);
+  }, []);
+  return es;
 }

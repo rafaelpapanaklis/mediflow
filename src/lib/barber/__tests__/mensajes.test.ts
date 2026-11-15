@@ -19,7 +19,6 @@ import {
   iniciales,
   proximaCita,
   quienAtiende,
-  telefonoLegible,
   trozosConEnlaces,
   ventanaRestante,
   vistaPrevia,
@@ -70,12 +69,12 @@ test("/barber/mensajes tiene su página, con el candado de la bandeja", () => {
 
 const TZ = "America/Mexico_City";
 
-test("teléfono: México a 10 dígitos como se dicta; otro país con su lada", () => {
-  assert.equal(telefonoLegible("9992602093"), "999 260 2093");
-  assert.equal(telefonoLegible("529992602093"), "999 260 2093");
-  assert.equal(telefonoLegible("5219992602093"), "999 260 2093");
-  assert.equal(telefonoLegible("+1 (415) 555-0100"), "+1 415 555 0100");
-  assert.equal(telefonoLegible("447700900123"), "+44 770 090 0123");
+test("Mensajes escribe los teléfonos con el formateador único del vertical", () => {
+  const pantalla = leer("src/components/barber/mensajes/mensajes-screen.tsx");
+  assert.match(pantalla, /from "@\/lib\/barber\/phone-format"/);
+  assert.match(pantalla, /formatBarberPhone\(/);
+  assert.doesNotMatch(pantalla, /telefonoLegible/);
+  assert.doesNotMatch(leer("src/components/barber/mensajes/formato.ts"), /function telefonoLegible/);
 });
 
 test("iniciales: dos letras del nombre, null sin nombre", () => {
@@ -235,4 +234,28 @@ test("estilos: solo tokens (ni un hex), letra nunca mayor que la del panel", () 
   assert.ok(Math.max(...tamanos) <= 14, `letra de ${Math.max(...tamanos)} px: la mayor del panel en tarjetas es 14`);
   // El título usa la misma escala que las demás pantallas.
   assert.match(css, /font-size: clamp\(19px, 2\.2vw, 23px\)/);
+});
+
+// ── El contador del menú es ligero (revisión ronda 16) ───────────────────
+
+test("contador del menú: pide solo el CONTEO, cada ≥ 2 min y se apaga con la pestaña escondida", () => {
+  const hook = sinComentarios(leer("src/components/barber/mensajes/sin-leer.ts"));
+  assert.match(hook, /"\/api\/barber\/whatsapp\/unread"/);
+  assert.doesNotMatch(hook, /whatsapp\/threads/, "el menú ya no baja la lista de hilos");
+  const cada = /MENSAJES_SIN_LEER_CADA_MS = ([\d_]+)/.exec(hook);
+  assert.ok(cada && Number(cada[1].replace(/_/g, "")) >= 120_000, "intervalo de al menos 2 min");
+  assert.match(hook, /visibilitychange/);
+  assert.match(hook, /clearInterval/, "con la pestaña escondida el reloj se apaga, no solo se salta");
+
+  const menu = sinComentarios(leer("src/components/barber/barber-sidebar.tsx"));
+  assert.match(menu, /sondear: conMensajes && !enMensajes && \(escritorio \|\| mobileOpen\)/);
+});
+
+test("/api/barber/whatsapp/unread: el MISMO candado que /threads y un solo número", () => {
+  const ruta = sinComentarios(leer("src/app/api/barber/whatsapp/unread/route.ts"));
+  assert.match(ruta, /permission: "whatsapp\.view"/);
+  assert.match(ruta, /feature: WA_INBOX_FEATURE/);
+  assert.match(ruta, /COUNT\(\*\)/);
+  assert.match(ruta, /LIMIT 2000/, "las mismas filas que mira la lista");
+  assert.match(ruta, /NextResponse\.json\(\{ chats:/);
 });

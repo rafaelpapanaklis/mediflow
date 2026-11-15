@@ -15,22 +15,8 @@ import {
 
 // ── Teléfono ─────────────────────────────────────────────────────────────
 
-function diez(d: string): string {
-  return `${d.slice(0, 3)} ${d.slice(3, 6)} ${d.slice(6)}`;
-}
-
-/**
- * México a 10 dígitos como se dicta: «999 260 2093» (también si llega con
- * 52 o 521 delante). Otro país, con su lada: «+1 415 555 0100».
- */
-export function telefonoLegible(phone: string): string {
-  const d = String(phone ?? "").replace(/\D/g, "");
-  if (d.length === 10) return diez(d);
-  if (d.length === 12 && d.startsWith("52")) return diez(d.slice(2));
-  if (d.length === 13 && d.startsWith("521")) return diez(d.slice(3));
-  if (d.length > 10) return `+${d.slice(0, d.length - 10)} ${diez(d.slice(-10))}`;
-  return d ? `+${d}` : String(phone ?? "");
-}
+// Cómo se ESCRIBE un teléfono: formatBarberPhone (@/lib/barber/phone-format),
+// el formateador único del vertical. Aquí solo la clave para comparar.
 
 /** Los 10 dígitos con los que se compara un teléfono (o todos si son menos). */
 export function telefonoClave(phone: string | null | undefined): string {
