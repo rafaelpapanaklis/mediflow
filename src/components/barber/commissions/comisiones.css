@@ -47,7 +47,7 @@
   position: sticky;
   right: 0;
   background: var(--bg-elev);
-  box-shadow: -10px 0 10px -10px rgba(0, 0, 0, 0.18);
+  box-shadow: -10px 0 10px -10px var(--border-strong);
 }
 
 /* Celular / contenedor angosto: una tarjeta por barbero. */

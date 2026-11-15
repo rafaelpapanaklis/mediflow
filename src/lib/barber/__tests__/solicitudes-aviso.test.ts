@@ -59,3 +59,17 @@ test("los textos nuevos existen en es y en", () => {
     assert.notEqual(en(key, { nombre: "X" }), key, `en sin ${k}`);
   }
 });
+
+test("sin colores sueltos: los estilos de lo nuevo usan los tokens del tema (modo oscuro)", () => {
+  const archivos = [
+    "app/barber/(panel)/solicitudes/solicitudes-client.tsx",
+    "components/barber/commissions/comisiones.css",
+    "components/barber/commissions/comisiones-client.tsx",
+    "components/barber/bot/bot-screen.tsx",
+  ];
+  for (const rel of archivos) {
+    const src = leer(rel);
+    assert.doesNotMatch(src, /#[0-9a-fA-F]{3,8}\b/, `${rel}: hex suelto`);
+    assert.doesNotMatch(src, /rgba?\(/, `${rel}: rgb/rgba suelto`);
+  }
+});

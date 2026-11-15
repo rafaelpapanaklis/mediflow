@@ -164,9 +164,9 @@ export function SolicitudesClient({
           role="alert"
           style={{
             fontSize: 13,
-            color: "#b91c1c",
-            background: "rgba(185,28,28,0.08)",
-            border: "1px solid rgba(185,28,28,0.28)",
+            color: "var(--danger)",
+            background: "var(--danger-soft)",
+            border: "1px solid var(--danger-border-strong)",
             borderRadius: 10,
             padding: "10px 12px",
             margin: "0 0 14px",
@@ -181,8 +181,8 @@ export function SolicitudesClient({
           role="status"
           data-aviso-manual
           style={{
-            background: "rgba(180,83,9,0.09)",
-            border: "1px solid rgba(180,83,9,0.35)",
+            background: "var(--warning-soft)",
+            border: "1px solid var(--warning-border-strong)",
             borderRadius: 12,
             padding: "12px 14px",
             margin: "0 0 14px",
@@ -193,7 +193,7 @@ export function SolicitudesClient({
               ? t("barber.reserva.solicitudes.avisaTuAcepto", { nombre: aviso.nombre })
               : t("barber.reserva.solicitudes.avisaTuRechazo", { nombre: aviso.nombre })}
           </p>
-          <p style={{ fontSize: 14.5, fontWeight: 700, color: "#b45309", margin: "4px 0 10px" }}>
+          <p style={{ fontSize: 14.5, fontWeight: 700, color: "var(--warning-strong)", margin: "4px 0 10px" }}>
             {t("barber.reserva.solicitudes.avisaTu")}
           </p>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
@@ -301,7 +301,7 @@ export function SolicitudesClient({
                     </p>
                   ) : null}
                   {r.isPast && r.status === "PENDING" ? (
-                    <p style={{ fontSize: 12.5, color: "#b45309", margin: "8px 0 0", fontWeight: 600 }}>
+                    <p style={{ fontSize: 12.5, color: "var(--warning-strong)", margin: "8px 0 0", fontWeight: 600 }}>
                       {t("barber.reserva.solicitudes.vencida")}
                     </p>
                   ) : null}
@@ -363,8 +363,8 @@ export function SolicitudesClient({
                         gap: 8,
                         padding: "10px 12px",
                         borderRadius: 10,
-                        background: "rgba(185,28,28,0.08)",
-                        border: "1px solid rgba(185,28,28,0.28)",
+                        background: "var(--danger-soft)",
+                        border: "1px solid var(--danger-border-strong)",
                       }}
                     >
                       <span style={{ fontSize: 13.5, fontWeight: 600, flex: "1 1 200px" }}>
@@ -373,7 +373,7 @@ export function SolicitudesClient({
                       <button
                         type="button"
                         autoFocus
-                        style={{ ...SMALL_BTN, background: "#b91c1c", border: "1px solid #b91c1c", color: "#fff" }}
+                        style={{ ...SMALL_BTN, background: "var(--danger)", border: "1px solid var(--danger)", color: "var(--bg-elev)" }}
                         disabled={busyId === r.id}
                         onClick={() => void resolve(r, "rechazar")}
                       >
