@@ -105,10 +105,6 @@
       "bodyNoBarbers": "That location's booking link tells people there's no room. Add at least one barber with their schedule and this fixes itself.",
       "ctaBarbers": "Add a barber"
     },
-    "closedBranch": {
-      "body": "You're viewing {sede}, which is closed: its data is read-only and it has nothing pending. What you save in Calendar, Schedules or Register goes to {operando}.",
-      "cta": "View {operando}"
-    },
     "setup": {
       "title": "Your barbershop is ready to start",
       "titleSede": "{sede}: ready to start",

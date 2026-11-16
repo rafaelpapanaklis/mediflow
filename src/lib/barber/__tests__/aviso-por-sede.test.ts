@@ -50,6 +50,38 @@ test("el nombre de la sede: el de sucursal si lo tiene", () => {
   assert.equal(inicioBranchLabel({ name: "Barbería Prueba", branchName: null }), "Barbería Prueba");
 });
 
+// ── UNA sola sede elegida para todo el panel (regla de servidor y barra) ──
+import { BARBER_BRANCH_ALL, sedeElegida } from "@/lib/barber/branch-cookie";
+
+const opciones = [
+  { id: "principal", isActive: true },
+  { id: "norte", isActive: true },
+  { id: "t2", isActive: false },
+];
+
+test("sede elegida: una abierta se respeta; «toda la cadena» también", () => {
+  assert.equal(sedeElegida({ requested: "norte", options: opciones, fallback: "principal" }), "norte");
+  assert.equal(sedeElegida({ requested: BARBER_BRANCH_ALL, options: opciones, fallback: "principal" }), BARBER_BRANCH_ALL);
+});
+
+test("sede elegida: una CERRADA nunca queda elegida, ni recuperada de la cookie → la principal", () => {
+  assert.equal(sedeElegida({ requested: "t2", options: opciones, fallback: "principal" }), "principal");
+});
+
+test("sede elegida: vacía o desconocida → la principal", () => {
+  assert.equal(sedeElegida({ requested: null, options: opciones, fallback: "principal" }), "principal");
+  assert.equal(sedeElegida({ requested: "otra-cadena", options: opciones, fallback: "principal" }), "principal");
+});
+
+test("la barra de arriba usa la misma regla y pone las cerradas aparte, sin poder elegirse", () => {
+  const src = readFileSync(join(__dirname, "..", "..", "..", "components", "barber", "barber-branch-badge.tsx"), "utf8");
+  assert.match(src, /sedeElegida\(/);
+  assert.match(src, /<optgroup label=\{labels\.closedGroup \?\? labels\.closed\}>/);
+  assert.match(src, /<option key=\{o\.id\} value=\{o\.id\} disabled>/);
+  const servidor = readFileSync(join(__dirname, "..", "branches.ts"), "utf8");
+  assert.match(servidor, /sedeElegida\(\{ requested, options: \[\{ id: requested, isActive: abierta > 0 \}\], fallback: ctx\.barbershopId \}\)/);
+});
+
 test("Sucursales no ofrece «Trabajar en esta sede» en una sede cerrada (dejaba la cookie apuntándole)", () => {
   const src = readFileSync(join(__dirname, "..", "..", "..", "components", "barber", "branches", "branches-client.tsx"), "utf8");
   assert.match(src, /\{!isCurrent && b\.isActive \? \(\s*<Btn size="sm" onClick=\{\(\) => workHere\(b\.id\)\}/);

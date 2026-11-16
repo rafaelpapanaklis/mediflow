@@ -172,22 +172,6 @@ export function InicioView({
           la gente que no hay lugar. Es un bloqueo, no un pendiente más: va
           arriba de todo, en rojo, para todos los roles (el CTA solo para quien
           puede cargar horarios). */}
-      {/* Viendo una sede CERRADA (Inicio la deja consultar): se dice, y que lo
-          que se guarda en Agenda, Horarios o Caja va a la sede que se opera. */}
-      {s.setup.viewingClosed && (
-        <div className="bdash-note" role="status">
-          {k("closedBranch.body", { sede: s.setup.viewingClosed.label, operando: s.setup.operatingBranchLabel })}{" "}
-          <IrASede
-            branchId={s.setup.operatingBranchId}
-            operatingBranchId=""
-            href="/barber/inicio"
-            className="btn-new btn-new--secondary btn-new--sm"
-          >
-            {k("closedBranch.cta", { operando: s.setup.operatingBranchLabel })}
-          </IrASede>
-        </div>
-      )}
-
       {/* Reserva en línea activa y una sede ACTIVA donde nadie puede apartar:
           la liga pública le dice a la gente que no hay lugar. Es un bloqueo, no
           un pendiente más: va arriba, en rojo, uno por sede y con su nombre

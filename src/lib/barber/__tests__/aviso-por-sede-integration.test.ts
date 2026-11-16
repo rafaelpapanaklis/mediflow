@@ -73,21 +73,28 @@ after(async () => {
   await prisma.$disconnect();
 });
 
-test("lo de Rafael: viendo la sede CERRADA no hay aviso rojo ni «Primeros pasos», y se dice qué sede es", { skip }, async () => {
+test("lo de Rafael: la cookie apunta a la sede CERRADA → Inicio ve la MISMA sede que Agenda (la principal), sin aviso", { skip }, async () => {
   const s = await getInicioSummary(ctx, { features: PRO, branchId: cerrada });
-  assert.deepEqual(s.scope.branchIds, [cerrada], "Inicio sí deja consultar la sede cerrada");
-  assert.equal(s.setup.bookingBlocked, false, "una sede cerrada nunca dispara el aviso");
+  assert.deepEqual(s.scope.branchIds, [matriz], "una sede cerrada nunca queda elegida: se pasa a la principal");
+  assert.equal(s.scope.activeBranchId, matriz);
+  assert.equal(s.setup.bookingBlocked, false, "la principal tiene horario");
   assert.deepEqual(s.setup.bookingBlockers, []);
-  assert.equal(s.setup.isFresh, false, "ni la lista de primeros pasos");
-  assert.deepEqual(s.setup.viewingClosed, { id: cerrada, label: "Sede Vieja" });
-  assert.equal(s.setup.operatingBranchId, matriz, "lo que se guarda va a la principal…");
-  assert.equal(s.setup.operatingBranchLabel, "Barbería Prueba", "…y se nombra");
+  assert.equal(s.setup.viewingLabel, "Barbería Prueba");
+  assert.equal(s.setup.operatingBranchId, matriz);
+});
+
+test("cambiar a una sede CERRADA (lo que hace el selector) resuelve a la principal; «toda la cadena» se respeta", { skip }, async () => {
+  const { resolveBranchScope } = await import("@/lib/barber/branches");
+  const scope = await resolveBranchScope(ctx, cerrada);
+  assert.equal(scope.activeId, matriz);
+  assert.equal(scope.isConsolidated, false);
+  const todas = await resolveBranchScope(ctx, BARBER_BRANCH_ALL);
+  assert.equal(todas.isConsolidated, true);
 });
 
 test("viendo la principal (con horario): sin aviso", { skip }, async () => {
   const s = await getInicioSummary(ctx, { features: PRO, branchId: matriz });
   assert.equal(s.setup.bookingBlocked, false);
-  assert.equal(s.setup.viewingClosed, null);
   assert.equal(s.setup.viewingLabel, "Barbería Prueba");
 });
 
@@ -100,10 +107,9 @@ test("toda la cadena: avisa SOLO por las sedes activas que fallan, y las nombra"
   const s = await getInicioSummary(ctx, { features: PRO, branchId: BARBER_BRANCH_ALL });
   assert.equal(s.scope.consolidated, true);
   assert.deepEqual(s.setup.bookingBlockers.map((b) => [b.label, b.reason]), [["Norte", "noBarbers"]], "la cerrada no, la principal tampoco");
-  assert.equal(s.setup.viewingClosed, null);
 });
 
-test("pintado: el aviso nombra la sede y la sede cerrada se explica (es y en)", { skip }, async () => {
+test("pintado: el aviso nombra la sede (es y en) y la cookie en la cerrada no lo dispara", { skip }, async () => {
   const { renderToStaticMarkup } = await import("react-dom/server");
   const { createElement } = await import("react");
   const { InicioView } = await import("@/components/barber/dashboard/inicio-view");
@@ -118,11 +124,9 @@ test("pintado: el aviso nombra la sede y la sede cerrada se explica (es y en)", 
   assert.ok(html.includes(`/b/${RUN}-n/reservar`), "con la liga de ESA sede");
   assert.doesNotMatch(html, /Sede Vieja/);
   const cerradaHtml = pinta(await getInicioSummary(ctx, { features: PRO, branchId: cerrada }), "es");
-  assert.match(cerradaHtml, /Estás viendo Sede Vieja, que está cerrada/);
-  assert.match(cerradaHtml, /Ver Barbería Prueba/);
-  assert.doesNotMatch(cerradaHtml, /nadie puede reservar/i);
-  const en = pinta(await getInicioSummary(ctx, { features: PRO, branchId: cerrada }), "en");
-  assert.match(en, /You&#x27;re viewing Sede Vieja, which is closed|You're viewing Sede Vieja, which is closed/);
+  assert.doesNotMatch(cerradaHtml, /nadie puede reservar/i, "con la cookie en la cerrada se ve la principal: sin aviso");
+  const en = pinta(await getInicioSummary(ctx, { features: PRO, branchId: BARBER_BRANCH_ALL }), "en");
+  assert.match(en, /Norte has no barbers/);
 });
 
 test("una sede activa con barbero y SIN horario: «no hay horario» con su nombre; al cargarlo se apaga", { skip }, async () => {

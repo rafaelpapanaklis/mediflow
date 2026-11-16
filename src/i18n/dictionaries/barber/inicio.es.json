@@ -105,10 +105,6 @@
       "bodyNoBarbers": "La liga de reservas de esa sede le dice a la gente que no hay lugar. Da de alta al menos un barbero con su horario y se arregla solo.",
       "ctaBarbers": "Dar de alta un barbero"
     },
-    "closedBranch": {
-      "body": "Estás viendo {sede}, que está cerrada: sus datos son solo de consulta y no tiene pendientes. Lo que guardas en Agenda, Horarios o Caja va a {operando}.",
-      "cta": "Ver {operando}"
-    },
     "setup": {
       "title": "Tu barbería está lista para arrancar",
       "titleSede": "{sede}: lista para arrancar",

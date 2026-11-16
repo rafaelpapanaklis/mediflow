@@ -368,8 +368,6 @@ export interface InicioSetup {
   /** Sede que OPERAN Agenda, Horarios y Caja (ctx.barbershopId). */
   operatingBranchId: string;
   operatingBranchLabel: string;
-  /** Se está viendo UNA sede cerrada (solo consulta): su nombre; si no, null. */
-  viewingClosed: { id: string; label: string } | null;
   /** Nombre de la sede que se ve (null en «Toda la cadena»). */
   viewingLabel: string | null;
 }
@@ -802,7 +800,6 @@ export async function getInicioSummary(ctx: BarberContext, opts: InicioOptions =
     bookingBlockers: blockers,
     operatingBranchId: ctx.barbershopId,
     operatingBranchLabel: operating?.label ?? ctx.barbershop.name,
-    viewingClosed: viewing && !viewing.isActive ? { id: viewing.id, label: viewing.label } : null,
     viewingLabel: viewing?.label ?? null,
   };
 

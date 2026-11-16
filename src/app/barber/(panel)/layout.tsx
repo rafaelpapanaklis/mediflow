@@ -152,6 +152,7 @@ export default async function BarberPanelLayout({
                 aria: t("barber.shell.topbar.branchAria"),
                 all: t("barber.shell.topbar.branchAll"),
                 closed: t("barber.shell.topbar.branchClosed"),
+                closedGroup: t("barber.shell.topbar.branchClosedGroup"),
               }}
             />
           }

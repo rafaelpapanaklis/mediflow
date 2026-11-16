@@ -38,3 +38,28 @@ export function isConsolidatedPath(pathname: string | null | undefined): boolean
   if (!pathname) return false;
   return BARBER_CONSOLIDATED_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
+
+/**
+ * UNA sola sede elegida para todo el panel (16-nov, Rafael: en Agenda decía
+ * la principal y al pulsar Inicio el mismo selector cambiaba solo a una sede
+ * cerrada). La cookie es una; lo que difería era quién respetaba una sede
+ * CERRADA: Agenda/Caja la ignoraban y Inicio/Reportes la enseñaban.
+ *
+ * Regla única, para el servidor y para la barra de arriba:
+ *  · «all» se respeta (solo las pantallas que consolidan lo enseñan);
+ *  · una sede abierta y alcanzable se respeta;
+ *  · una sede CERRADA, desconocida o vacía → la de siempre (fallback, la que
+ *    opera la sesión). Nunca se queda elegida ni se recupera sola.
+ */
+export function sedeElegida(args: {
+  requested: string | null | undefined;
+  /** Sedes alcanzables con su estado. */
+  options: ReadonlyArray<{ id: string; isActive: boolean }>;
+  fallback: string;
+}): string {
+  const { requested, options, fallback } = args;
+  if (!requested) return fallback;
+  if (requested === BARBER_BRANCH_ALL) return BARBER_BRANCH_ALL;
+  const o = options.find((x) => x.id === requested);
+  return o && o.isActive ? requested : fallback;
+}

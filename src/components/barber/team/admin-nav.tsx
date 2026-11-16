@@ -185,6 +185,8 @@ export function AdminNav({
                     aria-checked={selected}
                     aria-selected={selected}
                     className={s.branchOption}
+                    // Una sede cerrada no se elige (16-nov): se ve, marcada, y se reabre en Sucursales.
+                    disabled={!b.isActive}
                     onClick={() => switchTo(b.id)}
                   >
                     {selected ? <Check size={14} /> : <span style={{ width: 14 }} />}
