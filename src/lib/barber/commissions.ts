@@ -1023,7 +1023,15 @@ export async function markCommissionsPaid(
   ctx: BarberContext,
   params: { barberId: string; periodKey: string; expectedTotal?: unknown },
   now: Date = new Date(),
-  opts: { cashOut?: CommissionCashOut | null } = {},
+  opts: {
+    cashOut?: CommissionCashOut | null;
+    /**
+     * Renta de silla (o adelantos) con saldo a favor del dueño: el barbero
+     * entrega la diferencia y «entra a la caja en efectivo» (revisión ws6-t8,
+     * N3). Crea una entrada (DEPOSIT) ligada al pago. Pide cash.expenses.
+     */
+    cashIn?: boolean;
+  } = {},
 ): Promise<CommissionPayoutResult> {
   assertBarberPermission(ctx, "commissions.manage");
   if (!canMarkCommissionsPaid({ role: ctx.role, permissionsOverride: ctx.user.permissionsOverride })) {
@@ -1036,6 +1044,13 @@ export async function markCommissionsPaid(
     if (!isCashMovementMethod(cashOut.method)) throw new BarberCajaError(400, "INVALID_METHOD", "¿Con qué se pagó? Efectivo, tarjeta, transferencia u otro.");
     if (!(await cashMovementsReady(prisma))) {
       throw new BarberCajaError(409, "CAJA_SQL_PENDING", "Falta aplicar sql/barber_caja_completa.sql: el pago no se puede registrar en Caja.");
+    }
+  }
+  const cashIn = opts.cashIn === true;
+  if (cashIn) {
+    assertBarberPermission(ctx, "cash.expenses");
+    if (!(await cashMovementsReady(prisma))) {
+      throw new BarberCajaError(409, "CAJA_SQL_PENDING", "Falta aplicar sql/barber_caja_completa.sql: la entrada no se puede registrar en Caja.");
     }
   }
   if (!isValidPeriodKey(params.periodKey)) {
@@ -1132,6 +1147,31 @@ export async function markCommissionsPaid(
           note: null,
           barberId: params.barberId,
           payoutKind: barber.commissionType === "SALARY" ? "SALARY" : "COMMISSION",
+          periodKey: params.periodKey,
+          receiptUrl: null,
+          createdByUserId: ctx.barberUserId,
+          createdAt: now,
+        });
+      }
+      // Saldo a favor del dueño (renta de silla, o adelantos mayores que lo
+      // ganado): lo que el barbero entrega ENTRA al cajón, ligado a este pago.
+      if (cashIn && money(row.totalToPay).lt(ZERO)) {
+        const session = await lockOpenSessionShared(tx, barbershopId);
+        if (!session) {
+          throw new BarberCajaError(409, "NO_OPEN_SESSION", "No hay caja abierta: ábrela para que el efectivo entre a la caja, o quita «entra a la caja».");
+        }
+        movementId = randomUUID();
+        await insertMovement(tx, {
+          id: movementId,
+          barbershopId,
+          sessionId: session.id,
+          type: "DEPOSIT",
+          method: "CASH",
+          amount: money(row.totalToPay).abs(),
+          category: null,
+          note: null,
+          barberId: params.barberId,
+          payoutKind: null,
           periodKey: params.periodKey,
           receiptUrl: null,
           createdByUserId: ctx.barberUserId,

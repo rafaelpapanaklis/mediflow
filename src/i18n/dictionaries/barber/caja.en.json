@@ -381,7 +381,9 @@
     "fromCashHint": "It's recorded as a barber payout in the open register and lowers what should be in the drawer. One record: don't add it again in the register.",
     "fromCashNoSession": "No register is open: open it to pay from the drawer.",
     "payAdvances": "− Advances this period (already given)",
-    "colToHand": "To hand over"
+    "colToHand": "To hand over",
+    "toCash": "Goes into the register in cash ({amount})",
+    "toCashHint": "The barber hands over the rent in cash: it's recorded as cash in on the open register and raises what should be in the drawer."
   },
   "productos": {
     "title": "Products",
@@ -818,6 +820,7 @@
     "nothing": "Nothing pending to pay this period.",
     "needsOpen": "To pay in cash from the drawer, open the register first.",
     "confirm": "Mark paid {amount}",
-    "done": "Payout recorded: {amount}"
+    "done": "Payout recorded: {amount}",
+    "owes": "The barber owes the shop {amount} (rent or advances). Mark it in Commissions with «Goes into the register in cash»."
   }
 }

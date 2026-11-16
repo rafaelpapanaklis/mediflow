@@ -243,6 +243,31 @@ test("G1: un adelanto de OTRO periodo no se resta en este", { skip: skipDb }, as
   assert.equal(row.totalToPay, 0);
 });
 
+test("N3: renta de silla a favor del dueño → «entra a la caja en efectivo» crea una entrada ligada; anularla deshace el pago", { skip: skipDb }, async (t) => {
+  if (skip) return t.skip(skip);
+  const { ctx, corte } = await shop();
+  const renta = (await prisma.barber.create({ data: { barbershopId: ctx.barbershopId, name: "Silla", commissionType: "CHAIR_RENT", chairRent: new Prisma.Decimal(1000) } })).id;
+  await createSale(ctx, { barberId: renta, items: [{ kind: "service", id: corte }], tip: 50, paymentMethod: "CARD" }, FEATURES);
+  const antes = (await getCommissionSummary(ctx, PERIOD)).rows.find((r) => r.barberId === renta)!;
+  assert.equal(antes.totalToPay, -750, "renta 1,000 − (corte 200 + propina 50, que son suyos): le debe 750");
+
+  const sinEntradas = { ...ctx, user: { ...ctx.user, permissionsOverride: ["commissions.manage", "commissions.view", "cash.view"] } } as BarberContext;
+  const e = await errorOf(markCommissionsPaid(sinEntradas, { barberId: renta, periodKey: PERIOD }, new Date(), { cashIn: true }));
+  assert.ok(e instanceof BarberForbiddenError && e.permission === "cash.expenses");
+
+  const r = await markCommissionsPaid(ctx, { barberId: renta, periodKey: PERIOD, expectedTotal: -750 }, new Date(), { cashIn: true });
+  assert.ok(r.movementId);
+  const dep = (await movementsOf(ctx.barbershopId)).find((m) => m.type === "DEPOSIT")!;
+  assert.equal(new Prisma.Decimal(dep.amount).toNumber(), 750);
+  assert.equal(dep.periodKey, PERIOD);
+  assert.equal((await getCashState(ctx)).open!.expectedCash, 1000 + 750, "entró al cajón");
+
+  await voidCashMovement(ctx, r.movementId!, {});
+  const otra = (await getCommissionSummary(ctx, PERIOD)).rows.find((x) => x.barberId === renta)!;
+  assert.equal(otra.totalToPay, -750, "el pago se deshizo: vuelve a deberla");
+  assert.equal((await getCashState(ctx)).open!.expectedCash, 1000);
+});
+
 test("sueldo: el pago desde la caja queda como SALARY con su monto congelado", { skip: skipDb }, async (t) => {
   if (skip) return t.skip(skip);
   if (!hasSalary) return t.skip("sql/barber_sueldo.sql no está pegado");

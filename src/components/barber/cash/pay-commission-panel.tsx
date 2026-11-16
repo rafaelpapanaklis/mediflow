@@ -113,7 +113,7 @@ export function PayCommissionPanel({
             <div className="bcaja-totals__row bcaja-totals__row--big"><span>{t(row.advances ? "comisiones.colToHand" : "comisiones.colToPay")}</span><span>{fmtSigned(row.totalToPay)}</span></div>
           </div>
           {nothing ? (
-            <div className="bcaja-alert bcaja-alert--info" role="status">{t("payc.nothing")}</div>
+            <div className="bcaja-alert bcaja-alert--info" role="status">{row.totalToPay < 0 ? t("payc.owes", { amount: fmtMoney(-row.totalToPay) }) : t("payc.nothing")}</div>
           ) : (
             <div className="field-new">
               <label className="field-new__label">{t("mov.methodLabel")}</label>

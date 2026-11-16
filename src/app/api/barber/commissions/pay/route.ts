@@ -28,7 +28,8 @@ export async function POST(req: NextRequest) {
       ctx,
       { barberId, periodKey, expectedTotal: body.expectedTotal },
       new Date(),
-      { cashOut: payoutMethod ? { method: payoutMethod as never } : null },
+      // N3: renta de silla a favor del dueño → «entra a la caja en efectivo».
+      { cashOut: payoutMethod ? { method: payoutMethod as never } : null, cashIn: body.toCash === true },
     );
     const summary = await getCommissionSummary(ctx, periodKey, { barberId });
     return NextResponse.json({ ...result, row: summary.rows[0] ?? null });

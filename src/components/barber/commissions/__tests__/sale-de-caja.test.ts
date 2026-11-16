@@ -11,7 +11,8 @@ const src = readFileSync(join(__dirname, "..", "comisiones-client.tsx"), "utf8")
 
 test("la casilla arranca marcada si hay caja abierta, también al abrir otro pago", () => {
   assert.match(src, /useState\(Boolean\(cashOut\?\.sessionOpen\)\)/);
-  assert.match(src, /setFromCash\(Boolean\(cashOut\?\.sessionOpen\)\); setPayRow\(r\);/);
+  assert.match(src, /setFromCash\(Boolean\(cashOut\?\.sessionOpen\)\);[^}]*setPayRow\(r\);/);
+  assert.match(src, /useState\(Boolean\(cashIn\?\.sessionOpen\)\)/, "N3: «entra a la caja» también arranca marcada");
   assert.match(src, /checked=\{fromCash && cashOut\.sessionOpen\}/, "sin caja abierta nunca sale marcada");
 });
 

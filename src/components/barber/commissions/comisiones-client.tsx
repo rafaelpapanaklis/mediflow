@@ -33,6 +33,7 @@ export function ComisionesClient({
   canManage,
   noBarberLinked,
   cashOut = null,
+  cashIn = null,
 }: {
   dict: Dictionary;
   locale: string;
@@ -46,6 +47,11 @@ export function ComisionesClient({
    * null = no se ofrece (como antes).
    */
   cashOut?: { sessionOpen: boolean } | null;
+  /**
+   * Renta de silla a favor del dueño (revisión ws6-t8, N3): se puede marcar
+   * «entra a la caja en efectivo» (SQL pegado + cash.expenses). null = no.
+   */
+  cashIn?: { sessionOpen: boolean } | null;
 }) {
   const t = useBarberT(dict);
   const router = useRouter();
@@ -55,6 +61,7 @@ export function ComisionesClient({
   const [busy, setBusy] = useState(false);
   // Revisión ws6-t8 (N1): con caja abierta viene MARCADA (lo normal es pagar del cajón).
   const [fromCash, setFromCash] = useState(Boolean(cashOut?.sessionOpen));
+  const [toCash, setToCash] = useState(Boolean(cashIn?.sessionOpen));
   const tz = summary.timezone;
 
   // Presentación de las dos cifras de arriba, con lo que YA trae la pantalla
@@ -97,7 +104,7 @@ export function ComisionesClient({
         headers: { "Content-Type": "application/json" },
         // expectedTotal = la cifra que se le está enseñando a quien paga. Si
         // entró un ticket nuevo entretanto, el servidor NO marca nada y avisa.
-        body: JSON.stringify({ barberId: payRow.barberId, periodKey: summary.periodKey, expectedTotal: payRow.totalToPay, fromCash: fromCash && payRow.totalToPay > 0 }),
+        body: JSON.stringify({ barberId: payRow.barberId, periodKey: summary.periodKey, expectedTotal: payRow.totalToPay, fromCash: fromCash && payRow.totalToPay > 0, toCash: toCash && payRow.totalToPay < 0 }),
       });
       const data = (await res.json().catch(() => ({}))) as { error?: string; code?: string; marked?: number; paidAmount?: number };
       if (!res.ok) {
@@ -237,7 +244,7 @@ export function ComisionesClient({
                               {t("comisiones.receipt")}
                             </Link>
                             {canManage && r.paidStatus !== "PAID" && r.paidStatus !== "EMPTY" && (
-                              <button type="button" className="bcom-act bcom-act--primary" onClick={() => { setFromCash(Boolean(cashOut?.sessionOpen)); setPayRow(r); }}>
+                              <button type="button" className="bcom-act bcom-act--primary" onClick={() => { setFromCash(Boolean(cashOut?.sessionOpen)); setToCash(Boolean(cashIn?.sessionOpen)); setPayRow(r); }}>
                                 <BadgeCheck size={14} aria-hidden="true" />
                                 {/* Renta de silla mayor que lo producido: el barbero le paga al dueño (lógica L2). */}
                                 {r.totalToPay < 0 ? t("comisiones.markOwed") : t("comisiones.markPaid")}
@@ -353,6 +360,15 @@ export function ComisionesClient({
           </div>
           {payRow.paidTotal !== 0 && (
             <p className="bcaja-hint" style={{ margin: "10px 0 0" }}>{t("comisiones.payAlreadyPaid", { amount: fmtSigned(payRow.paidTotal) })}</p>
+          )}
+          {cashIn && payRow.totalToPay < 0 && (
+            <label style={{ display: "flex", gap: 8, alignItems: "flex-start", marginTop: 12, fontSize: 13.5, color: cashIn.sessionOpen ? "var(--text-1)" : "var(--text-3)" }} data-entra-a-caja>
+              <input type="checkbox" checked={toCash && cashIn.sessionOpen} disabled={!cashIn.sessionOpen} onChange={(e) => setToCash(e.target.checked)} style={{ marginTop: 3 }} />
+              <span>
+                {t("comisiones.toCash", { amount: fmtMoney(-payRow.totalToPay) })}
+                <span className="bcaja-hint" style={{ display: "block" }}>{cashIn.sessionOpen ? t("comisiones.toCashHint") : t("comisiones.fromCashNoSession")}</span>
+              </span>
+            </label>
           )}
           {cashOut && payRow.totalToPay > 0 && (
             <label style={{ display: "flex", gap: 8, alignItems: "flex-start", marginTop: 12, fontSize: 13.5, color: cashOut.sessionOpen ? "var(--text-1)" : "var(--text-3)" }} data-sale-de-caja>

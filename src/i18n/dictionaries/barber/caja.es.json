@@ -381,7 +381,9 @@
     "fromCashHint": "Queda como pago a barbero en la caja abierta y baja lo que debe haber en el cajón. Un solo registro: no lo anotes otra vez en Caja.",
     "fromCashNoSession": "No hay caja abierta: ábrela en Caja para pagar desde el cajón.",
     "payAdvances": "− Adelantos/vales del periodo (ya se le dieron)",
-    "colToHand": "A entregar"
+    "colToHand": "A entregar",
+    "toCash": "Entra a la caja en efectivo ({amount})",
+    "toCashHint": "El barbero entrega la renta en efectivo: queda como entrada en la caja abierta y sube lo que debe haber en el cajón."
   },
   "productos": {
     "title": "Productos",
@@ -818,6 +820,7 @@
     "nothing": "No tiene nada pendiente por pagar en este periodo.",
     "needsOpen": "Para pagar en efectivo desde el cajón, abre la caja primero.",
     "confirm": "Marcar pagado {amount}",
-    "done": "Pago registrado: {amount}"
+    "done": "Pago registrado: {amount}",
+    "owes": "El barbero le debe {amount} a la barbería (renta o adelantos). Márcalo en Comisiones con «Entra a la caja en efectivo»."
   }
 }
