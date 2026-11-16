@@ -61,6 +61,7 @@ type SortKey =
   | "createdAt"
   | "barbers"
   | "lastActivityAt"
+  | "uso"
   | "whatsapp";
 
 const COLUMNS: { key: SortKey; label: string; cls?: string; align?: "right" | "center" }[] = [
@@ -71,6 +72,7 @@ const COLUMNS: { key: SortKey; label: string; cls?: string; align?: "right" | "c
   { key: "pago", label: "Paga al mes", align: "right" },
   { key: "barbers", label: "Barberos", align: "right" },
   { key: "whatsapp", label: "WhatsApp", cls: "dcba-col-xwide" },
+  { key: "uso", label: "Uso del panel", cls: "dcba-col-wide" },
   { key: "lastActivityAt", label: "Última actividad", cls: "dcba-col-wide" },
   { key: "createdAt", label: "Alta" },
 ];
@@ -93,6 +95,8 @@ function sortValue(row: AdminBarbershopRow, key: SortKey): string | number {
       return row.whatsappConnected ? 1 : 0;
     case "lastActivityAt":
       return row.lastActivityAt ?? "";
+    case "uso":
+      return row.lastUsageAt ?? "";
     case "createdAt":
       return row.createdAt;
   }
@@ -568,6 +572,26 @@ export function AdminBarberiasClient() {
                             <div className="dcba-note" style={{ marginTop: 4 }}>
                               {formatInt(row.messagesUsedPeriod)} / {formatQuota(row.messageQuota)} msj
                             </div>
+                          </td>
+                          {/* Uso del panel (ws6-t4): último uso y clics del mes. */}
+                          <td className="dcba-col-wide">
+                            {row.clicksThisMonth === null ? (
+                              <span style={{ fontSize: 12, color: "var(--text-3)" }} title="Falta pegar sql/barber_usage_events.sql">
+                                —
+                              </span>
+                            ) : (
+                              <>
+                                <span
+                                  style={{ fontSize: 12, color: row.lastUsageAt ? "var(--text-2)" : "var(--text-3)" }}
+                                  title={row.lastUsageAt ? `Último uso: ${fullDate(row.lastUsageAt)}` : "Sin uso en los últimos 90 días"}
+                                >
+                                  {row.lastUsageAt ? relativeDate(row.lastUsageAt) : "Sin uso"}
+                                </span>
+                                <div className="dcba-note">
+                                  {formatInt(row.clicksThisMonth)} {row.clicksThisMonth === 1 ? "clic" : "clics"} este mes
+                                </div>
+                              </>
+                            )}
                           </td>
                           <td className="dcba-col-wide">
                             <span

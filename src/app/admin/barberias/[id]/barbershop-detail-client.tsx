@@ -53,6 +53,7 @@ import {
   ManualActionModal,
   type ManualActionKind,
 } from "@/components/admin/barberias/manual-action-modal";
+import { ActividadPanel } from "@/components/admin/barberias/actividad-panel";
 import "@/components/admin/barberias/barberias.css";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -371,6 +372,11 @@ export function AdminBarbershopDetailClient({ detail }: { detail: AdminBarbersho
               </table>
             </div>
           </CardNew>
+        </div>
+
+        {/* ── Actividad del panel: uso y clics por mes (ws6-t4) ─────── */}
+        <div className="dcba-section">
+          <ActividadPanel barbershopId={shop.id} />
         </div>
 
         <div className="dcba-grid2 dcba-section">

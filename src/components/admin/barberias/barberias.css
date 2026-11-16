@@ -490,3 +490,104 @@
   text-align: right;
   margin-top: 4px;
 }
+
+/* ── Actividad del panel (ws6-t4): uso por mes ──────────────────────────
+   Una sola serie (clics por día): barras finas en --brand, punta redonda
+   de 4 px apoyada en la base, 2 px de aire entre barras, sin leyenda (el
+   título la nombra). El detalle del día sale al pasar el ratón o con Tab. */
+
+.dcba-uso-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.dcba-uso-mes {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dcba-uso-mes select {
+  min-width: 170px;
+}
+
+.dcba-uso-esqueleto {
+  height: 160px;
+  border-radius: 10px;
+  background: var(--bg-elev);
+  color: var(--text-3);
+  font-size: 12.5px;
+  display: grid;
+  place-items: center;
+}
+
+.dcba-uso-chart__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.dcba-uso-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 120px;
+  padding-bottom: 1px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.dcba-uso-chart__col {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  cursor: default;
+  border-radius: 4px 4px 0 0;
+  outline: none;
+}
+
+.dcba-uso-chart__col:hover,
+.dcba-uso-chart__col:focus-visible,
+.dcba-uso-chart__col--on {
+  background: var(--bg-elev);
+}
+
+.dcba-uso-chart__bar {
+  width: 100%;
+  max-width: 18px;
+  margin: 0 auto;
+  background: var(--brand);
+  border-radius: 4px 4px 0 0;
+}
+
+.dcba-uso-chart__axis {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-3);
+  margin-top: 4px;
+}
+
+.dcba-uso-rank {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dcba-uso-rank__fila {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
