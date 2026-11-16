@@ -53,7 +53,8 @@ export function ComisionesClient({
   const [entries, setEntries] = useState<Record<string, CommissionEntryRow[] | "loading">>({});
   const [payRow, setPayRow] = useState<CommissionSummaryRow | null>(null);
   const [busy, setBusy] = useState(false);
-  const [fromCash, setFromCash] = useState(false);
+  // Revisión ws6-t8 (N1): con caja abierta viene MARCADA (lo normal es pagar del cajón).
+  const [fromCash, setFromCash] = useState(Boolean(cashOut?.sessionOpen));
   const tz = summary.timezone;
 
   // Presentación de las dos cifras de arriba, con lo que YA trae la pantalla
@@ -236,7 +237,7 @@ export function ComisionesClient({
                               {t("comisiones.receipt")}
                             </Link>
                             {canManage && r.paidStatus !== "PAID" && r.paidStatus !== "EMPTY" && (
-                              <button type="button" className="bcom-act bcom-act--primary" onClick={() => { setFromCash(false); setPayRow(r); }}>
+                              <button type="button" className="bcom-act bcom-act--primary" onClick={() => { setFromCash(Boolean(cashOut?.sessionOpen)); setPayRow(r); }}>
                                 <BadgeCheck size={14} aria-hidden="true" />
                                 {/* Renta de silla mayor que lo producido: el barbero le paga al dueño (lógica L2). */}
                                 {r.totalToPay < 0 ? t("comisiones.markOwed") : t("comisiones.markPaid")}
