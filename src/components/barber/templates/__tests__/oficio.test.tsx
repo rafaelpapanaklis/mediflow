@@ -155,6 +155,16 @@ test("sin horario guardado: ni tabla, ni «Horario», ni la línea del reloj en 
   assert.ok(!html.includes("am –"));
 });
 
+test("portada: el horario es el primer tramo ABIERTO, nunca «Lun: Cerrado»", () => {
+  // Cierra el lunes (muy común): antes la portada enseñaba solo «Lun: Cerrado».
+  const d = datos();
+  d.config = { ...d.config, horario: HORARIO.map((h) => ({ ...h, abierto: h.dia !== 0 && h.dia < 6 })) };
+  const html = pinta(d);
+  const portada = html.slice(html.indexOf('id="portada"'), html.indexOf('id="servicios"'));
+  assert.ok(!portada.includes("Cerrado"), "la portada enseña un tramo cerrado");
+  assert.match(portada, /Mar – Sáb: 10:00 am – 8:00 pm/);
+});
+
 test("sin nada de contacto: ni «Visítanos» ni su ancla en el menú", () => {
   const d = datos({ shop: { ...datos().shop, phone: null, address: null, city: null, state: null } });
   d.config = { ...d.config, horario: [], whatsapp: null, instagram: null };

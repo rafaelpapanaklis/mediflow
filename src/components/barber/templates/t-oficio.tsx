@@ -145,6 +145,12 @@ export function PlantillaOficio({ data }: { data: BarberWebData }) {
   const nombreLargo = shop.name.trim().length > 22;
   const insta = urlInstagram(config.instagram);
   const hayRedes = !!(insta || urlFacebook(config.facebook) || urlTiktok(config.tiktok));
+  // El horario de la portada es el primer tramo ABIERTO: con el lunes
+  // cerrado (muy común), el primero de horarioAgrupado es «Lun: Cerrado» y
+  // era lo único que se enseñaba. Igual que Barrio y Revista.
+  const tramoPortada = tieneHorario(config)
+    ? horarioAgrupado(config).find((l) => !l.endsWith(": Cerrado")) ?? null
+    : null;
   // «Visítanos» es obligatoria en el manifiesto, pero sin dirección, horario,
   // teléfono, WhatsApp ni redes no hay nada que enseñar: no sale, y tampoco
   // su liga del menú (un ancla a nada).
@@ -237,12 +243,12 @@ export function PlantillaOficio({ data }: { data: BarberWebData }) {
                         </Boton>
                       ) : null}
                     </div>
-                    {tieneHorario(config) || shop.address || dir || shop.phone ? (
+                    {tramoPortada || shop.address || dir || shop.phone ? (
                       <ul className="dcbw-of-portada-datos">
-                        {tieneHorario(config) ? (
+                        {tramoPortada ? (
                           <li>
                             <IcoReloj />
-                            <span>{horarioAgrupado(config)[0]}</span>
+                            <span>{tramoPortada}</span>
                           </li>
                         ) : null}
                         {shop.address || dir ? (
