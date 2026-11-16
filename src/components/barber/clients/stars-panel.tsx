@@ -35,6 +35,8 @@ export function StarsPanel({
   canHandle,
   onMessage,
   onChanged,
+  hideHistory = false,
+  historyLink = null,
 }: {
   clientId: string;
   clientName: string;
@@ -47,6 +49,9 @@ export function StarsPanel({
   canHandle: boolean;
   onMessage: (text: string) => void;
   onChanged?: (next: StarsView) => void;
+  /** Ficha «A»: el historial va en Historial › Estrellas; aquí solo el enlace. */
+  hideHistory?: boolean;
+  historyLink?: React.ReactNode;
 }) {
   const t = useMemo(() => starsT(dict), [dict]);
   const [view, setView] = useState<StarsView>(initial);
@@ -185,6 +190,7 @@ export function StarsPanel({
             audience="staff"
             locale={locale}
             timezone={timezone}
+            hideHistory={hideHistory}
             availableAction={
               canHandle
                 ? (bonus) => (
@@ -200,6 +206,8 @@ export function StarsPanel({
                 : undefined
             }
           />
+
+          {historyLink ? <div style={{ marginTop: 10, textAlign: "right" }}>{historyLink}</div> : null}
 
           {canHandle ? (
             <div style={{ marginTop: 18, paddingTop: 14, borderTop: "1px solid var(--border-soft)" }}>

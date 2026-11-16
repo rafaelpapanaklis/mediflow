@@ -149,6 +149,7 @@ export function ClientDrafts({
   canManage,
   reloadKey,
   onCharge,
+  onLoaded,
 }: {
   clientId: string;
   dict: Dictionary;
@@ -157,6 +158,8 @@ export function ClientDrafts({
   canManage: boolean;
   reloadKey: number;
   onCharge: (draft: SaleDraftRow) => void;
+  /** La ficha «A» pinta cuántas hay y cuánto suman (pestaña Pagos y Resumen). */
+  onLoaded?: (drafts: SaleDraftRow[]) => void;
 }) {
   const [list, setList] = useState<SaleDraftList | null>(null);
   const [tick, setTick] = useState(0);
@@ -164,10 +167,15 @@ export function ClientDrafts({
   const load = useCallback(async () => {
     try {
       const res = await fetch(`/api/barber/sales/drafts?clientId=${encodeURIComponent(clientId)}`, { cache: "no-store" });
-      if (res.ok) setList((await res.json()) as SaleDraftList);
+      if (res.ok) {
+        const next = (await res.json()) as SaleDraftList;
+        setList(next);
+        onLoaded?.(next.ready ? next.drafts : []);
+      }
     } catch {
       /* sin red: la sección simplemente no sale */
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- onLoaded es un aviso, no una dependencia
   }, [clientId]);
 
   useEffect(() => {

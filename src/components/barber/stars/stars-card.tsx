@@ -146,6 +146,7 @@ export function StarsDetails({
   locale,
   timezone,
   availableAction,
+  hideHistory = false,
 }: {
   view: StarsView;
   t: StarsT;
@@ -154,6 +155,8 @@ export function StarsDetails({
   timezone: string;
   /** Botón por bono disponible (solo en la ficha: «Marcar como entregado»). */
   availableAction?: (bonus: BonusPublic) => React.ReactNode;
+  /** Ficha «A»: el historial vive en su pestaña (StarsHistoryList). */
+  hideHistory?: boolean;
 }) {
   const ready = new Set(view.available.map((b) => b.id));
   const pending = view.catalog.filter((b) => !ready.has(b.id));
@@ -190,19 +193,35 @@ export function StarsDetails({
         {view.usedCount > 0 ? ` · ${t("card.used", { count: view.usedCount })}` : ""}
       </p>
 
-      <div className={s.section}>
-        <p className={s.sectionTitle}>{t("card.history")}</p>
-        {view.history.length === 0 ? (
-          <p className={s.hint}>{t("card.historyEmpty")}</p>
-        ) : (
-          <ul className={s.history}>
-            {view.history.map((e) => (
-              <StarEventRow key={e.id} event={e} t={t} locale={locale} timezone={timezone} />
-            ))}
-          </ul>
-        )}
-      </div>
+      {hideHistory ? null : (
+        <div className={s.section}>
+          <p className={s.sectionTitle}>{t("card.history")}</p>
+          <StarsHistoryList view={view} t={t} locale={locale} timezone={timezone} />
+        </div>
+      )}
     </div>
+  );
+}
+
+/** El historial de estrellas (con motivo y quién, en la audiencia «staff»). */
+export function StarsHistoryList({
+  view,
+  t,
+  locale,
+  timezone,
+}: {
+  view: StarsView;
+  t: StarsT;
+  locale: string;
+  timezone: string;
+}) {
+  if (view.history.length === 0) return <p className={s.hint}>{t("card.historyEmpty")}</p>;
+  return (
+    <ul className={s.history}>
+      {view.history.map((e) => (
+        <StarEventRow key={e.id} event={e} t={t} locale={locale} timezone={timezone} />
+      ))}
+    </ul>
   );
 }
 
