@@ -288,6 +288,7 @@
       "paidOut": "Entregado a barberos",
       "paidOutHint": "Adelantos, comisiones, sueldos y propinas entregadas en el periodo. Es informativo: la ganancia ya resta lo que les toca.",
       "onlineNotIncluded": "No incluye cobros en línea (anticipos, membresías y tienda)",
+      "truncated": "Una sede tiene más de {limit} movimientos en este periodo: los gastos y los pagos pueden estar incompletos. Elige un periodo más corto.",
       "byMethod": "Ingresos por método",
       "byMethodHint": "Con propinas, como en la Caja",
       "byCategory": "Gastos por categoría",

@@ -311,6 +311,24 @@ test("🔴 G2 (caso de t8): $800 + $50 de propina al 50 % → Ganancia $400 en R
   await prisma.$executeRaw`DELETE FROM "barber_cash_movements" WHERE "barbershopId" = ${shopD}`;
 });
 
+test("N5: una sede con 5,000 movimientos o más en el periodo → Reportes lo avisa (truncated), no recorta en silencio", { skip: skipDb }, async (t) => {
+  if (!ready) return t.skip("sql/barber_caja_completa.sql no está pegado en esta base");
+  const shopE = await shop("e");
+  await persona("duenoE", shopE, "OWNER");
+  const by = ctxs.duenoE.barberUserId;
+  const sinTope = body(await como("duenoE", "stats/reports", "range=today")).cashFlow;
+  assert.equal(sinTope.current.truncated, false);
+  await prisma.$executeRaw`
+    INSERT INTO "barber_cash_movements" ("id", "barbershopId", "type", "method", "amount", "category", "createdByUserId", "createdAt")
+    SELECT gen_random_uuid()::text, ${shopE}, 'EXPENSE', 'CARD', 1, 'OTHER', ${by}, now() FROM generate_series(1, 5000)
+  `;
+  const conTope = await como("duenoE", "stats/reports", "range=today");
+  assert.equal(body(conTope).cashFlow.current.truncated, true);
+  const csv = String((await como("duenoE", "stats/reports", "range=today&format=csv&section=money")).body);
+  assert.match(csv, /más de 5000 movimientos|más de 5,000 movimientos/);
+  await prisma.$executeRaw`DELETE FROM "barber_cash_movements" WHERE "barbershopId" = ${shopE}`;
+});
+
 test("M6: si la lectura del dinero falla, Inicio enseña «—» (null), nunca la cuenta vieja", { skip: skipDb }, async (t) => {
   if (!ready) return t.skip("sql/barber_caja_completa.sql no está pegado en esta base");
   const stats = await import("@/lib/barber/stats");

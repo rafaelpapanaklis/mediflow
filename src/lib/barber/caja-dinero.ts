@@ -77,6 +77,9 @@ export const GANANCIA_SIN_PROPINAS = true;
  */
 export const ONLINE_NOT_INCLUDED = true;
 
+/** Tope de movimientos por sede y consulta (el de loadMovements). Si se llega, `truncated`. */
+export const MOVEMENTS_LIMIT = 5000;
+
 // ── DTO (números listos para JSON) ──────────────────────────────────────
 
 /** Lo que les toca a los barberos por el periodo, SIN propinas (pagado o no). */
@@ -121,6 +124,8 @@ export interface DineroPeriodo {
   /** Flujo neto de efectivo del periodo (sin fondo): lo que el cajón ganó o perdió. */
   cashNet: number;
   byBarber: DineroBarbero[];
+  /** Alguna sede llegó al tope de movimientos: gastos y pagos pueden estar incompletos. */
+  truncated: boolean;
 }
 
 // ── Puro ────────────────────────────────────────────────────────────────
@@ -198,6 +203,7 @@ export function dineroDe(
   resumen: CajaResumen,
   advancesByBarber: Map<string, number> = new Map(),
   barberCost: CostoBarberos = SIN_COSTO,
+  truncated = false,
 ): DineroPeriodo {
   const charged = D(resumen.income.total);
   const tips = D(resumen.tips.total);
@@ -222,6 +228,7 @@ export function dineroDe(
         paidOut: b.paidOut,
         advances: advancesByBarber.get(b.barberId) ?? 0,
       })),
+    truncated,
   };
 }
 
@@ -281,19 +288,21 @@ function assertCashView(ctx: BarberContext): void {
 
 /**
  * Movimientos de las sedes, en tandas de ≤ 5 lecturas en paralelo (regla del
- * pooler).
+ * pooler). `truncated` = alguna sede llegó al tope de loadMovements (N5).
  */
-async function movementsOf(branchIds: string[], range: { from: Date; to: Date }): Promise<{ rows: CashMovementRow[] }> {
+async function movementsOf(branchIds: string[], range: { from: Date; to: Date }): Promise<{ rows: CashMovementRow[]; truncated: boolean }> {
   const rows: CashMovementRow[] = [];
+  let truncated = false;
   for (let i = 0; i < branchIds.length; i += 5) {
     const tanda = await Promise.all(
-      branchIds.slice(i, i + 5).map((id) => loadMovements(prisma, { barbershopId: id, from: range.from, to: range.to, limit: 5000 })),
+      branchIds.slice(i, i + 5).map((id) => loadMovements(prisma, { barbershopId: id, from: range.from, to: range.to, limit: MOVEMENTS_LIMIT })),
     );
     for (const r of tanda) {
+      if (r.length >= MOVEMENTS_LIMIT) truncated = true;
       rows.push(...r);
     }
   }
-  return { rows };
+  return { rows, truncated };
 }
 
 /** «YYYY-MM-DD» del instante en la zona de la barbería. */
@@ -395,7 +404,7 @@ export async function getDineroPeriodo(
     const sMovements = apart ? apartMovements : movements.filter((m) => m.sessionId === open.id);
     openExpected = cajaResumen({ openingAmount: open.openingAmount, tickets: sTickets.map(ticketOf), movements: sMovements }).expectedCash;
   }
-  return { dinero: dineroDe(resumen, adelantosPorBarbero(movements), barberCost), openExpected };
+  return { dinero: dineroDe(resumen, adelantosPorBarbero(movements), barberCost, mov.truncated), openExpected };
 }
 
 /** Para pruebas y para quien necesite la forma de un DineroPeriodo vacío. */

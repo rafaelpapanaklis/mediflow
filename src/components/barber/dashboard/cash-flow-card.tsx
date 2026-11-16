@@ -54,6 +54,11 @@ export function CashFlowCard({
         </a>
       }
     >
+      {c.truncated && (
+        <div className="bdash-callout bdash-callout--warning" role="status" style={{ marginBottom: 14 }}>
+          <span className="bdash-callout__text">{k("truncated", { limit: fmtInt(5000, locale) })}</span>
+        </div>
+      )}
       <div className="bdash-money">
         <div>
           <div className={`bdash-big${c.profit < 0 ? " bdash-big--neg" : ""}`}>{signed(c.profit)}</div>

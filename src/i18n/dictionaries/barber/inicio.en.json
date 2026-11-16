@@ -288,6 +288,7 @@
       "paidOut": "Handed over to barbers",
       "paidOutHint": "Advances, commissions, wages and tips handed over in the period. For reference: profit already subtracts what they earned.",
       "onlineNotIncluded": "Doesn't include online payments (deposits, memberships and shop)",
+      "truncated": "A location has more than {limit} movements in this period: expenses and payouts may be incomplete. Pick a shorter period.",
       "byMethod": "Income by method",
       "byMethodHint": "With tips, as in the Register",
       "byCategory": "Expenses by category",

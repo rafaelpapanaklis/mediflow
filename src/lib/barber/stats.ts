@@ -1888,8 +1888,9 @@ export interface ReportsCsvMoneyLabels {
     cashNet: string;
     note?: string;
   };
-  /** Texto de la nota de M4 (cobros en línea). */
+  /** Textos de las notas (M4 cobros en línea, N5 tope de movimientos). */
   onlineNotIncluded?: string;
+  truncated?: string;
   method: string;
   category: string;
   kind: string;
@@ -1933,6 +1934,7 @@ function cashFlowCsvLines(s: ReportsSummary, L: ReportsCsvLabels, M: ReportsCsvM
   push([M.metrics.payouts, c.payouts.total]);
   push([M.metrics.cashNet, c.cashNet]);
   if (M.onlineNotIncluded) push([M.metrics.note ?? "", M.onlineNotIncluded]);
+  if (c.truncated && M.truncated) push([M.metrics.note ?? "", M.truncated]);
   blank();
 
   push([M.sections.byMethod]);

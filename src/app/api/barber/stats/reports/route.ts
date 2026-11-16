@@ -12,6 +12,7 @@ import {
 } from "@/lib/barber/stats";
 import { RESUMEN_INCOME_METHODS } from "@/lib/barber/caja-resumen";
 import { BARBER_PAYOUT_KINDS, CASH_EXPENSE_CATEGORIES } from "@/lib/barber/caja-movimientos-core";
+import { MOVEMENTS_LIMIT } from "@/lib/barber/caja-dinero";
 import { getBarberT } from "@/i18n/dictionaries/barber";
 
 export const dynamic = "force-dynamic";
@@ -112,6 +113,7 @@ function moneyLabelsFor(t: ReturnType<typeof getBarberT>): ReportsCsvMoneyLabels
       cashNet: c("metrics.cashNet"),
     },
     onlineNotIncluded: m("onlineNotIncluded"),
+    truncated: m("truncated", { limit: MOVEMENTS_LIMIT }),
     method: c("method"),
     category: c("metrics.category"),
     kind: c("metrics.kind"),
