@@ -165,9 +165,12 @@ export function PlantillaUrbana({ data }: { data: BarberWebData }) {
                     )}
                     <div className="dcbw-ur-barbero-txt">
                       <h3>{b.apodo || b.nombre}</h3>
-                      <a href={rutaReservaBarberia(shop.slug, b.id)}>
-                        {copia(data, "equipo", "equipo.cta")}
-                      </a>
+                      {/* Sin horario no se ofrece «Reservar»: sigue en el equipo, no engaña (L3 ronda 2). */}
+                      {!b.sinHorario ? (
+                        <a href={rutaReservaBarberia(shop.slug, b.id)}>
+                          {copia(data, "equipo", "equipo.cta")}
+                        </a>
+                      ) : null}
                     </div>
                   </li>
                 ))}

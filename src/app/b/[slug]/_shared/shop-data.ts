@@ -136,7 +136,14 @@ export async function cargarBarberWeb(slug: string): Promise<BarberWebCarga | nu
     }),
     prisma.barber.findMany({
       where: { barbershopId: shop.id, isActive: true },
-      select: { id: true, name: true, nickname: true, photoUrl: true, bio: true },
+      select: {
+        id: true,
+        name: true,
+        nickname: true,
+        photoUrl: true,
+        bio: true,
+        _count: { select: { schedules: { where: { isActive: true } } } },
+      },
       orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
       take: 40,
     }),
@@ -181,6 +188,7 @@ export async function cargarBarberWeb(slug: string): Promise<BarberWebCarga | nu
         apodo: b.nickname,
         fotoUrl: b.photoUrl,
         bio: b.bio,
+        sinHorario: b._count.schedules === 0,
       })),
       editando: false,
     },

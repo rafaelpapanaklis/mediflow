@@ -51,6 +51,8 @@ export interface BarberWebBarbero {
   apodo: string | null;
   fotoUrl: string | null;
   bio: string | null;
+  /** true = activo pero sin un solo turno: sale en el equipo sin «Reservar». */
+  sinHorario?: boolean;
 }
 
 /** Un producto destacado en la página (solo lo público: sin costo ni existencias exactas). */

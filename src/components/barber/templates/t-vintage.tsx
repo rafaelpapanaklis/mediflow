@@ -152,9 +152,12 @@ export function PlantillaVintage({ data }: { data: BarberWebData }) {
                     <h3>{b.nombre}</h3>
                     {b.apodo && <p className="dcbw-apodo">«{b.apodo}»</p>}
                     {b.bio && <p className="dcbw-bio">{b.bio}</p>}
-                    <a href={rutaReservaBarberia(shop.slug, b.id)} className="dcbw-enlace">
-                      {copia(data, "equipo", "equipo.cta")}
-                    </a>
+                    {/* Sin horario no se ofrece «Reservar»: sigue en el equipo, no engaña (L3 ronda 2). */}
+                    {!b.sinHorario ? (
+                      <a href={rutaReservaBarberia(shop.slug, b.id)} className="dcbw-enlace">
+                        {copia(data, "equipo", "equipo.cta")}
+                      </a>
+                    ) : null}
                   </li>
                 ))}
               </ul>
