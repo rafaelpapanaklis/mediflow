@@ -391,6 +391,11 @@ export const BARBER_NAV_ITEMS: BarberNavItemDef[] = [
   { key: "mensajes", href: "/barber/mensajes", icon: "message-circle", section: "operacion", permission: "whatsapp.view", featureKey: "whatsappInbox" },
   { key: "servicios", href: "/barber/servicios", icon: "scissors", section: "negocio", permission: "services.manage", featureKey: null },
   { key: "barberos", href: "/barber/barberos", icon: "contact", section: "negocio", permission: "barbers.manage", featureKey: null },
+  // Equipo (16-nov, Rafael: «¿No tenemos la opción de Equipo igual que en
+  // dental?»): las CUENTAS para entrar al panel (correo, rol, permisos). Solo
+  // existía como pestaña dentro de Barberos y el dueño no la encontraba.
+  // Mismo candado que la pantalla y sus APIs: team.manage.
+  { key: "equipo", href: "/barber/equipo", icon: "users", section: "negocio", permission: "team.manage", featureKey: null },
   { key: "caja", href: "/barber/caja", icon: "wallet", section: "negocio", permission: "cash.view", featureKey: "cash" },
   { key: "comisiones", href: "/barber/comisiones", icon: "percent", section: "negocio", permission: "commissions.view", featureKey: "commissions" },
   { key: "membresias", href: "/barber/membresias", icon: "crown", section: "negocio", permission: "memberships.sell", featureKey: "memberships" },

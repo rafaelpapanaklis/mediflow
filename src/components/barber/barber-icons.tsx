@@ -237,6 +237,14 @@ const PATHS = {
       <rect x="13.5" y="11.5" width="2.5" height="2.5" {...F} />
     </>
   ),
+  // Credencial (Equipo): la cuenta con la que alguien entra al panel.
+  credencial: (
+    <>
+      <rect x="3" y="5" width="18" height="14" />
+      <circle cx="9" cy="11" r="2" />
+      <path d="M5.5 17c.6-1.8 1.9-2.7 3.5-2.7s2.9.9 3.5 2.7M15 10h3.5M15 14h3.5" />
+    </>
+  ),
   persona: (
     <>
       <circle cx="12" cy="8" r="4" />
@@ -290,6 +298,7 @@ export const BARBER_NAV_ICON: Record<string, BarberIconName> = {
   mensajes: "charla",
   servicios: "tijeras",
   barberos: "navaja",
+  equipo: "credencial",
   caja: "caja",
   comisiones: "porciento",
   membresias: "corona",

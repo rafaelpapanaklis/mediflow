@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowDown, ArrowUp, CalendarClock, Contact, Info, Pencil, Plus, Trash2, Upload } from "lucide-react";
+import { ArrowDown, ArrowUp, CalendarClock, Contact, Info, KeyRound, Pencil, Plus, Trash2, Upload } from "lucide-react";
 // El mismo color con que la Agenda pinta a cada barbero (punto y tarjeta).
 import { barberColor } from "@/components/barber/agenda/agenda-ui";
 import Link from "next/link";
@@ -97,6 +97,7 @@ export function BarbersClient({
   activeBranchId,
   isConsolidated,
   salaryReady = false,
+  canManageTeam = false,
 }: {
   initialBarbers: BarberProfileRow[];
   seat: BarberSeatLimit;
@@ -105,6 +106,8 @@ export function BarbersClient({
   isConsolidated: boolean;
   /** ¿Ya se pegó sql/barber_sueldo.sql? Si no, «Sueldo» se ve como hoy. */
   salaryReady?: boolean;
+  /** ¿Puede dar de alta cuentas (team.manage)? Enseña «Darle acceso al panel». */
+  canManageTeam?: boolean;
 }) {
   const t = useT();
   const [barbers, setBarbers] = useState(initialBarbers);
@@ -305,6 +308,14 @@ export function BarbersClient({
         <div className={s.headerText}>
           <h1 className={s.title}>{t("barbers.title")}</h1>
           <p className={s.subtitle}>{t("barbers.subtitle")}</p>
+          {/* Barberos ≠ Equipo (16-nov): las fichas aquí; las cuentas del panel allá. */}
+          <p className={s.subtitle}>
+            {t("barbers.subtitleOther")}{" "}
+            <Link href="/barber/equipo" style={{ color: "var(--brand)", fontWeight: 600 }}>
+              {t("nav.equipo")}
+            </Link>
+            .
+          </p>
         </div>
         <div className={s.headerActions}>
           <Chip tone={seatCanCreate ? undefined : "warn"}>{seatText}</Chip>
@@ -413,6 +424,17 @@ export function BarbersClient({
                   </div>
                 ) : null}
                 <div className={s.memberEdit}>
+                  {/* Ficha activa sin cuenta: atajo a Equipo con esta ficha ya elegida. */}
+                  {canManageTeam && b.isActive && b.linkedUserIds.length === 0 ? (
+                    <Link
+                      href={`/barber/equipo?alta=${encodeURIComponent(b.id)}`}
+                      className={[s.btn, s.btnSm].join(" ")}
+                      title={t("barbers.giveAccessHint")}
+                    >
+                      <KeyRound size={13} />
+                      {t("barbers.giveAccess")}
+                    </Link>
+                  ) : null}
                   <Btn size="sm" onClick={() => openForm(toForm(b))}>
                     <Pencil size={13} />
                     {t("common.edit")}

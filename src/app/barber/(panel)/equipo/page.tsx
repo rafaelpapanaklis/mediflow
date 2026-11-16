@@ -16,7 +16,11 @@ import { TeamClient } from "@/components/barber/team/team-client";
  * Ojo: esconder esta pantalla NO es el permiso. El candado está en cada
  * endpoint de /api/barber/team/** (assertBarberPermission("team.manage")).
  */
-export default async function Page() {
+export default async function Page(props: { searchParams?: Promise<{ alta?: string | string[] }> }) {
+  const sp = props.searchParams ? await props.searchParams : undefined;
+  // ?alta=<ficha> llega de «Darle acceso al panel» en Barberos. Solo se usa si
+  // la ficha está en la lista de abajo (ya filtrada por las sedes de la sesión).
+  const alta = typeof sp?.alta === "string" && sp.alta.length <= 64 ? sp.alta : null;
   const ctx = await getBarberContext();
   if (!ctx) redirect("/barber/entrar");
   await requireBarberPaidAccess(ctx);
@@ -49,6 +53,7 @@ export default async function Page() {
         branches={branches}
         activeBranchId={scope.activeId}
         isConsolidated={scope.isConsolidated}
+        initialInviteBarberId={alta}
       />
     </AdminFrame>
   );
