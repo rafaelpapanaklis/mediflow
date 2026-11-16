@@ -1194,6 +1194,119 @@ export const BARBER_WEB_MANIFESTS: Record<BarberWebTemplateId, BarberWebManifest
       },
     ],
   },
+
+  /* ────────────────────────────────────────────────────────────────
+     13 · REVISTA — premium y tranquila, como una revista de estudio.
+     Estructura: en escritorio, una columna FIJA a la izquierda que es el
+     ÍNDICE de la página (secciones en serif, «Mis citas», el horario y
+     Reservar abajo); en el teléfono, cabecera mínima y una barra abajo con
+     Servicios · Tienda · Visita · Reservar. Portada con el nombre enorme en
+     serif ligera y la foto en CÁPSULA; servicios con el encabezado quieto a
+     la izquierda; trabajo en tira de cápsulas sobre noche; una reseña en
+     grande; cierre oscuro. Sin fotos sigue siendo tipografía y aire: la
+     cápsula de portada se vuelve la inicial en itálica sobre el acento.
+     (La que en el mockup C se llamaba «Estudio»: ese id ya era de la 9.)
+     ──────────────────────────────────────────────────────────────── */
+  revista: {
+    id: "revista",
+    nombre: "Revista",
+    para: "Premium y tranquila: mucho aire, serif ligera y fotos en cápsula. Brilla con buenas fotos y sin ellas sigue fina.",
+    estructura: "Índice fijo a la izquierda con horario y Reservar · nombre enorme en serif · fotos en cápsula · barra abajo en el teléfono",
+    acentoSugerido: "vino",
+    secciones: [
+      {
+        id: "portada",
+        nombre: "Portada e índice",
+        obligatoria: true,
+        consume: [],
+        fotos: [
+          FOTO_LOGO,
+          {
+            id: "portada",
+            nombre: "Foto de portada",
+            proporcion: "3:4 vertical",
+            ayuda: "Sale en una cápsula alta, a la derecha del nombre. Un detalle (tijeras, la silla, una nuca) luce más que el local entero.",
+          },
+        ],
+        copia: [
+          { clave: "portada.kicker", etiqueta: "Portada · línea sobre el nombre", porDefecto: "Barbería con cita previa", maxLen: 60 },
+          ...copiaPortada("Reservar cita", "Un corte tranquilo, con cita y sin prisa.", "WhatsApp"),
+          { clave: "portada.secundario", etiqueta: "Portada · botón de ver servicios", porDefecto: "Ver servicios", maxLen: 40 },
+        ],
+      },
+      {
+        id: "servicios",
+        nombre: "Servicios y precios",
+        consume: ["servicios"],
+        textos: [
+          { campo: "titulo", etiqueta: "Título de servicios", porDefecto: "Servicios" },
+          { campo: "subtitulo", etiqueta: "Bajada de servicios", porDefecto: "Toca uno para elegir tu hora." },
+        ],
+        copia: [{ clave: "servicios.menu", etiqueta: "Servicios · en el índice", porDefecto: "Servicios", maxLen: 24 }],
+      },
+      {
+        id: "equipo",
+        nombre: "Barberos",
+        consume: ["barberos"],
+        textos: [
+          { campo: "titulo", etiqueta: "Título del equipo", porDefecto: "Equipo" },
+          {
+            campo: "subtitulo",
+            etiqueta: "Bajada del equipo",
+            porDefecto: "Puedes elegir con quién, o dejar que te asignemos al primero disponible.",
+          },
+        ],
+        copia: [
+          COPIA_EQUIPO_CTA,
+          { clave: "equipo.sinCitas", etiqueta: "Equipo · nota del barbero sin agenda", porDefecto: "Todavía sin citas en línea.", maxLen: 60 },
+          { clave: "equipo.menu", etiqueta: "Equipo · en el índice", porDefecto: "Equipo", maxLen: 24 },
+        ],
+      },
+      {
+        id: "portafolio",
+        nombre: "Portafolio de cortes",
+        consume: ["galeria"],
+        textos: [
+          { campo: "titulo", etiqueta: "Título del portafolio", porDefecto: "Trabajo reciente" },
+          { campo: "subtitulo", etiqueta: "Bajada del portafolio", porDefecto: "Algunos cortes hechos aquí." },
+        ],
+        copia: [{ clave: "portafolio.menu", etiqueta: "Portafolio · en el índice", porDefecto: "Trabajo", maxLen: 24 }],
+      },
+      {
+        id: "resenas",
+        nombre: "Reseñas de clientes",
+        consume: ["resenas"],
+        textos: [{ campo: "titulo", etiqueta: "Título de reseñas", porDefecto: "Reseñas" }],
+        copia: [{ clave: "resenas.menu", etiqueta: "Reseñas · en el índice", porDefecto: "Reseñas", maxLen: 24 }],
+      },
+      secContacto({
+        textos: [
+          { campo: "titulo", etiqueta: "Título de contacto", porDefecto: "Visita" },
+          { campo: "subtitulo", etiqueta: "Bajada de contacto", porDefecto: "" },
+        ],
+        // Mismas claves que el resto (quien las reescribió no las pierde),
+        // con los literales de esta: «Dónde» y «WhatsApp» a secas.
+        copia: [
+          { clave: "contacto.etiquetaDireccion", etiqueta: "Contacto · rótulo de la dirección", porDefecto: "Dónde", maxLen: 40 },
+          { clave: "contacto.etiquetaHorario", etiqueta: "Contacto · rótulo del horario", porDefecto: "Horario", maxLen: 40 },
+          { clave: "contacto.etiquetaTelefono", etiqueta: "Contacto · rótulo del teléfono", porDefecto: "Teléfono", maxLen: 40 },
+          { clave: "contacto.comoLlegar", etiqueta: "Contacto · botón del mapa", porDefecto: "Cómo llegar", maxLen: 40 },
+          { clave: "contacto.whatsapp", etiqueta: "Contacto · botón de WhatsApp", porDefecto: "WhatsApp", maxLen: 60 },
+          { clave: "contacto.menu", etiqueta: "Contacto · en el índice", porDefecto: "Visita", maxLen: 24 },
+        ],
+      }),
+      {
+        id: "reservar",
+        nombre: "Cierre con reserva",
+        consume: [],
+        textos: [
+          { campo: "titulo", etiqueta: "Título del cierre", porDefecto: "Tu hora, cuando te quede bien." },
+          { campo: "subtitulo", etiqueta: "Bajada del cierre", porDefecto: "Reserva en un minuto." },
+        ],
+        copia: [{ clave: "reservar.cta", etiqueta: "Cierre · botón", porDefecto: "Reservar cita", maxLen: 40 }],
+      },
+    ],
+  },
 };
 
 /* ── Tienda (ws6-t1, 16-nov) ─────────────────────────────────────────
@@ -1237,6 +1350,7 @@ export const BARBER_WEB_MANIFEST_LIST: BarberWebManifest[] = [
   BARBER_WEB_MANIFESTS.club,
   BARBER_WEB_MANIFESTS.oficio,
   BARBER_WEB_MANIFESTS.barrio,
+  BARBER_WEB_MANIFESTS.revista,
 ];
 
 /** El manifiesto de una plantilla, cayendo a «Oficio» (la de por defecto) si el id no existe. */
@@ -1305,5 +1419,23 @@ export const BARBER_WEB_SELECTOR_LIST: BarberWebManifest[] = [
     const [tienda] = lista.splice(i, 1);
     tienda.textos = (tienda.textos ?? []).map((t) => (t.campo === "titulo" ? { ...t, porDefecto: "Tienda" } : t));
     lista.splice(lista.findIndex((s) => s.id === "servicios") + 1, 0, tienda);
+  }
+}
+
+/* ── Revista (ws6-t6): la tienda va justo después de Servicios ──────
+   Como en su mockup: «Tienda» al lado de «Servicios» también en el orden
+   de la página, no al final. Solo cambia la POSICIÓN por omisión (quien ya
+   guardó un orden lo conserva, ver ordenDeSecciones) y los dos textos, con
+   los literales de esta plantilla; la sección es la misma de las doce. */
+{
+  const s = BARBER_WEB_MANIFESTS.revista.secciones;
+  const i = s.findIndex((x) => x.id === "tienda");
+  if (i >= 0) {
+    const [tienda] = s.splice(i, 1);
+    tienda.textos = [
+      { campo: "titulo", etiqueta: "Título de la tienda", porDefecto: "Tienda" },
+      { campo: "subtitulo", etiqueta: "Bajada de la tienda", porDefecto: "Lo que usamos aquí. Apártalo en línea y recógelo en tu cita." },
+    ];
+    s.splice(s.findIndex((x) => x.id === "servicios") + 1, 0, tienda);
   }
 }
