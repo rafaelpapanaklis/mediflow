@@ -119,7 +119,7 @@ test("el día del dueño cuadra en Caja, en el corte impreso/WhatsApp y en el CS
   );
   const dict = (getBarberDict("es") as unknown as { barber: { caja: Dictionary } }).barber.caja;
   const texto = corteWhatsappText(corte2, { shopName: "Barbería del Día", tz: TZ, t: makeBarberT(dict), categoryLabel: (c) => c });
-  for (const linea of ["= Esperado en efectivo: $270.00", "Contado: $270.00", "Diferencia: Cuadra", "Fondo para mañana: $200.00", "*Ingresos: $1,330.00*"]) {
+  for (const linea of ["= Esperado en efectivo: $270.00", "Contado: $270.00", "Diferencia: Cuadra", "Fondo para mañana: $200.00", "*Cobrado (con propinas): $1,330.00*"]) {
     assert.ok(texto.includes(linea), `falta «${linea}» en el corte:\n${texto}`);
   }
 

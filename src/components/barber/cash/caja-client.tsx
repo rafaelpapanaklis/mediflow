@@ -248,6 +248,8 @@ export function CajaClient({
             value={fmtMoney(resumen.income.total)}
             icon={Receipt}
             hint={[
+              // Revisión ws6-t8 (M5): incluye propinas; Inicio/Reportes llaman «Ingresos» a lo cobrado SIN propinas.
+              t("cards.incomeTips", { tips: fmtMoney(resumen.tips.total) }),
               `${t("common.cash")} ${fmtMoney(resumen.income.byMethod.CASH.total)}`,
               `${t("common.card")} ${fmtMoney(resumen.income.byMethod.CARD.total)}`,
               `${t("common.spei")} ${fmtMoney(resumen.income.byMethod.SPEI.total)}`,

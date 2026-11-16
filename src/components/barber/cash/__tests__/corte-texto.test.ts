@@ -80,7 +80,7 @@ test("el texto de WhatsApp trae el esperado desglosado y cuadra con el día de p
     "Contado: $270.00",
     "Diferencia: Cuadra",
     "Fondo para mañana: $200.00",
-    "*Ingresos: $1,330.00*",
+    "*Cobrado (con propinas): $1,330.00*",
     "Efectivo: $850.00 · Tarjeta: $300.00 · Transferencia (SPEI): $180.00",
     "Tickets: 3 · Ticket promedio: $416.67",
     "*Gastos: $80.00*",

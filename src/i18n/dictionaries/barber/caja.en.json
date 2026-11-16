@@ -594,13 +594,14 @@
   "cards": {
     "expected": "Should be in the drawer",
     "expectedHint": "Cash that should be in the drawer right now.",
-    "income": "Income",
+    "income": "Charged (incl. tips)",
     "online": "Online",
     "expenses": "Expenses",
     "expensesHint": "In cash: {cash}",
     "expensesHintPayouts": "In cash: {cash} · paid to barbers: {payouts}",
     "moves": "Withdrawals / cash in",
-    "movesHint": "Cash in {in} · {out} withdrawals · {inCount} cash in"
+    "movesHint": "Cash in {in} · {out} withdrawals · {inCount} cash in",
+    "incomeTips": "Tips {tips}"
   },
   "day": {
     "title": "Today's activity",

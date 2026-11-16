@@ -594,13 +594,14 @@
   "cards": {
     "expected": "Debe haber en caja",
     "expectedHint": "Efectivo que tiene que haber en el cajón ahora.",
-    "income": "Ingresos",
+    "income": "Cobrado (con propinas)",
     "online": "En línea",
     "expenses": "Gastos",
     "expensesHint": "En efectivo: {cash}",
     "expensesHintPayouts": "En efectivo: {cash} · pagos a barberos: {payouts}",
     "moves": "Retiros / entradas",
-    "movesHint": "Entradas {in} · {out} retiros · {inCount} entradas"
+    "movesHint": "Entradas {in} · {out} retiros · {inCount} entradas",
+    "incomeTips": "Propinas {tips}"
   },
   "day": {
     "title": "Movimientos del día",
