@@ -2,8 +2,9 @@
 
 import { soloDigitosTelefono } from "@/lib/barber/phone-format";
 import { useState } from "react";
-import { ArrowRightLeft, CalendarClock, Crown, Pencil, Plus, Store, Users } from "lucide-react";
+import { ArrowRightLeft, CalendarClock, Crown, Pencil, Plus, RotateCcw, Store, Users } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { BarberBranchLimit, BarberBranchRow } from "@/lib/barber/branches";
 import { switchBranchAndReload } from "../team/admin-nav";
 import {
@@ -102,6 +103,8 @@ export function BranchesClient({
   const [listError, setListError] = useState<string | null>(null);
   const [switching, setSwitching] = useState(false);
   const [confirmClose, setConfirmClose] = useState<BarberBranchRow | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState<BarberBranchRow | null>(null);
+  const router = useRouter();
   const { saving, error, setError, run } = useSaving();
 
   const defaultTz = branches[0]?.timezone ?? TIMEZONES[0];
@@ -147,18 +150,25 @@ export function BranchesClient({
         setBranches((list) => [...list, branch]);
       }
     });
-    if (ok) setForm(null);
+    if (ok) {
+      setForm(null);
+      // Nueva sede o nombre cambiado: el selector de Sede de arriba lo pinta el
+      // servidor; sin esto seguía con la lista vieja hasta recargar a mano.
+      router.refresh();
+    }
   }
 
   async function toggleOpen(branch: BarberBranchRow, confirmed = false) {
     setListError(null);
     const next = !branch.isActive;
-    // Cerrar pide confirmación con el diálogo del panel (antes: window.confirm del navegador).
-    if (!next && !confirmed) {
-      setConfirmClose(branch);
+    // Cerrar y reabrir piden confirmación con el diálogo del panel.
+    if (!confirmed) {
+      if (next) setConfirmOpen(branch);
+      else setConfirmClose(branch);
       return;
     }
     setConfirmClose(null);
+    setConfirmOpen(null);
     try {
       await apiCall(`/api/barber/branches/${branch.id}`, {
         method: "PATCH",
@@ -167,6 +177,9 @@ export function BranchesClient({
       setBranches((list) =>
         list.map((b) => (b.id === branch.id ? { ...b, isActive: next } : b)),
       );
+      // El selector de Sede de arriba (y el de esta barra) los pinta el SERVIDOR:
+      // sin esto, la sede recién reabierta seguía en «Cerradas» hasta recargar.
+      router.refresh();
     } catch (err) {
       setListError(err instanceof Error ? err.message : t("common.genericError"));
     }
@@ -288,6 +301,11 @@ export function BranchesClient({
                   {isCurrent ? <Chip tone="brand">{t("branches.current")}</Chip> : null}
                   {!b.isActive ? <Chip tone="muted">{t("branch.closed")}</Chip> : null}
                 </div>
+                {!b.isActive ? (
+                  <p className={s.subtitle} style={{ margin: "2px 0 0" }}>
+                    {t("branches.closedNote")}
+                  </p>
+                ) : null}
                 <div className={s.rowMeta}>
                   {b.address ? <span className={s.truncate}>{b.address}</span> : null}
                   {b.city ? <span>{b.city}</span> : null}
@@ -310,6 +328,13 @@ export function BranchesClient({
                   </a>
                 </div>
                 <div className={s.rowActions}>
+                  {/* Reabrir, PRIMERO y en primario (16-nov, Rafael no lo encontraba). */}
+                  {!b.isMainBranch && !b.isActive ? (
+                    <Btn size="sm" variant="primary" onClick={() => toggleOpen(b)}>
+                      <RotateCcw size={13} />
+                      {t("branches.openBranch")}
+                    </Btn>
+                  ) : null}
                   {limit.featureOn ? (
                     <Btn size="sm" onClick={() => setForm(toForm(b))}>
                       <Pencil size={13} />
@@ -325,13 +350,9 @@ export function BranchesClient({
                       {t("branches.switchHere")}
                     </Btn>
                   ) : null}
-                  {!b.isMainBranch ? (
-                    <Btn
-                      size="sm"
-                      variant={b.isActive ? "danger" : "default"}
-                      onClick={() => toggleOpen(b)}
-                    >
-                      {b.isActive ? t("branches.closeBranch") : t("branches.openBranch")}
+                  {!b.isMainBranch && b.isActive ? (
+                    <Btn size="sm" variant="danger" onClick={() => toggleOpen(b)}>
+                      {t("branches.closeBranch")}
                     </Btn>
                   ) : null}
                 </div>
@@ -369,6 +390,25 @@ export function BranchesClient({
           }
         >
           <p>{t("branches.confirmClose", { name: confirmClose.branchName || confirmClose.name })}</p>
+        </Modal>
+      ) : null}
+
+      {confirmOpen ? (
+        <Modal
+          title={t("branches.openTitle", { name: confirmOpen.branchName || confirmOpen.name })}
+          onClose={() => setConfirmOpen(null)}
+          footer={
+            <>
+              <Btn variant="ghost" onClick={() => setConfirmOpen(null)}>
+                {t("common.cancel")}
+              </Btn>
+              <Btn variant="primary" onClick={() => toggleOpen(confirmOpen, true)}>
+                {t("branches.openBranch")}
+              </Btn>
+            </>
+          }
+        >
+          <p>{t("branches.confirmOpen", { name: confirmOpen.branchName || confirmOpen.name })}</p>
         </Modal>
       ) : null}
 
