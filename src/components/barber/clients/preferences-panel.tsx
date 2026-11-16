@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Pencil, Scissors, X } from "lucide-react";
+import { Check, ChevronRight, Pencil, Scissors, TriangleAlert, X } from "lucide-react";
 import type { BarberClientPreferences } from "@/lib/barber/clients";
 import { Field, clientStyles as s, type BarberT } from "./ui";
+import f from "./ficha.module.css";
 
 /**
  * "Cómo le gusta el corte" — el panel que el barbero mira con el cliente ya
@@ -36,6 +37,9 @@ export function PreferencesPanel({
   t,
   onSaved,
   onMessage,
+  variant = "full",
+  onSeeAll,
+  seeAllHref = "?tab=corte",
 }: {
   clientId: string;
   preferences: BarberClientPreferences;
@@ -44,6 +48,11 @@ export function PreferencesPanel({
   t: BarberT;
   onSaved: (next: BarberClientPreferences) => void;
   onMessage: (text: string) => void;
+  /** "summary" = la tarjeta corta del Resumen (sin editar: eso vive en Corte). */
+  variant?: "full" | "summary";
+  /** «Ver todo» del Resumen: abre la pestaña Corte. */
+  onSeeAll?: (e: React.MouseEvent<HTMLAnchorElement>) => void;
+  seeAllHref?: string;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<BarberClientPreferences>(preferences);
@@ -52,7 +61,6 @@ export function PreferencesPanel({
   const label = (key: FieldKey) => t(`preferences.${key}`);
   const placeholder = (key: FieldKey) => t(`preferences.${key}Placeholder`);
 
-  const filled = SHORT_FIELDS.concat(LONG_FIELDS).filter((k) => preferences[k]);
   const favorite = preferences.favoriteBarberId
     ? barbers.filter((b) => b.id === preferences.favoriteBarberId)[0]
     : undefined;
@@ -87,6 +95,62 @@ export function PreferencesPanel({
 
   const set = (key: FieldKey, value: string) =>
     setDraft((d) => ({ ...d, [key]: value }));
+
+  // Lectura con el acomodo de la ficha «A»: la máquina en grande, lo que le
+  // irrita en rojo, y cada dato una sola vez. En el Resumen va la versión
+  // corta (máquina, desvanecido, arriba, barba, raya, irrita y la nota).
+  if (!editing && variant === "summary") {
+    return (
+      <section className={`${f.card} ${f.cardPad}`} aria-label={t("preferences.title")}>
+        <div className={f.cardHead}>
+          <h2 className={f.cardTitle}>
+            <Scissors size={16} aria-hidden="true" />
+            {t("preferences.title")}
+          </h2>
+          {onSeeAll ? (
+            <a href={seeAllHref} className={f.btnLink} onClick={onSeeAll}>
+              {t("ficha.seeAll")} <ChevronRight size={14} aria-hidden="true" />
+            </a>
+          ) : null}
+        </div>
+        <PreferencesRead
+          preferences={preferences}
+          favorite={null}
+          keys={["fade", "topLength", "beard", "part"]}
+          t={t}
+          label={label}
+          showLong={["barberNotes"]}
+        />
+      </section>
+    );
+  }
+
+  if (!editing) {
+    return (
+      <section className={`${f.card} ${f.cardPad}`} aria-label={t("preferences.title")}>
+        <div className={f.cardHead}>
+          <h2 className={f.cardTitle}>
+            <Scissors size={16} aria-hidden="true" />
+            {t("preferences.title")}
+          </h2>
+          {canEdit ? (
+            <button type="button" className={`${f.btn} ${f.btnSm}`} onClick={open} data-accion="editar-corte">
+              <Pencil size={13} aria-hidden="true" />
+              {t("preferences.edit")}
+            </button>
+          ) : null}
+        </div>
+        <PreferencesRead
+          preferences={preferences}
+          favorite={favorite ?? null}
+          keys={["fade", "topLength", "sideLength", "part", "beard"]}
+          t={t}
+          label={label}
+          showLong={["products", "barberNotes"]}
+        />
+      </section>
+    );
+  }
 
   return (
     <section className={`${s.card} ${s.cardPad} ${s.prefs}`} aria-label={t("preferences.title")}>
@@ -179,32 +243,97 @@ export function PreferencesPanel({
             </button>
           </div>
         </>
-      ) : filled.length === 0 && !favorite ? (
-        <p className={s.sectionSub}>{t("preferences.empty")}</p>
-      ) : (
-        <div className={s.prefGrid}>
-          {SHORT_FIELDS.filter((k) => preferences[k]).map((key) => (
-            <div key={key} className={s.prefRead}>
-              <span className={s.prefKey}>{label(key)}</span>
-              <span className={s.prefValue}>{preferences[key]}</span>
-            </div>
-          ))}
+      ) : null}
+    </section>
+  );
+}
 
-          {favorite ? (
-            <div className={s.prefRead}>
-              <span className={s.prefKey}>{t("preferences.favoriteBarber")}</span>
-              <span className={s.prefValue}>{favorite.name}</span>
+/** Lectura de «Cómo le gusta el corte»: cada dato una vez, la máquina en grande. */
+function PreferencesRead({
+  preferences,
+  favorite,
+  keys,
+  showLong,
+  t,
+  label,
+}: {
+  preferences: BarberClientPreferences;
+  favorite: { id: string; name: string } | null;
+  /** Campos cortos que van en la rejilla (la máquina va aparte). */
+  keys: FieldKey[];
+  /** Campos largos que se enseñan además de «lo que le irrita». */
+  showLong: FieldKey[];
+  t: BarberT;
+  label: (key: FieldKey) => string;
+}) {
+  const machine = (preferences.clipperNumber ?? "").trim();
+  const grid = keys.filter((k) => (preferences[k] ?? "").trim());
+  const avoid = (preferences.avoidProducts ?? "").trim();
+  const products = showLong.includes("products") ? (preferences.products ?? "").trim() : "";
+  const notes = showLong.includes("barberNotes") ? (preferences.barberNotes ?? "").trim() : "";
+  // En el Resumen la nota va como cita; en Corte, junto a su barbero y productos.
+  const notesAsQuote = !showLong.includes("products");
+
+  if (!machine && grid.length === 0 && !avoid && !products && !notes && !favorite) {
+    return <p className={f.empty}>{t("preferences.empty")}</p>;
+  }
+
+  return (
+    <>
+      {machine || grid.length > 0 ? (
+        <div className={f.cut}>
+          {machine ? (
+            <div className={f.machine} data-maquina>
+              <span className={`${f.machineNum} ${machine.length > 4 ? f.machineNumLong : ""}`}>{machine}</span>
+              <span className={f.machineLabel}>{t("ficha.machine")}</span>
             </div>
           ) : null}
-
-          {LONG_FIELDS.filter((k) => preferences[k]).map((key) => (
-            <div key={key} className={`${s.prefRead} ${s.prefWide}`}>
-              <span className={s.prefKey}>{label(key)}</span>
-              <span className={`${s.prefValue} ${s.prefValueLong}`}>{preferences[key]}</span>
-            </div>
-          ))}
+          {grid.length > 0 ? (
+            <dl className={f.cutGrid} style={{ margin: 0 }}>
+              {grid.map((k) => (
+                <div key={k} style={{ minWidth: 0 }}>
+                  <dt className={f.cutKey}>{label(k)}</dt>
+                  <dd className={f.cutValue} style={{ margin: 0 }}>{preferences[k]}</dd>
+                </div>
+              ))}
+            </dl>
+          ) : null}
         </div>
-      )}
-    </section>
+      ) : null}
+
+      {avoid ? (
+        <p className={f.irritates} data-irrita>
+          <TriangleAlert size={15} aria-hidden="true" />
+          <span>
+            <strong>{t("ficha.irritates")}</strong> {avoid}
+          </span>
+        </p>
+      ) : null}
+
+      {notesAsQuote ? (
+        notes ? <p className={f.quote}>«{notes}»</p> : null
+      ) : favorite || products || notes ? (
+        <div className={f.facts}>
+          {favorite ? (
+            <div className={f.fact}>
+              <span className={f.cutKey}>{t("preferences.favoriteBarber")}</span>
+              <span className={f.cutValue}>{favorite.name}</span>
+            </div>
+          ) : null}
+          {products ? (
+            <div className={f.fact}>
+              <span className={f.cutKey}>{label("products")}</span>
+              <span className={f.cutValue}>{products}</span>
+            </div>
+          ) : null}
+          {notes ? (
+            <div className={`${f.fact} ${f.factWide}`}>
+              <span className={f.cutKey}>{label("barberNotes")}</span>
+              <span className={f.cutValue} style={{ fontWeight: 500, whiteSpace: "pre-wrap" }}>{notes}</span>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </>
   );
 }

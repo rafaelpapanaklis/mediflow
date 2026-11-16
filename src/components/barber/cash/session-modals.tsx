@@ -248,7 +248,10 @@ export function CloseSessionModal({
   );
 }
 
-export function CancelSaleModal({ dict, sale, onClose, onDone }: { dict: Dictionary; sale: SaleRow; onClose: () => void; onDone: () => void }) {
+/** Lo que usan los dos diálogos de un ticket: Caja pasa su SaleRow y la ficha del cliente (Pagos) la suya. */
+export type SaleForModal = Pick<SaleRow, "id" | "itemsSummary" | "total" | "paymentMethod" | "kind">;
+
+export function CancelSaleModal({ dict, sale, onClose, onDone }: { dict: Dictionary; sale: SaleForModal; onClose: () => void; onDone: () => void }) {
   const t = useBarberT(dict);
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
@@ -311,7 +314,7 @@ export function CancelSaleModal({ dict, sale, onClose, onDone }: { dict: Diction
  * este botón en los tickets del turno vivo); el servidor lo vuelve a revisar
  * y deja la bitácora. El corte por método se recalcula solo.
  */
-export function ChangeMethodModal({ dict, sale, onClose, onDone }: { dict: Dictionary; sale: SaleRow; onClose: () => void; onDone: (method: BarberPaymentMethod) => void }) {
+export function ChangeMethodModal({ dict, sale, onClose, onDone }: { dict: Dictionary; sale: SaleForModal; onClose: () => void; onDone: (method: BarberPaymentMethod) => void }) {
   const t = useBarberT(dict);
   const [method, setMethod] = useState<BarberPaymentMethod | null>(null);
   const [busy, setBusy] = useState(false);

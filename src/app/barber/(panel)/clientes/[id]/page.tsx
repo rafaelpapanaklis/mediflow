@@ -1,4 +1,6 @@
 import "@/components/barber/cash/money.css";
+// El diálogo «Vender membresía» de Membresías se abre también desde la ficha.
+import "@/components/barber/memberships/membresias.css";
 import { notFound, redirect } from "next/navigation";
 import { getBarberContext, hasBarberPermission } from "@/lib/barber-auth";
 import { requireBarberPaidAccess } from "@/lib/barber/paid-access";
@@ -10,6 +12,9 @@ import { getStaffStarsView } from "@/lib/barber/stars";
 import { listClientSales } from "@/lib/barber/client-sales";
 import { barberCanSeeClient, barberClientScopeWhere } from "@/lib/barber/clients";
 import { clientsViewScope, scopeUserFromCtx } from "@/lib/barber/own-visits";
+import { listClientMembershipPeriods } from "@/lib/barber/ficha";
+import { listMembershipPlans } from "@/lib/barber/memberships";
+import { isBarberStripeConfigured } from "@/lib/barber/payments";
 import { BarberClientDetailScreen } from "@/components/barber/clients/client-detail";
 
 export const dynamic = "force-dynamic";
@@ -80,6 +85,19 @@ export default async function Page(props: { params: Promise<{ id: string }> }) {
   });
   const cobrosDict = ((getBarberDict(locale).barber as Dictionary).cobros ?? {}) as Dictionary;
 
+  // Pestaña Membresía: sus periodos (lectura) y, con plan + memberships.sell,
+  // el mismo diálogo de venta de Membresías (mismas rutas, mismo permiso).
+  const canSellMembership = plan.features.memberships === true && hasBarberPermission(permUser, "memberships.sell");
+  const [membershipPeriods, membershipPlans] = await Promise.all([
+    plan.features.memberships === true
+      ? listClientMembershipPeriods(ctx, params.id).catch((e) => {
+          console.warn("[barber/clientes] no se pudieron leer las membresías:", (e as Error).message);
+          return [];
+        })
+      : Promise.resolve([]),
+    canSellMembership ? listMembershipPlans(ctx.barbershopId).catch(() => []) : Promise.resolve([]),
+  ]);
+
   return (
     <BarberClientDetailScreen
       dict={dict}
@@ -99,6 +117,17 @@ export default async function Page(props: { params: Promise<{ id: string }> }) {
       canOpenAgenda={plan.features.agenda === true && hasBarberPermission(permUser, "agenda.view")}
       canMessage={plan.features.whatsappInbox === true && hasBarberPermission(permUser, "whatsapp.view")}
       cajaDict={((getBarberDict(locale).barber as Dictionary).caja ?? {}) as Dictionary}
+      shopName={ctx.barbershop.name}
+      nowISO={new Date().toISOString()}
+      membershipPeriods={membershipPeriods}
+      canSellMembership={canSellMembership}
+      membershipPlans={membershipPlans}
+      membershipStripeReady={canSellMembership ? isBarberStripeConfigured() : false}
+      membresiasDict={
+        canSellMembership || membershipPeriods.length > 0
+          ? (((getBarberDict(locale).barber as Dictionary).membresias ?? {}) as Dictionary)
+          : undefined
+      }
     />
   );
 }

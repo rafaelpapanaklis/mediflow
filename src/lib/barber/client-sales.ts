@@ -14,6 +14,14 @@ import {
 import { clientsViewScope, scopeUserFromCtx } from "@/lib/barber/own-visits";
 import { originalSummaryOf } from "@/lib/barber/stars-core";
 import type { BarberPaymentMethod } from "@/lib/barber/types";
+import { CANCELLED_MARK } from "@/lib/barber/commissions";
+import {
+  NO_SALES_FILTER,
+  cancelInfoOf,
+  salesPeriodStart,
+  ticketShortId,
+  type ClientSalesFilter,
+} from "@/lib/barber/ficha-core";
 
 /**
  * ═══════════════════════════════════════════════════════════════════════
@@ -68,6 +76,18 @@ export interface ClientSaleRow {
   cancelledSummary: string | null;
   /** Total que tenía antes de cancelarse (de la marca «… total X (MÉTODO)»). */
   cancelledTotal: number | null;
+  /** Quién lo canceló y por qué (de la misma marca). */
+  cancelledBy: string | null;
+  cancelReason: string | null;
+  /** Folio corto, el mismo del ticket impreso (#3F9A2C). */
+  shortId: string;
+  /**
+   * Su turno de caja sigue abierto: solo entonces Caja deja cambiar el método
+   * o cancelar (el servidor lo vuelve a revisar). Sin turno → false.
+   */
+  sessionOpen: boolean;
+  /** Entró a un turno de caja (los cobros en línea pueden no tenerlo). */
+  hasSession: boolean;
 }
 
 export interface ClientSalesPage {
@@ -78,8 +98,12 @@ export interface ClientSalesPage {
   rows: ClientSaleRow[];
   page: number;
   pageSize: number;
-  /** Tickets (pagados y cancelados) en el alcance. */
+  /** Tickets (pagados y cancelados) en el alcance, con el filtro aplicado (paginación). */
   count: number;
+  /** El filtro con que se pidió esta página. */
+  filter: ClientSalesFilter;
+  /** Conteos SIN filtro, para las pastillas «Todos · Pagados · Cancelados». */
+  totals: { all: number; paid: number; cancelled: number };
   summary: {
     /** Σ total de los tickets pagados (incluye propina). */
     spent: number;
@@ -97,6 +121,8 @@ function emptyPage(allowed: boolean, scope: "all" | "own", page = 1): ClientSale
     page,
     pageSize: CLIENT_SALES_PAGE_SIZE,
     count: 0,
+    filter: NO_SALES_FILTER,
+    totals: { all: 0, paid: 0, cancelled: 0 },
     summary: { spent: 0, chargedVisits: 0, paidTickets: 0 },
   };
 }
@@ -108,6 +134,8 @@ const saleSelect = {
   tip: true,
   total: true,
   paymentMethod: true,
+  cashSessionId: true,
+  cashSession: { select: { closedAt: true } },
   barber: { select: { name: true, nickname: true } },
   soldBy: { select: { firstName: true, lastName: true } },
   items: {
@@ -167,6 +195,13 @@ export function toClientSaleRow(s: SaleRowRaw): ClientSaleRow {
     total: toNum(s.total),
     cancelledSummary: cancelled ? originalSummaryOf(s.notes) || null : null,
     cancelledTotal: cancelled ? cancelledTotalOf(s.notes) : null,
+    ...(() => {
+      const info = cancelled ? cancelInfoOf(s.notes, CANCELLED_MARK) : null;
+      return { cancelledBy: info?.by ?? null, cancelReason: info?.reason ?? null };
+    })(),
+    shortId: ticketShortId(s.id),
+    sessionOpen: Boolean(s.cashSessionId && s.cashSession && !s.cashSession.closedAt),
+    hasSession: Boolean(s.cashSessionId),
   };
 }
 
@@ -177,8 +212,9 @@ export function toClientSaleRow(s: SaleRowRaw): ClientSaleRow {
 export async function listClientSales(
   ctx: BarberContext,
   clientId: string,
-  opts: { page?: number } = {},
+  opts: { page?: number; filter?: ClientSalesFilter } = {},
 ): Promise<ClientSalesPage> {
+  const filter = opts.filter ?? NO_SALES_FILTER;
   const page = Math.max(1, Math.floor(Number(opts.page) || 1));
   const perm = { role: ctx.role, permissionsOverride: ctx.user.permissionsOverride };
   const scope = clientsViewScope(scopeUserFromCtx(ctx));
@@ -194,11 +230,23 @@ export async function listClientSales(
     ...(scope.kind === "own" ? { barberId: scope.barberId } : {}),
   };
   const paid: Prisma.BarberSaleWhereInput = { AND: [where, NOT_CANCELLED] };
-
-  const [count, rows, spent, visits] = await Promise.all([
-    prisma.barberSale.count({ where }),
-    prisma.barberSale.findMany({
+  // La lista (y su paginación) lleva el filtro; las cifras de arriba, no.
+  const since = salesPeriodStart(filter.period);
+  const listed: Prisma.BarberSaleWhereInput = {
+    AND: [
       where,
+      ...(filter.status === "paid" ? [NOT_CANCELLED] : []),
+      ...(filter.status === "cancelled" ? [{ notes: { startsWith: CANCELLED_MARK } }] : []),
+      ...(since ? [{ createdAt: { gte: since } }] : []),
+      ...(filter.method !== "all" ? [{ paymentMethod: filter.method }] : []),
+    ],
+  };
+
+  const [all, count, rows, spent, visits] = await Promise.all([
+    prisma.barberSale.count({ where }),
+    prisma.barberSale.count({ where: listed }),
+    prisma.barberSale.findMany({
+      where: listed,
       orderBy: { createdAt: "desc" },
       skip: (page - 1) * CLIENT_SALES_PAGE_SIZE,
       take: CLIENT_SALES_PAGE_SIZE,
@@ -215,6 +263,8 @@ export async function listClientSales(
     page,
     pageSize: CLIENT_SALES_PAGE_SIZE,
     count,
+    filter,
+    totals: { all, paid: spent._count._all, cancelled: Math.max(0, all - spent._count._all) },
     summary: {
       spent: toNum(spent._sum.total ?? D(0)),
       chargedVisits: visits,

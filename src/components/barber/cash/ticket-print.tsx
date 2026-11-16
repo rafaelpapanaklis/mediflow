@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { ArrowLeft, MessageCircle } from "lucide-react";
 import type { Dictionary } from "@/i18n/t";
@@ -18,6 +18,16 @@ export function TicketPrint({ sale, dict }: { sale: SaleDetail; dict: Dictionary
   const printSetup = usePrintSetup();
   const ticketRef = useRef<HTMLDivElement | null>(null);
   const thermal = printSetup.width !== "letter";
+  // «Reimprimir» desde la ficha del cliente abre ?imprimir=1: el diálogo de
+  // impresión sale solo, con el ancho guardado en este navegador (se lee en
+  // un efecto de usePrintSetup; por eso la espera corta y el ref).
+  const widthRef = useRef(printSetup.width);
+  widthRef.current = printSetup.width;
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("imprimir") !== "1") return;
+    const id = window.setTimeout(() => printWithWidth(widthRef.current, ticketRef), 400);
+    return () => window.clearTimeout(id);
+  }, []);
   const tz = sale.shop.timezone;
   const shortId = sale.id.slice(-6).toUpperCase();
   const shareText = t("print.shareText", { shop: sale.shop.name, total: fmtMoney(sale.total) });
