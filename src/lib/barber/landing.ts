@@ -135,6 +135,11 @@ export interface BarberWebManifest {
   acentoSugerido: BarberWebAccentId;
   /** Fondo oscuro: el editor pinta la vista previa sobre negro. */
   oscura?: boolean;
+  /**
+   * Recién llegada: el selector de Mi web la pone PRIMERO y con la etiqueta
+   * «Nueva». La enciende BARBER_WEB_NUEVAS (manifest.ts), no cada plantilla.
+   */
+  nueva?: boolean;
   secciones: BarberWebManifestSeccion[];
 }
 

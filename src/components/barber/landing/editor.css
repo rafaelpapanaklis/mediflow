@@ -968,3 +968,9 @@ textarea.dcbwe-input {
 @container dcbwe (max-width: 560px) {
   .dcbwe-horario-horas .dcbwe-input { min-height: 40px; }
 }
+
+/* «Nueva» junto al nombre de las plantillas recién llegadas (ws6-t2). */
+.dcbwe-pastilla-nueva {
+  margin-left: 8px;
+  vertical-align: 2px;
+}
