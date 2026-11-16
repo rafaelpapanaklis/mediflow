@@ -478,7 +478,9 @@
   /* Cancelado en ficha: el tachado del renglón también tacharía las
      etiquetas; se tacha solo el total y la ficha va en gris. */
   .barber-shell .bcaja-tickets tr.bcaja-strike { text-decoration: none; }
-  .barber-shell .bcaja-tickets tr.bcaja-strike td:nth-child(7) strong { text-decoration: line-through; }
+  /* El monto es la celda .bcaja-num (5.ª en «Movimientos del día», 6.ª en
+     «Gastos»); con td:nth-child(7), de la tabla vieja, no se tachaba nada. */
+  .barber-shell .bcaja-tickets tr.bcaja-strike td.bcaja-num strong { text-decoration: line-through; }
   .barber-shell .bcaja-tickets td[data-label]::before {
     content: attr(data-label);
     display: block;
@@ -568,7 +570,9 @@
 }
 
 /* Lo anulado se lee tachado, pero quién y cuándo se lee derecho. */
-.barber-shell .bcaja-strike [data-anulado] { text-decoration: none; display: inline-block; }
+/* inline-block (no block): el tachado del renglón se hereda a los bloques
+   hijos y solo una caja inline-block lo corta; width 100 % la baja de renglón. */
+.barber-shell .bcaja-strike [data-anulado] { text-decoration: none; display: inline-block; width: 100%; }
 
 /* Pestañas Hoy · Cortes · Gastos. */
 .barber-shell .bcaja-tabs {
