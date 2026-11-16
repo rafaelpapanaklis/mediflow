@@ -104,11 +104,11 @@ export function PayCommissionPanel({
               <div className="bcaja-totals__row"><span>{t("comisiones.paySalary")}</span><span>{fmtMoney(row.salaryPending)}</span></div>
             )}
             {row.chairRentPending !== null && row.chairRentPending > 0 && (
-              <div className="bcaja-totals__row"><span>{t("comisiones.payRent")}</span><span>−{fmtMoney(row.chairRentPending)}</span></div>
+              <div className="bcaja-totals__row"><span>{t("comisiones.payRent")}</span><span style={{ whiteSpace: "nowrap" }}>−{fmtMoney(row.chairRentPending)}</span></div>
             )}
             {/* Adelantos/vales del periodo: ya se le dieron, se restan solos (caja completa). */}
             {row.advances != null && row.advances > 0 && (
-              <div className="bcaja-totals__row" data-adelantos-pago><span>{t("comisiones.payAdvances")}</span><span>−{fmtMoney(row.advances)}</span></div>
+              <div className="bcaja-totals__row" data-adelantos-pago><span>{t("comisiones.payAdvances")}</span><span style={{ whiteSpace: "nowrap" }}>−{fmtMoney(row.advances)}</span></div>
             )}
             <div className="bcaja-totals__row bcaja-totals__row--big"><span>{t(row.advances ? "comisiones.colToHand" : "comisiones.colToPay")}</span><span>{fmtSigned(row.totalToPay)}</span></div>
           </div>
