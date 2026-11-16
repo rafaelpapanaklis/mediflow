@@ -513,3 +513,53 @@ test("RONDA 2 · aviso del cierre: cuenta exacta de notas abiertas (también por
   assert.equal((await drafts.listSaleDrafts(B.ctx)).openCount, 51, "y las notas siguen pendientes");
   await cash.openCashSession(B.ctx, { openingAmount: 0 });
 });
+
+// ── Ficha «A» · Pagos (ws6-t3, 16-nov): filtros, turno y quién canceló ──
+//
+// Va al final a propósito: cierra el turno de A para ver que el ticket deja
+// de poder cambiarse o cancelarse (la ficha apaga los botones y el servidor
+// lo rechaza igual).
+
+test("ficha A · Pagos: filtros, turno abierto/cerrado y quién canceló y por qué", { skip }, async () => {
+  const fer = await newClient(A, "Fer");
+  const efectivo = await charge(A, fer);
+  const tarjeta = await charge(A, fer, { paymentMethod: "CARD" });
+  const viejo = await charge(A, fer, { paymentMethod: "SPEI" });
+  const anulado = await charge(A, fer);
+  await cash.cancelSale(A.ctx, anulado.id, { reason: "se cobró dos veces · era prueba" });
+  // Uno de hace 100 días: fuera de «Últimos 90 días».
+  await prisma.barberSale.update({ where: { id: viejo.id }, data: { createdAt: new Date(Date.now() - 100 * 86_400_000) } });
+
+  const todo = await sales.listClientSales(A.ctx, fer);
+  assert.deepEqual(todo.totals, { all: 4, paid: 3, cancelled: 1 });
+  assert.deepEqual(todo.filter, { status: "all", period: "all", method: "all" });
+  const cancelado = todo.rows.find((r) => r.id === anulado.id)!;
+  assert.equal(cancelado.cancelledBy, "Dueña A");
+  assert.equal(cancelado.cancelReason, "se cobró dos veces · era prueba");
+  assert.equal(cancelado.shortId, anulado.id.slice(-6).toUpperCase());
+  for (const r of todo.rows) {
+    assert.equal(r.sessionOpen, true, "turno abierto: se puede cambiar método / cancelar");
+    assert.equal(r.hasSession, true);
+  }
+
+  const f = (status: string, period: string, method: string) =>
+    sales.listClientSales(A.ctx, fer, { filter: { status, period, method } as never });
+  assert.deepEqual((await f("cancelled", "all", "all")).rows.map((r) => r.id), [anulado.id]);
+  const tarjetas = await f("paid", "all", "CARD");
+  assert.deepEqual(tarjetas.rows.map((r) => r.id), [tarjeta.id]);
+  assert.equal(tarjetas.count, 1, "la paginación cuenta lo filtrado");
+  assert.deepEqual(tarjetas.totals, { all: 4, paid: 3, cancelled: 1 }, "las pastillas no cambian con el filtro");
+  assert.equal(tarjetas.summary.spent, todo.summary.spent, "las cifras de arriba no llevan filtro");
+  const recientes = await f("all", "90d", "all");
+  assert.ok(!recientes.rows.some((r) => r.id === viejo.id));
+  assert.equal(recientes.count, 3);
+
+  // Se cierra el turno: la fila lo dice y el servidor ya no deja tocarla.
+  await prisma.barberCashSession.updateMany({ where: { barbershopId: A.id, closedAt: null }, data: { closedAt: new Date() } });
+  const cerrado = await sales.listClientSales(A.ctx, fer);
+  const fila = cerrado.rows.find((r) => r.id === efectivo.id)!;
+  assert.equal(fila.sessionOpen, false);
+  assert.equal(fila.hasSession, true);
+  await assert.rejects(() => cash.cancelSale(A.ctx, efectivo.id, { reason: "tarde" }), /turno/i);
+  await assert.rejects(() => cash.changeSalePaymentMethod(A.ctx, efectivo.id, { paymentMethod: "CARD" }));
+});
