@@ -137,7 +137,7 @@ export default async function BarberPanelLayout({
           contenido (tablas, agenda) y en celular la página entera se desborda;
           con él, cada tabla hace scroll dentro de su propio contenedor. En
           escritorio ya valía 0 por el overflow-y-auto. */}
-      <div className="flex min-h-screen min-w-0 flex-1 flex-col lg:max-h-screen lg:overflow-y-auto">
+      <div className="barber-columna flex min-h-screen min-w-0 flex-1 flex-col lg:max-h-screen lg:overflow-y-auto">
         <BarberTopbar
           rootLabel={t("barber.shell.topbar.root")}
           shopName={ctx.barbershop.name}

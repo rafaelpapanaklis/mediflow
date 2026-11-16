@@ -602,7 +602,9 @@ export function EditorWebBarberia(props: EditorProps) {
               {config.oculta ? t("publicacionOculta") : t("publicacionVisible")}
             </p>
             <Interruptor
-              etiqueta={config.oculta ? t("publicacionEncender") : t("publicacionApagar")}
+              // Etiqueta FIJA que nombra lo que significa encendido (16-nov, Rafael:
+              // «Apagar mi página» encendido junto a «está publicada» se leía al revés).
+              etiqueta={t("publicacionInterruptor")}
               activo={!config.oculta}
               onChange={(v) => cambiar((c) => ({ ...c, oculta: !v }))}
             />
