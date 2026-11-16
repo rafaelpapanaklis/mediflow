@@ -7,6 +7,7 @@ import { getBarberPlan } from "@/lib/barber/plans";
 import { hasBarberPaidAccess } from "@/lib/barber/paid-access";
 import type { BarberNavItem } from "@/lib/barber/types";
 import { resolveBarberNav } from "@/lib/barber/nav";
+import { hasBarberPermission } from "@/lib/barber/permissions";
 import { BARBER_LOGIN_PATH, BARBER_PRODUCT_NAME } from "@/lib/barber/marketing";
 import { BARBER_CHANGE_PASSWORD_PATH } from "@/lib/barber/contrasena";
 import { getBarberT } from "@/i18n/dictionaries/barber";
@@ -67,6 +68,10 @@ export default async function BarberPanelLayout({
   // una entrada que se le quita a alguien desaparece sin recargar. Sin pagar,
   // se recorta a pagar o pedir ayuda (barberNavItemsWhileUnpaid).
   const items: BarberNavItem[] = await resolveBarberNav(ctx, { features: plan.features, paid });
+  // «Administrar sucursales…» del selector de sede (sucursales-menu, ws6-t6) pide branches.manage.
+  // Mismo permUser que nav.ts: hasBarberPermission ya trae el arreglo G1 (BARBER_NO_PERMISSIONS).
+  // Unión pase 22: permisos-audit movió el menú a nav.ts y se llevó el import y permUser que esto usa.
+  const permUser = { role: ctx.role, permissionsOverride: ctx.user.permissionsOverride };
 
   // Sede activa en la barra de arriba (sucursales de verdad, 15-nov). Las
   // opciones son las que la sesión YA alcanza (getAccessibleBranchIds); con
