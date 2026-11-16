@@ -2,6 +2,8 @@
 //
 //   npx tsx --test src/lib/barber/__tests__/aviso-por-sede.test.ts
 import { test } from "node:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import assert from "node:assert/strict";
 import { bookingBlockers, inicioBranchLabel, setupFlags, type InicioBranchSetup } from "@/lib/barber/inicio-avisos";
 
@@ -46,4 +48,9 @@ test("primeros pasos: se juntan solo las sedes activas", () => {
 test("el nombre de la sede: el de sucursal si lo tiene", () => {
   assert.equal(inicioBranchLabel({ name: "Barbería Prueba", branchName: "  Centro " }), "Centro");
   assert.equal(inicioBranchLabel({ name: "Barbería Prueba", branchName: null }), "Barbería Prueba");
+});
+
+test("Sucursales no ofrece «Trabajar en esta sede» en una sede cerrada (dejaba la cookie apuntándole)", () => {
+  const src = readFileSync(join(__dirname, "..", "..", "..", "components", "barber", "branches", "branches-client.tsx"), "utf8");
+  assert.match(src, /\{!isCurrent && b\.isActive \? \(\s*<Btn size="sm" onClick=\{\(\) => workHere\(b\.id\)\}/);
 });
