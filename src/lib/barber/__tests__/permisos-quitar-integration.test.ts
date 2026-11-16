@@ -440,6 +440,36 @@ test("D1 · solo el Dueño nombra o sube Encargados (el Encargado ya no, aunque 
   assert.equal(ctxGerente.team.canAssignOwner, false);
 });
 
+test("D2 · el rol Barbero nunca marca pagos de comisiones, ni con «Administrar comisiones» dado a mano", { skip }, async () => {
+  const { canMarkCommissionsPaid } = await import("../permissions");
+  assert.equal(canMarkCommissionsPaid({ role: "BARBER", permissionsOverride: ["commissions.view", "commissions.manage"] }), false);
+  assert.equal(canMarkCommissionsPaid({ role: "RECEPTION", permissionsOverride: ["commissions.manage"] }), true);
+  assert.equal(canMarkCommissionsPaid({ role: "MANAGER", permissionsOverride: [] }), true);
+
+  const otra = (await prisma.barber.create({ data: { barbershopId: shopId, name: "Otra D2", commissionType: "COMMISSION", commissionPct: new Prisma.Decimal(40) } })).id;
+  for (const b of [barberoId, otra]) {
+    const v = await prisma.barberSale.create({
+      data: { barbershopId: shopId, soldByUserId: uid.dueno, barberId: b, subtotal: new Prisma.Decimal(100), total: new Prisma.Decimal(100), createdAt: new Date(Date.UTC(2026, 10, 9, 18)) },
+    });
+    await prisma.barberCommissionEntry.create({
+      data: { barbershopId: shopId, barberId: b, saleId: v.id, base: new Prisma.Decimal(100), pct: new Prisma.Decimal(50), amount: new Prisma.Decimal(50), periodKey: "2026-11" },
+    });
+  }
+  await dejarCon("barbero", [...BARBER_ROLE_DEFAULT_PERMISSIONS.BARBER, "commissions.manage"]);
+  const pagadas = () => prisma.barberCommissionEntry.count({ where: { barberId: { in: [barberoId, otra] }, paidAt: { not: null } } });
+  const antes = await pagadas();
+  for (const b of [barberoId, otra]) {
+    const r = await como("barbero", "commissions/pay", "POST", { body: { barberId: b, periodKey: "2026-11" } });
+    assert.equal(r.status, 403, `Barbero con el permiso, pagando ${b === barberoId ? "lo suyo" : "a otra"}: ${JSON.stringify(r.body)}`);
+  }
+  assert.equal(await pagadas(), antes, "no se marcó nada");
+  // Quien sí paga: el dueño.
+  const r = await como("dueno", "commissions/pay", "POST", { body: { barberId: otra, periodKey: "2026-11" } });
+  assert.equal(r.status, 200, JSON.stringify(r.body).slice(0, 200));
+  assert.ok((await pagadas()) > antes);
+  await dejarCon("barbero", BARBER_ROLE_DEFAULT_PERMISSIONS.BARBER);
+});
+
 test("ESCALADA · Recepción con «Administrar el equipo» no reparte lo que no tiene ni sube a nadie a Encargado", { skip }, async () => {
   await dejarCon("recepcionEquipo", [...RECEPCION, "team.manage"]);
   const mios = [...RECEPCION, "team.manage"];

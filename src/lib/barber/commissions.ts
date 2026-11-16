@@ -43,6 +43,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { assertBarberPermission, type BarberContext } from "@/lib/barber-auth";
+import { BarberForbiddenError, canMarkCommissionsPaid } from "@/lib/barber/permissions";
 import type {
   BarberCommissionEntryDTO,
   BarberCommissionType,
@@ -959,7 +960,8 @@ export interface CommissionPayoutResult {
  *  · `expectedTotal` (lo que la pantalla le enseñó a quien paga): si ya no
  *    coincide con lo pendiente, 409 PAYOUT_CHANGED y no se marca nada.
  *
- * Requiere commissions.manage; el barbero debe ser de ESTA barbería.
+ * Requiere commissions.manage y NO ser rol Barbero (D2, 16-nov: ni con el
+ * permiso dado a mano); el barbero debe ser de ESTA barbería.
  */
 export async function markCommissionsPaid(
   ctx: BarberContext,
@@ -967,6 +969,9 @@ export async function markCommissionsPaid(
   now: Date = new Date(),
 ): Promise<CommissionPayoutResult> {
   assertBarberPermission(ctx, "commissions.manage");
+  if (!canMarkCommissionsPaid({ role: ctx.role, permissionsOverride: ctx.user.permissionsOverride })) {
+    throw new BarberForbiddenError("commissions.manage");
+  }
   if (!isValidPeriodKey(params.periodKey)) {
     throw new BarberCajaError(400, "INVALID_PERIOD", "Periodo inválido (usa YYYY-MM)");
   }

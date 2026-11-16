@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import "@/components/barber/cash/money.css";
 import { redirect } from "next/navigation";
 import { getBarberContext, hasBarberPermission } from "@/lib/barber-auth";
+import { canMarkCommissionsPaid } from "@/lib/barber/permissions";
 import { requireBarberPaidAccess } from "@/lib/barber/paid-access";
 import { getBarberPlan } from "@/lib/barber/plans";
 import { getBarberDict, getBarberT } from "@/i18n/dictionaries/barber";
@@ -44,7 +45,8 @@ export default async function Page(props: { searchParams: Promise<{ period?: str
       locale={ctx.barbershop.locale}
       summary={summary}
       maxPeriod={current}
-      canManage={hasBarberPermission(permUser, "commissions.manage")}
+      // «Marcar pagado»: commissions.manage y nunca el rol Barbero (D2).
+      canManage={canMarkCommissionsPaid(permUser)}
       noBarberLinked={ctx.role === "BARBER" && !ctx.barber}
     />
   );

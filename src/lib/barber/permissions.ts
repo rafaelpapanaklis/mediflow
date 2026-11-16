@@ -194,6 +194,19 @@ export function hasBarberPermission(
   return resolveBarberPermissions(user.role, user.permissionsOverride).has(key);
 }
 
+/**
+ * ¿Puede marcar comisiones (y sueldos) como PAGADOS? commissions.manage, y
+ * NUNCA con rol Barbero aunque se lo hayan dado a mano (D2, 16-nov): sería
+ * marcarse a sí mismo —o a un compañero— como pagado. Lo usan el servidor
+ * (markCommissionsPaid) y la pantalla de Comisiones (botón «Marcar pagado»).
+ */
+export function canMarkCommissionsPaid(user: {
+  role: BarberRole;
+  permissionsOverride?: string[] | null;
+}): boolean {
+  return user.role !== "BARBER" && hasBarberPermission(user, "commissions.manage");
+}
+
 /** Error tipado que lanzan los asserts; las APIs lo mapean a 403. */
 export class BarberForbiddenError extends Error {
   readonly permission: BarberPermissionKey;
