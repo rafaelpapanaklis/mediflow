@@ -51,6 +51,10 @@ import type {
 // Núcleo puro (sin prisma): no rompe el DAG commissions ← inventory ← cash.
 import { isDepositLine, isMembershipLine } from "@/lib/barber/memberships-core";
 import { isLoyaltyFreeLine } from "@/lib/barber/loyalty-core";
+// Sueldo opcional del barbero (ws6-t6): núcleo puro + SQL crudo que degrada.
+import { activeSalary, salaryForPeriodKey, type BarberSalary, type BarberSalaryPeriod } from "@/lib/barber/sueldo-core";
+import { insertSalaryPayment, loadSalaries, loadSalaryPaid, salaryReady } from "@/lib/barber/sueldo";
+import { randomUUID } from "node:crypto";
 
 // ── Dinero ──────────────────────────────────────────────────────────────
 
@@ -373,7 +377,7 @@ export function computeCommission(barber: CommissionBarberShape, base: Money): C
  */
 export function payoutFor(
   type: BarberCommissionType,
-  parts: { commissionTotal: Money; tips: Money; chairRent: Money | null },
+  parts: { commissionTotal: Money; tips: Money; chairRent: Money | null; salary?: Money | null },
 ): Money {
   switch (type) {
     case "COMMISSION":
@@ -382,7 +386,8 @@ export function payoutFor(
       return money(parts.commissionTotal.minus(parts.chairRent ?? ZERO).plus(parts.tips));
     case "SALARY":
     default:
-      return money(parts.tips);
+      // Con sueldo capturado (ws6-t6), el sueldo del periodo se suma a sus propinas.
+      return money(parts.tips.plus(parts.salary ?? ZERO));
   }
 }
 
@@ -417,6 +422,10 @@ export function splitPayout(
     chairRent: Money | null;
     /** Ya hubo al menos un pago en el periodo. */
     anyPaid: boolean;
+    /** Sueldo del periodo (solo SALARY con monto capturado); null = sin sueldo. */
+    salary?: Money | null;
+    /** Sueldo YA pagado en el periodo (congelado al pagar); null = aún no. */
+    salaryPaid?: Money | null;
   },
 ): PayoutSplit {
   switch (type) {
@@ -438,13 +447,18 @@ export function splitPayout(
       };
     }
     case "SALARY":
-    default:
+    default: {
+      // El sueldo se paga UNA vez por periodo: mientras no haya renglón en
+      // barber_salary_payments va en «a pagar»; después, lo pagado (congelado).
+      const salaryPaid = parts.salaryPaid ?? null;
+      const salaryDue = salaryPaid === null ? money(parts.salary ?? ZERO) : ZERO;
       return {
-        toPay: money(parts.tipsPending),
-        paid: money(parts.tipsPaid),
+        toPay: money(parts.tipsPending.plus(salaryDue)),
+        paid: money(parts.tipsPaid.plus(salaryPaid ?? ZERO)),
         rentDiscounted: false,
         rentPending: null,
       };
+    }
   }
 }
 
@@ -480,6 +494,17 @@ export interface CommissionSummaryRow {
   chairRentDiscounted: boolean;
   /** Renta que todavía se descuenta de «a pagar» (null si no renta silla). */
   chairRentPending: number | null;
+  /** Sueldo capturado en la ficha (aunque hoy no cobre por Sueldo); null = sin sueldo. */
+  salaryAmount: number | null;
+  salaryPeriod: BarberSalaryPeriod | null;
+  /** «Sueldo del periodo»: solo si cobra por Sueldo y tiene monto; null = no aplica. */
+  salaryPeriodTotal: number | null;
+  /** El periodo no cuadra con semanas/quincenas completas: prorrateo por días («aprox.»). */
+  salaryApprox: boolean;
+  /** Sueldo del periodo que todavía va en «a pagar» (0 si ya se pagó; null si no aplica). */
+  salaryPending: number | null;
+  /** Sueldo ya pagado en el periodo (monto congelado al pagar); null = aún no. */
+  salaryPaid: number | null;
   /**
    * A PAGAR = solo lo pendiente: comisión sin pagar + propinas de tickets
    * sin pagar − renta aún no descontada. Es la cifra de la tabla, del
@@ -542,7 +567,20 @@ export function resolveCommissionScope(
  *   PARTIAL → ya hubo un pago y volvió a juntarse algo por pagar.
  *   PAID    → nada pendiente (o solo entradas de $0 sin propina: sueldo fijo).
  */
-function paidStatusOf(a: { entryCount: number; pendingCount: number; paidCount: number; pendingAmount: Money }): CommissionPaidStatus {
+function paidStatusOf(a: {
+  entryCount: number;
+  pendingCount: number;
+  paidCount: number;
+  pendingAmount: Money;
+  /** Sueldo del periodo: null = no aplica; pending = aún no pagado. */
+  salary?: { pending: boolean } | null;
+}): CommissionPaidStatus {
+  // Sueldo (ws6-t6): sin tickets también hay algo que pagar.
+  if (a.salary) {
+    if (a.salary.pending) return a.paidCount > 0 ? "PARTIAL" : "PENDING";
+    if (a.pendingCount === 0 || a.pendingAmount.isZero()) return "PAID";
+    return "PARTIAL";
+  }
   if (a.entryCount === 0) return "EMPTY";
   if (a.pendingCount === 0 || a.pendingAmount.isZero()) return "PAID";
   return a.paidCount > 0 ? "PARTIAL" : "PENDING";
@@ -550,7 +588,14 @@ function paidStatusOf(a: { entryCount: number; pendingCount: number; paidCount: 
 
 // ── Libro del periodo: UNA sola cuenta para tabla, diálogo, recibo y pago ──
 
-type Db = Pick<Prisma.TransactionClient, "barber" | "barberSale" | "barberCommissionEntry">;
+type Db = Pick<Prisma.TransactionClient, "barber" | "barberSale" | "barberCommissionEntry" | "$queryRaw" | "$executeRaw">;
+
+/** Sueldo de cada barbero para el libro del periodo (vacío si el SQL no está pegado). */
+interface LedgerSalaries {
+  ready: boolean;
+  salaries: Map<string, BarberSalary | null>;
+  paid: Map<string, { amount: Prisma.Decimal; paidAt: Date }>;
+}
 
 const LEDGER_BARBER_SELECT = {
   id: true,
@@ -585,7 +630,7 @@ interface LedgerEntry {
 async function loadLedger(
   db: Db,
   args: { barbershopId: string; barberIds: string[] | null; periodKey: string; tz: string },
-): Promise<{ barbers: LedgerBarber[]; sales: LedgerSale[]; entries: LedgerEntry[] }> {
+): Promise<{ barbers: LedgerBarber[]; sales: LedgerSale[]; entries: LedgerEntry[]; salaries: LedgerSalaries }> {
   const { start, end } = periodRange(args.periodKey, args.tz);
   const barberWhere: Prisma.BarberWhereInput = { barbershopId: args.barbershopId };
   if (args.barberIds) barberWhere.id = { in: args.barberIds };
@@ -620,7 +665,14 @@ async function loadLedger(
       select: { id: true, barberId: true, saleId: true, base: true, amount: true, paidAt: true },
     }),
   ]);
-  return { barbers, sales, entries };
+  const salaries: LedgerSalaries = { ready: false, salaries: new Map(), paid: new Map() };
+  if (barbers.length > 0 && (await salaryReady(db))) {
+    const ids = barbers.map((b) => b.id);
+    salaries.ready = true;
+    salaries.salaries = await loadSalaries(db, ids);
+    salaries.paid = await loadSalaryPaid(db, { barbershopId: args.barbershopId, barberIds: ids, periodKey: args.periodKey });
+  }
+  return { barbers, sales, entries, salaries };
 }
 
 /** Fila del barbero + los ids de las entradas que un pago marcaría ahora. */
@@ -628,7 +680,8 @@ function ledgerRowFor(
   b: LedgerBarber,
   sales: LedgerSale[],
   entries: LedgerEntry[],
-): { row: CommissionSummaryRow; pendingEntryIds: string[] } {
+  sal: { salaries: LedgerSalaries; periodKey: string },
+): { row: CommissionSummaryRow; pendingEntryIds: string[]; salaryDue: { amount: Money; approx: boolean; salary: BarberSalary } | null } {
   let ticketCount = 0;
   let services = ZERO;
   let products = ZERO;
@@ -682,6 +735,13 @@ function ledgerRowFor(
   const tipsPending = tips.minus(tipsPaid);
 
   const chairRent = b.commissionType === "CHAIR_RENT" ? money(b.chairRent ?? 0) : null;
+
+  // Sueldo del periodo (ws6-t6): cuenta SOLO si hoy cobra por Sueldo.
+  const savedSalary = sal.salaries.salaries.get(b.id) ?? null;
+  const salary = activeSalary(b.commissionType, savedSalary);
+  const salaryOfPeriod = salary ? salaryForPeriodKey(salary, sal.periodKey) : null;
+  const salaryPaidRow = salary ? sal.salaries.paid.get(b.id) ?? null : null;
+
   const split = splitPayout(b.commissionType, {
     commissionPending: pending,
     commissionPaid: paid,
@@ -689,7 +749,11 @@ function ledgerRowFor(
     tipsPaid,
     chairRent,
     anyPaid: paidCount > 0,
+    salary: salaryOfPeriod ? salaryOfPeriod.amount : null,
+    salaryPaid: salaryPaidRow ? salaryPaidRow.amount : null,
   });
+  const salaryPending = salaryOfPeriod && !salaryPaidRow ? money(salaryOfPeriod.amount) : null;
+  if (salaryPaidRow && (!lastPaidAt || salaryPaidRow.paidAt > lastPaidAt)) lastPaidAt = salaryPaidRow.paidAt;
 
   const row: CommissionSummaryRow = {
     barberId: b.id,
@@ -713,6 +777,12 @@ function ledgerRowFor(
     tipsPending: toNum(tipsPending),
     chairRentDiscounted: split.rentDiscounted,
     chairRentPending: split.rentPending === null ? null : toNum(split.rentPending),
+    salaryAmount: savedSalary ? savedSalary.amount : null,
+    salaryPeriod: savedSalary ? savedSalary.period : null,
+    salaryPeriodTotal: salaryOfPeriod ? toNum(salaryPaidRow ? salaryPaidRow.amount : salaryOfPeriod.amount) : null,
+    salaryApprox: salaryOfPeriod ? salaryOfPeriod.approx : false,
+    salaryPending: salaryOfPeriod ? toNum(salaryPending ?? ZERO) : null,
+    salaryPaid: salaryPaidRow ? toNum(salaryPaidRow.amount) : null,
     totalToPay: toNum(split.toPay),
     paidTotal: toNum(split.paid),
     periodTotal: toNum(split.toPay.plus(split.paid)),
@@ -721,11 +791,16 @@ function ledgerRowFor(
       pendingCount: pendingEntryIds.length,
       paidCount,
       pendingAmount: pending.plus(tipsPending),
+      salary: salaryOfPeriod && salaryOfPeriod.amount.gt(0) ? { pending: salaryPending !== null } : null,
     }),
     lastPaidAt: lastPaidAt ? lastPaidAt.toISOString() : null,
     entryCount,
   };
-  return { row, pendingEntryIds };
+  const salaryDue =
+    salary && salaryOfPeriod && salaryPending !== null && salaryPending.gt(0)
+      ? { amount: salaryPending, approx: salaryOfPeriod.approx, salary }
+      : null;
+  return { row, pendingEntryIds, salaryDue };
 }
 
 export async function getCommissionSummary(
@@ -742,13 +817,13 @@ export async function getCommissionSummary(
   const barbershopId = ctx.barbershopId;
   const policy = await getCommissionPolicy(barbershopId);
 
-  const { barbers, sales, entries } = await loadLedger(prisma, {
+  const { barbers, sales, entries, salaries } = await loadLedger(prisma, {
     barbershopId,
     barberIds: scope.barberIds,
     periodKey,
     tz,
   });
-  const rows = barbers.map((b) => ledgerRowFor(b, sales, entries).row);
+  const rows = barbers.map((b) => ledgerRowFor(b, sales, entries, { salaries, periodKey }).row);
 
   const totals = rows.reduce(
     (t, r) => ({
@@ -909,7 +984,7 @@ export async function markCommissionsPaid(
     async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`dcb:pay:${barbershopId}:${params.barberId}:${params.periodKey}`}))`;
 
-      const { barbers, sales, entries } = await loadLedger(tx, {
+      const { barbers, sales, entries, salaries } = await loadLedger(tx, {
         barbershopId,
         barberIds: [params.barberId],
         periodKey: params.periodKey,
@@ -918,8 +993,11 @@ export async function markCommissionsPaid(
       const barber = barbers[0];
       if (!barber) throw new BarberCajaError(404, "BARBER_NOT_FOUND", "Barbero no encontrado");
 
-      const { row, pendingEntryIds } = ledgerRowFor(barber, sales, entries);
-      if (pendingEntryIds.length === 0) {
+      const { row, pendingEntryIds, salaryDue } = ledgerRowFor(barber, sales, entries, {
+        salaries,
+        periodKey: params.periodKey,
+      });
+      if (pendingEntryIds.length === 0 && !salaryDue) {
         return { marked: 0, paidAt: now.toISOString(), paidAmount: 0 };
       }
       if (expected !== null && !expected.equals(money(row.totalToPay))) {
@@ -931,11 +1009,29 @@ export async function markCommissionsPaid(
         );
       }
 
-      const r = await tx.barberCommissionEntry.updateMany({
-        where: { id: { in: pendingEntryIds }, barbershopId, barberId: params.barberId, paidAt: null },
-        data: { paidAt: now },
-      });
-      return { marked: r.count, paidAt: now.toISOString(), paidAmount: row.totalToPay };
+      const r =
+        pendingEntryIds.length > 0
+          ? await tx.barberCommissionEntry.updateMany({
+              where: { id: { in: pendingEntryIds }, barbershopId, barberId: params.barberId, paidAt: null },
+              data: { paidAt: now },
+            })
+          : { count: 0 };
+      // El sueldo del periodo se paga en el MISMO pago (mismo candado y misma transacción).
+      let salaryMarked = false;
+      if (salaryDue) {
+        salaryMarked = await insertSalaryPayment(tx, {
+          id: randomUUID(),
+          barbershopId,
+          barberId: params.barberId,
+          periodKey: params.periodKey,
+          amount: salaryDue.amount,
+          approx: salaryDue.approx,
+          salary: salaryDue.salary,
+          paidAt: now,
+          paidByUserId: ctx.barberUserId ?? null,
+        });
+      }
+      return { marked: r.count + (salaryMarked ? 1 : 0), paidAt: now.toISOString(), paidAmount: row.totalToPay };
     },
     { maxWait: 5000, timeout: 15000 },
   );

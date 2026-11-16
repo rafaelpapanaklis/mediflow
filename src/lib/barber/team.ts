@@ -23,6 +23,8 @@ import {
 import { normalizarConfigBarberWeb, turnosDesdeHorarioDelLocal } from "@/lib/barber/landing";
 import { BARBER_NON_BLOCKING_STATUSES } from "@/lib/barber/agenda";
 import { getBarberPlan } from "@/lib/barber/plans";
+import { parseSalaryInput, type BarberSalary, type BarberSalaryPeriod, type SalaryInputError } from "@/lib/barber/sueldo-core";
+import { loadSalaries, salaryReady, saveSalary } from "@/lib/barber/sueldo";
 import { barberPlanHasFeature, isBarberUnlimited } from "@/lib/barber/plan-shared";
 import type { BarberCommissionType, BarberRole } from "@/lib/barber/types";
 import {
@@ -216,6 +218,12 @@ export interface BarberProfileRow {
   linkedUserIds: string[];
   /** Activo y sin un solo día de trabajo: no aparece para reservar. */
   noSchedule: boolean;
+  /**
+   * Sueldo capturado (ws6-t6). Se conserva aunque cobre por Comisión o Renta;
+   * solo CUENTA con commissionType SALARY. null = sin sueldo o SQL sin pegar.
+   */
+  salaryAmount: number | null;
+  salaryPeriod: BarberSalaryPeriod | null;
 }
 
 export interface BarberProfileInput {
@@ -228,6 +236,9 @@ export interface BarberProfileInput {
   chairRent?: unknown;
   isActive?: unknown;
   barbershopId?: unknown;
+  /** Opcionales (ws6-t6): monto vacío = sin sueldo. Ausentes = no se tocan. */
+  salaryAmount?: unknown;
+  salaryPeriod?: unknown;
 }
 
 const BARBER_SELECT = {
@@ -282,7 +293,44 @@ function toBarberRow(r: BarberRowRaw): BarberProfileRow {
     createdAt: r.createdAt.toISOString(),
     linkedUserIds: r.users.map((u) => u.id),
     noSchedule: r.isActive && (r._count?.schedules ?? 1) === 0,
+    salaryAmount: null,
+    salaryPeriod: null,
   };
+}
+
+// ── Sueldo (ws6-t6) ─────────────────────────────────────────────────────
+
+const SALARY_ERRORS: Record<SalaryInputError, string> = {
+  amountBad: "El sueldo debe ser un monto en pesos, con máximo 2 decimales.",
+  amountZero: "El sueldo debe ser mayor a $0. Déjalo vacío si no trae sueldo.",
+  periodMissing: "Elige cada cuándo se le paga el sueldo: semanal, quincenal o mensual.",
+};
+
+/**
+ * Lo que pidió el formulario para el sueldo: undefined = no lo tocó (o el SQL
+ * no está pegado: entonces se ignora y todo sigue como hoy). Lanza 400 claro.
+ */
+async function salaryFromInput(input: BarberProfileInput): Promise<BarberSalary | null | undefined> {
+  if (input.salaryAmount === undefined && input.salaryPeriod === undefined) return undefined;
+  if (!(await salaryReady(prisma))) return undefined;
+  const parsed = parseSalaryInput(input.salaryAmount, input.salaryPeriod);
+  if (!parsed.ok) throw new BarberAdminError(SALARY_ERRORS[parsed.error], 400);
+  return parsed.salary;
+}
+
+/** Pega el sueldo guardado a las filas (sin SQL pegado, quedan en null). */
+async function withSalaries(rows: BarberProfileRow[]): Promise<BarberProfileRow[]> {
+  if (rows.length === 0 || !(await salaryReady(prisma))) return rows;
+  const map = await loadSalaries(prisma, rows.map((r) => r.id));
+  return rows.map((r) => {
+    const sal = map.get(r.id) ?? null;
+    return sal ? { ...r, salaryAmount: sal.amount, salaryPeriod: sal.period } : r;
+  });
+}
+
+async function saveAndReturn(row: BarberProfileRow, salary: BarberSalary | null | undefined): Promise<BarberProfileRow> {
+  if (salary !== undefined) await saveSalary(prisma, row.id, salary);
+  return (await withSalaries([row]))[0];
 }
 
 /** URL de foto: solo http/https y longitud sana (se pinta en la mini-web). */
@@ -391,7 +439,7 @@ export async function listBarbers(
     select: BARBER_SELECT,
     orderBy: [{ isActive: "desc" }, { sortOrder: "asc" }, { createdAt: "asc" }],
   });
-  return rows.map((r) => toBarberRow(r as BarberRowRaw));
+  return withSalaries(rows.map((r) => toBarberRow(r as BarberRowRaw)));
 }
 
 export async function createBarberProfile(
@@ -413,6 +461,7 @@ export async function createBarberProfile(
 
   const barbershopId = await targetBranchId(ctx, input.barbershopId);
   const pay = payFields(input);
+  const salary = await salaryFromInput(input);
 
   const last = await prisma.barber.findFirst({
     where: { barbershopId },
@@ -434,7 +483,7 @@ export async function createBarberProfile(
     select: BARBER_SELECT,
   });
   await heredarHorarioDelLocal(barbershopId, created.id, created.isActive === true);
-  return toBarberRow(created as BarberRowRaw);
+  return saveAndReturn(toBarberRow(created as BarberRowRaw), salary);
 }
 
 /**
@@ -492,6 +541,8 @@ export async function updateBarberProfile(
     },
   });
   if (!current) throw new BarberAdminError("Barbero no encontrado.", 404);
+  // Sueldo: se valida ANTES de escribir nada (ws6-t6).
+  const salary = await salaryFromInput(input);
 
   // Cambio de sede (L3 ronda 2, D4): solo sin citas futuras. Si las tiene, se
   // dice cuántas y no se mueve nada (las citas son de la sede donde se apartaron).
@@ -565,7 +616,7 @@ export async function updateBarberProfile(
       }),
       prisma.barber.update({ where: { id: barberId }, data, select: BARBER_SELECT }),
     ]);
-    return toBarberRow(updated as BarberRowRaw);
+    return saveAndReturn(toBarberRow(updated as BarberRowRaw), salary);
   }
 
   const updated = await prisma.barber.update({
@@ -573,7 +624,7 @@ export async function updateBarberProfile(
     data,
     select: BARBER_SELECT,
   });
-  return toBarberRow(updated as BarberRowRaw);
+  return saveAndReturn(toBarberRow(updated as BarberRowRaw), salary);
 }
 
 /** «Tiene 3 citas próximas…»: el porqué de no moverlo de sede (puro, probado). */
