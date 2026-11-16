@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import toast from "react-hot-toast";
 import {
+  ArrowLeftRight,
   Banknote,
   CreditCard,
   Landmark,
@@ -17,7 +18,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { Dictionary } from "@/i18n/t";
-import type { CashState, CheckoutContext, PendingAppointment, SaleRow } from "@/lib/barber/cash";
+import type { CashSessionRow, CashState, CheckoutContext, PendingAppointment, SaleRow } from "@/lib/barber/cash";
 import { sumMoneyBy } from "@/lib/barber/money";
 import type { BarberPaymentMethod } from "@/lib/barber/types";
 import { CardNew } from "@/components/ui/design-system/card-new";
@@ -29,14 +30,17 @@ import { TicketModal } from "./ticket-modal";
 import type { SaleDraftList, SaleDraftRow } from "@/lib/barber/sale-drafts";
 import { SaleDraftsList } from "@/components/barber/clients/sale-drafts-list";
 import { ClientChargeBridge } from "@/components/barber/clients/client-charge-bridge";
-import { CancelSaleModal, CloseSessionModal, OpenSessionModal } from "./session-modals";
+import { CancelSaleModal, ChangeMethodModal, CloseSessionModal, OpenSessionModal } from "./session-modals";
+import { SessionDetailModal } from "./session-detail";
 
 type ModalState =
   | { kind: "none" }
   | { kind: "ticket"; appointment: PendingAppointment | null }
   | { kind: "open" }
   | { kind: "close" }
-  | { kind: "cancel"; sale: SaleRow };
+  | { kind: "cancel"; sale: SaleRow }
+  | { kind: "method"; sale: SaleRow }
+  | { kind: "history"; row: CashSessionRow };
 
 const METHOD_ICON: Record<BarberPaymentMethod, LucideIcon> = {
   CASH: Banknote,
@@ -44,6 +48,24 @@ const METHOD_ICON: Record<BarberPaymentMethod, LucideIcon> = {
   SPEI: Landmark,
   STRIPE: CreditCard,
 };
+
+/** "2026-11-15" del instante en la zona de la barbería (para saber si una cita es de hoy). */
+function dayKey(iso: string, tz: string): string {
+  try {
+    return new Intl.DateTimeFormat("en-CA", { year: "numeric", month: "2-digit", day: "2-digit", timeZone: tz }).format(new Date(iso));
+  } catch {
+    return iso.slice(0, 10);
+  }
+}
+
+/** "13 nov" en la zona de la barbería. */
+function fmtShortDate(iso: string, tz: string): string {
+  try {
+    return new Date(iso).toLocaleDateString("es-MX", { day: "numeric", month: "short", weekday: "short", timeZone: tz });
+  } catch {
+    return iso.slice(0, 10);
+  }
+}
 
 export function CajaClient({
   dict,
@@ -78,6 +100,7 @@ export function CajaClient({
 
   const open = state.open;
   const tz = state.timezone;
+  const todayKey = dayKey(new Date().toISOString(), tz);
   const methodLabel = (m: BarberPaymentMethod) => t(PAYMENT_METHOD_KEYS[m]);
 
   return (
@@ -156,7 +179,7 @@ export function CajaClient({
 
       {/* Citas por cobrar | Tickets del turno */}
       <div className="bcaja-cols">
-        <CardNew title={t("caja.pendingTitle")} sub={open ? undefined : t("caja.needsSession")}>
+        <CardNew id="citas-por-cobrar" title={t("caja.pendingTitle")} sub={open ? undefined : t("caja.needsSession")}>
           {checkout.pendingAppointments.length === 0 ? (
             <p className="bcaja-hint" style={{ margin: 0 }}>{t("caja.pendingEmpty")}</p>
           ) : (
@@ -169,6 +192,11 @@ export function CajaClient({
                       <span className="bcaja-appt__time">{fmtTime(a.startAt, tz)}</span>
                       <div style={{ minWidth: 0 }}>
                         <div className="bcaja-appt__name">{a.clientName ?? t("caja.walkIn")}</div>
+                        {dayKey(a.startAt, tz) !== todayKey ? (
+                          <div className="bcaja-appt__meta" style={{ color: "var(--warning, var(--text-1))", fontWeight: 600 }}>
+                            {t("caja.pendingOlder", { date: fmtShortDate(a.startAt, tz) })}
+                          </div>
+                        ) : null}
                         <div className="bcaja-appt__meta">
                           {a.services.map((s) => s.name).join(", ")}
                           {a.barberName ? ` · ${a.barberName}` : ""}
@@ -224,7 +252,14 @@ export function CajaClient({
                       <td data-label={t("caja.colItems")} style={{ whiteSpace: "normal", maxWidth: 260 }}>
                         {s.cancelled ? <BadgeNew tone="neutral">{t("common.cancelled")}</BadgeNew> : s.itemsSummary}
                       </td>
-                      <td data-label={t("caja.colMethod")}>{methodLabel(s.paymentMethod)}</td>
+                      <td data-label={t("caja.colMethod")}>
+                        {methodLabel(s.paymentMethod)}
+                        {(s.methodChanges ?? []).length > 0 ? (
+                          <span className="bcaja-muted" style={{ display: "block", fontSize: 11.5 }} title={(s.methodChanges ?? []).map((m) => t("caja.changedBy", { from: methodLabel(m.from), to: methodLabel(m.to), name: m.by, time: fmtTime(m.at, tz) })).join("\n")}>
+                            {t("caja.changedFrom", { method: methodLabel(s.methodChanges[0].from) })}
+                          </span>
+                        ) : null}
+                      </td>
                       <td className="bcaja-num" data-label={t("caja.colTip")}>{fmtMoney(s.tip)}</td>
                       <td className="bcaja-num" data-label={t("caja.colTotal")}><strong>{fmtMoney(s.total)}</strong></td>
                       <td>
@@ -232,6 +267,11 @@ export function CajaClient({
                           <Link href={`/barber/caja/ticket/${s.id}`} className="icon-btn-new" title={t("caja.view")} aria-label={t("caja.view")}>
                             <Printer size={13} />
                           </Link>
+                          {canManage && !s.cancelled && s.paymentMethod !== "STRIPE" && (
+                            <button type="button" className="icon-btn-new" title={t("caja.changeMethod")} aria-label={t("caja.changeMethod")} onClick={() => setModal({ kind: "method", sale: s })}>
+                              <ArrowLeftRight size={13} />
+                            </button>
+                          )}
                           {canManage && !s.cancelled && (
                             <button type="button" className="icon-btn-new" title={t("caja.cancelTicket")} aria-label={t("caja.cancelTicket")} onClick={() => setModal({ kind: "cancel", sale: s })}>
                               <XCircle size={13} />
@@ -283,6 +323,7 @@ export function CajaClient({
                   <th className="bcaja-num">{t("caja.colExpected")}</th>
                   <th className="bcaja-num">{t("caja.colCounted")}</th>
                   <th className="bcaja-num">{t("caja.colDifference")}</th>
+                  <th />
                 </tr>
               </thead>
               <tbody>
@@ -299,6 +340,13 @@ export function CajaClient({
                       {h.difference === null ? "—" : (
                         <BadgeNew tone={h.difference === 0 ? "success" : h.difference > 0 ? "info" : "danger"}>{fmtSigned(h.difference)}</BadgeNew>
                       )}
+                    </td>
+                    <td>
+                      <span className="bcaja-row-actions">
+                        <button type="button" className="icon-btn-new" title={t("caja.historyView")} aria-label={t("caja.historyView")} onClick={() => setModal({ kind: "history", row: h })}>
+                          <Receipt size={13} />
+                        </button>
+                      </span>
                     </td>
                   </tr>
                 ))}
@@ -359,8 +407,24 @@ export function CajaClient({
           summary={open}
           tz={tz}
           openDrafts={drafts?.ready ? drafts.openCount : 0}
+          pendingAppointments={checkout.pendingAppointments.length}
           onClose={closeModal}
           onDone={() => {
+            closeModal();
+            refresh();
+          }}
+        />
+      )}
+      {modal.kind === "history" && (
+        <SessionDetailModal dict={dict} row={modal.row} tz={tz} onClose={closeModal} />
+      )}
+      {modal.kind === "method" && (
+        <ChangeMethodModal
+          dict={dict}
+          sale={modal.sale}
+          onClose={closeModal}
+          onDone={(m) => {
+            toast.success(t("caja.changeMethodDone", { method: methodLabel(m) }));
             closeModal();
             refresh();
           }}

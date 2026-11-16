@@ -13,6 +13,7 @@
  * REGLA DE DINERO: nada de float. Todo el dinero se maneja aquí como
  * ENTEROS de centavos y se convierte a Prisma.Decimal en la frontera de BD.
  */
+import { METHOD_CHANGE_PREFIX } from "@/lib/barber/method-change-core";
 import type {
   BarberClientMembershipStatus,
   BarberPaymentMethod,
@@ -511,13 +512,16 @@ export function parseSaleTag(notes: string | null | undefined): BarberSaleTag | 
   return null;
 }
 
-/** Las notas SIN el sello (lo único que se le enseña a una persona). */
+/**
+ * Las notas SIN el sello ni la bitácora de cambios de método (lo único que se
+ * le enseña a una persona).
+ */
 export function stripSaleTag(notes: string | null | undefined): string | null {
   if (typeof notes !== "string") return null;
-  if (notes.indexOf(BARBER_SALE_TAG_PREFIX) < 0) return notes;
+  if (notes.indexOf(BARBER_SALE_TAG_PREFIX) < 0 && notes.indexOf(METHOD_CHANGE_PREFIX) < 0) return notes;
   const kept = notes
     .split("\n")
-    .filter((line) => !line.startsWith(BARBER_SALE_TAG_PREFIX))
+    .filter((line) => !line.startsWith(BARBER_SALE_TAG_PREFIX) && !line.startsWith(METHOD_CHANGE_PREFIX))
     .join("\n")
     .trim();
   return kept || null;
