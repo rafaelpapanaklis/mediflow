@@ -527,12 +527,13 @@ test("4 · Caja: «+1 estrella para X: lleva N de M», y avisa cuando alcanza un
   assert.equal(productoSolo, null);
 });
 
-test("4 · dar y quitar estrella a mano: motivo obligatorio, quién y cuándo; nunca por debajo de 0", { skip }, async () => {
+test("4 · dar y quitar estrella a mano: motivo opcional (hasta 200), quién y cuándo; nunca por debajo de 0", { skip }, async () => {
   const { stars, starsRoute } = await load();
   const rita = await staffCtx(A, "RECEPTION");
   const lu = await withStars(A, "Lu", 0);
 
-  await assert.rejects(stars.adjustClientStars(rita, { clientId: lu, delta: 1, reason: " " }), isStarsError("REASON_REQUIRED"));
+  // El motivo es opcional, pero el tope de 200 se queda.
+  await assert.rejects(stars.adjustClientStars(rita, { clientId: lu, delta: 1, reason: "x".repeat(201) }), isStarsError("INVALID_INPUT"));
   await assert.rejects(stars.adjustClientStars(rita, { clientId: lu, delta: -1, reason: "error" }), isStarsError("NO_STARS"));
   await assert.rejects(stars.adjustClientStars(rita, { clientId: lu, delta: 5, reason: "regalo" }), isStarsError("INVALID_INPUT"));
 
@@ -563,6 +564,20 @@ test("4 · dar y quitar estrella a mano: motivo obligatorio, quién y cuándo; n
 
   session = await staffCtx(A, "BARBER", A.barberId);
   assert.equal((await call({ action: "adjust", delta: 1, reason: "quiero" })).status, 403, "Barbero: no cobra, no da estrellas");
+
+  // Sin motivo: pasa (vacío, solo espacios o sin el campo) y el historial lo
+  // enseña sin motivo, con quién.
+  const sinMotivo = await withStars(A, "Sin Motivo", 0);
+  const v1 = await stars.adjustClientStars(rita, { clientId: sinMotivo, delta: 1, reason: "   " });
+  assert.equal(v1.stars, 1);
+  assert.equal(v1.history[0].note, null, "sin motivo: note null, no un texto vacío");
+  assert.equal(v1.history[0].by, "Rita Staff");
+  session = rita;
+  const porRuta = await starsRoute.POST(new Request(`http://localhost/api/barber/clients/${sinMotivo}/stars`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "adjust", delta: 1 }),
+  }), { params: Promise.resolve({ id: sinMotivo }) });
+  assert.equal(porRuta.status, 200, "la ruta acepta dar estrella sin el campo reason");
+  assert.equal((await view(A, sinMotivo))?.stars, 2);
 });
 
 // ── 5. La barbería aplica el bono ──────────────────────────────────────

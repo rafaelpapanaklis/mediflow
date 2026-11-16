@@ -62,7 +62,7 @@
     "remove": "Remove star",
     "giveTitle": "Give {name} a star",
     "removeTitle": "Remove a star from {name}",
-    "reason": "Reason (required)",
+    "reason": "Reason (optional)",
     "reasonHint": "It stays in the history with your name and the time.",
     "reasonPlaceholderGive": "e.g. Brought a friend",
     "reasonPlaceholderRemove": "e.g. Added by mistake",
