@@ -99,10 +99,15 @@
       "body": "Tu liga de reservas ya funciona, pero sin horarios le dice a la gente que no hay lugar. Carga el horario de al menos un barbero y se arregla solo.",
       "bodyPublished": "Tu página ya está publicada y la reserva en línea está activa, pero sin horarios le dice a la gente que no hay lugar. Carga el horario de al menos un barbero y se arregla solo.",
       "cta": "Cargar horarios ahora",
-      "askOwner": "Pídele al dueño o al encargado que cargue los horarios."
+      "askOwner": "Pídele al dueño o al encargado que cargue los horarios.",
+      "titleSede": "En {sede} nadie puede reservar en línea: no hay ni un horario cargado",
+      "titleNoBarbers": "{sede} no tiene barberos: nadie puede reservar en línea ahí",
+      "bodyNoBarbers": "La liga de reservas de esa sede le dice a la gente que no hay lugar. Da de alta al menos un barbero con su horario y se arregla solo.",
+      "ctaBarbers": "Dar de alta un barbero"
     },
     "setup": {
       "title": "Tu barbería está lista para arrancar",
+      "titleSede": "{sede}: lista para arrancar",
       "body": "Estos son los primeros pasos. En cuanto cobres la primera visita, aquí verás el resumen del día.",
       "done": "Listo",
       "pending": "Pendiente",

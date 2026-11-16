@@ -64,6 +64,13 @@ import { NOT_CANCELLED } from "@/lib/barber/clients";
 import { BARBER_DEPOSIT_LINE_PREFIX, BARBER_DEPOSIT_REFUND_LINE_PREFIX } from "@/lib/barber/memberships-core";
 import { BARBER_DEFAULT_DAY_END_MIN, BARBER_DEFAULT_DAY_START_MIN } from "@/lib/barber/agenda";
 import { BARBER_REQUEST_SOURCES } from "@/lib/barber/whatsapp-core";
+import {
+  bookingBlockers,
+  inicioBranchLabel,
+  setupFlags,
+  type BookingBlocker,
+  type InicioBranchSetup,
+} from "@/lib/barber/inicio-avisos";
 import type {
   BarberAppointmentStatus,
   BarberCommissionType,
@@ -353,6 +360,16 @@ export interface InicioSetup {
    * contexto: el resumen no lleva textos libres, solo números y banderas.)
    */
   bookingBlocked: boolean;
+  /**
+   * Sedes ACTIVAS del alcance donde nadie puede reservar, con su nombre y el
+   * motivo (sin barberos / sin horario). Una sede cerrada nunca sale aquí.
+   */
+  bookingBlockers: BookingBlocker[];
+  /** Sede que OPERAN Agenda, Horarios y Caja (ctx.barbershopId). */
+  operatingBranchId: string;
+  operatingBranchLabel: string;
+  /** Nombre de la sede que se ve (null en «Toda la cadena»). */
+  viewingLabel: string | null;
 }
 
 export interface InicioSummary {
@@ -486,6 +503,18 @@ export interface InicioOptions extends StatsScopeInput {
  * arranque en un solo SELECT, turno abierto con sus totales) más las 1-2 de
  * resolveBranchScope. Nada se lee por fila.
  */
+interface BranchSetupRow {
+  id: string;
+  name: string;
+  branchName: string | null;
+  slug: string;
+  isActive: boolean;
+  has_barbers: boolean;
+  has_schedules: boolean;
+  has_services: boolean;
+  has_web: boolean;
+}
+
 export async function getInicioSummary(ctx: BarberContext, opts: InicioOptions = {}): Promise<InicioSummary> {
   const now = opts.now ?? new Date();
   const tz = tzOf(ctx);
@@ -513,6 +542,21 @@ export async function getInicioSummary(ctx: BarberContext, opts: InicioOptions =
 
   const ids = Prisma.join(branchIds);
   const cashShopId = scope.activeBranchId ?? ctx.barbershopId;
+
+  // Avisos de configuración POR SEDE (ws6-t6, 16-nov): una fila por sede del
+  // alcance más la que opera la sesión, para poder nombrarlas.
+  const sedeIds = Prisma.join(Array.from(new Set([...branchIds, ctx.barbershopId])));
+  const branchRowsPromise = prisma.$queryRaw<BranchSetupRow[]>`
+    SELECT s."id", s."name", s."branchName", s."slug", s."isActive",
+      EXISTS (SELECT 1 FROM "barber_barbers" b WHERE b."barbershopId" = s."id" AND b."isActive" = TRUE) AS has_barbers,
+      EXISTS (SELECT 1 FROM "barber_schedules" sc
+                JOIN "barber_barbers" b ON b."id" = sc."barberId" AND b."isActive" = TRUE
+              WHERE sc."barbershopId" = s."id" AND sc."isActive" = TRUE) AS has_schedules,
+      EXISTS (SELECT 1 FROM "barber_services" sv WHERE sv."barbershopId" = s."id" AND sv."isActive" = TRUE) AS has_services,
+      EXISTS (SELECT 1 FROM "barber_landing_configs" l WHERE l."barbershopId" = s."id" AND l."publishedAt" IS NOT NULL) AS has_web
+    FROM "barber_shops" s
+    WHERE s."id" IN (${sedeIds})
+  `;
 
   const [dayRows, todayAppointments, queueGroups, alertsRows, openSessionRows] = await Promise.all([
     prisma.$queryRaw<DayMoneyRow[]>`
@@ -563,11 +607,13 @@ export async function getInicioSummary(ctx: BarberContext, opts: InicioOptions =
     prisma.$queryRaw<AlertsRow[]>`
       SELECT
         (SELECT COUNT(*)::int FROM "barber_barbers" b
+           JOIN "barber_shops" bs ON bs."id" = b."barbershopId" AND bs."isActive" = TRUE
            WHERE b."barbershopId" IN (${ids}) AND b."isActive" = TRUE
              AND NOT EXISTS (SELECT 1 FROM "barber_schedules" sc WHERE sc."barberId" = b."id" AND sc."isActive" = TRUE)
         ) AS barbers_no_schedule,
         (SELECT string_agg(x."name", '|' ORDER BY x."name") FROM (
            SELECT b."name" FROM "barber_barbers" b
+           JOIN "barber_shops" bs ON bs."id" = b."barbershopId" AND bs."isActive" = TRUE
            WHERE b."barbershopId" IN (${ids}) AND b."isActive" = TRUE
              AND NOT EXISTS (SELECT 1 FROM "barber_schedules" sc WHERE sc."barberId" = b."id" AND sc."isActive" = TRUE)
            ORDER BY b."name" LIMIT 3) x
@@ -640,6 +686,22 @@ export async function getInicioSummary(ctx: BarberContext, opts: InicioOptions =
       : Promise.resolve([] as OpenSessionRow[]),
   ]);
   const openSession = openSessionRows[0] ?? null;
+  const branchRows = await branchRowsPromise;
+  const branchSetups: InicioBranchSetup[] = branchRows.map((b) => ({
+    id: b.id,
+    label: inicioBranchLabel({ name: b.name, branchName: b.branchName }),
+    slug: b.slug,
+    isActive: b.isActive,
+    hasBarbers: Boolean(b.has_barbers),
+    hasSchedules: Boolean(b.has_schedules),
+    hasServices: Boolean(b.has_services),
+    hasWeb: Boolean(b.has_web),
+  }));
+  const enAlcance = branchSetups.filter((b) => branchIds.includes(b.id));
+  const operating = branchSetups.find((b) => b.id === ctx.barbershopId);
+  const viewing = scope.consolidated ? null : enAlcance[0] ?? null;
+  const flags = setupFlags(enAlcance);
+  const blockers = bookingBlockers(enAlcance, features.publicBooking === true);
 
   const byDay = new Map(dayRows.map((r) => [r.day, r]));
   const today = dayMoneyOf(byDay.get(todayKey));
@@ -721,18 +783,24 @@ export async function getInicioSummary(ctx: BarberContext, opts: InicioOptions =
   };
 
   const setup: InicioSetup = {
-    hasBarbers: Boolean(ar?.has_barbers),
-    hasSchedules: Boolean(ar?.has_schedules),
-    hasServices: Boolean(ar?.has_services),
+    // Sobre las sedes ACTIVAS del alcance (una cerrada no tiene pendientes).
+    hasBarbers: flags ? flags.hasBarbers : Boolean(ar?.has_barbers),
+    hasSchedules: flags ? flags.hasSchedules : Boolean(ar?.has_schedules),
+    hasServices: flags ? flags.hasServices : Boolean(ar?.has_services),
     hasAppointments: Boolean(ar?.has_appointments),
     hasSales: Boolean(ar?.has_sales),
-    hasWeb: Boolean(ar?.has_web),
-    isFresh: !ar?.has_appointments && !ar?.has_sales,
+    hasWeb: flags ? flags.hasWeb : Boolean(ar?.has_web),
+    // «Primeros pasos» no se ofrece viendo una sede cerrada.
+    isFresh: flags !== null && !ar?.has_appointments && !ar?.has_sales,
     publicBookingOn: features.publicBooking === true,
     // La página /b/<slug> existe para toda barbería activa (con o sin
     // editor), así que el bloqueo no depende de "publicada": depende de que
     // la reserva en línea esté encendida y no haya un solo horario.
-    bookingBlocked: features.publicBooking === true && !ar?.has_schedules,
+    bookingBlocked: blockers.length > 0,
+    bookingBlockers: blockers,
+    operatingBranchId: ctx.barbershopId,
+    operatingBranchLabel: operating?.label ?? ctx.barbershop.name,
+    viewingLabel: viewing?.label ?? null,
   };
 
   const cash: InicioCash | null = canCash

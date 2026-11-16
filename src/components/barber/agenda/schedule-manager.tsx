@@ -11,6 +11,7 @@
 // ═══════════════════════════════════════════════════════════════════════
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ArrowLeft, Copy, Plus, Trash2 } from "lucide-react";
 import { type Dictionary } from "@/i18n/t";
 import { makeBarberT } from "@/lib/barber/i18n";
@@ -55,6 +56,7 @@ export interface ScheduleManagerProps {
 
 export function ScheduleManager(props: ScheduleManagerProps) {
   const t = useMemo(() => makeBarberT(props.dict), [props.dict]);
+  const router = useRouter();
   const [tab, setTab] = useState<"week" | "timeOff">("week");
 
   const [barbers, setBarbers] = useState<BarberDTO[]>([]);
@@ -185,6 +187,9 @@ export function ScheduleManager(props: ScheduleManagerProps) {
       markDirty(false);
       setSchedules(data.schedules ?? []);
       setNotice(t("barber.agenda.schedule.saved"));
+      // El caché del navegador guarda Inicio 30 s: sin esto, al volver a Inicio
+      // seguía el aviso «no hay horario» aunque ya se guardó (ws6-t6, 16-nov).
+      router.refresh();
       return true;
     } catch {
       setError(t("barber.agenda.schedule.saveError"));

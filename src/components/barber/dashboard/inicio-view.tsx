@@ -26,6 +26,7 @@ import type { TFunction } from "@/i18n/t";
 import type { InicioSummary } from "@/lib/barber/stats";
 import { fmtInt, fmtLongDay, fmtMoney, fmtPctSigned, fmtTime, weekdayOfKey } from "./format";
 import { RefreshButton } from "./refresh-button";
+import { IrASede } from "./ir-a-sede";
 import type { BranchOption } from "./branch-select";
 
 /**
@@ -171,30 +172,46 @@ export function InicioView({
           la gente que no hay lugar. Es un bloqueo, no un pendiente más: va
           arriba de todo, en rojo, para todos los roles (el CTA solo para quien
           puede cargar horarios). */}
-      {s.setup.bookingBlocked && (
-        <div className="bdash-blocker" role="alert">
+      {/* Reserva en línea activa y una sede ACTIVA donde nadie puede apartar:
+          la liga pública le dice a la gente que no hay lugar. Es un bloqueo, no
+          un pendiente más: va arriba, en rojo, uno por sede y con su nombre
+          (ws6-t6, 16-nov). El CTA lleva a ESA sede; solo para quien puede
+          cargar horarios o barberos. */}
+      {s.setup.bookingBlockers.map((b) => (
+        <div key={b.branchId} className="bdash-blocker" role="alert">
           <div className="bdash-blocker__icon" aria-hidden>
             <CalendarOff size={22} />
           </div>
           <div className="bdash-blocker__body">
-            <div className="bdash-blocker__title">{k("blocker.title")}</div>
+            <div className="bdash-blocker__title">
+              {k(b.reason === "noBarbers" ? "blocker.titleNoBarbers" : "blocker.titleSede", { sede: b.label })}
+            </div>
             <p className="bdash-blocker__text">
-              {k(s.setup.hasWeb ? "blocker.bodyPublished" : "blocker.body")}{" "}
-              <code className="bdash-blocker__url">/b/{slug}/reservar</code>
+              {k(b.reason === "noBarbers" ? "blocker.bodyNoBarbers" : s.setup.hasWeb ? "blocker.bodyPublished" : "blocker.body")}{" "}
+              <code className="bdash-blocker__url">/b/{b.slug}/reservar</code>
             </p>
           </div>
           {s.can.schedule ? (
-            <Link href="/barber/agenda/horarios" className="btn-new barber-btn-primary bdash-blocker__cta">
-              <CalendarClock size={14} aria-hidden /> {k("blocker.cta")}
-            </Link>
+            <IrASede
+              branchId={b.branchId}
+              operatingBranchId={s.setup.operatingBranchId}
+              href={b.reason === "noBarbers" ? "/barber/barberos" : "/barber/agenda/horarios"}
+              className="btn-new barber-btn-primary bdash-blocker__cta"
+            >
+              <CalendarClock size={14} aria-hidden />{" "}
+              {k(b.reason === "noBarbers" ? "blocker.ctaBarbers" : "blocker.cta")}
+            </IrASede>
           ) : (
             <span className="bdash-blocker__hint">{k("blocker.askOwner")}</span>
           )}
         </div>
-      )}
+      ))}
 
       {s.setup.isFresh ? (
-        <CardNew title={k("setup.title")} sub={k("setup.body")}>
+        <CardNew
+          title={s.scope.canConsolidate && s.setup.viewingLabel ? k("setup.titleSede", { sede: s.setup.viewingLabel }) : k("setup.title")}
+          sub={k("setup.body")}
+        >
           <div className="bdash-setup">
             {setupSteps.map((st, i) => (
               <Link key={st.key} href={st.href} className={`bdash-step${st.done ? " bdash-step--done" : ""}`}>

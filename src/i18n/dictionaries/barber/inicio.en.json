@@ -99,10 +99,15 @@
       "body": "Your booking link is live, but with no schedules it tells people there's no room. Set at least one barber's schedule and this fixes itself.",
       "bodyPublished": "Your website is published and online booking is on, but with no schedules it tells people there's no room. Set at least one barber's schedule and this fixes itself.",
       "cta": "Set schedules now",
-      "askOwner": "Ask the owner or manager to set the schedules."
+      "askOwner": "Ask the owner or manager to set the schedules.",
+      "titleSede": "Nobody can book online at {sede}: not a single schedule is set",
+      "titleNoBarbers": "{sede} has no barbers: nobody can book online there",
+      "bodyNoBarbers": "That location's booking link tells people there's no room. Add at least one barber with their schedule and this fixes itself.",
+      "ctaBarbers": "Add a barber"
     },
     "setup": {
       "title": "Your barbershop is ready to start",
+      "titleSede": "{sede}: ready to start",
       "body": "These are the first steps. As soon as you charge the first visit, the day's summary shows up here.",
       "done": "Done",
       "pending": "Pending",

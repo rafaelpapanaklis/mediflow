@@ -316,7 +316,10 @@ export function BranchesClient({
                       {t("common.edit")}
                     </Btn>
                   ) : null}
-                  {!isCurrent ? (
+                  {/* En una sede CERRADA no se trabaja: el botón solo dejaba la cookie
+                      apuntándole, la sesión seguía en la propia e Inicio pasaba a mirar
+                      la cerrada (lo que vio Rafael el 16-nov). Para usarla, «Reabrir». */}
+                  {!isCurrent && b.isActive ? (
                     <Btn size="sm" onClick={() => workHere(b.id)} disabled={switching}>
                       <ArrowRightLeft size={13} />
                       {t("branches.switchHere")}

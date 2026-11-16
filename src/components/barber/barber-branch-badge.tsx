@@ -4,7 +4,7 @@ import { useState } from "react";
 import { usePathname } from "next/navigation";
 import { Building2 } from "lucide-react";
 import { switchBranchAndReload } from "@/components/barber/team/admin-nav";
-import { BARBER_BRANCH_ALL, isConsolidatedPath } from "@/lib/barber/branch-cookie";
+import { BARBER_BRANCH_ALL, isConsolidatedPath, sedeElegida } from "@/lib/barber/branch-cookie";
 
 export interface BarberBranchBadgeOption {
   id: string;
@@ -39,7 +39,7 @@ export function BarberBranchBadge({
   consolidated: boolean;
   /** Valor crudo de la cookie del selector (sin validar). */
   selectedId?: string | null;
-  labels: { branch: string; aria: string; all: string; closed: string };
+  labels: { branch: string; aria: string; all: string; closed: string; closedGroup?: string };
 }) {
   const pathname = usePathname();
   const [busy, setBusy] = useState(false);
@@ -47,11 +47,14 @@ export function BarberBranchBadge({
 
   const canShowAll = isConsolidatedPath(pathname);
   const showingAll = consolidated && canShowAll;
-  // En las pantallas que consolidan se enseña la sede pedida (puede ser una
-  // cerrada, solo para verla); en las demás, la que opera la sesión.
-  const viewing = canShowAll && selectedId && options.some((o) => o.id === selectedId) ? selectedId : activeId;
-  const value = showingAll ? BARBER_BRANCH_ALL : viewing;
-  const name = (o: BarberBranchBadgeOption) => (o.isActive ? o.label : `${o.label} (${labels.closed})`);
+  // UNA sola sede para todo el panel (16-nov): la misma regla que el servidor
+  // (sedeElegida). Una sede CERRADA nunca se enseña como elegida: antes, en
+  // Inicio, el selector «cambiaba solo» a la cerrada que guardaba la cookie
+  // mientras Agenda decía la principal.
+  const elegida = sedeElegida({ requested: canShowAll ? selectedId : null, options, fallback: activeId });
+  const value = showingAll ? BARBER_BRANCH_ALL : elegida === BARBER_BRANCH_ALL ? activeId : elegida;
+  const abiertas = options.filter((o) => o.isActive);
+  const cerradas = options.filter((o) => !o.isActive);
 
   return (
     <label
@@ -83,13 +86,21 @@ export function BarberBranchBadge({
         }}
       >
         {canShowAll ? <option value={BARBER_BRANCH_ALL}>{labels.all}</option> : null}
-        {options.map((o) => (
-          // Sede cerrada: solo se puede elegir para VERLA en las pantallas que
-          // consolidan; operar en ella no se puede (ronda 2, M1).
-          <option key={o.id} value={o.id} disabled={!o.isActive && !canShowAll}>
-            {name(o)}
+        {abiertas.map((o) => (
+          <option key={o.id} value={o.id}>
+            {o.label}
           </option>
         ))}
+        {/* Cerradas: aparte y sin poder elegirse (se reabren en Sucursales). */}
+        {cerradas.length > 0 ? (
+          <optgroup label={labels.closedGroup ?? labels.closed}>
+            {cerradas.map((o) => (
+              <option key={o.id} value={o.id} disabled>
+                {o.label}
+              </option>
+            ))}
+          </optgroup>
+        ) : null}
       </select>
     </label>
   );

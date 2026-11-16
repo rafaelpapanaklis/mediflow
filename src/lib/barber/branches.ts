@@ -13,7 +13,7 @@ import { barberPlanHasFeature, isBarberUnlimited } from "@/lib/barber/plan-share
 import { revalidarWebPublicaBarber } from "@/lib/barber/cobros";
 import { makeBarberSlug } from "@/lib/barber/types";
 import { serviciosParaSedeNueva } from "@/lib/barber/branch-services";
-import { BARBER_BRANCH_ALL, BARBER_BRANCH_COOKIE } from "@/lib/barber/branch-cookie";
+import { BARBER_BRANCH_ALL, BARBER_BRANCH_COOKIE, sedeElegida } from "@/lib/barber/branch-cookie";
 
 // ═══════════════════════════════════════════════════════════════════════
 // DaleControl BARBER — SUCURSALES (sedes de una cadena).
@@ -165,14 +165,20 @@ export async function resolveBranchScope(
       canConsolidate,
     };
   }
-  if (requested && safeAccessible.includes(requested)) {
-    return {
-      branchIds: [requested],
-      activeId: requested,
-      accessible: safeAccessible,
-      isConsolidated: false,
-      canConsolidate,
-    };
+  // Una sede CERRADA nunca queda elegida (16-nov): ni en Inicio ni en Reportes.
+  // Misma regla que el contexto de sesión (withActiveBranch) y que la barra.
+  if (requested && requested !== ctx.barbershopId && safeAccessible.includes(requested)) {
+    const abierta = await prisma.barbershop.count({ where: { id: requested, isActive: true } });
+    const pick = sedeElegida({ requested, options: [{ id: requested, isActive: abierta > 0 }], fallback: ctx.barbershopId });
+    if (pick === requested) {
+      return {
+        branchIds: [requested],
+        activeId: requested,
+        accessible: safeAccessible,
+        isConsolidated: false,
+        canConsolidate,
+      };
+    }
   }
   return {
     branchIds: [ctx.barbershopId],

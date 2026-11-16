@@ -306,7 +306,8 @@ test("toda llave literal de barber existe en es y en", () => {
   // sin haber comprobado NADA.
   assert.ok(usos.length > 500, `solo se extrajeron ${usos.length} llaves literales — el extractor se quedó ciego`);
   assert.ok(
-    usos.some((u) => u.llave === "barber.inicio.blocker.title"),
+    // (16-nov: el aviso de bloqueo pasó a ser por sede; el canario es otra llave literal del mismo helper)
+    usos.some((u) => u.llave === "barber.inicio.blocker.askOwner"),
     "el extractor dejó de leer el helper de prefijo de inicio-view.tsx — era justo el caso que se escapó",
   );
 
