@@ -140,6 +140,12 @@ test("las doce plantillas del manifiesto son exactamente las declaradas", () => 
   // por eso es «al menos» y no un número que cada rama pisaría.
   assert.ok(BARBER_WEB_TEMPLATE_IDS.length >= 13);
   assert.ok((BARBER_WEB_TEMPLATE_IDS as readonly string[]).includes("oficio"));
+  // 8 de la ola de la mini-web + estudio, carta, nocturna y club.
+  // + las de ws6 (16-nov): barrio aquí; oficio y revista llegan en sus propias
+  // ramas, por eso es «al menos» y no un número que cada rama pisaría (mismo
+  // criterio que la rama de Oficio).
+  assert.ok(BARBER_WEB_TEMPLATE_IDS.length >= 13);
+  assert.ok((BARBER_WEB_TEMPLATE_IDS as readonly string[]).includes("barrio"));
 });
 
 test("el contenido compartido sobrevive a un cambio de plantilla", () => {

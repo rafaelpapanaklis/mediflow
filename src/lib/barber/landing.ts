@@ -50,6 +50,7 @@ export const BARBER_WEB_TEMPLATE_IDS = [
   "nocturna",
   "club",
   "oficio",
+  "barrio",
 ] as const;
 
 export type BarberWebTemplateId = (typeof BARBER_WEB_TEMPLATE_IDS)[number];
