@@ -139,7 +139,7 @@
     "differenceOver": "Sobra",
     "differenceShort": "Falta",
     "breakdown": "Desglose del turno",
-    "closeNotes": "Nota del cierre (opcional)",
+    "closeNotes": "Nota del cierre",
     "closeConfirm": "Cerrar turno",
     "closeWarning": "Un turno cerrado no se puede reabrir. Para corregir algo después, abre un turno nuevo y déjalo anotado.",
     "closedTitle": "Turno cerrado",
