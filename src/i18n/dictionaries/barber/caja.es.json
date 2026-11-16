@@ -602,7 +602,7 @@
     "expensesHint": "En efectivo: {cash}",
     "expensesHintPayouts": "En efectivo: {cash} · pagos a barberos: {payouts}",
     "moves": "Retiros / entradas",
-    "movesHint": "Entradas {in} · {out} retiros · {inCount} entradas",
+    "movesHint": "Entradas {in} · Retiros hechos: {out} · Entradas hechas: {inCount}",
     "incomeTips": "Propinas {tips}"
   },
   "day": {

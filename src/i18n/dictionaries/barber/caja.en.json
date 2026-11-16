@@ -602,7 +602,7 @@
     "expensesHint": "In cash: {cash}",
     "expensesHintPayouts": "In cash: {cash} · paid to barbers: {payouts}",
     "moves": "Withdrawals / cash in",
-    "movesHint": "Cash in {in} · {out} withdrawals · {inCount} cash in",
+    "movesHint": "Cash in {in} · Withdrawals made: {out} · Cash-ins made: {inCount}",
     "incomeTips": "Tips {tips}"
   },
   "day": {
