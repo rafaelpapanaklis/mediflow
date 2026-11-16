@@ -205,7 +205,7 @@ export function CajaClient({
       )}
       {tab === "gastos" && ready && (
         <div role="tabpanel" id="bcaja-panel-gastos" aria-labelledby="bcaja-tab-gastos">
-          <GastosTab dict={dict} tz={tz} locale={locale} currentPeriod={currentPeriod} canAdd={can.expenses} openSessionId={open?.session.id ?? null} onChanged={refresh} />
+          <GastosTab dict={dict} tz={tz} locale={locale} currentPeriod={currentPeriod} canAdd={can.expenses} openSessionId={open?.session.id ?? null} drawerCash={open ? open.expectedCash : null} onChanged={refresh} />
         </div>
       )}
 
@@ -459,6 +459,7 @@ export function CajaClient({
           dict={dict}
           type={modal.type}
           sessionOpen={Boolean(open)}
+          drawerCash={open ? open.expectedCash : null}
           barbers={checkout.barbers}
           extraPayout={
             can.payCommissions

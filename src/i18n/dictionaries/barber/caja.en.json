@@ -691,6 +691,7 @@
     "methodLabel": "How was it paid?",
     "outsideWarning": "No register is open: this expense is saved outside the register and won't be in any close.",
     "notDrawer": "Doesn't leave the drawer: doesn't change what should be in it.",
+    "overDrawer": "The drawer should hold {drawer}: this amount is {over} more than there is. Check it; if you save it like this, the register goes negative.",
     "note": "Note",
     "notePlaceholder": {
       "EXPENSE": "E.g. water jug, blades",

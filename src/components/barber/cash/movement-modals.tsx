@@ -9,6 +9,7 @@ import {
   CASH_EXPENSE_CATEGORIES,
   CASH_MOVEMENT_METHODS,
   isLinkedCommissionMovement,
+  overDrawerCents,
   parseMovementAmount,
   type BarberPayoutKind,
   type CashMovementMethod,
@@ -50,6 +51,7 @@ export function MovementModal({
   dict,
   type,
   sessionOpen,
+  drawerCash = null,
   barbers,
   onClose,
   onDone,
@@ -59,6 +61,11 @@ export function MovementModal({
   type: CashMovementType;
   /** Hay caja abierta (un gasto sin caja queda «fuera de caja»). */
   sessionOpen: boolean;
+  /**
+   * Lo que debe haber en el cajón ahora (null sin caja abierta). Una salida en
+   * efectivo mayor que eso se AVISA, no se impide (QA de cierre C).
+   */
+  drawerCash?: number | null;
   barbers?: CheckoutContext["barbers"];
   onClose: () => void;
   onDone: (r: MovementSaved) => void;
@@ -90,6 +97,7 @@ export function MovementModal({
   const parsed = parseMovementAmount(amountText);
   const delegated = isPayout && extraPayout && extraPayout.kinds.includes(payoutKind);
   const canSubmit = parsed.ok && !busy && !uploading && (!isPayout || barberId !== null);
+  const overDrawer = parsed.ok && sessionOpen ? overDrawerCents({ type, method: cashOnly ? "CASH" : method, amountCents: parsed.cents, drawerCash }) : 0;
 
   async function pickPhoto(file: File | null | undefined) {
     if (!file) return;
@@ -211,6 +219,11 @@ export function MovementModal({
                 aria-invalid={amountHint ? true : undefined}
               />
               {amountHint && <div className="bcaja-hint" role="alert" style={{ color: "var(--danger)" }}>{amountHint}</div>}
+              {overDrawer > 0 && drawerCash !== null && (
+                <div className="bcaja-alert bcaja-alert--warning" role="alert" style={{ marginTop: 8 }} data-aviso-mas-que-el-cajon>
+                  {t("mov.overDrawer", { drawer: fmtMoney(drawerCash), over: fmtMoney(overDrawer / 100) })}
+                </div>
+              )}
             </div>
 
             {type === "EXPENSE" && (

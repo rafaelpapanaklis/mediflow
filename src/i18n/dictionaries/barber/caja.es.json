@@ -691,6 +691,7 @@
     "methodLabel": "¿Con qué se pagó?",
     "outsideWarning": "No hay caja abierta: este gasto se registra fuera de caja y no entra en ningún corte.",
     "notDrawer": "No sale del cajón: no cambia lo que debe haber en caja.",
+    "overDrawer": "En el cajón debe haber {drawer}: este monto son {over} más de lo que hay. Revísalo; si lo registras así, la caja queda en negativo.",
     "note": "Nota",
     "notePlaceholder": {
       "EXPENSE": "Ej. garrafón, navajas",
