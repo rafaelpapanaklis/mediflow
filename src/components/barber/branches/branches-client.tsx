@@ -197,6 +197,18 @@ export function BranchesClient({
         <div className={s.headerText}>
           <h1 className={s.title}>{t("branches.title")}</h1>
           <p className={s.subtitle}>{t("branches.subtitle")}</p>
+          {/* Sucursales ≠ Barberos ≠ Equipo (16-nov): cada pantalla dice qué es. */}
+          <p className={s.subtitle}>
+            {t("branches.subtitleOther")}{" "}
+            <Link href="/barber/barberos" style={{ color: "var(--brand)", fontWeight: 600 }}>
+              {t("nav.barberos")}
+            </Link>{" "}
+            {t("branches.subtitleAnd")}{" "}
+            <Link href="/barber/equipo" style={{ color: "var(--brand)", fontWeight: 600 }}>
+              {t("nav.equipo")}
+            </Link>
+            .
+          </p>
         </div>
         <div className={s.headerActions}>
           {limit.featureOn ? (

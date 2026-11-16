@@ -207,7 +207,9 @@
   },
   "branches": {
     "title": "Sucursales",
-    "subtitle": "Tus sedes, quién entra a cada una y desde cuál estás trabajando.",
+    "subtitle": "Tus sedes (cada local): abrirlas, cerrarlas, reabrirlas y elegir desde cuál trabajas.",
+    "subtitleOther": "Quién corta en cada sede está en",
+    "subtitleAnd": "y quién entra al panel, en",
     "new": "Nueva sede",
     "limit": "{used} de {max} sedes de tu plan {plan}",
     "limitUnlimited": "{used} sedes · sin límite en tu plan {plan}",

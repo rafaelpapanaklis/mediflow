@@ -207,7 +207,9 @@
   },
   "branches": {
     "title": "Locations",
-    "subtitle": "Your shops, who gets into each one, and which one you are working in.",
+    "subtitle": "Your locations (each shop): open, close, reopen them and pick which one you work in.",
+    "subtitleOther": "Who cuts at each location is in",
+    "subtitleAnd": "and who can sign in to the panel, in",
     "new": "New location",
     "limit": "{used} of {max} locations on your {plan} plan",
     "limitUnlimited": "{used} locations · unlimited on your {plan} plan",
