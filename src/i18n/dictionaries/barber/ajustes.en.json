@@ -216,6 +216,16 @@
       "planNote": "Your plan doesn't include online booking. The setting is saved and applies as soon as you turn it on.",
       "saved": "Saved"
     },
+    "notifications": {
+      "title": "Notifications",
+      "sub": "How you find out when an order comes into your online shop.",
+      "sqlPending": "Order notices can't be turned on yet: {file} still has to be applied to the database. None are sent in the meantime.",
+      "email": "Email me about shop orders",
+      "emailHint": "One email when an order comes in and another when it gets paid online, with the products, the total and the customer.",
+      "emailTo": "Goes to: {emails}. They are the owners of this branch and of the main shop (change them in Team).",
+      "emailNoOne": "There is no active Owner user with an email: nobody to notify. Check it in Team.",
+      "saved": "Saved"
+    },
     "password": {
       "title": "Your password",
       "sub": "Change it anytime. You stay signed in.",

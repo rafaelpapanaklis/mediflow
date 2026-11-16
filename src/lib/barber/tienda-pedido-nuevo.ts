@@ -1,46 +1,39 @@
 import "server-only";
+import * as nextServer from "next/server";
 import type { OrderItem } from "@/lib/barber/tienda-core";
+import type { OrderNoticeKind } from "@/lib/barber/pedido-avisos-core";
+import { notifyOwnerOfOrder, type OrderNoticeResult } from "@/lib/barber/pedido-avisos";
 
 /**
  * ═══════════════════════════════════════════════════════════════════════
- * DaleControl BARBER — «ENTRÓ UN PEDIDO NUEVO A LA TIENDA»: el punto ÚNICO.
+ * DaleControl BARBER — «ENTRÓ UN PEDIDO A LA TIENDA» y «SE PAGÓ EN LÍNEA»:
+ * los DOS únicos puntos desde los que se le avisa al dueño.
  *
- * 16-nov-2026. Rafael preguntó dónde le llega al dueño un pedido de la
- * tienda. Dentro del panel ya se entera (numerito del menú, pestaña Pedidos
- * y tarjeta de Inicio). Falta decidir si además se le manda un CORREO: esa
- * decisión es de Rafael y todavía no la toma.
+ * 16-nov-2026. Dentro del panel el dueño ya se entera (numerito del menú,
+ * pestaña Pedidos y tarjeta de Inicio). Además, por decisión de Rafael
+ * («haz el 1, 2, 3 y 4»), se le avisa por CORREO y, si lo enciende, por
+ * WHATSAPP. Quién manda, a quién y la regla de «una sola vez por pedido»
+ * viven en pedido-avisos.ts; aquí solo están los dos momentos:
  *
- * Por eso esto está PREPARADO Y APAGADO:
- *   · HOY NO MANDA NADA. Ni correo, ni WhatsApp, ni push. Con
- *     TIENDA_OWNER_EMAIL_ENABLED en false, `sendOwnerEmail` ni se llama.
- *   · La ruta pública que crea el pedido (POST
- *     /api/barber/public/tienda/[slug]/pedidos) llama a
- *     onTiendaOrderCreated UNA vez, después de guardar el pedido. Es el único
- *     sitio que lo llama y el único donde nace un pedido.
- *   · NUNCA lanza: si un aviso falla, el cliente ya apartó y recibe su folio.
+ *   · onTiendaOrderCreated — lo llama UNA vez la ruta pública que crea el
+ *     pedido (POST /api/barber/public/tienda/[slug]/pedidos), después de
+ *     guardarlo. Es el único sitio donde nace un pedido.
+ *   · onTiendaOrderPaid — lo llama el webhook de Mercado Pago cuando
+ *     aplicarPagoDePedido marca el pedido como pagado (pasa una sola vez).
  *
- * Para encender el correo cuando Rafael lo decida (y solo entonces):
- *   1. escribir `sendOwnerEmail` (a quién: ¿el dueño de la cadena, el de la
- *      sede, todos los que tengan products.view?; con qué texto; con qué
- *      proveedor — el repo ya manda correo en otras partes: reutilizarlo);
- *   2. poner TIENDA_OWNER_EMAIL_ENABLED en true;
- *   3. si el envío tarda, sacarlo de la respuesta con `after()` de
- *      next/server en la ruta (hoy se espera porque no hace nada).
- * Si además se quiere avisar cuando el pedido se PAGA en línea, ese momento
- * vive en el webhook de Mercado Pago (ws6-t5), no aquí.
+ * Los dos NUNCA lanzan, y las rutas los corren con afterResponse: DESPUÉS de
+ * contestarle al cliente (o a Mercado Pago). Un correo lento o caído no
+ * retrasa ni tumba el pedido.
  * ═══════════════════════════════════════════════════════════════════════
  */
 
-/** Interruptor del correo al dueño por pedido nuevo. DECISIÓN DE RAFAEL: apagado. */
-export const TIENDA_OWNER_EMAIL_ENABLED = false;
-
-/** Lo que se sabe del pedido en el momento en que nace (sin leer la base otra vez). */
+/** Lo que se sabe del pedido en el momento en que nace. */
 export interface NewTiendaOrderEvent {
   orderId: string;
   folio: string;
   /** Sede dueña de las existencias: la que recibe y entrega el pedido. */
   barbershopId: string;
-  /** Slug de la tienda por la que entró (para armar ligas al panel o a la tienda). */
+  /** Slug de la tienda por la que entró. */
   shopSlug: string;
   shopName: string;
   branchName: string | null;
@@ -54,44 +47,54 @@ export interface NewTiendaOrderEvent {
   expiresAt: string;
 }
 
-/** Un canal de aviso: su nombre, si está encendido y cómo manda. */
-export interface OrderNoticeChannel {
-  name: string;
-  enabled: () => boolean;
-  send: (ev: NewTiendaOrderEvent) => Promise<void>;
-}
+/** Quien de verdad avisa. Se puede cambiar en las pruebas (nunca se manda nada real ahí). */
+export type OwnerNotifier = (kind: OrderNoticeKind, orderId: string) => Promise<OrderNoticeResult>;
 
-/**
- * Correo al dueño. SIN IMPLEMENTAR A PROPÓSITO (ver arriba). Si alguien
- * enciende el interruptor sin escribirlo, falla aquí, queda en el log y el
- * pedido del cliente sigue adelante.
- */
-async function sendOwnerEmail(_ev: NewTiendaOrderEvent): Promise<void> {
-  throw new Error("correo al dueño por pedido nuevo: sin implementar (decisión de Rafael pendiente)");
-}
+const VACIO: OrderNoticeResult = { ran: false, reason: "error", channels: [] };
 
-/** Los canales que existen. Hoy uno, y apagado. */
-export const ORDER_NOTICE_CHANNELS: readonly OrderNoticeChannel[] = [
-  { name: "correo-dueno", enabled: () => TIENDA_OWNER_EMAIL_ENABLED, send: sendOwnerEmail },
-];
-
-/**
- * Se llama UNA vez por pedido recién creado. Devuelve los canales que sí
- * avisaron (hoy, ninguno). Nunca lanza.
- */
-export async function onTiendaOrderCreated(
-  ev: NewTiendaOrderEvent,
-  channels: readonly OrderNoticeChannel[] = ORDER_NOTICE_CHANNELS,
-): Promise<{ sent: string[] }> {
-  const sent: string[] = [];
-  for (const ch of channels) {
-    try {
-      if (!ch.enabled()) continue;
-      await ch.send(ev);
-      sent.push(ch.name);
-    } catch (e) {
-      console.warn(`[barber/tienda] aviso de pedido nuevo (${ch.name}) falló:`, (e as Error)?.message ?? e);
-    }
+async function avisar(kind: OrderNoticeKind, orderId: string, notify: OwnerNotifier): Promise<OrderNoticeResult> {
+  try {
+    if (!orderId) return { ran: false, reason: "sin_pedido", channels: [] };
+    return await notify(kind, orderId);
+  } catch (e) {
+    console.warn(`[barber/tienda] aviso al dueño (${kind} ${orderId}) falló:`, (e as Error)?.message ?? e);
+    return VACIO;
   }
-  return { sent };
+}
+
+/** Se llama UNA vez por pedido recién creado. Nunca lanza. */
+export function onTiendaOrderCreated(ev: NewTiendaOrderEvent, notify: OwnerNotifier = notifyOwnerOfOrder): Promise<OrderNoticeResult> {
+  return avisar("NEW", ev?.orderId, notify);
+}
+
+/** Se llama cuando Mercado Pago confirma el pago de un pedido. Nunca lanza. */
+export function onTiendaOrderPaid(orderId: string, notify: OwnerNotifier = notifyOwnerOfOrder): Promise<OrderNoticeResult> {
+  return avisar("PAID", orderId, notify);
+}
+
+/**
+ * Corre `tarea` DESPUÉS de mandar la respuesta (after de next/server): el
+ * cliente recibe su folio sin esperar al correo. Fuera de una petición de
+ * Next (pruebas, scripts) `after` no existe: ahí se lanza sin esperarla.
+ * Nunca lanza y nunca deja una promesa rechazada suelta.
+ */
+export function afterResponse(tarea: () => Promise<unknown>): void {
+  const segura = async () => {
+    try {
+      await tarea();
+    } catch (e) {
+      console.warn("[barber/tienda] tarea posterior a la respuesta falló:", (e as Error)?.message ?? e);
+    }
+  };
+  // Por el espacio de nombres y no con `import { after }`: Next 16 (el que
+  // corre en producción) lo exporta, pero una copia vieja de node_modules no,
+  // y ahí un import con nombre ni compila. Si no existe o no hay petición en
+  // curso (lanza), se corre sin esperarla.
+  const after = (nextServer as unknown as { after?: (fn: () => Promise<void>) => void }).after;
+  try {
+    if (typeof after !== "function") throw new Error("sin after");
+    after(segura);
+  } catch {
+    void segura();
+  }
 }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verificarFirmaMp } from "@/lib/mercadopago-firma";
 import { aplicarPagoDePedido } from "@/lib/barber/mercadopago";
+import { afterResponse, onTiendaOrderPaid } from "@/lib/barber/tienda-pedido-nuevo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -59,11 +60,16 @@ export async function POST(req: NextRequest) {
   if (!pedido) return NextResponse.json({ received: true });
 
   try {
-    await aplicarPagoDePedido({
+    const pago = await aplicarPagoDePedido({
       orderId: pedido,
       paymentId: firma.paymentId,
       cuentaDelLink: texto(url.searchParams.get("cta")),
     });
+    // «Te pagaron un pedido»: el aviso al dueño (ws6-t6). Solo cuando ESTE
+    // aviso de Mercado Pago marcó el pedido (aplicado pasa una sola vez; un
+    // reintento vuelve «ya aplicado») y, además, el aviso es idempotente por
+    // pedido. Corre después de contestarle a Mercado Pago y nunca lanza.
+    if (pago.aplicado) afterResponse(() => onTiendaOrderPaid(pedido));
   } catch (err) {
     console.error("[barber-mp] webhook error (transitorio, MP reintentará):", (err as Error).message);
     return NextResponse.json({ error: "transient failure" }, { status: 500 });

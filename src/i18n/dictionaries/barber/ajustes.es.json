@@ -216,6 +216,16 @@
       "planNote": "Tu plan no incluye reservas en línea. El ajuste queda guardado y aplica en cuanto las actives.",
       "saved": "Guardado"
     },
+    "notifications": {
+      "title": "Notificaciones",
+      "sub": "Cómo te enteras cuando entra un pedido a tu tienda en línea.",
+      "sqlPending": "Los avisos de pedidos todavía no se pueden activar: falta aplicar {file} en la base de datos. Mientras tanto no se manda ninguno.",
+      "email": "Avisarme por correo de pedidos de la tienda",
+      "emailHint": "Un correo cuando entra un pedido y otro cuando te lo pagan en línea, con los productos, el total y el cliente.",
+      "emailTo": "Llega a: {emails}. Son los dueños de esta sucursal y de la matriz (se cambian en Equipo).",
+      "emailNoOne": "No hay ningún usuario Dueño activo con correo: no hay a quién avisarle. Revísalo en Equipo.",
+      "saved": "Guardado"
+    },
     "password": {
       "title": "Tu contraseña",
       "sub": "Cámbiala cuando quieras. No se cierra tu sesión.",

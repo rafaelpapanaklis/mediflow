@@ -7,7 +7,7 @@ import { normalizeBarberPhone } from "@/lib/barber/booking";
 import { getPortalSession } from "@/lib/barber/client-portal";
 import { createTiendaOrder, isTiendaGateOk, resolveTienda, tiendaErrorBody } from "@/lib/barber/tienda";
 import { normalizeOrderLines, rutaTienda } from "@/lib/barber/tienda-core";
-import { onTiendaOrderCreated } from "@/lib/barber/tienda-pedido-nuevo";
+import { afterResponse, onTiendaOrderCreated } from "@/lib/barber/tienda-pedido-nuevo";
 
 /**
  * POST /api/barber/public/tienda/[slug]/pedidos — APARTAR productos (ws6-t1).
@@ -74,10 +74,11 @@ export async function POST(req: NextRequest, props: { params: Promise<{ slug: st
 
     const order = await createTiendaOrder({ gate, lines, name, phone, portalClient, payOnline: body.payOnline === true });
 
-    // PUNTO ÚNICO de «entró un pedido nuevo» (16-nov): aquí se enganchará el
-    // correo al dueño cuando Rafael lo decida. HOY NO MANDA NADA y nunca
-    // lanza: el pedido ya está guardado. Ver tienda-pedido-nuevo.ts.
-    await onTiendaOrderCreated({
+    // PUNTO ÚNICO de «entró un pedido nuevo» (16-nov): el aviso al dueño
+    // (correo y, si lo encendió, WhatsApp). Corre DESPUÉS de responder: el
+    // cliente recibe su folio sin esperar al correo, y si el aviso falla el
+    // pedido ya está guardado. Nunca lanza. Ver tienda-pedido-nuevo.ts.
+    const nuevo = {
       orderId: order.id,
       folio: order.folio,
       barbershopId: order.branch.id,
@@ -90,7 +91,8 @@ export async function POST(req: NextRequest, props: { params: Promise<{ slug: st
       total: order.total,
       payOnline: body.payOnline === true,
       expiresAt: order.expiresAt,
-    });
+    };
+    afterResponse(() => onTiendaOrderCreated(nuevo));
 
     return NextResponse.json({
       ok: true,
