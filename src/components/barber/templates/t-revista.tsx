@@ -384,7 +384,7 @@ export function PlantillaRevista({ data }: { data: BarberWebData }) {
                               {copia(data, "equipo", "equipo.cta")} <IcoFlecha size={14} />
                             </a>
                           ) : (
-                            <p className="dcbw-rv-nota">{copia(data, "equipo", "equipo.sinCitas")}</p>
+                            <p className="dcbw-rv-nota">{copia(data, "equipo", "equipo.sinHorario")}</p>
                           )}
                         </div>
                       </li>

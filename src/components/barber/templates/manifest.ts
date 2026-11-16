@@ -1046,7 +1046,7 @@ export const BARBER_WEB_MANIFESTS: Record<BarberWebTemplateId, BarberWebManifest
         ],
         copia: [
           COPIA_EQUIPO_CTA,
-          { clave: "equipo.sinCitas", etiqueta: "Equipo · nota del barbero sin agenda", porDefecto: "Todavía sin citas en línea.", maxLen: 60 },
+          { clave: "equipo.sinHorario", etiqueta: "Equipo · nota del barbero sin horario", porDefecto: "Todavía sin citas en línea.", maxLen: 60 },
           { clave: "equipo.menu", etiqueta: "Equipo · en el índice", porDefecto: "Equipo", maxLen: 24 },
         ],
       },

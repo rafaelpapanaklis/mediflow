@@ -150,6 +150,9 @@ test("1 barbero y 9 barberos: todos salen; el sin horario sin «Reservar» y con
   assert.equal((html.match(/<h3>Barbero /g) ?? []).length, 9);
   assert.ok(!html.includes("barbero=b8"));
   assert.ok(html.includes("Todavía sin citas en línea."));
+  // La misma clave que Oficio y Barrio: lo que la barbería escribió la sigue al cambiar.
+  const reescrita = pinta(datos({ barberos: nueve, config: { copia: { "equipo.sinHorario": "Pronto con agenda" } } }));
+  assert.ok(reescrita.includes("Pronto con agenda"));
   assert.ok(html.includes('aria-label="Reservar con Barbero 0"'));
 });
 
