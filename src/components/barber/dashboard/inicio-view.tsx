@@ -430,6 +430,7 @@ export function InicioView({
               </dl>
               <div className="bdash-foot">
                 <span>{m.tips === null ? k("money.tipsApartNone") : k("money.tipsApart", { amount: fmtMoney(m.tips) })}</span>
+                <span>{k("money.onlineNotIncluded")}</span>
               </div>
             </CardNew>
           )}

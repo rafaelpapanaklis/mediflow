@@ -123,6 +123,9 @@ export function CashFlowCard({
             </span>
             <span>{k("cashNetHint")}</span>
           </div>
+          <div className="bdash-foot">
+            <span>{k("onlineNotIncluded")}</span>
+          </div>
         </div>
 
         <div>

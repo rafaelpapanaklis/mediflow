@@ -89,7 +89,7 @@ function csvLabelsFor(t: ReturnType<typeof getBarberT>): ReportsCsvLabels {
 /** Etiquetas de «Ingresos y gastos» (ws6-t5): barber.reportes.csv.* y barber.reportes.money.*. */
 function moneyLabelsFor(t: ReturnType<typeof getBarberT>): ReportsCsvMoneyLabels {
   const c = (key: string) => t(`barber.reportes.csv.${key}`);
-  const m = (key: string) => t(`barber.reportes.money.${key}`);
+  const m = (key: string, vars?: Record<string, string | number>) => t(`barber.reportes.money.${key}`, vars);
   const map = (prefix: string, keys: readonly string[]) => Object.fromEntries(keys.map((k) => [k, m(`${prefix}.${k}`)]));
   return {
     sections: {
@@ -106,10 +106,12 @@ function moneyLabelsFor(t: ReturnType<typeof getBarberT>): ReportsCsvMoneyLabels
       expensesCash: c("metrics.expensesCash"),
       payouts: c("metrics.payouts"),
       barberCost: c("metrics.barberCost"),
+      note: c("metrics.note"),
       profit: c("metrics.profit"),
       prevProfit: c("metrics.prevProfit"),
       cashNet: c("metrics.cashNet"),
     },
+    onlineNotIncluded: m("onlineNotIncluded"),
     method: c("method"),
     category: c("metrics.category"),
     kind: c("metrics.kind"),

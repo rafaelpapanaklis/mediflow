@@ -222,6 +222,7 @@ test("Reportes del dueño: ingresos y gastos, ganancia, comparación y por barbe
   const txt = String(csv.body);
   assert.match(txt, /Ganancia,420/);
   assert.match(txt, /Comisiones y sueldos devengados \(sin propinas\),800/);
+  assert.match(txt, /No incluye cobros en línea/);
   assert.match(txt, /Gastos,380/);
   assert.match(txt, /Limpieza,1,300/);
   assert.doesNotMatch(txt, /7777|5555/);

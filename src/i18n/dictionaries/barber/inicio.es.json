@@ -86,6 +86,7 @@
       "paidToday": "entregado hoy: {amount}",
       "tipsApart": "Propinas: {amount}, son de los barberos",
       "tipsApartNone": "Propinas: —",
+      "onlineNotIncluded": "No incluye cobros en línea (anticipos, membresías y tienda)",
       "unavailable": "No se pudo leer el dinero de hoy. Vuelve a cargar en un momento; mientras, revisa la Caja.",
       "goCash": "Ver gastos"
     },
@@ -286,6 +287,7 @@
       "approx": "aprox.",
       "paidOut": "Entregado a barberos",
       "paidOutHint": "Adelantos, comisiones, sueldos y propinas entregadas en el periodo. Es informativo: la ganancia ya resta lo que les toca.",
+      "onlineNotIncluded": "No incluye cobros en línea (anticipos, membresías y tienda)",
       "byMethod": "Ingresos por método",
       "byMethodHint": "Con propinas, como en la Caja",
       "byCategory": "Gastos por categoría",
@@ -380,6 +382,7 @@
         "expensesCash": "Gastos en efectivo",
         "payouts": "Entregado a barberos (informativo)",
         "barberCost": "Comisiones y sueldos devengados (sin propinas)",
+        "note": "Nota",
         "profit": "Ganancia",
         "prevProfit": "Ganancia del periodo anterior",
         "cashNet": "Efectivo neto del periodo",

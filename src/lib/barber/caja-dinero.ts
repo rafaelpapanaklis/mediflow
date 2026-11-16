@@ -31,6 +31,9 @@
 // efectivo. Los anulados y los tickets cancelados ya los descarta cajaResumen
 // (y la comisión de un ticket cancelado se borra con él, cash.ts).
 //
+// NO incluye cobros en línea que no generan ticket (anticipos con Stripe,
+// membresías por suscripción, pedidos de la tienda): ver ONLINE_NOT_INCLUDED.
+//
 // N6 (revisión): getCajaResumenPeriodo (cash.ts, de ws6-t1) es un segundo
 // cargador del mismo resumen; hoy solo lo usan sus pruebas. Vive en un
 // archivo de t1 y no se toca desde aquí: anotado en el reporte de ws6-t5.
@@ -65,6 +68,14 @@ const out = (d: Dec): number => d.toDecimalPlaces(2, ROUND).toNumber();
  * negocio; así «Ingresos» cuadra con la cifra de Inicio y de Reportes.
  */
 export const GANANCIA_SIN_PROPINAS = true;
+
+/**
+ * M4 (revisión ws6-t8): los anticipos pagados en línea no crean ticket ni
+ * guardan cuándo se pagaron (y uno de mostrador también queda PAID), las
+ * membresías por suscripción y la tienda viven en otras tablas. Sumarlos sin
+ * contar doble no es limpio hoy: la pantalla lo AVISA en vez de sumarlos.
+ */
+export const ONLINE_NOT_INCLUDED = true;
 
 // ── DTO (números listos para JSON) ──────────────────────────────────────
 
