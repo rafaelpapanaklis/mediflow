@@ -60,6 +60,10 @@ export default async function Page() {
       state={state}
       checkout={checkout}
       canManage={hasBarberPermission(permUser, "cash.manage")}
+      perms={{
+        expenses: hasBarberPermission(permUser, "cash.expenses"),
+        withdraw: hasBarberPermission(permUser, "cash.withdraw"),
+      }}
       starsDict={((getBarberDict(ctx.barbershop.locale).barber as Dictionary).estrellas ?? {}) as Dictionary}
       locale={ctx.barbershop.locale === "en" ? "en" : "es"}
       drafts={drafts}

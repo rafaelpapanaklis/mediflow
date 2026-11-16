@@ -37,7 +37,8 @@
     "planLockedBody": "Available on the Advanced and Professional plans. You can change plans from Subscription.",
     "goToPlan": "See plans",
     "cancelled": "Cancelled",
-    "by": "by"
+    "by": "by",
+    "optional": "optional"
   },
   "caja": {
     "title": "Cash register",
@@ -158,7 +159,8 @@
       "withdrawals": "Withdrawals",
       "cashPayouts": "Cash paid to barbers",
       "cashRefunds": "Deposits refunded in cash"
-    }
+    },
+    "openingSuggested": "This is the float left at the last close ({amount}). Change it if it's not what's there."
   },
   "ticket": {
     "title": "Charge",
@@ -562,5 +564,147 @@
     "refundWarning": "This order was paid online ({total}). Cancelling it here does NOT refund the money: you issue the refund in Mercado Pago.",
     "refundDone": "I already refunded it in Mercado Pago",
     "cancelBody": "The reserved items become available again in your store."
+  },
+  "status": {
+    "open": "Open register",
+    "close": "Close register",
+    "openSince": "Register open since {time}",
+    "openSinceDate": "Register open since {date}",
+    "openedBy": "opened by {name}",
+    "float": "float {amount}",
+    "closed": "Register closed",
+    "staleTitle": "This register has been open since {date}.",
+    "staleBody": "Close it and count the cash first: whatever you charge today would mix into that day's close.",
+    "staleClose": "Close it now",
+    "actions": "Register actions",
+    "charge": "Charge",
+    "needsOpen": "Open the register first"
+  },
+  "cards": {
+    "expected": "Should be in the drawer",
+    "expectedHint": "Cash that should be in the drawer right now.",
+    "income": "Income",
+    "online": "Online",
+    "expenses": "Expenses",
+    "expensesHint": "In cash: {cash}",
+    "expensesHintPayouts": "In cash: {cash} · paid to barbers: {payouts}",
+    "moves": "Withdrawals / cash in",
+    "movesHint": "{out} withdrawals · {in} cash in"
+  },
+  "day": {
+    "title": "Today's activity",
+    "empty": "Nothing in this register yet.",
+    "filter": "Show",
+    "f": {
+      "all": "All",
+      "tickets": "Tickets",
+      "expenses": "Expenses",
+      "withdrawals": "Withdrawals",
+      "deposits": "Cash in",
+      "payouts": "Payouts",
+      "advances": "Deposits"
+    },
+    "colWhat": "What",
+    "colWho": "Who",
+    "colAmount": "Amount",
+    "kind": {
+      "ticket": "Ticket",
+      "deposit": "Booking deposit",
+      "refund": "Deposit refund",
+      "membership": "Membership"
+    },
+    "tipIncluded": "includes {tip} tip",
+    "voidedBy": "Voided by {name} · {when}"
+  },
+  "mov": {
+    "title": {
+      "EXPENSE": "Add expense",
+      "WITHDRAWAL": "Take cash out",
+      "DEPOSIT": "Put cash in",
+      "BARBER_PAYOUT": "Pay a barber"
+    },
+    "body": {
+      "EXPENSE": "What you buy or pay for the shop: blades, water, rent. Only the amount is required.",
+      "WITHDRAWAL": "Cash leaving the drawer that isn't an expense: to the bank, to the owner.",
+      "DEPOSIT": "Cash entering the drawer that isn't a sale: change, coins, a loan from the owner.",
+      "BARBER_PAYOUT": "An advance is deducted later in Commissions."
+    },
+    "confirm": {
+      "EXPENSE": "Add {amount} expense",
+      "WITHDRAWAL": "Take out {amount}",
+      "DEPOSIT": "Put in {amount}",
+      "BARBER_PAYOUT": "Pay {amount}"
+    },
+    "saved": {
+      "EXPENSE": "Expense added",
+      "WITHDRAWAL": "Withdrawal added",
+      "DEPOSIT": "Cash in added",
+      "BARBER_PAYOUT": "Payout added"
+    },
+    "savedOutside": "Saved outside the register: no register was open.",
+    "type": {
+      "EXPENSE": "Expense",
+      "WITHDRAWAL": "Cash withdrawal",
+      "DEPOSIT": "Cash in"
+    },
+    "amount": "Amount",
+    "amountError": {
+      "required": "Enter the amount.",
+      "format": "Numbers only, e.g. 80 or 80.50 (no letters or minus sign).",
+      "zero": "The amount must be more than $0.",
+      "tooBig": "That amount is too large."
+    },
+    "category": "Category",
+    "cat": {
+      "SUPPLIES": "Supplies",
+      "RESALE": "Products for sale",
+      "CLEANING": "Cleaning",
+      "RENT": "Rent",
+      "UTILITIES": "Power/water/internet",
+      "FOOD": "Food",
+      "ADS": "Advertising",
+      "MAINTENANCE": "Maintenance",
+      "PAYROLL": "Wages/commissions",
+      "OTHER": "Other",
+      "none": "No category"
+    },
+    "method": {
+      "CASH": "Cash",
+      "CARD": "Card",
+      "TRANSFER": "Transfer",
+      "OTHER": "Other"
+    },
+    "methodLabel": "How was it paid?",
+    "outsideWarning": "No register is open: this expense is saved outside the register and won't be in any close.",
+    "notDrawer": "Doesn't leave the drawer: doesn't change what should be in it.",
+    "note": "Note",
+    "notePlaceholder": {
+      "EXPENSE": "E.g. water jug, blades",
+      "WITHDRAWAL": "E.g. bank deposit",
+      "DEPOSIT": "E.g. change for the day",
+      "BARBER_PAYOUT": "E.g. this week's advance"
+    },
+    "receipt": "Receipt photo",
+    "receiptAdd": "Take or upload photo",
+    "receiptUploading": "Uploading…",
+    "receiptReady": "Photo ready",
+    "receiptRemove": "Remove photo",
+    "receiptView": "View receipt",
+    "photoTooBig": "The photo is too large.",
+    "photoBad": "Couldn't read that photo.",
+    "barber": "Barber",
+    "noBarbers": "No active barbers at this location.",
+    "payoutKind": "Payout type",
+    "payout": {
+      "ADVANCE": "Advance",
+      "COMMISSION": "Commission",
+      "SALARY": "Salary",
+      "OTHER": "Other"
+    },
+    "void": "Void",
+    "voidTitle": "Void entry",
+    "voidBody": "It isn't deleted: it stays crossed out, with who voided it and when, and stops counting in the close.",
+    "voidConfirm": "Void",
+    "voided": "Entry voided"
   }
 }

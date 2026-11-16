@@ -489,3 +489,143 @@
     text-decoration: none;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   CAJA COMPLETA (ws6-t1, 16-nov-2026): botones del día, categorías con
+   botones grandes, filtros de la lista, aviso de caja de otro día, conteo
+   del corte y pestañas. Solo tokens del tema; mismos tamaños de letra.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* Botones del día: en celular, rejilla de dos; en escritorio, una fila. */
+.barber-shell .bcaja-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+@container bcaja-page (min-width: 720px) {
+  .barber-shell .bcaja-actions { display: flex; flex-wrap: wrap; }
+}
+.barber-shell .bcaja-action { min-height: 44px; justify-content: center; }
+
+/* Categorías y barberos: botones grandes que se tocan con el dedo. */
+.barber-shell .bcaja-cats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+@container (min-width: 480px) {
+  .barber-shell .bcaja-cats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+.barber-shell .bcaja-cat {
+  min-height: 44px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-elev);
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.15;
+  text-align: center;
+  cursor: pointer;
+}
+.barber-shell .bcaja-cat:hover { border-color: var(--border-strong); color: var(--text-1); }
+.barber-shell .bcaja-cat:focus-visible { box-shadow: var(--ring); outline: none; }
+.barber-shell .bcaja-cat--on { background: var(--brand-soft); border-color: var(--border-brand); color: var(--brand); }
+
+/* Filtros de la lista del día. */
+.barber-shell .bcaja-filters {
+  display: flex;
+  gap: 6px;
+  padding: 12px 14px 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.barber-shell .bcaja-filters::-webkit-scrollbar { display: none; }
+.barber-shell .bcaja-filters .bcaja-chip { flex: 0 0 auto; }
+
+/* Caja abierta desde otro día. */
+.barber-shell .bcaja-stale {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+.barber-shell .bcaja-stale > span { flex: 1 1 220px; }
+
+/* Comprobante adjunto. */
+.barber-shell .bcaja-receipt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  background: var(--bg-elev);
+  color: var(--text-2);
+  font-size: 13px;
+}
+
+/* Lo anulado se lee tachado, pero quién y cuándo se lee derecho. */
+.barber-shell .bcaja-strike [data-anulado] { text-decoration: none; display: inline-block; }
+
+/* Pestañas Hoy · Cortes · Gastos. */
+.barber-shell .bcaja-tabs {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--border-soft);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.barber-shell .bcaja-tabs::-webkit-scrollbar { display: none; }
+.barber-shell .bcaja-tab {
+  flex: 0 0 auto;
+  appearance: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  padding: 10px 14px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-3);
+  cursor: pointer;
+}
+.barber-shell .bcaja-tab:hover { color: var(--text-1); }
+.barber-shell .bcaja-tab[aria-selected="true"] { color: var(--brand); border-bottom-color: var(--brand); }
+.barber-shell .bcaja-tab:focus-visible { box-shadow: var(--ring); outline: none; }
+
+/* Conteo por billete/moneda del corte. */
+.barber-shell .bcaja-denoms {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 10px;
+}
+@container (min-width: 480px) {
+  .barber-shell .bcaja-denoms { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+.barber-shell .bcaja-denom {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 72px;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.barber-shell .bcaja-denom input { text-align: right; }
+
+/* Diferencia del corte en color. */
+.barber-shell .bcaja-diff { font-weight: 700; }
+.barber-shell .bcaja-diff--ok { color: var(--success); }
+.barber-shell .bcaja-diff--over { color: var(--info, var(--brand)); }
+.barber-shell .bcaja-diff--short { color: var(--danger); }
+
+/* Barra de filtros de Cortes y Gastos. */
+.barber-shell .bcaja-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+}
+.barber-shell .bcaja-toolbar .input-new { width: auto; min-width: 140px; }

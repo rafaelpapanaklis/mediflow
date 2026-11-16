@@ -32,9 +32,20 @@ async function postJson<T>(url: string, body: unknown): Promise<PostResult<T>> {
   }
 }
 
-export function OpenSessionModal({ dict, onClose, onDone }: { dict: Dictionary; onClose: () => void; onDone: () => void }) {
+export function OpenSessionModal({
+  dict,
+  suggested = null,
+  onClose,
+  onDone,
+}: {
+  dict: Dictionary;
+  /** Fondo que se dejó en el último corte (caja completa): se propone, se puede cambiar. */
+  suggested?: number | null;
+  onClose: () => void;
+  onDone: () => void;
+}) {
   const t = useBarberT(dict);
-  const [amountText, setAmountText] = useState("");
+  const [amountText, setAmountText] = useState(suggested !== null && suggested !== undefined ? suggested.toFixed(2) : "");
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -75,6 +86,9 @@ export function OpenSessionModal({ dict, onClose, onDone }: { dict: Dictionary; 
           <label className="field-new__label">{t("session.openingAmount")}</label>
           <input className="input-new bcaja-amount" inputMode="decimal" autoFocus value={amountText} onChange={(e) => setAmountText(e.target.value)} placeholder="0.00" />
           {amountText.trim() === "" && <div className="bcaja-hint">{t("session.openingRequired")}</div>}
+          {suggested !== null && suggested !== undefined && (
+            <div className="bcaja-hint" data-fondo-sugerido>{t("session.openingSuggested", { amount: fmtMoney(suggested) })}</div>
+          )}
           {amountText.trim() !== "" && amount === null && <div className="bcaja-hint" role="alert" style={{ color: "var(--danger)" }}>{t("session.amountInvalid")}</div>}
         </div>
         <div className="field-new">
