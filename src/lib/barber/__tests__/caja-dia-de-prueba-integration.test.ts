@@ -140,7 +140,7 @@ test("el día del dueño cuadra en Caja, en el corte impreso/WhatsApp y en el CS
   assert.equal(col("Contado"), "270");
   assert.equal(col("Diferencia"), "0");
   assert.equal(col("Fondo para mañana"), "200");
-  assert.equal(col("Ingresos"), "1330");
+  assert.equal(col("Cobrado (con propinas)"), "1330");
   assert.equal(col("Propinas"), "80");
 
   // ── Gastos del mes y el fondo sugerido para mañana ──
