@@ -56,6 +56,7 @@ const SIN_PERMISO_A_PROPOSITO: Record<string, string> = {
   "POST branches/switch": "cambiar de sede entre las que YA le dieron (lo valida getAccessibleBranchIds)",
   "GET mercadopago/status": "¿la tienda cobra en línea? (sin la cuenta: esa solo para Dueño y «Configuración», D3)",
   "GET stats/inicio": "su Inicio: avisos y sede, SIN dinero si no tiene «Ver caja» (G2, se comprueba abajo)",
+  "GET nav": "SU menú lateral (m4): solo lo que sus permisos dejan; se comprueba abajo",
 };
 
 /** Lo que el Barbero SÍ puede tocar aunque sea de otro: la fila es de todos. */
@@ -317,6 +318,11 @@ test("1 · con TODO apagado (o sin sesión), ninguna ruta del panel contesta 2xx
       if (ok(anon) && clave !== "GET mercadopago/status") fugas.push(`${clave} SIN SESIÓN → ${anon.status}`);
       if (clave === "GET mercadopago/status") {
         assert.equal((anon.body as { account?: unknown }).account, null, "sin sesión no viaja la cuenta");
+      }
+      // m4: el menú de «nada» es solo Inicio y Configuración («Mi cuenta»).
+      if (clave === "GET nav") {
+        const keys = ((nada.body as { items: { key: string }[] }).items ?? []).map((i) => i.key);
+        assert.deepEqual(keys.sort(), ["configuracion", "inicio"], "menú de «nada»");
       }
       // G2: el Inicio de «nada» no trae el dinero del día (hay un ticket de $150 hoy).
       if (clave === "GET stats/inicio") {

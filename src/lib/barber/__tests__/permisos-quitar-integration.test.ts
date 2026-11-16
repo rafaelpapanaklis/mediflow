@@ -320,6 +320,35 @@ test("G2 · Inicio: quitar «Ver caja» quita el dinero del día en la siguiente
   await dejarCon("barbero", BARBER_ROLE_DEFAULT_PERMISSIONS.BARBER);
 });
 
+test("m4 · el MENÚ (GET /api/barber/nav, lo que vuelve a pedir el menú al navegar) quita la entrada en la siguiente llamada", { skip }, async () => {
+  const menu = async (tag: string | null) => {
+    const r = await como(tag, "nav", "GET");
+    return { status: r.status, keys: ((r.body as { items?: { key: string }[] }).items ?? []).map((i) => i.key) };
+  };
+  await dejarCon("rita", RECEPCION);
+  const con = await menu("rita");
+  assert.equal(con.status, 200);
+  assert.ok(con.keys.includes("caja") && con.keys.includes("agenda"), JSON.stringify(con.keys));
+  await dejarCon("rita", RECEPCION.filter((k) => !k.startsWith("cash.")));
+  const sin = await menu("rita");
+  assert.ok(!sin.keys.includes("caja"), "sin «Ver caja», Caja ya no está en el menú");
+  assert.ok(sin.keys.includes("agenda"), "lo demás sigue");
+  await dejarCon("rita", RECEPCION);
+  assert.ok((await menu("rita")).keys.includes("caja"), "devuelto, vuelve");
+  // Cada quien recibe SU menú: el del Barbero no trae Caja ni Equipo; sin sesión, nada.
+  const b = await menu("barbero");
+  assert.ok(!b.keys.includes("caja") && !b.keys.includes("equipo") && b.keys.includes("comisiones"), JSON.stringify(b.keys));
+  assert.equal((await menu(null)).status, 401);
+  // Y es el MISMO cálculo del layout: el layout ya no filtra por su cuenta.
+  const fs = await import("node:fs");
+  const layout = fs.readFileSync(path.resolve(__dirname, "../../../app/barber/(panel)/layout.tsx"), "utf8");
+  assert.match(layout, /resolveBarberNav\(ctx/);
+  assert.doesNotMatch(layout, /hasBarberPermission\(/, "el layout no tiene un filtro propio");
+  const sidebar = fs.readFileSync(path.resolve(__dirname, "../../../components/barber/barber-sidebar.tsx"), "utf8");
+  assert.match(sidebar, /const items = useMenuAlDia\(initialItems, pathname\)/, "el menú se vuelve a pedir al cambiar de página");
+  assert.match(sidebar, /fetch\("\/api\/barber\/nav"/);
+});
+
 test("cambiar el ROL tiene efecto en la siguiente llamada (Recepción → Barbero → Recepción)", { skip }, async () => {
   await dejarCon("rita", RECEPCION);
   assert.equal((await como("rita", "sales", "GET")).status, 200);

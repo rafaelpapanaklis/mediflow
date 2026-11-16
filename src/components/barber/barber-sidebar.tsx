@@ -29,7 +29,7 @@ const SECTION_ORDER: BarberNavItem["section"][] = [
 
 export function BarberSidebar({
   shopName,
-  items,
+  items: initialItems,
   sectionLabels,
   brandName,
   brandSub,
@@ -55,6 +55,7 @@ export function BarberSidebar({
 }) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const items = useMenuAlDia(initialItems, pathname);
   // Chats sin leer, solo si «Mensajes» está en el menú (ya pasó su candado).
   // Se pregunta al servidor solo cuando el contador se ve y nadie más lo
   // sabe: no en /barber/mensajes (la bandeja lo avisa) ni en celular con el
@@ -247,4 +248,39 @@ function useEsEscritorio(): boolean {
     return () => mq.removeEventListener("change", cambio);
   }, []);
   return es;
+}
+
+/**
+ * El menú, al día con los permisos (m4, auditoría de permisos 16-nov).
+ *
+ * Next conserva el layout entre páginas: el menú que pintó el servidor al
+ * entrar se quedaba igual aunque el dueño le quitara a esta persona un
+ * permiso (en panel.108, «Caja» seguía en el menú de Recepción tras quitarle
+ * «Ver caja» y navegar). En cada navegación interna se vuelve a pedir
+ * GET /api/barber/nav —el MISMO cálculo del layout— y se pinta lo que diga.
+ * La primera vez no: acaba de llegar del servidor. Si la petición falla, se
+ * queda el menú que había (las páginas y las APIs cortan igual).
+ */
+export function useMenuAlDia(initialItems: BarberNavItem[], pathname: string | null): BarberNavItem[] {
+  const [items, setItems] = useState(initialItems);
+  // Si el servidor vuelve a pintar el layout (router.refresh), manda ése.
+  useEffect(() => setItems(initialItems), [initialItems]);
+  const primera = useRef(true);
+  useEffect(() => {
+    if (primera.current) {
+      primera.current = false;
+      return;
+    }
+    let vivo = true;
+    fetch("/api/barber/nav", { cache: "no-store" })
+      .then(async (r) => (r.ok ? ((await r.json()) as { items?: BarberNavItem[] }) : null))
+      .then((d) => {
+        if (vivo && d && Array.isArray(d.items)) setItems(d.items);
+      })
+      .catch(() => undefined);
+    return () => {
+      vivo = false;
+    };
+  }, [pathname]);
+  return items;
 }

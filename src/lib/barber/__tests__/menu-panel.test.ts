@@ -152,7 +152,8 @@ test("Barberos ↔ Equipo: cada pantalla dice qué es la otra y la ficha sin cue
   assert.match(equipo, /role: "BARBER", barberId: ficha\.id, barbershopId: ficha\.barbershopId/);
 });
 
-test("el layout aplica anyPermission", () => {
-  const layout = leer("src/app/barber/(panel)/layout.tsx");
-  assert.match(layout, /item\.anyPermission &&\s*!item\.anyPermission\.some\(/);
+test("el menú aplica anyPermission (nav.ts, que usan el layout y GET /api/barber/nav)", () => {
+  const menu = leer("src/lib/barber/nav.ts");
+  assert.match(menu, /item\.anyPermission &&\s*!item\.anyPermission\.some\(/);
+  assert.match(leer("src/app/barber/(panel)/layout.tsx"), /resolveBarberNav\(/);
 });

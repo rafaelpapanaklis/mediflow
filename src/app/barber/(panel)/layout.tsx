@@ -3,11 +3,10 @@ export const dynamic = "force-dynamic";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getBarberContext } from "@/lib/barber-auth";
-import { hasBarberPermission, type BarberPermissionKey } from "@/lib/barber/permissions";
 import { getBarberPlan } from "@/lib/barber/plans";
 import { hasBarberPaidAccess } from "@/lib/barber/paid-access";
-import { barberNavItemsWhileUnpaid } from "@/lib/barber/plan-shared";
-import { BARBER_NAV_ITEMS, type BarberNavItem } from "@/lib/barber/types";
+import type { BarberNavItem } from "@/lib/barber/types";
+import { resolveBarberNav } from "@/lib/barber/nav";
 import { BARBER_LOGIN_PATH, BARBER_PRODUCT_NAME } from "@/lib/barber/marketing";
 import { BARBER_CHANGE_PASSWORD_PATH } from "@/lib/barber/contrasena";
 import { getBarberT } from "@/i18n/dictionaries/barber";
@@ -63,42 +62,11 @@ export default async function BarberPanelLayout({
   const plan = await getBarberPlan(ctx.barbershop.plan);
   const t = getBarberT(ctx.barbershop.locale);
   const paid = await hasBarberPaidAccess(ctx);
-
-  // Impaga: solo Suscripción y Soporte, las dos pantallas exentas del candado
-  // (helper PURO y ya probado de plan-shared). El recorte va ANTES del filtro
-  // de plan/permiso — no después: el orden importa porque Suscripción se
-  // indulta abajo. Soporte sí respeta su permiso (support.view): a quien no
-  // lo tiene la pantalla le diría «sin acceso».
-  const navSource = paid ? BARBER_NAV_ITEMS : barberNavItemsWhileUnpaid(BARBER_NAV_ITEMS);
-
-  const permUser = { role: ctx.role, permissionsOverride: ctx.user.permissionsOverride };
-  const items: BarberNavItem[] = navSource.filter((item) => {
-    // Sin pagar, Suscripción se ve SIEMPRE, tenga o no billing.manage: la
-    // pantalla ya deja verla en solo-lectura a cualquier rol, y si el
-    // permiso la escondiera un empleado vería el menú VACÍO, sin una sola
-    // pista de por qué su barbería dejó de funcionar.
-    if (!paid && item.key === "suscripcion") return true;
-    // Configuración se ve con CUALQUIER rol: quien no edita la barbería entra
-    // ahí a cambiar su propia contraseña (la página le enseña solo eso).
-    if (item.key === "configuracion") return true;
-    if (item.featureKey && plan.features[item.featureKey] !== true) return false;
-    if (item.permission && !hasBarberPermission(permUser, item.permission as BarberPermissionKey)) {
-      return false;
-    }
-    if (
-      item.anyPermission &&
-      !item.anyPermission.some((k) => hasBarberPermission(permUser, k as BarberPermissionKey))
-    ) {
-      return false;
-    }
-    return true;
-  }).map((item) => ({
-    key: item.key,
-    href: item.href,
-    icon: item.icon,
-    section: item.section,
-    label: t(`barber.shell.nav.${item.key}`),
-  }));
+  // El menú sale de resolveBarberNav (nav.ts): el MISMO cálculo que vuelve a
+  // pedir el menú en cada navegación interna (GET /api/barber/nav, m4), así
+  // una entrada que se le quita a alguien desaparece sin recargar. Sin pagar,
+  // se recorta a pagar o pedir ayuda (barberNavItemsWhileUnpaid).
+  const items: BarberNavItem[] = await resolveBarberNav(ctx, { features: plan.features, paid });
 
   // Sede activa en la barra de arriba (sucursales de verdad, 15-nov). Las
   // opciones son las que la sesión YA alcanza (getAccessibleBranchIds); con
