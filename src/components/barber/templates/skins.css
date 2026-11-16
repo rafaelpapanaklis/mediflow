@@ -7757,7 +7757,9 @@ img.dcbw-es-equipo-foto {
     display: flex;
     margin-right: auto;
     padding-right: 16px;
-    max-width: 320px;
+    /* Sin tope fijo: con 320px «Barbería Prueba DaleControl» salía «BARBERÍA
+       PRUE…» aunque sobrara media tira. La marca es lo único que encoge
+       (min-width: 0 + elipsis); las ligas son `flex: none`. */
   }
 
   .dcbw-barrio .bw-tira nav > a:not(.bw-marca) {
