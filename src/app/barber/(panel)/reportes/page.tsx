@@ -13,6 +13,7 @@ import { getBarberDict, getBarberT } from "@/i18n/dictionaries/barber";
 import type { Dictionary } from "@/i18n/t";
 import { BarberDenied } from "@/components/barber/cash/denied";
 import { ReportesView } from "@/components/barber/dashboard/reportes-view";
+import { CASH_EXPENSE_CATEGORIES } from "@/lib/barber/caja-movimientos-core";
 
 /**
  * /barber/reportes?range=today|week|month|custom&from=&to=&branch=&barber=
@@ -103,6 +104,7 @@ export default async function Page(
       barbers={barbers.map((b) => ({ id: b.id, label: b.nickname || b.name }))}
       currentBranch={currentBranch}
       currentBarber={currentBarber}
+      categoryLabels={Object.fromEntries(CASH_EXPENSE_CATEGORIES.map((c) => [c, t(`barber.caja.mov.cat.${c}`)]))}
     />
   );
 }

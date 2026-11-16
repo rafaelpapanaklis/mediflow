@@ -81,6 +81,8 @@ export function InicioView({
 
   const v = s.visits;
   const c = s.cash;
+  // Sin «Ver caja» el servidor no lo manda; y nunca para el rol Barbero.
+  const m = s.can.cash && !s.scope.selfOnly ? s.money ?? null : null;
   const q = s.queue;
   const a = s.alerts;
 
@@ -377,6 +379,62 @@ export function InicioView({
         </div>
 
         <div className="bdash-stack">
+          {/* Dinero de hoy (ws6-t5): solo viaja con «Ver caja» y el SQL de caja completa. */}
+          {m && (
+            <CardNew
+              title={k("money.title")}
+              action={
+                <Link href="/barber/caja" className="bdash-link">
+                  {k("money.goCash")} <ArrowRight size={14} aria-hidden />
+                </Link>
+              }
+            >
+              <div className={`bdash-big${(m.profit ?? 0) < 0 ? " bdash-big--neg" : ""}`}>
+                <Money value={signedOrDash(m.profit)} />
+              </div>
+              <div className="bdash-big__label">
+                {k("money.profit")} · {k("money.profitHint")}
+              </div>
+              {m.unavailable && (
+                <div className="bdash-callout bdash-callout--warning" role="status" style={{ marginTop: 10 }}>
+                  <span className="bdash-callout__text">{k("money.unavailable")}</span>
+                </div>
+              )}
+              <dl className="bdash-ledger">
+                <div className="bdash-ledger__row">
+                  <dt>{k("money.income")}</dt>
+                  <dd>{moneyOrDash(m.income)}</dd>
+                </div>
+                <div className="bdash-ledger__row">
+                  <dt>
+                    {k("money.expenses")}
+                    {(m.expensesCount ?? 0) > 0 && (
+                      <span className="bdash-ledger__meta">
+                        {k("money.expensesCount", { count: m.expensesCount ?? 0 })}
+                        {(m.expensesCash ?? 0) > 0 ? ` · ${k("money.expensesCash", { amount: fmtMoney(m.expensesCash) })}` : ""}
+                      </span>
+                    )}
+                  </dt>
+                  <dd>{lessOrDash(m.expenses)}</dd>
+                </div>
+                <div className="bdash-ledger__row">
+                  <dt>
+                    {k("money.barberCost")}
+                    <span className="bdash-ledger__meta">
+                      {k("money.barberCostHint")}
+                      {(m.payouts ?? 0) > 0 ? ` · ${k("money.paidToday", { amount: fmtMoney(m.payouts) })}` : ""}
+                    </span>
+                  </dt>
+                  <dd>{lessOrDash(m.barberCost)}</dd>
+                </div>
+              </dl>
+              <div className="bdash-foot">
+                <span>{m.tips === null ? k("money.tipsApartNone") : k("money.tipsApart", { amount: fmtMoney(m.tips) })}</span>
+                <span>{k("money.onlineNotIncluded")}</span>
+              </div>
+            </CardNew>
+          )}
+
           {c && (
             <CardNew
               title={k("cash.title")}
@@ -388,12 +446,26 @@ export function InicioView({
             >
               {c.open ? (
                 <>
+                  {/* Caja de OTRO día que nadie cerró (ws6-t5): el corte de ese día no cuadra hasta cerrarla. */}
+                  {c.staleSince ? (
+                    <div className="bdash-callout bdash-callout--danger bdash-callout--wrap" role="alert" style={{ marginBottom: 12 }}>
+                      <CalendarClock size={16} aria-hidden />
+                      <span className="bdash-callout__text">
+                        <strong>{k("cash.stale", { day: fmtLongDay(c.staleSince, locale) })}</strong>. {k("cash.staleHint")}
+                      </span>
+                      <Link href="/barber/caja" className="bdash-callout__cta">
+                        {k("cash.staleCta")}
+                      </Link>
+                    </div>
+                  ) : null}
                   <div className="bdash-status">
                     <span className="bdash-status__dot" /> {k("cash.open")}
                   </div>
-                  <div className="bdash-big" style={{ marginTop: 10 }}><Money value={fmtMoney(c.expectedCash)} /></div>
+                  <div className="bdash-big" style={{ marginTop: 10 }}><Money value={moneyOrDash(c.expectedCash)} /></div>
                   <div className="bdash-big__label">
-                    {k("cash.expected")} · {k("cash.expectedHint", { opening: fmtMoney(c.openingAmount) })}
+                    {c.full
+                      ? `${k("cash.inDrawer")} · ${k("cash.inDrawerHint", { opening: fmtMoney(c.openingAmount) })}`
+                      : `${k("cash.expected")} · ${k("cash.expectedHint", { opening: fmtMoney(c.openingAmount) })}`}
                   </div>
                   <div className="bdash-chips" style={{ marginTop: 12 }}>
                     <span className="bdash-chip">{k("cash.tickets", { count: c.ticketCount })}</span>
@@ -518,6 +590,22 @@ function Money({ value }: { value: string }) {
       <small className="bdash-cents">{m[2]}</small>
     </>
   );
+}
+
+/** null = la lectura falló (M6): «—», nunca un $0.00 que parezca cierto. */
+function moneyOrDash(n: number | null | undefined): string {
+  return typeof n === "number" ? fmtMoney(n) : "—";
+}
+function signedOrDash(n: number | null | undefined): string {
+  if (typeof n !== "number") return "—";
+  return n < 0 ? `−${fmtMoney(-n)}` : fmtMoney(n);
+}
+/** Un renglón que resta: «−$80.00»; 0 → «$0.00»; un monto negativo (renta a favor) → «+$X». */
+function lessOrDash(n: number | null | undefined): string {
+  if (typeof n !== "number") return "—";
+  if (n > 0) return `−${fmtMoney(n)}`;
+  if (n < 0) return `+${fmtMoney(-n)}`;
+  return fmtMoney(0);
 }
 
 /** Una celda de la banda de cifras de Inicio (antes, una KpiCard). */

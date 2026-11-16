@@ -47,6 +47,9 @@ import {
 } from "@/lib/barber-auth";
 import { resolveBranchScope } from "@/lib/barber/branches";
 import { expectedCashFor, resolveBarberFeatures } from "@/lib/barber/cash";
+import { cambioPct, getDineroPeriodo, type DineroPeriodo } from "@/lib/barber/caja-dinero";
+import { RESUMEN_INCOME_METHODS } from "@/lib/barber/caja-resumen";
+import { BARBER_PAYOUT_KINDS } from "@/lib/barber/caja-movimientos-core";
 import {
   BarberCajaError,
   CANCELLED_MARK,
@@ -331,6 +334,41 @@ export interface InicioCash {
   ticketCount: number;
   salesTotal: number;
   tipsTotal: number;
+  /**
+   * Caja completa (ws6-t5): expectedCash ya es «lo que hay en el cajón ahora»
+   * con gastos, retiros, entradas y pagos (summarizeSession, la cuenta de la
+   * Caja). false/ausente = sin sql/barber_caja_completa.sql: fondo + efectivo.
+   */
+  full?: boolean;
+  /** Día local (YYYY-MM-DD) en que se abrió, si NO es hoy: la caja quedó abierta. null = es de hoy. */
+  staleSince?: string | null;
+}
+
+/**
+ * Dinero completo de HOY (ws6-t5): solo con cash.view y el SQL de caja
+ * completa pegado. Sale de caja-dinero.ts (cajaResumen de ws6-t1).
+ */
+export interface InicioMoney {
+  /**
+   * true = la lectura falló (M6 de la revisión ws6-t8): las cifras viajan en
+   * null y la pantalla enseña «—», NUNCA una cuenta vieja que no cuadra.
+   */
+  unavailable?: boolean;
+  /** Ingresos del negocio (= «Ingresos de hoy» de la banda: sin propinas). */
+  income: number | null;
+  /** Propinas de hoy: son de los barberos, se enseñan aparte. */
+  tips: number | null;
+  /** Gastos de hoy (todos los medios; los anulados no). */
+  expenses: number | null;
+  expensesCount: number | null;
+  /** De esos gastos, los pagados en efectivo. */
+  expensesCash: number | null;
+  /** Lo que les toca hoy a los barberos (comisión + sueldo − renta), sin propinas. */
+  barberCost: number | null;
+  /** Lo ENTREGADO hoy a barberos (adelantos, comisión, sueldo, propinas): informativo. */
+  payouts: number | null;
+  /** Te queda hoy = ingresos − gastos − lo que les toca a los barberos. */
+  profit: number | null;
 }
 
 export interface InicioAlerts {
@@ -420,6 +458,8 @@ export interface InicioSummary {
   } | null;
   upcoming: InicioUpcoming[];
   cash: InicioCash | null;
+  /** null/ausente = no viaja (sin cash.view, rol Barbero o sin el SQL de caja completa). */
+  money?: InicioMoney | null;
   queue: { waiting: number; called: number } | null;
   alerts: InicioAlerts;
   setup: InicioSetup;
@@ -813,6 +853,70 @@ export async function getInicioSummary(ctx: BarberContext, opts: InicioOptions =
     viewingLabel: viewing?.label ?? null,
   };
 
+  // Caja completa (ws6-t5): gastos, pagos y «te queda» de hoy, y el cajón con
+  // TODOS sus movimientos. Las cuentas son las de la Caja (cajaResumen vía
+  // getDineroPeriodo). Sin el SQL pegado, money = null y
+  // la tarjeta de caja se queda con la cuenta de siempre. Si la lectura
+  // falla, Inicio se pinta igual sin esto (no tumba la pantalla de entrada).
+  let money: InicioMoney | null = null;
+  let fullExpected: number | null = null;
+  let staleSince: string | null = null;
+  let dineroFailed = false;
+  if (canCash) {
+    const r = await getDineroPeriodo(
+      ctx,
+      branchIds,
+      { from: todayStart, to: tomorrowStart },
+      {
+        openSession: openSession
+          ? {
+              id: openSession.id,
+              barbershopId: cashShopId,
+              openingAmount: D(openSession.openingAmount as never),
+              openedAt: new Date(openSession.openedAt),
+            }
+          : null,
+        now,
+      },
+    ).catch((e: unknown) => {
+      // M6 (revisión ws6-t8): si falla, se registra y la pantalla enseña «—».
+      // Nunca se vuelve en silencio a la cuenta sin movimientos (no cuadra con Caja).
+      console.error("[barber/inicio] dinero de hoy: falló la lectura, se enseña «—»", e);
+      return "error" as const;
+    });
+    if (r === "error") {
+      dineroFailed = true;
+      money = {
+        unavailable: true,
+        income: null,
+        tips: null,
+        expenses: null,
+        expensesCount: null,
+        expensesCash: null,
+        barberCost: null,
+        payouts: null,
+        profit: null,
+      };
+    } else if (r) {
+      const d = r.dinero;
+      money = {
+        income: d.income,
+        tips: d.tips,
+        expenses: d.expenses.total,
+        expensesCount: d.expenses.count,
+        expensesCash: d.expenses.cash,
+        barberCost: d.barberCost.total,
+        payouts: d.payouts.total,
+        profit: d.profit,
+      };
+      fullExpected = r.openExpected;
+    }
+    if (money && openSession) {
+      const openedDay = dateKeyInTz(new Date(openSession.openedAt), tz);
+      staleSince = openedDay !== todayKey ? openedDay : null;
+    }
+  }
+
   const cash: InicioCash | null = canCash
     ? openSession
       ? {
@@ -820,12 +924,18 @@ export async function getInicioSummary(ctx: BarberContext, opts: InicioOptions =
           sessionId: openSession.id,
           openedAt: new Date(openSession.openedAt).toISOString(),
           openedByName: openSession.opened_by || "—",
-          // MISMA regla que la caja: fondo + Σ total de tickets vivos en efectivo.
-          expectedCash: toNum(expectedCashFor(D(openSession.openingAmount as never), D(openSession.cash_total as never))),
+          // MISMA regla que la caja: con el SQL de caja completa, el esperado
+          // del turno con sus movimientos (cajaResumen); sin él, fondo +
+          // Σ total de tickets vivos en efectivo. Si la lectura de caja
+          // completa FALLÓ: null («—»), nunca la cuenta sin movimientos (M6).
+          expectedCash: dineroFailed
+            ? null
+            : fullExpected ?? toNum(expectedCashFor(D(openSession.openingAmount as never), D(openSession.cash_total as never))),
           openingAmount: toNum(D(openSession.openingAmount as never)),
           ticketCount: intOf(openSession.tickets),
           salesTotal: toNum(D(openSession.sales_total as never)),
           tipsTotal: toNum(D(openSession.tips_total as never)),
+          ...(money ? { full: dineroFailed || fullExpected !== null, staleSince } : {}),
         }
       : {
           open: false,
@@ -876,6 +986,7 @@ export async function getInicioSummary(ctx: BarberContext, opts: InicioOptions =
     visits,
     upcoming,
     cash,
+    ...(money ? { money } : {}),
     queue,
     alerts,
     setup,
@@ -1000,6 +1111,27 @@ export interface ReportBarberRow {
   avgTicket: number | null;
   /** null = sin permiso commissions.view (la columna no viaja). */
   commission: number | null;
+  /**
+   * Caja completa (ws6-t5): lo que se le pagó en el periodo (adelantos,
+   * comisión, sueldo, otro) y, de eso, los adelantos/vales. Ausente = sin
+   * cash.view o sin el SQL de caja completa (la columna no viaja).
+   */
+  paidOut?: number;
+  advances?: number;
+}
+
+/**
+ * «Ingresos y gastos» de Reportes (ws6-t5). Las cuentas salen de cajaResumen
+ * (ws6-t1) vía caja-dinero.ts. Es de TODA la sede (o la cadena): el filtro
+ * de barbero no la recorta (barberFiltered lo avisa).
+ */
+export interface ReportCashFlow {
+  current: DineroPeriodo;
+  previous: { income: number; expenses: number; payouts: number; profit: number };
+  /** Ganancia vs. el periodo anterior de la misma longitud. null = el anterior fue 0. */
+  vsPrevProfitPct: number | null;
+  vsPrevExpensesPct: number | null;
+  barberFiltered: boolean;
 }
 
 export interface ReportItemRow {
@@ -1105,6 +1237,8 @@ export interface ReportsSummary {
   noShows: ReportNoShows;
   retention: ReportRetention;
   payments: ReportPayment[];
+  /** Ausente/null = no viaja: sin cash.view, rol Barbero, plan sin caja o sin el SQL de caja completa. */
+  cashFlow?: ReportCashFlow | null;
 }
 
 export interface ReportsOptions extends StatsScopeInput {
@@ -1584,6 +1718,39 @@ export async function getReportsSummary(ctx: BarberContext, opts: ReportsOptions
     })
     .filter((p) => p.count > 0 || p.method !== "STRIPE");
 
+  // ── Ingresos y gastos (caja completa, ws6-t5) ──
+  // Solo quien ve la caja (cash.view), nunca el rol Barbero, con el plan que
+  // trae caja y con sql/barber_caja_completa.sql pegado. Periodo y anterior
+  // en serie (cada uno ya junta sus lecturas en un Promise.all).
+  let cashFlow: ReportCashFlow | null = null;
+  if (!selfOnly && features.cash === true && can(ctx, "cash.view")) {
+    try {
+      const cur = await getDineroPeriodo(ctx, branchIds, { from: start, to: end });
+      const prev = cur ? await getDineroPeriodo(ctx, branchIds, { from: prevStart, to: start }) : null;
+      if (cur && prev) {
+        const c = cur.dinero;
+        const p = prev.dinero;
+        cashFlow = {
+          current: c,
+          previous: { income: p.income, expenses: p.expenses.total, payouts: p.payouts.total, profit: p.profit },
+          vsPrevProfitPct: cambioPct(c.profit, p.profit),
+          vsPrevExpensesPct: cambioPct(c.expenses.total, p.expenses.total),
+          barberFiltered: barberIds !== null,
+        };
+        const porBarbero = new Map(c.byBarber.map((b) => [b.barberId, b]));
+        for (const row of byBarber) {
+          const b = porBarbero.get(row.barberId);
+          row.paidOut = b?.paidOut ?? 0;
+          row.advances = b?.advances ?? 0;
+        }
+      }
+    } catch (e) {
+      // Reportes se pinta igual sin esta sección; no tumba la pantalla.
+      console.error("[barber/reportes] ingresos y gastos", e);
+      cashFlow = null;
+    }
+  }
+
   const revenue = money(tot.revenue);
   return {
     generatedAt: now.toISOString(),
@@ -1633,6 +1800,7 @@ export async function getReportsSummary(ctx: BarberContext, opts: ReportsOptions
       returnRate: ratioPct(newReturned, newClients),
     },
     payments,
+    ...(cashFlow ? { cashFlow } : {}),
   };
 }
 
@@ -1697,6 +1865,99 @@ export interface ReportsCsvLabels {
     newReturned: string;
     returnRate: string;
   };
+  /**
+   * «Ingresos y gastos» (ws6-t5). Opcional: sin estas etiquetas (o sin
+   * s.cashFlow) la sección no se escribe y el CSV sale como antes.
+   */
+  money?: ReportsCsvMoneyLabels;
+}
+
+export interface ReportsCsvMoneyLabels {
+  sections: { money: string; byMethod: string; byCategory: string; byKind: string };
+  metrics: {
+    charged: string;
+    tips: string;
+    income: string;
+    expenses: string;
+    expensesCash: string;
+    payouts: string;
+    /** Comisiones y sueldos devengados, sin propinas (G2): lo que resta en la ganancia. */
+    barberCost?: string;
+    profit: string;
+    prevProfit: string;
+    cashNet: string;
+    note?: string;
+  };
+  /** Textos de las notas (M4 cobros en línea, N5 tope de movimientos). */
+  onlineNotIncluded?: string;
+  truncated?: string;
+  method: string;
+  category: string;
+  kind: string;
+  count: string;
+  total: string;
+  barber: string;
+  paidOut: string;
+  advances: string;
+  methods: Record<string, string>;
+  categories: Record<string, string>;
+  kinds: Record<string, string>;
+}
+
+/** Las etiquetas de dinero, solo si vienen completas (un llamador viejo sin ellas → CSV como antes). */
+function moneyLabelsOf(L: ReportsCsvLabels): ReportsCsvMoneyLabels | null {
+  const m = L.money;
+  return m && typeof m === "object" && typeof m.sections === "object" && typeof m.metrics === "object" ? m : null;
+}
+
+/** Las filas de «Ingresos y gastos» (sin BOM). Vacío si la sección no viaja. */
+function cashFlowCsvLines(s: ReportsSummary, L: ReportsCsvLabels, M: ReportsCsvMoneyLabels): string[] {
+  const cf = s.cashFlow;
+  if (!cf) return [];
+  const c = cf.current;
+  const lines: string[] = [];
+  const push = (cells: unknown[]) => lines.push(csvLine(cells));
+  const blank = () => lines.push("");
+
+  push([M.sections.money]);
+  push([L.metric, L.value]);
+  push([L.metrics.period, `${s.period.from} → ${s.period.to}`]);
+  push([M.metrics.charged, c.charged]);
+  push([M.metrics.tips, c.tips]);
+  push([M.metrics.income, c.income]);
+  push([M.metrics.expenses, c.expenses.total]);
+  push([M.metrics.expensesCash, c.expenses.cash]);
+  // G2: resta lo devengado (sin propinas); lo entregado va como dato, no resta.
+  push([M.metrics.barberCost ?? "barberCost", c.barberCost.total]);
+  push([M.metrics.profit, c.profit]);
+  push([M.metrics.prevProfit, cf.previous.profit]);
+  push([M.metrics.payouts, c.payouts.total]);
+  push([M.metrics.cashNet, c.cashNet]);
+  if (M.onlineNotIncluded) push([M.metrics.note ?? "", M.onlineNotIncluded]);
+  if (c.truncated && M.truncated) push([M.metrics.note ?? "", M.truncated]);
+  blank();
+
+  push([M.sections.byMethod]);
+  push([M.method, M.count, M.total]);
+  for (const m of RESUMEN_INCOME_METHODS) push([M.methods[m] ?? m, c.byMethod[m].count, c.byMethod[m].total]);
+  blank();
+
+  push([M.sections.byCategory]);
+  push([M.category, M.count, M.total]);
+  for (const r of c.expenses.byCategory) push([M.categories[r.category] ?? r.category, r.count, r.total]);
+  blank();
+
+  push([M.sections.byKind]);
+  push([M.kind, M.total]);
+  for (const k of BARBER_PAYOUT_KINDS) push([M.kinds[k] ?? k, c.payouts.byKind[k]]);
+  return lines;
+}
+
+/** CSV SOLO de «Ingresos y gastos» (botón de su tarjeta). Mismo formato que buildReportsCsv. */
+export function buildCashFlowCsv(s: ReportsSummary, L: ReportsCsvLabels): string {
+  const M = moneyLabelsOf(L);
+  const lines = M ? cashFlowCsvLines(s, L, M) : [];
+  return String.fromCharCode(0xfeff) + lines.join("\r\n") + "\r\n";
 }
 
 function csvCell(v: unknown): string {
@@ -1740,10 +2001,15 @@ export function buildReportsCsv(s: ReportsSummary, L: ReportsCsvLabels): string 
   push([L.sections.byBarber]);
   const barberHead = [L.barber, L.tickets, L.produced, L.tips, L.avgTicket];
   if (s.can.commissions) barberHead.push(L.commission);
+  // Pagado y adelantos del periodo (ws6-t5): solo si viajó «Ingresos y gastos».
+  const M = moneyLabelsOf(L);
+  const paid = Boolean(s.cashFlow && M);
+  if (paid) barberHead.push(M!.paidOut, M!.advances);
   push(barberHead);
   for (const b of s.byBarber) {
     const row: unknown[] = [b.nickname || b.name, b.tickets, b.produced, b.tips, b.avgTicket ?? ""];
     if (s.can.commissions) row.push(b.commission ?? "");
+    if (paid) row.push(b.paidOut ?? 0, b.advances ?? 0);
     push(row);
   }
   blank();
@@ -1787,6 +2053,12 @@ export function buildReportsCsv(s: ReportsSummary, L: ReportsCsvLabels): string 
   push([L.sections.payments]);
   push([L.method, L.tickets, L.revenue, L.tips, L.total, L.share]);
   for (const p of s.payments) push([L.methods[p.method] ?? p.method, p.count, p.revenue, p.tips, p.total, p.share ?? ""]);
+
+  // Ingresos y gastos (ws6-t5): solo si viajó (cash.view + SQL de caja completa).
+  if (s.cashFlow && M) {
+    blank();
+    lines.push(...cashFlowCsvLines(s, L, M));
+  }
 
   // BOM para que Excel abra el UTF-8 con acentos; CRLF por el mismo motivo.
   return String.fromCharCode(0xfeff) + lines.join("\r\n") + "\r\n";

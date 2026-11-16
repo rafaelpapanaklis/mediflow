@@ -13,6 +13,7 @@ import { fmtDateTime, fmtHour, fmtInt, fmtMediumDay, fmtMoney, fmtPct, fmtPctSig
 import { RevenueChart } from "./revenue-chart";
 import { Heatmap } from "./heatmap";
 import { ItemBars, PaymentsBar } from "./bars";
+import { CashFlowCard } from "./cash-flow-card";
 import type { BranchOption } from "./branch-select";
 
 export interface BarberOption {
@@ -36,6 +37,7 @@ export function ReportesView({
   barbers,
   currentBranch,
   currentBarber,
+  categoryLabels = {},
 }: {
   dict: Dictionary;
   summary: ReportsSummary;
@@ -46,6 +48,8 @@ export function ReportesView({
   currentBranch: string;
   /** id del barbero filtrado o "". */
   currentBarber: string;
+  /** Categorías de gasto con las etiquetas de la Caja (barber.caja.mov.cat.*). */
+  categoryLabels?: Record<string, string>;
 }) {
   const t = useBarberT(dict);
   const router = useRouter();
@@ -93,6 +97,8 @@ export function ReportesView({
       : `${(s.period.from.slice(0, 4) === s.period.to.slice(0, 4) ? fmtShortDay(s.period.from, locale) : fmtMediumDay(s.period.from, locale))} – ${fmtMediumDay(s.period.to, locale)} · ${t("period.days", { count: s.period.days })}`;
 
   const hasSales = s.totals.tickets > 0;
+  // Pagado y adelantos por barbero (ws6-t5): solo si viajó «Ingresos y gastos».
+  const paidCols = Boolean(s.cashFlow);
   const occ = s.occupancy;
   const noSchedule = occ.openHours.every((h) => h !== null) && occ.openHours.every((h) => h && h.from === occ.openHours[0]!.from && h.to === occ.openHours[0]!.to);
 
@@ -262,6 +268,9 @@ export function ReportesView({
         )}
       </CardNew>
 
+      {/* Ingresos y gastos (ws6-t5): solo viaja con «Ver caja» y el SQL de caja completa. */}
+      {s.cashFlow && <CashFlowCard cf={s.cashFlow} locale={locale} csvHref={`${csvHref}&section=money`} t={t} categoryLabels={categoryLabels} />}
+
       <div className="bdash-grid bdash-grid--even">
         {/* Por barbero */}
         <CardNew title={t("barbers.title")} noPad={s.byBarber.length > 0}>
@@ -278,6 +287,8 @@ export function ReportesView({
                     <th className="bdash-num">{t("barbers.colAvg")}</th>
                     <th className="bdash-num">{t("barbers.colTips")}</th>
                     {s.can.commissions && <th className="bdash-num">{t("barbers.colCommission")}</th>}
+                    {paidCols && <th className="bdash-num">{t("money.colPaidOut")}</th>}
+                    {paidCols && <th className="bdash-num">{t("money.colAdvances")}</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -297,6 +308,8 @@ export function ReportesView({
                       <td className="bdash-num">{b.avgTicket === null ? "—" : fmtMoney(b.avgTicket)}</td>
                       <td className="bdash-num">{fmtMoney(b.tips)}</td>
                       {s.can.commissions && <td className="bdash-num">{b.commission === null ? "—" : fmtMoney(b.commission)}</td>}
+                      {paidCols && <td className="bdash-num">{fmtMoney(b.paidOut ?? 0)}</td>}
+                      {paidCols && <td className="bdash-num">{b.advances ? fmtMoney(b.advances) : "—"}</td>}
                     </tr>
                   ))}
                 </tbody>
