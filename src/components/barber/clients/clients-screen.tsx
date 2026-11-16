@@ -95,10 +95,12 @@ export function BarberClientsScreen({
   const [showNew, setShowNew] = useState(false);
   // «Es otra persona» en la ficha regresa aquí con el nombre ya escrito.
   const [prefillName, setPrefillName] = useState("");
+  const [prefillPhone, setPrefillPhone] = useState("");
   const searchParams = useSearchParams();
   useEffect(() => {
     if (searchParams.get("alta") === "1") {
       setPrefillName((searchParams.get("nombre") ?? "").slice(0, 80));
+      setPrefillPhone((searchParams.get("tel") ?? "").replace(/\D/g, "").slice(-10));
       setShowNew(true);
       router.replace("/barber/clientes");
     }
@@ -380,6 +382,7 @@ export function BarberClientsScreen({
         <NewClientModal
           t={t}
           initialName={prefillName}
+          initialPhone={prefillPhone}
           onClose={() => setShowNew(false)}
           onDone={(clientId, created, typedName) => {
             setShowNew(false);
@@ -508,16 +511,19 @@ function NewClientModal({
   onDone,
   onMessage,
   initialName = "",
+  initialPhone = "",
 }: {
   t: ReturnType<typeof useBarberT>;
   onClose: () => void;
   onDone: (clientId: string, created: boolean, typedName: string) => void;
   initialName?: string;
+  /** Desde Mensajes («Crear ficha» de un número sin ficha): el WhatsApp ya puesto. */
+  initialPhone?: string;
   onMessage: (text: string) => void;
 }) {
   const [form, setForm] = useState({
     name: initialName,
-    phone: "",
+    phone: initialPhone,
     email: "",
     birthday: "",
     notes: "",

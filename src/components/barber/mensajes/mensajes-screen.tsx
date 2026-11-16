@@ -78,6 +78,8 @@ export interface MensajesPermisos {
   agenda: boolean;
   /** agenda.edit + plan con agenda — «Agendar» al cliente del chat. */
   book?: boolean;
+  /** clients.edit + plan con clientes — «Crear ficha» a un número sin ficha. */
+  createClient?: boolean;
 }
 
 /** «2026-11-15» del instante en la zona de la barbería (el día que abre la Agenda). */
@@ -868,6 +870,13 @@ function Chat(p: ChatProps) {
           </h2>
           <p className={s.chatSub}>
             {nombre ? <span>{formatBarberPhone(phone)}</span> : <span>{t("chat.noClient")}</span>}
+            {/* Número que escribe y no tiene ficha: se le crea con su
+                WhatsApp ya puesto (y desde ahí se le agenda). */}
+            {!clientId && p.can.createClient ? (
+              <Link href={`/barber/clientes?alta=1&tel=${encodeURIComponent(phone)}`} className={s.enlace}>
+                {t("chat.createClient")}
+              </Link>
+            ) : null}
             {clientId && p.can.clients ? (
               <Link href={`/barber/clientes/${encodeURIComponent(clientId)}`} className={s.enlace}>
                 {t("chat.viewClient")}

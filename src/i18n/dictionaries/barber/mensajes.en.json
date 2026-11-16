@@ -53,6 +53,7 @@
     "back": "Back to chats",
     "viewClient": "View profile",
     "noClient": "No client profile",
+    "createClient": "Create profile",
     "nextAppt": "Next appointment",
     "with": "with {barber}",
     "noAppt": "No appointment in the next 14 days",

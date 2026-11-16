@@ -53,6 +53,7 @@
     "back": "Volver a los chats",
     "viewClient": "Ver ficha",
     "noClient": "Sin ficha de cliente",
+    "createClient": "Crear ficha",
     "nextAppt": "Próxima cita",
     "with": "con {barber}",
     "noAppt": "Sin cita en los próximos 14 días",
