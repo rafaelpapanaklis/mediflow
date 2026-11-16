@@ -37,7 +37,8 @@
     "planLockedBody": "Disponible en los planes Avanzado y Profesional. Puedes cambiar de plan desde Suscripción.",
     "goToPlan": "Ver planes",
     "cancelled": "Cancelado",
-    "by": "por"
+    "by": "por",
+    "optional": "opcional"
   },
   "caja": {
     "title": "Caja",
@@ -150,7 +151,19 @@
     "cashCharged": "Efectivo cobrado en el turno",
     "cashChargedTips": "Incluye {tips} de propinas: ya van dentro, no se suman aparte.",
     "expectedHow": "Fondo inicial + efectivo cobrado.",
-    "outsideDrawer": "No está en el cajón (no lo cuentes):"
+    "outsideDrawer": "No está en el cajón (no lo cuentes):",
+    "expectedHowFull": "Fondo + efectivo cobrado + entradas − gastos, retiros, pagos y devoluciones en efectivo.",
+    "sum": {
+      "cashIn": "Entradas de efectivo",
+      "cashExpenses": "Gastos pagados en efectivo",
+      "withdrawals": "Retiros",
+      "cashPayouts": "Pagos a barberos en efectivo",
+      "cashRefunds": "Anticipos devueltos en efectivo"
+    },
+    "openingSuggested": "Es el fondo que se dejó en el último corte ({amount}). Cámbialo si no es lo que hay.",
+    "openWithDiff": "Abrir con esa diferencia",
+    "openDiffShort": "En el último corte se dejaron {left} de fondo y vas a abrir con {amount}: faltan {diff}. Si es correcto, vuelve a pulsar; queda anotado en el corte.",
+    "openDiffOver": "En el último corte se dejaron {left} de fondo y vas a abrir con {amount}: sobran {diff}. Si es correcto, vuelve a pulsar; queda anotado en el corte."
   },
   "ticket": {
     "title": "Cobrar",
@@ -276,7 +289,9 @@
     "receiptPeriodTotal": "Total del periodo",
     "receiptAlreadyPaid": "Ya pagado",
     "receiptPartial": "Pago parcial el {date}; hay pendiente",
-    "receiptCoveredNote": "Incluye cortes cubiertos por membresía o lealtad: el cliente pagó $0 en ese ticket y la comisión se calcula sobre el precio normal del servicio."
+    "receiptCoveredNote": "Incluye cortes cubiertos por membresía o lealtad: el cliente pagó $0 en ese ticket y la comisión se calcula sobre el precio normal del servicio.",
+    "receiptAdvances": "Adelantos/vales del periodo (ya entregados)",
+    "receiptToHand": "A entregar (pendiente)"
   },
   "comisiones": {
     "title": "Comisiones",
@@ -360,7 +375,15 @@
     "payAlreadyPaid": "Ya pagado antes en este periodo: {amount}.",
     "markedPaidAmount": "Pago registrado: {amount}",
     "nothingToPay": "No había nada pendiente por pagar.",
-    "entryCovered": "Cubierto por membresía o lealtad: comisiona sobre el precio normal"
+    "entryCovered": "Cubierto por membresía o lealtad: comisiona sobre el precio normal",
+    "advances": "Ya restados: −{amount} de adelantos",
+    "fromCash": "Sale de la caja en efectivo ({amount})",
+    "fromCashHint": "Queda como pago a barbero en la caja abierta y baja lo que debe haber en el cajón. Un solo registro: no lo anotes otra vez en Caja.",
+    "fromCashNoSession": "No hay caja abierta: ábrela en Caja para pagar desde el cajón.",
+    "payAdvances": "− Adelantos/vales del periodo (ya se le dieron)",
+    "colToHand": "A entregar",
+    "toCash": "Entra a la caja en efectivo ({amount})",
+    "toCashHint": "El barbero entrega la renta en efectivo: queda como entrada en la caja abierta y sube lo que debe haber en el cajón."
   },
   "productos": {
     "title": "Productos",
@@ -554,5 +577,250 @@
     "refundWarning": "Este pedido se pagó en línea ({total}). Cancelarlo aquí NO devuelve el dinero: el reembolso lo haces tú en Mercado Pago.",
     "refundDone": "Ya hice el reembolso en Mercado Pago",
     "cancelBody": "Las piezas apartadas vuelven a estar disponibles en tu tienda."
+  },
+  "status": {
+    "open": "Abrir caja",
+    "close": "Cerrar caja",
+    "openSince": "Caja abierta desde las {time}",
+    "openSinceDate": "Caja abierta desde el {date}",
+    "openedBy": "abrió {name}",
+    "float": "fondo {amount}",
+    "closed": "Caja cerrada",
+    "staleTitle": "Esta caja sigue abierta desde el {date}.",
+    "staleBody": "Ciérrala y cuenta el efectivo antes de seguir: lo que cobres hoy se mezclaría con el corte de ese día.",
+    "staleClose": "Cerrarla ahora",
+    "actions": "Qué hacer en caja",
+    "charge": "Cobrar",
+    "needsOpen": "Abre la caja primero"
+  },
+  "cards": {
+    "expected": "Debe haber en caja",
+    "expectedHint": "Efectivo que tiene que haber en el cajón ahora.",
+    "income": "Cobrado (con propinas)",
+    "online": "En línea",
+    "expenses": "Gastos",
+    "expensesHint": "En efectivo: {cash}",
+    "expensesHintPayouts": "En efectivo: {cash} · pagos a barberos: {payouts}",
+    "moves": "Retiros / entradas",
+    "movesHint": "Entradas {in} · {out} retiros · {inCount} entradas",
+    "incomeTips": "Propinas {tips}"
+  },
+  "day": {
+    "title": "Movimientos del día",
+    "empty": "Todavía no hay nada en esta caja.",
+    "filter": "Ver",
+    "f": {
+      "all": "Todo",
+      "tickets": "Tickets",
+      "expenses": "Gastos",
+      "withdrawals": "Retiros",
+      "deposits": "Entradas",
+      "payouts": "Pagos",
+      "advances": "Anticipos"
+    },
+    "colWhat": "Qué",
+    "colWho": "Quién",
+    "colAmount": "Monto",
+    "kind": {
+      "ticket": "Ticket",
+      "deposit": "Anticipo",
+      "refund": "Devolución de anticipo",
+      "membership": "Membresía"
+    },
+    "tipIncluded": "incluye {tip} de propina",
+    "voidedBy": "Anulado por {name} · {when}"
+  },
+  "mov": {
+    "title": {
+      "EXPENSE": "Registrar gasto",
+      "WITHDRAWAL": "Sacar efectivo",
+      "DEPOSIT": "Meter efectivo",
+      "BARBER_PAYOUT": "Pagar a barbero"
+    },
+    "body": {
+      "EXPENSE": "Lo que se compra o se paga para la barbería: navajas, el garrafón, la renta. Solo el monto es obligatorio.",
+      "WITHDRAWAL": "Efectivo que sale del cajón sin ser un gasto: llevarlo al banco, dárselo al dueño.",
+      "DEPOSIT": "Efectivo que entra al cajón sin ser una venta: cambio, morralla, un préstamo del dueño.",
+      "BARBER_PAYOUT": "Un adelanto o vale se descuenta después en Comisiones."
+    },
+    "confirm": {
+      "EXPENSE": "Registrar gasto de {amount}",
+      "WITHDRAWAL": "Sacar {amount}",
+      "DEPOSIT": "Meter {amount}",
+      "BARBER_PAYOUT": "Pagar {amount}"
+    },
+    "saved": {
+      "EXPENSE": "Gasto registrado",
+      "WITHDRAWAL": "Retiro registrado",
+      "DEPOSIT": "Entrada registrada",
+      "BARBER_PAYOUT": "Pago registrado"
+    },
+    "savedOutside": "Registrado fuera de caja: no había caja abierta.",
+    "type": {
+      "EXPENSE": "Gasto",
+      "WITHDRAWAL": "Retiro de efectivo",
+      "DEPOSIT": "Entrada de efectivo"
+    },
+    "amount": "Monto",
+    "amountError": {
+      "required": "Escribe el monto.",
+      "format": "Solo números, por ejemplo 80 o 80.50 (sin letras ni signo menos).",
+      "zero": "El monto tiene que ser mayor que $0.",
+      "tooBig": "Ese monto es demasiado grande."
+    },
+    "category": "Categoría",
+    "cat": {
+      "SUPPLIES": "Insumos",
+      "RESALE": "Productos para venta",
+      "CLEANING": "Limpieza",
+      "RENT": "Renta",
+      "UTILITIES": "Luz/agua/internet",
+      "FOOD": "Comida",
+      "ADS": "Publicidad",
+      "MAINTENANCE": "Mantenimiento",
+      "PAYROLL": "Sueldos/comisiones",
+      "OTHER": "Otro",
+      "none": "Sin categoría"
+    },
+    "method": {
+      "CASH": "Efectivo",
+      "CARD": "Tarjeta",
+      "TRANSFER": "Transferencia",
+      "OTHER": "Otro"
+    },
+    "methodLabel": "¿Con qué se pagó?",
+    "outsideWarning": "No hay caja abierta: este gasto se registra fuera de caja y no entra en ningún corte.",
+    "notDrawer": "No sale del cajón: no cambia lo que debe haber en caja.",
+    "note": "Nota",
+    "notePlaceholder": {
+      "EXPENSE": "Ej. garrafón, navajas",
+      "WITHDRAWAL": "Ej. depósito al banco",
+      "DEPOSIT": "Ej. cambio para el día",
+      "BARBER_PAYOUT": "Ej. vale de la semana"
+    },
+    "receipt": "Foto del comprobante",
+    "receiptAdd": "Tomar o subir foto",
+    "receiptUploading": "Subiendo…",
+    "receiptReady": "Foto lista",
+    "receiptRemove": "Quitar foto",
+    "receiptView": "Ver comprobante",
+    "photoTooBig": "La foto es demasiado pesada.",
+    "photoBad": "No se pudo leer esa foto.",
+    "barber": "Barbero",
+    "noBarbers": "No hay barberos activos en esta sede.",
+    "payoutKind": "Tipo de pago",
+    "payout": {
+      "ADVANCE": "Adelanto / vale",
+      "COMMISSION": "Comisión",
+      "SALARY": "Sueldo",
+      "OTHER": "Otro"
+    },
+    "void": "Anular",
+    "voidTitle": "Anular movimiento",
+    "voidBody": "No se borra: queda tachado en la lista, con quién lo anuló y cuándo, y deja de contar en el corte.",
+    "voidConfirm": "Anular",
+    "voided": "Movimiento anulado",
+    "voidLinkedBody": "Deshace el pago marcado en Comisiones: la comisión vuelve a quedar pendiente, los adelantos que descontó vuelven a restarse y este movimiento queda tachado. Un pago que incluyó sueldo no se puede deshacer."
+  },
+  "corte": {
+    "title": "Corte de caja",
+    "opened": "Apertura",
+    "closed": "Cierre",
+    "openedByLabel": "Abrió",
+    "closedByLabel": "Cerró",
+    "cashSection": "Efectivo en el cajón",
+    "countSection": "Conteo",
+    "counted": "Contado",
+    "difference": "Diferencia",
+    "diffOk": "Cuadra",
+    "diffOver": "Sobran {amount}",
+    "diffShort": "Faltan {amount}",
+    "leftForNext": "Fondo para mañana",
+    "taken": "Se retira",
+    "tickets": "Tickets",
+    "average": "Ticket promedio",
+    "discounts": "Descuentos",
+    "payouts": "Pagos a barberos",
+    "withdrawals": "Retiros",
+    "deposits": "Entradas",
+    "coin": "moneda",
+    "notClosed": "CAJA ABIERTA",
+    "sign": "Firma de quien entrega y recibe",
+    "closedElsewhere": "Esta caja ya se cerró en otra pantalla. Actualiza para ver el corte.",
+    "alreadyClosed": "Esta caja ya la cerró {name} ({time}). Este es su corte; no se cerró dos veces.",
+    "whatsapp": "Mandar resumen por WhatsApp",
+    "print": "Imprimir corte",
+    "howCount": "¿Cómo cuentas el efectivo?",
+    "modeTotal": "Escribir el total",
+    "modeCount": "Contar billetes y monedas",
+    "pieces": "Piezas de {denom}",
+    "leftQuestion": "¿Cuánto dejas de fondo para mañana?",
+    "leftHint": "Lo que se queda en el cajón para abrir mañana. Se sugiere al abrir.",
+    "leftTooBig": "No puedes dejar más de lo que contaste.",
+    "leftTake": "Te llevas {amount}.",
+    "leftSummary": "Se deja {left} de fondo para mañana; se retiran {take}.",
+    "reprint": "Reimprimir corte",
+    "whoLine": "Abrió {opened} · cerró {closed} ({when})",
+    "leftAll": "Todo el efectivo contado se queda de fondo para mañana. Llevarse efectivo al cerrar pide el permiso «Sacar efectivo y pagar a barberos»."
+  },
+  "tabs": {
+    "hoy": "Hoy",
+    "cortes": "Cortes",
+    "gastos": "Gastos",
+    "csv": "Exportar CSV",
+    "cortesEmpty": "No hay cortes en este mes.",
+    "gastosEmpty": "No hay gastos en este mes.",
+    "stillOpen": "Abierta",
+    "colDate": "Fecha",
+    "outside": "Fuera de caja",
+    "byMethod": "Efectivo {cash} · Tarjeta {card} · Transferencia {transfer} · Otro {other}"
+  },
+  "csv": {
+    "cortes": {
+      "opened": "Abrió (fecha)",
+      "closed": "Cerró (fecha)",
+      "openedBy": "Abrió",
+      "closedBy": "Cerró",
+      "opening": "Fondo",
+      "cashCharged": "Efectivo cobrado",
+      "cashIn": "Entradas",
+      "cashExpenses": "Gastos en efectivo",
+      "withdrawals": "Retiros",
+      "cashPayouts": "Pagos a barberos en efectivo",
+      "cashRefunds": "Anticipos devueltos en efectivo",
+      "expected": "Esperado",
+      "counted": "Contado",
+      "difference": "Diferencia",
+      "leftForNext": "Fondo para mañana",
+      "income": "Ingresos",
+      "card": "Tarjeta",
+      "transfer": "Transferencia",
+      "online": "En línea",
+      "tips": "Propinas",
+      "tickets": "Tickets",
+      "expensesAll": "Gastos (todos los medios)",
+      "notes": "Notas"
+    },
+    "gastos": {
+      "date": "Fecha",
+      "category": "Categoría",
+      "amount": "Monto",
+      "method": "Pagado con",
+      "note": "Nota",
+      "who": "Registró",
+      "inRegister": "En caja",
+      "yes": "Sí",
+      "no": "No",
+      "voided": "Anulado"
+    }
+  },
+  "payc": {
+    "pickBarber": "Elige el barbero para ver lo que se le debe.",
+    "body": "Se paga TODO lo pendiente de {period}, igual que «Marcar pagado» en Comisiones (un solo registro).",
+    "nothing": "No tiene nada pendiente por pagar en este periodo.",
+    "needsOpen": "Para pagar en efectivo desde el cajón, abre la caja primero.",
+    "confirm": "Marcar pagado {amount}",
+    "done": "Pago registrado: {amount}",
+    "owes": "El barbero le debe {amount} a la barbería (renta o adelantos). Márcalo en Comisiones con «Entra a la caja en efectivo»."
   }
 }

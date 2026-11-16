@@ -11,6 +11,9 @@ import type { Dictionary } from "@/i18n/t";
 import { currentPeriodKey, DEFAULT_BARBER_TZ, getCommissionSummary, isValidPeriodKey } from "@/lib/barber/commissions";
 import { BarberDenied } from "@/components/barber/cash/denied";
 import { ComisionesClient } from "@/components/barber/commissions/comisiones-client";
+import { prisma } from "@/lib/prisma";
+import { getOpenCashSession } from "@/lib/barber/cash";
+import { cashMovementsReady } from "@/lib/barber/cash-movements";
 
 /**
  * /barber/comisiones?period=YYYY-MM — nómina por barbero. Gate en SERVIDOR:
@@ -38,6 +41,13 @@ export default async function Page(props: { searchParams: Promise<{ period?: str
   const current = currentPeriodKey(tz);
   const period = isValidPeriodKey(searchParams.period) ? searchParams.period : current;
   const summary = await getCommissionSummary(ctx, period);
+  // Caja completa (ws6-t1): «sale de la caja en efectivo» al marcar pagado.
+  const canPay = canMarkCommissionsPaid(permUser);
+  const movementsReady = canPay && (await cashMovementsReady(prisma));
+  const sessionOpen = movementsReady ? Boolean(await getOpenCashSession(ctx.barbershopId)) : false;
+  const cashOut = movementsReady && hasBarberPermission(permUser, "cash.withdraw") ? { sessionOpen } : null;
+  // N3: renta de silla a favor del dueño → «entra a la caja en efectivo».
+  const cashIn = movementsReady && hasBarberPermission(permUser, "cash.expenses") ? { sessionOpen } : null;
 
   return (
     <ComisionesClient
@@ -46,7 +56,9 @@ export default async function Page(props: { searchParams: Promise<{ period?: str
       summary={summary}
       maxPeriod={current}
       // «Marcar pagado»: commissions.manage y nunca el rol Barbero (D2).
-      canManage={canMarkCommissionsPaid(permUser)}
+      canManage={canPay}
+      cashOut={cashOut}
+      cashIn={cashIn}
       noBarberLinked={ctx.role === "BARBER" && !ctx.barber}
     />
   );

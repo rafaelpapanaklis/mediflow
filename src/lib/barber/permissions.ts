@@ -35,6 +35,12 @@ export const BARBER_PERMISSIONS = [
   { key: "requests.manage", label: "Atender solicitudes de reserva" },
   { key: "cash.view", label: "Ver caja" },
   { key: "cash.manage", label: "Cobrar y hacer cortes" },
+  // Caja completa (ws6-t1, 16-nov): el dinero que entra o sale del cajón sin
+  // ser un ticket. Gastos y entradas (meter cambio) por un lado; sacar
+  // efectivo y pagar a barberos por otro, porque eso es lo que se pierde.
+  // Ninguno exige cash.manage: Recepción anota el garrafón sin poder sacar.
+  { key: "cash.expenses", label: "Registrar gastos y entradas" },
+  { key: "cash.withdraw", label: "Sacar efectivo y pagar a barberos" },
   { key: "commissions.view", label: "Ver comisiones" },
   { key: "commissions.manage", label: "Administrar comisiones" },
   // Vender ≠ administrar (decisión #13 de Rafael, 15-nov: «que la Recepción
@@ -94,6 +100,8 @@ export const BARBER_ROLE_DEFAULT_PERMISSIONS: Record<BarberRole, BarberPermissio
     "requests.manage",
     "cash.view",
     "cash.manage",
+    // Gastos y entradas sí; sacar efectivo y pagar a barberos no (ws6-t1).
+    "cash.expenses",
     // Recepción vende (decisión #13, 15-nov): membresías (vender y renovar),
     // anticipos y productos en Caja (cash.manage), premios de lealtad al
     // cobrar (cash.manage), y ve las existencias. NO administra planes,

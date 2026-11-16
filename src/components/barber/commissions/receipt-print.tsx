@@ -7,7 +7,7 @@ import { PrintSetupControls, printWithWidth, usePrintSetup } from "@/components/
 import type { Dictionary } from "@/i18n/t";
 import type { CommissionEntryRow, CommissionSummaryRow } from "@/lib/barber/commissions";
 import { useBarberT } from "@/components/barber/cash/use-barber-t";
-import { fmtDate, fmtDateTime, fmtMoney, fmtPct, fmtPeriod, fmtSigned } from "@/components/barber/cash/money";
+import { fmtDate, fmtDateTime, fmtMoney, fmtPct, fmtPeriod, fmtSigned, fromCents, toCents } from "@/components/barber/cash/money";
 import { upperFirst } from "@/components/barber/upper-first";
 import { salaryLabel } from "@/lib/barber/sueldo-texto";
 
@@ -31,6 +31,8 @@ export function ReceiptPrint({
   policyLabel: string;
 }) {
   const t = useBarberT(dict);
+  // Adelantos del periodo (pendientes de descontar + ya descontados).
+  const advTotalCents = toCents(row.advances ?? 0) + toCents(row.advancesSettled ?? 0);
   const scheme =
     row.commissionType === "COMMISSION" ? t("comisiones.schemeCOMMISSION", { pct: row.commissionPct ?? 0 }) : t(`comisiones.scheme${row.commissionType}`);
   const live = entries.filter((e) => !e.saleCancelled);
@@ -93,8 +95,14 @@ export function ReceiptPrint({
         {/* Tres renglones que suman: lo del periodo = ya pagado + a pagar.
             «A pagar» es la misma cifra de la tabla y del diálogo de pagar. */}
         <div className="bcaja-print__row"><span>{t("print.receiptPeriodTotal")}</span><span>{fmtSigned(row.periodTotal)}</span></div>
-        <div className="bcaja-print__row"><span>{t("print.receiptAlreadyPaid")}</span><span>{fmtSigned(row.paidTotal)}</span></div>
-        <div className="bcaja-print__row bcaja-print__row--total"><span>{t("print.receiptTotal")}</span><span>{fmtSigned(row.totalToPay)}</span></div>
+        {/* Caja completa (ws6-t1): los adelantos/vales del periodo ya se le
+            entregaron y se RESTAN solos. Se enseñan aparte de «ya pagado»
+            para que la cuenta se lea: periodo − adelantos − pagado = a entregar. */}
+        {advTotalCents > 0 && (
+          <div className="bcaja-print__row" data-recibo-adelantos><span>{t("print.receiptAdvances")}</span><span>−{fmtMoney(fromCents(advTotalCents))}</span></div>
+        )}
+        <div className="bcaja-print__row"><span>{t("print.receiptAlreadyPaid")}</span><span>{fmtSigned(fromCents(toCents(row.paidTotal) - advTotalCents))}</span></div>
+        <div className="bcaja-print__row bcaja-print__row--total"><span>{t(advTotalCents > 0 ? "print.receiptToHand" : "print.receiptTotal")}</span><span>{fmtSigned(row.totalToPay)}</span></div>
 
         <div className="bcaja-print__section">{t("print.receiptEntries")}</div>
         <table className="bcaja-print__table">

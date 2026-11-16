@@ -55,6 +55,8 @@ import { isLoyaltyFreeLine } from "@/lib/barber/loyalty-core";
 // Sueldo opcional del barbero (ws6-t6): núcleo puro + SQL crudo que degrada.
 import { activeSalary, salaryForPeriodKey, type BarberSalary, type BarberSalaryPeriod } from "@/lib/barber/sueldo-core";
 import { insertSalaryPayment, loadSalaries, loadSalaryPaid, salaryReady } from "@/lib/barber/sueldo";
+import { cashMovementsReady, insertMovement, loadAdvances, lockOpenSessionShared, retryIfCajaSqlGone, settleAdvances, unsettleAdvances, type AdvanceRow } from "@/lib/barber/cash-movements";
+import { isCashMovementMethod, type CashMovementMethod } from "@/lib/barber/caja-movimientos-core";
 import { randomUUID } from "node:crypto";
 
 // ── Dinero ──────────────────────────────────────────────────────────────
@@ -519,6 +521,16 @@ export interface CommissionSummaryRow {
   paidStatus: CommissionPaidStatus;
   lastPaidAt: string | null;
   entryCount: number;
+  /**
+   * Adelantos/vales del periodo dados desde Caja y AÚN NO descontados (caja
+   * completa, ws6-t1). Ya están restados de totalToPay y sumados a paidTotal:
+   * el siguiente pago los descuenta solo. Sin el SQL, 0.
+   */
+  advances?: number;
+  /** Adelantos del periodo que ya se descontaron en un pago anterior. */
+  advancesSettled?: number;
+  /** «A pagar» ANTES de restar los adelantos (comisión + propinas [+ sueldo] − renta). */
+  grossToPay?: number;
 }
 
 export interface CommissionSummary {
@@ -631,7 +643,7 @@ interface LedgerEntry {
 async function loadLedger(
   db: Db,
   args: { barbershopId: string; barberIds: string[] | null; periodKey: string; tz: string },
-): Promise<{ barbers: LedgerBarber[]; sales: LedgerSale[]; entries: LedgerEntry[]; salaries: LedgerSalaries }> {
+): Promise<{ barbers: LedgerBarber[]; sales: LedgerSale[]; entries: LedgerEntry[]; salaries: LedgerSalaries; advances: AdvanceRow[] }> {
   const { start, end } = periodRange(args.periodKey, args.tz);
   const barberWhere: Prisma.BarberWhereInput = { barbershopId: args.barbershopId };
   if (args.barberIds) barberWhere.id = { in: args.barberIds };
@@ -673,7 +685,12 @@ async function loadLedger(
     salaries.salaries = await loadSalaries(db, ids);
     salaries.paid = await loadSalaryPaid(db, { barbershopId: args.barbershopId, barberIds: ids, periodKey: args.periodKey });
   }
-  return { barbers, sales, entries, salaries };
+  // Adelantos/vales del periodo dados desde Caja (caja completa): se restan solos.
+  const advances =
+    barbers.length > 0 && (await cashMovementsReady(db))
+      ? await loadAdvances(db, { barbershopId: args.barbershopId, barberIds: barbers.map((b) => b.id), periodKey: args.periodKey })
+      : [];
+  return { barbers, sales, entries, salaries, advances };
 }
 
 /** Fila del barbero + los ids de las entradas que un pago marcaría ahora. */
@@ -681,8 +698,14 @@ function ledgerRowFor(
   b: LedgerBarber,
   sales: LedgerSale[],
   entries: LedgerEntry[],
-  sal: { salaries: LedgerSalaries; periodKey: string },
-): { row: CommissionSummaryRow; pendingEntryIds: string[]; salaryDue: { amount: Money; approx: boolean; salary: BarberSalary } | null } {
+  sal: { salaries: LedgerSalaries; periodKey: string; advances?: AdvanceRow[] },
+): {
+  row: CommissionSummaryRow;
+  pendingEntryIds: string[];
+  salaryDue: { amount: Money; approx: boolean; salary: BarberSalary } | null;
+  /** Adelantos vivos y aún sin descontar que el siguiente pago descuenta. */
+  pendingAdvanceIds: string[];
+} {
   let ticketCount = 0;
   let services = ZERO;
   let products = ZERO;
@@ -754,6 +777,23 @@ function ledgerRowFor(
     salaryPaid: salaryPaidRow ? salaryPaidRow.amount : null,
   });
   const salaryPending = salaryOfPeriod && !salaryPaidRow ? money(salaryOfPeriod.amount) : null;
+
+  // Adelantos/vales (caja completa, ws6-t1): ya se le entregaron, así que se
+  // RESTAN SOLOS de «a pagar» y cuentan como ya pagado. Uno ya descontado en
+  // un pago anterior no se vuelve a restar (queda dentro de lo pagado).
+  let advancesPending = ZERO;
+  let advancesSettled = ZERO;
+  const pendingAdvanceIds: string[] = [];
+  for (const a of sal.advances ?? []) {
+    if (a.barberId !== b.id) continue;
+    if (a.settledAt) advancesSettled = advancesSettled.plus(a.amount);
+    else {
+      advancesPending = advancesPending.plus(a.amount);
+      pendingAdvanceIds.push(a.id);
+    }
+  }
+  const toPayNet = money(split.toPay.minus(advancesPending));
+  const paidNet = money(split.paid.plus(advancesPending));
   if (salaryPaidRow && (!lastPaidAt || salaryPaidRow.paidAt > lastPaidAt)) lastPaidAt = salaryPaidRow.paidAt;
 
   const row: CommissionSummaryRow = {
@@ -784,9 +824,12 @@ function ledgerRowFor(
     salaryApprox: salaryOfPeriod ? salaryOfPeriod.approx : false,
     salaryPending: salaryOfPeriod ? toNum(salaryPending ?? ZERO) : null,
     salaryPaid: salaryPaidRow ? toNum(salaryPaidRow.amount) : null,
-    totalToPay: toNum(split.toPay),
-    paidTotal: toNum(split.paid),
-    periodTotal: toNum(split.toPay.plus(split.paid)),
+    totalToPay: toNum(toPayNet),
+    paidTotal: toNum(paidNet),
+    periodTotal: toNum(toPayNet.plus(paidNet)),
+    grossToPay: toNum(split.toPay),
+    advances: toNum(advancesPending),
+    advancesSettled: toNum(advancesSettled),
     paidStatus: paidStatusOf({
       entryCount,
       pendingCount: pendingEntryIds.length,
@@ -801,10 +844,19 @@ function ledgerRowFor(
     salary && salaryOfPeriod && salaryPending !== null && salaryPending.gt(0)
       ? { amount: salaryPending, approx: salaryOfPeriod.approx, salary }
       : null;
-  return { row, pendingEntryIds, salaryDue };
+  return { row, pendingEntryIds, salaryDue, pendingAdvanceIds };
 }
 
 export async function getCommissionSummary(
+  ctx: BarberContext,
+  periodKey: string,
+  opts: { barberId?: string | null } = {},
+): Promise<CommissionSummary> {
+  // N4: si se quitó el SQL de caja completa, se reintenta ya sin adelantos.
+  return retryIfCajaSqlGone(() => getCommissionSummaryOnce(ctx, periodKey, opts));
+}
+
+async function getCommissionSummaryOnce(
   ctx: BarberContext,
   periodKey: string,
   opts: { barberId?: string | null } = {},
@@ -818,13 +870,13 @@ export async function getCommissionSummary(
   const barbershopId = ctx.barbershopId;
   const policy = await getCommissionPolicy(barbershopId);
 
-  const { barbers, sales, entries, salaries } = await loadLedger(prisma, {
+  const { barbers, sales, entries, salaries, advances } = await loadLedger(prisma, {
     barbershopId,
     barberIds: scope.barberIds,
     periodKey,
     tz,
   });
-  const rows = barbers.map((b) => ledgerRowFor(b, sales, entries, { salaries, periodKey }).row);
+  const rows = barbers.map((b) => ledgerRowFor(b, sales, entries, { salaries, periodKey, advances }).row);
 
   const totals = rows.reduce(
     (t, r) => ({
@@ -944,6 +996,19 @@ export interface CommissionPayoutResult {
   paidAt: string;
   /** Lo que cubrió ESTE pago: el «a pagar» que había justo antes de marcar. */
   paidAmount: number;
+  /**
+   * Movimiento de caja que se creó con el pago («sale de la caja», caja
+   * completa ws6-t1). null = el pago no se registró en caja (o no había nada
+   * que entregar: «a pagar» ≤ 0).
+   */
+  movementId?: string | null;
+  /** Adelantos/vales del periodo que este pago descontó (ya se le habían entregado). */
+  advancesDeducted?: number;
+}
+
+/** Cómo sale el dinero del pago, si se registra en Caja (caja completa). */
+export interface CommissionCashOut {
+  method: CashMovementMethod;
 }
 
 /**
@@ -967,10 +1032,35 @@ export async function markCommissionsPaid(
   ctx: BarberContext,
   params: { barberId: string; periodKey: string; expectedTotal?: unknown },
   now: Date = new Date(),
+  opts: {
+    cashOut?: CommissionCashOut | null;
+    /**
+     * Renta de silla (o adelantos) con saldo a favor del dueño: el barbero
+     * entrega la diferencia y «entra a la caja en efectivo» (revisión ws6-t8,
+     * N3). Crea una entrada (DEPOSIT) ligada al pago. Pide cash.expenses.
+     */
+    cashIn?: boolean;
+  } = {},
 ): Promise<CommissionPayoutResult> {
   assertBarberPermission(ctx, "commissions.manage");
   if (!canMarkCommissionsPaid({ role: ctx.role, permissionsOverride: ctx.user.permissionsOverride })) {
     throw new BarberForbiddenError("commissions.manage");
+  }
+  // «Sale de la caja» (caja completa): además pide sacar efectivo y el SQL.
+  const cashOut = opts.cashOut ?? null;
+  if (cashOut) {
+    assertBarberPermission(ctx, "cash.withdraw");
+    if (!isCashMovementMethod(cashOut.method)) throw new BarberCajaError(400, "INVALID_METHOD", "¿Con qué se pagó? Efectivo, tarjeta, transferencia u otro.");
+    if (!(await cashMovementsReady(prisma))) {
+      throw new BarberCajaError(409, "CAJA_SQL_PENDING", "Falta aplicar sql/barber_caja_completa.sql: el pago no se puede registrar en Caja.");
+    }
+  }
+  const cashIn = opts.cashIn === true;
+  if (cashIn) {
+    assertBarberPermission(ctx, "cash.expenses");
+    if (!(await cashMovementsReady(prisma))) {
+      throw new BarberCajaError(409, "CAJA_SQL_PENDING", "Falta aplicar sql/barber_caja_completa.sql: la entrada no se puede registrar en Caja.");
+    }
   }
   if (!isValidPeriodKey(params.periodKey)) {
     throw new BarberCajaError(400, "INVALID_PERIOD", "Periodo inválido (usa YYYY-MM)");
@@ -989,7 +1079,7 @@ export async function markCommissionsPaid(
     async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`dcb:pay:${barbershopId}:${params.barberId}:${params.periodKey}`}))`;
 
-      const { barbers, sales, entries, salaries } = await loadLedger(tx, {
+      const { barbers, sales, entries, salaries, advances } = await loadLedger(tx, {
         barbershopId,
         barberIds: [params.barberId],
         periodKey: params.periodKey,
@@ -998,12 +1088,13 @@ export async function markCommissionsPaid(
       const barber = barbers[0];
       if (!barber) throw new BarberCajaError(404, "BARBER_NOT_FOUND", "Barbero no encontrado");
 
-      const { row, pendingEntryIds, salaryDue } = ledgerRowFor(barber, sales, entries, {
+      const { row, pendingEntryIds, salaryDue, pendingAdvanceIds } = ledgerRowFor(barber, sales, entries, {
         salaries,
         periodKey: params.periodKey,
+        advances,
       });
       if (pendingEntryIds.length === 0 && !salaryDue) {
-        return { marked: 0, paidAt: now.toISOString(), paidAmount: 0 };
+        return { marked: 0, paidAt: now.toISOString(), paidAmount: 0, movementId: null, advancesDeducted: 0 };
       }
       if (expected !== null && !expected.equals(money(row.totalToPay))) {
         throw new BarberCajaError(
@@ -1036,10 +1127,118 @@ export async function markCommissionsPaid(
           paidByUserId: ctx.barberUserId ?? null,
         });
       }
-      return { marked: r.count + (salaryMarked ? 1 : 0), paidAt: now.toISOString(), paidAmount: row.totalToPay };
+      // Los adelantos vivos del periodo quedan DESCONTADOS en este pago (con su
+      // hora): no se vuelven a restar. Si uno se anuló entretanto, nada se paga.
+      if (pendingAdvanceIds.length > 0) {
+        const settled = await settleAdvances(tx, { barbershopId, ids: pendingAdvanceIds, at: now });
+        if (settled !== pendingAdvanceIds.length) {
+          throw new BarberCajaError(409, "PAYOUT_CHANGED", "Los adelantos cambiaron mientras tenías la pantalla abierta. Revisa la cifra y vuelve a marcar.");
+        }
+      }
+      // Un solo pago = un solo registro (las entradas/sueldo marcados) + SU
+      // movimiento de caja, en la MISMA transacción: si no hay caja abierta
+      // para pagar en efectivo, no se marca nada.
+      let movementId: string | null = null;
+      if (cashOut && money(row.totalToPay).gt(ZERO)) {
+        const session = await lockOpenSessionShared(tx, barbershopId);
+        if (!session && cashOut.method === "CASH") {
+          throw new BarberCajaError(409, "NO_OPEN_SESSION", "No hay caja abierta: ábrela para pagar en efectivo desde la caja, o quita «sale de la caja».");
+        }
+        movementId = randomUUID();
+        await insertMovement(tx, {
+          id: movementId,
+          barbershopId,
+          sessionId: session?.id ?? null,
+          type: "BARBER_PAYOUT",
+          method: cashOut.method,
+          amount: money(row.totalToPay),
+          category: null,
+          note: null,
+          barberId: params.barberId,
+          payoutKind: barber.commissionType === "SALARY" ? "SALARY" : "COMMISSION",
+          periodKey: params.periodKey,
+          receiptUrl: null,
+          createdByUserId: ctx.barberUserId,
+          createdAt: now,
+        });
+      }
+      // Saldo a favor del dueño (renta de silla, o adelantos mayores que lo
+      // ganado): lo que el barbero entrega ENTRA al cajón, ligado a este pago.
+      if (cashIn && money(row.totalToPay).lt(ZERO)) {
+        const session = await lockOpenSessionShared(tx, barbershopId);
+        if (!session) {
+          throw new BarberCajaError(409, "NO_OPEN_SESSION", "No hay caja abierta: ábrela para que el efectivo entre a la caja, o quita «entra a la caja».");
+        }
+        movementId = randomUUID();
+        await insertMovement(tx, {
+          id: movementId,
+          barbershopId,
+          sessionId: session.id,
+          type: "DEPOSIT",
+          method: "CASH",
+          amount: money(row.totalToPay).abs(),
+          category: null,
+          note: null,
+          barberId: params.barberId,
+          payoutKind: null,
+          periodKey: params.periodKey,
+          receiptUrl: null,
+          createdByUserId: ctx.barberUserId,
+          createdAt: now,
+        });
+      }
+      return {
+        marked: r.count + (salaryMarked ? 1 : 0),
+        paidAt: now.toISOString(),
+        // Lo que de verdad se le entrega: el «a pagar» ya sin los adelantos.
+        paidAmount: row.totalToPay,
+        movementId,
+        advancesDeducted: row.advances ?? 0,
+      };
     },
     { maxWait: 5000, timeout: 15000 },
   );
+}
+
+/**
+ * Deshace un pago de comisión ligado a Caja (revisión ws6-t8, N2): dentro de
+ * la transacción de quien anula el movimiento, con el MISMO candado del pago.
+ * Las entradas de comisión de ese pago (paidAt = la hora del pago) vuelven a
+ * quedar pendientes y los adelantos que descontó vuelven a restarse.
+ *
+ * NO deshace un pago que incluyó SUELDO: el sueldo pagado es un renglón de
+ * barber_salary_payments (uno por barbero y periodo) y deshacerlo sería
+ * borrarlo. En ese caso, 409 SALARY_PAID_NOT_UNDOABLE y no se toca nada.
+ */
+export async function undoCommissionPaymentTx(
+  tx: Prisma.TransactionClient,
+  ctx: BarberContext,
+  p: { barberId: string; periodKey: string; paidAt: Date },
+): Promise<{ unmarked: number; advancesRestored: number }> {
+  if (!canMarkCommissionsPaid({ role: ctx.role, permissionsOverride: ctx.user.permissionsOverride })) {
+    throw new BarberForbiddenError("commissions.manage");
+  }
+  const barbershopId = ctx.barbershopId;
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`dcb:pay:${barbershopId}:${p.barberId}:${p.periodKey}`}))`;
+  if (await salaryReady(tx)) {
+    const sal = await tx.$queryRaw<Array<{ n: number }>>`
+      SELECT COUNT(*)::int AS "n" FROM "barber_salary_payments"
+      WHERE "barbershopId" = ${barbershopId} AND "barberId" = ${p.barberId} AND "periodKey" = ${p.periodKey} AND "paidAt" = ${p.paidAt}
+    `;
+    if (Number(sal[0]?.n ?? 0) > 0) {
+      throw new BarberCajaError(
+        409,
+        "SALARY_PAID_NOT_UNDOABLE",
+        "Ese pago incluyó el sueldo del periodo y el sueldo pagado no se puede deshacer desde Caja. Corrígelo con un movimiento de caja y una nota.",
+      );
+    }
+  }
+  const r = await tx.barberCommissionEntry.updateMany({
+    where: { barbershopId, barberId: p.barberId, periodKey: p.periodKey, paidAt: p.paidAt },
+    data: { paidAt: null },
+  });
+  const advancesRestored = await unsettleAdvances(tx, { barbershopId, barberId: p.barberId, periodKey: p.periodKey, at: p.paidAt });
+  return { unmarked: r.count, advancesRestored };
 }
 
 /** Recibo imprimible: resumen del barbero + sus entradas del periodo. */

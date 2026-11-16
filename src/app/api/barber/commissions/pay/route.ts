@@ -19,7 +19,18 @@ export async function POST(req: NextRequest) {
     const barberId = typeof body.barberId === "string" ? body.barberId : "";
     const periodKey = typeof body.periodKey === "string" ? body.periodKey : "";
     if (!barberId) return NextResponse.json({ error: "barberId requerido" }, { status: 400 });
-    const result = await markCommissionsPaid(ctx, { barberId, periodKey, expectedTotal: body.expectedTotal });
+    // Caja completa (ws6-t1): «sale de la caja en efectivo» (fromCash) desde
+    // Comisiones, o el medio elegido en «Pagar a barbero» de Caja
+    // (payoutMethod). Crea el movimiento de caja ligado en la misma
+    // transacción; pide además cash.withdraw.
+    const payoutMethod = typeof body.payoutMethod === "string" ? body.payoutMethod : body.fromCash === true ? "CASH" : null;
+    const result = await markCommissionsPaid(
+      ctx,
+      { barberId, periodKey, expectedTotal: body.expectedTotal },
+      new Date(),
+      // N3: renta de silla a favor del dueño → «entra a la caja en efectivo».
+      { cashOut: payoutMethod ? { method: payoutMethod as never } : null, cashIn: body.toCash === true },
+    );
     const summary = await getCommissionSummary(ctx, periodKey, { barberId });
     return NextResponse.json({ ...result, row: summary.rows[0] ?? null });
   } catch (e) {
