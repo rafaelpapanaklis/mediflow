@@ -1,4 +1,12 @@
 -- ═══════════════════════════════════════════════════════════════════════
+-- ⛔ YA NO HACE FALTA — NO APLICAR (rama feat/barber-web-solo-tres, 16-nov).
+-- Desde que Mi web ofrece SOLO Oficio, Barrio y Revista, una fila con
+-- 'clasica' (o cualquiera de las doce viejas) se PINTA y se EDITA como
+-- Oficio al leerla (plantillaOfrecidaBarberWeb en landing.ts): no hay que
+-- escribir en la base. Se deja el archivo por historia; Rafael decide si
+-- se borra.
+-- ═══════════════════════════════════════════════════════════════════════
+--
 -- barber_web_oficio_defecto.sql — «Oficio» pasa a ser la plantilla de por
 -- defecto de la página web de las barberías (ws6-t2, 16-nov-2026).
 --
