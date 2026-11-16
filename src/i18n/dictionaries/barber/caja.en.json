@@ -743,6 +743,59 @@
     "leftHint": "What stays in the drawer to open tomorrow. It's suggested when opening.",
     "leftTooBig": "You can't leave more than you counted.",
     "leftTake": "You take {amount}.",
-    "leftSummary": "{left} left as float for tomorrow; {take} taken out."
+    "leftSummary": "{left} left as float for tomorrow; {take} taken out.",
+    "reprint": "Reprint close",
+    "whoLine": "Opened by {opened} · closed by {closed} ({when})"
+  },
+  "tabs": {
+    "hoy": "Today",
+    "cortes": "Closes",
+    "gastos": "Expenses",
+    "csv": "Export CSV",
+    "cortesEmpty": "No closes this month.",
+    "gastosEmpty": "No expenses this month.",
+    "stillOpen": "Open",
+    "colDate": "Date",
+    "outside": "Outside the register",
+    "byMethod": "Cash {cash} · Card {card} · Transfer {transfer} · Other {other}"
+  },
+  "csv": {
+    "cortes": {
+      "opened": "Opened (date)",
+      "closed": "Closed (date)",
+      "openedBy": "Opened by",
+      "closedBy": "Closed by",
+      "opening": "Float",
+      "cashCharged": "Cash charged",
+      "cashIn": "Cash in",
+      "cashExpenses": "Cash expenses",
+      "withdrawals": "Withdrawals",
+      "cashPayouts": "Cash paid to barbers",
+      "cashRefunds": "Deposits refunded in cash",
+      "expected": "Expected",
+      "counted": "Counted",
+      "difference": "Difference",
+      "leftForNext": "Float for tomorrow",
+      "income": "Income",
+      "card": "Card",
+      "transfer": "Transfer",
+      "online": "Online",
+      "tips": "Tips",
+      "tickets": "Tickets",
+      "expensesAll": "Expenses (all methods)",
+      "notes": "Notes"
+    },
+    "gastos": {
+      "date": "Date",
+      "category": "Category",
+      "amount": "Amount",
+      "method": "Paid with",
+      "note": "Note",
+      "who": "Added by",
+      "inRegister": "In register",
+      "yes": "Yes",
+      "no": "No",
+      "voided": "Voided"
+    }
   }
 }

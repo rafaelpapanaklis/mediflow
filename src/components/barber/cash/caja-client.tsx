@@ -17,12 +17,11 @@ import {
   Wallet,
 } from "lucide-react";
 import type { Dictionary } from "@/i18n/t";
-import type { CashSessionRow, CashState, CheckoutContext, PendingAppointment, SaleRow } from "@/lib/barber/cash";
+import type { CashState, CheckoutContext, PendingAppointment, SaleRow } from "@/lib/barber/cash";
 import type { CashMovementRow } from "@/lib/barber/cash-movements";
 import type { CashMovementType } from "@/lib/barber/caja-movimientos-core";
 import { sumMoneyBy } from "@/lib/barber/money";
 import { CardNew } from "@/components/ui/design-system/card-new";
-import { BadgeNew } from "@/components/ui/design-system/badge-new";
 import { KpiCard } from "@/components/ui/design-system/kpi-card";
 import { useBarberT } from "./use-barber-t";
 import { fmtDateTime, fmtMoney, fmtSigned, fmtTime, PAYMENT_METHOD_KEYS } from "./money";
@@ -31,7 +30,8 @@ import type { SaleDraftList, SaleDraftRow } from "@/lib/barber/sale-drafts";
 import { SaleDraftsList } from "@/components/barber/clients/sale-drafts-list";
 import { ClientChargeBridge } from "@/components/barber/clients/client-charge-bridge";
 import { CancelSaleModal, ChangeMethodModal, CloseSessionModal, OpenSessionModal } from "./session-modals";
-import { SessionDetailModal } from "./session-detail";
+import { CortesTab } from "./cortes-tab";
+import { GastosTab } from "./gastos-tab";
 import { categoryLabel, MovementModal, VoidMovementModal } from "./movement-modals";
 import { DayList } from "./day-list";
 import { dayKeyInTz, isStaleSession } from "./caja-dia-core";
@@ -43,7 +43,6 @@ type ModalState =
   | { kind: "close" }
   | { kind: "cancel"; sale: SaleRow }
   | { kind: "method"; sale: SaleRow }
-  | { kind: "history"; row: CashSessionRow }
   | { kind: "movement"; type: CashMovementType }
   | { kind: "void"; movement: CashMovementRow };
 
@@ -96,6 +95,7 @@ export function CajaClient({
   const t = useBarberT(dict);
   const router = useRouter();
   const [modal, setModal] = useState<ModalState>({ kind: "none" });
+  const [tab, setTab] = useState<"hoy" | "cortes" | "gastos">("hoy");
   const [chargeDraft, setChargeDraft] = useState<SaleDraftRow | null>(null);
   const closeModal = useCallback(() => setModal({ kind: "none" }), []);
   // El refresco del servidor tarda 1-4 s: mientras tanto se dice «Actualizando…» (QA E, ronda 4).
@@ -110,6 +110,8 @@ export function CajaClient({
   const todayKey = dayKeyInTz(now.toISOString(), tz);
   const stale = open ? isStaleSession(open.session.openedAt, now, tz) : false;
   const resumen = open?.resumen ?? null;
+  const currentPeriod = todayKey.slice(0, 7);
+  const tabs: Array<"hoy" | "cortes" | "gastos"> = ready ? ["hoy", "cortes", "gastos"] : ["hoy", "cortes"];
   const canVoid = (m: CashMovementRow) => (m.type === "EXPENSE" || m.type === "DEPOSIT" ? can.expenses : can.withdraw);
 
   const moveButtons: Array<{ type: CashMovementType; icon: typeof Banknote; show: boolean; needsOpen: boolean }> = [
@@ -177,6 +179,28 @@ export function CajaClient({
         </div>
       )}
 
+      {/* Pestañas: Hoy · Cortes · Gastos */}
+      <div className="bcaja-tabs" role="tablist" aria-label={t("caja.title")}>
+        {tabs.map((k) => (
+          <button key={k} type="button" role="tab" id={`bcaja-tab-${k}`} aria-controls={`bcaja-panel-${k}`} aria-selected={tab === k} className="bcaja-tab" onClick={() => setTab(k)} data-tab={k}>
+            {t(`tabs.${k}`)}
+          </button>
+        ))}
+      </div>
+
+      {tab === "cortes" && (
+        <div role="tabpanel" id="bcaja-panel-cortes" aria-labelledby="bcaja-tab-cortes">
+          <CortesTab dict={dict} tz={tz} locale={locale} currentPeriod={currentPeriod} />
+        </div>
+      )}
+      {tab === "gastos" && ready && (
+        <div role="tabpanel" id="bcaja-panel-gastos" aria-labelledby="bcaja-tab-gastos">
+          <GastosTab dict={dict} tz={tz} locale={locale} currentPeriod={currentPeriod} canAdd={can.expenses} openSessionId={open?.session.id ?? null} onChanged={refresh} />
+        </div>
+      )}
+
+      {tab === "hoy" && (
+        <div role="tabpanel" id="bcaja-panel-hoy" aria-labelledby="bcaja-tab-hoy" style={{ display: "flex", flexDirection: "column", gap: "inherit" }}>
       {/* Botones del día */}
       {(canManage && open) || moveButtons.some((b) => b.show) ? (
         <div className="bcaja-actions" role="group" aria-label={t("status.actions")}>
@@ -327,58 +351,8 @@ export function CajaClient({
           />
         </div>
       ) : null}
-
-      {/* Historial de turnos */}
-      <CardNew title={t("caja.historyTitle")} noPad>
-        {state.history.length === 0 ? (
-          <p className="bcaja-hint" style={{ margin: 0, padding: 18 }}>{t("caja.historyEmpty")}</p>
-        ) : (
-          <div className="bcaja-table-wrap">
-            {/* En celular cada turno es una ficha (bcaja-hist en money.css):
-                cada celda lleva su etiqueta en data-label. */}
-            <table className="table-new bcaja-hist">
-              <thead>
-                <tr>
-                  <th>{t("caja.colOpened")}</th>
-                  <th>{t("caja.colClosed")}</th>
-                  <th>{t("caja.colWho")}</th>
-                  <th className="bcaja-num">{t("caja.colTickets")}</th>
-                  <th className="bcaja-num">{t("caja.colOpening")}</th>
-                  <th className="bcaja-num">{t("caja.colExpected")}</th>
-                  <th className="bcaja-num">{t("caja.colCounted")}</th>
-                  <th className="bcaja-num">{t("caja.colDifference")}</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {state.history.map((h) => (
-                  <tr key={h.id}>
-                    <td data-label={t("caja.colOpened")}>{fmtDateTime(h.openedAt, tz)}</td>
-                    <td data-label={t("caja.colClosed")}>{fmtDateTime(h.closedAt, tz)}</td>
-                    <td data-label={t("caja.colWho")}>{h.openedByName}{h.closedByName && h.closedByName !== h.openedByName ? ` / ${h.closedByName}` : ""}</td>
-                    <td className="bcaja-num" data-label={t("caja.colTickets")}>{h.ticketCount}{h.cancelledCount > 0 ? <span className="bcaja-muted"> (+{h.cancelledCount})</span> : null}</td>
-                    <td className="bcaja-num" data-label={t("caja.colOpening")}>{fmtMoney(h.openingAmount)}</td>
-                    <td className="bcaja-num" data-label={t("caja.colExpected")}>{fmtMoney(h.expectedAmount)}</td>
-                    <td className="bcaja-num" data-label={t("caja.colCounted")}>{fmtMoney(h.countedAmount)}</td>
-                    <td className="bcaja-num" data-label={t("caja.colDifference")}>
-                      {h.difference === null ? "—" : (
-                        <BadgeNew tone={h.difference === 0 ? "success" : h.difference > 0 ? "info" : "danger"}>{fmtSigned(h.difference)}</BadgeNew>
-                      )}
-                    </td>
-                    <td>
-                      <span className="bcaja-row-actions">
-                        <button type="button" className="icon-btn-new" title={t("caja.historyView")} aria-label={t("caja.historyView")} onClick={() => setModal({ kind: "history", row: h })}>
-                          <Receipt size={13} />
-                        </button>
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </CardNew>
+        </div>
+      )}
 
       {/* Modales (fuera de los contenedores) */}
       {chargeDraft?.clientId && cobrosDict ? (
@@ -441,9 +415,6 @@ export function CajaClient({
             refresh();
           }}
         />
-      )}
-      {modal.kind === "history" && (
-        <SessionDetailModal dict={dict} row={modal.row} tz={tz} onClose={closeModal} />
       )}
       {modal.kind === "method" && (
         <ChangeMethodModal

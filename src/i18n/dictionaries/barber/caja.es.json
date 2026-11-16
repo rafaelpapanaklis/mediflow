@@ -743,6 +743,59 @@
     "leftHint": "Lo que se queda en el cajón para abrir mañana. Se sugiere al abrir.",
     "leftTooBig": "No puedes dejar más de lo que contaste.",
     "leftTake": "Te llevas {amount}.",
-    "leftSummary": "Se deja {left} de fondo para mañana; se retiran {take}."
+    "leftSummary": "Se deja {left} de fondo para mañana; se retiran {take}.",
+    "reprint": "Reimprimir corte",
+    "whoLine": "Abrió {opened} · cerró {closed} ({when})"
+  },
+  "tabs": {
+    "hoy": "Hoy",
+    "cortes": "Cortes",
+    "gastos": "Gastos",
+    "csv": "Exportar CSV",
+    "cortesEmpty": "No hay cortes en este mes.",
+    "gastosEmpty": "No hay gastos en este mes.",
+    "stillOpen": "Abierta",
+    "colDate": "Fecha",
+    "outside": "Fuera de caja",
+    "byMethod": "Efectivo {cash} · Tarjeta {card} · Transferencia {transfer} · Otro {other}"
+  },
+  "csv": {
+    "cortes": {
+      "opened": "Abrió (fecha)",
+      "closed": "Cerró (fecha)",
+      "openedBy": "Abrió",
+      "closedBy": "Cerró",
+      "opening": "Fondo",
+      "cashCharged": "Efectivo cobrado",
+      "cashIn": "Entradas",
+      "cashExpenses": "Gastos en efectivo",
+      "withdrawals": "Retiros",
+      "cashPayouts": "Pagos a barberos en efectivo",
+      "cashRefunds": "Anticipos devueltos en efectivo",
+      "expected": "Esperado",
+      "counted": "Contado",
+      "difference": "Diferencia",
+      "leftForNext": "Fondo para mañana",
+      "income": "Ingresos",
+      "card": "Tarjeta",
+      "transfer": "Transferencia",
+      "online": "En línea",
+      "tips": "Propinas",
+      "tickets": "Tickets",
+      "expensesAll": "Gastos (todos los medios)",
+      "notes": "Notas"
+    },
+    "gastos": {
+      "date": "Fecha",
+      "category": "Categoría",
+      "amount": "Monto",
+      "method": "Pagado con",
+      "note": "Nota",
+      "who": "Registró",
+      "inRegister": "En caja",
+      "yes": "Sí",
+      "no": "No",
+      "voided": "Anulado"
+    }
   }
 }

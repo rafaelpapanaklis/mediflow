@@ -65,6 +65,7 @@ import {
   parseMoneyInput,
   parseQty,
   periodKeyFor,
+  periodRange,
   startOfDayInTz,
   sumMoney,
   toNum,
@@ -804,6 +805,59 @@ export async function listCashSessions(
   return sessions.map((s) => {
     const e = extras.get(s.id);
     return { ...toSessionRow(s, bySession.get(s.id) ?? []), countedBreakdown: e?.countedBreakdown ?? null, leftForNext: e?.leftForNext ?? null };
+  });
+}
+
+/** Un corte de la pestaña «Cortes»: el turno + su resumen (esperado desglosado e ingresos). */
+export interface CorteRow extends CashSessionRow {
+  resumen: CajaResumen;
+}
+
+/**
+ * Pestaña «Cortes» (y su CSV): los turnos ABIERTOS en un mes («YYYY-MM» en
+ * la zona de la barbería), del más reciente al más viejo, cada uno con su
+ * resumen. Tickets y movimientos se leen EN LOTE (dos consultas para todo el
+ * mes, no una por turno). cash.view.
+ */
+export async function listCortes(ctx: BarberContext, periodKey: string): Promise<CorteRow[]> {
+  assertBarberPermission(ctx, "cash.view");
+  const barbershopId = ctx.barbershopId;
+  if (!barbershopId) throw new BarberCajaError(400, "NO_SHOP", "Sin barbería");
+  const { start, end } = periodRange(periodKey, ctx.barbershop.timezone || DEFAULT_BARBER_TZ);
+  const sessions = await prisma.barberCashSession.findMany({
+    where: { barbershopId, openedAt: { gte: start, lt: end } },
+    orderBy: { openedAt: "desc" },
+    take: 200,
+    include: sessionInclude,
+  });
+  if (sessions.length === 0) return [];
+  const ids = sessions.map((s) => s.id);
+  const sales = await prisma.barberSale.findMany({ where: { barbershopId, cashSessionId: { in: ids } }, include: saleInclude });
+  const ready = await cashMovementsReady(prisma);
+  const [movements, extras] = ready
+    ? await Promise.all([loadMovements(prisma, { barbershopId, sessionIds: ids }), loadSessionExtras(prisma, barbershopId, ids)])
+    : [[] as CashMovementRow[], new Map<string, SessionExtras>()];
+  const salesBy = new Map<string, SaleRow[]>();
+  for (const s of sales) {
+    const list = salesBy.get(s.cashSessionId!) ?? [];
+    list.push(toSaleRow(s));
+    salesBy.set(s.cashSessionId!, list);
+  }
+  const movBy = new Map<string, CashMovementRow[]>();
+  for (const m of movements) {
+    const list = movBy.get(m.sessionId!) ?? [];
+    list.push(m);
+    movBy.set(m.sessionId!, list);
+  }
+  return sessions.map((s) => {
+    const rows = salesBy.get(s.id) ?? [];
+    const e = extras.get(s.id);
+    return {
+      ...toSessionRow(s, rows),
+      countedBreakdown: e?.countedBreakdown ?? null,
+      leftForNext: e?.leftForNext ?? null,
+      resumen: cajaResumen({ openingAmount: s.openingAmount, tickets: rows.map(resumenTicketOf), movements: movBy.get(s.id) ?? [] }),
+    };
   });
 }
 
