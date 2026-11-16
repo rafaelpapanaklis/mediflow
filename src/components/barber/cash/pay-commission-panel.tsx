@@ -49,7 +49,8 @@ export function PayCommissionPanel({
       .then(async (res) => {
         if (!res.ok) throw new Error(String(res.status));
         const json = (await res.json()) as CommissionSummary;
-        if (alive) setRow(json.rows.find((r) => r.barberId === barberId) ?? null);
+        // null = «todavía no se pide» (se lee como cargando); sin renglón, error.
+        if (alive) setRow(json.rows.find((r) => r.barberId === barberId) ?? "error");
       })
       .catch(() => {
         if (alive) setRow("error");
@@ -90,9 +91,9 @@ export function PayCommissionPanel({
     <div className="bcaja-form" data-pago-comision>
       {!barberId ? (
         <p className="bcaja-hint" style={{ margin: 0 }}>{t("payc.pickBarber")}</p>
-      ) : row === "loading" ? (
+      ) : row === "loading" || row === null ? (
         <p className="bcaja-hint" style={{ margin: 0 }}>{t("common.loading")}</p>
-      ) : row === "error" || row === null ? (
+      ) : row === "error" ? (
         <div className="bcaja-alert bcaja-alert--danger" role="alert">{t("common.error")}</div>
       ) : (
         <>
