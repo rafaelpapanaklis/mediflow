@@ -389,8 +389,8 @@ export function InicioView({
                 </Link>
               }
             >
-              <div className={`bdash-big${m.profit < 0 ? " bdash-big--neg" : ""}`}>
-                <Money value={m.profit < 0 ? `−${fmtMoney(-m.profit)}` : fmtMoney(m.profit)} />
+              <div className={`bdash-big${(m.profit ?? 0) < 0 ? " bdash-big--neg" : ""}`}>
+                <Money value={signedOrDash(m.profit)} />
               </div>
               <div className="bdash-big__label">
                 {k("money.profit")} · {k("money.profitHint")}
@@ -398,25 +398,34 @@ export function InicioView({
               <dl className="bdash-ledger">
                 <div className="bdash-ledger__row">
                   <dt>{k("money.income")}</dt>
-                  <dd>{fmtMoney(m.income)}</dd>
+                  <dd>{moneyOrDash(m.income)}</dd>
                 </div>
                 <div className="bdash-ledger__row">
                   <dt>
                     {k("money.expenses")}
-                    {m.expensesCount > 0 && (
+                    {(m.expensesCount ?? 0) > 0 && (
                       <span className="bdash-ledger__meta">
-                        {k("money.expensesCount", { count: m.expensesCount })}
-                        {m.expensesCash > 0 ? ` · ${k("money.expensesCash", { amount: fmtMoney(m.expensesCash) })}` : ""}
+                        {k("money.expensesCount", { count: m.expensesCount ?? 0 })}
+                        {(m.expensesCash ?? 0) > 0 ? ` · ${k("money.expensesCash", { amount: fmtMoney(m.expensesCash) })}` : ""}
                       </span>
                     )}
                   </dt>
-                  <dd>{m.expenses > 0 ? `−${fmtMoney(m.expenses)}` : fmtMoney(0)}</dd>
+                  <dd>{lessOrDash(m.expenses)}</dd>
                 </div>
                 <div className="bdash-ledger__row">
-                  <dt>{k("money.payouts")}</dt>
-                  <dd>{m.payouts > 0 ? `−${fmtMoney(m.payouts)}` : fmtMoney(0)}</dd>
+                  <dt>
+                    {k("money.barberCost")}
+                    <span className="bdash-ledger__meta">
+                      {k("money.barberCostHint")}
+                      {(m.payouts ?? 0) > 0 ? ` · ${k("money.paidToday", { amount: fmtMoney(m.payouts) })}` : ""}
+                    </span>
+                  </dt>
+                  <dd>{lessOrDash(m.barberCost)}</dd>
                 </div>
               </dl>
+              <div className="bdash-foot">
+                <span>{m.tips === null ? k("money.tipsApartNone") : k("money.tipsApart", { amount: fmtMoney(m.tips) })}</span>
+              </div>
             </CardNew>
           )}
 
@@ -575,6 +584,22 @@ function Money({ value }: { value: string }) {
       <small className="bdash-cents">{m[2]}</small>
     </>
   );
+}
+
+/** Montos de «Dinero de hoy»: «—» si no hay número. */
+function moneyOrDash(n: number | null | undefined): string {
+  return typeof n === "number" ? fmtMoney(n) : "—";
+}
+function signedOrDash(n: number | null | undefined): string {
+  if (typeof n !== "number") return "—";
+  return n < 0 ? `−${fmtMoney(-n)}` : fmtMoney(n);
+}
+/** Un renglón que resta: «−$80.00»; 0 → «$0.00»; un monto negativo (renta a favor) → «+$X». */
+function lessOrDash(n: number | null | undefined): string {
+  if (typeof n !== "number") return "—";
+  if (n > 0) return `−${fmtMoney(n)}`;
+  if (n < 0) return `+${fmtMoney(-n)}`;
+  return fmtMoney(0);
 }
 
 /** Una celda de la banda de cifras de Inicio (antes, una KpiCard). */

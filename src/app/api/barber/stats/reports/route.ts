@@ -105,6 +105,7 @@ function moneyLabelsFor(t: ReturnType<typeof getBarberT>): ReportsCsvMoneyLabels
       expenses: c("metrics.expenses"),
       expensesCash: c("metrics.expensesCash"),
       payouts: c("metrics.payouts"),
+      barberCost: c("metrics.barberCost"),
       profit: c("metrics.profit"),
       prevProfit: c("metrics.prevProfit"),
       cashNet: c("metrics.cashNet"),

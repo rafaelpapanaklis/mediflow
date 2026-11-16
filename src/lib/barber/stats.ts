@@ -351,14 +351,18 @@ export interface InicioCash {
 export interface InicioMoney {
   /** Ingresos del negocio (= «Ingresos de hoy» de la banda: sin propinas). */
   income: number;
+  /** Propinas de hoy: son de los barberos, se enseñan aparte. */
+  tips: number;
   /** Gastos de hoy (todos los medios; los anulados no). */
   expenses: number;
   expensesCount: number;
   /** De esos gastos, los pagados en efectivo. */
   expensesCash: number;
-  /** Pagos a barberos de hoy (adelantos, comisión, sueldo…). */
+  /** Lo que les toca hoy a los barberos (comisión + sueldo − renta), sin propinas. */
+  barberCost: number;
+  /** Lo ENTREGADO hoy a barberos (adelantos, comisión, sueldo, propinas): informativo. */
   payouts: number;
-  /** Te queda hoy = ingresos − gastos − pagos a barberos. */
+  /** Te queda hoy = ingresos − gastos − lo que les toca a los barberos. */
   profit: number;
 }
 
@@ -876,17 +880,19 @@ export async function getInicioSummary(ctx: BarberContext, opts: InicioOptions =
       const d = r.dinero;
       money = {
         income: d.income,
+        tips: d.tips,
         expenses: d.expenses.total,
         expensesCount: d.expenses.count,
         expensesCash: d.expenses.cash,
+        barberCost: d.barberCost.total,
         payouts: d.payouts.total,
         profit: d.profit,
       };
       fullExpected = r.openExpected;
-      if (openSession) {
-        const openedDay = dateKeyInTz(new Date(openSession.openedAt), tz);
-        staleSince = openedDay !== todayKey ? openedDay : null;
-      }
+    }
+    if (money && openSession) {
+      const openedDay = dateKeyInTz(new Date(openSession.openedAt), tz);
+      staleSince = openedDay !== todayKey ? openedDay : null;
     }
   }
 
@@ -898,7 +904,7 @@ export async function getInicioSummary(ctx: BarberContext, opts: InicioOptions =
           openedAt: new Date(openSession.openedAt).toISOString(),
           openedByName: openSession.opened_by || "—",
           // MISMA regla que la caja: con el SQL de caja completa, el esperado
-          // del turno con sus movimientos (summarizeSession); sin él, fondo +
+          // del turno con sus movimientos (cajaResumen); sin él, fondo +
           // Σ total de tickets vivos en efectivo.
           expectedCash:
             fullExpected ?? toNum(expectedCashFor(D(openSession.openingAmount as never), D(openSession.cash_total as never))),
@@ -1852,6 +1858,8 @@ export interface ReportsCsvMoneyLabels {
     expenses: string;
     expensesCash: string;
     payouts: string;
+    /** Comisiones y sueldos devengados, sin propinas (G2): lo que resta en la ganancia. */
+    barberCost?: string;
     profit: string;
     prevProfit: string;
     cashNet: string;
@@ -1892,9 +1900,11 @@ function cashFlowCsvLines(s: ReportsSummary, L: ReportsCsvLabels, M: ReportsCsvM
   push([M.metrics.income, c.income]);
   push([M.metrics.expenses, c.expenses.total]);
   push([M.metrics.expensesCash, c.expenses.cash]);
-  push([M.metrics.payouts, c.payouts.total]);
+  // G2: resta lo devengado (sin propinas); lo entregado va como dato, no resta.
+  push([M.metrics.barberCost ?? "barberCost", c.barberCost.total]);
   push([M.metrics.profit, c.profit]);
   push([M.metrics.prevProfit, cf.previous.profit]);
+  push([M.metrics.payouts, c.payouts.total]);
   push([M.metrics.cashNet, c.cashNet]);
   blank();
 

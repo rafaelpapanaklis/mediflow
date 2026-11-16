@@ -42,6 +42,7 @@ export function CashFlowCard({
   const catMax = Math.max(0, ...c.expenses.byCategory.map((r) => r.total));
   const kinds = KINDS.filter((kd) => c.payouts.byKind[kd] > 0);
   const delta = cf.vsPrevProfitPct;
+  const bc = c.barberCost;
 
   return (
     <CardNew
@@ -76,7 +77,7 @@ export function CashFlowCard({
             <div className="bdash-ledger__row bdash-ledger__row--neg">
               <dt>
                 {k("tips")}
-                <span className="bdash-ledger__meta">{k("incomeHint")}</span>
+                <span className="bdash-ledger__meta">{k("tipsApart", { amount: fmtMoney(c.tips) })}</span>
               </dt>
               <dd>{neg(c.tips)}</dd>
             </div>
@@ -99,10 +100,17 @@ export function CashFlowCard({
             </div>
             <div className="bdash-ledger__row bdash-ledger__row--neg">
               <dt>
-                {k("lessPayouts")}
-                {c.payouts.count > 0 && <span className="bdash-ledger__meta">{k("payoutsCount", { count: c.payouts.count })}</span>}
+                {k("lessBarberCost")}
+                <span className="bdash-ledger__meta">
+                  {k("barberCostHint")}
+                  {" · "}
+                  {k("barberCostParts", { commission: fmtMoney(bc.commission), salary: fmtMoney(bc.salary) })}
+                  {bc.chairRent > 0 ? ` · ${k("chairRent", { amount: `−${fmtMoney(bc.chairRent)}` })}` : ""}
+                  {bc.approx ? ` · ${k("approx")}` : ""}
+                </span>
               </dt>
-              <dd>{neg(c.payouts.total)}</dd>
+              {/* Negativo = la renta de silla supera lo que les toca: suma a la ganancia. */}
+              <dd>{bc.total < 0 ? `+${fmtMoney(-bc.total)}` : neg(bc.total)}</dd>
             </div>
             <div className="bdash-ledger__row bdash-ledger__row--total">
               <dt>{k("profit")}</dt>
@@ -165,6 +173,10 @@ export function CashFlowCard({
           )}
 
           <h3 className="bdash-money__sub" style={{ marginTop: 18 }}>{k("byKind")}</h3>
+          <div className="bdash-big__label" style={{ margin: "0 0 6px" }}>
+            {k("paidOut")}: <strong>{fmtMoney(c.payouts.total)}</strong>
+            {c.payouts.count > 0 ? ` · ${k("payoutsCount", { count: c.payouts.count })}` : ""} · {k("paidOutHint")}
+          </div>
           {kinds.length === 0 ? (
             <div className="bdash-empty" style={{ textAlign: "left", padding: "4px 0" }}>{k("byKindEmpty")}</div>
           ) : (

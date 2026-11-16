@@ -160,8 +160,10 @@ test("Inicio del dueño: gastos de hoy, te queda hoy y en caja ahora (= la Caja)
   assert.equal(body(r).today.revenue, m.income, "cuadra con la banda de Inicio");
   assert.equal(m.expenses, 380, "80 efectivo + 300 tarjeta; el anulado de 999 y los 7,777 de la otra sede no");
   assert.equal(m.expensesCash, 80, "el de tarjeta no salió del cajón");
-  assert.equal(m.payouts, 350);
-  assert.equal(m.profit, 870, "1,600 − 380 − 350");
+  assert.equal(m.payouts, 350, "lo entregado hoy se enseña, pero ya no resta (G2)");
+  assert.equal(m.tips, 50, "las propinas, aparte");
+  assert.equal(m.barberCost, 800, "comisión devengada: 50 % de 800 + 50 % de 800, sin propinas");
+  assert.equal(m.profit, 420, "1,600 − 380 − 800 (lo devengado, no lo pagado)");
 
   const c = body(r).cash;
   assert.equal(c.full, true);
@@ -204,7 +206,8 @@ test("Reportes del dueño: ingresos y gastos, ganancia, comparación y por barbe
   );
   assert.equal(cf.current.payouts.byKind.ADVANCE, 200);
   assert.equal(cf.current.payouts.byKind.COMMISSION, 150);
-  assert.equal(cf.current.profit, 870);
+  assert.equal(cf.current.barberCost.total, 800);
+  assert.equal(cf.current.profit, 420);
   assert.equal(cf.current.cashNet, -230, "850 + 200 − 80 − 1,000 − 200: la tarjeta no toca el cajón");
   assert.equal(cf.previous.profit, 0);
   assert.equal(cf.vsPrevProfitPct, null, "sin periodo anterior no hay porcentaje");
@@ -217,7 +220,8 @@ test("Reportes del dueño: ingresos y gastos, ganancia, comparación y por barbe
   const csv = await como("dueno", "stats/reports", "range=today&format=csv&section=money");
   assert.equal(csv.status, 200);
   const txt = String(csv.body);
-  assert.match(txt, /Ganancia,870/);
+  assert.match(txt, /Ganancia,420/);
+  assert.match(txt, /Comisiones y sueldos devengados \(sin propinas\),800/);
   assert.match(txt, /Gastos,380/);
   assert.match(txt, /Limpieza,1,300/);
   assert.doesNotMatch(txt, /7777|5555/);
@@ -264,6 +268,46 @@ test("🔴 sin «Ver caja» no viaja NI UN monto nuevo (Barbero y Recepción sin
   }
   // Y la función misma se niega sin el permiso.
   await assert.rejects(() => dinero.getDineroPeriodo(ctxs.recepcion, [shopA], { from: new Date(0), to: new Date() }), /cash\.view/);
+});
+
+test("🔴 G2 (caso de t8): $800 + $50 de propina al 50 % → Ganancia $400 en Reportes, Inicio y CSV, marcado pagado o no", { skip: skipDb }, async (t) => {
+  if (!ready) return t.skip("sql/barber_caja_completa.sql no está pegado en esta base");
+  const { FALLBACK_BARBER_PLAN_CONFIG } = await import("@/lib/barber/plan-shared");
+  const commissions = await import("@/lib/barber/commissions");
+  const shopD = await shop("d");
+  await persona("duenoD", shopD, "OWNER");
+  const pepe = (await prisma.barber.create({ data: { barbershopId: shopD, name: "Pepe", commissionType: "COMMISSION", commissionPct: new Prisma.Decimal(50) } })).id;
+  const corte = (await prisma.barberService.create({ data: { barbershopId: shopD, name: "Corte", durationMin: 30, price: new Prisma.Decimal(800) } })).id;
+  await cash.openCashSession(ctxs.duenoD, { openingAmount: 0 });
+  await cash.createSale(ctxs.duenoD, { barberId: pepe, items: [{ kind: "service", id: corte }], tip: 50, paymentMethod: "CASH" }, FALLBACK_BARBER_PLAN_CONFIG.PROFESIONAL.features);
+
+  const mirar = async () => {
+    const rep = body(await como("duenoD", "stats/reports", "range=today"));
+    const ini = body(await como("duenoD", "stats/inicio"));
+    const csv = String((await como("duenoD", "stats/reports", "range=today&format=csv&section=money")).body);
+    return { rep: rep.cashFlow, ini: ini.money, csv };
+  };
+
+  const antes = await mirar();
+  assert.equal(antes.rep.current.income, 800);
+  assert.equal(antes.rep.current.tips, 50);
+  assert.equal(antes.rep.current.profit, 400, "sin marcar pagado: 800 − 400 de comisión");
+  assert.equal(antes.ini.profit, 400, "Inicio «Te queda hoy», mismo criterio");
+  assert.equal(antes.ini.tips, 50);
+  assert.match(antes.csv, /Ganancia,400/);
+
+  // Se marca pagado «Sale de la caja en efectivo»: $450 = 400 de comisión + 50 de propina.
+  const periodKey = commissions.currentPeriodKey("America/Mexico_City");
+  const pago = await commissions.markCommissionsPaid(ctxs.duenoD, { barberId: pepe, periodKey }, new Date(), { cashOut: { method: "CASH" } });
+  assert.equal(pago.paidAmount, 450);
+
+  const despues = await mirar();
+  assert.equal(despues.rep.current.payouts.total, 450, "lo entregado se ve…");
+  assert.equal(despues.rep.current.profit, 400, "…pero la ganancia NO cambia por marcar pagado");
+  assert.equal(despues.ini.profit, 400);
+  assert.equal(despues.ini.payouts, 450);
+  assert.match(despues.csv, /Ganancia,400/);
+  await prisma.$executeRaw`DELETE FROM "barber_cash_movements" WHERE "barbershopId" = ${shopD}`;
 });
 
 // ── Sin el SQL ──────────────────────────────────────────────────────────
