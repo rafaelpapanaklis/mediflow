@@ -343,7 +343,14 @@ test("m4 · el MENÚ (GET /api/barber/nav, lo que vuelve a pedir el menú al nav
   const fs = await import("node:fs");
   const layout = fs.readFileSync(path.resolve(__dirname, "../../../app/barber/(panel)/layout.tsx"), "utf8");
   assert.match(layout, /resolveBarberNav\(ctx/);
-  assert.doesNotMatch(layout, /hasBarberPermission\(/, "el layout no tiene un filtro propio");
+  // Unión pase 22 (ws6-t4): el layout usa hasBarberPermission UNA vez, y no para el menú: el enlace
+  // «Administrar sucursales…» del selector de sede (sucursales-menu, ws6-t6) pide branches.manage, igual
+  // que sucursales/page.tsx (que abre aunque el plan no traiga sedes; la entrada del menú sí lo exige,
+  // así que no se puede sacar del menú sin cambiar qué ve quién). Se exige EXACTAMENTE ese uso y
+  // ningún rastro de filtro de menú: cualquier otro permiso en el layout vuelve a romper esta prueba.
+  const usos = layout.match(/hasBarberPermission\([^)]*\)/g) ?? [];
+  assert.deepEqual(usos, ['hasBarberPermission(permUser, "branches.manage")'], "el layout no tiene un filtro propio");
+  assert.doesNotMatch(layout, /BARBER_NAV_ITEMS|item\.permission|anyPermission/, "el layout no filtra el menú por su cuenta");
   const sidebar = fs.readFileSync(path.resolve(__dirname, "../../../components/barber/barber-sidebar.tsx"), "utf8");
   assert.match(sidebar, /const items = useMenuAlDia\(initialItems, pathname\)/, "el menú se vuelve a pedir al cambiar de página");
   assert.match(sidebar, /fetch\("\/api\/barber\/nav"/);
