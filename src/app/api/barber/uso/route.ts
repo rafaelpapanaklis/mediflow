@@ -47,6 +47,13 @@ export async function POST(req: NextRequest) {
 
     const ctx = await getBarberContext();
     if (!ctx) return NextResponse.json({ ok: false, error: "No autorizado" }, { status: 401 });
+    // «Ver como barbería» de ws6-t1 (feat/barber-admin-ver-como): durante la
+    // inspección, getBarberContext trae `verComo` con datos. Se lee sin tiparlo
+    // para no depender de que esa rama ya esté unida; antes de la unión vale
+    // undefined y no cambia nada.
+    if ((ctx as unknown as { verComo?: unknown }).verComo) {
+      return NextResponse.json({ ok: true, omitido: "ver-como" });
+    }
 
     const r = await registrarLote(
       prisma,
