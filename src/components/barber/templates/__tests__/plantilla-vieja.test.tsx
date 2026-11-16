@@ -104,12 +104,14 @@ let cargarBarberWeb: Carga["cargarBarberWeb"];
 let PlantillaBarberWeb: typeof import("../index")["PlantillaBarberWeb"];
 let EditorWebBarberia: typeof import("../../landing/editor")["EditorWebBarberia"];
 let getBarberDict: typeof import("../../../../i18n/dictionaries/barber")["getBarberDict"];
+let UpsellWebBarberia: typeof import("../../landing/upsell")["UpsellWebBarberia"];
 
 before(async () => {
   ({ cargarBarberWeb } = await import("../../../../app/b/[slug]/_shared/shop-data"));
   ({ PlantillaBarberWeb } = await import("../index"));
   ({ EditorWebBarberia } = await import("../../landing/editor"));
   ({ getBarberDict } = await import("../../../../i18n/dictionaries/barber"));
+  ({ UpsellWebBarberia } = await import("../../landing/upsell"));
 });
 
 beforeEach(() => {
@@ -145,6 +147,25 @@ for (const buena of ["barrio", "revista"]) {
 test("sin fila (Básico, o nunca abrió Mi web) → Oficio", async () => {
   const carga = await cargarBarberWeb("el-roble");
   assert.equal(carga!.data.manifest.id, "oficio");
+});
+
+test("Básico (upsell): el texto nombra la plantilla que DE VERDAD se pinta", async () => {
+  for (const [guardada, nombre] of [
+    [null, "Oficio"],
+    ["clasica", "Oficio"],
+    ["barrio", "Barrio"],
+  ] as const) {
+    st.fila = guardada ? { template: guardada, config: CONFIG, version: 1, publishedAt: null } : null;
+    const carga = await cargarBarberWeb("el-roble");
+    for (const idioma of ["es", "en"] as const) {
+      const html = renderToStaticMarkup(
+        <UpsellWebBarberia dict={getBarberDict(idioma)} data={{ ...carga!.data, editando: false }} urlPublica="https://x.test/b/el-roble" />,
+      );
+      const frase = idioma === "es" ? `con la plantilla ${nombre},` : `with the ${nombre} template,`;
+      assert.ok(html.includes(frase), `${idioma}, guardada=${guardada}: no dice «${frase}»`);
+      assert.ok(!html.includes("{plantilla}"), "quedó la llave sin reemplazar");
+    }
+  }
 });
 
 test("el editor enseña Oficio ELEGIDA a quien tiene «clasica» guardada, y solo ofrece las tres", async () => {

@@ -101,7 +101,7 @@
   "sinTablaTitulo": "A database step is missing",
   "sinTablaCuerpo": "The mini-site table doesn't exist yet. sql/barber_complemento.sql has to be applied in Supabase before you can save.",
   "upsellTitulo": "Your website is already live",
-  "upsellCuerpo": "On the Básico plan your barbershop has a website with the Oficio template, your services, your barbers and your booking button. To choose between Oficio, Barrio and Revista, change the text, upload your photos and publish whenever you want, move up to Avanzado.",
+  "upsellCuerpo": "On the Básico plan your barbershop has a website with the {plantilla} template, your services, your barbers and your booking button. To choose between Oficio, Barrio and Revista, change the text, upload your photos and publish whenever you want, move up to Avanzado.",
   "upsellBoton": "See plans",
   "upsellTuPagina": "Your page",
   "textosTitulo": "Text",

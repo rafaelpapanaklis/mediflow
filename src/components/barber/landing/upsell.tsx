@@ -53,7 +53,9 @@ export function UpsellWebBarberia({
       <div className="dcbwe-upsell">
         <div className="dcbwe-upsell-txt">
           <h2>{t("upsellTitulo")}</h2>
-          <p>{t("upsellCuerpo")}</p>
+          {/* La plantilla que DE VERDAD se pinta (la resuelta por shop-data):
+              Oficio, salvo un Básico que bajó de plan con Barrio o Revista. */}
+          <p>{t("upsellCuerpo", { plantilla: data.manifest.nombre })}</p>
           {/* Enlace del panel al panel: <a> y no <Link>, como el resto del
               vertical, para no arrastrar el router del cliente a una
               pantalla que es casi estática. */}
