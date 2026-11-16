@@ -5109,24 +5109,26 @@ img.dcbw-es-equipo-foto {
 
    Fuentes autoalojadas en /public/barber/fuentes (OFL), con
    font-display: swap: si tardan, se lee primero con la de respaldo.
+   Familias con el prefijo «DCBW …», como Barrio y Revista: no chocan con
+   una «Abril Fatface» o «Libre Franklin» instalada ni con otra del panel.
    Ningún color de acento escrito: todo sale de --dcbw-acento-*.
    El texto blanco va sobre --dcbw-acento-fuerte (AA en los seis).
    ══════════════════════════════════════════════════════════════ */
 
 @font-face {
-  font-family: "Abril Fatface";
+  font-family: "DCBW Abril Fatface";
   src: url("/barber/fuentes/abril-fatface-400.woff2") format("woff2");
   font-weight: 400;
   font-display: swap;
 }
 @font-face {
-  font-family: "Libre Franklin";
+  font-family: "DCBW Libre Franklin";
   src: url("/barber/fuentes/libre-franklin-400-700.woff2") format("woff2");
   font-weight: 400 700;
   font-display: swap;
 }
 @font-face {
-  font-family: "Libre Franklin";
+  font-family: "DCBW Libre Franklin";
   src: url("/barber/fuentes/libre-franklin-italic-400-700.woff2") format("woff2");
   font-weight: 400 700;
   font-style: italic;
@@ -5148,8 +5150,8 @@ img.dcbw-es-equipo-foto {
   --of-filete: #c2a06b;
   --of-repisa: #4a3528;
   /* letra */
-  --of-rotulo: "Abril Fatface", "Bodoni 72", Didot, Georgia, serif;
-  --of-texto: "Libre Franklin", "Franklin Gothic Medium", "Helvetica Neue", Arial, sans-serif;
+  --of-rotulo: "DCBW Abril Fatface", "Bodoni 72", Didot, Georgia, serif;
+  --of-texto: "DCBW Libre Franklin", "Franklin Gothic Medium", "Helvetica Neue", Arial, sans-serif;
   --of-h2: clamp(2.2rem, 9.2cqi, 3.75rem);
   /* forma */
   --of-arco: 999px 999px 0 0;
