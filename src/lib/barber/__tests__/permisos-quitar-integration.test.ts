@@ -171,6 +171,7 @@ const CASOS: Caso[] = [
   { permiso: "clients.edit", rel: "clients/[id]", metodo: "PATCH", params: () => ({ id: clienteId }), body: () => ({ notes: "nota" }) },
   { permiso: "clients.view", rel: "clients", metodo: "GET" },
   { permiso: "commissions.view", rel: "commissions", metodo: "GET", query: () => "period=2026-11" },
+  { permiso: "commissions.manage", rel: "commissions/pay", metodo: "POST", body: () => ({ barberId: barberoId, periodKey: "2026-11" }) },
   { permiso: "barbers.manage", rel: "team/barbers", metodo: "GET" },
   { permiso: "billing.manage", rel: "billing/status", metodo: "GET" },
   { permiso: "whatsapp.view", rel: "whatsapp/threads", metodo: "GET" },
@@ -233,6 +234,24 @@ test("G1 · el dueño le apaga TODO → la siguiente llamada ya no pasa (antes: 
   await dejarCon("rita", RECEPCION);
   assert.equal((await como("rita", "appointments", "GET", { query: "date=2026-11-18" })).status, 200);
   assert.deepEqual((await prisma.barberUser.findUniqueOrThrow({ where: { id: uid.rita } })).permissionsOverride, []);
+});
+
+test("M1 · «Administrar comisiones» trae «Ver comisiones»: pagar no responde 403 después de haber pagado", { skip }, async () => {
+  // Una venta con comisión pendiente para Beto en el periodo.
+  const venta = await prisma.barberSale.create({
+    data: { barbershopId: shopId, soldByUserId: uid.dueno, barberId: barberoId, subtotal: new Prisma.Decimal(200), total: new Prisma.Decimal(200), createdAt: new Date(Date.UTC(2026, 10, 10, 18)) },
+  });
+  await prisma.barberCommissionEntry.create({
+    data: { barbershopId: shopId, barberId: barberoId, saleId: venta.id, base: new Prisma.Decimal(200), pct: new Prisma.Decimal(50), amount: new Prisma.Decimal(100), periodKey: "2026-11" },
+  });
+  await dejarCon("rita", [...RECEPCION, "commissions.manage"]);
+  const r = await como("rita", "commissions/pay", "POST", { body: { barberId: barberoId, periodKey: "2026-11" } });
+  const pagadas = await prisma.barberCommissionEntry.count({ where: { barberId: barberoId, periodKey: "2026-11", paidAt: { not: null } } });
+  // Lo que importa: la respuesta dice la verdad sobre lo que pasó en la base.
+  assert.equal(r.status === 200, pagadas > 0, `respuesta ${r.status} y ${pagadas} comisiones pagadas: ${JSON.stringify(r.body).slice(0, 200)}`);
+  assert.equal(r.status, 200);
+  assert.ok(resolveBarberPermissions("RECEPTION", ["commissions.manage"]).has("commissions.view"));
+  await dejarCon("rita", RECEPCION);
 });
 
 test("cambiar el ROL tiene efecto en la siguiente llamada (Recepción → Barbero → Recepción)", { skip }, async () => {

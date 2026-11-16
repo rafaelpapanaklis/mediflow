@@ -120,6 +120,10 @@ export const BARBER_PERMISSION_IMPLIES: Partial<Record<BarberPermissionKey, Barb
   "products.manage": ["products.view"],
   "schedule.manage": ["timeoff.manage", "timeoff.own"],
   "timeoff.manage": ["timeoff.own"],
+  // Auditoría 16-nov (M1): pagar comisiones devuelve la fila del periodo, que
+  // se lee con commissions.view. Con «Administrar» sin «Ver», el pago SÍ se
+  // guardaba y la respuesta era un 403: la pantalla decía que falló.
+  "commissions.manage": ["commissions.view"],
 };
 
 /**
