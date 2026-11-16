@@ -159,6 +159,33 @@ test("un COBRO que llega mientras se cierra tampoco se cuela: o entra antes del 
   await prisma.barberSale.deleteMany({ where: { barbershop: { slug: { startsWith: RUN } } } });
 });
 
+test("M2: cancelar un ticket o cambiarle el medio MIENTRAS se cierra no descuadra el corte congelado", { skip: skipDb }, async (t) => {
+  if (skip) return t.skip(skip);
+  const { createSale, cancelSale, changeSalePaymentMethod } = await import("@/lib/barber/cash");
+  const { FALLBACK_BARBER_PLAN_CONFIG } = await import("@/lib/barber/plan-shared");
+  const F = FALLBACK_BARBER_PLAN_CONFIG.PROFESIONAL.features;
+  for (let i = 0; i < 6; i++) {
+    const c = await shop();
+    const svc = (await prisma.barberService.create({ data: { barbershopId: c.barbershopId, name: "Corte", durationMin: 30, price: 300 } })).id;
+    await openCashSession(c, { openingAmount: 100 });
+    const sale = await createSale(c, { items: [{ kind: "service", id: svc }], paymentMethod: "CASH" }, F);
+    const toque = i % 2 === 0 ? cancelSale(c, sale.id, { reason: "error" }) : changeSalePaymentMethod(c, sale.id, { paymentMethod: "CARD" });
+    const [cambio, cierre] = await Promise.allSettled([toque, closeCashSession(c, { countedAmount: 100 })]);
+    assert.equal(cierre.status, "fulfilled");
+    const closed = (cierre as PromiseFulfilledResult<Awaited<ReturnType<typeof closeCashSession>>>).value;
+    if (cambio.status === "rejected") {
+      assert.equal((cambio.reason as BarberCajaError).code, "SESSION_CLOSED", String(cambio.reason));
+      assert.equal(closed.session.expectedAmount, 400, "el cambio llegó tarde: el ticket sigue en efectivo");
+    } else {
+      assert.equal(closed.session.expectedAmount, 100, "el cambio entró antes del corte");
+    }
+    const s = await getCashSessionSummary(c, closed.session.id);
+    assert.equal(s.expectedCash, closed.session.expectedAmount, "lo congelado = lo que se recalcula");
+  }
+  await prisma.barberSaleItem.deleteMany({ where: { sale: { barbershop: { slug: { startsWith: RUN } } } } });
+  await prisma.barberSale.deleteMany({ where: { barbershop: { slug: { startsWith: RUN } } } });
+});
+
 test("un gasto que llega mientras se cierra NO se cuela en un corte ya congelado", { skip: skipDb }, async (t) => {
   if (skip) return t.skip(skip);
   const ctx = await shop();

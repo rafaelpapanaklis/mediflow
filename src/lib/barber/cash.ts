@@ -135,6 +135,7 @@ import {
   cashMovementsReady,
   lastLeftForNext,
   lockOpenSessionShared,
+  lockSessionIfOpen,
   loadMovements,
   loadSessionExtras,
   type CashMovementRow,
@@ -2014,7 +2015,11 @@ export async function cancelSaleTx(
   });
   if (!s) throw new BarberCajaError(404, "SALE_NOT_FOUND", "Ticket no encontrado");
   if (isSaleCancelled(s)) throw new BarberCajaError(409, "ALREADY_CANCELLED", "Ese ticket ya está cancelado");
-  if (s.cashSession && s.cashSession.closedAt) {
+  // El turno, bloqueado FOR SHARE (revisión ws6-t8, M2): si un cierre está en
+  // curso (FOR UPDATE), esta cancelación espera y luego ya lo ve cerrado; así
+  // no se cuela en un corte que congeló el esperado con el ticket dentro.
+  const sessionOpen = s.cashSessionId ? await lockSessionIfOpen(tx, barbershopId, s.cashSessionId) : true;
+  if ((s.cashSession && s.cashSession.closedAt) || !sessionOpen) {
     throw new BarberCajaError(
       409,
       "SESSION_CLOSED",
@@ -2163,12 +2168,15 @@ export async function changeSalePaymentMethod(
         select: { id: true, notes: true, paymentMethod: true, cashSessionId: true, cashSession: { select: { closedAt: true } } },
       });
       if (!s) throw new BarberCajaError(404, "SALE_NOT_FOUND", "Ticket no encontrado");
+      // Mismo candado del turno que el cobro (M2): un cierre en curso espera a
+      // este cambio, o este cambio espera al cierre y lo encuentra cerrado.
+      const sessionOpen = s.cashSessionId ? await lockSessionIfOpen(tx, barbershopId, s.cashSessionId) : false;
       const blocker = methodChangeBlocker({
         current: s.paymentMethod,
         next: input.paymentMethod,
         cancelled: isSaleCancelled(s),
         hasSession: Boolean(s.cashSessionId && s.cashSession),
-        sessionClosed: Boolean(s.cashSession?.closedAt),
+        sessionClosed: Boolean(s.cashSession?.closedAt) || (Boolean(s.cashSessionId) && !sessionOpen),
       });
       if (blocker) {
         const m = METHOD_CHANGE_MESSAGES[blocker];
