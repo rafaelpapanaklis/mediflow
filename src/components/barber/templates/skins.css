@@ -6701,19 +6701,23 @@ img.dcbw-es-equipo-foto {
   z-index: -1;
 }
 
+/* La foto de portada sale A COLOR, tal cual la subió la barbería (Rafael,
+   16-nov: «no quiero blanco y negro»). Lo que deja leer el nombre encima es
+   el degradado negro de ::after, que es otra capa: no tiñe la foto. */
 .dcbw-barrio .bw-portada-foto img {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  filter: grayscale(1) contrast(1.25) brightness(0.62);
   animation: bw-revelar 1.1s cubic-bezier(0.2, 0.7, 0.2, 1) both;
 }
 
+/* Solo funde el pie de la foto con el negro de la página. Arriba casi no
+   oscurece: ahí no hay texto y la foto se ve como es. */
 .dcbw-barrio .bw-portada-foto::after {
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(to top, var(--bw-negro) 2%, rgba(12, 12, 12, 0.2) 62%, rgba(12, 12, 12, 0.55));
+  background: linear-gradient(to top, var(--bw-negro) 2%, rgba(12, 12, 12, 0.18) 55%, rgba(12, 12, 12, 0.12));
 }
 
 .dcbw-barrio .bw-portada-foto .dcbw-hueco {
@@ -6738,6 +6742,22 @@ img.dcbw-es-equipo-foto {
   position: relative;
   width: 100%;
   padding: 120px max(var(--dcbw-lado), calc((100% - var(--dcbw-ancho)) / 2)) 26px;
+}
+
+/* Con foto: un velo NEGRO (no tiñe) pegado al bloque del nombre, que crece
+   con él. Antes la legibilidad salía de apagar la foto entera con
+   brightness(0.62); ahora la foto va a color y solo se oscurece debajo del
+   texto. Los 120 px de arriba son el relleno del bloque: ahí se desvanece.
+   Medido con una foto casi blanca: el nombre queda en 3:1 o más (AA de
+   texto grande) y la frase por encima de 4.5:1, a 390 y a 1440 px. */
+.dcbw-barrio .bw-con-foto .bw-portada-in {
+  background: linear-gradient(
+    to top,
+    rgba(12, 12, 12, 0.84),
+    rgba(12, 12, 12, 0.66) calc(100% - 200px),
+    rgba(12, 12, 12, 0.5) calc(100% - 120px),
+    rgba(12, 12, 12, 0)
+  );
 }
 
 /* El nombre: tan grande como quepa. --bw-letras (lo pone el JSX) es lo
@@ -7191,10 +7211,8 @@ img.dcbw-es-equipo-foto {
   letter-spacing: 0.06em;
 }
 
-.dcbw-barrio .dcbw-producto:has(> .dcbw-producto-cat:last-child) .dcbw-producto-foto {
-  opacity: 0.35;
-  filter: grayscale(1);
-}
+/* Agotado: lo dice la banda negra cruzada y el precio apagado. La foto del
+   producto se queda como es (antes iba en gris y al 35 %). */
 
 .dcbw-barrio .dcbw-producto:has(> .dcbw-producto-cat:last-child) > .dcbw-precio {
   background: var(--bw-carbon);
@@ -7292,17 +7310,12 @@ img.dcbw-es-equipo-foto {
   background: var(--bw-concreto-2);
 }
 
+/* Los cortes van a color SIEMPRE, como los subió la barbería: antes salían
+   en blanco y negro y solo tomaban color al pasar el ratón. */
 .dcbw-barrio .bw-rejilla img {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  filter: grayscale(1) contrast(1.12);
-  transition: filter 0.3s;
-}
-
-/* El color vuelve al pasar el ratón: el corte se ve como es. */
-.dcbw-barrio .bw-rejilla figure:hover img {
-  filter: none;
 }
 
 .dcbw-barrio .bw-rejilla .bw-oculta-cel {
@@ -7367,11 +7380,11 @@ img.dcbw-es-equipo-foto {
   background: #3a3a3a;
 }
 
+/* El retrato del barbero, a color y sin retoque. */
 .dcbw-barrio .bw-barbero-foto img {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  filter: grayscale(1) contrast(1.08);
 }
 
 .dcbw-barrio .bw-barbero-inicial {
