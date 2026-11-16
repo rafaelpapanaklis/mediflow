@@ -159,6 +159,7 @@
     "fromRole": "From role",
     "badgeInherited": "From role",
     "badgeNotYours": "You don't have it",
+    "badgeIncluded": "Comes with “{perm}”",
     "notYoursNote": "You can't grant the ones marked “You don't have it”: only someone who already has them can. Ask the owner.",
     "badgeAdded": "Added",
     "badgeRemoved": "Removed",

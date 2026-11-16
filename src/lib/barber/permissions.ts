@@ -127,6 +127,22 @@ export const BARBER_PERMISSION_IMPLIES: Partial<Record<BarberPermissionKey, Barb
 };
 
 /**
+ * Lo que viene INCLUIDO en otro permiso encendido, y de cuál viene (D4,
+ * 16-nov): la matriz bloquea ese interruptor con «Viene con «…»» en vez de
+ * dejar apagarlo y que al guardar vuelva solo. Si dos encendidos lo incluyen,
+ * manda el primero de BARBER_PERMISSION_IMPLIES.
+ */
+export function includedBy(keys: Iterable<string>): Map<BarberPermissionKey, BarberPermissionKey> {
+  const on = new Set<string>(keys);
+  const out = new Map<BarberPermissionKey, BarberPermissionKey>();
+  for (const [src, implied] of Object.entries(BARBER_PERMISSION_IMPLIES)) {
+    if (!on.has(src)) continue;
+    for (const k of implied ?? []) if (!out.has(k)) out.set(k, src as BarberPermissionKey);
+  }
+  return out;
+}
+
+/**
  * Qué bloqueos puede poner y quitar esta persona (L3 ronda 2):
  * - "all": de cualquier barbero y de toda la barbería (día festivo);
  * - { barberId }: solo los de SU ficha (rol Barbero ligado);
