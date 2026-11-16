@@ -20,6 +20,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { BarberIcon } from "@/components/barber/barber-icons";
+import { addDaysISO } from "@/lib/barber/agenda";
 import { CardNew } from "@/components/ui/design-system/card-new";
 import type { TFunction } from "@/i18n/t";
 import type { InicioSummary } from "@/lib/barber/stats";
@@ -51,6 +52,8 @@ export function InicioView({
 }) {
   const k = (key: string, vars?: Record<string, string | number>) => t(`barber.inicio.${key}`, vars);
   const tz = s.timezone;
+  // «Mañana» en la zona de la barbería: los avisos de mañana abren la Agenda EN mañana, no en hoy.
+  const mananaISO = addDaysISO(diaDeLaBarberia(s.generatedAt, tz), 1);
   const weekdayName = t(`barber.reportes.weekdaysLong.${weekdayOfKey(s.date)}`).toLowerCase();
 
   // ── KPIs ──
@@ -119,7 +122,7 @@ export function InicioView({
       key: "tomorrow",
       title: k("alerts.tomorrowPending", { count: a.tomorrowPending }),
       hint: k("alerts.tomorrowPendingHint"),
-      href: "/barber/agenda",
+      href: `/barber/agenda?fecha=${mananaISO}`,
       cta: k("alerts.tomorrowPendingCta"),
       icon: CalendarDays,
     });
@@ -339,7 +342,7 @@ export function InicioView({
               {a.tomorrowTotal !== null && (
                 <div className="bdash-foot">
                   <span>{k("upcoming.tomorrow", { count: a.tomorrowTotal })}</span>
-                  <Link href="/barber/agenda" className="bdash-link">
+                  <Link href={`/barber/agenda?fecha=${mananaISO}`} className="bdash-link">
                     {k("visits.goAgenda")} <ArrowRight size={14} aria-hidden />
                   </Link>
                 </div>

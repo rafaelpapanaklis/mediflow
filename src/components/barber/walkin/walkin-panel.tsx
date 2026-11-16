@@ -12,7 +12,6 @@
 // El aviso por WhatsApp de esta ola solo REGISTRA el evento (encola una
 // fila BarberMessage PENDING). El envío lo conecta la ola de WhatsApp.
 // ═══════════════════════════════════════════════════════════════════════
-import { soloDigitosTelefono } from "@/lib/barber/phone-format";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { BellRing, LogOut, MessageCircle, Plus, RefreshCw, Scissors, Volume2 } from "lucide-react";
 import { type Dictionary } from "@/i18n/t";
@@ -34,6 +33,11 @@ import { formatBarberPhone } from "@/lib/barber/phone-format";
 import { mxTenDigits } from "@/lib/phone-mx";
 import { WalkinQr } from "./walkin-qr";
 import { ChatClienteLink } from "../wa-chat";
+import { TelefonoConPais } from "@/components/barber/telefono-con-pais";
+import { panelPhone } from "@/lib/barber/telefono-panel";
+import { barberPhoneCountry } from "@/lib/barber/phone-countries";
+import { BarberoSelect } from "@/components/barber/agenda/barbero-select";
+import type { BarberPick } from "@/lib/barber/quien-trabaja";
 import css from "./walkin.module.css";
 
 interface QueueRow extends BarberWalkInDTO {
@@ -58,6 +62,10 @@ interface Payload {
   services: ServiceLite[];
   queue: QueueRow[];
   recent: BarberWalkInDTO[];
+  /** «¿Con quién?»: quién trabaja hoy y a quién se propone (quien-trabaja.ts). Opcional: una API vieja no lo manda. */
+  pick?: BarberPick;
+  /** Siguen «esperando» desde antes de hoy (no cuentan en la fila de hoy). */
+  staleCount?: number;
 }
 
 export interface WalkinPanelProps {
@@ -158,6 +166,31 @@ export function WalkinPanel(props: WalkinPanelProps) {
     }
   };
 
+  // «De ayer (N) · Sacarlos»: los marca «Se fue» (no se borra nada).
+  const [clearingStale, setClearingStale] = useState(false);
+  const clearStale = async () => {
+    setClearingStale(true);
+    try {
+      const res = await fetch("/api/barber/walkins/de-ayer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ branchId: props.branchId }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(typeof body.error === "string" ? body.error : t("barber.agenda.queue.errors.generic"));
+        return;
+      }
+      setError(null);
+      setNotice(t("barber.agenda.queue.stale.done", { count: typeof body.cleared === "number" ? body.cleared : 0 }));
+      await load(true);
+    } catch {
+      setError(t("barber.agenda.queue.errors.generic"));
+    } finally {
+      setClearingStale(false);
+    }
+  };
+
   const queue = data?.queue ?? [];
 
   return (
@@ -193,6 +226,21 @@ export function WalkinPanel(props: WalkinPanelProps) {
       {notice ? (
         <div className={agendaCss.totals} style={{ marginBottom: 12 }}>
           <span>{notice}</span>
+        </div>
+      ) : null}
+      {/* Los que se anotaron antes de hoy y nadie sacó: ya no cuentan en la
+          fila de hoy (fila-del-dia.ts); se marcan «Se fue» SOLO al pulsar. */}
+      {data && (data.staleCount ?? 0) > 0 ? (
+        <div className={agendaCss.totals} style={{ marginBottom: 12, alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <span>{t("barber.agenda.queue.stale.text", { count: data.staleCount ?? 0 })}</span>
+          <button
+            type="button"
+            className={`${agendaCss.btn} ${agendaCss.btnSm}`}
+            disabled={clearingStale}
+            onClick={() => void clearStale()}
+          >
+            <LogOut size={14} /> {t("barber.agenda.queue.stale.clear")}
+          </button>
         </div>
       ) : null}
 
@@ -281,7 +329,8 @@ export function WalkinPanel(props: WalkinPanelProps) {
                             {t("barber.agenda.queue.actions.uncall")}
                           </button>
                         ) : null}
-                        {row.phone ? (
+                        {/* El aviso sale por el WhatsApp de la barbería: hoy solo a números de México. */}
+                        {mxTenDigits(row.phone ?? "") ? (
                           <button
                             type="button"
                             className={agendaCss.btn}
@@ -349,6 +398,7 @@ export function WalkinPanel(props: WalkinPanelProps) {
           t={t}
           branchId={props.branchId}
           barbers={data.barbers}
+          pick={data.pick ?? null}
           onClose={() => setAdding(false)}
           onAdded={() => {
             setAdding(false);
@@ -362,6 +412,7 @@ export function WalkinPanel(props: WalkinPanelProps) {
           t={t}
           row={serving}
           barbers={data.barbers}
+          pick={data.pick ?? null}
           services={data.services}
           onClose={() => setServing(null)}
           onConfirm={async (barberId, serviceIds) => {
@@ -383,12 +434,15 @@ function AddWalkInDialog(props: {
   t: (key: string, vars?: Record<string, string | number>) => string;
   branchId: string;
   barbers: BarberDTO[];
+  pick: BarberPick | null;
   onClose: () => void;
   onAdded: () => void;
 }) {
   const { t } = props;
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
+  // México por omisión; el turista elige su país (telefono-panel.ts).
+  const [phoneIso, setPhoneIso] = useState("MX");
   const [barberId, setBarberId] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -396,7 +450,17 @@ function AddWalkInDialog(props: {
   const submit = async () => {
     if (!name.trim()) return setError(t("barber.agenda.queue.errors.name"));
     // Un teléfono a medias no se descarta en silencio: se avisa (igual que en la agenda).
-    if (phone.trim() && !mxTenDigits(phone)) return setError(t("barber.agenda.modal.errors.phone"));
+    if (phone.trim()) {
+      const tel = panelPhone(phoneIso, phone);
+      if (!tel.ok) {
+        const c = barberPhoneCountry(phoneIso);
+        return setError(
+          c.iso === "MX"
+            ? t("barber.agenda.modal.errors.phone")
+            : t("barber.agenda.modal.errors.phoneOther", { country: c.name, len: c.len }),
+        );
+      }
+    }
     setBusy(true);
     setError(null);
     try {
@@ -407,6 +471,7 @@ function AddWalkInDialog(props: {
           branchId: props.branchId,
           clientName: name.trim(),
           phone: phone.trim(),
+          phoneCountry: phoneIso,
           barberId: barberId || null,
         }),
       });
@@ -449,26 +514,29 @@ function AddWalkInDialog(props: {
         <input className={agendaCss.input} value={name} onChange={(e) => setName(e.target.value)} />
       </Field>
       <Field label={t("barber.agenda.queue.phone")} hint={t("barber.agenda.queue.phoneHint")}>
-        <input
-          className={agendaCss.input}
+        <TelefonoConPais
+          iso={phoneIso}
+          onIsoChange={setPhoneIso}
           value={phone}
-          onChange={(e) => setPhone(soloDigitosTelefono(e.target.value))}
-          inputMode="numeric"
+          onValueChange={setPhone}
+          selectClassName={agendaCss.select}
+          inputClassName={agendaCss.input}
+          countryLabel={t("barber.agenda.modal.phoneCountry")}
+          inputLabel={t("barber.agenda.queue.phone")}
+          placeholderMx={t("barber.agenda.modal.phonePlaceholderMx")}
+          placeholderOther={t("barber.agenda.modal.phonePlaceholderOther")}
         />
       </Field>
       <Field label={t("barber.agenda.queue.barber")}>
-        <select
-          className={agendaCss.select}
+        <BarberoSelect
+          barbers={props.barbers}
+          pick={props.pick}
           value={barberId}
-          onChange={(e) => setBarberId(e.target.value)}
-        >
-          <option value="">{t("barber.agenda.queue.anyBarber")}</option>
-          {props.barbers.map((b) => (
-            <option key={b.id} value={b.id}>
-              {b.nickname || b.name}
-            </option>
-          ))}
-        </select>
+          onChange={setBarberId}
+          anyLabel={t("barber.agenda.queue.anyBarber")}
+          t={t}
+          isToday
+        />
       </Field>
     </Modal>
   );
@@ -480,12 +548,16 @@ function ServeDialog(props: {
   t: (key: string, vars?: Record<string, string | number>) => string;
   row: QueueRow;
   barbers: BarberDTO[];
+  pick: BarberPick | null;
   services: ServiceLite[];
   onClose: () => void;
   onConfirm: (barberId: string, serviceIds: string[]) => void | Promise<void>;
 }) {
   const { t } = props;
-  const [barberId, setBarberId] = useState(props.row.barberId ?? props.barbers[0]?.id ?? "");
+  // El que pidió (si pidió a alguien); si no, el que trabaja ahora y está libre.
+  const [barberId, setBarberId] = useState(
+    props.row.barberId ?? props.pick?.suggested ?? props.barbers.find((b) => b.isActive)?.id ?? "",
+  );
   const [selected, setSelected] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -521,17 +593,14 @@ function ServeDialog(props: {
       {error ? <div className={agendaCss.errorBox}>{error}</div> : null}
       <p className={agendaCss.hint}>{t("barber.agenda.queue.serveBody")}</p>
       <Field label={t("barber.agenda.queue.barber")}>
-        <select
-          className={agendaCss.select}
+        <BarberoSelect
+          barbers={props.barbers}
+          pick={props.pick}
           value={barberId}
-          onChange={(e) => setBarberId(e.target.value)}
-        >
-          {props.barbers.map((b) => (
-            <option key={b.id} value={b.id}>
-              {b.nickname || b.name}
-            </option>
-          ))}
-        </select>
+          onChange={setBarberId}
+          t={t}
+          isToday
+        />
       </Field>
       <Field label={t("barber.agenda.modal.services")}>
         <div className={agendaCss.chips}>

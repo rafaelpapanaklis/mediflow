@@ -1,6 +1,6 @@
 "use client";
 
-import { soloDigitosTelefono } from "@/lib/barber/phone-format";
+import { TelefonoConPais } from "@/components/barber/telefono-con-pais";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -95,10 +95,12 @@ export function BarberClientsScreen({
   const [showNew, setShowNew] = useState(false);
   // «Es otra persona» en la ficha regresa aquí con el nombre ya escrito.
   const [prefillName, setPrefillName] = useState("");
+  const [prefillPhone, setPrefillPhone] = useState("");
   const searchParams = useSearchParams();
   useEffect(() => {
     if (searchParams.get("alta") === "1") {
       setPrefillName((searchParams.get("nombre") ?? "").slice(0, 80));
+      setPrefillPhone((searchParams.get("tel") ?? "").replace(/\D/g, "").slice(-10));
       setShowNew(true);
       router.replace("/barber/clientes");
     }
@@ -380,6 +382,7 @@ export function BarberClientsScreen({
         <NewClientModal
           t={t}
           initialName={prefillName}
+          initialPhone={prefillPhone}
           onClose={() => setShowNew(false)}
           onDone={(clientId, created, typedName) => {
             setShowNew(false);
@@ -508,16 +511,21 @@ function NewClientModal({
   onDone,
   onMessage,
   initialName = "",
+  initialPhone = "",
 }: {
   t: ReturnType<typeof useBarberT>;
   onClose: () => void;
   onDone: (clientId: string, created: boolean, typedName: string) => void;
   initialName?: string;
+  /** Desde Mensajes («Crear ficha» de un número sin ficha): el WhatsApp ya puesto. */
+  initialPhone?: string;
   onMessage: (text: string) => void;
 }) {
   const [form, setForm] = useState({
     name: initialName,
-    phone: "",
+    phone: initialPhone,
+    // País del teléfono: México por omisión (telefono-panel.ts decide qué se guarda).
+    phoneCountry: "MX",
     email: "",
     birthday: "",
     notes: "",
@@ -592,13 +600,18 @@ function NewClientModal({
         hint={t("search.hint")}
         error={err("phone")}
       >
-        <input
-          id="nc-phone"
-          className={s.input}
+        {/* México por omisión (como siempre); el turista elige su país. */}
+        <TelefonoConPais
+          inputId="nc-phone"
+          iso={form.phoneCountry}
+          onIsoChange={(iso) => setForm((f) => ({ ...f, phoneCountry: iso }))}
           value={form.phone}
-          inputMode="tel"
-          placeholder={t("form.phonePlaceholder")}
-          onChange={(e) => setForm((f) => ({ ...f, phone: soloDigitosTelefono(e.target.value) }))}
+          onValueChange={(phone) => setForm((f) => ({ ...f, phone }))}
+          selectClassName={s.select}
+          inputClassName={s.input}
+          countryLabel={t("form.phoneCountry")}
+          placeholderMx={t("form.phonePlaceholder")}
+          placeholderOther={t("form.phonePlaceholderOther")}
         />
       </Field>
 

@@ -391,6 +391,16 @@
 .chatCita > svg { flex: none; margin-top: 2px; color: var(--brand-ink); }
 .chatCita strong { font-weight: 600; color: var(--text-1); }
 
+/* La próxima cita lleva a la Agenda: se lee igual, con subrayado discreto. */
+.citaLiga {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--brand-ink) 35%, transparent);
+  text-underline-offset: 2px;
+}
+.citaLiga:hover { text-decoration-color: var(--brand-ink); }
+.citaLiga:focus-visible { outline: none; box-shadow: var(--ring); border-radius: 4px; }
+
 .enlace {
   font-weight: 600;
   color: var(--brand-ink);

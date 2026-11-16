@@ -76,6 +76,19 @@ export interface MensajesPermisos {
   clients: boolean;
   /** agenda.view + plan con agenda — próxima cita. */
   agenda: boolean;
+  /** agenda.edit + plan con agenda — «Agendar» al cliente del chat. */
+  book?: boolean;
+  /** clients.edit + plan con clientes — «Crear ficha» a un número sin ficha. */
+  createClient?: boolean;
+}
+
+/** «2026-11-15» del instante en la zona de la barbería (el día que abre la Agenda). */
+function diaEnZona(iso: string, tz: string): string {
+  try {
+    return new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(iso));
+  } catch {
+    return iso.slice(0, 10);
+  }
 }
 
 interface Props {
@@ -833,13 +846,30 @@ function Chat(p: ChatProps) {
   const cita =
     p.can.agenda && p.citasListas ? (
       p.cita ? (
-        <span>
+        // La cita se abre en la Agenda, ese día y con la visita abierta: el
+        // cliente que escribe «¿me la puedes mover?» se atiende allá.
+        <Link
+          href={`/barber/agenda?fecha=${diaEnZona(p.cita.startAt, p.tz)}&visita=${encodeURIComponent(p.cita.id)}`}
+          className={s.citaLiga}
+          title={t("chat.openAppt")}
+        >
           <strong>{t("chat.nextAppt")}:</strong> {fechaCita(p.cita.startAt, p.tz, p.locale)}
           {p.cita.services.length > 0 ? ` · ${p.cita.services.map((x) => x.serviceName).join(", ")}` : ""}
           {p.cita.barberName ? ` · ${t("chat.with", { barber: p.cita.barberName })}` : ""}
-        </span>
+        </Link>
       ) : (
-        <span>{t("chat.noAppt")}</span>
+        <span>
+          {t("chat.noAppt")}
+          {/* «Quiero cita para el sábado»: agendar sin salir a buscarlo. */}
+          {p.can.book && clientId ? (
+            <>
+              {" · "}
+              <Link href={`/barber/agenda?nueva=${encodeURIComponent(clientId)}`} className={s.enlace}>
+                {t("chat.book")}
+              </Link>
+            </>
+          ) : null}
+        </span>
       )
     ) : null;
 
@@ -856,6 +886,13 @@ function Chat(p: ChatProps) {
           </h2>
           <p className={s.chatSub}>
             {nombre ? <span>{formatBarberPhone(phone)}</span> : <span>{t("chat.noClient")}</span>}
+            {/* Número que escribe y no tiene ficha: se le crea con su
+                WhatsApp ya puesto (y desde ahí se le agenda). */}
+            {!clientId && p.can.createClient ? (
+              <Link href={`/barber/clientes?alta=1&tel=${encodeURIComponent(phone)}`} className={s.enlace}>
+                {t("chat.createClient")}
+              </Link>
+            ) : null}
             {clientId && p.can.clients ? (
               <Link href={`/barber/clientes/${encodeURIComponent(clientId)}`} className={s.enlace}>
                 {t("chat.viewClient")}

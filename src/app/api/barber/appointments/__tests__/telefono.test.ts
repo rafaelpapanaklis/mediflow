@@ -41,3 +41,24 @@ test("sin nombre sigue pidiendo el nombre", async () => {
   assert.equal(r.error?.status, 400);
   assert.match((await r.error!.json()).error, /nombre/i);
 });
+
+test("otro país (ronda 2 L1): un número de España mal escrito dice cuál y no se guarda suelto", async () => {
+  const r = await resolveAppointmentClient(
+    { clientName: "Turista", clientPhone: "12", clientPhoneCountry: "ES" },
+    "shop1",
+    ctx,
+  );
+  assert.equal(r.error?.status, 400);
+  assert.match((await r.error!.json()).error, /España/);
+});
+
+test("otro país sin permiso de crear clientes: queda suelto pero con su número en +E.164", async () => {
+  const sinAlta = { role: "BARBER", user: { permissionsOverride: null } } as unknown as BarberContext;
+  const r = await resolveAppointmentClient(
+    { clientName: "Turista", clientPhone: "612 345 678", clientPhoneCountry: "ES" },
+    "shop1",
+    sinAlta,
+  );
+  assert.equal(r.error, null);
+  assert.deepEqual(r.client, { clientId: null, clientName: "Turista", clientPhone: "+34612345678" });
+});

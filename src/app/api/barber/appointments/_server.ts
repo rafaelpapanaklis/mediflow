@@ -25,7 +25,7 @@ import {
 import { hasBarberPermission } from "@/lib/barber/permissions";
 import { isSaleCancelled } from "@/lib/barber/commissions";
 import { scopeAppointmentsWhere, type BarberViewScope } from "@/lib/barber/own-visits";
-import { mxTenDigits } from "@/lib/phone-mx";
+import { panelPhone } from "@/lib/barber/telefono-panel";
 import { readAppointmentExtras } from "@/lib/barber/appointment-extras";
 import { getBarberPlan } from "@/lib/barber/plans";
 import { barberPlanHasFeature, type BarberResolvedPlan } from "@/lib/barber/plan-shared";
@@ -423,12 +423,17 @@ export async function resolveAppointmentClient(
     return { client: null, error: jsonError("Escribe el nombre del cliente.", 400) };
   }
   const rawPhone = asString(body.clientPhone) ?? "";
-  const phone = mxTenDigits(rawPhone);
-  // Un teléfono escrito que no es de 10 dígitos NO se descarta en silencio:
-  // la visita quedaba sin cliente ligado y nadie se enteraba.
-  if (rawPhone && !phone) {
-    return { client: null, error: jsonError(PHONE_INVALID_MESSAGE, 400, { code: "PHONE_INVALID" }) };
+  // México igual que siempre (10 dígitos); otro país con su lada en «+E.164»
+  // (telefono-panel.ts). Un teléfono escrito y malo NO se descarta en
+  // silencio: la visita quedaba sin cliente ligado y nadie se enteraba.
+  const phoneIso = asString(body.clientPhoneCountry);
+  const tel = rawPhone ? panelPhone(phoneIso, rawPhone) : null;
+  if (tel && !tel.ok) {
+    // México conserva su texto de siempre; otro país dice cuál y cuántos dígitos.
+    const mx = !phoneIso || phoneIso.trim().toUpperCase() === "MX";
+    return { client: null, error: jsonError(mx ? PHONE_INVALID_MESSAGE : tel.error, 400, { code: "PHONE_INVALID" }) };
   }
+  const phone = tel ? tel.stored : null;
 
   const canCreate = hasBarberPermission(
     { role: ctx.role, permissionsOverride: ctx.user.permissionsOverride },

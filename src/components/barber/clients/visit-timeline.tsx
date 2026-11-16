@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Gift, Scissors, Store } from "lucide-react";
 import { BARBER_APPOINTMENT_STATUS_UI } from "@/lib/barber/types";
 import type { BarberVisitEntry } from "@/lib/barber/loyalty";
@@ -27,7 +28,10 @@ export function VisitTimeline({
   t,
   onOpenPhoto,
   timezone,
+  agendaLinks = false,
 }: {
+  /** agenda.view: la fecha de cada cita lleva a esa visita en la Agenda. */
+  agendaLinks?: boolean;
   entries: BarberVisitEntry[];
   locale: string;
   /** Zona de la barbería: la misma hora en el servidor y en el navegador. */
@@ -59,7 +63,19 @@ export function VisitTimeline({
 
             <div className={s.tlBody}>
               <div className={s.tlHead}>
-                <span className={s.tlDate}>{formatDateTime(entry.at, locale, timezone)}</span>
+                {agendaLinks && entry.kind === "appointment" ? (
+                  // La cita se abre donde se trabaja: en la Agenda, ese día y
+                  // con la visita abierta (reagendar, cobrar, ver sus notas).
+                  <Link
+                    href={`/barber/agenda?fecha=${dayInZone(entry.at, timezone)}&visita=${encodeURIComponent(entry.id)}`}
+                    className={`${s.tlDate} ${s.tlDateLink}`}
+                    title={t("history.openInAgenda")}
+                  >
+                    {formatDateTime(entry.at, locale, timezone)}
+                  </Link>
+                ) : (
+                  <span className={s.tlDate}>{formatDateTime(entry.at, locale, timezone)}</span>
+                )}
 
                 {isRedemption ? (
                   <Badge tone="brand">
@@ -140,4 +156,13 @@ export function VisitTimeline({
       })}
     </ol>
   );
+}
+
+/** «2026-11-15» del instante en la zona de la barbería (el día que abre la Agenda). */
+function dayInZone(iso: string, tz = "America/Mexico_City"): string {
+  try {
+    return new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(iso));
+  } catch {
+    return iso.slice(0, 10);
+  }
 }

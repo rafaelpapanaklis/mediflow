@@ -18,7 +18,7 @@
 // ═══════════════════════════════════════════════════════════════════════
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { CalendarClock, ChevronLeft, ChevronRight, Plus, RefreshCw } from "lucide-react";
+import { CalendarClock, CalendarDays, ChevronLeft, ChevronRight, Plus, RefreshCw } from "lucide-react";
 import { type Dictionary } from "@/i18n/t";
 import { makeBarberT } from "@/lib/barber/i18n";
 import { sumMoney } from "@/lib/barber/money";
@@ -50,6 +50,7 @@ import { AppointmentDialog, type AppointmentDialogFocus } from "./appointment-di
 import { AppointmentDetail } from "./appointment-detail";
 import { ChargeBridge } from "./charge-bridge";
 import { nextSlotStart } from "./next-slot";
+import { pickBarbers } from "@/lib/barber/quien-trabaja";
 import { HoverCard, useHoverCard } from "./hover-card";
 import { quickActions } from "./rejilla";
 import type { CardQuickAction } from "./appointment-card";
@@ -111,6 +112,12 @@ export interface AgendaClientProps {
   initialDateISO: string;
   /** Visita a resaltar al abrir (viene de Inicio: ?visita=<id>). */
   highlightId?: string | null;
+  /**
+   * «Agendar» desde la ficha del cliente o desde Mensajes (?nueva=<id>):
+   * abre «Nueva visita» con el cliente ya puesto. El servidor ya comprobó
+   * que se puede crear citas y ver a ese cliente.
+   */
+  newFor?: { clientId: string; clientName: string; clientPhone: string | null; barberId: string | null } | null;
   /** El plan incluye caja. Sin esto no se ofrece cobrar (el server igual lo niega). */
   cashEnabled: boolean;
 }
@@ -206,9 +213,55 @@ export function AgendaClient(props: AgendaClientProps) {
       el.scrollIntoView({ block: "center", inline: "center", behavior: "smooth" });
       el.setAttribute("data-resaltada", "");
       window.setTimeout(() => el.removeAttribute("data-resaltada"), 4000);
+      // «Ver la visita de X» abre la visita, no solo la señala: quien la
+      // tocó en Inicio quiere confirmarla, sentarlo o cobrarla.
+      const appt = data?.appointments.find((a) => a.id === id);
+      if (appt) setDetail(appt);
     }, 350);
     return () => window.clearTimeout(t1);
   }, [data, props.highlightId]);
+
+  // Desde la ficha / Mensajes (?nueva=<clientId>): «Nueva visita» con el
+  // cliente puesto, su barbero de siempre (si sigue activo) y la próxima
+  // hora libre. Una sola vez, en cuanto hay catálogo y barberos.
+  const nuevaAbierta = useRef(false);
+  useEffect(() => {
+    const nf = props.newFor;
+    if (!nf || nuevaAbierta.current || !data || !data.can.edit) return;
+    nuevaAbierta.current = true;
+    const ahora = new Date().toISOString();
+    const barberActivo = nf.barberId && data.barbers.some((b) => b.id === nf.barberId && b.isActive) ? nf.barberId : null;
+    setCreating({
+      barberId: barberActivo ?? chair ?? suggestBarber(nextSlotStart(new Date(), timezone)),
+      startAt: nextSlotStart(new Date(), timezone),
+      prefill: {
+        id: "",
+        clientId: nf.clientId,
+        clientName: nf.clientName,
+        clientPhone: nf.clientPhone,
+        barberId: barberActivo,
+        barberName: null,
+        startAt: ahora,
+        endAt: ahora,
+        status: "PENDING",
+        source: "PANEL",
+        depositAmount: null,
+        depositStatus: null,
+        notes: null,
+        services: [],
+      },
+    });
+  }, [data, props.newFor, chair, timezone]);
+
+  // ?visita= y ?nueva= se cumplen UNA vez: se quitan de la barra para que
+  // recargar la página no vuelva a abrir el diálogo. ?fecha= se queda.
+  useEffect(() => {
+    if (!props.highlightId && !props.newFor) return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("visita");
+    url.searchParams.delete("nueva");
+    window.history.replaceState(window.history.state, "", url.toString());
+  }, [props.highlightId, props.newFor]);
 
   // El aviso flotante se va solo a los 9 segundos (da tiempo a "Deshacer").
   useEffect(() => {
@@ -385,6 +438,26 @@ export function AgendaClient(props: AgendaClientProps) {
     () => (data?.barbers ?? []).filter((b) => b.isActive),
     [data],
   );
+
+  // «¿Con quién?» de Nueva visita: horarios, bloqueos y visitas ya cargados.
+  const roster = useMemo(
+    () => (data ? { schedules: data.schedules, timeOff: data.timeOff, visits: data.appointments } : null),
+    [data],
+  );
+  /** Barbero propuesto para una visita nueva a esa hora: el que trabaja y está libre (quien-trabaja.ts). */
+  const suggestBarber = (startAt: Date): string | null => {
+    if (!data) return activeBarbers[0]?.id ?? null;
+    const day = shopDateISO(startAt, timezone);
+    return pickBarbers({
+      barbers: activeBarbers,
+      schedules: data.schedules,
+      timeOff: data.timeOff,
+      visits: data.appointments.filter((a) => shopDateISO(new Date(a.startAt), timezone) === day),
+      dateISO: day,
+      timezone,
+      now: new Date(),
+    }).suggested;
+  };
 
   // La silla elegida recorta columnas Y resumen: si filtras a Beto, el total
   // del día es el de Beto, no el de toda la barbería (mentir sería peor).
@@ -593,6 +666,29 @@ export function AgendaClient(props: AgendaClientProps) {
               >
                 {t("barber.agenda.nav.today")}
               </button>
+              {/* Ir a una fecha: el cliente que quiere volver en 5 semanas no
+                  se busca con 35 flechas. Es el calendario NATIVO (en el
+                  celular sale la rueda del sistema): la cajita invisible va
+                  encima del ícono y al tocarla se abre el selector. */}
+              <span className={`${css.btn} ${css.btnIcon} ${css.datePick}`} title={t("barber.agenda.nav.pickDate")}>
+                <CalendarDays size={16} aria-hidden />
+                <input
+                  type="date"
+                  className={css.datePickInput}
+                  aria-label={t("barber.agenda.nav.pickDate")}
+                  value={dateISO}
+                  onClick={(e) => {
+                    try {
+                      e.currentTarget.showPicker();
+                    } catch {
+                      /* Navegador sin showPicker: el clic normal ya lo abre. */
+                    }
+                  }}
+                  onChange={(e) => {
+                    if (/^\d{4}-\d{2}-\d{2}$/.test(e.target.value)) setDateISO(e.target.value);
+                  }}
+                />
+              </span>
             </div>
 
             <div className={css.dateBlock}>
@@ -647,7 +743,7 @@ export function AgendaClient(props: AgendaClientProps) {
                 className={`${css.btn} ${css.btnPrimary}`}
                 onClick={() =>
                   setCreating({
-                    barberId: chair ?? activeBarbers[0]?.id ?? null,
+                    barberId: chair ?? suggestBarber(nextSlotStart(new Date(), timezone)),
                     startAt: nextSlotStart(new Date(), timezone),
                   })
                 }
@@ -854,6 +950,7 @@ export function AgendaClient(props: AgendaClientProps) {
           services={data.services}
           canSearchClients={data.can.clients}
           initialBarberId={creating.barberId}
+          roster={roster}
           initialStartAt={creating.startAt}
           prefill={creating.prefill ?? null}
           t={t}
@@ -875,6 +972,7 @@ export function AgendaClient(props: AgendaClientProps) {
           services={data.services}
           canSearchClients={data.can.clients}
           appointment={editing}
+          roster={roster}
           focus={editFocus}
           t={t}
           onClose={() => setEditing(null)}

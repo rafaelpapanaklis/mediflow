@@ -21,12 +21,21 @@ import { getBarberDict } from "@/i18n/dictionaries/barber";
 import type { Dictionary } from "@/i18n/t";
 import { shopDateISO } from "@/lib/barber/agenda";
 import { AgendaClient } from "@/components/barber/agenda/agenda-client";
+import { barberCanSeeClient } from "@/lib/barber/clients";
+import { prisma } from "@/lib/prisma";
 import { BarberAreaLocked } from "@/components/barber/agenda/area-locked";
 
 export const dynamic = "force-dynamic";
 
+/** El «Su barbero» de la ficha (preferences.favoriteBarberId), si lo tiene. */
+function favoriteBarberIdOf(preferences: unknown): string | null {
+  if (!preferences || typeof preferences !== "object") return null;
+  const v = (preferences as Record<string, unknown>).favoriteBarberId;
+  return typeof v === "string" && v ? v : null;
+}
+
 export default async function BarberAgendaPage(props: {
-  searchParams: Promise<{ fecha?: string | string[]; visita?: string | string[] }>;
+  searchParams: Promise<{ fecha?: string | string[]; visita?: string | string[]; nueva?: string | string[] }>;
 }) {
   const ctx = await getBarberContext();
   if (!ctx) redirect("/barber/entrar");
@@ -34,7 +43,7 @@ export default async function BarberAgendaPage(props: {
 
   // Desde Inicio: ?fecha=2026-11-15&visita=<id> abre ese día con la visita
   // resaltada. Se lee DESPUÉS del candado (candado-suscripcion).
-  const { fecha, visita } = await props.searchParams;
+  const { fecha, visita, nueva } = await props.searchParams;
   const fechaValida = typeof fecha === "string" && /^\d{4}-\d{2}-\d{2}$/.test(fecha) ? fecha : null;
 
   const dict = getBarberDict(ctx.barbershop.locale);
@@ -55,8 +64,38 @@ export default async function BarberAgendaPage(props: {
     return <BarberAreaLocked reason="unlinked" areaKey="agenda" />;
   }
 
+  // Desde la ficha del cliente o Mensajes: ?nueva=<clientId> abre «Nueva
+  // visita» con ese cliente ya puesto (y su barbero de siempre). Solo si
+  // quien entra puede crear citas y VER a ese cliente: misma barbería de la
+  // sesión y el mismo recorte por rol que su ficha. Si no, la agenda abre
+  // normal, sin decir si el cliente existe.
+  const permUser = { role: ctx.role, permissionsOverride: ctx.user.permissionsOverride };
+  const nuevaId = typeof nueva === "string" ? nueva.trim() : "";
+  const newFor =
+    nuevaId &&
+    hasBarberPermission(permUser, "agenda.edit") &&
+    hasBarberPermission(permUser, "clients.view") &&
+    (await barberCanSeeClient(ctx, nuevaId))
+      ? await prisma.barberClient
+          .findFirst({
+            where: { id: nuevaId, barbershopId: ctx.barbershopId },
+            select: { id: true, name: true, phone: true, preferences: true },
+          })
+          .then((c) =>
+            c
+              ? {
+                  clientId: c.id,
+                  clientName: c.name,
+                  clientPhone: c.phone,
+                  barberId: favoriteBarberIdOf(c.preferences),
+                }
+              : null,
+          )
+      : null;
+
   return (
     <AgendaClient
+      newFor={newFor}
       dict={dict}
       cajaDict={(dict.barber as Dictionary).caja as Dictionary}
       starsDict={((dict.barber as Dictionary).estrellas ?? {}) as Dictionary}

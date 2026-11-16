@@ -9,7 +9,7 @@
 // ═══════════════════════════════════════════════════════════════════════
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { mxTenDigits } from "@/lib/phone-mx";
+import { panelPhone } from "@/lib/barber/telefono-panel";
 import { hasBarberPermission } from "@/lib/barber/permissions";
 import {
   checkAppointmentSlot,
@@ -100,7 +100,7 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
       })
     : [];
 
-  const snapshot = await loadQueueSnapshot(shopId);
+  const snapshot = await loadQueueSnapshot(shopId, timezone);
   const durationMin = services.length
     ? totalServiceMinutes(services)
     : snapshot.avgServiceMin;
@@ -139,7 +139,11 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
     });
   }
 
-  const phone = mxTenDigits(entry.phone ?? "");
+  // Lo guardado en la fila ya viene validado (México 10 dígitos u otro país
+  // en «+E.164», telefono-panel.ts): se vuelve a pasar por la MISMA regla
+  // para que el turista también quede ligado a su ficha.
+  const tel = entry.phone ? panelPhone(null, entry.phone) : null;
+  const phone = tel?.ok ? tel.stored : null;
   const canCreateClients = hasBarberPermission(
     { role: ctx.role, permissionsOverride: ctx.user.permissionsOverride },
     "clients.edit",

@@ -95,6 +95,9 @@ export default async function Page(props: { params: Promise<{ id: string }> }) {
       cobrosDict={cobrosDict}
       canPrintSales={hasBarberPermission(permUser, "cash.view")}
       canCharge={plan.features.cash === true && hasBarberPermission(permUser, "cash.manage")}
+      canBook={plan.features.agenda === true && hasBarberPermission(permUser, "agenda.edit")}
+      canOpenAgenda={plan.features.agenda === true && hasBarberPermission(permUser, "agenda.view")}
+      canMessage={plan.features.whatsappInbox === true && hasBarberPermission(permUser, "whatsapp.view")}
       cajaDict={((getBarberDict(locale).barber as Dictionary).caja ?? {}) as Dictionary}
     />
   );

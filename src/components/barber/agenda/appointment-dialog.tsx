@@ -12,7 +12,6 @@
 // helper. El precio que se ve aquí es el VIVO del catálogo; al guardar, el
 // servidor lo congela en BarberAppointmentService.priceAtBooking.
 // ═══════════════════════════════════════════════════════════════════════
-import { soloDigitosTelefono } from "@/lib/barber/phone-format";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, Minus, Plus, RotateCcw, Search, UserPlus } from "lucide-react";
 import type { BarberAppointmentDTO, BarberDTO, BarberServiceDTO } from "@/lib/barber/types";
@@ -31,9 +30,14 @@ import {
   totalServiceMinutes,
   totalServicePrice,
 } from "@/lib/barber/agenda";
-import { mxTenDigits } from "@/lib/phone-mx";
+import { panelPhone, splitStoredPhone } from "@/lib/barber/telefono-panel";
+import { barberPhoneCountry } from "@/lib/barber/phone-countries";
+import { TelefonoConPais } from "@/components/barber/telefono-con-pais";
 import { formatBarberPhone } from "@/lib/barber/phone-format";
 import { Field, Modal, agendaCss as css } from "./agenda-ui";
+import { BarberoSelect } from "./barbero-select";
+import { pickBarbers, type TimeOffLike, type VisitLike } from "@/lib/barber/quien-trabaja";
+import type { ScheduleLike } from "@/lib/barber/agenda";
 
 interface ClientHit {
   id: string;
@@ -53,6 +57,12 @@ export interface AppointmentDialogProps {
   canSearchClients: boolean;
   appointment?: BarberAppointmentDTO | null;
   initialBarberId?: string | null;
+  /**
+   * Horarios, bloqueos y visitas que la Agenda ya tiene cargados: con ellos
+   * «¿Con quién?» lista solo a los que trabajan el día elegido (con «Ver
+   * todos»). Sin ellos (null) se listan todos, como antes.
+   */
+  roster?: { schedules: ScheduleLike[]; timeOff: TimeOffLike[]; visits: (VisitLike & { startAt: string })[] } | null;
   initialStartAt?: Date | null;
   /**
    * Campo que recibe el foco al abrir (los botones directos de la cita:
@@ -87,7 +97,12 @@ export function AppointmentDialog(props: AppointmentDialogProps) {
 
   const [clientId, setClientId] = useState<string | null>(source ? source.clientId : null);
   const [clientName, setClientName] = useState(source ? (source.clientName ?? "") : "");
-  const [clientPhone, setClientPhone] = useState(source ? (source.clientPhone ?? "") : "");
+  // Teléfono escrito a mano: país + número local. Lo guardado («+34…») se parte
+  // para que al editar se vea su bandera (telefono-panel.ts).
+  const [clientPhone, setClientPhone] = useState(
+    source ? (source.clientId ? (source.clientPhone ?? "") : splitStoredPhone(source.clientPhone).local) : "",
+  );
+  const [phoneIso, setPhoneIso] = useState(source ? splitStoredPhone(source.clientPhone).iso || "MX" : "MX");
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<ClientHit[]>([]);
   const [manual, setManual] = useState(Boolean(editing) || Boolean(source?.clientName));
@@ -104,6 +119,26 @@ export function AppointmentDialog(props: AppointmentDialogProps) {
           ""),
   );
   const [dateISO, setDateISO] = useState(shopDateISO(startDate, timezone));
+
+  // «¿Con quién?»: los que trabajan el día ELEGIDO (cambia con la fecha).
+  // Las visitas solo cuentan si son de ese día (la silla ocupada es de hoy).
+  const roster = props.roster ?? null;
+  const isToday = dateISO === shopDateISO(new Date(), timezone);
+  const pick = useMemo(
+    () =>
+      roster
+        ? pickBarbers({
+            barbers: activeBarbers,
+            schedules: roster.schedules,
+            timeOff: roster.timeOff,
+            visits: roster.visits.filter((v) => shopDateISO(new Date(v.startAt), timezone) === dateISO),
+            dateISO,
+            timezone,
+            now: new Date(),
+          })
+        : null,
+    [roster, activeBarbers, dateISO, timezone],
+  );
   const [hhmm, setHhmm] = useState(minuteToHHMM(shopMinuteOfDay(startDate, timezone)));
   const [selected, setSelected] = useState<string[]>(() => {
     if (!source) return [];
@@ -217,6 +252,7 @@ export function AppointmentDialog(props: AppointmentDialogProps) {
     setClientId(null);
     setClientName("");
     setClientPhone("");
+    setPhoneIso("MX");
     setManual(false);
   };
 
@@ -226,7 +262,9 @@ export function AppointmentDialog(props: AppointmentDialogProps) {
     // Un cliente ya elegido de la lista trae su teléfono bueno. Lo escrito a
     // mano, si no es de 10 dígitos, se avisa AQUÍ: antes el servidor guardaba
     // la visita sin ligar al cliente y sin decir nada.
-    if (!clientId && clientPhone.trim() && !mxTenDigits(clientPhone)) {
+    if (!clientId && clientPhone.trim() && !panelPhone(phoneIso, clientPhone).ok) {
+      const c = barberPhoneCountry(phoneIso);
+      if (c.iso !== "MX") return setError(t("barber.agenda.modal.errors.phoneOther", { country: c.name, len: c.len }));
       return setError(t("barber.agenda.modal.errors.phone"));
     }
     if (selected.length === 0) return setError(t("barber.agenda.modal.errors.services"));
@@ -255,6 +293,7 @@ export function AppointmentDialog(props: AppointmentDialogProps) {
           clientId,
           clientName: clientName.trim(),
           clientPhone: clientPhone.trim(),
+          clientPhoneCountry: phoneIso,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -395,12 +434,17 @@ export function AppointmentDialog(props: AppointmentDialogProps) {
             />
           </Field>
           <Field label={t("barber.agenda.modal.clientPhone")}>
-            <input
-              className={css.input}
+            <TelefonoConPais
+              iso={phoneIso}
+              onIsoChange={setPhoneIso}
               value={clientPhone}
-              onChange={(e) => setClientPhone(soloDigitosTelefono(e.target.value))}
-              inputMode="numeric"
-              autoComplete="off"
+              onValueChange={setClientPhone}
+              selectClassName={css.select}
+              inputClassName={css.input}
+              countryLabel={t("barber.agenda.modal.phoneCountry")}
+              inputLabel={t("barber.agenda.modal.clientPhone")}
+              placeholderMx={t("barber.agenda.modal.phonePlaceholderMx")}
+              placeholderOther={t("barber.agenda.modal.phonePlaceholderOther")}
             />
           </Field>
         </div>
@@ -437,18 +481,15 @@ export function AppointmentDialog(props: AppointmentDialogProps) {
       {/* ── Barbero, fecha y hora ── */}
       <div className={css.row}>
         <Field label={t("barber.agenda.modal.barber")}>
-          <select
+          <BarberoSelect
             ref={barberRef}
-            className={css.select}
+            barbers={activeBarbers}
+            pick={pick}
             value={barberId}
-            onChange={(e) => setBarberId(e.target.value)}
-          >
-            {activeBarbers.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.nickname || b.name}
-              </option>
-            ))}
-          </select>
+            onChange={setBarberId}
+            t={t}
+            isToday={isToday}
+          />
         </Field>
         <Field label={t("barber.agenda.modal.date")}>
           <input

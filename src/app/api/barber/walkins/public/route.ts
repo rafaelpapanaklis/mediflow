@@ -36,6 +36,7 @@ import {
 import {
   clientIp,
   createWalkIn,
+  activeWalkInWhere,
   loadQueueSnapshot,
   publicRateLimited,
   resolvePublicShop,
@@ -77,7 +78,7 @@ export async function GET(req: Request) {
   if (resolved.error) return shopError(resolved.error);
   const shop = resolved.shop;
 
-  const snapshot = await loadQueueSnapshot(shop.id);
+  const snapshot = await loadQueueSnapshot(shop.id, shop.timezone);
   const queue = snapshot.rows.map(toWalkInDTO);
 
   const barbers = await prisma.barber.findMany({
@@ -206,7 +207,8 @@ export async function POST(req: Request) {
   // ticket guardado en su navegador; si lo perdió, el mostrador lo ve.
   // Va como 409 para que la página lo pinte como aviso, sin tocarla.
   const existing = await prisma.barberWalkIn.findFirst({
-    where: { barbershopId: shop.id, phone, status: { in: ["WAITING", "CALLED"] } },
+    // Solo la fila de HOY: si ayer se anotó y nadie lo sacó, hoy puede volver.
+    where: { ...activeWalkInWhere(shop.id, shop.timezone), phone },
     select: { id: true },
   });
   if (existing) {
@@ -221,7 +223,7 @@ export async function POST(req: Request) {
 
   // Tope de gente en espera para anotarse desde la calle.
   const waitingNow = await prisma.barberWalkIn.count({
-    where: { barbershopId: shop.id, status: "WAITING" },
+    where: { ...activeWalkInWhere(shop.id, shop.timezone), status: "WAITING" },
   });
   if (waitingNow >= PUBLIC_WALKIN_WAITING_CAP) {
     return NextResponse.json(
@@ -232,7 +234,7 @@ export async function POST(req: Request) {
 
   const entry = await createWalkIn(shop.id, { clientName, phone, barberId });
 
-  const snapshot = await loadQueueSnapshot(shop.id);
+  const snapshot = await loadQueueSnapshot(shop.id, shop.timezone);
   const queue = snapshot.rows.map(toWalkInDTO);
   const ahead = walkInsAhead(queue, entry.id);
   const etaMinutes = estimateWaitMinutes({

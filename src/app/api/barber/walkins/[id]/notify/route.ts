@@ -45,7 +45,7 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
     branchId: asString(body?.branchId),
   });
   if (gate.response) return gate.response;
-  const { ctx, shopId, shopName } = gate.gate;
+  const { ctx, shopId, shopName, timezone } = gate.gate;
 
   // Encolar un mensaje ES mandar un mensaje, solo que en diferido. Por eso
   // además del permiso de fila se exige el de enviar WhatsApp.
@@ -75,7 +75,7 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
     return jsonError("Esa persona no dejó un WhatsApp a 10 dígitos.", 400, { code: "NO_PHONE" });
   }
 
-  const snapshot = await loadQueueSnapshot(shopId);
+  const snapshot = await loadQueueSnapshot(shopId, timezone);
   const queue = snapshot.rows.map(toWalkInDTO);
   const ahead = walkInsAhead(queue, entry.id);
   const etaMinutes = estimateWaitMinutes({
