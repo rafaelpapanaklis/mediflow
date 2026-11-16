@@ -15,8 +15,8 @@
        tarjetas grandes; el resto, en lista con el precio enorme.
      · Cortes en REJILLA DE INSTAGRAM, con la cuenta si la barbería la
        puso. La rejilla nunca deja huecos (ver `planRejilla`).
-     · Reseñas sobre el color de la barbería a bloque completo, con el
-       promedio REAL de las reseñas que escribió.
+     · Reseñas sobre el color de la barbería a bloque completo (sin promedio:
+       las escribe la barbería, no es una calificación).
      · En el celular, un muelle flotante con WhatsApp y «Reservar».
 
    Cero hooks: se pinta en el servidor para /b/[slug] y en el navegador
@@ -637,23 +637,19 @@ function Rejilla({ fotos, nombre }: { fotos: string[]; nombre: string }) {
 
 function Resenas({ data }: { data: BarberWebData }) {
   const lista = data.config.resenas;
-  const promedio = lista.length ? lista.reduce((t, r) => t + (Number(r.estrellas) || 0), 0) / lista.length : 0;
-  const cifra = promedio.toFixed(1);
+  // Sin promedio (revisión ws6-t8, B3): las reseñas las escribe la barbería
+  // a mano en Mi web, así que una cifra «4.8 de 5» se leería como una
+  // calificación que nadie dio. El hueco de la cifra del mockup lo llenan
+  // unas comillas enormes, de adorno.
   return (
     <Sec id="resenas" className="bw-bloque bw-resenas">
       <div className="bw-resenas-rejilla">
         <div>
           <Encabezado titulo={titulo(data, "resenas")} />
           {lista.length > 0 ? (
-            <div className="bw-nota-total">
-              <span className="bw-titular bw-nota-num">{cifra}</span>
-              <span className="bw-nota-de">
-                <span aria-hidden>
-                  <Estrellas n={promedio} size={20} />
-                </span>
-                {copia(data, "resenas", "resenas.promedio")}
-              </span>
-            </div>
+            <span className="bw-titular bw-comillas" aria-hidden>
+              “
+            </span>
           ) : null}
         </div>
         <ul className="bw-resenas-lista">

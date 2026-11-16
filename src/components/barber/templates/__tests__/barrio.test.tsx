@@ -136,9 +136,14 @@ test("30 servicios: todos con su liga, los combos en tarjetas y fichas por categ
   assert.ok(!una.includes("bw-fichas") && !una.includes("bw-grupo-titulo"));
 });
 
-test("reseñas: promedio REAL; sin reseñas no hay sección", () => {
+test("B3 · reseñas: sin promedio ni «según nuestros clientes» (las escribe la barbería); sin reseñas no hay sección", () => {
   const html = pinta(datos({}, { resenas: [{ nombre: "A", texto: "Bien", estrellas: 5 }, { nombre: "B", texto: "Ok", estrellas: 4 }] }));
-  assert.ok(html.includes(">4.5<"));
+  assert.ok(html.includes("Bien") && html.includes("Ok"));
+  for (const no of [">4.5<", "4.5", "de 5,", "según nuestros clientes", "bw-nota"]) assert.ok(!html.includes(no), `sale «${no}»`);
+  // Cada reseña conserva SUS estrellas (las de la tarjeta), y solo esas dos.
+  assert.equal((html.match(/class="dcbw-estrellas"/g) ?? []).length, 2);
+  const s = BARBER_WEB_MANIFESTS.barrio.secciones.find((x) => x.id === "resenas")!;
+  assert.ok(!(s.copia ?? []).some((c) => c.clave === "resenas.promedio"), "sigue la clave del promedio en el manifiesto");
   assert.ok(!pinta(datos()).includes('id="resenas"'));
 });
 

@@ -1064,9 +1064,6 @@ export const BARBER_WEB_MANIFESTS: Record<BarberWebTemplateId, BarberWebManifest
         nombre: "Reseñas de clientes",
         consume: ["resenas"],
         textos: [{ campo: "titulo", etiqueta: "Título de reseñas", porDefecto: "Reseñas" }],
-        copia: [
-          { clave: "resenas.promedio", etiqueta: "Reseñas · texto junto al promedio", porDefecto: "de 5, según nuestros clientes", maxLen: 60 },
-        ],
       },
       secContacto({
         textos: [

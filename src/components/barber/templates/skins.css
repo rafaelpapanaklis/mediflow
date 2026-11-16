@@ -6186,30 +6186,16 @@ img.dcbw-es-equipo-foto {
   color: #fff;
 }
 
-.dcbw-barrio .bw-nota-total {
-  display: flex;
-  align-items: flex-end;
-  gap: 16px;
-  margin-top: 24px;
-}
-
-.dcbw-barrio .bw-nota-num {
-  font-size: clamp(7rem, 40cqi, 13rem);
-  line-height: 0.74;
-}
-
-.dcbw-barrio .bw-nota-de {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  max-width: 14ch;
-  padding-bottom: 6px;
-  font-weight: 600;
-  line-height: 1.3;
-}
-
-.dcbw-barrio .bw-nota-de .dcbw-estrellas {
-  color: #fff;
+/* Comillas de adorno donde el mockup ponía el promedio (no hay promedio:
+   las reseñas las escribe la barbería). Solo en PC: en el celular la tira
+   de reseñas va justo debajo del título. */
+.dcbw-barrio .bw-comillas {
+  display: none;
+  height: 0.5em;
+  margin-top: 28px;
+  font-size: 15rem;
+  line-height: 0.9;
+  color: var(--dcbw-acento-claro);
 }
 
 .dcbw-barrio .bw-resenas-lista {
@@ -6740,8 +6726,8 @@ img.dcbw-es-equipo-foto {
     width: auto;
   }
 
-  .dcbw-barrio .bw-nota-num {
-    font-size: 15rem;
+  .dcbw-barrio .bw-comillas {
+    display: block;
   }
 
   .dcbw-barrio .bw-ubicacion-rejilla {
