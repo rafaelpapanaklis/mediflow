@@ -150,7 +150,14 @@ test("1 barbero y 9 barberos: todos salen; el sin horario sin «Reservar» y con
   assert.equal((html.match(/<h3>Barbero /g) ?? []).length, 9);
   assert.ok(!html.includes("barbero=b8"));
   assert.ok(html.includes("Todavía sin citas en línea."));
-  assert.ok(html.includes('aria-label="Reservar con Barbero 0"'));
+  // La misma clave que Oficio y Barrio: lo que la barbería escribió la sigue al cambiar.
+  const reescrita = pinta(datos({ barberos: nueve, config: { copia: { "equipo.sinHorario": "Pronto con agenda" } } }));
+  assert.ok(reescrita.includes("Pronto con agenda"));
+  // «con» en el código y el defecto «Reservar»: «Reservar con <nombre corto>».
+  assert.ok(html.includes(">Reservar con Barbero <"), "el enlace del barbero no dice «Reservar con <nombre>»");
+  assert.ok(!/con con/.test(html));
+  const apodo = pinta(datos({ barberos: [barbero(1, { nombre: "Rodrigo Ibarra", apodo: "Rodri" })] }));
+  assert.ok(apodo.includes(">Reservar con Rodri <"));
 });
 
 test("nombre de 40 letras: talla chica en portada y en la lateral", () => {
@@ -167,7 +174,7 @@ test("sin reseñas ni horario: ni sección de reseñas, ni horario en portada, l
   assert.ok(!html.includes('id="resenas"'));
   assert.ok(!html.includes('href="#resenas"'));
   assert.ok(!html.includes("am –"), "sale un rango de horas sin horario");
-  assert.ok(!html.includes("dcbw-rv-abierto"));
+  assert.ok(!html.includes("dcbw-rv-tramo"));
   assert.ok(!html.includes("Horario"));
 });
 
@@ -178,6 +185,10 @@ test("con horario: solo los tramos abiertos arriba, la semana entera en Visita",
   const portada = html.slice(html.indexOf("dcbw-rv-datos"), html.indexOf("</dl>"));
   assert.ok(!portada.includes("Cerrado"), "un tramo cerrado salió en la portada");
   assert.ok(html.includes("Domingo"), "la tabla de Visita lleva los siete días");
+  // El tramo de la lateral no lleva punto de color: no es «abierto ahora» (ws6-t8 R2).
+  const pie = html.slice(html.indexOf("dcbw-rv-lado-pie"), html.indexOf("dcbw-rv-contenido"));
+  assert.ok(pie.includes("dcbw-rv-tramo") && pie.includes("Mar – Sáb"));
+  assert.ok(!pie.includes("dcbw-rv-punto"), "punto de «abierto» junto al horario");
 });
 
 test("Tienda encendida: en el índice justo tras Servicios, en la barra y su sección; apagada: nada", () => {

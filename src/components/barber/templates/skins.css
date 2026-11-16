@@ -8067,6 +8067,12 @@ img.dcbw-es-equipo-foto {
    no chocar con otra plantilla que declare las mismas. El navegador solo
    las descarga si algo de esta plantilla las usa.
 
+   RECORTADAS a lo que pinta Revista (ws6-t8 R1, 16-nov): de 314 KB a
+   115 KB. Newsreader normal wght 300-400 + opsz 24-72 (el nombre gigante
+   conserva el corte de titular); cursiva ESTÁTICA 300 a opsz 32 (frase,
+   categorías, inicial, apodo); Hanken 400-600. Pedir un peso fuera del
+   rango cae al más cercano. Ninguna lleva 600+ en serif.
+
    La medida va por @container como en las demás. El contenido (al lado
    de la lateral) es además su PROPIO contenedor (`dcbw-rv`): así los
    `cqi` de los titulares miden el ancho que de verdad tienen, no el de la
@@ -8075,24 +8081,24 @@ img.dcbw-es-equipo-foto {
 
 @font-face {
   font-family: "DCBW Revista Serif";
-  src: url("/barber/fuentes/newsreader-300-600.woff2") format("woff2");
-  font-weight: 300 600;
+  src: url("/barber/fuentes/newsreader-300-400.woff2") format("woff2");
+  font-weight: 300 400;
   font-style: normal;
   font-display: swap;
 }
 
 @font-face {
   font-family: "DCBW Revista Serif";
-  src: url("/barber/fuentes/newsreader-italic-300-600.woff2") format("woff2");
-  font-weight: 300 600;
+  src: url("/barber/fuentes/newsreader-italic-300.woff2") format("woff2");
+  font-weight: 300;
   font-style: italic;
   font-display: swap;
 }
 
 @font-face {
   font-family: "DCBW Revista Sans";
-  src: url("/barber/fuentes/hanken-grotesk-latin-var.woff2") format("woff2");
-  font-weight: 300 700;
+  src: url("/barber/fuentes/hanken-grotesk-400-600.woff2") format("woff2");
+  font-weight: 400 600;
   font-style: normal;
   font-display: swap;
 }
@@ -9140,11 +9146,14 @@ img.dcbw-es-equipo-foto {
     font-size: 15px;
   }
 
-  .dcbw-rv-abierto {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    color: var(--dcbw-tinta-2);
+  .dcbw-rv-tramo {
+    display: grid;
+    gap: 2px;
+    color: var(--dcbw-tinta);
+  }
+
+  .dcbw-rv-tramo .dcbw-rv-rotulo {
+    margin: 0;
   }
 
   .dcbw-revista .dcbw-rv-lado-btn {

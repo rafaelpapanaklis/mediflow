@@ -104,6 +104,11 @@ function cuentaInstagram(crudo: string | null): string | null {
   return /^[A-Za-z0-9._]{1,30}$/.test(limpio) ? `@${limpio}` : null;
 }
 
+/** Cómo lo llaman en el local: el apodo, o el primer nombre. */
+function nombreCorto(b: { nombre: string; apodo: string | null }): string {
+  return b.apodo?.trim() || b.nombre.trim().split(/\s+/)[0] || b.nombre;
+}
+
 /** Los combos y paquetes se destacan en su recuadro de acento, como en el mockup. */
 function esDestacada(categoria: string | null): boolean {
   return !!categoria && /combo|paquete|promo/i.test(categoria);
@@ -207,9 +212,12 @@ export function PlantillaRevista({ data }: { data: BarberWebData }) {
               </nav>
             )}
             <div className="dcbw-rv-lado-pie">
+              {/* Un tramo del horario, no un «abierto ahora»: el HTML se
+                  cachea y no sabe qué hora es cuando alguien lo abre. Por
+                  eso sin punto de color, con su rótulo (revisión ws6-t8 R2). */}
               {abiertos[0] && (
-                <p className="dcbw-rv-abierto">
-                  <span className="dcbw-rv-punto" aria-hidden />
+                <p className="dcbw-rv-tramo">
+                  <span className="dcbw-rv-rotulo">{copia(data, "contacto", "contacto.etiquetaHorario")}</span>
                   <span>{abiertos[0]}</span>
                 </p>
               )}
@@ -373,15 +381,15 @@ export function PlantillaRevista({ data }: { data: BarberWebData }) {
                           {b.bio && <p className="dcbw-rv-bio">{b.bio}</p>}
                           {/* Sin horario no se ofrece «Reservar»: sigue en el equipo, no engaña (L3 ronda 2). */}
                           {!b.sinHorario ? (
-                            <a
-                              href={rutaReservaBarberia(shop.slug, b.id)}
-                              className="dcbw-rv-enlace"
-                              aria-label={`${copia(data, "equipo", "equipo.cta")} con ${b.nombre}`}
-                            >
-                              {copia(data, "equipo", "equipo.cta")} <IcoFlecha size={14} />
+                            // «Reservar con Rodri», como el mockup. El «con» va AQUÍ y
+                            // no en el texto (defecto «Reservar»): la misma regla que
+                            // Oficio y Barrio, para que equipo.cta signifique lo mismo
+                            // en todas y nunca salga «Reservar con con Juan».
+                            <a href={rutaReservaBarberia(shop.slug, b.id)} className="dcbw-rv-enlace">
+                              {copia(data, "equipo", "equipo.cta")} con {nombreCorto(b)} <IcoFlecha size={14} />
                             </a>
                           ) : (
-                            <p className="dcbw-rv-nota">{copia(data, "equipo", "equipo.sinCitas")}</p>
+                            <p className="dcbw-rv-nota">{copia(data, "equipo", "equipo.sinHorario")}</p>
                           )}
                         </div>
                       </li>
