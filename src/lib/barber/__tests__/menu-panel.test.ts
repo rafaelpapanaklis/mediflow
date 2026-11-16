@@ -12,7 +12,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { getBarberT } from "@/i18n/dictionaries/barber";
 import { BARBER_FEATURES, BARBER_UNPAID_NAV_KEYS, barberNavItemsWhileUnpaid } from "@/lib/barber/plan-shared";
-import { BARBER_PERMISSION_KEYS } from "@/lib/barber/permissions";
+import { BARBER_PERMISSION_KEYS, hasBarberPermission } from "@/lib/barber/permissions";
 import { BARBER_NAV_ITEMS } from "@/lib/barber/types";
 
 const RAIZ = join(__dirname, "..", "..", "..", "..");
@@ -115,6 +115,41 @@ test("sin pagar: Suscripción y Soporte, y nada más (Socios no se cuela)", () =
     const pagina = leer(`src/app/barber/(panel)/${key}/page.tsx`).replace(/\/\*[\s\S]*?\*\//g, "");
     assert.ok(!/await requireBarberPaidAccess\(/.test(pagina), `${key} tiene candado: en el menú sin pagar sería un bucle`);
   }
+});
+
+test("Equipo: entrada propia junto a Barberos, solo con team.manage (como su pantalla y sus APIs)", () => {
+  // 16-nov, Rafael: «¿No tenemos la opción de Equipo igual que en dental?».
+  const equipo = item("equipo");
+  assert.ok(equipo, "falta Equipo en el menú");
+  assert.equal(equipo.href, "/barber/equipo");
+  assert.equal(equipo.section, item("barberos")!.section);
+  assert.equal(equipo.permission, "team.manage");
+  assert.equal(equipo.featureKey, null);
+  const llaves = BARBER_NAV_ITEMS.map((i) => i.key);
+  assert.equal(llaves.indexOf("equipo"), llaves.indexOf("barberos") + 1, "Equipo va justo debajo de Barberos");
+  const pagina = leer("src/app/barber/(panel)/equipo/page.tsx");
+  assert.match(pagina, /hasBarberPermission\(permUser, "team\.manage"\)/);
+  assert.equal(getBarberT("es")("barber.shell.nav.equipo"), "Equipo");
+  assert.equal(getBarberT("en")("barber.shell.nav.equipo"), "Team");
+  // Por omisión: dueño y encargado lo ven; Recepción y Barbero no.
+  for (const [rol, ve] of [["OWNER", true], ["MANAGER", true], ["RECEPTION", false], ["BARBER", false]] as const) {
+    assert.equal(hasBarberPermission({ role: rol, permissionsOverride: null }, "team.manage"), ve, rol);
+  }
+});
+
+test("Barberos ↔ Equipo: cada pantalla dice qué es la otra y la ficha sin cuenta lleva a darla de alta", () => {
+  for (const locale of ["es", "en"]) {
+    const t = getBarberT(locale);
+    for (const k of ["barbers.subtitleOther", "team.subtitleOther", "barbers.giveAccess", "barbers.giveAccessHint"]) {
+      const v = t(`barber.admin.${k}`);
+      assert.ok(v && !v.includes("barber.admin."), `[${locale}] falta ${k}`);
+    }
+  }
+  const barberos = leer("src/components/barber/team/barbers-client.tsx");
+  assert.match(barberos, /href=\{`\/barber\/equipo\?alta=\$\{encodeURIComponent\(b\.id\)\}`\}/);
+  assert.match(barberos, /canManageTeam && b\.isActive && b\.linkedUserIds\.length === 0/);
+  const equipo = leer("src/components/barber/team/team-client.tsx");
+  assert.match(equipo, /role: "BARBER", barberId: ficha\.id, barbershopId: ficha\.barbershopId/);
 });
 
 test("el layout aplica anyPermission", () => {

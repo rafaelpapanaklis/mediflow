@@ -40,7 +40,10 @@
   },
   "barbers": {
     "title": "Barberos",
-    "subtitle": "La ficha de cada profesional: cómo se llama, cómo se ve en tu web y cómo cobra.",
+    "subtitle": "Las fichas de quienes cortan: cómo se ven en tu web, su horario y cómo cobran.",
+    "subtitleOther": "Las cuentas para entrar al panel (correo, rol y permisos) están en",
+    "giveAccess": "Darle acceso al panel",
+    "giveAccessHint": "Crea su cuenta en Equipo con esta ficha ya elegida.",
     "new": "Nuevo barbero",
     "empty": "Todavía no has dado de alta a ningún barbero.",
     "emptyCta": "Da de alta al primero",
@@ -101,7 +104,8 @@
   },
   "team": {
     "title": "Equipo y permisos",
-    "subtitle": "Quién entra al panel, con qué rol y qué puede hacer exactamente.",
+    "subtitle": "Las cuentas para entrar al panel: correo, rol y lo que cada persona puede hacer.",
+    "subtitleOther": "Las fichas de quienes cortan (horario y cómo cobran) están en",
     "invite": "Dar de alta",
     "empty": "Solo estás tú en el panel.",
     "role": "Rol",

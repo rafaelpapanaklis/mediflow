@@ -69,7 +69,10 @@ export function TeamClient({
   branches,
   activeBranchId,
   isConsolidated,
+  initialInviteBarberId = null,
 }: {
+  /** Llega de «Darle acceso al panel» en Barberos (?alta=<ficha>): abre el alta con esa ficha. */
+  initialInviteBarberId?: string | null;
   initialMembers: BarberMemberRow[];
   team: BarberTeamContext;
   barbers: BarberOption[];
@@ -79,7 +82,14 @@ export function TeamClient({
 }) {
   const t = useT();
   const [members, setMembers] = useState(initialMembers);
-  const [invite, setInvite] = useState<InviteState | null>(null);
+  // Desde Barberos («Darle acceso al panel»): el alta ya abierta, rol Barbero y
+  // esa ficha elegida en SU sede. Una ficha que no está en la lista (otra sede,
+  // inactiva) no abre nada.
+  const [invite, setInvite] = useState<InviteState | null>(() => {
+    const ficha = initialInviteBarberId ? barbers.find((b) => b.id === initialInviteBarberId) : null;
+    if (!ficha || isConsolidated) return null;
+    return { firstName: "", lastName: "", email: "", role: "BARBER", barberId: ficha.id, barbershopId: ficha.barbershopId };
+  });
   const [created, setCreated] = useState<{ name: string; password: string } | null>(null);
   const [edit, setEdit] = useState<EditState | null>(null);
   const [permsFor, setPermsFor] = useState<BarberMemberRow | null>(null);
@@ -178,6 +188,14 @@ export function TeamClient({
         <div className={s.headerText}>
           <h1 className={s.title}>{t("team.title")}</h1>
           <p className={s.subtitle}>{t("team.subtitle")}</p>
+          {/* Equipo ≠ Barberos (16-nov): las cuentas aquí; las fichas de quienes cortan allá. */}
+          <p className={s.subtitle}>
+            {t("team.subtitleOther")}{" "}
+            <Link href="/barber/barberos" style={{ color: "var(--brand)", fontWeight: 600 }}>
+              {t("nav.barberos")}
+            </Link>
+            .
+          </p>
         </div>
         <div className={s.headerActions}>
           <Btn

@@ -45,6 +45,7 @@ export default async function Page() {
         activeBranchId={scope.activeId}
         isConsolidated={scope.isConsolidated}
         salaryReady={sueldoListo}
+        canManageTeam={hasBarberPermission(permUser, "team.manage")}
       />
     </AdminFrame>
   );
