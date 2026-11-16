@@ -18,25 +18,8 @@ import { BarberModal } from "./modal";
 import { useBarberT } from "./use-barber-t";
 import { fmtMoney, fmtTime } from "./money";
 
-/** Etiqueta de una categoría guardada (clave conocida → diccionario; otra → tal cual). */
-export function categoryLabel(t: (k: string) => string, category: string | null): string {
-  if (!category) return t("mov.cat.none");
-  return (CASH_EXPENSE_CATEGORIES as readonly string[]).includes(category) ? t(`mov.cat.${category}`) : category;
-}
-
-/** Título corto de un movimiento para la lista y los diálogos. */
-export function movementTitle(t: (k: string, v?: Record<string, string | number>) => string, m: Pick<CashMovementRow, "type" | "category" | "payoutKind" | "barberName">): string {
-  switch (m.type) {
-    case "EXPENSE":
-      return `${t("mov.type.EXPENSE")} · ${categoryLabel(t, m.category)}`;
-    case "WITHDRAWAL":
-      return t("mov.type.WITHDRAWAL");
-    case "DEPOSIT":
-      return t("mov.type.DEPOSIT");
-    default:
-      return `${t(`mov.payout.${m.payoutKind ?? "OTHER"}`)} · ${m.barberName ?? "—"}`;
-  }
-}
+export { categoryLabel, movementTitle } from "./movement-labels";
+import { movementTitle } from "./movement-labels";
 
 async function postJson<T>(url: string, body: unknown): Promise<{ data: T | null; error: string | null; code?: string; details?: unknown }> {
   try {

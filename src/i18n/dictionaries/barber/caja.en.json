@@ -594,7 +594,7 @@
     "expensesHint": "In cash: {cash}",
     "expensesHintPayouts": "In cash: {cash} · paid to barbers: {payouts}",
     "moves": "Withdrawals / cash in",
-    "movesHint": "{out} withdrawals · {in} cash in"
+    "movesHint": "Cash in {in} · {out} withdrawals · {inCount} cash in"
   },
   "day": {
     "title": "Today's activity",

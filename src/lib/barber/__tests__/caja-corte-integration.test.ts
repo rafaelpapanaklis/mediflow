@@ -130,6 +130,35 @@ test("dos pestañas cierran A LA VEZ: una gana; la otra recibe 409 SESSION_CLOSE
   assert.equal((await errorOf(closeCashSession(ctx, { countedAmount: 1 }))).code, "NO_OPEN_SESSION");
 });
 
+test("un COBRO que llega mientras se cierra tampoco se cuela: o entra antes del corte o se rechaza (sin turno)", { skip: skipDb }, async (t) => {
+  if (skip) return t.skip(skip);
+  const ctx = await shop();
+  const corte = (await prisma.barberService.create({ data: { barbershopId: ctx.barbershopId, name: "Corte", durationMin: 30, price: 150 } })).id;
+  const { createSale } = await import("@/lib/barber/cash");
+  const { FALLBACK_BARBER_PLAN_CONFIG } = await import("@/lib/barber/plan-shared");
+  for (let i = 0; i < 4; i++) {
+    const c = i === 0 ? ctx : await shop();
+    const svc = i === 0 ? corte : (await prisma.barberService.create({ data: { barbershopId: c.barbershopId, name: "Corte", durationMin: 30, price: 150 } })).id;
+    await openCashSession(c, { openingAmount: 100 });
+    const [cobro, cierre] = await Promise.allSettled([
+      createSale(c, { items: [{ kind: "service", id: svc }], paymentMethod: "CASH" }, FALLBACK_BARBER_PLAN_CONFIG.PROFESIONAL.features),
+      closeCashSession(c, { countedAmount: 100 }),
+    ]);
+    assert.equal(cierre.status, "fulfilled");
+    const closed = (cierre as PromiseFulfilledResult<Awaited<ReturnType<typeof closeCashSession>>>).value;
+    if (cobro.status === "rejected") {
+      assert.equal((cobro.reason as BarberCajaError).code, "NO_OPEN_SESSION");
+      assert.equal(closed.session.expectedAmount, 100);
+    } else {
+      assert.equal(closed.session.expectedAmount, 250, "el cobro entró antes del corte y está en el esperado");
+    }
+    const s = await getCashSessionSummary(c, closed.session.id);
+    assert.equal(s.expectedCash, closed.session.expectedAmount, "lo congelado = lo que hay en el turno");
+  }
+  await prisma.barberSaleItem.deleteMany({ where: { sale: { barbershop: { slug: { startsWith: RUN } } } } });
+  await prisma.barberSale.deleteMany({ where: { barbershop: { slug: { startsWith: RUN } } } });
+});
+
 test("un gasto que llega mientras se cierra NO se cuela en un corte ya congelado", { skip: skipDb }, async (t) => {
   if (skip) return t.skip(skip);
   const ctx = await shop();

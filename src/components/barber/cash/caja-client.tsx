@@ -265,9 +265,9 @@ export function CajaClient({
           {ready && (
             <KpiCard
               label={t("cards.moves")}
-              value={`${fmtSigned(-resumen.withdrawals.total)} / ${fmtSigned(resumen.deposits.total)}`}
+              value={fmtMoney(resumen.withdrawals.total)}
               icon={Wallet}
-              hint={t("cards.movesHint", { out: resumen.withdrawals.count, in: resumen.deposits.count })}
+              hint={t("cards.movesHint", { in: fmtSigned(resumen.deposits.total), out: resumen.withdrawals.count, inCount: resumen.deposits.count })}
             />
           )}
           <KpiCard
@@ -279,7 +279,8 @@ export function CajaClient({
       )}
 
       {/* Citas por cobrar | Lista del día */}
-      <div className="bcaja-cols">
+      {/* Una columna: la lista del día es lo principal y necesita todo el ancho. */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         <CardNew id="citas-por-cobrar" title={t("caja.pendingTitle")} sub={open ? undefined : t("caja.needsSession")}>
           {checkout.pendingAppointments.length === 0 ? (
             <p className="bcaja-hint" style={{ margin: 0 }}>{t("caja.pendingEmpty")}</p>

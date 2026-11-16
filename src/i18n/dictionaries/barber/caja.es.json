@@ -594,7 +594,7 @@
     "expensesHint": "En efectivo: {cash}",
     "expensesHintPayouts": "En efectivo: {cash} · pagos a barberos: {payouts}",
     "moves": "Retiros / entradas",
-    "movesHint": "{out} retiros · {in} entradas"
+    "movesHint": "Entradas {in} · {out} retiros · {inCount} entradas"
   },
   "day": {
     "title": "Movimientos del día",
@@ -714,8 +714,8 @@
   },
   "corte": {
     "title": "Corte de caja",
-    "opened": "Abrió",
-    "closed": "Cerró",
+    "opened": "Apertura",
+    "closed": "Cierre",
     "openedByLabel": "Abrió",
     "closedByLabel": "Cerró",
     "cashSection": "Efectivo en el cajón",

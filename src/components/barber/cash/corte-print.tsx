@@ -10,7 +10,7 @@ import { fmtDateTime, fmtMoney, fmtSigned, fromCents, toCents } from "./money";
 import { PrintSetupControls, printWithWidth, usePrintSetup } from "./print-setup";
 import { closeExpectedView } from "./close-expected";
 import { corteDiffCents, corteDiffLabel, corteWhatsappText, denominationLabel, waMeLink } from "./corte-core";
-import { categoryLabel, movementTitle } from "./movement-modals";
+import { categoryLabel, movementTitle } from "./movement-labels";
 import { CASH_DENOMINATIONS } from "@/lib/barber/caja-movimientos-core";
 
 /**

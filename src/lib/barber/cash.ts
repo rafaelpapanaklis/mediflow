@@ -134,6 +134,7 @@ import { parseCashCount, type CashCount } from "@/lib/barber/caja-movimientos-co
 import {
   cashMovementsReady,
   lastLeftForNext,
+  lockOpenSessionShared,
   loadMovements,
   loadSessionExtras,
   type CashMovementRow,
@@ -1226,10 +1227,8 @@ export async function createCounterTicketTx(tx: Tx, input: CounterTicketInput): 
     throw new BarberCajaError(500, "INVALID_COUNTER_TICKET", "Línea de ticket de mostrador inválida");
   }
 
-  const session = await tx.barberCashSession.findFirst({
-    where: { barbershopId: input.barbershopId, closedAt: null },
-    select: { id: true },
-  });
+  // FOR SHARE: igual que un cobro, no se cuela en un corte que se está cerrando.
+  const session = await lockOpenSessionShared(tx, input.barbershopId);
   if (!session) throw new BarberCajaError(409, "NO_OPEN_SESSION", input.noSessionMessage);
 
   const created = await tx.barberSale.create({
@@ -1458,11 +1457,11 @@ export async function createSale(
 
   const sale = await prisma.$transaction(
     async (tx) => {
-      // 1. Turno abierto (se re-verifica DENTRO de la transacción).
-      const session = await tx.barberCashSession.findFirst({
-        where: { barbershopId, closedAt: null },
-        select: { id: true },
-      });
+      // 1. Turno abierto (se re-verifica DENTRO de la transacción) y
+      //    bloqueado FOR SHARE: un cierre en curso (FOR UPDATE) espera a que
+      //    este cobro termine, y un cobro que llega durante el cierre ya no
+      //    encuentra turno abierto (no se cuela en un corte congelado).
+      const session = await lockOpenSessionShared(tx, barbershopId);
       if (!session) throw new BarberCajaError(409, "NO_OPEN_SESSION", "Abre un turno antes de cobrar");
 
       // 2. Cita (opcional): de esta barbería, COMPLETADA y sin ticket vivo.

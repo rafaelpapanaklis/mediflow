@@ -30,9 +30,12 @@ test("vacío NO es $0 en las cifras que se cuentan a mano", () => {
 test("abrir y cerrar turno usan la versión obligatoria y lo dicen en es y en", () => {
   const src = readFileSync(join(__dirname, "../../../components/barber/cash/session-modals.tsx"), "utf8");
   assert.match(src, /const amount = parseRequiredAmountText\(amountText\)/);
-  assert.match(src, /const counted = parseRequiredAmountText\(countedText\)/);
+  // Caja completa (ws6-t1): el contado sale del conteo por billete o del total
+  // escrito; el total escrito sigue siendo la versión obligatoria (vacío ≠ $0).
+  assert.match(src, /const typed = parseRequiredAmountText\(countedText\)/);
+  assert.match(src, /const counted = mode === "count" \?[^;]*: typed;/);
   assert.match(src, /disabled=\{amount === null \|\| busy\}/);
-  assert.match(src, /disabled=\{counted === null \|\| busy\}/);
+  assert.match(src, /disabled=\{counted === null \|\| busy/);
   for (const locale of ["es", "en"] as const) {
     const s = (((getBarberDict(locale) as Dictionary).barber as Dictionary).caja as Dictionary).session as Dictionary;
     assert.match(String(s.openingRequired), /0/, locale);

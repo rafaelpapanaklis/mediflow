@@ -11,7 +11,7 @@ import { BadgeNew } from "@/components/ui/design-system/badge-new";
 import { useBarberT } from "./use-barber-t";
 import { fmtDateTime, fmtMoney, fmtTime, PAYMENT_METHOD_KEYS } from "./money";
 import { buildDayRows, countByFilter, DAY_FILTERS, drawerEffect, filterDayRows, type DayFilter, type DayRow } from "./caja-dia-core";
-import { movementTitle } from "./movement-modals";
+import { movementTitle } from "./movement-labels";
 
 /**
  * La lista ÚNICA del día (ws6-t1): tickets, gastos, retiros, entradas, pagos
