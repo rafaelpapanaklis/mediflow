@@ -101,3 +101,10 @@
   .barber-shell .bcom-table > tbody > tr.bcom-row { border-top-color: var(--line); }
   .barber-shell .bcom-table > tbody > tr.bcom-row:hover { background: var(--bg-elev-2); }
 }
+
+/* ── Recibo de pago en pantalla (QA de cierre E): en el celular la tabla «Detalle por
+   ticket» no cabe y empujaba TODA la página de lado (55 px a 390). Ahora se desliza
+   dentro del recibo. Solo en pantalla: la impresión y el rollo térmico no cambian. ── */
+@media screen {
+  .barber-shell .bcom-recibo:not(.bcaja-print--thermal) { overflow-x: auto; }
+}

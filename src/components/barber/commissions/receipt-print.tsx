@@ -10,6 +10,7 @@ import { useBarberT } from "@/components/barber/cash/use-barber-t";
 import { fmtDate, fmtDateTime, fmtMoney, fmtPct, fmtPeriod, fmtSigned, fromCents, toCents } from "@/components/barber/cash/money";
 import { upperFirst } from "@/components/barber/upper-first";
 import { salaryLabel } from "@/lib/barber/sueldo-texto";
+import "./comisiones.css";
 
 export function ReceiptPrint({
   dict,
@@ -55,7 +56,7 @@ export function ReceiptPrint({
         />
       </div>
 
-      <div className={`bcaja-print ${printSetup.width === "letter" ? "bcaja-print--wide" : printSetup.className}`} ref={receiptRef} data-ancho-impresion={printSetup.width}>
+      <div className={`bcaja-print bcom-recibo ${printSetup.width === "letter" ? "bcaja-print--wide" : printSetup.className}`} ref={receiptRef} data-ancho-impresion={printSetup.width}>
         <div className="bcaja-print__head">
           <div className="bcaja-print__shop">{shopName}</div>
           <div className="bcaja-print__meta">{t("print.receiptTitle")}</div>
