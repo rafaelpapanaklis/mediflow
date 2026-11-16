@@ -12,6 +12,8 @@ import { currentPeriodKey, DEFAULT_BARBER_TZ, isValidPeriodKey } from "@/lib/bar
 import { getInventoryStats, listProducts } from "@/lib/barber/inventory";
 import { canHandleOrders, countNewProductOrders, loadProductExtras } from "@/lib/barber/tienda";
 import { BarberDenied } from "@/components/barber/cash/denied";
+import { normalizarConfigBarberWeb } from "@/lib/barber/landing";
+import { prisma } from "@/lib/prisma";
 import { ProductosClient } from "@/components/barber/products/productos-client";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.dalecontrol.com";
@@ -52,6 +54,12 @@ export default async function Page(props: { searchParams: Promise<{ period?: str
   // sql/barber_tienda.sql vuelve `ready: false` y la pantalla sigue como hoy.
   const extras = await loadProductExtras(ctx.barbershopId);
   const newCount = extras.ordersReady ? await countNewProductOrders(ctx.barbershopId) : 0;
+  // ¿La barbería apagó la sección «Tienda» en Mi web? (la misma fila que lee
+  // /barber/mi-web). Sin la tabla o sin fila, la sección está encendida.
+  const landing = await prisma.barberLandingConfig
+    .findUnique({ where: { barbershopId: ctx.barbershop.id }, select: { config: true } })
+    .catch(() => null);
+  const webSectionOff = normalizarConfigBarberWeb(landing?.config).secciones.tienda?.visible === false;
 
   return (
     <ProductosClient
@@ -75,6 +83,7 @@ export default async function Page(props: { searchParams: Promise<{ period?: str
         canOpenSession: hasBarberPermission(permUser, "cash.manage"),
         timezone: tz,
         initialTab: searchParams.tab === "pedidos" ? "orders" : "catalog",
+        webSectionOff,
       }}
     />
   );

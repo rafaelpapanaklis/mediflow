@@ -217,6 +217,32 @@ test("1 · la tienda enseña solo lo marcado «en mi página», con lo que queda
   const dest = await tienda.loadFeaturedProducts({ id: A.id, plan: "PROFESIONAL" });
   assert.ok(dest.length > 0 && dest.length <= core.TIENDA_FEATURED_MAX);
   assert.equal((await tienda.loadFeaturedProducts({ id: A.id, plan: "BASICO" })).length, 0, "sin productos en el plan, no hay sección");
+
+  // La sección «Tienda» de la página y de Mi web (16-nov): cuenta lo mismo
+  // que la tienda pública (3: Oculto no) y nada de otra barbería.
+  const web = await tienda.loadWebTienda(A.id);
+  assert.equal(web.disponible, true);
+  assert.equal(web.total, 3);
+  assert.ok(web.products.length > 0 && web.products.length <= core.TIENDA_FEATURED_MAX);
+  assert.ok(web.products.every((p) => p.branchId === A.id), "nada de B en la sección de A");
+  // Una sede nueva de A, sin productos propios: ve los de la cadena (como su /tienda).
+  const sede = await prisma.barbershop.create({
+    data: { name: "Sede Norte", slug: `${RUN}-a-norte`, parentId: A.id, plan: "PROFESIONAL", subscriptionStatus: "active" },
+  });
+  const deSede = await tienda.loadWebTienda(sede.id);
+  assert.equal(deSede.total, 3, "la sede cuenta la tienda de la cadena");
+  // Y si la sede tiene uno propio, sale primero.
+  const propio = await prisma.barberProduct.create({ data: { barbershopId: sede.id, name: "Talco", price: new Prisma.Decimal(60), stock: 2 } });
+  await setExtras(propio.id, true, false);
+  const deSede2 = await tienda.loadWebTienda(sede.id);
+  assert.equal(deSede2.total, 4);
+  assert.equal(deSede2.products[0].name, "Talco", "lo de la sede, primero");
+  await prisma.barberProduct.delete({ where: { id: propio.id } });
+  await prisma.barbershop.delete({ where: { id: sede.id } });
+  // Plan sin productos: el editor ni ofrece la sección.
+  await prisma.barbershop.update({ where: { id: A.id }, data: { plan: "BASICO" } });
+  assert.deepEqual(await tienda.loadWebTienda(A.id), { disponible: false, products: [], total: 0 });
+  await prisma.barbershop.update({ where: { id: A.id }, data: { plan: "PROFESIONAL" } });
 });
 
 test("1b · etiqueta: Disponible / Pocas (en o bajo el mínimo) / Agotado", () => {

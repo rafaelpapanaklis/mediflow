@@ -76,7 +76,9 @@ export type BarberWebFuente =
   | "galeria"
   | "resenas"
   | "horario"
-  | "contacto";
+  | "contacto"
+  /** Productos con «Mostrar en mi página» (la sección «Tienda»). */
+  | "productos";
 
 export interface BarberWebManifestTexto {
   campo: "titulo" | "subtitulo";

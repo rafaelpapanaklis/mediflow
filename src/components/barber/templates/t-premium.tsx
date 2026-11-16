@@ -23,6 +23,7 @@ import {
   urlWhatsApp,
 } from "@/lib/barber/landing";
 import {
+  BotonTienda,
   Boton,
   Duracion,
   Foto,
@@ -89,6 +90,7 @@ export function PlantillaPremium({ data }: { data: BarberWebData }) {
                       <IcoWhatsApp size={16} /> {copia(data, "portada", "portada.whatsapp")}
                     </Boton>
                   )}
+                  <BotonTienda data={data} />
                 </div>
               </div>
             </Sec>
@@ -233,10 +235,11 @@ export function PlantillaPremium({ data }: { data: BarberWebData }) {
               </Boton>
             </Sec>
           )}
+          {/* ── Tienda: sección de Mi web, con su lugar en el orden ── */}
+          {s.id === "tienda" && <SeccionProductos data={data} />}
         </Fragment>
       ))}
 
-      <SeccionProductos data={data} />
       <Pie nombre={shop.name} cuentaUrl={data.cuentaUrl} />
     </div>
   );

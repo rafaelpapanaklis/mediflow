@@ -29,6 +29,7 @@ import {
   urlWhatsApp,
   type BarberWebConfig,
 } from "@/lib/barber/landing";
+import { copia, secciones, subtitulo, tieneSeccion, titulo } from "./helpers";
 import type { BarberWebData, BarberWebServicio } from "./types";
 
 /* ══════════════════════════════════════════════════════════════
@@ -487,22 +488,68 @@ export function Pie({ nombre, cuentaUrl }: { nombre: string; cuentaUrl?: string 
   );
 }
 
-/* ══════════════════════════════════════════════════════════════
-   Productos (ws6-t1)
+/**
+ * La liga a la tienda para el menú/portada, o null. Sale SOLO si la sección
+ * «Tienda» de Mi web está encendida y hay productos que enseñar (es lo que
+ * decide `secciones`: apagada o vacía, no está en la lista).
+ */
+export function enlaceTienda(data: BarberWebData): string | null {
+  if (!data.tiendaUrl || (data.productos?.length ?? 0) === 0) return null;
+  return tieneSeccion(secciones(data), "tienda") ? data.tiendaUrl : null;
+}
 
-   Los destacados de la tienda, antes del pie, en TODAS las plantillas.
-   Hereda la piel de cada una (sus clases dcbw-*); sin productos no se
-   pinta. Los enlaces son <a> (ver Boton): la tienda vive en otra ruta.
+function IcoBolsa({ size = 16, className }: IcoProps) {
+  return (
+    <svg {...svg(size, className)}>
+      <path d="M5 8h14l-1.2 12H6.2z" />
+      <path d="M9 8V6a3 3 0 0 1 6 0v2" />
+    </svg>
+  );
+}
+
+/**
+ * «Tienda» junto a «Reservar» en la portada de las plantillas sin menú, y en
+ * la barra de la clásica en el teléfono. Nada si la sección está apagada o
+ * no hay productos.
+ */
+export function BotonTienda({
+  data,
+  className,
+  variante = "fantasma",
+  size = 16,
+}: {
+  data: BarberWebData;
+  className?: string;
+  variante?: "primario" | "fantasma" | "whatsapp";
+  size?: number;
+}) {
+  const url = enlaceTienda(data);
+  if (!url) return null;
+  return (
+    <Boton href={url} variante={variante} className={`dcbw-btn-tienda ${className ?? ""}`}>
+      <IcoBolsa size={size} /> {copia(data, "tienda", "tienda.menu")}
+    </Boton>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Tienda (ws6-t1)
+
+   La sección «Tienda» de Mi web, en TODAS las plantillas, en el lugar que
+   le toque en el orden. Hereda la piel de cada una (sus clases dcbw-*);
+   sin productos no se pinta. Los enlaces son <a> (ver Boton): la tienda
+   vive en otra ruta.
    ══════════════════════════════════════════════════════════════ */
 
 export function SeccionProductos({ data }: { data: BarberWebData }) {
   const lista = data.productos ?? [];
   if (lista.length === 0 || !data.tiendaUrl) return null;
+  const bajada = subtitulo(data, "tienda");
   return (
-    <section id="productos" className="dcbw-sec dcbw-sec-productos">
+    <section id="tienda" className="dcbw-sec dcbw-sec-tienda dcbw-sec-productos">
       <header className="dcbw-encabezado">
-        <h2 className="dcbw-h2">Productos</h2>
-        <p className="dcbw-bajada">Apártalos en línea y recógelos aquí.</p>
+        <h2 className="dcbw-h2">{titulo(data, "tienda")}</h2>
+        {bajada ? <p className="dcbw-bajada">{bajada}</p> : null}
       </header>
       <div className="dcbw-productos">
         {lista.map((p) => (
@@ -523,7 +570,9 @@ export function SeccionProductos({ data }: { data: BarberWebData }) {
         ))}
       </div>
       <p style={{ marginTop: 18 }}>
-        <Boton href={data.tiendaUrl} variante="fantasma">Ver la tienda</Boton>
+        <Boton href={data.tiendaUrl} variante="fantasma">
+          <IcoBolsa size={15} /> {copia(data, "tienda", "tienda.cta")}
+        </Boton>
       </p>
     </section>
   );

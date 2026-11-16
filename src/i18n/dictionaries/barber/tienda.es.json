@@ -9,6 +9,8 @@
   "title": "Tienda",
   "sub": "Aparta en línea y recoge en la barbería.",
   "back": "Volver a la barbería",
+  "backTo": "Volver a {shop}",
+  "book": "Reservar cita",
   "backStore": "Ver toda la tienda",
   "branch": "Sucursal",
   "branchAll": "Todas",

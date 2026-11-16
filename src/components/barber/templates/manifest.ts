@@ -984,6 +984,31 @@ export const BARBER_WEB_MANIFESTS: Record<BarberWebTemplateId, BarberWebManifest
   },
 };
 
+/* ── Tienda (ws6-t1, 16-nov) ─────────────────────────────────────────
+   La MISMA sección en las doce: los productos con «Mostrar en mi página»
+   y «Ver toda la tienda». Va al final del manifiesto, que es donde ya se
+   pintaba; la barbería la mueve y la apaga como cualquier otra. Un config
+   viejo que no la menciona la recibe en esa posición (ordenDeSecciones) y
+   encendida (visible por omisión): sin productos visibles no sale nada,
+   porque consume "productos". Encendida y con productos, «Tienda» sale
+   también en el menú (o junto a «Reservar» en la portada) de la plantilla. */
+function secTienda(): BarberWebManifestSeccion {
+  return {
+    id: "tienda",
+    nombre: "Tienda",
+    consume: ["productos"],
+    textos: [
+      { campo: "titulo", etiqueta: "Título de la tienda", porDefecto: "Productos" },
+      { campo: "subtitulo", etiqueta: "Bajada de la tienda", porDefecto: "Apártalos en línea y recógelos aquí." },
+    ],
+    copia: [
+      { clave: "tienda.cta", etiqueta: "Tienda · botón", porDefecto: "Ver toda la tienda", maxLen: 40 },
+      { clave: "tienda.menu", etiqueta: "Tienda · en el menú", porDefecto: "Tienda", maxLen: 24 },
+    ],
+  };
+}
+for (const m of Object.values(BARBER_WEB_MANIFESTS)) m.secciones.push(secTienda());
+
 /** La lista para el selector del editor, en el orden en que se presentan. */
 export const BARBER_WEB_MANIFEST_LIST: BarberWebManifest[] = [
   BARBER_WEB_MANIFESTS.clasica,

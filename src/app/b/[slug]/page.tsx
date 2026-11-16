@@ -5,7 +5,7 @@ import { rutaCuentaBarberia, rutaWebBarberia } from "@/lib/barber/landing";
 import { barberiaTieneWhatsApp } from "@/lib/barber/wa-conectado";
 import { cargarBarberWeb, cargarSeoBarberWeb, cargarSedeCerrada } from "./_shared/shop-data";
 import { SedeCerrada } from "./_shared/sede-cerrada";
-import { loadFeaturedProducts } from "@/lib/barber/tienda";
+import { loadWebTienda } from "@/lib/barber/tienda";
 import { rutaProductoTienda, rutaTienda } from "@/lib/barber/tienda-core";
 import { descripcionSeo, imagenSocial, jsonLdBarberia, serializarJsonLd, tituloSeo } from "./_shared/seo";
 
@@ -142,8 +142,12 @@ export default async function PaginaBarberia(props: Props) {
   // «Mis citas» en el pie: solo si el cliente puede recibir su código por WhatsApp.
   const conWhatsApp = await barberiaTieneWhatsApp(carga.data.shop.id).catch(() => false);
 
-  // Destacados de la tienda (ws6-t1). Nunca truena: sin SQL o sin plan, [].
-  const productos = (await loadFeaturedProducts({ id: carga.data.shop.id })).map((p) => ({
+  // Sección «Tienda» (ws6-t1). Nunca truena: sin SQL o sin plan, []. Si la
+  // barbería la apagó en Mi web, la plantilla no la pinta ni la pone en el
+  // menú (la liga directa de un producto sigue abriendo: la tienda no depende
+  // de esta página).
+  const webTienda = await loadWebTienda(carga.data.shop.id);
+  const productos = webTienda.products.map((p) => ({
     id: p.id,
     nombre: p.name,
     precio: p.price,

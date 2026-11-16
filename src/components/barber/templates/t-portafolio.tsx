@@ -28,6 +28,7 @@ import {
   urlWhatsApp,
 } from "@/lib/barber/landing";
 import {
+  BotonTienda,
   Boton,
   Duracion,
   Estrellas,
@@ -206,18 +207,22 @@ export function PlantillaPortafolio({ data }: { data: BarberWebData }) {
               <Redes config={config} conWhatsApp={false} size={22} />
             </Sec>
           )}
+          {/* ── Tienda: sección de Mi web, con su lugar en el orden ── */}
+          {s.id === "tienda" && <SeccionProductos data={data} />}
         </Fragment>
       ))}
 
-      <SeccionProductos data={data} />
       <Pie nombre={shop.name} cuentaUrl={data.cuentaUrl} />
 
       {/* ── Barra de reserva pegada abajo ─────────────────────── */}
       <div className="dcbw-pf-barra">
         <span>{shop.name}</span>
-        <Boton href={reservar}>
-          {copia(data, "portada", "portada.cta")} <IcoFlecha size={14} />
-        </Boton>
+        <div className="dcbw-pf-barra-acc">
+          <BotonTienda data={data} size={15} />
+          <Boton href={reservar}>
+            {copia(data, "portada", "portada.cta")} <IcoFlecha size={14} />
+          </Boton>
+        </div>
       </div>
     </div>
   );

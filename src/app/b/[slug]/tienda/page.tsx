@@ -85,7 +85,6 @@ export default async function TiendaPage(props: Props) {
   return (
     <TiendaShell shop={gate.shop}>
       <div className="dct-head">
-        <Link href={`/b/${encodeURIComponent(gate.shop.slug)}`} className="dct-back">← {t("back")}</Link>
         <h1 className="dct-title">{t("title")}</h1>
         <p className="dct-sub">{t("sub")}</p>
       </div>

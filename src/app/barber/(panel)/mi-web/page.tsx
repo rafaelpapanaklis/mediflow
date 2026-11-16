@@ -9,6 +9,8 @@ import { getBarberDict, getBarberT } from "@/i18n/dictionaries/barber";
 import { rutaWebBarberia } from "@/lib/barber/landing";
 import { cargarBarberWeb } from "@/app/b/[slug]/_shared/shop-data";
 import { prisma } from "@/lib/prisma";
+import { loadWebTienda } from "@/lib/barber/tienda";
+import { rutaProductoTienda, rutaTienda } from "@/lib/barber/tienda-core";
 import { EditorWebBarberia } from "@/components/barber/landing/editor";
 import { UpsellWebBarberia } from "@/components/barber/landing/upsell";
 
@@ -85,8 +87,27 @@ export default async function PaginaMiWeb() {
     );
   }
 
+  // Sección «Tienda»: los mismos productos que pinta la página pública. Sin
+  // plan con productos o sin el SQL de la tienda, el editor no la ofrece.
+  const webTienda = await loadWebTienda(ctx.barbershop.id);
+  const slug = carga.data.shop.slug;
+
   return (
     <EditorWebBarberia
+      tienda={{
+        disponible: webTienda.disponible,
+        total: webTienda.total,
+        url: rutaTienda(slug),
+        productos: webTienda.products.map((p) => ({
+          id: p.id,
+          nombre: p.name,
+          precio: p.price,
+          fotoUrl: p.photoUrl,
+          categoria: p.category,
+          url: rutaProductoTienda(slug, p.id),
+          agotado: p.available <= 0,
+        })),
+      }}
       dict={dict}
       shop={carga.data.shop}
       servicios={carga.data.servicios}
