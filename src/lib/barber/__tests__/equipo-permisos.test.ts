@@ -254,8 +254,13 @@ test("control: un encargado SÍ reparte un permiso que él tiene", async () => {
 test("control: un encargado SÍ cambia roles por debajo del suyo y da de baja", async () => {
   await team.updateMember(sesion("gerente"), "barbero", { role: "RECEPTION" });
   assert.equal(de("barbero").role, "RECEPTION");
-  await team.updateMember(sesion("gerente"), "recepcion", { role: "MANAGER" });
-  assert.equal(de("recepcion").role, "MANAGER");
+  // D1 (16-nov): subir a Encargado ya es solo del dueño, aunque el encargado
+  // tenga todos los permisos de ese rol.
+  await assert.rejects(
+    team.updateMember(sesion("gerente"), "recepcion", { role: "MANAGER" }),
+    /Solo el dueño puede nombrar Encargados/,
+  );
+  assert.equal(de("recepcion").role, "RECEPTION");
   await team.updateMember(sesion("gerente"), "barbero", { isActive: false });
   assert.equal(de("barbero").isActive, false);
 });

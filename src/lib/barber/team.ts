@@ -784,10 +784,18 @@ async function loadMemberInScope(ctx: BarberContext, memberId: string) {
   return member as MemberRowRaw;
 }
 
-/** Solo un dueño reparte el rol de dueño (freno a la escalada de privilegios). */
+/**
+ * Solo un dueño reparte el rol de dueño (freno a la escalada de privilegios),
+ * y desde el 16-nov (D1, auditoría de permisos) también el de Encargado: un
+ * Encargado ya no da de alta ni sube a otro Encargado, aunque tenga todos sus
+ * permisos. Bajarlo de rol sí puede (quitar no es repartir).
+ */
 function assertCanAssignRole(ctx: BarberContext, role: BarberRole): void {
   if (role === "OWNER" && ctx.role !== "OWNER") {
     throw new BarberAdminError("Solo el dueño puede nombrar a otro dueño.", 403);
+  }
+  if (role === "MANAGER" && ctx.role !== "OWNER") {
+    throw new BarberAdminError("Solo el dueño puede nombrar Encargados.", 403);
   }
 }
 

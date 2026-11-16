@@ -127,7 +127,13 @@ export function TeamClient({
     setMembers((list) => list.map((m) => (m.id === next.id ? next : m)));
   }
 
-  const assignableRoles = team.canAssignOwner ? ROLES : ROLES.filter((r) => r !== "OWNER");
+  // Dueños y Encargados los nombra solo el dueño (D1, 16-nov). Al editar se
+  // conserva en la lista el rol que la persona YA tiene, para que se lea bien.
+  const assignableRoles = team.canAssignOwner ? ROLES : ROLES.filter((r) => r !== "OWNER" && r !== "MANAGER");
+  const rolesForEdit = (id: string) => {
+    const actual = members.find((m) => m.id === id)?.role;
+    return ROLES.filter((r) => assignableRoles.includes(r) || r === actual);
+  };
 
   /** Fila de un dueño vista por alguien que no lo es: solo se mira. */
   function ownerLocked(m: BarberMemberRow): boolean {
@@ -528,7 +534,7 @@ export function TeamClient({
                   disabled={edit.id === team.selfUserId}
                   onChange={(e) => setEdit({ ...edit, role: e.target.value as BarberRole })}
                 >
-                  {assignableRoles.map((r) => (
+                  {rolesForEdit(edit.id).map((r) => (
                     <option key={r} value={r}>
                       {roleLabel(r)}
                     </option>

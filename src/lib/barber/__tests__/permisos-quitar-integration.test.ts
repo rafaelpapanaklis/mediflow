@@ -420,6 +420,26 @@ test("ESCALADA · el Encargado no se da lo que no tiene, no sube su rol, no toca
   assert.equal(o.isActive, true);
 });
 
+test("D1 · solo el Dueño nombra o sube Encargados (el Encargado ya no, aunque tenga todos sus permisos)", { skip }, async () => {
+  const alta = await como("gerente", "team/members", "POST", { body: { email: `${RUN}-ge@test.local`, firstName: "Otro", lastName: "Encargado", role: "MANAGER" } });
+  assert.equal(alta.status, 403, JSON.stringify(alta.body));
+  assert.match(String((alta.body as { error: string }).error), /Solo el dueño puede nombrar Encargados/);
+  assert.equal(await prisma.barberUser.count({ where: { email: `${RUN}-ge@test.local` } }), 0);
+  const subir = await como("gerente", "team/members/[id]", "PATCH", { params: { id: uid.recepcion }, body: { role: "MANAGER" } });
+  assert.equal(subir.status, 403, JSON.stringify(subir.body));
+  assert.equal((await prisma.barberUser.findUniqueOrThrow({ where: { id: uid.recepcion } })).role, "RECEPTION");
+  // Lo que un Encargado SÍ sigue haciendo: dar de alta Recepción/Barbero.
+  const recep = await como("gerente", "team/members", "POST", { body: { email: `${RUN}-gr@test.local`, firstName: "Nueva", lastName: "Recepción", role: "RECEPTION" } });
+  assert.equal(recep.status, 201, JSON.stringify(recep.body));
+  // El dueño sí sube a Encargado (y lo deja como estaba).
+  const dueno = await como("dueno", "team/members/[id]", "PATCH", { params: { id: uid.recepcion }, body: { role: "MANAGER" } });
+  assert.equal(dueno.status, 200, JSON.stringify(dueno.body));
+  assert.equal((await como("dueno", "team/members/[id]", "PATCH", { params: { id: uid.recepcion }, body: { role: "RECEPTION" } })).status, 200);
+  // La pantalla no le ofrece «Encargado» a quien no es dueño.
+  const ctxGerente = (await como("gerente", "team/members", "GET")).body as { team: { canAssignOwner: boolean } };
+  assert.equal(ctxGerente.team.canAssignOwner, false);
+});
+
 test("ESCALADA · Recepción con «Administrar el equipo» no reparte lo que no tiene ni sube a nadie a Encargado", { skip }, async () => {
   await dejarCon("recepcionEquipo", [...RECEPCION, "team.manage"]);
   const mios = [...RECEPCION, "team.manage"];
