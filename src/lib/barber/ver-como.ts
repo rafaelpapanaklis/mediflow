@@ -189,8 +189,10 @@ type ClienteConSesion = {
  */
 export async function estadoVerComoDe(supabase: ClienteConSesion): Promise<EstadoVerComo> {
   try {
+    // Un cliente sin getSession (dobles de prueba viejos) no puede traer una inspección.
+    if (typeof supabase?.auth?.getSession !== "function") return { tipo: "normal" };
     const { data } = await supabase.auth.getSession();
-    const token = data.session?.access_token ?? null;
+    const token = data?.session?.access_token ?? null;
     const sessionId = sessionIdDelToken(token);
     if (!sessionId || !token) return { tipo: "normal" };
     const estado = estadoVerComo(await buscarPorSesion(sessionId));
