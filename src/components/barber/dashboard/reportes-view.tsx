@@ -163,7 +163,7 @@ export function ReportesView({
           </form>
         )}
         {s.scope.canConsolidate && branches.length > 1 && (
-          <select className="bdash-select" value={currentBranch} aria-label={t("branch.label")} onChange={(e) => go({ branch: e.target.value })}>
+          <select className="bdash-select" value={currentBranch} aria-label={t("branch.label")} onChange={(e) => go({ branch: e.target.value, barber: "" })}>
             {branches.map((b) => (
               <option key={b.id} value={b.id}>
                 {b.label}
