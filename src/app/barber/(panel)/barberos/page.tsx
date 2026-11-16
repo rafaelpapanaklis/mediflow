@@ -8,6 +8,8 @@ import { getBranchScopeFromCookie, listBranchOptions } from "@/lib/barber/branch
 import { getBarberSeatLimit, listBarbers } from "@/lib/barber/team";
 import { AdminDenied, AdminFrame } from "@/components/barber/team/admin-frame";
 import { BarbersClient } from "@/components/barber/team/barbers-client";
+import { prisma } from "@/lib/prisma";
+import { salaryReady } from "@/lib/barber/sueldo";
 
 /**
  * /barber/barberos — fichas del profesional.
@@ -26,10 +28,12 @@ export default async function Page() {
   }
 
   const scope = await getBranchScopeFromCookie(ctx);
-  const [barbers, seat, branches] = await Promise.all([
+  const [barbers, seat, branches, sueldoListo] = await Promise.all([
     listBarbers(ctx, scope.branchIds),
     getBarberSeatLimit(ctx),
     listBranchOptions(ctx),
+    // Sin sql/barber_sueldo.sql pegado, «Sueldo» se ve como hoy (sin monto).
+    salaryReady(prisma),
   ]);
 
   return (
@@ -40,6 +44,7 @@ export default async function Page() {
         branches={branches}
         activeBranchId={scope.activeId}
         isConsolidated={scope.isConsolidated}
+        salaryReady={sueldoListo}
       />
     </AdminFrame>
   );
