@@ -5153,6 +5153,9 @@ img.dcbw-es-equipo-foto {
   --of-h2: clamp(2.2rem, 9.2cqi, 3.75rem);
   /* forma */
   --of-arco: 999px 999px 0 0;
+  /* Texto chico en acento sobre papel: el «fuerte» de caramelo y whisky no
+     llega a AA (4,06 y 3,87); con un cuarto de tinta pasan los seis (≥ 4,8). */
+  --of-acento-texto: color-mix(in srgb, var(--dcbw-acento-fuerte) 75%, var(--of-tinta));
   --of-barra: 56px;
   /* lo que leen las piezas compartidas */
   --dcbw-bg: var(--of-noche);
@@ -5280,7 +5283,7 @@ img.dcbw-es-equipo-foto {
   text-underline-offset: 6px;
 }
 .dcbw-oficio a.dcbw-of-enlace:hover {
-  color: var(--dcbw-acento-fuerte);
+  color: var(--of-acento-texto);
 }
 .dcbw-of-oscura .dcbw-of-enlace {
   text-decoration-color: var(--dcbw-acento-claro);
@@ -5650,14 +5653,14 @@ img.dcbw-es-equipo-foto {
   align-self: end;
   font-size: 15px;
   font-weight: 600;
-  color: var(--dcbw-acento-fuerte);
+  color: var(--of-acento-texto);
   display: inline-flex;
   align-items: center;
   gap: 6px;
   margin-top: 3px;
 }
 .dcbw-of-servicio:hover .dcbw-of-servicio-nombre {
-  color: var(--dcbw-acento-fuerte);
+  color: var(--of-acento-texto);
 }
 
 /* ── tienda: la pieza compartida vestida de vitrina ─────── */
@@ -5804,7 +5807,7 @@ img.dcbw-es-equipo-foto {
 }
 .dcbw-of-apodo {
   font-style: italic;
-  color: var(--dcbw-acento-fuerte);
+  color: var(--of-acento-texto);
   font-weight: 500;
   margin-top: 2px;
 }
