@@ -44,6 +44,12 @@
     "branchChanged": "You switched location in another tab. Reload this page to keep working in the location you see; nothing was saved."
   },
   "logout": "Sign out",
+  "verComo": {
+    "before": "You are viewing as",
+    "middle": "support by",
+    "until": "The barbershop doesn't see this bar. The session ends on its own at",
+    "exit": "Exit and go back to /admin"
+  },
   "navLabel": "Main menu",
   "unreadChats": "{count} unread chats",
   "unreadChat": "1 unread chat",

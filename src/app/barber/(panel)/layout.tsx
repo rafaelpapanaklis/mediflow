@@ -15,6 +15,7 @@ import { BarberSidebar } from "@/components/barber/barber-sidebar";
 import { BarberTopbar } from "@/components/barber/barber-topbar";
 import { BarberBranchBadge } from "@/components/barber/barber-branch-badge";
 import { BarberSedePin } from "@/components/barber/barber-sede-pin";
+import { VerComoBarra } from "@/components/barber/ver-como-barra";
 import { listBranchOptions, readBranchCookie } from "@/lib/barber/branches";
 import { BARBER_BRANCH_ALL } from "@/lib/barber/branch-cookie";
 import { getBarberWaChatAcceso } from "@/lib/barber/wa-chat";
@@ -111,6 +112,20 @@ export default async function BarberPanelLayout({
           con él, cada tabla hace scroll dentro de su propio contenedor. En
           escritorio ya valía 0 por el overflow-y-auto. */}
       <div className="barber-columna flex min-h-screen min-w-0 flex-1 flex-col lg:max-h-screen lg:overflow-y-auto">
+        {/* «Ver como barbería» (ws6-t1): solo en el navegador del admin de plataforma. */}
+        {ctx.verComo && (
+          <VerComoBarra
+            shopName={ctx.barbershop.name}
+            adminEmail={ctx.verComo.adminEmail}
+            expiresAt={ctx.verComo.expiresAt}
+            labels={{
+              before: t("barber.shell.verComo.before"),
+              middle: t("barber.shell.verComo.middle"),
+              until: t("barber.shell.verComo.until"),
+              exit: t("barber.shell.verComo.exit"),
+            }}
+          />
+        )}
         <BarberTopbar
           rootLabel={t("barber.shell.topbar.root")}
           shopName={ctx.barbershop.name}

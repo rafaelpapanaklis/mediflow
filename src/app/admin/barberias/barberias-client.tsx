@@ -50,6 +50,7 @@ import {
   subscriptionFace,
   fullDate,
 } from "@/components/admin/barberias/shared";
+import { BotonVerComoBarberia } from "@/components/admin/barberias/boton-ver-como-barberia";
 import "@/components/admin/barberias/barberias.css";
 
 type SortKey =
@@ -499,6 +500,10 @@ export function AdminBarberiasClient() {
                                   {row.branchCount === 1 ? "sucursal" : "sucursales"}
                                 </div>
                               ) : null}
+                              {/* «Ver como barbería» (ws6-t1), como «Ver como clínica» en /admin/clinics. */}
+                              <div style={{ marginTop: 6 }}>
+                                <BotonVerComoBarberia barbershopId={row.id} size="sm" />
+                              </div>
                             </div>
                           </td>
                           <td className="dcba-col-wide">

@@ -238,7 +238,8 @@
         "filtrada": "Esa contraseña apareció en filtraciones públicas. Elige otra.",
         "rechazada": "Esa contraseña no se acepta. Prueba con otra más larga y variada.",
         "demasiados": "Demasiados intentos. Espera unos minutos y vuelve a intentarlo.",
-        "error": "No pudimos cambiar tu contraseña. Inténtalo de nuevo."
+        "error": "No pudimos cambiar tu contraseña. Inténtalo de nuevo.",
+        "ver_como": "No disponible en «Ver como barbería»: la contraseña del dueño solo la cambia el dueño."
       }
     },
     "payments": {
@@ -276,6 +277,7 @@
         "sesion": "Tu sesión cambió mientras conectabas Mercado Pago. Vuelve a intentarlo.",
         "canje": "Mercado Pago no confirmó la conexión. Vuelve a intentarlo.",
         "guardar": "No pudimos guardar la conexión con Mercado Pago. Vuelve a intentarlo más tarde.",
+        "ver_como": "No disponible en «Ver como barbería»: a dónde llegan los cobros lo decide el dueño.",
         "generic": "No se pudo conectar Mercado Pago. Vuelve a intentarlo."
       }
     }

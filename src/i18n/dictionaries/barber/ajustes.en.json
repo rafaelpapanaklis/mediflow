@@ -238,7 +238,8 @@
         "filtrada": "That password showed up in public data leaks. Choose another one.",
         "rechazada": "That password isn't accepted. Try a longer, more varied one.",
         "demasiados": "Too many attempts. Wait a few minutes and try again.",
-        "error": "We couldn't change your password. Please try again."
+        "error": "We couldn't change your password. Please try again.",
+        "ver_como": "Not available while viewing as this barbershop: only the owner can change their password."
       }
     },
     "payments": {
@@ -276,6 +277,7 @@
         "sesion": "Your session changed while connecting Mercado Pago. Please try again.",
         "canje": "Mercado Pago didn't confirm the connection. Please try again.",
         "guardar": "We couldn't save the Mercado Pago connection. Please try again later.",
+        "ver_como": "Not available while viewing as this barbershop: the owner decides where payments go.",
         "generic": "Mercado Pago couldn't be connected. Please try again."
       }
     }

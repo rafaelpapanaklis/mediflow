@@ -53,6 +53,7 @@ import {
   ManualActionModal,
   type ManualActionKind,
 } from "@/components/admin/barberias/manual-action-modal";
+import { BotonVerComoBarberia } from "@/components/admin/barberias/boton-ver-como-barberia";
 import "@/components/admin/barberias/barberias.css";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -102,6 +103,8 @@ export function AdminBarbershopDetailClient({ detail }: { detail: AdminBarbersho
             </p>
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {/* «Ver como barbería» (ws6-t1): abre su panel /barber en otra pestaña, como su dueño. */}
+            <BotonVerComoBarberia barbershopId={shop.id} size="sm" />
             {!shop.isBranch && (
               <>
                 <ButtonNew size="sm" variant="secondary" onClick={() => setAction("plan")}>

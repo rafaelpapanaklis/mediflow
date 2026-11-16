@@ -100,11 +100,15 @@ export function BarberSidebar({
   }, [mobileOpen, pathname]);
 
   async function handleLogout() {
+    let destino = loginHref;
     try {
-      await fetch("/api/barber/auth/logout", { method: "POST" });
+      const r = await fetch("/api/barber/auth/logout", { method: "POST" });
+      // «Ver como barbería»: la salida vuelve a la ficha de /admin (ws6-t1).
+      const d = (await r.json().catch(() => null)) as { redirect?: unknown } | null;
+      if (typeof d?.redirect === "string" && d.redirect.startsWith("/admin/barberias/")) destino = d.redirect;
     } finally {
       // A la entrada PROPIA del vertical, no al /login de las clínicas.
-      window.location.href = loginHref;
+      window.location.href = destino;
     }
   }
 

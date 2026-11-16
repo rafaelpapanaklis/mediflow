@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createBarberPortalSession, resolveBarberBaseUrl } from "@/lib/barber/billing";
 import { billingErrorResponse, requireBarberBilling, requireBarberStripe } from "../_lib";
+import { respuestaSiVerComo } from "@/lib/barber/ver-como";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,6 +16,9 @@ export const dynamic = "force-dynamic";
 export async function POST(req: NextRequest) {
   const auth = await requireBarberBilling();
   if (auth instanceof NextResponse) return auth;
+  // «Ver como barbería» (ws6-t1): esto no es soporte, es de la cuenta del dueño.
+  const bloqueo = respuestaSiVerComo(auth.ctx);
+  if (bloqueo) return bloqueo;
   const stripe = requireBarberStripe();
   if (stripe instanceof NextResponse) return stripe;
   try {
