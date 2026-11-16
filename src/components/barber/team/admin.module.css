@@ -504,6 +504,11 @@
   min-width: 0;
 }
 .rowCardMuted { opacity: .68; }
+/* Sede cerrada (16-nov): se atenúa lo informativo, NO los botones — «Reabrir
+   sede» tiene que verse. Con .rowCardMuted la tarjeta entera quedaba apagada. */
+.rowCardClosed .avatar,
+.rowCardClosed .rowTitle,
+.rowCardClosed .rowMeta { opacity: .68; }
 .rowCardCurrent { border-color: var(--border-brand); box-shadow: 0 0 0 1px var(--border-brand), var(--shadow-1); }
 
 .rowMain { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 6px; }

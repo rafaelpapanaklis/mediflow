@@ -396,6 +396,12 @@ export const BARBER_NAV_ITEMS: BarberNavItemDef[] = [
   // existía como pestaña dentro de Barberos y el dueño no la encontraba.
   // Mismo candado que la pantalla y sus APIs: team.manage.
   { key: "equipo", href: "/barber/equipo", icon: "users", section: "negocio", permission: "team.manage", featureKey: null },
+  // Sucursales (16-nov, Rafael: «no encuentro "Sucursales" para abrirlas»):
+  // solo era una pestaña dentro de Barberos, igual que Equipo. Mismo permiso
+  // que la pantalla y sus APIs (branches.manage). Con featureKey multiBranch:
+  // si el plan no trae sedes, la entrada no sale (la pantalla sigue
+  // existiendo y explica el plan Profesional desde la pestaña de Barberos).
+  { key: "sucursales", href: "/barber/sucursales", icon: "store", section: "negocio", permission: "branches.manage", featureKey: "multiBranch" },
   { key: "caja", href: "/barber/caja", icon: "wallet", section: "negocio", permission: "cash.view", featureKey: "cash" },
   { key: "comisiones", href: "/barber/comisiones", icon: "percent", section: "negocio", permission: "commissions.view", featureKey: "commissions" },
   { key: "membresias", href: "/barber/membresias", icon: "crown", section: "negocio", permission: "memberships.sell", featureKey: "memberships" },

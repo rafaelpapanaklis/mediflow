@@ -147,12 +147,16 @@ export default async function BarberPanelLayout({
               activeId={ctx.barbershopId}
               consolidated={branchCookie === BARBER_BRANCH_ALL && branchOptions.length > 1}
               selectedId={branchCookie}
+              manageHref={
+                hasBarberPermission(permUser, "branches.manage") ? "/barber/sucursales" : null
+              }
               labels={{
                 branch: t("barber.shell.topbar.branch"),
                 aria: t("barber.shell.topbar.branchAria"),
                 all: t("barber.shell.topbar.branchAll"),
                 closed: t("barber.shell.topbar.branchClosed"),
                 closedGroup: t("barber.shell.topbar.branchClosedGroup"),
+                manage: t("barber.shell.topbar.branchManage"),
               }}
             />
           }

@@ -137,6 +137,29 @@ test("Equipo: entrada propia junto a Barberos, solo con team.manage (como su pan
   }
 });
 
+test("Sucursales: entrada propia junto a Equipo, solo con branches.manage y con el plan de sedes", () => {
+  // 16-nov, Rafael: «no encuentro "Sucursales" para abrirlas».
+  const suc = item("sucursales");
+  assert.ok(suc, "falta Sucursales en el menú");
+  assert.equal(suc.href, "/barber/sucursales");
+  assert.equal(suc.section, item("barberos")!.section);
+  assert.equal(suc.permission, "branches.manage");
+  assert.equal(suc.featureKey, "multiBranch", "si el plan no tiene sedes, no sale");
+  const llaves = BARBER_NAV_ITEMS.map((i) => i.key);
+  assert.equal(llaves.indexOf("sucursales"), llaves.indexOf("equipo") + 1, "Sucursales va justo debajo de Equipo");
+  const pagina = leer("src/app/barber/(panel)/sucursales/page.tsx");
+  assert.match(pagina, /hasBarberPermission\(permUser, "branches\.manage"\)/);
+  assert.equal(getBarberT("es")("barber.shell.nav.sucursales"), "Sucursales");
+  assert.equal(getBarberT("en")("barber.shell.nav.sucursales"), "Locations");
+  // Por omisión: dueño y encargado; Recepción y Barbero no.
+  for (const [rol, ve] of [["OWNER", true], ["MANAGER", true], ["RECEPTION", false], ["BARBER", false]] as const) {
+    assert.equal(hasBarberPermission({ role: rol, permissionsOverride: null }, "branches.manage"), ve, rol);
+  }
+  // El layout es el que corta por plan; el menú del celular es el mismo sidebar.
+  const layout = leer("src/app/barber/(panel)/layout.tsx");
+  assert.match(layout, /if \(item\.featureKey && plan\.features\[item\.featureKey\] !== true\) return false;/);
+});
+
 test("Barberos ↔ Equipo: cada pantalla dice qué es la otra y la ficha sin cuenta lleva a darla de alta", () => {
   for (const locale of ["es", "en"]) {
     const t = getBarberT(locale);

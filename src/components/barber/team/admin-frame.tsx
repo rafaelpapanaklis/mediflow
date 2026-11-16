@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import type { BarberContext } from "@/lib/barber-auth";
 import { resolveBarberPermissions } from "@/lib/barber/permissions";
-import { getBranchScopeFromCookie, listBranchOptions } from "@/lib/barber/branches";
 import { countTicketsWaitingShop } from "@/lib/barber/support";
 import { Lock } from "lucide-react";
 import { getBarberDict, getBarberT } from "@/i18n/dictionaries/barber";
@@ -14,12 +13,11 @@ import s from "./admin.module.css";
 //
 // Resuelve aquí (una sola vez) lo que las cuatro necesitan: diccionario del
 // locale de la barbería, pestañas visibles según permisos, sedes del
-// selector y el contador de soporte. La pantalla solo pinta.
+// el contador de soporte. La pantalla solo pinta. La SEDE se elige en un solo
+// sitio, el selector de la barra de arriba (16-nov).
 //
-// Nota de navegación: BARBER_NAV_ITEMS (src/lib/barber/types.ts) todavía no
-// trae equipo / sucursales / soporte y ese archivo es de otra terminal, así
-// que estas cuatro pantallas se enlazan entre sí desde esta barra. Cuando se
-// agreguen al sidebar, esta barra sigue sirviendo igual.
+// Nota de navegación: Barberos, Equipo y Sucursales ya tienen entrada propia en
+// el menú lateral (16-nov); estas pestañas siguen enlazándolas entre sí.
 // ═══════════════════════════════════════════════════════════════════════
 
 export async function AdminFrame({
@@ -42,24 +40,12 @@ export async function AdminFrame({
   if (grants.has("branches.manage")) tabs.push("sucursales");
   if (grants.has("support.view")) tabs.push("soporte");
 
-  const [branches, scope, supportBadge] = await Promise.all([
-    listBranchOptions(ctx),
-    getBranchScopeFromCookie(ctx),
-    grants.has("support.view") ? countTicketsWaitingShop(ctx) : Promise.resolve(0),
-  ]);
+  const supportBadge = grants.has("support.view") ? await countTicketsWaitingShop(ctx) : 0;
 
   return (
     <AdminI18n dict={dict}>
       <div className={s.page}>
-        <AdminNav
-          tabs={tabs}
-          active={active}
-          branches={branches}
-          activeBranchId={scope.activeId}
-          isConsolidated={scope.isConsolidated}
-          canConsolidate={scope.canConsolidate}
-          supportBadge={supportBadge}
-        />
+        <AdminNav tabs={tabs} active={active} supportBadge={supportBadge} />
         {children}
       </div>
     </AdminI18n>
