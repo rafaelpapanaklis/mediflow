@@ -55,7 +55,7 @@ import { isLoyaltyFreeLine } from "@/lib/barber/loyalty-core";
 // Sueldo opcional del barbero (ws6-t6): núcleo puro + SQL crudo que degrada.
 import { activeSalary, salaryForPeriodKey, type BarberSalary, type BarberSalaryPeriod } from "@/lib/barber/sueldo-core";
 import { insertSalaryPayment, loadSalaries, loadSalaryPaid, salaryReady } from "@/lib/barber/sueldo";
-import { cashMovementsReady, insertMovement, loadAdvances, lockOpenSessionShared, settleAdvances, unsettleAdvances, type AdvanceRow } from "@/lib/barber/cash-movements";
+import { cashMovementsReady, insertMovement, loadAdvances, lockOpenSessionShared, retryIfCajaSqlGone, settleAdvances, unsettleAdvances, type AdvanceRow } from "@/lib/barber/cash-movements";
 import { isCashMovementMethod, type CashMovementMethod } from "@/lib/barber/caja-movimientos-core";
 import { randomUUID } from "node:crypto";
 
@@ -848,6 +848,15 @@ function ledgerRowFor(
 }
 
 export async function getCommissionSummary(
+  ctx: BarberContext,
+  periodKey: string,
+  opts: { barberId?: string | null } = {},
+): Promise<CommissionSummary> {
+  // N4: si se quitó el SQL de caja completa, se reintenta ya sin adelantos.
+  return retryIfCajaSqlGone(() => getCommissionSummaryOnce(ctx, periodKey, opts));
+}
+
+async function getCommissionSummaryOnce(
   ctx: BarberContext,
   periodKey: string,
   opts: { barberId?: string | null } = {},

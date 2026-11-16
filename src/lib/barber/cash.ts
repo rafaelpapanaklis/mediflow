@@ -134,6 +134,8 @@ import { cajaResumen, discountFromItems, esperadoEnEfectivo, type CajaResumen, t
 import { parseCashCount, type CashCount } from "@/lib/barber/caja-movimientos-core";
 import {
   cashMovementsReady,
+  forgetIfCajaSqlGone,
+  retryIfCajaSqlGone,
   lastLeftForNext,
   lockOpenSessionShared,
   lockSessionIfOpen,
@@ -225,6 +227,14 @@ export function moneyErrorResponse(e: unknown): NextResponse {
     return NextResponse.json(
       { error: e.message, code: e.code, details: e.details ?? null },
       { status: e.status },
+    );
+  }
+  // Revisión ws6-t8 (N4): se quitó (o falta) el SQL de caja completa a media
+  // marcha. La caché ya se olvidó: la siguiente petición ve la caja de antes.
+  if (forgetIfCajaSqlGone(e)) {
+    return NextResponse.json(
+      { error: "Falta aplicar sql/barber_caja_completa.sql (o se quitó). Recarga la página.", code: "CAJA_SQL_PENDING" },
+      { status: 409 },
     );
   }
   if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
@@ -626,6 +636,13 @@ export async function getCashSessionSummary(
   ctx: BarberContext,
   sessionId: string,
 ): Promise<CashSessionSummary> {
+  return retryIfCajaSqlGone(() => getCashSessionSummaryOnce(ctx, sessionId));
+}
+
+async function getCashSessionSummaryOnce(
+  ctx: BarberContext,
+  sessionId: string,
+): Promise<CashSessionSummary> {
   assertBarberPermission(ctx, "cash.view");
   const session = await prisma.barberCashSession.findFirst({
     where: { id: sessionId, barbershopId: ctx.barbershopId },
@@ -851,6 +868,10 @@ export interface CorteRow extends CashSessionRow {
  * mes, no una por turno). cash.view.
  */
 export async function listCortes(ctx: BarberContext, periodKey: string): Promise<CorteRow[]> {
+  return retryIfCajaSqlGone(() => listCortesOnce(ctx, periodKey));
+}
+
+async function listCortesOnce(ctx: BarberContext, periodKey: string): Promise<CorteRow[]> {
   assertBarberPermission(ctx, "cash.view");
   const barbershopId = ctx.barbershopId;
   if (!barbershopId) throw new BarberCajaError(400, "NO_SHOP", "Sin barbería");
@@ -894,6 +915,10 @@ export async function listCortes(ctx: BarberContext, periodKey: string): Promise
 
 /** Estado completo de la caja para la página. */
 export async function getCashState(ctx: BarberContext): Promise<CashState> {
+  return retryIfCajaSqlGone(() => getCashStateOnce(ctx));
+}
+
+async function getCashStateOnce(ctx: BarberContext): Promise<CashState> {
   assertBarberPermission(ctx, "cash.view");
   const open = await getOpenCashSession(ctx.barbershopId);
   const [openSummary, history] = await Promise.all([

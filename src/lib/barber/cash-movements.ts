@@ -13,6 +13,7 @@
 // ═══════════════════════════════════════════════════════════════════════
 import { Prisma } from "@prisma/client";
 import type { BarberPayoutKind, CashMovementMethod, CashMovementType } from "@/lib/barber/caja-movimientos-core";
+import { isSchemaBehindError } from "@/lib/barber/db-errors";
 
 /** Lo mínimo que se pide de prisma o de una transacción. */
 export type MovementsDb = {
@@ -47,6 +48,36 @@ export async function cashMovementsReady(db: MovementsDb): Promise<boolean> {
 /** Solo para las pruebas: olvida lo visto. */
 export function resetCashMovementsReadyCache(): void {
   seen = false;
+}
+
+/** Lo que el SQL de caja completa agrega: tabla y columnas. */
+const CAJA_SQL_OBJETOS = /barber_cash_movements|countedBreakdown|leftForNext|settledAt/;
+
+/**
+ * ¿Este error es porque falta (o se quitó) lo de sql/barber_caja_completa.sql?
+ * Si sí, OLVIDA la caché de cashMovementsReady (revisión ws6-t8, N4): sin
+ * esto, quitar el SQL dejaba «sí está» pegado en el proceso y todo daba 500
+ * hasta reiniciar. El siguiente cashMovementsReady vuelve a mirar la base.
+ */
+export function forgetIfCajaSqlGone(e: unknown): boolean {
+  if (!isSchemaBehindError(e)) return false;
+  const msg = e instanceof Error ? e.message : String((e as { message?: unknown } | null)?.message ?? "");
+  if (!CAJA_SQL_OBJETOS.test(msg)) return false;
+  seen = false;
+  return true;
+}
+
+/**
+ * Corre una LECTURA; si falla porque se quitó el SQL de caja completa, olvida
+ * la caché y la corre otra vez (ya sin el SQL: la caja se ve como antes).
+ */
+export async function retryIfCajaSqlGone<T>(fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (e) {
+    if (forgetIfCajaSqlGone(e)) return fn();
+    throw e;
+  }
 }
 
 // ── DTO ─────────────────────────────────────────────────────────────────
