@@ -7,6 +7,14 @@
     "label": "Vista",
     "goToDay": "Ver este día"
   },
+  "picker": {
+    "offToday": "hoy no trabaja",
+    "offThatDay": "ese día no trabaja",
+    "showAllToday": "Ver también a los que hoy no trabajan ({count})",
+    "showAllThatDay": "Ver también a los que ese día no trabajan ({count})",
+    "onlyWorkingToday": "Solo los que trabajan hoy",
+    "onlyWorkingThatDay": "Solo los que trabajan ese día"
+  },
   "nav": {
     "today": "Hoy",
     "prev": "Anterior",

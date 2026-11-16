@@ -34,6 +34,9 @@ import {
 import { mxTenDigits } from "@/lib/phone-mx";
 import { formatBarberPhone } from "@/lib/barber/phone-format";
 import { Field, Modal, agendaCss as css } from "./agenda-ui";
+import { BarberoSelect } from "./barbero-select";
+import { pickBarbers, type TimeOffLike, type VisitLike } from "@/lib/barber/quien-trabaja";
+import type { ScheduleLike } from "@/lib/barber/agenda";
 
 interface ClientHit {
   id: string;
@@ -53,6 +56,12 @@ export interface AppointmentDialogProps {
   canSearchClients: boolean;
   appointment?: BarberAppointmentDTO | null;
   initialBarberId?: string | null;
+  /**
+   * Horarios, bloqueos y visitas que la Agenda ya tiene cargados: con ellos
+   * «¿Con quién?» lista solo a los que trabajan el día elegido (con «Ver
+   * todos»). Sin ellos (null) se listan todos, como antes.
+   */
+  roster?: { schedules: ScheduleLike[]; timeOff: TimeOffLike[]; visits: (VisitLike & { startAt: string })[] } | null;
   initialStartAt?: Date | null;
   /**
    * Campo que recibe el foco al abrir (los botones directos de la cita:
@@ -104,6 +113,26 @@ export function AppointmentDialog(props: AppointmentDialogProps) {
           ""),
   );
   const [dateISO, setDateISO] = useState(shopDateISO(startDate, timezone));
+
+  // «¿Con quién?»: los que trabajan el día ELEGIDO (cambia con la fecha).
+  // Las visitas solo cuentan si son de ese día (la silla ocupada es de hoy).
+  const roster = props.roster ?? null;
+  const isToday = dateISO === shopDateISO(new Date(), timezone);
+  const pick = useMemo(
+    () =>
+      roster
+        ? pickBarbers({
+            barbers: activeBarbers,
+            schedules: roster.schedules,
+            timeOff: roster.timeOff,
+            visits: roster.visits.filter((v) => shopDateISO(new Date(v.startAt), timezone) === dateISO),
+            dateISO,
+            timezone,
+            now: new Date(),
+          })
+        : null,
+    [roster, activeBarbers, dateISO, timezone],
+  );
   const [hhmm, setHhmm] = useState(minuteToHHMM(shopMinuteOfDay(startDate, timezone)));
   const [selected, setSelected] = useState<string[]>(() => {
     if (!source) return [];
@@ -437,18 +466,15 @@ export function AppointmentDialog(props: AppointmentDialogProps) {
       {/* ── Barbero, fecha y hora ── */}
       <div className={css.row}>
         <Field label={t("barber.agenda.modal.barber")}>
-          <select
+          <BarberoSelect
             ref={barberRef}
-            className={css.select}
+            barbers={activeBarbers}
+            pick={pick}
             value={barberId}
-            onChange={(e) => setBarberId(e.target.value)}
-          >
-            {activeBarbers.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.nickname || b.name}
-              </option>
-            ))}
-          </select>
+            onChange={setBarberId}
+            t={t}
+            isToday={isToday}
+          />
         </Field>
         <Field label={t("barber.agenda.modal.date")}>
           <input

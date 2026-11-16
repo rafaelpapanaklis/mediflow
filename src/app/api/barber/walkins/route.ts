@@ -12,12 +12,17 @@ import { mxTenDigits } from "@/lib/phone-mx";
 import { hasBarberPermission } from "@/lib/barber/permissions";
 import { clientsViewScope, scopeUserFromCtx } from "@/lib/barber/own-visits";
 import {
+  addDaysISO,
   estimateWaitMinutes,
+  shopDateISO,
+  shopLocalToUtc,
   toBarberDTO,
   toWalkInDTO,
   walkInsAhead,
 } from "@/lib/barber/agenda";
-import { asString, jsonError, openAgendaGate, readJson } from "../appointments/_server";
+import { asString, jsonError, loadSlotContext, openAgendaGate, readJson } from "../appointments/_server";
+import { pickBarbers } from "@/lib/barber/quien-trabaja";
+import { walkInDayStart } from "@/lib/barber/fila-del-dia";
 import { createWalkIn, loadQueueSnapshot, WALKIN_FEATURE } from "./_server";
 
 export const dynamic = "force-dynamic";
@@ -71,6 +76,27 @@ export async function GET(req: Request) {
     }),
   ]);
 
+  // «¿Con quién?» (anotar y sentar): quién trabaja HOY y a quién proponer
+  // (el que trabaja ahora y no tiene a nadie en la silla). Segunda tanda
+  // aparte: el pooler no quiere más de 6 consultas en un Promise.all. Solo
+  // viajan ids: ni horarios ni visitas ajenas salen de aquí.
+  const now = new Date();
+  const today = shopDateISO(now, timezone);
+  const roster = await loadSlotContext(
+    shopId,
+    walkInDayStart(timezone, now),
+    shopLocalToUtc(addDaysISO(today, 1), 0, timezone),
+  );
+  const pick = pickBarbers({
+    barbers: barbers.map((b) => ({ id: b.id, isActive: b.isActive })),
+    schedules: roster.schedules,
+    timeOff: roster.timeOff,
+    visits: roster.appointments,
+    dateISO: today,
+    timezone,
+    now,
+  });
+
   const hidePhone = <T extends { barberId: string | null; phone: string | null }>(row: T): T =>
     narrowed && (!mine || row.barberId !== mine) ? { ...row, phone: null } : row;
   const queue = snapshot.rows.map(toWalkInDTO).map(hidePhone);
@@ -102,6 +128,7 @@ export async function GET(req: Request) {
       };
     }),
     recent: recent.map(toWalkInDTO).map(hidePhone),
+    pick,
   });
 }
 

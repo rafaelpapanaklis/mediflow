@@ -7,6 +7,14 @@
     "label": "View",
     "goToDay": "See this day"
   },
+  "picker": {
+    "offToday": "off today",
+    "offThatDay": "off that day",
+    "showAllToday": "Also show who is off today ({count})",
+    "showAllThatDay": "Also show who is off that day ({count})",
+    "onlyWorkingToday": "Only who works today",
+    "onlyWorkingThatDay": "Only who works that day"
+  },
   "nav": {
     "today": "Today",
     "prev": "Previous",

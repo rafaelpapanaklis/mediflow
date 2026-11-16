@@ -33,6 +33,8 @@ import { Field, Modal, Pill, agendaCss } from "@/components/barber/agenda/agenda
 import { formatBarberPhone } from "@/lib/barber/phone-format";
 import { mxTenDigits } from "@/lib/phone-mx";
 import { WalkinQr } from "./walkin-qr";
+import { BarberoSelect } from "@/components/barber/agenda/barbero-select";
+import type { BarberPick } from "@/lib/barber/quien-trabaja";
 import css from "./walkin.module.css";
 
 interface QueueRow extends BarberWalkInDTO {
@@ -57,6 +59,8 @@ interface Payload {
   services: ServiceLite[];
   queue: QueueRow[];
   recent: BarberWalkInDTO[];
+  /** «¿Con quién?»: quién trabaja hoy y a quién se propone (quien-trabaja.ts). Opcional: una API vieja no lo manda. */
+  pick?: BarberPick;
 }
 
 export interface WalkinPanelProps {
@@ -343,6 +347,7 @@ export function WalkinPanel(props: WalkinPanelProps) {
           t={t}
           branchId={props.branchId}
           barbers={data.barbers}
+          pick={data.pick ?? null}
           onClose={() => setAdding(false)}
           onAdded={() => {
             setAdding(false);
@@ -356,6 +361,7 @@ export function WalkinPanel(props: WalkinPanelProps) {
           t={t}
           row={serving}
           barbers={data.barbers}
+          pick={data.pick ?? null}
           services={data.services}
           onClose={() => setServing(null)}
           onConfirm={async (barberId, serviceIds) => {
@@ -377,6 +383,7 @@ function AddWalkInDialog(props: {
   t: (key: string, vars?: Record<string, string | number>) => string;
   branchId: string;
   barbers: BarberDTO[];
+  pick: BarberPick | null;
   onClose: () => void;
   onAdded: () => void;
 }) {
@@ -451,18 +458,15 @@ function AddWalkInDialog(props: {
         />
       </Field>
       <Field label={t("barber.agenda.queue.barber")}>
-        <select
-          className={agendaCss.select}
+        <BarberoSelect
+          barbers={props.barbers}
+          pick={props.pick}
           value={barberId}
-          onChange={(e) => setBarberId(e.target.value)}
-        >
-          <option value="">{t("barber.agenda.queue.anyBarber")}</option>
-          {props.barbers.map((b) => (
-            <option key={b.id} value={b.id}>
-              {b.nickname || b.name}
-            </option>
-          ))}
-        </select>
+          onChange={setBarberId}
+          anyLabel={t("barber.agenda.queue.anyBarber")}
+          t={t}
+          isToday
+        />
       </Field>
     </Modal>
   );
@@ -474,12 +478,16 @@ function ServeDialog(props: {
   t: (key: string, vars?: Record<string, string | number>) => string;
   row: QueueRow;
   barbers: BarberDTO[];
+  pick: BarberPick | null;
   services: ServiceLite[];
   onClose: () => void;
   onConfirm: (barberId: string, serviceIds: string[]) => void | Promise<void>;
 }) {
   const { t } = props;
-  const [barberId, setBarberId] = useState(props.row.barberId ?? props.barbers[0]?.id ?? "");
+  // El que pidió (si pidió a alguien); si no, el que trabaja ahora y está libre.
+  const [barberId, setBarberId] = useState(
+    props.row.barberId ?? props.pick?.suggested ?? props.barbers.find((b) => b.isActive)?.id ?? "",
+  );
   const [selected, setSelected] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -515,17 +523,14 @@ function ServeDialog(props: {
       {error ? <div className={agendaCss.errorBox}>{error}</div> : null}
       <p className={agendaCss.hint}>{t("barber.agenda.queue.serveBody")}</p>
       <Field label={t("barber.agenda.queue.barber")}>
-        <select
-          className={agendaCss.select}
+        <BarberoSelect
+          barbers={props.barbers}
+          pick={props.pick}
           value={barberId}
-          onChange={(e) => setBarberId(e.target.value)}
-        >
-          {props.barbers.map((b) => (
-            <option key={b.id} value={b.id}>
-              {b.nickname || b.name}
-            </option>
-          ))}
-        </select>
+          onChange={setBarberId}
+          t={t}
+          isToday
+        />
       </Field>
       <Field label={t("barber.agenda.modal.services")}>
         <div className={agendaCss.chips}>

@@ -50,6 +50,7 @@ import { AppointmentDialog, type AppointmentDialogFocus } from "./appointment-di
 import { AppointmentDetail } from "./appointment-detail";
 import { ChargeBridge } from "./charge-bridge";
 import { nextSlotStart } from "./next-slot";
+import { pickBarbers } from "@/lib/barber/quien-trabaja";
 import { HoverCard, useHoverCard } from "./hover-card";
 import { quickActions } from "./rejilla";
 import type { CardQuickAction } from "./appointment-card";
@@ -231,7 +232,7 @@ export function AgendaClient(props: AgendaClientProps) {
     const ahora = new Date().toISOString();
     const barberActivo = nf.barberId && data.barbers.some((b) => b.id === nf.barberId && b.isActive) ? nf.barberId : null;
     setCreating({
-      barberId: barberActivo ?? chair ?? null,
+      barberId: barberActivo ?? chair ?? suggestBarber(nextSlotStart(new Date(), timezone)),
       startAt: nextSlotStart(new Date(), timezone),
       prefill: {
         id: "",
@@ -437,6 +438,26 @@ export function AgendaClient(props: AgendaClientProps) {
     () => (data?.barbers ?? []).filter((b) => b.isActive),
     [data],
   );
+
+  // «¿Con quién?» de Nueva visita: horarios, bloqueos y visitas ya cargados.
+  const roster = useMemo(
+    () => (data ? { schedules: data.schedules, timeOff: data.timeOff, visits: data.appointments } : null),
+    [data],
+  );
+  /** Barbero propuesto para una visita nueva a esa hora: el que trabaja y está libre (quien-trabaja.ts). */
+  const suggestBarber = (startAt: Date): string | null => {
+    if (!data) return activeBarbers[0]?.id ?? null;
+    const day = shopDateISO(startAt, timezone);
+    return pickBarbers({
+      barbers: activeBarbers,
+      schedules: data.schedules,
+      timeOff: data.timeOff,
+      visits: data.appointments.filter((a) => shopDateISO(new Date(a.startAt), timezone) === day),
+      dateISO: day,
+      timezone,
+      now: new Date(),
+    }).suggested;
+  };
 
   // La silla elegida recorta columnas Y resumen: si filtras a Beto, el total
   // del día es el de Beto, no el de toda la barbería (mentir sería peor).
@@ -722,7 +743,7 @@ export function AgendaClient(props: AgendaClientProps) {
                 className={`${css.btn} ${css.btnPrimary}`}
                 onClick={() =>
                   setCreating({
-                    barberId: chair ?? activeBarbers[0]?.id ?? null,
+                    barberId: chair ?? suggestBarber(nextSlotStart(new Date(), timezone)),
                     startAt: nextSlotStart(new Date(), timezone),
                   })
                 }
@@ -929,6 +950,7 @@ export function AgendaClient(props: AgendaClientProps) {
           services={data.services}
           canSearchClients={data.can.clients}
           initialBarberId={creating.barberId}
+          roster={roster}
           initialStartAt={creating.startAt}
           prefill={creating.prefill ?? null}
           t={t}
@@ -950,6 +972,7 @@ export function AgendaClient(props: AgendaClientProps) {
           services={data.services}
           canSearchClients={data.can.clients}
           appointment={editing}
+          roster={roster}
           focus={editFocus}
           t={t}
           onClose={() => setEditing(null)}
