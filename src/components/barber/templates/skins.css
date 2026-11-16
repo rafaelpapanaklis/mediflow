@@ -6313,36 +6313,43 @@ img.dcbw-es-equipo-foto {
   color: var(--bw-tinta-suave);
 }
 
+/* El horario es la pieza compartida (TablaHorario: ul > li > dos span),
+   vestida como la tabla de la maqueta: renglones con filete arriba. */
 .dcbw-barrio .bw-horario {
-  width: 100%;
-  border-collapse: collapse;
+  gap: 0;
+  max-width: none;
+  font-size: 1rem;
   font-variant-numeric: tabular-nums;
 }
 
-.dcbw-barrio .bw-horario th,
-.dcbw-barrio .bw-horario td {
+.dcbw-barrio .bw-horario li {
+  gap: 12px;
   padding: 13px 0;
+  border-bottom: 0;
   border-top: 1px solid var(--bw-linea);
+}
+
+.dcbw-barrio .bw-horario li:last-child {
+  border-bottom: 1px solid var(--bw-linea);
+}
+
+.dcbw-barrio .bw-horario .dcbw-horario-dia {
+  color: var(--bw-tinta);
   font-weight: 500;
 }
 
-.dcbw-barrio .bw-horario th {
-  text-align: left;
-  padding-right: 12px;
-}
-
-.dcbw-barrio .bw-horario td {
+.dcbw-barrio .bw-horario .dcbw-horario-rango {
   text-align: right;
   font-weight: 700;
   white-space: nowrap;
 }
 
-.dcbw-barrio .bw-horario tr:last-child th,
-.dcbw-barrio .bw-horario tr:last-child td {
-  border-bottom: 1px solid var(--bw-linea);
+/* Cerrado: en gris de la piel (AA sobre concreto), no con opacidad. */
+.dcbw-barrio .bw-horario .dcbw-cerrado {
+  opacity: 1;
 }
 
-.dcbw-barrio .bw-horario .bw-cerrado td {
+.dcbw-barrio .bw-horario .dcbw-cerrado .dcbw-horario-rango {
   font-weight: 500;
   color: var(--bw-tinta-suave);
 }

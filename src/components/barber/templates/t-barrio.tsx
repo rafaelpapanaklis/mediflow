@@ -26,9 +26,10 @@
 import { Fragment, type CSSProperties } from "react";
 import {
   direccionCompleta,
-  horarioAgrupado,
+  horarioBarberWeb,
   rutaReservaBarberia,
   tieneHorario,
+  type BarberWebConfig,
   urlComoLlegar,
   urlInstagram,
   urlMapaEmbed,
@@ -51,6 +52,7 @@ import {
   Ranura,
   Redes,
   SeccionProductos,
+  TablaHorario,
   enlaceTienda,
   porCategoria,
 } from "./pieces";
@@ -167,6 +169,34 @@ export function planRejilla(n: number, C: number, tope: number): CeldaRejilla[] 
   return celdas;
 }
 
+/**
+ * El tramo de días SEGUIDOS abiertos con el mismo horario más largo, para la
+ * píldora de la portada: «Mar – Sáb: 11:00 am – 9:00 pm». Sale de las filas
+ * de horarioBarberWeb (datos), no de partir el texto de horarioAgrupado. Con
+ * dos tramos igual de largos gana el primero de la semana. Sin días abiertos,
+ * null.
+ */
+export function tramoMasLargo(config: BarberWebConfig): string | null {
+  const filas = horarioBarberWeb(config);
+  let mejor: { desde: number; hasta: number } | null = null;
+  let i = 0;
+  while (i < filas.length) {
+    if (!filas[i].abierto) {
+      i++;
+      continue;
+    }
+    let j = i;
+    while (j + 1 < filas.length && filas[j + 1].abierto && filas[j + 1].rango === filas[i].rango) j++;
+    if (!mejor || j - i > mejor.hasta - mejor.desde) mejor = { desde: i, hasta: j };
+    i = j + 1;
+  }
+  if (!mejor) return null;
+  const a = filas[mejor.desde];
+  const b = filas[mejor.hasta];
+  const dias = a.dia === b.dia ? a.etiquetaCorta : `${a.etiquetaCorta} – ${b.etiquetaCorta}`;
+  return `${dias}: ${a.rango}`;
+}
+
 /** ¿Es una categoría de combos? Esa sale en tarjetas grandes. */
 function esCombo(categoria: string | null): boolean {
   return !!categoria && /combo|paquete/i.test(categoria);
@@ -235,13 +265,9 @@ export function PlantillaBarrio({ data }: { data: BarberWebData }) {
   // La cinta corre la carta solo si la carta se enseña.
   const conCinta = tieneSeccion(secs, "servicios") && servicios.length > 0;
 
-  // El renglón de horario de la portada: el grupo abierto con más días.
+  // El renglón de horario de la portada: el tramo abierto con más días.
   // No dice «hoy»: el HTML se cachea y no sabe qué día lo abren.
-  const horarioPortada = tieneHorario(config)
-    ? horarioAgrupado(config)
-        .filter((l) => !l.endsWith(": Cerrado"))
-        .sort((a, b) => b.length - a.length)[0] ?? null
-    : null;
+  const horarioPortada = tramoMasLargo(config);
 
   const sello = copia(data, "portada", "portada.sello");
   const lema = copia(data, "portada", "portada.lema");
@@ -659,7 +685,6 @@ function Ubicacion({ data, dir, wa }: { data: BarberWebData; dir: string | null;
   const { shop, config } = data;
   const mapa = urlMapaEmbed(config, dir);
   const llegar = urlComoLlegar(dir);
-  const horario = tieneHorario(config) ? horarioAgrupado(config) : [];
   if (!hayContacto(data, dir, wa)) return null;
 
   const calle = shop.address?.trim() || null;
@@ -685,23 +710,9 @@ function Ubicacion({ data, dir, wa }: { data: BarberWebData; dir: string | null;
               {calle && resto ? <small>{resto}</small> : null}
             </p>
           ) : null}
-          {horario.length > 0 ? (
-            <table className="bw-horario">
-              <tbody>
-                {horario.map((l, i) => {
-                  const corte = l.indexOf(": ");
-                  const dias = corte >= 0 ? l.slice(0, corte) : l;
-                  const horas = corte >= 0 ? l.slice(corte + 2) : "";
-                  return (
-                    <tr key={i} className={horas === "Cerrado" ? "bw-cerrado" : ""}>
-                      <th scope="row">{dias}</th>
-                      <td>{horas}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          ) : null}
+          {/* La pieza compartida: los siete días desde horarioBarberWeb, sin
+              rearmar el texto de horarioAgrupado (revisión ws6-t8, B2). */}
+          {tieneHorario(config) ? <TablaHorario config={config} className="bw-horario" /> : null}
           {wa || shop.phone ? (
             <div className="bw-contacto">
               {wa ? (

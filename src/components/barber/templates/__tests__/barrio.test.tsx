@@ -20,7 +20,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { configBarberWebVacia, normalizarConfigBarberWeb, ordenDeSecciones, type BarberWebConfig } from "@/lib/barber/landing";
 import { BARBER_WEB_MANIFESTS, BARBER_WEB_TEMPLATES } from "../index";
-import { letrasPorRenglon, planRejilla } from "../t-barrio";
+import { letrasPorRenglon, planRejilla, tramoMasLargo } from "../t-barrio";
 import type { BarberWebBarbero, BarberWebData, BarberWebServicio } from "../types";
 
 const FOTO = (n: number) => `https://cdn.example.com/f${n}.webp`;
@@ -152,7 +152,14 @@ test("sucursal con dirección larga y horario: mapa, cómo llegar y horario agru
   );
   assert.ok(html.includes('id="contacto"') && html.includes("google.com/maps?q="));
   assert.ok(html.includes("Av. Patria 1891 local 4-B<small>Zapopan, Jalisco</small>"));
-  assert.ok(html.includes("Mar – Dom") && html.includes("11:00 am – 9:00 pm"));
+  // B2: el horario es la pieza compartida TablaHorario (los siete días), no el
+  // texto de horarioAgrupado partido a mano.
+  assert.ok(html.includes('<ul class="dcbw-horario bw-horario">'));
+  assert.ok(html.includes('<li class="dcbw-cerrado"><span class="dcbw-horario-dia">Lunes</span><span class="dcbw-horario-rango">Cerrado</span></li>'));
+  assert.ok(html.includes('<span class="dcbw-horario-dia">Domingo</span><span class="dcbw-horario-rango">11:00 am – 9:00 pm</span>'));
+  assert.ok(!html.includes("<table"), "queda la tabla rearmada");
+  // La píldora de la portada: el tramo seguido más largo, de las filas.
+  assert.ok(html.includes("Mar – Dom: 11:00 am – 9:00 pm"));
   assert.ok(html.includes('href="tel:33 1111 2222"') && html.includes("wa.me/523311112222"));
   // El renglón de la portada no dice «hoy» (ISR: el HTML no sabe qué día es).
   assert.ok(!/\bHoy\b/.test(html));
@@ -180,6 +187,21 @@ test("Tienda: encendida va JUSTO después de Servicios (sección y tira); apagad
 test("«Mis citas» arriba solo con WhatsApp conectado (cuentaUrl)", () => {
   assert.ok(pinta(datos({ cuentaUrl: "/b/filo/mi-cuenta" })).includes('class="bw-mis" href="/b/filo/mi-cuenta"'));
   assert.ok(!pinta(datos()).includes("Mis citas"));
+});
+
+test("B2 · tramoMasLargo sale de las filas del horario, no del texto", () => {
+  const dia = (d: number, abierto: boolean, hasta = "21:00") => ({ dia: d, abierto, desde: "11:00", hasta });
+  const c = (h: ReturnType<typeof dia>[]) => normalizarConfigBarberWeb({ horario: h });
+  assert.equal(tramoMasLargo(c([])), null);
+  assert.equal(tramoMasLargo(c([0, 1, 2, 3, 4, 5, 6].map((d) => dia(d, false)))), null);
+  assert.equal(tramoMasLargo(c([dia(6, true)])), "Dom: 11:00 am – 9:00 pm");
+  // Lun–Mié a las 9, Jue–Sáb a las 8: dos tramos de tres, gana el primero.
+  assert.equal(
+    tramoMasLargo(c([0, 1, 2, 3, 4, 5].map((d) => dia(d, true, d < 3 ? "21:00" : "20:00")))),
+    "Lun – Mié: 11:00 am – 9:00 pm",
+  );
+  // Salteados: el lunes solo pierde contra Mié–Vie.
+  assert.equal(tramoMasLargo(c([dia(0, true), dia(2, true), dia(3, true), dia(4, true)])), "Mié – Vie: 11:00 am – 9:00 pm");
 });
 
 test("B1 · la cinta se puede pausar (WCAG 2.2.2): botón fuera de aria-hidden, hover/foco y reduced-motion", () => {
