@@ -12,6 +12,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import fs from "node:fs";
+import path from "node:path";
 
 // CSS modules: cada clase se llama como su llave (así se puede buscar en el HTML).
 const M = Module as unknown as { _load: (r: string, p: unknown, m: boolean) => unknown };
@@ -108,4 +110,26 @@ test("D4 · «Administrar productos» bloquea «Ver productos»; sin él, «Ver 
 test("D4 · Barbero de fábrica: nada bloqueado por incluido (no trae ningún «administrar»)", () => {
   const html = pinta("BARBER");
   assert.doesNotMatch(html, /Viene con/);
+});
+
+// m3 (16-nov): el resumen «N permisos en total» era sticky al fondo del cuerpo
+// que desplaza y tapaba el último renglón visible (en panel.108, 15 clics
+// seguidos sobre «Ver caja» cayeron en él). Ahora vive en el PIE, que no
+// desplaza: no puede tapar ningún renglón.
+test("m3 · el resumen va en el pie del diálogo, fuera de lo que desplaza, y sin sticky", () => {
+  const html = pinta("RECEPTION", ["agenda.view"]);
+  const cuerpo = html.indexOf('class="modalBody"');
+  const pie = html.indexOf('class="modalFoot"');
+  const resumen = html.indexOf('class="permSummary"');
+  assert.ok(cuerpo >= 0 && pie > cuerpo, "hay cuerpo y pie");
+  assert.ok(resumen > pie, "el resumen está en el pie");
+  assert.doesNotMatch(html.slice(cuerpo, pie), /permSummary/, "y no dentro del cuerpo");
+  assert.match(html.slice(resumen, resumen + 300), /permiso en total|permisos en total/);
+  // Y el último interruptor (el de abajo del todo) está en el cuerpo.
+  assert.ok(html.indexOf('aria-label="Administrar sucursales"') < pie);
+
+  const css = fs.readFileSync(path.resolve(__dirname, "../../../components/barber/team/admin.module.css"), "utf8");
+  const bloque = css.match(/\.permSummary\s*\{[^}]*\}/g) ?? [];
+  assert.ok(bloque.length > 0);
+  for (const b of bloque) assert.doesNotMatch(b, /position:\s*sticky/, "el resumen ya no es sticky");
 });

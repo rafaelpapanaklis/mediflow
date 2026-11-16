@@ -598,17 +598,17 @@
 .permTagAdded { background: rgba(22, 163, 74, 0.14); color: #15803D; }
 .permTagRemoved { background: rgba(192, 57, 43, 0.12); color: #B02A1C; }
 
-/* Barra de resultado pegada al fondo del cuerpo del modal. Va a sangre
-   (margen negativo que cancela el padding de .modalBody) para que las filas
-   no asomen por los costados al scrollear por debajo. */
+/* Resumen de la matriz: va en el PIE del modal, encima de los botones (m3,
+   16-nov). Antes era sticky al fondo del cuerpo que desplaza y tapaba el
+   último renglón visible: un clic o un Tab caían en él. El pie no desplaza,
+   así que no puede tapar ningún renglón. */
+.permFoot {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
 .permSummary {
-  position: sticky;
-  bottom: -18px;
-  margin: 4px -18px -18px;
-  padding: 12px 18px;
-  background: var(--bg-elev-2);
-  border-top: 1px solid var(--border-soft);
-  box-shadow: 0 -8px 16px -12px rgba(18, 16, 16, 0.35);
   font-size: 12.5px;
   line-height: 1.5;
   color: var(--text-2);
@@ -795,7 +795,6 @@
   background: rgba(248, 113, 113, 0.08);
 }
 :global(.dark) .tabBadge { color: #241410; background: #FCA5A5; }
-:global(.dark) .permSummary { box-shadow: 0 -8px 16px -12px rgba(0, 0, 0, 0.7); }
 
 /* ═══════════════════════════════════════════════════════════════════════
    REDISEÑO D (15-nov-2026, aprobado por Rafael) — Barberos y la barra de

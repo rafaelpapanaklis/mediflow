@@ -168,6 +168,12 @@ export function PermissionMatrix({
       subtitle={t("perms.roleLine", { role: roleLabel })}
       onClose={onClose}
       footer={
+        // El resumen va en el PIE (fuera de lo que desplaza), no pegado con
+        // sticky al fondo del cuerpo (m3, 16-nov): ahí tapaba el último
+        // renglón visible y un clic o un Tab caía en el resumen, no en el
+        // interruptor. Fuera del cuerpo no puede tapar nada.
+        <div className={s.permFoot}>
+        <div className={s.permSummary} aria-live="polite">{summaryLine}</div>
         <div className={s.modalFootSpread} style={{ display: "flex", width: "100%", gap: 8 }}>
           <Btn
             variant="ghost"
@@ -186,6 +192,7 @@ export function PermissionMatrix({
               {saving ? t("common.saving") : t("common.save")}
             </Btn>
           </div>
+        </div>
         </div>
       }
     >
@@ -261,7 +268,6 @@ export function PermissionMatrix({
         ))}
       </div>
 
-      <div className={s.permSummary}>{summaryLine}</div>
     </Modal>
   );
 }
