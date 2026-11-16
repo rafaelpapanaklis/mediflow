@@ -123,7 +123,8 @@ function moneyLabelsFor(t: ReturnType<typeof getBarberT>): ReportsCsvMoneyLabels
     paidOut: c("metrics.paidOut"),
     advances: c("metrics.advances"),
     methods: map("methods", RESUMEN_INCOME_METHODS),
-    categories: map("cat", CASH_EXPENSE_CATEGORIES),
+    // N9: las etiquetas de la Caja (barber.caja.mov.cat.*), una sola fuente.
+    categories: Object.fromEntries(CASH_EXPENSE_CATEGORIES.map((k) => [k, t(`barber.caja.mov.cat.${k}`)])),
     kinds: map("kind", BARBER_PAYOUT_KINDS),
   };
 }

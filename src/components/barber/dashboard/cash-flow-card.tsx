@@ -30,11 +30,14 @@ export function CashFlowCard({
   locale,
   csvHref,
   t,
+  categoryLabels,
 }: {
   cf: ReportCashFlow;
   locale: string;
   csvHref: string;
   t: (key: string, vars?: Record<string, string | number>) => string;
+  /** Etiquetas de categoría de la Caja (barber.caja.mov.cat.*): una sola fuente (N9). */
+  categoryLabels: Record<string, string>;
 }) {
   const c = cf.current;
   const k = (key: string, vars?: Record<string, string | number>) => t(`money.${key}`, vars);
@@ -166,7 +169,7 @@ export function CashFlowCard({
               {c.expenses.byCategory.map((r) => (
                 <div className="bdash-bar" key={r.category}>
                   <div className="bdash-bar__head">
-                    <span className="bdash-bar__name" title={catLabel(k, r.category)}>{catLabel(k, r.category)}</span>
+                    <span className="bdash-bar__name" title={categoryLabels[r.category] ?? r.category}>{categoryLabels[r.category] ?? r.category}</span>
                     <span className="bdash-bar__val">{fmtMoney(r.total)}</span>
                   </div>
                   <div className="bdash-bar__track" aria-hidden>
@@ -201,11 +204,4 @@ export function CashFlowCard({
       </div>
     </CardNew>
   );
-}
-
-/** Categoría guardada como CLAVE (caja-movimientos-core); una que no conozcamos se enseña tal cual. */
-function catLabel(k: (key: string) => string, cat: string): string {
-  const key = `cat.${cat}`;
-  const label = k(key);
-  return label === `money.${key}` ? cat : label;
 }

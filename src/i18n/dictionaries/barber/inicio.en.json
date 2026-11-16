@@ -299,18 +299,6 @@
       "cashNetHint": "What the drawer gained or lost: card or transfer expenses don't count here",
       "vsPrev": "vs. previous period",
       "methods": { "CASH": "Cash", "CARD": "Card", "SPEI": "SPEI", "ONLINE": "Online" },
-      "cat": {
-        "SUPPLIES": "Supplies",
-        "RESALE": "Products for sale",
-        "CLEANING": "Cleaning",
-        "RENT": "Rent",
-        "UTILITIES": "Power, water and internet",
-        "FOOD": "Food",
-        "ADS": "Advertising",
-        "MAINTENANCE": "Maintenance",
-        "PAYROLL": "Wages and commissions",
-        "OTHER": "Other"
-      },
       "kind": { "ADVANCE": "Advances", "COMMISSION": "Commissions", "SALARY": "Wages", "OTHER": "Other" },
       "colPaidOut": "Paid",
       "colAdvances": "Advances"

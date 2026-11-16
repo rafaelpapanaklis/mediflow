@@ -37,6 +37,7 @@ export function ReportesView({
   barbers,
   currentBranch,
   currentBarber,
+  categoryLabels = {},
 }: {
   dict: Dictionary;
   summary: ReportsSummary;
@@ -47,6 +48,8 @@ export function ReportesView({
   currentBranch: string;
   /** id del barbero filtrado o "". */
   currentBarber: string;
+  /** Categorías de gasto con las etiquetas de la Caja (barber.caja.mov.cat.*). */
+  categoryLabels?: Record<string, string>;
 }) {
   const t = useBarberT(dict);
   const router = useRouter();
@@ -266,7 +269,7 @@ export function ReportesView({
       </CardNew>
 
       {/* Ingresos y gastos (ws6-t5): solo viaja con «Ver caja» y el SQL de caja completa. */}
-      {s.cashFlow && <CashFlowCard cf={s.cashFlow} locale={locale} csvHref={`${csvHref}&section=money`} t={t} />}
+      {s.cashFlow && <CashFlowCard cf={s.cashFlow} locale={locale} csvHref={`${csvHref}&section=money`} t={t} categoryLabels={categoryLabels} />}
 
       <div className="bdash-grid bdash-grid--even">
         {/* Por barbero */}

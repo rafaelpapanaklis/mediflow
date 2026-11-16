@@ -299,18 +299,6 @@
       "cashNetHint": "Lo que el cajón ganó o perdió: los gastos con tarjeta o transferencia no cuentan aquí",
       "vsPrev": "vs. periodo anterior",
       "methods": { "CASH": "Efectivo", "CARD": "Tarjeta", "SPEI": "SPEI", "ONLINE": "En línea" },
-      "cat": {
-        "SUPPLIES": "Insumos",
-        "RESALE": "Productos para venta",
-        "CLEANING": "Limpieza",
-        "RENT": "Renta",
-        "UTILITIES": "Luz, agua e internet",
-        "FOOD": "Comida",
-        "ADS": "Publicidad",
-        "MAINTENANCE": "Mantenimiento",
-        "PAYROLL": "Sueldos y comisiones",
-        "OTHER": "Otro"
-      },
       "kind": { "ADVANCE": "Adelantos / vales", "COMMISSION": "Comisiones", "SALARY": "Sueldos", "OTHER": "Otros" },
       "colPaidOut": "Pagado",
       "colAdvances": "Adelantos"
