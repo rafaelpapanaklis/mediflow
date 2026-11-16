@@ -349,21 +349,26 @@ export interface InicioCash {
  * completa pegado. Sale de caja-dinero.ts (cajaResumen de ws6-t1).
  */
 export interface InicioMoney {
+  /**
+   * true = la lectura falló (M6 de la revisión ws6-t8): las cifras viajan en
+   * null y la pantalla enseña «—», NUNCA una cuenta vieja que no cuadra.
+   */
+  unavailable?: boolean;
   /** Ingresos del negocio (= «Ingresos de hoy» de la banda: sin propinas). */
-  income: number;
+  income: number | null;
   /** Propinas de hoy: son de los barberos, se enseñan aparte. */
-  tips: number;
+  tips: number | null;
   /** Gastos de hoy (todos los medios; los anulados no). */
-  expenses: number;
-  expensesCount: number;
+  expenses: number | null;
+  expensesCount: number | null;
   /** De esos gastos, los pagados en efectivo. */
-  expensesCash: number;
+  expensesCash: number | null;
   /** Lo que les toca hoy a los barberos (comisión + sueldo − renta), sin propinas. */
-  barberCost: number;
+  barberCost: number | null;
   /** Lo ENTREGADO hoy a barberos (adelantos, comisión, sueldo, propinas): informativo. */
-  payouts: number;
+  payouts: number | null;
   /** Te queda hoy = ingresos − gastos − lo que les toca a los barberos. */
-  profit: number;
+  profit: number | null;
 }
 
 export interface InicioAlerts {
@@ -856,6 +861,7 @@ export async function getInicioSummary(ctx: BarberContext, opts: InicioOptions =
   let money: InicioMoney | null = null;
   let fullExpected: number | null = null;
   let staleSince: string | null = null;
+  let dineroFailed = false;
   if (canCash) {
     const r = await getDineroPeriodo(
       ctx,
@@ -872,11 +878,26 @@ export async function getInicioSummary(ctx: BarberContext, opts: InicioOptions =
           : null,
         now,
       },
-    ).catch((e) => {
-      console.error("[barber/inicio] dinero de hoy", e);
-      return null;
+    ).catch((e: unknown) => {
+      // M6 (revisión ws6-t8): si falla, se registra y la pantalla enseña «—».
+      // Nunca se vuelve en silencio a la cuenta sin movimientos (no cuadra con Caja).
+      console.error("[barber/inicio] dinero de hoy: falló la lectura, se enseña «—»", e);
+      return "error" as const;
     });
-    if (r) {
+    if (r === "error") {
+      dineroFailed = true;
+      money = {
+        unavailable: true,
+        income: null,
+        tips: null,
+        expenses: null,
+        expensesCount: null,
+        expensesCash: null,
+        barberCost: null,
+        payouts: null,
+        profit: null,
+      };
+    } else if (r) {
       const d = r.dinero;
       money = {
         income: d.income,
@@ -905,14 +926,16 @@ export async function getInicioSummary(ctx: BarberContext, opts: InicioOptions =
           openedByName: openSession.opened_by || "—",
           // MISMA regla que la caja: con el SQL de caja completa, el esperado
           // del turno con sus movimientos (cajaResumen); sin él, fondo +
-          // Σ total de tickets vivos en efectivo.
-          expectedCash:
-            fullExpected ?? toNum(expectedCashFor(D(openSession.openingAmount as never), D(openSession.cash_total as never))),
+          // Σ total de tickets vivos en efectivo. Si la lectura de caja
+          // completa FALLÓ: null («—»), nunca la cuenta sin movimientos (M6).
+          expectedCash: dineroFailed
+            ? null
+            : fullExpected ?? toNum(expectedCashFor(D(openSession.openingAmount as never), D(openSession.cash_total as never))),
           openingAmount: toNum(D(openSession.openingAmount as never)),
           ticketCount: intOf(openSession.tickets),
           salesTotal: toNum(D(openSession.sales_total as never)),
           tipsTotal: toNum(D(openSession.tips_total as never)),
-          ...(money ? { full: fullExpected !== null, staleSince } : {}),
+          ...(money ? { full: dineroFailed || fullExpected !== null, staleSince } : {}),
         }
       : {
           open: false,

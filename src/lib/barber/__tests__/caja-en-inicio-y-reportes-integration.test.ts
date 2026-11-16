@@ -310,6 +310,29 @@ test("🔴 G2 (caso de t8): $800 + $50 de propina al 50 % → Ganancia $400 en R
   await prisma.$executeRaw`DELETE FROM "barber_cash_movements" WHERE "barbershopId" = ${shopD}`;
 });
 
+test("M6: si la lectura del dinero falla, Inicio enseña «—» (null), nunca la cuenta vieja", { skip: skipDb }, async (t) => {
+  if (!ready) return t.skip("sql/barber_caja_completa.sql no está pegado en esta base");
+  const stats = await import("@/lib/barber/stats");
+  // Se rompe la lectura de movimientos SOLO durante esta llamada: la tabla (de esta base LOCAL de
+  // pruebas) se renombra y se devuelve en el finally.
+  await prisma.$executeRawUnsafe(`ALTER TABLE "barber_cash_movements" RENAME TO "barber_cash_movements_m6"`);
+  // cashMovementsReady ya vio la tabla (caché por proceso): la consulta de movimientos falla de verdad.
+  const errores: unknown[] = [];
+  const original = console.error;
+  console.error = (...a: unknown[]) => void errores.push(a);
+  try {
+    const s = await stats.getInicioSummary(ctxs.dueno, { features: (await import("@/lib/barber/plan-shared")).FALLBACK_BARBER_PLAN_CONFIG.PROFESIONAL.features });
+    assert.equal(s.money?.unavailable, true);
+    assert.equal(s.money?.profit, null);
+    assert.equal(s.money?.expenses, null);
+    assert.equal(s.cash?.expectedCash, null, "ni la cifra vieja de fondo + efectivo (que no cuadra con Caja)");
+    assert.ok(errores.length > 0, "y queda registrado");
+  } finally {
+    console.error = original;
+    await prisma.$executeRawUnsafe(`ALTER TABLE "barber_cash_movements_m6" RENAME TO "barber_cash_movements"`);
+  }
+});
+
 // ── Sin el SQL ──────────────────────────────────────────────────────────
 
 test("sin sql/barber_caja_completa.sql: Inicio y Reportes como hoy", { skip: skipDb }, async (t) => {

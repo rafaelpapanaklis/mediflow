@@ -86,6 +86,7 @@
       "paidToday": "entregado hoy: {amount}",
       "tipsApart": "Propinas: {amount}, son de los barberos",
       "tipsApartNone": "Propinas: —",
+      "unavailable": "No se pudo leer el dinero de hoy. Vuelve a cargar en un momento; mientras, revisa la Caja.",
       "goCash": "Ver gastos"
     },
     "queue": {

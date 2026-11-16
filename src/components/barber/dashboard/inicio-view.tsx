@@ -395,6 +395,11 @@ export function InicioView({
               <div className="bdash-big__label">
                 {k("money.profit")} · {k("money.profitHint")}
               </div>
+              {m.unavailable && (
+                <div className="bdash-callout bdash-callout--warning" role="status" style={{ marginTop: 10 }}>
+                  <span className="bdash-callout__text">{k("money.unavailable")}</span>
+                </div>
+              )}
               <dl className="bdash-ledger">
                 <div className="bdash-ledger__row">
                   <dt>{k("money.income")}</dt>
@@ -455,7 +460,7 @@ export function InicioView({
                   <div className="bdash-status">
                     <span className="bdash-status__dot" /> {k("cash.open")}
                   </div>
-                  <div className="bdash-big" style={{ marginTop: 10 }}><Money value={fmtMoney(c.expectedCash)} /></div>
+                  <div className="bdash-big" style={{ marginTop: 10 }}><Money value={moneyOrDash(c.expectedCash)} /></div>
                   <div className="bdash-big__label">
                     {c.full
                       ? `${k("cash.inDrawer")} · ${k("cash.inDrawerHint", { opening: fmtMoney(c.openingAmount) })}`
@@ -586,7 +591,7 @@ function Money({ value }: { value: string }) {
   );
 }
 
-/** Montos de «Dinero de hoy»: «—» si no hay número. */
+/** null = la lectura falló (M6): «—», nunca un $0.00 que parezca cierto. */
 function moneyOrDash(n: number | null | undefined): string {
   return typeof n === "number" ? fmtMoney(n) : "—";
 }

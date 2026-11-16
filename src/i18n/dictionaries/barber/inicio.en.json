@@ -86,6 +86,7 @@
       "paidToday": "handed over today: {amount}",
       "tipsApart": "Tips: {amount}, they belong to the barbers",
       "tipsApartNone": "Tips: —",
+      "unavailable": "Today's money couldn't be read. Reload in a moment; meanwhile, check the Register.",
       "goCash": "View expenses"
     },
     "queue": {
