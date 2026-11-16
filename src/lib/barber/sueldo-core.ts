@@ -42,6 +42,11 @@ export interface BarberSalary {
 
 export type SalaryInputError = "amountBad" | "amountZero" | "periodMissing";
 
+/** Resultado de validar (el `error?: undefined` deja leer .error sin estrechar: tsconfig no es strict). */
+export type SalaryParse =
+  | { ok: true; salary: BarberSalary | null; error?: undefined }
+  | { ok: false; error: SalaryInputError; salary?: undefined };
+
 /**
  * Lo que llega del formulario → sueldo o null (vacío = «como hoy»).
  * Monto vacío = sin sueldo (aunque haya periodo elegido). Monto escrito:
@@ -50,7 +55,7 @@ export type SalaryInputError = "amountBad" | "amountZero" | "periodMissing";
 export function parseSalaryInput(
   rawAmount: unknown,
   rawPeriod: unknown,
-): { ok: true; salary: BarberSalary | null } | { ok: false; error: SalaryInputError } {
+): SalaryParse {
   const txt =
     typeof rawAmount === "number"
       ? String(rawAmount)

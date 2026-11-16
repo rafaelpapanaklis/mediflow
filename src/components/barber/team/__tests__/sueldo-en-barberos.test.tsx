@@ -46,10 +46,9 @@ async function pinta(locale: "es" | "en", rows: BarberProfileRow[]): Promise<str
   const { BarbersClient } = await import("../barbers-client");
   const { AdminI18n } = await import("../admin-ui");
   return renderToStaticMarkup(
-    createElement(
-      AdminI18n,
-      { dict: getBarberDict(locale) },
-      createElement(BarbersClient, {
+    createElement(AdminI18n, {
+      dict: getBarberDict(locale),
+      children: createElement(BarbersClient, {
         initialBarbers: rows,
         seat: { used: rows.length, max: 10, unlimited: true, canCreate: true, planName: "Profesional" },
         branches: [{ id: "s1", label: "Centro", isMainBranch: true, isActive: true }],
@@ -57,7 +56,7 @@ async function pinta(locale: "es" | "en", rows: BarberProfileRow[]): Promise<str
         isConsolidated: false,
         salaryReady: true,
       }),
-    ),
+    }),
   );
 }
 
