@@ -507,6 +507,46 @@ export async function loadFeaturedProducts(shop: { id: string; plan?: string | n
   }
 }
 
+export interface WebTiendaResumen {
+  /** Plan con productos y SQL de la tienda pegado: hay sección «Tienda» que ofrecer. */
+  disponible: boolean;
+  /** Los que salen en la sección de la página: hasta TIENDA_FEATURED_MAX, los de esta sede primero. */
+  products: TiendaProduct[];
+  /** Cuántos productos se ven en /b/<slug>/tienda (activos y con «Mostrar en mi página», de toda la cadena). */
+  total: number;
+}
+
+/**
+ * La sección «Tienda» de la página de la barbería y de Mi web (16-nov).
+ * Cuenta lo MISMO que la tienda pública: los productos de toda la cadena
+ * (la tienda de un slug junta las sedes activas). Nunca lanza.
+ */
+export async function loadWebTienda(shopId: string): Promise<WebTiendaResumen> {
+  const vacio: WebTiendaResumen = { disponible: false, products: [], total: 0 };
+  try {
+    if (!(await tiendaReady(prisma)).columns) return vacio;
+    const shop = await prisma.barbershop.findUnique({ where: { id: shopId }, select: { id: true, plan: true, parentId: true } });
+    if (!shop) return vacio;
+    const plan = await getBarberPlan(shop.plan ?? null);
+    if (plan.features.products !== true) return vacio;
+    const rootId = shop.parentId ?? shop.id;
+    const sedes = await prisma.barbershop.findMany({
+      where: { isActive: true, OR: [{ id: rootId }, { parentId: rootId }] },
+      select: { id: true },
+      take: 50,
+    });
+    const ids = Array.from(new Set([shop.id, ...sedes.map((s) => s.id)]));
+    const all = await webProducts(ids, false);
+    // Los de esta sede primero; dentro, el orden de siempre (foto, categoría, nombre).
+    const propios = all.filter((p) => p.branchId === shop.id);
+    const otros = all.filter((p) => p.branchId !== shop.id);
+    return { disponible: true, products: [...propios, ...otros].slice(0, TIENDA_FEATURED_MAX), total: all.length };
+  } catch (e) {
+    console.warn("[barber/tienda] sección de la página:", (e as Error).message);
+    return vacio;
+  }
+}
+
 // ── Apartar ─────────────────────────────────────────────────────────────
 
 export interface CreatedOrder {

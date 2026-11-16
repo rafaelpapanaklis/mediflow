@@ -73,9 +73,9 @@ export interface BarberWebData {
   servicios: BarberWebServicio[];
   barberos: BarberWebBarbero[];
   /**
-   * Destacados de la tienda (ws6-t1): productos marcados «Mostrar en mi
-   * página». Vacío o ausente = no hay sección «Productos». Los carga la
-   * página pública; el editor no los pinta.
+   * La sección «Tienda» (ws6-t1): productos marcados «Mostrar en mi
+   * página», hasta 4. Vacío o ausente = ni sección ni «Tienda» en el menú.
+   * Los carga la página pública y, para la vista previa, Mi web.
    */
   productos?: BarberWebProducto[];
   /** Liga a /b/<slug>/tienda (solo si hay productos). */

@@ -37,6 +37,7 @@ import {
   urlWhatsApp,
 } from "@/lib/barber/landing";
 import {
+  BotonTienda,
   Boton,
   Duracion,
   Estrellas,
@@ -151,6 +152,7 @@ export function PlantillaEstudio({ data }: { data: BarberWebData }) {
                     <IcoWhatsApp size={15} /> {copia(data, "portada", "portada.whatsapp")}
                   </Boton>
                 )}
+                <BotonTienda data={data} className="dcbw-es-btn" />
                 <p className="dcbw-es-nota">{copia(data, "portada", "portada.nota")}</p>
               </div>
             </div>
@@ -343,18 +345,22 @@ export function PlantillaEstudio({ data }: { data: BarberWebData }) {
                   </div>
                 </Sec>
               )}
+              {/* ── Tienda: sección de Mi web, con su lugar en el orden ── */}
+              {s.id === "tienda" && <SeccionProductos data={data} />}
             </Fragment>
           ))}
 
           {/* ── Barra de reserva pegada abajo (solo teléfono) ─────── */}
           <div className="dcbw-es-barra">
             <span>{shop.name}</span>
-            <Boton href={reservar}>
-              {copia(data, "portada", "portada.cta")} <IcoFlecha size={14} />
-            </Boton>
+            <div className="dcbw-es-barra-acc">
+              <BotonTienda data={data} size={15} />
+              <Boton href={reservar}>
+                {copia(data, "portada", "portada.cta")} <IcoFlecha size={14} />
+              </Boton>
+            </div>
           </div>
 
-          <SeccionProductos data={data} />
           <Pie nombre={shop.name} cuentaUrl={data.cuentaUrl} />
         </div>
       </div>

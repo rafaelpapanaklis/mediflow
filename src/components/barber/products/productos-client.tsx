@@ -40,6 +40,8 @@ export interface TiendaPanelProps {
   canOpenSession: boolean;
   timezone: string;
   initialTab: "catalog" | "orders";
+  /** La sección «Tienda» está apagada en Mi web: la tienda no sale en la página. */
+  webSectionOff?: boolean;
 }
 
 const ALL = "__all__";
@@ -111,6 +113,12 @@ export function ProductosClient({
     ...(canManage ? (["toggleActive"] as const) : []),
   ];
 
+  // Productos que hoy se ven en la tienda de esta sede (activos + «Mostrar en mi página»).
+  const onWebCount = useMemo(
+    () => products.filter((p) => p.isActive && tienda.extras[p.id]?.showOnWeb === true).length,
+    [products, tienda.extras],
+  );
+
   const linkOf = (p: ProductRow) => `${tienda.siteUrl}${rutaProductoTienda(tienda.slug, p.id)}`;
 
   async function patch(url: string, body: unknown): Promise<boolean> {
@@ -171,7 +179,7 @@ export function ProductosClient({
           <p className="bcaja-head__sub">{t("productos.subtitle")}</p>
         </div>
         <div className="bcaja-head__actions">
-          {tienda.ready ? (
+          {tienda.ready && onWebCount > 0 ? (
             <a className="btn-new btn-new--secondary" href={`${tienda.siteUrl}/b/${encodeURIComponent(tienda.slug)}/tienda`} target="_blank" rel="noopener noreferrer" data-accion="ver-tienda">
               <ShoppingBag size={15} /> {t("productos.viewStore")}
             </a>
@@ -183,6 +191,21 @@ export function ProductosClient({
           ) : null}
         </div>
       </div>
+
+      {tienda.ready && (onWebCount === 0 || tienda.webSectionOff) ? (
+        <div className="btienda-aviso" role="note" data-tienda-aviso={onWebCount === 0 ? "sin-productos" : "seccion-apagada"}>
+          <ShoppingBag size={16} aria-hidden="true" />
+          <div>
+            <p className="btienda-aviso__title">{t("productos.storeHidden.title")}</p>
+            <p className="btienda-aviso__body">
+              {onWebCount === 0 ? t("productos.storeHidden.noProducts") : t("productos.storeHidden.sectionOff")}{" "}
+              {onWebCount > 0 ? (
+                <a href="/barber/mi-web">{t("productos.storeHidden.goToWeb")}</a>
+              ) : null}
+            </p>
+          </div>
+        </div>
+      ) : null}
 
       <div className="btienda-tabs" role="tablist" aria-label={t("productos.title")}>
         <button type="button" role="tab" id="tab-catalogo" aria-selected={tab === "catalog"} aria-controls="panel-catalogo" className="btienda-tab" onClick={() => setTab("catalog")}>

@@ -109,6 +109,8 @@ export function hayDatosDe(data: BarberWebData): (f: BarberWebFuente) => boolean
         return tieneHorario(data.config);
       case "contacto":
         return true;
+      case "productos":
+        return (data.productos?.length ?? 0) > 0 && !!data.tiendaUrl;
       default:
         return false;
     }

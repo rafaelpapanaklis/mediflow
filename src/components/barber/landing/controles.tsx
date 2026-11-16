@@ -260,6 +260,7 @@ const ETIQUETA_FUENTE: Record<BarberWebFuente, string> = {
   resenas: "fuenteResenas",
   horario: "fuenteHorario",
   contacto: "fuenteHorario",
+  productos: "fuenteProductos",
 };
 
 export function EditorSeccion({
@@ -273,6 +274,7 @@ export function EditorSeccion({
   onCopia,
   onFoto,
   onMover,
+  extra,
 }: {
   t: TFn;
   seccion: BarberWebManifestSeccion;
@@ -284,6 +286,8 @@ export function EditorSeccion({
   onCopia: (clave: string, v: string) => void;
   onFoto: (slot: string, url: string | null) => void;
   onMover: (id: string, dir: -1 | 1) => void;
+  /** Lo propio de una sección (la «Tienda»: cuántos productos y a dónde ir). Sustituye al aviso genérico de «sin datos». */
+  extra?: ReactNode;
 }) {
   const estado = config.secciones[seccion.id];
   const visible = estado?.visible !== false;
@@ -335,7 +339,9 @@ export function EditorSeccion({
         )}
       </div>
 
-      {sinDatos && (
+      {extra}
+
+      {sinDatos && !extra && (
         <p className="dcbwe-aviso">
           {t("seccionSinDatos", { que: faltan.map((f) => t(ETIQUETA_FUENTE[f])).join(", ") })}
         </p>
@@ -391,5 +397,39 @@ export function EditorSeccion({
         </div>
       )}
     </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════
+   La nota de la sección «Tienda»
+
+   Junto al interruptor: cuántos productos se ven y a dónde ir. Encendida
+   y sin ningún producto visible, el aviso de qué falta (en la página no
+   sale nada vacío) con el camino a Productos.
+   ══════════════════════════════════════════════════════════════ */
+
+export function NotaTienda({ t, total, url, visible }: { t: TFn; total: number; url: string; visible: boolean }) {
+  if (total === 0) {
+    return (
+      <p className={visible ? "dcbwe-aviso" : "dcbwe-ayuda"} data-tienda-nota="vacia">
+        {t("tiendaSinProductos")}{" "}
+        <a href="/barber/productos" className="dcbwe-enlace">
+          {t("tiendaElegir")}
+        </a>
+      </p>
+    );
+  }
+  return (
+    <p className="dcbwe-ayuda" data-tienda-nota="con-productos">
+      {t("tiendaVisibles", { count: total })}
+      {" · "}
+      <a href={url} target="_blank" rel="noopener noreferrer" className="dcbwe-enlace">
+        {t("tiendaVer")}
+      </a>
+      {" · "}
+      <a href="/barber/productos" className="dcbwe-enlace">
+        {t("tiendaElegir")}
+      </a>
+    </p>
   );
 }

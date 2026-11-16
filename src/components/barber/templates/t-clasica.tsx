@@ -25,6 +25,8 @@ import {
   urlWhatsApp,
 } from "@/lib/barber/landing";
 import {
+  BotonTienda,
+  enlaceTienda,
   Boton,
   Duracion,
   Estrellas,
@@ -53,6 +55,7 @@ import {
   nombreRanura,
   secciones,
   subtitulo,
+  tieneSeccion,
   titulo,
   varsDeAcento,
 } from "./helpers";
@@ -65,6 +68,7 @@ export function PlantillaClasica({ data }: { data: BarberWebData }) {
   const reservar = rutaReservaBarberia(shop.slug);
   const wa = urlWhatsApp(config.whatsapp, `Hola, quiero reservar en ${shop.name}`);
   const marca = logo(data);
+  const tienda = enlaceTienda(data);
 
   return (
     <div className="dcbw dcbw-clasica" style={varsDeAcento(data)}>
@@ -76,13 +80,22 @@ export function PlantillaClasica({ data }: { data: BarberWebData }) {
         </a>
         <nav className="dcbw-menu" aria-label="Secciones">
           {secs
-            .filter((s) => s.id !== "portada" && s.id !== "reservar")
+            .filter((s) => s.id !== "portada" && s.id !== "reservar" && s.id !== "tienda")
             .map((s) => (
-              <a key={s.id} href={`#${s.id}`}>
-                {s.nombre.split(" ")[0]}
-              </a>
+              <Fragment key={s.id}>
+                <a href={`#${s.id}`}>{s.nombre.split(" ")[0]}</a>
+                {/* «Tienda» va a la tienda (otra página), al lado de Servicios. */}
+                {s.id === "servicios" && tienda ? <a href={tienda}>{copia(data, "tienda", "tienda.menu")}</a> : null}
+              </Fragment>
             ))}
+          {tienda && !tieneSeccion(secs, "servicios") ? <a href={tienda}>{copia(data, "tienda", "tienda.menu")}</a> : null}
         </nav>
+        {/* En el teléfono el menú no cabe: la tienda queda a la vista junto a «Reservar». */}
+        {tienda ? (
+          <a href={tienda} className="dcbw-barra-tienda">
+            {copia(data, "tienda", "tienda.menu")}
+          </a>
+        ) : null}
         <Boton href={reservar} className="dcbw-barra-cta">
           {copia(data, "portada", "portada.cta")}
         </Boton>
@@ -125,6 +138,7 @@ export function PlantillaClasica({ data }: { data: BarberWebData }) {
                       <IcoWhatsApp /> {copia(data, "portada", "portada.whatsapp")}
                     </Boton>
                   )}
+                  <BotonTienda data={data} />
                 </div>
               </div>
               {/* Sin foto de portada la columna entera desaparece y el texto
@@ -316,10 +330,11 @@ export function PlantillaClasica({ data }: { data: BarberWebData }) {
               </Boton>
             </Sec>
           )}
+          {/* ── Tienda: sección de Mi web, con su lugar en el orden ── */}
+          {s.id === "tienda" && <SeccionProductos data={data} />}
         </Fragment>
       ))}
 
-      <SeccionProductos data={data} />
       <Pie nombre={shop.name} cuentaUrl={data.cuentaUrl} />
     </div>
   );

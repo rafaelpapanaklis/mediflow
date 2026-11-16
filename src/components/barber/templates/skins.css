@@ -615,6 +615,12 @@
   white-space: nowrap;
 }
 
+.dcbw-barra .dcbw-marca > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .dcbw-barra .dcbw-marca-img,
 .dcbw-barra .dcbw-poste {
   width: 30px;
@@ -639,6 +645,25 @@
   min-height: 40px;
   padding: 9px 18px;
   font-size: 14px;
+  /* Con «Tienda» al lado, el botón no se parte en dos renglones: cede el nombre (con elipsis). */
+  flex: none;
+  white-space: nowrap;
+}
+
+/* «Tienda» en la barra del teléfono (en escritorio va dentro del menú). */
+.dcbw-barra-tienda {
+  margin-left: auto;
+  flex: none;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--dcbw-tinta-2);
+  padding: 8px 4px;
+}
+.dcbw-barra-tienda:hover {
+  color: var(--dcbw-acento);
+}
+.dcbw-barra-tienda + .dcbw-barra-cta {
+  margin-left: 0;
 }
 
 @container dcbw (min-width: 820px) {
@@ -647,6 +672,9 @@
   }
   .dcbw-barra-cta {
     margin-left: 0;
+  }
+  .dcbw-barra-tienda {
+    display: none;
   }
 }
 
@@ -1232,6 +1260,16 @@
   min-height: 42px;
   padding: 10px 20px;
   flex: none;
+}
+
+.dcbw-pf-barra-acc {
+  display: flex;
+  gap: 8px;
+  flex: none;
+}
+
+.dcbw-pf-barra .dcbw-btn-tienda {
+  padding: 10px 14px;
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -2764,6 +2802,16 @@
   min-height: 42px;
   padding: 10px 18px;
   flex: none;
+}
+
+.dcbw-es-barra-acc {
+  display: flex;
+  gap: 8px;
+  flex: none;
+}
+
+.dcbw-es-barra .dcbw-btn-tienda {
+  padding: 10px 14px;
 }
 
 /* ── Portada: el nombre en display y la foto ───────────────────── */

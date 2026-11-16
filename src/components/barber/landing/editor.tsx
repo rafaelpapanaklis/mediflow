@@ -47,10 +47,11 @@ import { BARBER_WEB_MANIFEST_LIST, manifiestoBarberWeb } from "@/components/barb
 import type {
   BarberWebBarbero,
   BarberWebData,
+  BarberWebProducto,
   BarberWebServicio,
   BarberWebShop,
 } from "@/components/barber/templates/types";
-import { Campo, CampoTexto, EditorSeccion, Interruptor, Panel, RanuraFoto, type TFn } from "./controles";
+import { Campo, CampoTexto, EditorSeccion, Interruptor, NotaTienda, Panel, RanuraFoto, type TFn } from "./controles";
 import { Compartir } from "./compartir";
 import { MiniaturaPlantilla, VistaPrevia, type ModoVista } from "./vista-previa";
 import { subirFoto } from "./imagen";
@@ -70,6 +71,12 @@ export interface EditorProps {
   turnosBarberos?: { dayOfWeek: number; startMinute: number; endMinute: number }[];
   /** true = la tabla barber_landing_configs todavía no existe en Supabase. */
   sinTabla?: boolean;
+  /**
+   * La sección «Tienda». `disponible` = el plan trae productos y el SQL de la
+   * tienda está pegado; si no, el editor ni la ofrece. `total` = productos
+   * que hoy se ven en la tienda (activos y con «Mostrar en mi página»).
+   */
+  tienda?: { disponible: boolean; total: number; url: string; productos: BarberWebProducto[] };
 }
 
 type Estado = "listo" | "guardando" | "guardado" | "error";
@@ -326,9 +333,11 @@ export function EditorWebBarberia(props: EditorProps) {
       manifest,
       servicios: props.servicios,
       barberos: props.barberos,
+      productos: props.tienda?.productos ?? [],
+      tiendaUrl: (props.tienda?.total ?? 0) > 0 ? props.tienda!.url : null,
       editando: true,
     }),
-    [props.shop, props.servicios, props.barberos, config, manifest],
+    [props.shop, props.servicios, props.barberos, props.tienda, config, manifest],
   );
 
   const hayDatos = useCallback(
@@ -344,17 +353,25 @@ export function EditorWebBarberia(props: EditorProps) {
           return config.resenas.length > 0;
         case "horario":
           return tieneHorario(config);
+        case "productos":
+          return (props.tienda?.total ?? 0) > 0;
         default:
           return true;
       }
     },
-    [props.servicios, props.barberos, config],
+    [props.servicios, props.barberos, props.tienda, config],
   );
 
   const orden = useMemo(() => ordenDeSecciones(manifest, config), [manifest, config]);
+  // Sin plan con productos (o sin el SQL de la tienda) no hay sección «Tienda» que ofrecer.
+  const conTienda = props.tienda?.disponible === true;
   const secciones = useMemo(
-    () => orden.map((id) => manifest.secciones.find((s) => s.id === id)!).filter(Boolean),
-    [orden, manifest],
+    () =>
+      orden
+        .map((id) => manifest.secciones.find((s) => s.id === id)!)
+        .filter(Boolean)
+        .filter((s) => s.id !== "tienda" || conTienda),
+    [orden, manifest, conTienda],
   );
   const movibles = secciones.filter((s) => !s.obligatoria).map((s) => s.id);
 
@@ -495,6 +512,11 @@ export function EditorWebBarberia(props: EditorProps) {
                 onCopia={setCopia}
                 onFoto={setFoto}
                 onMover={moverSeccion}
+                extra={
+                  s.id === "tienda" && props.tienda ? (
+                    <NotaTienda t={t} total={props.tienda.total} url={props.tienda.url} visible={config.secciones.tienda?.visible !== false} />
+                  ) : null
+                }
               />
             ))}
           </Panel>

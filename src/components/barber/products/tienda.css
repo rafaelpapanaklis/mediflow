@@ -5,6 +5,24 @@
    2 por fila en celular, 3 en tableta, 4 en escritorio (1440).
    ═══════════════════════════════════════════════════════════════════════ */
 
+/* Aviso arriba: la tienda no se ve en la página de la barbería. */
+.barber-shell .btienda-aviso {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  border-radius: 12px;
+  background: var(--warning-soft);
+  border: 1px solid color-mix(in srgb, var(--warning) 35%, transparent);
+  color: var(--text-1);
+}
+.barber-shell .btienda-aviso > svg { color: var(--warning); flex: none; margin-top: 2px; }
+.barber-shell .btienda-aviso__title { margin: 0; font-size: 14px; font-weight: 700; }
+.barber-shell .btienda-aviso__body { margin: 2px 0 0; font-size: 13px; line-height: 1.45; color: var(--text-2); }
+.barber-shell .btienda-aviso__body a { color: var(--brand-ink); font-weight: 600; text-decoration: underline; text-underline-offset: 2px; border-radius: 3px; }
+.barber-shell .btienda-aviso__body a:focus-visible { outline: none; box-shadow: var(--ring); }
+
 .barber-shell .btienda-tabs {
   display: flex;
   gap: 4px;

@@ -474,6 +474,12 @@
     "nowHidden": "No longer shown on your page",
     "deactivateConfirm": "Deactivate “{name}”? It stops selling at the register and disappears from your page. You can reactivate it with “Show retired”.",
     "viewStore": "View my store",
+    "storeHidden": {
+      "title": "Your store doesn’t show on your page",
+      "noProducts": "Turn on “Show on my page” for the products you want to sell (in each one’s “Edit” or its menu).",
+      "sectionOff": "The “Store” section is off in My website: your clients don’t see your products or “Store” in the menu.",
+      "goToWeb": "Turn it on in My website"
+    },
     "tabCatalog": "Catalog",
     "tabOrders": "Orders",
     "newOrders": "{count} new orders",

@@ -67,6 +67,7 @@ test("sin el SQL: Productos y Caja siguen igual, la tienda no aparece y nada tru
   assert.deepEqual(load, { ready: false, ordersReady: false, extras: {}, reserved: {} });
   assert.equal(tienda.isTiendaGateOk(await tienda.resolveTienda(slug)), false, "sin columnas no hay tienda pública");
   assert.deepEqual(await tienda.loadFeaturedProducts({ id: ctx.barbershopId, plan: "PROFESIONAL" }), [], "sin sección en la página");
+  assert.deepEqual(await tienda.loadWebTienda(ctx.barbershopId), { disponible: false, products: [], total: 0 }, "Mi web no ofrece la sección");
   assert.deepEqual(await tienda.listProductOrders(ctx), { ready: false, orders: [], newCount: 0 });
   assert.equal(await tienda.countNewProductOrders(ctx.barbershopId), 0);
   await assert.rejects(tienda.saveProductExtras(ctx, productId, { showOnWeb: true }), (e: unknown) => (e as { code?: string }).code === "TIENDA_SQL_PENDING");

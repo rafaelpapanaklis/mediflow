@@ -24,7 +24,7 @@ import {
   urlComoLlegar,
   urlWhatsApp,
 } from "@/lib/barber/landing";
-import { Boton, Duracion, Foto, IcoFlecha, IcoMapa, IcoWhatsApp, Pie, Poste, Precio, Redes, SeccionProductos } from "./pieces";
+import { BotonTienda, Boton, Duracion, Foto, IcoFlecha, IcoMapa, IcoWhatsApp, Pie, Poste, Precio, Redes, SeccionProductos } from "./pieces";
 import { Sec, copia, logo, secciones, tieneSeccion, titulo, varsDeAcento } from "./helpers";
 import type { BarberWebData } from "./types";
 
@@ -84,6 +84,7 @@ export function PlantillaMinimal({ data }: { data: BarberWebData }) {
                 <IcoWhatsApp size={16} /> {copia(data, "portada", "portada.whatsapp")}
               </Boton>
             )}
+            <BotonTienda data={data} />
             {conContacto && urlComoLlegar(dir) && (
               <Boton href={urlComoLlegar(dir)!} variante="fantasma" externo>
                 <IcoMapa size={16} /> {copia(data, "contacto", "contacto.comoLlegar")}
@@ -114,7 +115,7 @@ export function PlantillaMinimal({ data }: { data: BarberWebData }) {
         </Sec>
       )}
 
-      <SeccionProductos data={data} />
+      {tieneSeccion(secs, "tienda") && <SeccionProductos data={data} />}
       <Pie nombre={shop.name} cuentaUrl={data.cuentaUrl} />
     </div>
   );

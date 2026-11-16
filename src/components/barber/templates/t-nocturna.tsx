@@ -41,6 +41,7 @@ import {
   type BarberWebConfig,
 } from "@/lib/barber/landing";
 import {
+  BotonTienda,
   Boton,
   Duracion,
   Estrellas,
@@ -228,6 +229,7 @@ export function PlantillaNocturna({ data }: { data: BarberWebData }) {
                       <IcoWhatsApp size={16} /> {copia(data, "portada", "portada.whatsapp")}
                     </Boton>
                   )}
+                  <BotonTienda data={data} />
                 </div>
               </div>
             </Sec>
@@ -376,10 +378,11 @@ export function PlantillaNocturna({ data }: { data: BarberWebData }) {
               </div>
             </Sec>
           )}
+          {/* ── Tienda: sección de Mi web, con su lugar en el orden ── */}
+          {s.id === "tienda" && <SeccionProductos data={data} />}
         </Fragment>
       ))}
 
-      <SeccionProductos data={data} />
       <Pie nombre={shop.name} cuentaUrl={data.cuentaUrl} />
     </div>
   );

@@ -9,6 +9,8 @@
   "title": "Shop",
   "sub": "Reserve online, pick up at the barbershop.",
   "back": "Back to the barbershop",
+  "backTo": "Back to {shop}",
+  "book": "Book an appointment",
   "backStore": "See the whole shop",
   "branch": "Location",
   "branchAll": "All",

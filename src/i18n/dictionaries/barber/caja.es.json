@@ -474,6 +474,12 @@
     "nowHidden": "Ya no se ve en tu página",
     "deactivateConfirm": "¿Desactivar «{name}»? Deja de venderse en Caja y de verse en tu página. Puedes volver a activarlo con «Mostrar retirados».",
     "viewStore": "Ver mi tienda",
+    "storeHidden": {
+      "title": "Tu tienda no se ve en tu página",
+      "noProducts": "Enciende «Mostrar en mi página» en los productos que quieras vender (en «Editar» de cada uno o en su menú).",
+      "sectionOff": "La sección «Tienda» está apagada en Mi web: tus clientes no ven tus productos ni la palabra «Tienda» en el menú.",
+      "goToWeb": "Encenderla en Mi web"
+    },
     "tabCatalog": "Catálogo",
     "tabOrders": "Pedidos",
     "newOrders": "{count} pedidos nuevos",
