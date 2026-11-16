@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { persistentRateLimit } from "@/lib/failban";
-import { getBarberContext } from "@/lib/barber-auth";
+import { getBarberContext, hasBarberPermission } from "@/lib/barber-auth";
 import { estadoCuentaMp, tiendaAceptaMercadoPago } from "@/lib/barber/mercadopago";
 import { matrizDeLaSesion, matrizDelDueno } from "@/lib/barber/mercadopago-core";
 
@@ -12,9 +12,10 @@ export const dynamic = "force-dynamic";
  * GET /api/barber/mercadopago/status — ws6-t5 (contrato con la tienda, ws6-t1).
  *
  * Responde SIEMPRE `{ connected, account }`:
- *   · con sesión del panel: la cuenta de la cadena de la sesión, con apodo,
- *     correo y la cuenta enmascarada (nunca un token), más `needsReconnect`,
- *     `storageReady`, `platformReady` y `canManage` (¿es el dueño?);
+ *   · con sesión del panel: el estado de la cadena de la sesión (`connected`,
+ *     `needsReconnect`, `storageReady`, `platformReady`, `canManage` = ¿es el
+ *     dueño?) y la cuenta (apodo, correo y número enmascarado; nunca un token)
+ *     SOLO para el Dueño y quien tiene «Configuración» (D3); al resto, null;
  *   · sin sesión, con `?slug=<barbería>`: solo `connected` (¿la tienda de esa
  *     barbería ofrece pagar en línea?) y `account: null`;
  *   · sin sesión ni slug: `{ connected: false, account: null }`.
@@ -26,7 +27,15 @@ export async function GET(req: NextRequest) {
   const ctx = await getBarberContext();
   if (ctx) {
     const estado = await estadoCuentaMp(matrizDeLaSesion(ctx));
-    return NextResponse.json({ ...estado, canManage: matrizDelDueno(ctx) != null });
+    const canManage = matrizDelDueno(ctx) != null;
+    // La cuenta (apodo, CORREO y número enmascarado de Mercado Pago) solo la
+    // ven el Dueño y quien tiene «Configuración» (D3, 16-nov, auditoría de
+    // permisos). Al resto del panel (Recepción, Barbero) le basta saber si
+    // la barbería cobra en línea: `connected` y compañía viajan igual.
+    const veCuenta =
+      canManage ||
+      hasBarberPermission({ role: ctx.role, permissionsOverride: ctx.user.permissionsOverride }, "settings.edit");
+    return NextResponse.json({ ...estado, account: veCuenta ? estado.account : null, canManage });
   }
 
   const slug = (req.nextUrl.searchParams.get("slug") ?? "").trim().toLowerCase();

@@ -54,7 +54,7 @@ const PUBLICAS = [
 const SIN_PERMISO_A_PROPOSITO: Record<string, string> = {
   "GET branches/current": "saber en qué sede está (barra de arriba)",
   "POST branches/switch": "cambiar de sede entre las que YA le dieron (lo valida getAccessibleBranchIds)",
-  "GET mercadopago/status": "¿la tienda cobra en línea? (la cuenta enmascarada viaja a todo el panel: decisión D4 del reporte)",
+  "GET mercadopago/status": "¿la tienda cobra en línea? (sin la cuenta: esa solo para Dueño y «Configuración», D3)",
   "GET stats/inicio": "su Inicio: avisos y sede, SIN dinero si no tiene «Ver caja» (G2, se comprueba abajo)",
 };
 
