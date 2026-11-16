@@ -90,6 +90,16 @@
       "unavailable": "Today's money couldn't be read. Reload in a moment; meanwhile, check the Register.",
       "goCash": "View expenses"
     },
+    "orders": {
+      "title": { "one": "1 shop order to handle", "other": "{count} shop orders to handle" },
+      "listLabel": "Latest orders",
+      "paidOnline": "Paid online",
+      "payAtShop": "Pays at the shop",
+      "ready": "ready, not handed over yet",
+      "more": { "one": "and 1 more", "other": "and {count} more" },
+      "hint": "They leave this list as soon as you handle them.",
+      "cta": "View orders"
+    },
     "queue": {
       "title": "Virtual queue",
       "waiting": { "one": "1 waiting", "other": "{count} waiting" },
