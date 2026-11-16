@@ -1374,16 +1374,20 @@ export function manifiestoBarberWeb(id: string | null | undefined): BarberWebMan
 {
   const s = BARBER_WEB_MANIFESTS.oficio.secciones;
   const i = s.findIndex((x) => x.id === "tienda");
-  const tienda = s.splice(i, 1)[0];
-  tienda.textos = [
-    { campo: "titulo", etiqueta: "Título de la tienda", porDefecto: "La vitrina" },
-    {
-      campo: "subtitulo",
-      etiqueta: "Bajada de la tienda",
-      porDefecto: "Lo mismo que usamos en el sillón. Apártalo en línea y recógelo aquí.",
-    },
-  ];
-  s.splice(s.findIndex((x) => x.id === "servicios") + 1, 0, tienda);
+  // Sin la tienda en la lista, splice(-1, 1) se llevaría la ÚLTIMA sección
+  // («reservar»). Hoy el bucle de arriba siempre la agrega; esto es por si no.
+  if (i >= 0) {
+    const tienda = s.splice(i, 1)[0];
+    tienda.textos = [
+      { campo: "titulo", etiqueta: "Título de la tienda", porDefecto: "La vitrina" },
+      {
+        campo: "subtitulo",
+        etiqueta: "Bajada de la tienda",
+        porDefecto: "Lo mismo que usamos en el sillón. Apártalo en línea y recógelo aquí.",
+      },
+    ];
+    s.splice(s.findIndex((x) => x.id === "servicios") + 1, 0, tienda);
+  }
 }
 
 /* ── Barrio (ws6-t3): la tienda va JUSTO DESPUÉS de servicios ─────────
