@@ -118,7 +118,7 @@
     "openNotes": "Note (optional)",
     "openConfirm": "Open shift",
     "closeTitle": "Close shift",
-    "closeBody": "Count the cash in the drawer and enter it. It should hold what was there at opening plus what was charged in cash.",
+    "closeBody": "Count the cash in the drawer and enter it. Below is how much it should hold: the float, what was charged in cash and what went in or out of the drawer.",
     "draftsPending": {
       "one": "1 note is still to be charged.",
       "other": "{count} notes are still to be charged."

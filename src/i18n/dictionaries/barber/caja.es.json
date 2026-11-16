@@ -118,7 +118,7 @@
     "openNotes": "Nota (opcional)",
     "openConfirm": "Abrir turno",
     "closeTitle": "Cerrar turno",
-    "closeBody": "Cuenta el efectivo del cajón y captúralo. Debe haber lo que había al abrir más lo que se cobró en efectivo.",
+    "closeBody": "Cuenta el efectivo del cajón y captúralo. Abajo está la cuenta de lo que debe haber: el fondo, lo cobrado en efectivo y lo que entró o salió del cajón.",
     "draftsPending": {
       "one": "Queda 1 nota por cobrar.",
       "other": "Quedan {count} notas por cobrar."
