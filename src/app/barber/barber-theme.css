@@ -821,8 +821,18 @@ body:has(.barber-shell) {
    (Clientes 1180, Configuración 1100, Ticket 720…) manda el suyo; sin eso,
    el #main-content le ganaba y a 1440 las ensanchaba. Membresías (.bmem)
    va pegada a la izquierda en el diseño aprobado: no se centra.
+   VELOS FUERA (ws6-t2, 16-nov, Rafael en Clientes → «Estrellas y bonos»
+   a ~2570 px: «se ve rara la pantalla y el blur»). Varias pantallas montan
+   su ventana como HERMANA de la página, o sea hija directa de #main-content
+   (para que ningún container-type la atrape). Esta regla le ponía también a
+   ese velo `max-width: 1320px; margin-inline: auto`, y un `position: fixed;
+   inset: 0` con tope de ancho se encoge a 1320 centrado en la VENTANA: una
+   franja oscura con bordes claros en todo monitor de más de 1320 px (1440
+   incluido). Todo velo de Barber es «velo > [aria-modal="true"]» (Modal de
+   Clientes, BarberModal, Equipo, Membresías, Cobro, agenda y cita), así que
+   el :has() lo deja fuera sin tocar cada copia.
    ═══════════════════════════════════════════════════════════════════════ */
-:where(.barber-shell #main-content) > :where(:not(:has([data-scroller])):not(.bmem)) {
+:where(.barber-shell #main-content) > :where(:not(:has([data-scroller])):not(.bmem):not(:has(> [aria-modal="true"]))) {
   max-width: 1320px;
   margin-inline: auto;
 }
