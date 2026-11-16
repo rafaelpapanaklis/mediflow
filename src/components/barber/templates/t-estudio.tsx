@@ -353,9 +353,12 @@ export function PlantillaEstudio({ data }: { data: BarberWebData }) {
           {/* ── Barra de reserva pegada abajo (solo teléfono) ─────── */}
           <div className="dcbw-es-barra">
             <span>{shop.name}</span>
-            <Boton href={reservar}>
-              {copia(data, "portada", "portada.cta")} <IcoFlecha size={14} />
-            </Boton>
+            <div className="dcbw-es-barra-acc">
+              <BotonTienda data={data} size={15} />
+              <Boton href={reservar}>
+                {copia(data, "portada", "portada.cta")} <IcoFlecha size={14} />
+              </Boton>
+            </div>
           </div>
 
           <Pie nombre={shop.name} cuentaUrl={data.cuentaUrl} />
