@@ -245,6 +245,13 @@ const PATHS = {
       <path d="M5.5 17c.6-1.8 1.9-2.7 3.5-2.7s2.9.9 3.5 2.7M15 10h3.5M15 14h3.5" />
     </>
   ),
+  // Local (Sucursales): la fachada con su toldo, una por sede.
+  local: (
+    <>
+      <path d="M3 9.5 4.5 4h15L21 9.5M3 9.5h18M3 9.5c0 1.5 1.3 2.5 3 2.5s3-1 3-2.5c0 1.5 1.3 2.5 3 2.5s3-1 3-2.5c0 1.5 1.3 2.5 3 2.5s3-1 3-2.5" />
+      <path d="M5 12v8.5h14V12M10 20.5v-5h4v5" />
+    </>
+  ),
   persona: (
     <>
       <circle cx="12" cy="8" r="4" />
@@ -299,6 +306,7 @@ export const BARBER_NAV_ICON: Record<string, BarberIconName> = {
   servicios: "tijeras",
   barberos: "navaja",
   equipo: "credencial",
+  sucursales: "local",
   caja: "caja",
   comisiones: "porciento",
   membresias: "corona",
