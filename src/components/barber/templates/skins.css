@@ -6192,11 +6192,14 @@ img.dcbw-es-equipo-foto {
     font-size: 15px;
   }
 
-  .dcbw-rv-abierto {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    color: var(--dcbw-tinta-2);
+  .dcbw-rv-tramo {
+    display: grid;
+    gap: 2px;
+    color: var(--dcbw-tinta);
+  }
+
+  .dcbw-rv-tramo .dcbw-rv-rotulo {
+    margin: 0;
   }
 
   .dcbw-revista .dcbw-rv-lado-btn {

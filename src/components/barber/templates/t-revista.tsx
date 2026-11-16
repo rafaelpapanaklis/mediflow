@@ -207,9 +207,12 @@ export function PlantillaRevista({ data }: { data: BarberWebData }) {
               </nav>
             )}
             <div className="dcbw-rv-lado-pie">
+              {/* Un tramo del horario, no un «abierto ahora»: el HTML se
+                  cachea y no sabe qué hora es cuando alguien lo abre. Por
+                  eso sin punto de color, con su rótulo (revisión ws6-t8 R2). */}
               {abiertos[0] && (
-                <p className="dcbw-rv-abierto">
-                  <span className="dcbw-rv-punto" aria-hidden />
+                <p className="dcbw-rv-tramo">
+                  <span className="dcbw-rv-rotulo">{copia(data, "contacto", "contacto.etiquetaHorario")}</span>
                   <span>{abiertos[0]}</span>
                 </p>
               )}

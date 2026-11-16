@@ -167,7 +167,7 @@ test("sin reseñas ni horario: ni sección de reseñas, ni horario en portada, l
   assert.ok(!html.includes('id="resenas"'));
   assert.ok(!html.includes('href="#resenas"'));
   assert.ok(!html.includes("am –"), "sale un rango de horas sin horario");
-  assert.ok(!html.includes("dcbw-rv-abierto"));
+  assert.ok(!html.includes("dcbw-rv-tramo"));
   assert.ok(!html.includes("Horario"));
 });
 
@@ -178,6 +178,10 @@ test("con horario: solo los tramos abiertos arriba, la semana entera en Visita",
   const portada = html.slice(html.indexOf("dcbw-rv-datos"), html.indexOf("</dl>"));
   assert.ok(!portada.includes("Cerrado"), "un tramo cerrado salió en la portada");
   assert.ok(html.includes("Domingo"), "la tabla de Visita lleva los siete días");
+  // El tramo de la lateral no lleva punto de color: no es «abierto ahora» (ws6-t8 R2).
+  const pie = html.slice(html.indexOf("dcbw-rv-lado-pie"), html.indexOf("dcbw-rv-contenido"));
+  assert.ok(pie.includes("dcbw-rv-tramo") && pie.includes("Mar – Sáb"));
+  assert.ok(!pie.includes("dcbw-rv-punto"), "punto de «abierto» junto al horario");
 });
 
 test("Tienda encendida: en el índice justo tras Servicios, en la barra y su sección; apagada: nada", () => {
