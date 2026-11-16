@@ -98,7 +98,8 @@ export function TeamClient({
   /** Opciones de ficha con «ya es de …» y solo de la sede de la persona. */
   function fichaOptions(barbershopId: string, miembroId: string | null, actual: string | null = null) {
     return opcionesDeFicha(barbers, members, { barbershopId, miembroId, actual }).map((o) => (
-      <option key={o.id} value={o.id}>
+      // El servidor ya no deja ligar una ficha ocupada (409): aquí se ve y no se elige.
+      <option key={o.id} value={o.id} disabled={Boolean(o.ligadaA) && o.id !== actual}>
         {o.ligadaA ? t("team.linkedBarberTaken", { name: o.name, who: o.ligadaA }) : o.name}
       </option>
     ));

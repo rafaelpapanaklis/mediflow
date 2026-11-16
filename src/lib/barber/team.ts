@@ -816,6 +816,24 @@ function tempPassword(): string {
 }
 
 /** La ficha de barbero existe y es de la MISMA sede que el usuario. */
+/**
+ * Una ficha de barbero = una persona activa (L3 ronda 2, D5). Dos usuarios
+ * ligados a la misma ficha hacen «suyas» de los dos las mismas citas y
+ * comisiones. Si la otra persona está dada de baja, la ficha está libre.
+ */
+async function assertFichaLibre(barberId: string, exceptUserId: string | null): Promise<void> {
+  const otro = await prisma.barberUser.findFirst({
+    where: { barberId, isActive: true, ...(exceptUserId ? { id: { not: exceptUserId } } : {}) },
+    select: { firstName: true, lastName: true },
+  });
+  if (otro) {
+    throw new BarberAdminError(
+      `Esa ficha de barbero ya es de ${`${otro.firstName} ${otro.lastName}`.trim()}. Desliga a esa persona o dale de baja antes.`,
+      409,
+    );
+  }
+}
+
 async function assertBarberBelongsTo(barberId: string, barbershopId: string): Promise<void> {
   const barber = await prisma.barber.findFirst({
     where: { id: barberId, barbershopId },
@@ -861,7 +879,10 @@ export async function inviteMember(
   if (dupe) throw new BarberAdminError("Ya hay alguien con ese correo en esta sede.", 409);
 
   const barberId = typeof input.barberId === "string" && input.barberId ? input.barberId : null;
-  if (barberId) await assertBarberBelongsTo(barberId, barbershopId);
+  if (barberId) {
+    await assertBarberBelongsTo(barberId, barbershopId);
+    await assertFichaLibre(barberId, null);
+  }
 
   const password = tempPassword();
   const { data: created, error } = await adminSupabase().auth.admin.createUser({
@@ -987,6 +1008,15 @@ export async function updateMember(
     }
     data.isActive = next;
   }
+
+  // Ficha ocupada (D5): al ligar OTRA ficha, o al reactivar a alguien cuya
+  // ficha tomó otra persona mientras estaba de baja. Dejarla como estaba no
+  // se revisa: los datos viejos compartidos se pueden seguir editando.
+  const fichaFinal = data.barberId !== undefined ? (data.barberId as string | null) : member.barberId;
+  const activoFinal = data.isActive !== undefined ? data.isActive === true : member.isActive;
+  const cambiaFicha = data.barberId !== undefined && data.barberId !== member.barberId;
+  const reactiva = data.isActive === true && !member.isActive;
+  if (fichaFinal && activoFinal && (cambiaFicha || reactiva)) await assertFichaLibre(fichaFinal, member.id);
 
   const updated = (await prisma.barberUser.update({
     where: { id: memberId },
