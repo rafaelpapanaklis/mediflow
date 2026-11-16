@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { AlertTriangle, Package, PackagePlus, Search, ShoppingBag, TrendingUp } from "lucide-react";
@@ -16,6 +16,7 @@ import { fmtMoney, fmtPct, fmtPeriod } from "@/components/barber/cash/money";
 import { HistoryModal, MovementModal, ProductFormModal } from "./product-modals";
 import { ProductCard, type ProductCardAction } from "./product-card";
 import { PedidosTab } from "./pedidos";
+import { avisarPedidosPorAtender } from "./pedidos-aviso";
 
 type ModalState =
   | { kind: "none" }
@@ -74,6 +75,17 @@ export function ProductosClient({
   const router = useRouter();
   const [tab, setTab] = useState<"catalog" | "orders">(tienda.initialTab);
   const [newCount, setNewCount] = useState(tienda.newCount);
+  // El número de la pestaña es el MISMO que el del menú (regla única en
+  // tienda-core.ts). Cada vez que cambia aquí —la lista se recargó o el
+  // servidor volvió a pintar la página— el menú se entera sin esperar a su
+  // sondeo de cada minuto (products/pedidos-aviso.ts).
+  const onOrdersCount = useCallback((n: number) => {
+    setNewCount(n);
+    avisarPedidosPorAtender(n);
+  }, []);
+  useEffect(() => {
+    onOrdersCount(tienda.newCount);
+  }, [tienda.newCount, onOrdersCount]);
   const [showInactive, setShowInactive] = useState(false);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<string>(ALL);
@@ -227,7 +239,7 @@ export function ProductosClient({
             canOpenSession={tienda.canOpenSession}
             timezone={tienda.timezone}
             shopName={tienda.shopName}
-            onCount={setNewCount}
+            onCount={onOrdersCount}
             onChanged={() => router.refresh()}
           />
         </div>

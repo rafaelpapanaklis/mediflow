@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import type { BarberNavItem } from "@/lib/barber/types";
 import { BARBER_NAV_ICON, BarberIcon } from "./barber-icons";
 import { useMensajesSinLeer } from "./mensajes/sin-leer";
+import { textoContador, usePedidosPorAtender } from "./products/pedidos-aviso";
 
 /**
  * Menú lateral del panel BARBER — rediseño 15-nov-2026 (el menú de la
@@ -37,6 +38,8 @@ export function BarberSidebar({
   navLabel,
   unreadLabel,
   unreadLabelOne,
+  ordersLabel,
+  ordersLabelOne,
   loginHref,
 }: {
   shopName: string;
@@ -50,6 +53,9 @@ export function BarberSidebar({
   /** «{count} chats sin leer» / «1 chat sin leer», para el contador de Mensajes. */
   unreadLabel: string;
   unreadLabelOne: string;
+  /** «{count} pedidos por atender» / «1 pedido por atender», para el contador de Productos. */
+  ordersLabel: string;
+  ordersLabelOne: string;
   /** A dónde ir al cerrar sesión: la entrada del vertical (/barber/entrar). */
   loginHref: string;
 }) {
@@ -67,6 +73,21 @@ export function BarberSidebar({
     mostrar: conMensajes,
     sondear: conMensajes && !enMensajes && (escritorio || mobileOpen),
   });
+  // Pedidos de la tienda por atender, solo si «Productos» está en el menú
+  // (plan con productos + products.view; el servidor lo vuelve a revisar).
+  // Se pregunta al navegar y cada minuto mientras el contador se ve. Ver
+  // products/pedidos-aviso.ts.
+  const conProductos = items.some((i) => i.key === "productos");
+  const porAtender = usePedidosPorAtender({
+    mostrar: conProductos,
+    sondear: conProductos && (escritorio || mobileOpen),
+    ruta: pathname,
+  });
+  // Cada entrada con contador: cuánto y cómo se le dice a un lector de pantalla.
+  const cuentas: Record<string, { n: number; uno: string; varios: string }> = {
+    mensajes: { n: sinLeer, uno: unreadLabelOne, varios: unreadLabel },
+    productos: { n: porAtender, uno: ordersLabelOne, varios: ordersLabel },
+  };
   const navRef = useRef<HTMLElement | null>(null);
 
   // ¿Queda menú escondido arriba o abajo? El CSS desvanece esa orilla para
@@ -193,6 +214,7 @@ export function BarberSidebar({
               <ul className="barber-menu__lista" aria-labelledby={`barber-menu-${s.section}`}>
                 {s.items.map((item) => {
                   const active = isActive(item.href);
+                  const cuenta = cuentas[item.key];
                   return (
                     <li key={item.key}>
                       <Link
@@ -203,16 +225,14 @@ export function BarberSidebar({
                       >
                         <BarberIcon name={BARBER_NAV_ICON[item.key] ?? "poste"} size={18} />
                         <span>{item.label}</span>
-                        {item.key === "mensajes" && sinLeer > 0 ? (
+                        {cuenta && cuenta.n > 0 ? (
                           <>
-                            <span className="barber-menu__cuenta" aria-hidden="true">
-                              {sinLeer > 99 ? "99+" : sinLeer}
+                            <span className="barber-menu__cuenta" aria-hidden="true" data-cuenta={item.key}>
+                              {textoContador(cuenta.n)}
                             </span>
                             <span className="sr-only">
                               {", "}
-                              {sinLeer === 1
-                                ? unreadLabelOne
-                                : unreadLabel.replace("{count}", String(sinLeer))}
+                              {cuenta.n === 1 ? cuenta.uno : cuenta.varios.replace("{count}", String(cuenta.n))}
                             </span>
                           </>
                         ) : null}

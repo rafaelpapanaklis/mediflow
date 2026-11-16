@@ -505,7 +505,7 @@
     },
     "tabCatalog": "Catálogo",
     "tabOrders": "Pedidos",
-    "newOrders": "{count} pedidos nuevos",
+    "newOrders": { "one": "1 pedido por atender", "other": "{count} pedidos por atender" },
     "storeSqlPending": "La foto, la categoría y la tienda en línea se activan cuando se aplique la actualización de la base (sql/barber_tienda.sql). Mientras, todo lo demás funciona igual.",
     "search": "Buscar por nombre, SKU o categoría",
     "categories": "Categorías",

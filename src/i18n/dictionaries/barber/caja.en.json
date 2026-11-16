@@ -505,7 +505,7 @@
     },
     "tabCatalog": "Catalog",
     "tabOrders": "Orders",
-    "newOrders": "{count} new orders",
+    "newOrders": { "one": "1 order to handle", "other": "{count} orders to handle" },
     "storeSqlPending": "Photo, category and the online store turn on once the database update (sql/barber_tienda.sql) is applied. Everything else works as usual meanwhile.",
     "search": "Search by name, SKU or category",
     "categories": "Categories",

@@ -658,7 +658,8 @@ body:has(.barber-shell) {
 }
 .barber-shell .barber-menu__ent[aria-current="page"] > svg { color: var(--menu-active-text); }
 
-/* Contador de chats sin leer de «Mensajes»: pastilla café al final del
+/* Contador del menú («Mensajes»: chats sin leer; «Productos»: pedidos de
+   la tienda por atender): pastilla café al final del
    renglón. Letra 11 (la de las etiquetas chicas del panel), nunca mayor. */
 .barber-shell .barber-menu__cuenta {
   margin-left: auto;
