@@ -1,5 +1,5 @@
 {
-  "title": "Cobros",
+  "title": "Pagos",
   "subtitle": "Cada ticket de este cliente: qué se cobró, quién lo atendió y cómo pagó.",
   "subtitleOwn": "Los tickets que cobraste tú a este cliente.",
   "newCharge": "Nuevo cobro",
@@ -61,5 +61,56 @@
     "inCaja": "Por cobrar en esta sede",
     "client": "Cliente: {name}",
     "noClient": "Sin cliente"
+  },
+  "ficha": {
+    "pendingCell": "Por cobrar",
+    "pendingNotes": {
+      "one": "{count} nota guardada",
+      "other": "{count} notas guardadas"
+    },
+    "filters": {
+      "label": "Filtrar tickets",
+      "all": "Todos",
+      "paid": "Pagados",
+      "cancelled": "Cancelados",
+      "periodAll": "Todo el tiempo",
+      "period30d": "Últimos 30 días",
+      "period90d": "Últimos 90 días",
+      "periodYear": "Último año",
+      "methodAll": "Todos los métodos",
+      "none": "Ningún ticket con este filtro."
+    },
+    "ticket": "Ticket {id}",
+    "detail": {
+      "open": "Ver el desglose",
+      "attended": "Atendió",
+      "charged": "Cobró",
+      "method": "Método",
+      "shift": "Turno",
+      "shiftOpen": "Abierto",
+      "shiftClosed": "Cerrado",
+      "shiftNone": "Sin turno",
+      "total": "Total",
+      "tipLine": "Propina",
+      "discountLine": "Descuento",
+      "product": "Producto",
+      "cancelledBy": "Canceló {name}",
+      "reason": "Motivo: {reason}"
+    },
+    "actions": {
+      "view": "Ver ticket",
+      "reprint": "Reimprimir",
+      "whatsapp": "Mandar por WhatsApp",
+      "changeMethod": "Cambiar método",
+      "cancel": "Cancelar ticket",
+      "closedHint": "El turno de este ticket ya se cerró: ya no se cambia el método ni se cancela desde aquí.",
+      "noSessionHint": "Este ticket no entró a ningún turno de caja: no se cambia ni se cancela desde aquí.",
+      "onlineHint": "Pagado en línea: el método no se cambia.",
+      "changed": "Método cambiado a {method}.",
+      "cancelled": "Ticket cancelado."
+    },
+    "cfdi": "Factura fiscal (CFDI)",
+    "cfdiBody": "Por ahora la barbería entrega ticket. Cuando esté lista, se pedirá desde aquí.",
+    "cfdiSoon": "Próximamente"
   }
 }

@@ -248,5 +248,105 @@
     "noPermission": "You don't have permission for this section.",
     "notYourClient": "No access: you only see the profiles of clients you serve.",
     "notLinked": "Your user isn't linked to your barber profile. Ask the owner to link it from Team to see your clients."
+  },
+  "ficha": {
+    "tabsLabel": "Client file sections",
+    "tabs": {
+      "resumen": "Summary",
+      "corte": "Haircut",
+      "pagos": "Payments",
+      "fotos": "Photos",
+      "historial": "History",
+      "membresia": "Membership"
+    },
+    "more": "More actions",
+    "starsShort": "{count} of {total}",
+    "starsCount": {
+      "one": "{count} star",
+      "other": "{count} stars"
+    },
+    "stampsShort": "{count} of {total} stamps",
+    "lastVisitShort": "Last visit:",
+    "today": "today",
+    "seeAll": "See all",
+    "machine": "Clipper",
+    "irritates": "Irritated by:",
+    "cutSubtitle": "Readable at a glance, with the client already in the chair.",
+    "nextTitle": "Next appointment",
+    "nextNone": "No upcoming appointment.",
+    "openAgenda": "Open in schedule",
+    "lastVisitLabel": "Last visit",
+    "historyLink": "History",
+    "paymentsTitle": "Latest payments",
+    "paymentsAll": "See payments",
+    "draftsBanner": {
+      "one": "{count} note to charge",
+      "other": "{count} notes to charge"
+    },
+    "charge": "Charge",
+    "photosLast": "How it looked last time",
+    "photosAll": {
+      "one": "See the photo",
+      "other": "See all {count}"
+    },
+    "starsHistoryLink": "Star history",
+    "photosSubtitle": "The “do it like last time” that keeps them coming back to you.",
+    "photosFilter": {
+      "all": "All",
+      "BEFORE": "Before",
+      "AFTER": "After",
+      "REFERENCE": "Reference"
+    },
+    "photosNoVisit": "No visit",
+    "photosNoVisitHint": "Uploaded to the file",
+    "openVisit": "Open the visit",
+    "inPortal": "In their portal",
+    "onlyYou": "Only you see it",
+    "photosFooter": "Only photos marked “In their portal” are visible to the client. The rest are yours.",
+    "historySubtitle": {
+      "one": "{count} visit in their history.",
+      "other": "{count} visits in their history."
+    },
+    "historySeg": {
+      "visits": "Visits",
+      "stars": "Stars"
+    },
+    "historyFilter": {
+      "all": "All",
+      "done": "Completed",
+      "missed": "No-show or cancelled",
+      "rewards": "Rewards",
+      "counter": "Counter"
+    },
+    "historyEmptyFilter": "Nothing with this filter.",
+    "starsOff": "The star card is turned off for this shop.",
+    "membershipTitle": "Membership",
+    "membershipSubtitle": "What they paid in advance and how much is left.",
+    "membershipNone": "No membership.",
+    "membershipNoneHint": "With a membership they pay the month in advance and their cuts are included at checkout.",
+    "membershipSell": "Sell membership",
+    "membershipSellOther": "Sell another",
+    "membershipSeeAll": "Open Memberships",
+    "membershipRenewHint": "Renew, pause or cancel: in Memberships.",
+    "membershipLeft": "{left} of {total} cuts left",
+    "membershipLeftTail": "this period",
+    "membershipUnlimited": "Unlimited cuts this period",
+    "membershipRange": "From {from} to {to}",
+    "membershipExpiresIn": {
+      "one": "expires in {count} day",
+      "other": "expires in {count} days"
+    },
+    "membershipPeriods": "Periods",
+    "membershipCuts": "{used} of {total} cuts",
+    "membershipCutsUnlimited": {
+      "one": "{count} cut",
+      "other": "{count} cuts"
+    },
+    "periodCurrent": "Current",
+    "periodUpcoming": "Prepaid",
+    "periodEnded": "Ended",
+    "periodPaused": "Paused",
+    "periodCancelled": "Cancelled",
+    "blockedChip": "Blocked"
   }
 }

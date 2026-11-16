@@ -1,5 +1,5 @@
 {
-  "title": "Charges",
+  "title": "Payments",
   "subtitle": "Every ticket for this client: what was charged, who served them and how they paid.",
   "subtitleOwn": "The tickets you charged this client.",
   "newCharge": "New charge",
@@ -61,5 +61,56 @@
     "inCaja": "To be charged at this location",
     "client": "Client: {name}",
     "noClient": "No client"
+  },
+  "ficha": {
+    "pendingCell": "To charge",
+    "pendingNotes": {
+      "one": "{count} saved note",
+      "other": "{count} saved notes"
+    },
+    "filters": {
+      "label": "Filter tickets",
+      "all": "All",
+      "paid": "Paid",
+      "cancelled": "Cancelled",
+      "periodAll": "All time",
+      "period30d": "Last 30 days",
+      "period90d": "Last 90 days",
+      "periodYear": "Last year",
+      "methodAll": "All methods",
+      "none": "No tickets with this filter."
+    },
+    "ticket": "Ticket {id}",
+    "detail": {
+      "open": "See breakdown",
+      "attended": "Served by",
+      "charged": "Charged by",
+      "method": "Method",
+      "shift": "Shift",
+      "shiftOpen": "Open",
+      "shiftClosed": "Closed",
+      "shiftNone": "No shift",
+      "total": "Total",
+      "tipLine": "Tip",
+      "discountLine": "Discount",
+      "product": "Product",
+      "cancelledBy": "Cancelled by {name}",
+      "reason": "Reason: {reason}"
+    },
+    "actions": {
+      "view": "View ticket",
+      "reprint": "Reprint",
+      "whatsapp": "Send via WhatsApp",
+      "changeMethod": "Change method",
+      "cancel": "Cancel ticket",
+      "closedHint": "This ticket's shift is already closed: the method can't be changed or the ticket cancelled from here.",
+      "noSessionHint": "This ticket isn't in any cash shift: it can't be changed or cancelled from here.",
+      "onlineHint": "Paid online: the method can't be changed.",
+      "changed": "Method changed to {method}.",
+      "cancelled": "Ticket cancelled."
+    },
+    "cfdi": "Tax invoice (CFDI)",
+    "cfdiBody": "For now the shop issues a ticket. When it's ready, you'll request it from here.",
+    "cfdiSoon": "Coming soon"
   }
 }

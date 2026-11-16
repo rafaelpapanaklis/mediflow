@@ -248,5 +248,105 @@
     "noPermission": "No tienes permiso para esta sección.",
     "notYourClient": "Sin acceso: solo ves la ficha de los clientes que tú atiendes.",
     "notLinked": "Tu usuario no está ligado a tu ficha de barbero. Pídele al dueño que lo ligue desde Equipo para ver tus clientes."
+  },
+  "ficha": {
+    "tabsLabel": "Secciones de la ficha",
+    "tabs": {
+      "resumen": "Resumen",
+      "corte": "Corte",
+      "pagos": "Pagos",
+      "fotos": "Fotos",
+      "historial": "Historial",
+      "membresia": "Membresía"
+    },
+    "more": "Más acciones",
+    "starsShort": "{count} de {total}",
+    "starsCount": {
+      "one": "{count} estrella",
+      "other": "{count} estrellas"
+    },
+    "stampsShort": "{count} de {total} sellos",
+    "lastVisitShort": "Última visita:",
+    "today": "hoy",
+    "seeAll": "Ver todo",
+    "machine": "Máquina",
+    "irritates": "Le irrita:",
+    "cutSubtitle": "Se lee de un vistazo, con el cliente ya sentado.",
+    "nextTitle": "Próxima cita",
+    "nextNone": "No tiene cita próxima.",
+    "openAgenda": "Ver en agenda",
+    "lastVisitLabel": "Última visita",
+    "historyLink": "Historial",
+    "paymentsTitle": "Últimos pagos",
+    "paymentsAll": "Ver pagos",
+    "draftsBanner": {
+      "one": "{count} nota por cobrar",
+      "other": "{count} notas por cobrar"
+    },
+    "charge": "Cobrar",
+    "photosLast": "Así quedó la última vez",
+    "photosAll": {
+      "one": "Ver la foto",
+      "other": "Ver las {count}"
+    },
+    "starsHistoryLink": "Historial de estrellas",
+    "photosSubtitle": "El «así me lo hiciste la vez pasada» que hace que vuelva contigo.",
+    "photosFilter": {
+      "all": "Todas",
+      "BEFORE": "Antes",
+      "AFTER": "Después",
+      "REFERENCE": "Referencia"
+    },
+    "photosNoVisit": "Sin visita",
+    "photosNoVisitHint": "Subida a la ficha",
+    "openVisit": "Abrir la visita",
+    "inPortal": "En su portal",
+    "onlyYou": "Solo la ves tú",
+    "photosFooter": "Solo las fotos marcadas «En su portal» las ve el cliente. Las demás son tuyas.",
+    "historySubtitle": {
+      "one": "{count} visita en su historial.",
+      "other": "{count} visitas en su historial."
+    },
+    "historySeg": {
+      "visits": "Visitas",
+      "stars": "Estrellas"
+    },
+    "historyFilter": {
+      "all": "Todo",
+      "done": "Completadas",
+      "missed": "No llegó o canceló",
+      "rewards": "Premios",
+      "counter": "Mostrador"
+    },
+    "historyEmptyFilter": "Nada con este filtro.",
+    "starsOff": "La tarjeta de estrellas está apagada en esta barbería.",
+    "membershipTitle": "Membresía",
+    "membershipSubtitle": "Lo que tiene pagado por adelantado y cuánto le queda.",
+    "membershipNone": "No tiene membresía.",
+    "membershipNoneHint": "Con una membresía paga el mes por adelantado y sus cortes salen incluidos en Caja.",
+    "membershipSell": "Vender membresía",
+    "membershipSellOther": "Vender otra",
+    "membershipSeeAll": "Ver en Membresías",
+    "membershipRenewHint": "Renovar, pausar o cancelar: en Membresías.",
+    "membershipLeft": "Le quedan {left} de {total} cortes",
+    "membershipLeftTail": "este periodo",
+    "membershipUnlimited": "Cortes sin límite este periodo",
+    "membershipRange": "Del {from} al {to}",
+    "membershipExpiresIn": {
+      "one": "vence en {count} día",
+      "other": "vence en {count} días"
+    },
+    "membershipPeriods": "Periodos",
+    "membershipCuts": "{used} de {total} cortes",
+    "membershipCutsUnlimited": {
+      "one": "{count} corte",
+      "other": "{count} cortes"
+    },
+    "periodCurrent": "Vigente",
+    "periodUpcoming": "Ya pagado",
+    "periodEnded": "Terminó",
+    "periodPaused": "Pausada",
+    "periodCancelled": "Cancelada",
+    "blockedChip": "Bloqueado"
   }
 }
