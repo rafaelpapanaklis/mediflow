@@ -252,6 +252,12 @@ export function TeamClient({
                 </div>
                 <div className={s.rowMeta}>
                   <span className={[s.rowMetaItem, s.truncate].join(" ")}>{m.email}</span>
+                  {/* Último acceso (como el Equipo del dental): saber si ya entró con su cuenta. */}
+                  <span className={s.rowMetaItem} suppressHydrationWarning>
+                    {m.lastLogin
+                      ? `${t("team.lastLogin")}: ${new Intl.DateTimeFormat(t("team.dateLocale"), { day: "numeric", month: "short", year: "numeric" }).format(new Date(m.lastLogin))}`
+                      : t("team.neverEntered")}
+                  </span>
                 </div>
                 <div className={s.rowMeta}>
                   <Chip>{roleLabel(m.role)}</Chip>

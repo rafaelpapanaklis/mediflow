@@ -116,6 +116,7 @@
     "barberWithoutFicha": "Without a profile this barber won't see their own appointments or commissions: pick theirs.",
     "lastLogin": "Last sign in",
     "neverEntered": "Never signed in",
+    "dateLocale": "en-US",
     "you": "You",
     "permissionsBtn": "Permissions",
     "ownerOnlyNote": "Only another owner can change this account",

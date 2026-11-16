@@ -116,6 +116,7 @@
     "barberWithoutFicha": "Sin ficha, este barbero no verá citas ni comisiones propias: elige la suya.",
     "lastLogin": "Último acceso",
     "neverEntered": "Nunca ha entrado",
+    "dateLocale": "es-MX",
     "you": "Tú",
     "permissionsBtn": "Permisos",
     "ownerOnlyNote": "Solo otro dueño puede cambiar esta cuenta",
