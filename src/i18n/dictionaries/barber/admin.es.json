@@ -159,6 +159,7 @@
     "fromRole": "Del rol",
     "badgeInherited": "Del rol",
     "badgeNotYours": "No lo tienes",
+    "badgeIncluded": "Viene con «{perm}»",
     "notYoursNote": "Los que dicen «No lo tienes» no los puedes dar: solo los reparte quien ya los tiene. Pídeselo al dueño.",
     "badgeAdded": "Añadido",
     "badgeRemoved": "Quitado",

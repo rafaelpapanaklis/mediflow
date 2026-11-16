@@ -93,9 +93,11 @@ export function PedidosTab({
     if (!ready) return;
     let alive = true;
     fetch("/api/barber/mercadopago/status", { cache: "no-store" })
-      .then(async (r) => (r.ok ? ((await r.json()) as { connected?: boolean; account?: string | null }) : null))
+      .then(async (r) => (r.ok ? ((await r.json()) as { connected?: boolean; account?: { nickname?: string | null } | null }) : null))
       .then((d) => {
-        if (alive && d && typeof d.connected === "boolean") setMp({ connected: d.connected, account: d.account ?? null });
+        // account es un objeto (apodo, correo, número) y solo llega al Dueño y
+        // a quien tiene Configuración (D3): aquí se enseña el apodo, si viene.
+        if (alive && d && typeof d.connected === "boolean") setMp({ connected: d.connected, account: d.account?.nickname ?? null });
       })
       .catch(() => undefined);
     return () => {

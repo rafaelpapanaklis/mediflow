@@ -5,7 +5,8 @@
  *
  * REGLA (misma semántica que User.permissionsOverride del dental): si
  * permissionsOverride tiene keys, esas REEMPLAZAN el default del rol — no se
- * suman. Un permiso NUEVO agregado a un rol NO le llega a un usuario con
+ * suman. «Ningún permiso» se guarda como [BARBER_NO_PERMISSIONS], nunca
+ * como [] (que es «hereda el rol»). Un permiso NUEVO agregado a un rol NO le llega a un usuario con
  * override; hay que agregarlo a su override también.
  *
  * Las otras olas NO inventan su propio check: usan hasBarberPermission /
@@ -119,7 +120,27 @@ export const BARBER_PERMISSION_IMPLIES: Partial<Record<BarberPermissionKey, Barb
   "products.manage": ["products.view"],
   "schedule.manage": ["timeoff.manage", "timeoff.own"],
   "timeoff.manage": ["timeoff.own"],
+  // Auditoría 16-nov (M1): pagar comisiones devuelve la fila del periodo, que
+  // se lee con commissions.view. Con «Administrar» sin «Ver», el pago SÍ se
+  // guardaba y la respuesta era un 403: la pantalla decía que falló.
+  "commissions.manage": ["commissions.view"],
 };
+
+/**
+ * Lo que viene INCLUIDO en otro permiso encendido, y de cuál viene (D4,
+ * 16-nov): la matriz bloquea ese interruptor con «Viene con «…»» en vez de
+ * dejar apagarlo y que al guardar vuelva solo. Si dos encendidos lo incluyen,
+ * manda el primero de BARBER_PERMISSION_IMPLIES.
+ */
+export function includedBy(keys: Iterable<string>): Map<BarberPermissionKey, BarberPermissionKey> {
+  const on = new Set<string>(keys);
+  const out = new Map<BarberPermissionKey, BarberPermissionKey>();
+  for (const [src, implied] of Object.entries(BARBER_PERMISSION_IMPLIES)) {
+    if (!on.has(src)) continue;
+    for (const k of implied ?? []) if (!out.has(k)) out.set(k, src as BarberPermissionKey);
+  }
+  return out;
+}
 
 /**
  * Qué bloqueos puede poner y quitar esta persona (L3 ronda 2):
@@ -149,19 +170,31 @@ export function timeOffAllowed(scope: BarberTimeOffScope, barberId: string | nul
 }
 
 /**
+ * Marca que se guarda en permissionsOverride cuando el dueño le apaga TODO a
+ * alguien (auditoría de permisos 16-nov, G1). Sin ella, «ningún permiso» se
+ * guardaba como [] — que el motor lee como «hereda el rol» — y la persona
+ * recuperaba todos los permisos de fábrica justo al quitárselos. No es una
+ * clave de permiso: nunca sale en la matriz ni da nada.
+ */
+export const BARBER_NO_PERMISSIONS = "__ninguno";
+
+/**
  * Set efectivo de permisos: override REEMPLAZA al default del rol si trae
- * keys (mismo contrato que el dental). Keys desconocidas se ignoran. Al
+ * keys (mismo contrato que el dental). Keys desconocidas se ignoran. Un
+ * override con BARBER_NO_PERMISSIONS es «nada» (no hereda el rol). Al
  * final se suman los permisos incluidos (BARBER_PERMISSION_IMPLIES).
  */
 export function resolveBarberPermissions(
   role: BarberRole,
   permissionsOverride?: string[] | null,
 ): Set<BarberPermissionKey> {
-  const override = (permissionsOverride ?? []).filter((k): k is BarberPermissionKey =>
+  const raw = permissionsOverride ?? [];
+  const override = raw.filter((k): k is BarberPermissionKey =>
     (BARBER_PERMISSION_KEYS as string[]).includes(k),
   );
+  const replaces = override.length > 0 || raw.includes(BARBER_NO_PERMISSIONS);
   const set = new Set<BarberPermissionKey>(
-    override.length > 0 ? override : BARBER_ROLE_DEFAULT_PERMISSIONS[role] ?? [],
+    replaces ? override : BARBER_ROLE_DEFAULT_PERMISSIONS[role] ?? [],
   );
   for (const [key, implied] of Object.entries(BARBER_PERMISSION_IMPLIES)) {
     if (set.has(key as BarberPermissionKey)) for (const k of implied ?? []) set.add(k);
@@ -175,6 +208,19 @@ export function hasBarberPermission(
   key: BarberPermissionKey,
 ): boolean {
   return resolveBarberPermissions(user.role, user.permissionsOverride).has(key);
+}
+
+/**
+ * ¿Puede marcar comisiones (y sueldos) como PAGADOS? commissions.manage, y
+ * NUNCA con rol Barbero aunque se lo hayan dado a mano (D2, 16-nov): sería
+ * marcarse a sí mismo —o a un compañero— como pagado. Lo usan el servidor
+ * (markCommissionsPaid) y la pantalla de Comisiones (botón «Marcar pagado»).
+ */
+export function canMarkCommissionsPaid(user: {
+  role: BarberRole;
+  permissionsOverride?: string[] | null;
+}): boolean {
+  return user.role !== "BARBER" && hasBarberPermission(user, "commissions.manage");
 }
 
 /** Error tipado que lanzan los asserts; las APIs lo mapean a 403. */

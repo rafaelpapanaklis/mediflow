@@ -254,8 +254,13 @@ test("control: un encargado SÍ reparte un permiso que él tiene", async () => {
 test("control: un encargado SÍ cambia roles por debajo del suyo y da de baja", async () => {
   await team.updateMember(sesion("gerente"), "barbero", { role: "RECEPTION" });
   assert.equal(de("barbero").role, "RECEPTION");
-  await team.updateMember(sesion("gerente"), "recepcion", { role: "MANAGER" });
-  assert.equal(de("recepcion").role, "MANAGER");
+  // D1 (16-nov): subir a Encargado ya es solo del dueño, aunque el encargado
+  // tenga todos los permisos de ese rol.
+  await assert.rejects(
+    team.updateMember(sesion("gerente"), "recepcion", { role: "MANAGER" }),
+    /Solo el dueño puede nombrar Encargados/,
+  );
+  assert.equal(de("recepcion").role, "RECEPTION");
   await team.updateMember(sesion("gerente"), "barbero", { isActive: false });
   assert.equal(de("barbero").isActive, false);
 });
@@ -303,7 +308,8 @@ test("Equipo esconde Permisos y Editar sobre un dueño, y la matriz apaga lo que
   const matriz = readFileSync(join(raiz, "src/components/barber/team/permission-matrix.tsx"), "utf8");
   // Misma cuenta que el servidor: ni lo tengo yo, ni lo tenía ya esa persona.
   assert.match(matriz, /!own\.has\(i\.key\) && !saved\.has\(i\.key\)/);
-  assert.match(matriz, /disabled=\{!advancedRoles \|\| saving \|\| lockSelf \|\| lockNotMine\}/);
+  // D4 (16-nov): además, lo incluido en otro encendido queda bloqueado (viaKey).
+  assert.match(matriz, /disabled=\{!advancedRoles \|\| saving \|\| lockSelf \|\| lockNotMine \|\| Boolean\(viaKey\)\}/);
   assert.match(matriz, /perms\.notYoursNote/);
 });
 

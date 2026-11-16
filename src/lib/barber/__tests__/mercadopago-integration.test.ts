@@ -411,16 +411,33 @@ test("desconectar: solo el dueño; la tienda deja de ofrecer pagar en línea", {
 
 /* ═══════════════ 4. El estado (panel y tienda) ═══════════════ */
 
-test("GET status: el panel ve la cuenta; la tienda (sin sesión, por slug) solo si cobra", { skip }, async () => {
+test("GET status: la cuenta solo la ven el Dueño y quien tiene Configuración; la tienda (sin sesión, por slug) solo si cobra", { skip }, async () => {
+  // D3 (auditoría de permisos, 16-nov): antes TODO el panel recibía el apodo,
+  // el correo y el número enmascarado de la cuenta del dueño.
   sesion = RECEPCION_A;
   let r = await rutaEstado.GET(new NextRequest(`${BASE}/api/barber/mercadopago/status`));
   let j = await r.json();
-  assert.equal(j.connected, true);
-  assert.equal(j.account.nickname, "NAVAJA.MX");
+  assert.equal(j.connected, true, "Recepción sí sabe que se cobra en línea");
+  assert.equal(j.account, null, "pero no ve la cuenta");
   assert.equal(j.canManage, false);
   sesion = DUENO_A;
   j = await (await rutaEstado.GET(new NextRequest(`${BASE}/api/barber/mercadopago/status`))).json();
   assert.equal(j.canManage, true);
+  assert.equal(j.account.nickname, "NAVAJA.MX");
+  assert.equal(j.account.email, "pagos@navaja.test");
+  // Encargado (trae «Configuración» de fábrica): la ve sin poder conectar/desconectar.
+  const gerenteA = `${RUN}-gerente-a`;
+  const barberoA = `${RUN}-barbero-a`;
+  await usuario(A.id, gerenteA, "MANAGER");
+  await usuario(A.id, barberoA, "BARBER");
+  sesion = gerenteA;
+  j = await (await rutaEstado.GET(new NextRequest(`${BASE}/api/barber/mercadopago/status`))).json();
+  assert.equal(j.account.nickname, "NAVAJA.MX");
+  assert.equal(j.canManage, false);
+  sesion = barberoA;
+  j = await (await rutaEstado.GET(new NextRequest(`${BASE}/api/barber/mercadopago/status`))).json();
+  assert.equal(j.account, null, "el Barbero no ve la cuenta");
+  assert.ok(!JSON.stringify(j).includes("pagos@navaja.test"), "ni el correo en ninguna parte");
 
   sesion = null;
   const pub = async (slug: string) =>

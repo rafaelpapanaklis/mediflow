@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Info, RotateCcw, ShieldCheck } from "lucide-react";
-import type { BarberPermissionKey } from "@/lib/barber/permissions";
+import { includedBy, type BarberPermissionKey } from "@/lib/barber/permissions";
 import type { BarberMemberRow } from "@/lib/barber/team";
 import {
   adminStyles as s,
@@ -65,7 +65,19 @@ export function PermissionMatrix({
     [items],
   );
 
-  const effectiveSet = useMemo(() => new Set<string>(effective), [effective]);
+  // Lo INCLUIDO en otro encendido (D4, 16-nov): se pinta encendido y
+  // bloqueado con «Viene con «…»». Antes se podía apagar y al guardar el
+  // servidor lo volvía a sumar (BARBER_PERMISSION_IMPLIES): parecía que
+  // quitarlo no servía. `effective` es lo que eligió quien edita; lo que se
+  // ve, se cuenta y se manda es eso más lo incluido.
+  const via = useMemo(() => includedBy(effective), [effective]);
+  const shown = useMemo(() => {
+    const set = new Set<BarberPermissionKey>(effective);
+    for (const k of via.keys()) set.add(k);
+    return items.map((i) => i.key).filter((k) => set.has(k));
+  }, [effective, via, items]);
+  const effectiveSet = useMemo(() => new Set<string>(shown), [shown]);
+  const labelOf = (key: string) => items.find((i) => i.key === key)?.label ?? key;
 
   // Lo que quien edita NO puede dar: permisos que él no tiene y que esta
   // persona tampoco tenía ya guardados. Es la misma cuenta que hace el
@@ -122,7 +134,7 @@ export function PermissionMatrix({
     const ok = await run(async () => {
       const { member: next } = await apiCall<{ member: BarberMemberRow }>(
         `/api/barber/team/members/${member.id}/permissions`,
-        { method: "PUT", json: { permissions: effective } },
+        { method: "PUT", json: { permissions: shown } },
       );
       onSaved(next);
     });
@@ -136,7 +148,7 @@ export function PermissionMatrix({
   if (removed.length > 0) diffParts.push(t("perms.sumRemoved", { count: removed.length }));
   const summaryLine = inheritsAll
     ? t("perms.summaryInherits", { role: roleLabel })
-    : `${t("perms.sumTotal", { count: effective.length })} · ${t("perms.sumVs", {
+    : `${t("perms.sumTotal", { count: shown.length })} · ${t("perms.sumVs", {
         diff: diffParts.join(" · "),
         role: roleLabel,
       })}`;
@@ -146,8 +158,8 @@ export function PermissionMatrix({
   const resetBlocked = roleDefaults.some((k) => notGrantable.has(k));
 
   const dirty =
-    effective.length !== member.permissions.effective.length ||
-    effective.some((k) => !member.permissions.effective.includes(k));
+    shown.length !== member.permissions.effective.length ||
+    shown.some((k) => !member.permissions.effective.includes(k));
 
   return (
     <Modal
@@ -156,6 +168,12 @@ export function PermissionMatrix({
       subtitle={t("perms.roleLine", { role: roleLabel })}
       onClose={onClose}
       footer={
+        // El resumen va en el PIE (fuera de lo que desplaza), no pegado con
+        // sticky al fondo del cuerpo (m3, 16-nov): ahí tapaba el último
+        // renglón visible y un clic o un Tab caía en el resumen, no en el
+        // interruptor. Fuera del cuerpo no puede tapar nada.
+        <div className={s.permFoot}>
+        <div className={s.permSummary} aria-live="polite">{summaryLine}</div>
         <div className={s.modalFootSpread} style={{ display: "flex", width: "100%", gap: 8 }}>
           <Btn
             variant="ghost"
@@ -174,6 +192,7 @@ export function PermissionMatrix({
               {saving ? t("common.saving") : t("common.save")}
             </Btn>
           </div>
+        </div>
         </div>
       }
     >
@@ -203,6 +222,7 @@ export function PermissionMatrix({
               const changed = origin === "added" || origin === "removed";
               const lockSelf = isSelf && item.key === "team.manage";
               const lockNotMine = notGrantable.has(item.key);
+              const viaKey = via.get(item.key);
               return (
                 <div
                   key={item.key}
@@ -211,7 +231,11 @@ export function PermissionMatrix({
                     .join(" ")}
                 >
                   <span className={s.permLabel}>{item.label}</span>
-                  {origin === "added" ? (
+                  {viaKey ? (
+                    <span className={[s.permTag, s.permTagInherited].join(" ")} data-incluido={viaKey}>
+                      {t("perms.badgeIncluded", { perm: labelOf(viaKey) })}
+                    </span>
+                  ) : origin === "added" ? (
                     <span className={[s.permTag, s.permTagAdded].join(" ")}>
                       {t("perms.badgeAdded")}
                     </span>
@@ -221,7 +245,7 @@ export function PermissionMatrix({
                       {t("perms.badgeRemoved")}
                     </span>
                   ) : null}
-                  {origin === "inherited" ? (
+                  {origin === "inherited" && !viaKey ? (
                     <span className={[s.permTag, s.permTagInherited].join(" ")}>
                       {t("perms.badgeInherited")}
                     </span>
@@ -235,7 +259,7 @@ export function PermissionMatrix({
                     checked={effectiveSet.has(item.key)}
                     onChange={() => toggle(item.key)}
                     label={item.label}
-                    disabled={!advancedRoles || saving || lockSelf || lockNotMine}
+                    disabled={!advancedRoles || saving || lockSelf || lockNotMine || Boolean(viaKey)}
                   />
                 </div>
               );
@@ -244,7 +268,6 @@ export function PermissionMatrix({
         ))}
       </div>
 
-      <div className={s.permSummary}>{summaryLine}</div>
     </Modal>
   );
 }

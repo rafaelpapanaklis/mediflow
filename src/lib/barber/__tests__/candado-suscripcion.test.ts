@@ -237,7 +237,12 @@ test("las dos exentas existen y suscripcion NO se bloquea a sí misma", () => {
 // ── 4. El menú tampoco miente cuando no se ha pagado ────────────────────
 
 test("el layout del panel recorta el menú con barberNavItemsWhileUnpaid", () => {
-  const layout = sinComentarios(leer(LAYOUT));
+  // El filtro del menú vive desde el 16-nov en src/lib/barber/nav.ts (m4: el
+  // menú lo vuelve a pedir cada navegación interna); el layout lo usa con su
+  // hasBarberPaidAccess. Se revisan los dos como si fueran uno.
+  const soloLayout = sinComentarios(leer(LAYOUT));
+  assert.match(soloLayout, /resolveBarberNav\(ctx, \{ features: plan\.features, paid \}\)/, `${LAYOUT} arma el menú con resolveBarberNav`);
+  const layout = soloLayout + "\n" + sinComentarios(leer("src/lib/barber/nav.ts"));
 
   assert.ok(
     layout.includes("barberNavItemsWhileUnpaid"),
@@ -266,7 +271,7 @@ test("el layout del panel recorta el menú con barberNavItemsWhileUnpaid", () =>
 
   // Y el layout NO puede cortar: envuelve también a /barber/suscripcion.
   assert.ok(
-    !layout.includes("/barber/suscripcion"),
+    !soloLayout.includes("/barber/suscripcion"),
     `${LAYOUT} redirige a /barber/suscripcion: envuelve TAMBIÉN a esa pantalla y no sabe en qué ruta está ` +
       "(el middleware no cubre /barber) → bucle infinito",
   );

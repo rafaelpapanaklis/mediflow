@@ -8,9 +8,9 @@ import {
   type BarberContext,
 } from "@/lib/barber-auth";
 import {
+  BARBER_NO_PERMISSIONS,
   BARBER_PERMISSIONS,
   BARBER_PERMISSION_KEYS,
-  BARBER_ROLE_DEFAULT_PERMISSIONS,
   resolveBarberPermissions,
   type BarberPermissionKey,
 } from "@/lib/barber/permissions";
@@ -152,11 +152,15 @@ export function describeMemberPermissions(
   role: BarberRole,
   permissionsOverride?: string[] | null,
 ): BarberPermissionSummary {
-  const roleSet = new Set<string>(BARBER_ROLE_DEFAULT_PERMISSIONS[role] ?? []);
+  // Con lo incluido (M2): «sus propios bloqueos» de Recepción viene del rol
+  // (por «bloqueos de cualquiera»), no es una excepción «añadida».
+  const roleSet = new Set<string>(resolveBarberPermissions(role, []));
   // resolveBarberPermissions es el MISMO motor que usa assertBarberPermission:
   // la pantalla no puede mentir sobre lo que el servidor va a validar.
   const effectiveSet = resolveBarberPermissions(role, permissionsOverride);
-  const hasOverride = canonicalPermissions(permissionsOverride ?? []).length > 0;
+  const hasOverride =
+    canonicalPermissions(permissionsOverride ?? []).length > 0 ||
+    (permissionsOverride ?? []).includes(BARBER_NO_PERMISSIONS);
 
   const items: BarberPermissionState[] = BARBER_PERMISSIONS.map((p) => {
     const fromRole = roleSet.has(p.key);
@@ -187,14 +191,25 @@ export function describeMemberPermissions(
  *   así un permiso NUEVO que se agregue al rol mañana le llega solo).
  * · Si no -> el conjunto COMPLETO, nunca un delta. Ese es el contrato del
  *   motor y es lo que evita que darle un permiso apague los demás.
+ * · Si es VACÍO (el dueño le apagó todo) -> [BARBER_NO_PERMISSIONS]: [] sería
+ *   «hereda el rol» y le devolvería todo lo que se le acaba de quitar.
  */
 export function overrideFromEffective(
   role: BarberRole,
   effectiveKeys: Iterable<string>,
-): BarberPermissionKey[] {
+): string[] {
   const effective = canonicalPermissions(effectiveKeys);
-  const roleDefaults = canonicalPermissions(BARBER_ROLE_DEFAULT_PERMISSIONS[role] ?? []);
-  return sameKeySet(effective, roleDefaults) ? [] : effective;
+  // Se compara con lo INCLUIDO sumado de los dos lados (auditoría 16-nov, M2):
+  // la matriz manda el conjunto efectivo, que ya trae lo incluido (Recepción:
+  // «sus propios bloqueos» por «bloqueos de cualquiera»), y los defaults del
+  // rol no. Antes eso nunca cuadraba y TODA edición dejaba a la persona con
+  // excepciones fijas: un permiso nuevo del rol ya no le llegaba.
+  const conIncluidos = (keys: string[]) =>
+    canonicalPermissions(resolveBarberPermissions(role, [...keys, BARBER_NO_PERMISSIONS]));
+  const roleDefaults = canonicalPermissions(resolveBarberPermissions(role, []));
+  if (sameKeySet(conIncluidos(effective), roleDefaults)) return [];
+  // TODO apagado (G1, 16-nov): [] sería «hereda el rol» y le devolvería todo.
+  return effective.length > 0 ? effective : [BARBER_NO_PERMISSIONS];
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -769,10 +784,18 @@ async function loadMemberInScope(ctx: BarberContext, memberId: string) {
   return member as MemberRowRaw;
 }
 
-/** Solo un dueño reparte el rol de dueño (freno a la escalada de privilegios). */
+/**
+ * Solo un dueño reparte el rol de dueño (freno a la escalada de privilegios),
+ * y desde el 16-nov (D1, auditoría de permisos) también el de Encargado: un
+ * Encargado ya no da de alta ni sube a otro Encargado, aunque tenga todos sus
+ * permisos. Bajarlo de rol sí puede (quitar no es repartir).
+ */
 function assertCanAssignRole(ctx: BarberContext, role: BarberRole): void {
   if (role === "OWNER" && ctx.role !== "OWNER") {
     throw new BarberAdminError("Solo el dueño puede nombrar a otro dueño.", 403);
+  }
+  if (role === "MANAGER" && ctx.role !== "OWNER") {
+    throw new BarberAdminError("Solo el dueño puede nombrar Encargados.", 403);
   }
 }
 

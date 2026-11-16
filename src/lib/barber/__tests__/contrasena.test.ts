@@ -291,7 +291,8 @@ describe("2 · cambiar mi contraseña dentro del panel", () => {
   });
 
   test("Configuración: menú para todos los roles; sin settings.edit, solo «Tu contraseña»", () => {
-    const layout = sinComentarios(leer("src/app/barber/(panel)/layout.tsx"));
+    // El filtro del menú vive en nav.ts desde el 16-nov (m4); el layout lo usa.
+    const layout = sinComentarios(leer("src/lib/barber/nav.ts"));
     const iConfig = layout.indexOf('if (item.key === "configuracion") return true;');
     assert.ok(iConfig > -1 && iConfig < layout.indexOf("item.permission &&"), "Configuración sigue filtrada por permiso");
     const pagina = sinComentarios(leer("src/app/barber/(panel)/configuracion/page.tsx"));

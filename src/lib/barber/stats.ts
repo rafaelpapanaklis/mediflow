@@ -389,6 +389,11 @@ export interface InicioSummary {
     agenda: boolean;
     cash: boolean;
     cashManage: boolean;
+    /**
+     * ¿Viaja el dinero del día (today/compare)? cash.view, o commissions.view
+     * para el Barbero (su producción). false = today/compare en ceros.
+     */
+    money: boolean;
     queue: boolean;
     reports: boolean;
     schedule: boolean;
@@ -703,7 +708,12 @@ export async function getInicioSummary(ctx: BarberContext, opts: InicioOptions =
   const flags = setupFlags(enAlcance);
   const blockers = bookingBlockers(enAlcance, features.publicBooking === true);
 
-  const byDay = new Map(dayRows.map((r) => [r.day, r]));
+  // Dinero del día (auditoría de permisos 16-nov, G2): antes viajaba a TODA
+  // persona del panel. Quien no tiene «Ver caja» (o el Barbero sin «Ver
+  // comisiones», que es lo suyo) recibe ceros y can.money=false; la pantalla
+  // no pinta la banda de dinero.
+  const canMoney = selfOnly ? can(ctx, "commissions.view") : can(ctx, "cash.view");
+  const byDay = new Map<string, (typeof dayRows)[number]>(canMoney ? dayRows.map((r) => [r.day, r] as const) : []);
   const today = dayMoneyOf(byDay.get(todayKey));
   const yesterday = dayMoneyOf(byDay.get(yesterdayKey));
   const lastWeek = dayMoneyOf(byDay.get(weekAgoKey));
@@ -846,6 +856,7 @@ export async function getInicioSummary(ctx: BarberContext, opts: InicioOptions =
       agenda: canAgenda,
       cash: canCash,
       cashManage: can(ctx, "cash.manage"),
+      money: canMoney,
       queue: canQueue,
       reports: canReports,
       schedule: canSchedule,
