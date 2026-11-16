@@ -8,6 +8,16 @@ import { getBarberPlan } from "@/lib/barber/plans";
 import { barberPlanHasFeature, isBarbershopSubscriptionActive } from "@/lib/barber/plan-shared";
 import { canTransition } from "@/lib/barber/types";
 import { getBarberWaQuota } from "@/lib/barber/whatsapp";
+import { isTiendaGateOk, loadTienda, resolveTienda } from "@/lib/barber/tienda";
+import { tiendaAceptaMercadoPago } from "@/lib/barber/mercadopago";
+import { CANCELLED_MARK } from "@/lib/barber/commissions";
+import { rutaProductoTienda, rutaTienda } from "@/lib/barber/tienda-core";
+import {
+  botProductView,
+  botPublicBase,
+  pickBotProducts,
+  type BotStoreProduct,
+} from "@/lib/barber/bot-productos-core";
 import {
   BARBER_WA_CHANGE_NOTICE_HOURS,
   barberLateChangeReply,
@@ -603,6 +613,77 @@ async function loadShopHours(barbershopId: string): Promise<string> {
   return out.length > 0 ? out.join(" · ") : "(La barbería no tiene horarios cargados.)";
 }
 
+/* ── La tienda (productos) ─────────────────────────────────────────────
+   Lo MISMO que ve /b/<slug>/tienda: resolveTienda (barbería al corriente,
+   plan con productos, SQL pegado) + loadTienda (activos con «Mostrar en mi
+   página», existencia − apartado). Nada más existe para el bot.
+   Caché corta por barbería, como la de la configuración: un cliente que
+   pregunta tres cosas seguidas no pega tres veces en la base. */
+
+interface BotStore {
+  slug: string;
+  products: BotStoreProduct[];
+  /** Piezas vendidas en 90 días por producto (para «los más vendidos»). */
+  salesRank: Map<string, number>;
+  /** La barbería cobra en línea con Mercado Pago (la tienda ofrece pagar). */
+  payOnline: boolean;
+}
+
+const STORE_CACHE_MS = 60_000;
+const storeCache = new Map<string, { at: number; store: BotStore | null }>();
+
+/** Solo para las pruebas: olvida la tienda en caché. */
+export function resetBarberBotStoreCache(): void {
+  storeCache.clear();
+}
+
+async function loadBotStore(shop: { id: string; slug: string }): Promise<BotStore | null> {
+  const hit = storeCache.get(shop.id);
+  if (hit && Date.now() - hit.at < STORE_CACHE_MS) return hit.store;
+  let store: BotStore | null = null;
+  try {
+    const gate = await resolveTienda(shop.slug);
+    if (isTiendaGateOk(gate)) {
+      const all = await loadTienda(gate);
+      if (all.length > 0) {
+        const ids = all.map((p) => p.id);
+        const branchIds = gate.branches.map((b) => b.id);
+        const [sold, payOnline] = await Promise.all([
+          prisma.$queryRaw<Array<{ id: string; n: number }>>`
+            SELECT i."productId" AS "id", SUM(i."qty")::int AS "n"
+            FROM "barber_sale_items" i
+            JOIN "barber_sales" s ON s."id" = i."saleId"
+            WHERE s."barbershopId" = ANY(${branchIds}::text[])
+              AND i."productId" = ANY(${ids}::text[])
+              AND s."createdAt" >= now() - interval '90 days'
+              AND (s."notes" IS NULL OR s."notes" NOT LIKE ${`${CANCELLED_MARK}%`})
+            GROUP BY i."productId"`.catch(() => [] as Array<{ id: string; n: number }>),
+          tiendaAceptaMercadoPago(shop.id).catch(() => false),
+        ]);
+        store = {
+          slug: gate.shop.slug,
+          products: all.map((p) => ({
+            id: p.id,
+            name: p.name,
+            category: p.category,
+            price: p.price,
+            available: p.available,
+            orderable: p.orderable,
+          })),
+          salesRank: new Map(sold.map((r) => [r.id, Number(r.n) || 0])),
+          payOnline,
+        };
+      }
+    }
+  } catch (err) {
+    // Sin tienda legible el bot contesta como antes (sin productos), nunca truena.
+    console.warn("[barber/bot] no se pudo leer la tienda:", (err as Error).message);
+    store = null;
+  }
+  storeCache.set(shop.id, { at: Date.now(), store });
+  return store;
+}
+
 function hhmm(minute: number): string {
   const h = Math.floor(minute / 60);
   const m = minute % 60;
@@ -767,6 +848,8 @@ interface ToolCtx {
   client: BotClientInfo;
   settings: BarberBotSettings;
   now: Date;
+  /** La tienda (null = sin productos en la web o «productos» apagado: el bot no los menciona). */
+  store: BotStore | null;
   /** Horario de la barbería ya resumido (informativo, no decide huecos). */
   hoursText: string;
   /** Efectos que el turno provocó — el panel los muestra. */
@@ -797,7 +880,7 @@ interface ToolDef {
   input_schema: Record<string, unknown>;
 }
 
-function toolDefs(settings: BarberBotSettings): ToolDef[] {
+function toolDefs(settings: BarberBotSettings, hasStore = false): ToolDef[] {
   const defs: ToolDef[] = [];
   const a = settings.abilities;
 
@@ -895,6 +978,26 @@ function toolDefs(settings: BarberBotSettings): ToolDef[] {
           hora: { type: "string", description: "HH:MM en 24 h." },
         },
         required: ["citaId", "fecha", "hora"],
+      },
+    });
+  }
+
+  // Solo si la barbería tiene productos en su página Y el interruptor está
+  // encendido: sin esto el bot ni sabe que hay tienda (contesta como antes).
+  if (hasStore && settings.abilities.productos) {
+    defs.push({
+      name: "buscar_productos",
+      description:
+        "Productos que la barbería vende en su tienda (cera, pomada, shampoo…): nombre, precio, si HAY o está AGOTADO, " +
+        "y la liga donde el cliente lo aparta. Es la ÚNICA fuente de productos y de sus precios: " +
+        "si un producto no sale aquí, la barbería no lo maneja. Pasa en `texto` lo que busca " +
+        "(«cera», «pomada mate»); vacío para ver lo que más se vende.",
+      input_schema: {
+        type: "object",
+        properties: {
+          texto: { type: "string", description: "Lo que busca el cliente, en sus palabras. Vacío = lo más vendido." },
+        },
+        required: [],
       },
     });
   }
@@ -1002,6 +1105,9 @@ async function runTool(
       case "reagendar":
         return await toolReagendar(ctx, input);
 
+      case "buscar_productos":
+        return toolBuscarProductos(ctx, input);
+
       case "responder_con_opciones": {
         const texto = typeof input.texto === "string" ? input.texto.trim() : "";
         if (!texto) return { error: "Falta el texto del mensaje." };
@@ -1025,6 +1131,33 @@ async function runTool(
     console.error(`[barber/bot] herramienta ${name} falló:`, err);
     return { error: "No se pudo consultar eso ahorita." };
   }
+}
+
+/**
+ * Productos de la tienda para esta pregunta. Nunca más de
+ * BARBER_BOT_PRODUCTS_MAX; nunca existencias ni costo (solo «hay»); agotado
+ * sin liga. Si la pregunta nombra algo que no está, lo dice en `nota` para
+ * que el modelo conteste «no lo manejamos» en vez de inventar.
+ */
+function toolBuscarProductos(ctx: ToolCtx, input: Record<string, unknown>): unknown {
+  const store = ctx.store;
+  if (!store || !ctx.settings.abilities.productos) {
+    return { error: "La barbería no tiene productos en su tienda en línea." };
+  }
+  const texto = typeof input.texto === "string" ? input.texto.slice(0, 120) : "";
+  const pick = pickBotProducts(store.products, texto, store.salesRank);
+  const base = botPublicBase();
+  const productos = pick.products.map((p) => botProductView(p, `${base}${rutaProductoTienda(store.slug, p.id)}`));
+  return {
+    productos,
+    // La tienda completa: para cuando son varios o quiere ver todo.
+    ligaTienda: `${base}${rutaTienda(store.slug)}`,
+    totalEnTienda: pick.total,
+    pagoEnLinea: store.payOnline,
+    nota: pick.askedSomething && !pick.matched
+      ? "Nada de la tienda coincide con lo que pidió: dile que no lo manejan (no inventes uno parecido) y ofrécele lo que sí hay si viene al caso."
+      : undefined,
+  };
 }
 
 async function toolBuscarHorarios(
@@ -1530,6 +1663,19 @@ function buildSystemPrompt(ctx: ToolCtx): string {
     "",
   ];
 
+  // La tienda: solo si hay productos en la web y el interruptor está encendido.
+  if (ctx.store && s.abilities.productos) {
+    lines.push("PRODUCTOS DE LA TIENDA (cera, pomada, shampoo…):");
+    lines.push("- Si preguntan por un producto, qué venden o cuánto cuesta algo, usa buscar_productos. Es tu ÚNICA fuente de productos y sus precios.");
+    lines.push("- Nunca inventes un producto ni un precio. Si no sale en buscar_productos, dile que no lo manejan (y ofrece lo que sí hay si viene al caso).");
+    lines.push("- De la existencia solo di si HAY o está AGOTADO. Nunca digas cuántas piezas quedan.");
+    lines.push("- Contesta corto y manda la liga: la del producto si es uno, la de la tienda (ligaTienda) si son varios. Ahí se aparta con folio y se recoge en la barbería.");
+    lines.push("- Si pagoEnLinea es true, menciona que en la liga también se puede pagar en línea. Si un producto trae seApartaEnLinea en false, di que se compra directo en la barbería.");
+    lines.push("- Si está AGOTADO, dilo y NO mandes liga para apartarlo.");
+    lines.push("- Tú no apartas productos en el chat: el apartado lo hace la liga.");
+    lines.push("");
+  }
+
   if (ctx.client.name) {
     lines.push("EL CLIENTE:");
     lines.push(`- Se llama ${firstName(ctx.client.name)} y ya es cliente de la casa.`);
@@ -1556,7 +1702,9 @@ function buildSystemPrompt(ctx: ToolCtx): string {
   }
 
   const off = (Object.keys(s.abilities) as (keyof typeof s.abilities)[]).filter(
-    (k) => !s.abilities[k],
+    // «productos» apagado no se anuncia: sin él (o sin productos en la web) el
+    // bot ni sabe que hay tienda y contesta como antes de esta función.
+    (k) => !s.abilities[k] && k !== "productos",
   );
   if (off.length > 0) {
     lines.push(
@@ -1946,11 +2094,13 @@ async function runTurnInner(input: BarberBotTurnInput): Promise<BarberBotTurnRes
   }
 
   // ── 7. Contexto ───────────────────────────────────────────────────
-  const [services, barbers, client, hoursText] = await Promise.all([
+  const [services, barbers, client, hoursText, store] = await Promise.all([
     loadServices(shopId),
     loadBarbers(shopId),
     loadClientInfo(shopId, phone),
     settings.abilities.horarios ? loadShopHours(shopId) : Promise.resolve(""),
+    // La tienda solo si el interruptor está encendido (y viene de caché).
+    settings.abilities.productos ? loadBotStore(shop) : Promise.resolve(null),
   ]);
 
   const ctx: ToolCtx = {
@@ -1963,6 +2113,7 @@ async function runTurnInner(input: BarberBotTurnInput): Promise<BarberBotTurnRes
     now,
     effects: emptyEffects(),
     hoursText,
+    store,
   };
 
   const history = await loadHistory(shopId, phone);
@@ -1978,7 +2129,7 @@ async function runTurnInner(input: BarberBotTurnInput): Promise<BarberBotTurnRes
   }
 
   // ── 8. La conversación con el modelo ──────────────────────────────
-  const tools = toolDefs(settings);
+  const tools = toolDefs(settings, ctx.store !== null);
   const system = buildSystemPrompt(ctx);
   const messages: unknown[] = [...history];
 
