@@ -154,6 +154,7 @@
     "groupServices": "Servicios",
     "groupBarbers": "Barberos",
     "groupSchedule": "Horarios",
+    "groupTimeoff": "Bloqueos",
     "groupWalkin": "Fila virtual",
     "groupRequests": "Solicitudes",
     "groupCash": "Caja",

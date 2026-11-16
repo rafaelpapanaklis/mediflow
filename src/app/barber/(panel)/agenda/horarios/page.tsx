@@ -8,7 +8,7 @@
 import { redirect } from "next/navigation";
 import { getBarberContext } from "@/lib/barber-auth";
 import { requireBarberPaidAccess } from "@/lib/barber/paid-access";
-import { hasBarberPermission } from "@/lib/barber/permissions";
+import { hasBarberPermission, timeOffScope } from "@/lib/barber/permissions";
 import { agendaViewScope, scopeUserFromCtx } from "@/lib/barber/own-visits";
 import { getBarberPlan } from "@/lib/barber/plans";
 import { barberPlanHasFeature } from "@/lib/barber/plan-shared";
@@ -56,6 +56,7 @@ export default async function BarberSchedulePage(
       timezone={ctx.barbershop.timezone}
       branchId={ctx.barbershopId}
       canManage={hasBarberPermission(permUser, "schedule.manage")}
+      timeOffScope={timeOffScope({ ...permUser, ownBarberId: ctx.barber?.id ?? null })}
       initialBarberId={initialBarberId}
     />
   );

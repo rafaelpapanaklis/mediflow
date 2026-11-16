@@ -14,6 +14,7 @@ import Link from "next/link";
 import { ArrowLeft, Copy, Plus, Trash2 } from "lucide-react";
 import { type Dictionary } from "@/i18n/t";
 import { makeBarberT } from "@/lib/barber/i18n";
+import { timeOffAllowed, type BarberTimeOffScope } from "@/lib/barber/permissions";
 import {
   BARBER_TIME_OFF_TYPE_LABELS,
   type BarberDTO,
@@ -42,6 +43,8 @@ export interface ScheduleManagerProps {
   timezone: string;
   branchId: string;
   canManage: boolean;
+  /** Qué bloqueos puede poner/quitar (L3 ronda 2): todos, solo los suyos o ninguno. */
+  timeOffScope: BarberTimeOffScope;
   /**
    * Barbero que llega elegido en la URL (?barbero=). Es lo que hace que el
    * aviso "Sin horario cargado" de la agenda sirva de algo: aterrizas
@@ -404,7 +407,7 @@ export function ScheduleManager(props: ScheduleManagerProps) {
           t={t}
           timezone={props.timezone}
           branchId={props.branchId}
-          canManage={props.canManage}
+          scope={props.timeOffScope}
           barbers={barbers}
           timeOff={timeOff}
           onChanged={load}
@@ -457,7 +460,7 @@ function TimeOffTab(props: {
   t: (key: string, vars?: Record<string, string | number>) => string;
   timezone: string;
   branchId: string;
-  canManage: boolean;
+  scope: BarberTimeOffScope;
   barbers: BarberDTO[];
   timeOff: BarberTimeOffDTO[];
   onChanged: () => void | Promise<void>;
@@ -465,7 +468,11 @@ function TimeOffTab(props: {
   const { t, timezone } = props;
   const today = shopDateISO(new Date(), timezone);
 
-  const [who, setWho] = useState("");
+  // Barbero con «sus propios bloqueos»: solo él en la lista y ya elegido.
+  const ownId = props.scope && props.scope !== "all" ? props.scope.barberId : null;
+  const canCreate = props.scope !== null;
+  const whoOptions = ownId ? props.barbers.filter((b) => b.id === ownId) : props.barbers;
+  const [who, setWho] = useState(ownId ?? "");
   const [type, setType] = useState<BarberTimeOffType>("BREAK");
   const [startDate, setStartDate] = useState(today);
   const [startTime, setStartTime] = useState("14:00");
@@ -541,7 +548,7 @@ function TimeOffTab(props: {
         {t("barber.agenda.schedule.timeOff.subtitle")}
       </p>
 
-      {props.canManage ? (
+      {canCreate ? (
         <div
           style={{
             display: "grid",
@@ -554,8 +561,8 @@ function TimeOffTab(props: {
         >
           <Field label={t("barber.agenda.schedule.timeOff.who")}>
             <select className={css.select} value={who} onChange={(e) => setWho(e.target.value)}>
-              <option value="">{t("barber.agenda.schedule.timeOff.wholeShop")}</option>
-              {props.barbers.map((b) => (
+              {!ownId ? <option value="">{t("barber.agenda.schedule.timeOff.wholeShop")}</option> : null}
+              {whoOptions.map((b) => (
                 <option key={b.id} value={b.id}>
                   {b.nickname || b.name}
                 </option>
@@ -663,7 +670,7 @@ function TimeOffTab(props: {
                   {fmt(off.startAt)} → {fmtFin(off.startAt, off.endAt)}
                 </span>
               </span>
-              {props.canManage ? (
+              {timeOffAllowed(props.scope, off.barberId) ? (
                 askRemove === off.id ? (
                   <span style={{ display: "flex", gap: 6, alignItems: "center" }} role="alertdialog" aria-label={t("barber.agenda.schedule.timeOff.confirmDelete")}>
                     <span className={css.resultMeta}>{t("barber.agenda.schedule.timeOff.confirmDelete")}</span>

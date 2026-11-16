@@ -14,6 +14,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { blocksAgenda, toAppointmentDTO, toTimeOffDTO } from "@/lib/barber/agenda";
 import type { BarberTimeOffType } from "@/lib/barber/types";
+import { timeOffAllowed, timeOffScope } from "@/lib/barber/permissions";
 import {
   APPOINTMENT_INCLUDE,
   asDate,
@@ -33,12 +34,19 @@ export async function POST(req: Request) {
   if (!body) return jsonError("Cuerpo de la solicitud inválido.", 400);
 
   const gate = await openAgendaGate({
-    permission: "schedule.manage",
+    permission: ["timeoff.manage", "timeoff.own"],
     feature: "agenda",
     branchId: asString(body.branchId),
   });
   if (gate.response) return gate.response;
   const { ctx, shopId } = gate.gate;
+  // Recepción/encargado: cualquier bloqueo. Barbero: solo los de SU ficha,
+  // nunca toda la barbería (L3 ronda 2).
+  const scope = timeOffScope({
+    role: ctx.role,
+    permissionsOverride: ctx.user.permissionsOverride,
+    ownBarberId: ctx.barber?.id ?? null,
+  });
 
   const startAt = asDate(body.startAt);
   const endAt = asDate(body.endAt);
@@ -56,6 +64,9 @@ export async function POST(req: Request) {
   // barberId null = TODA la barbería cerrada. Es la semántica del schema y
   // se respeta tal cual.
   const barberId = asString(body.barberId);
+  if (!timeOffAllowed(scope, barberId ?? null)) {
+    return jsonError("Solo puedes bloquear tu propia agenda.", 403);
+  }
   if (barberId) {
     const barber = await prisma.barber.findFirst({
       where: { id: barberId, barbershopId: shopId },

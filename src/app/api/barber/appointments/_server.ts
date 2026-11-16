@@ -88,7 +88,8 @@ export function jsonError(message: string, status: number, extra?: Record<string
  * Un id ajeno no da error: simplemente cae a la sede de la sesión.
  */
 export async function openAgendaGate(opts: {
-  permission: BarberPermissionKey;
+  /** Uno, o una lista donde basta CUALQUIERA (bloqueos: timeoff.manage o timeoff.own). */
+  permission: BarberPermissionKey | BarberPermissionKey[];
   feature?: string | null;
   branchId?: string | null;
 }): Promise<GateResult> {
@@ -129,7 +130,10 @@ export async function openAgendaGate(opts: {
   }
 
   try {
-    assertBarberPermission(ctx, opts.permission);
+    const keys = Array.isArray(opts.permission) ? opts.permission : [opts.permission];
+    const perm = { role: ctx.role, permissionsOverride: ctx.user.permissionsOverride };
+    const ok = keys.find((k) => hasBarberPermission(perm, k)) ?? keys[0];
+    assertBarberPermission(ctx, ok);
   } catch (err) {
     if (err instanceof BarberForbiddenError) {
       return deny(jsonError("No tienes permiso para esto.", 403, { permission: err.permission }));

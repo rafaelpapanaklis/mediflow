@@ -154,6 +154,7 @@
     "groupServices": "Services",
     "groupBarbers": "Barbers",
     "groupSchedule": "Schedules",
+    "groupTimeoff": "Time off",
     "groupWalkin": "Walk-in queue",
     "groupRequests": "Requests",
     "groupCash": "Register",
