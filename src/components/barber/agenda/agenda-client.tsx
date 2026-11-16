@@ -51,6 +51,7 @@ import { AppointmentDetail } from "./appointment-detail";
 import { ChargeBridge } from "./charge-bridge";
 import { nextSlotStart } from "./next-slot";
 import { pickBarbers } from "@/lib/barber/quien-trabaja";
+import type { NewClientSeed } from "./dialogo-inicial";
 import { HoverCard, useHoverCard } from "./hover-card";
 import { quickActions } from "./rejilla";
 import type { CardQuickAction } from "./appointment-card";
@@ -140,6 +141,8 @@ export function AgendaClient(props: AgendaClientProps) {
     startAt: Date;
     /** «Repetir esta cita»: la visita que se copia. */
     prefill?: BarberAppointmentDTO | null;
+    /** «Agendar» desde la ficha o Mensajes: solo el cliente. */
+    newClient?: NewClientSeed | null;
   } | null>(null);
   /** Campo del diálogo de editar que recibe el foco (botones directos de la cita). */
   const [editFocus, setEditFocus] = useState<AppointmentDialogFocus | null>(null);
@@ -229,27 +232,13 @@ export function AgendaClient(props: AgendaClientProps) {
     const nf = props.newFor;
     if (!nf || nuevaAbierta.current || !data || !data.can.edit) return;
     nuevaAbierta.current = true;
-    const ahora = new Date().toISOString();
     const barberActivo = nf.barberId && data.barbers.some((b) => b.id === nf.barberId && b.isActive) ? nf.barberId : null;
     setCreating({
       barberId: barberActivo ?? chair ?? suggestBarber(nextSlotStart(new Date(), timezone)),
       startAt: nextSlotStart(new Date(), timezone),
-      prefill: {
-        id: "",
-        clientId: nf.clientId,
-        clientName: nf.clientName,
-        clientPhone: nf.clientPhone,
-        barberId: barberActivo,
-        barberName: null,
-        startAt: ahora,
-        endAt: ahora,
-        status: "PENDING",
-        source: "PANEL",
-        depositAmount: null,
-        depositStatus: null,
-        notes: null,
-        services: [],
-      },
+      // Solo el cliente: NO es un «repetir» (sin endAt, sin servicios); la
+      // duración sale de los servicios que se elijan (dialogo-inicial.ts).
+      newClient: { clientId: nf.clientId, clientName: nf.clientName, clientPhone: nf.clientPhone },
     });
   }, [data, props.newFor, chair, timezone]);
 
@@ -953,6 +942,7 @@ export function AgendaClient(props: AgendaClientProps) {
           roster={roster}
           initialStartAt={creating.startAt}
           prefill={creating.prefill ?? null}
+          newClient={creating.newClient ?? null}
           t={t}
           onClose={() => setCreating(null)}
           onSaved={(appt) => {
