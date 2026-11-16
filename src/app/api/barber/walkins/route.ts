@@ -23,7 +23,7 @@ import {
 import { asString, jsonError, loadSlotContext, openAgendaGate, readJson } from "../appointments/_server";
 import { pickBarbers } from "@/lib/barber/quien-trabaja";
 import { walkInDayStart } from "@/lib/barber/fila-del-dia";
-import { createWalkIn, loadQueueSnapshot, WALKIN_FEATURE } from "./_server";
+import { createWalkIn, loadQueueSnapshot, staleWalkInWhere, WALKIN_FEATURE } from "./_server";
 
 export const dynamic = "force-dynamic";
 
@@ -82,11 +82,11 @@ export async function GET(req: Request) {
   // viajan ids: ni horarios ni visitas ajenas salen de aquí.
   const now = new Date();
   const today = shopDateISO(now, timezone);
-  const roster = await loadSlotContext(
-    shopId,
-    walkInDayStart(timezone, now),
-    shopLocalToUtc(addDaysISO(today, 1), 0, timezone),
-  );
+  // Y cuántos siguen «esperando» desde ANTES de hoy: «De ayer (N) · Sacarlos».
+  const [roster, staleCount] = await Promise.all([
+    loadSlotContext(shopId, walkInDayStart(timezone, now), shopLocalToUtc(addDaysISO(today, 1), 0, timezone)),
+    prisma.barberWalkIn.count({ where: staleWalkInWhere(shopId, timezone, now) }),
+  ]);
   const pick = pickBarbers({
     barbers: barbers.map((b) => ({ id: b.id, isActive: b.isActive })),
     schedules: roster.schedules,
@@ -129,6 +129,7 @@ export async function GET(req: Request) {
     }),
     recent: recent.map(toWalkInDTO).map(hidePhone),
     pick,
+    staleCount,
   });
 }
 

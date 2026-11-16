@@ -245,6 +245,17 @@
     "serveBody": "This creates an IN-CHAIR visit with this barber, so the checkout and the commission come from it.",
     "serveConfirm": "Seat in the chair",
     "servedOk": "{name} is in the chair.",
+    "stale": {
+      "text": {
+        "one": "From before today ({count}): 1 person is still listed from an earlier day. They no longer count in today’s line.",
+        "other": "From before today ({count}): {count} people are still listed from earlier days. They no longer count in today’s line."
+      },
+      "clear": "Clear them",
+      "done": {
+        "one": "Done: 1 person from earlier days was marked as «Left».",
+        "other": "Done: {count} people from earlier days were marked as «Left»."
+      }
+    },
     "recent": "Left the queue",
     "notify": {
       "queued": "Ping sent on WhatsApp.",

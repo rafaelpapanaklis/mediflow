@@ -163,6 +163,18 @@ export function activeWalkInWhere(shopId: string, timezone: string, now: Date = 
   };
 }
 
+/**
+ * Lo contrario: los que siguen «esperando» o «llamados» pero se anotaron
+ * ANTES de hoy (nadie los sacó). Es lo que cuenta y saca «De ayer (N)».
+ */
+export function staleWalkInWhere(shopId: string, timezone: string, now: Date = new Date()) {
+  return {
+    barbershopId: shopId,
+    status: { in: ACTIVE_WALKIN_STATUSES },
+    joinedAt: { lt: walkInDayStart(timezone, now) },
+  };
+}
+
 /** Foto de la fila activa (la de HOY) + los datos con los que se estima la espera. */
 export async function loadQueueSnapshot(shopId: string, timezone: string): Promise<QueueSnapshot> {
   const [rows, barbers, services] = await Promise.all([

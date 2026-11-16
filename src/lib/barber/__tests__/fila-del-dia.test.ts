@@ -3,7 +3,9 @@
 //   npx tsx --test src/lib/barber/__tests__/fila-del-dia.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import "./_sin-server-only";
 import { isTodaysWalkIn, walkInDayStart } from "../fila-del-dia";
+import { activeWalkInWhere, staleWalkInWhere } from "@/app/api/barber/walkins/_server";
 
 const MX = "America/Mexico_City"; // UTC−6 todo el año
 const MERIDA = "America/Merida";
@@ -34,4 +36,17 @@ test("otra zona: Mérida también es UTC−6; Tijuana corta a su medianoche", ()
   const ahora = new Date("2026-11-15T23:45:00Z");
   assert.equal(walkInDayStart(MERIDA, ahora).toISOString(), "2026-11-15T06:00:00.000Z");
   assert.equal(walkInDayStart("America/Tijuana", ahora).toISOString(), "2026-11-15T08:00:00.000Z");
+});
+
+test("«De ayer · Sacarlos» toca justo lo que la fila de hoy deja fuera (y nada más)", () => {
+  const ahora = new Date("2026-11-15T23:45:00Z");
+  const hoy = activeWalkInWhere("shop1", MX, ahora);
+  const ayer = staleWalkInWhere("shop1", MX, ahora);
+  // Misma barbería y mismos estados (esperando / llamado): SERVED y LEFT nunca se tocan.
+  assert.equal(ayer.barbershopId, "shop1");
+  assert.deepEqual(ayer.status, hoy.status);
+  assert.deepEqual([...ayer.status.in].sort(), ["CALLED", "WAITING"]);
+  // El corte es la MISMA medianoche: gte para hoy, lt para lo de antes.
+  assert.equal(hoy.joinedAt.gte.toISOString(), "2026-11-15T06:00:00.000Z");
+  assert.equal(ayer.joinedAt.lt.toISOString(), "2026-11-15T06:00:00.000Z");
 });

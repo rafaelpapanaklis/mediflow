@@ -63,6 +63,8 @@ interface Payload {
   recent: BarberWalkInDTO[];
   /** «¿Con quién?»: quién trabaja hoy y a quién se propone (quien-trabaja.ts). Opcional: una API vieja no lo manda. */
   pick?: BarberPick;
+  /** Siguen «esperando» desde antes de hoy (no cuentan en la fila de hoy). */
+  staleCount?: number;
 }
 
 export interface WalkinPanelProps {
@@ -163,6 +165,31 @@ export function WalkinPanel(props: WalkinPanelProps) {
     }
   };
 
+  // «De ayer (N) · Sacarlos»: los marca «Se fue» (no se borra nada).
+  const [clearingStale, setClearingStale] = useState(false);
+  const clearStale = async () => {
+    setClearingStale(true);
+    try {
+      const res = await fetch("/api/barber/walkins/de-ayer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ branchId: props.branchId }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(typeof body.error === "string" ? body.error : t("barber.agenda.queue.errors.generic"));
+        return;
+      }
+      setError(null);
+      setNotice(t("barber.agenda.queue.stale.done", { count: typeof body.cleared === "number" ? body.cleared : 0 }));
+      await load(true);
+    } catch {
+      setError(t("barber.agenda.queue.errors.generic"));
+    } finally {
+      setClearingStale(false);
+    }
+  };
+
   const queue = data?.queue ?? [];
 
   return (
@@ -198,6 +225,21 @@ export function WalkinPanel(props: WalkinPanelProps) {
       {notice ? (
         <div className={agendaCss.totals} style={{ marginBottom: 12 }}>
           <span>{notice}</span>
+        </div>
+      ) : null}
+      {/* Los que se anotaron antes de hoy y nadie sacó: ya no cuentan en la
+          fila de hoy (fila-del-dia.ts); se marcan «Se fue» SOLO al pulsar. */}
+      {data && (data.staleCount ?? 0) > 0 ? (
+        <div className={agendaCss.totals} style={{ marginBottom: 12, alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <span>{t("barber.agenda.queue.stale.text", { count: data.staleCount ?? 0 })}</span>
+          <button
+            type="button"
+            className={`${agendaCss.btn} ${agendaCss.btnSm}`}
+            disabled={clearingStale}
+            onClick={() => void clearStale()}
+          >
+            <LogOut size={14} /> {t("barber.agenda.queue.stale.clear")}
+          </button>
         </div>
       ) : null}
 

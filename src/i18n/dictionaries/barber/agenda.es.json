@@ -245,6 +245,17 @@
     "serveBody": "Se crea una visita EN SILLA con este barbero, para que el cobro y la comisión salgan de ahí.",
     "serveConfirm": "Sentar en la silla",
     "servedOk": "{name} ya está en la silla.",
+    "stale": {
+      "text": {
+        "one": "De ayer ({count}): sigue anotada 1 persona de un día anterior. Ya no cuenta en la fila de hoy.",
+        "other": "De ayer ({count}): siguen anotadas {count} personas de días anteriores. Ya no cuentan en la fila de hoy."
+      },
+      "clear": "Sacarlos",
+      "done": {
+        "one": "Listo: 1 persona de días anteriores quedó como «Se fue».",
+        "other": "Listo: {count} personas de días anteriores quedaron como «Se fue»."
+      }
+    },
     "recent": "Salieron de la fila",
     "notify": {
       "queued": "Aviso enviado por WhatsApp.",
