@@ -1,10 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Building2 } from "lucide-react";
 import { switchBranchAndReload } from "@/components/barber/team/admin-nav";
 import { BARBER_BRANCH_ALL, isConsolidatedPath, sedeElegida } from "@/lib/barber/branch-cookie";
+
+/** Valor de la última opción del selector: no es una sede, abre Sucursales. */
+export const BARBER_BRANCH_MANAGE = "__administrar-sucursales";
 
 export interface BarberBranchBadgeOption {
   id: string;
@@ -30,6 +33,7 @@ export function BarberBranchBadge({
   activeId,
   consolidated,
   selectedId = null,
+  manageHref = null,
   labels,
 }: {
   options: BarberBranchBadgeOption[];
@@ -39,9 +43,15 @@ export function BarberBranchBadge({
   consolidated: boolean;
   /** Valor crudo de la cookie del selector (sin validar). */
   selectedId?: string | null;
-  labels: { branch: string; aria: string; all: string; closed: string; closedGroup?: string };
+  /**
+   * Pantalla de Sucursales, solo si la sesión puede administrarlas
+   * (branches.manage): al final del selector sale «Administrar sucursales…».
+   */
+  manageHref?: string | null;
+  labels: { branch: string; aria: string; all: string; closed: string; closedGroup?: string; manage?: string };
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [busy, setBusy] = useState(false);
   if (options.length < 2) return null;
 
@@ -69,6 +79,12 @@ export function BarberBranchBadge({
         disabled={busy}
         aria-label={labels.aria}
         onChange={(e) => {
+          // «Administrar sucursales…» no cambia de sede: solo lleva a la pantalla
+          // (16-nov, Rafael no encontraba dónde reabrir una sede cerrada).
+          if (e.target.value === BARBER_BRANCH_MANAGE) {
+            if (manageHref) router.push(manageHref);
+            return;
+          }
           setBusy(true);
           void switchBranchAndReload(e.target.value);
         }}
@@ -100,6 +116,14 @@ export function BarberBranchBadge({
               </option>
             ))}
           </optgroup>
+        ) : null}
+        {manageHref && labels.manage ? (
+          <>
+            <option disabled value="">
+              ──────────
+            </option>
+            <option value={BARBER_BRANCH_MANAGE}>{labels.manage}</option>
+          </>
         ) : null}
       </select>
     </label>
