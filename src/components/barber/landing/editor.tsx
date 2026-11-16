@@ -34,8 +34,8 @@ import {
   BARBER_WEB_ACCENTS,
   BARBER_WEB_DIAS,
   BARBER_WEB_SELECTOR_LIST,
-  BARBER_WEB_TEMPLATE_DEFAULT,
   horarioDelLocalDesdeTurnos,
+  plantillaOfrecidaBarberWeb,
   normalizarConfigBarberWeb,
   ordenDeSecciones,
   tieneHorario,
@@ -100,7 +100,9 @@ export function EditorWebBarberia(props: EditorProps) {
   const horarioDeBarberos = useMemo(() => horarioDelLocalDesdeTurnos(props.turnosBarberos ?? []), [props.turnosBarberos]);
 
   const [config, setConfig] = useState<BarberWebConfig>(inicial);
-  const [template, setTemplate] = useState<string>(props.template || BARBER_WEB_TEMPLATE_DEFAULT);
+  // Una de las doce viejas guardada llega como la de por defecto: el editor
+  // la enseña ELEGIDA (ya no se ofrecen) y el primer guardado la deja así.
+  const [template, setTemplate] = useState<string>(plantillaOfrecidaBarberWeb(props.template));
   const [sucio, setSucio] = useState(false);
   const [estado, setEstado] = useState<Estado>("listo");
   const [error, setError] = useState<string | null>(null);
@@ -115,7 +117,7 @@ export function EditorWebBarberia(props: EditorProps) {
      petición en vuelo leyera valores viejos por el cierre. */
   const version = useRef(props.version);
   const base = useRef<{ template: string; config: BarberWebConfig }>({
-    template: props.template || BARBER_WEB_TEMPLATE_DEFAULT,
+    template: plantillaOfrecidaBarberWeb(props.template),
     config: inicial,
   });
   const enVuelo = useRef(false);
