@@ -7,6 +7,7 @@ import { normalizeBarberPhone } from "@/lib/barber/booking";
 import { getPortalSession } from "@/lib/barber/client-portal";
 import { createTiendaOrder, isTiendaGateOk, resolveTienda, tiendaErrorBody } from "@/lib/barber/tienda";
 import { normalizeOrderLines, rutaTienda } from "@/lib/barber/tienda-core";
+import { onTiendaOrderCreated } from "@/lib/barber/tienda-pedido-nuevo";
 
 /**
  * POST /api/barber/public/tienda/[slug]/pedidos — APARTAR productos (ws6-t1).
@@ -72,6 +73,25 @@ export async function POST(req: NextRequest, props: { params: Promise<{ slug: st
     }
 
     const order = await createTiendaOrder({ gate, lines, name, phone, portalClient, payOnline: body.payOnline === true });
+
+    // PUNTO ÚNICO de «entró un pedido nuevo» (16-nov): aquí se enganchará el
+    // correo al dueño cuando Rafael lo decida. HOY NO MANDA NADA y nunca
+    // lanza: el pedido ya está guardado. Ver tienda-pedido-nuevo.ts.
+    await onTiendaOrderCreated({
+      orderId: order.id,
+      folio: order.folio,
+      barbershopId: order.branch.id,
+      shopSlug: gate.shop.slug,
+      shopName: order.branch.name,
+      branchName: order.branch.branchName,
+      clientName: name,
+      clientPhone: phone,
+      items: order.items,
+      total: order.total,
+      payOnline: body.payOnline === true,
+      expiresAt: order.expiresAt,
+    });
+
     return NextResponse.json({
       ok: true,
       id: order.id,
