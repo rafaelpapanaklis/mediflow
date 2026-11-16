@@ -20,7 +20,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { configBarberWebVacia, normalizarConfigBarberWeb, ordenDeSecciones, type BarberWebConfig } from "@/lib/barber/landing";
 import { BARBER_WEB_MANIFESTS, BARBER_WEB_TEMPLATES } from "../index";
-import { letrasPorRenglon, planRejilla } from "../t-barrio";
+import { letrasPorRenglon, planRejilla, tramoMasLargo } from "../t-barrio";
 import type { BarberWebBarbero, BarberWebData, BarberWebServicio } from "../types";
 
 const FOTO = (n: number) => `https://cdn.example.com/f${n}.webp`;
@@ -119,10 +119,22 @@ test("nombre de 40 letras: el titular calcula su tamaño por renglón y no por l
 test("1 y 9 barberos; sin horario sale sin «Reservar», con su aviso", () => {
   const uno = pinta(datos({ barberos: [barbero(1, { apodo: "Dani", bio: "Fades." })] }));
   assert.ok(uno.includes("Reservar con Dani") && uno.includes("/b/filo/reservar?barbero=b1"));
+  // U3: «con» va en el código, como en Oficio; el texto es solo el verbo.
+  const cta = BARBER_WEB_MANIFESTS.barrio.secciones.find((s) => s.id === "equipo")!.copia!.find((c) => c.clave === "equipo.cta")!;
+  assert.equal(cta.porDefecto, "Reservar");
+  const agendar = pinta(datos({ barberos: [barbero(1, { nombre: "Juan Pérez" })] }, { copia: { "equipo.cta": "Agendar" } }));
+  assert.ok(agendar.includes("Agendar con Juan"), "el verbo reescrito no sigue «con <nombre>»");
+  assert.ok(!/con\s*(<!-- -->)?\s*con/.test(agendar), "«con con»");
   const nueve = pinta(datos({ barberos: Array.from({ length: 9 }, (_, i) => barbero(i, { sinHorario: i === 4 })) }));
   assert.equal((nueve.match(/class="bw-barbero"/g) ?? []).length, 9);
   assert.ok(!nueve.includes("barbero=b4"), "ofrece reservar con quien no tiene horario");
   assert.ok(nueve.includes("Barbero 4") && nueve.includes("Todavía sin citas en línea"));
+  // U-menor: la nota sale de equipo.sinHorario, la misma clave que Oficio
+  // (no equipo.sinCitas): reescrita una vez, sigue al cambiar de plantilla.
+  const decl = BARBER_WEB_MANIFESTS.barrio.secciones.find((s) => s.id === "equipo")!.copia!.map((c) => c.clave);
+  assert.ok(decl.includes("equipo.sinHorario") && !decl.includes("equipo.sinCitas"));
+  const propia = pinta(datos({ barberos: [barbero(1, { sinHorario: true })] }, { copia: { "equipo.sinHorario": "Pronto en línea" } }));
+  assert.ok(propia.includes('<p class="bw-barbero-nota">Pronto en línea</p>'));
 });
 
 test("30 servicios: todos con su liga, los combos en tarjetas y fichas por categoría", () => {
@@ -136,9 +148,14 @@ test("30 servicios: todos con su liga, los combos en tarjetas y fichas por categ
   assert.ok(!una.includes("bw-fichas") && !una.includes("bw-grupo-titulo"));
 });
 
-test("reseñas: promedio REAL; sin reseñas no hay sección", () => {
+test("B3 · reseñas: sin promedio ni «según nuestros clientes» (las escribe la barbería); sin reseñas no hay sección", () => {
   const html = pinta(datos({}, { resenas: [{ nombre: "A", texto: "Bien", estrellas: 5 }, { nombre: "B", texto: "Ok", estrellas: 4 }] }));
-  assert.ok(html.includes(">4.5<"));
+  assert.ok(html.includes("Bien") && html.includes("Ok"));
+  for (const no of [">4.5<", "4.5", "de 5,", "según nuestros clientes", "bw-nota"]) assert.ok(!html.includes(no), `sale «${no}»`);
+  // Cada reseña conserva SUS estrellas (las de la tarjeta), y solo esas dos.
+  assert.equal((html.match(/class="dcbw-estrellas"/g) ?? []).length, 2);
+  const s = BARBER_WEB_MANIFESTS.barrio.secciones.find((x) => x.id === "resenas")!;
+  assert.ok(!(s.copia ?? []).some((c) => c.clave === "resenas.promedio"), "sigue la clave del promedio en el manifiesto");
   assert.ok(!pinta(datos()).includes('id="resenas"'));
 });
 
@@ -152,7 +169,14 @@ test("sucursal con dirección larga y horario: mapa, cómo llegar y horario agru
   );
   assert.ok(html.includes('id="contacto"') && html.includes("google.com/maps?q="));
   assert.ok(html.includes("Av. Patria 1891 local 4-B<small>Zapopan, Jalisco</small>"));
-  assert.ok(html.includes("Mar – Dom") && html.includes("11:00 am – 9:00 pm"));
+  // B2: el horario es la pieza compartida TablaHorario (los siete días), no el
+  // texto de horarioAgrupado partido a mano.
+  assert.ok(html.includes('<ul class="dcbw-horario bw-horario">'));
+  assert.ok(html.includes('<li class="dcbw-cerrado"><span class="dcbw-horario-dia">Lunes</span><span class="dcbw-horario-rango">Cerrado</span></li>'));
+  assert.ok(html.includes('<span class="dcbw-horario-dia">Domingo</span><span class="dcbw-horario-rango">11:00 am – 9:00 pm</span>'));
+  assert.ok(!html.includes("<table"), "queda la tabla rearmada");
+  // La píldora de la portada: el tramo seguido más largo, de las filas.
+  assert.ok(html.includes("Mar – Dom: 11:00 am – 9:00 pm"));
   assert.ok(html.includes('href="tel:33 1111 2222"') && html.includes("wa.me/523311112222"));
   // El renglón de la portada no dice «hoy» (ISR: el HTML no sabe qué día es).
   assert.ok(!/\bHoy\b/.test(html));
@@ -180,6 +204,49 @@ test("Tienda: encendida va JUSTO después de Servicios (sección y tira); apagad
 test("«Mis citas» arriba solo con WhatsApp conectado (cuentaUrl)", () => {
   assert.ok(pinta(datos({ cuentaUrl: "/b/filo/mi-cuenta" })).includes('class="bw-mis" href="/b/filo/mi-cuenta"'));
   assert.ok(!pinta(datos()).includes("Mis citas"));
+});
+
+test("B2 · tramoMasLargo sale de las filas del horario, no del texto", () => {
+  const dia = (d: number, abierto: boolean, hasta = "21:00") => ({ dia: d, abierto, desde: "11:00", hasta });
+  const c = (h: ReturnType<typeof dia>[]) => normalizarConfigBarberWeb({ horario: h });
+  assert.equal(tramoMasLargo(c([])), null);
+  assert.equal(tramoMasLargo(c([0, 1, 2, 3, 4, 5, 6].map((d) => dia(d, false)))), null);
+  assert.equal(tramoMasLargo(c([dia(6, true)])), "Dom: 11:00 am – 9:00 pm");
+  // Lun–Mié a las 9, Jue–Sáb a las 8: dos tramos de tres, gana el primero.
+  assert.equal(
+    tramoMasLargo(c([0, 1, 2, 3, 4, 5].map((d) => dia(d, true, d < 3 ? "21:00" : "20:00")))),
+    "Lun – Mié: 11:00 am – 9:00 pm",
+  );
+  // Salteados: el lunes solo pierde contra Mié–Vie.
+  assert.equal(tramoMasLargo(c([dia(0, true), dia(2, true), dia(3, true), dia(4, true)])), "Mié – Vie: 11:00 am – 9:00 pm");
+});
+
+test("U4 · la pegatina usa claves propias: el sello de año de Vintage no se vuelve un botón de reservar", () => {
+  const portada = BARBER_WEB_MANIFESTS.barrio.secciones.find((s) => s.id === "portada")!;
+  const claves = (portada.copia ?? []).map((c) => c.clave);
+  assert.ok(claves.includes("portada.pegatina") && claves.includes("portada.pegatinaNota"));
+  assert.ok(!claves.includes("portada.sello") && !claves.includes("portada.lema"));
+  // Lo que la barbería escribió en Vintage no aparece en Barrio…
+  const vintage = pinta(datos({}, { copia: { "portada.sello": "EST. 1998", "portada.lema": "Barbería tradicional" } }));
+  assert.ok(!vintage.includes("EST. 1998") && !vintage.includes("Barbería tradicional"));
+  assert.match(vintage, /<a class="bw-pegatina" href="\/b\/filo\/reservar"><span>Cita en 1 minuto<small>sin llamar<\/small>/);
+  // …y lo suyo sí.
+  const propia = pinta(datos({}, { copia: { "portada.pegatina": "Sin fila", "portada.pegatinaNota": "con cita" } }));
+  assert.match(propia, /<span>Sin fila<small>con cita<\/small><\/span>/);
+});
+
+test("B1 · la cinta se puede pausar (WCAG 2.2.2): botón fuera de aria-hidden, hover/foco y reduced-motion", () => {
+  const html = pinta(datos({ servicios: [sv(1), sv(2)] }));
+  const cinta = html.slice(html.indexOf('<div class="bw-cinta">'), html.indexOf("bw-cinta-via"));
+  assert.match(cinta, /<label class="bw-cinta-pausa"><input type="checkbox"[^>]*aria-label="Pausar la cinta de precios"/);
+  assert.ok(!cinta.includes("aria-hidden=\"true\"><label"), "el botón quedó dentro de aria-hidden");
+  assert.match(html, /class="bw-cinta-via" aria-hidden="true"/);
+  const css = readFileSync(path.resolve(__dirname, "../skins.css"), "utf8");
+  const piel = css.slice(css.indexOf("13 · BARRIO"));
+  assert.match(piel, /\.bw-cinta:hover \.bw-cinta-via,\s*\.dcbw-barrio \.bw-cinta:focus-within \.bw-cinta-via,\s*\.dcbw-barrio \.bw-cinta:has\(\.bw-cinta-pausa input:checked\) \.bw-cinta-via \{\s*animation-play-state: paused;/);
+  const quieta = piel.slice(piel.indexOf("@media (prefers-reduced-motion: reduce)"));
+  assert.match(quieta, /\.bw-cinta-via,[\s\S]*?animation: none/);
+  assert.match(quieta, /\.bw-cinta-pausa \{\s*display: none;/);
 });
 
 test("la piel no escribe colores de acento sueltos y respeta prefers-reduced-motion", () => {

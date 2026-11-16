@@ -6816,11 +6816,55 @@ img.dcbw-es-equipo-foto {
 
 /* ── Cinta: la carta corriendo ───────────────────────────────── */
 .dcbw-barrio .bw-cinta {
+  position: relative;
   overflow: hidden;
   white-space: nowrap;
   background: var(--dcbw-acento-fuerte);
   color: #fff;
   border-block: 2px solid var(--bw-negro);
+}
+
+/* WCAG 2.2.2: la cinta para con su botón (casilla marcada), al pasar el
+   ratón y con el foco dentro. */
+.dcbw-barrio .bw-cinta:hover .bw-cinta-via,
+.dcbw-barrio .bw-cinta:focus-within .bw-cinta-via,
+.dcbw-barrio .bw-cinta:has(.bw-cinta-pausa input:checked) .bw-cinta-via {
+  animation-play-state: paused;
+}
+
+.dcbw-barrio .bw-cinta-pausa {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin-top: -22px;
+  border-radius: 50%;
+  background: var(--bw-negro);
+  color: var(--bw-sobre);
+  border: 2px solid var(--bw-sobre);
+  cursor: pointer;
+}
+
+.dcbw-barrio .bw-cinta-pausa:hover {
+  background: var(--bw-carbon);
+}
+
+.dcbw-barrio .bw-cinta-pausa:has(input:focus-visible) {
+  outline: 3px solid #fff;
+  outline-offset: 2px;
+}
+
+.dcbw-barrio .bw-cinta-ico-seguir,
+.dcbw-barrio .bw-cinta-pausa:has(input:checked) .bw-cinta-ico-pausa {
+  display: none;
+}
+
+.dcbw-barrio .bw-cinta-pausa:has(input:checked) .bw-cinta-ico-seguir {
+  display: block;
 }
 
 .dcbw-barrio .bw-cinta-via {
@@ -7408,30 +7452,16 @@ img.dcbw-es-equipo-foto {
   color: #fff;
 }
 
-.dcbw-barrio .bw-nota-total {
-  display: flex;
-  align-items: flex-end;
-  gap: 16px;
-  margin-top: 24px;
-}
-
-.dcbw-barrio .bw-nota-num {
-  font-size: clamp(7rem, 40cqi, 13rem);
-  line-height: 0.74;
-}
-
-.dcbw-barrio .bw-nota-de {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  max-width: 14ch;
-  padding-bottom: 6px;
-  font-weight: 600;
-  line-height: 1.3;
-}
-
-.dcbw-barrio .bw-nota-de .dcbw-estrellas {
-  color: #fff;
+/* Comillas de adorno donde el mockup ponía el promedio (no hay promedio:
+   las reseñas las escribe la barbería). Solo en PC: en el celular la tira
+   de reseñas va justo debajo del título. */
+.dcbw-barrio .bw-comillas {
+  display: none;
+  height: 0.5em;
+  margin-top: 28px;
+  font-size: 15rem;
+  line-height: 0.9;
+  color: var(--dcbw-acento-claro);
 }
 
 .dcbw-barrio .bw-resenas-lista {
@@ -7535,36 +7565,43 @@ img.dcbw-es-equipo-foto {
   color: var(--bw-tinta-suave);
 }
 
+/* El horario es la pieza compartida (TablaHorario: ul > li > dos span),
+   vestida como la tabla de la maqueta: renglones con filete arriba. */
 .dcbw-barrio .bw-horario {
-  width: 100%;
-  border-collapse: collapse;
+  gap: 0;
+  max-width: none;
+  font-size: 1rem;
   font-variant-numeric: tabular-nums;
 }
 
-.dcbw-barrio .bw-horario th,
-.dcbw-barrio .bw-horario td {
+.dcbw-barrio .bw-horario li {
+  gap: 12px;
   padding: 13px 0;
+  border-bottom: 0;
   border-top: 1px solid var(--bw-linea);
+}
+
+.dcbw-barrio .bw-horario li:last-child {
+  border-bottom: 1px solid var(--bw-linea);
+}
+
+.dcbw-barrio .bw-horario .dcbw-horario-dia {
+  color: var(--bw-tinta);
   font-weight: 500;
 }
 
-.dcbw-barrio .bw-horario th {
-  text-align: left;
-  padding-right: 12px;
-}
-
-.dcbw-barrio .bw-horario td {
+.dcbw-barrio .bw-horario .dcbw-horario-rango {
   text-align: right;
   font-weight: 700;
   white-space: nowrap;
 }
 
-.dcbw-barrio .bw-horario tr:last-child th,
-.dcbw-barrio .bw-horario tr:last-child td {
-  border-bottom: 1px solid var(--bw-linea);
+/* Cerrado: en gris de la piel (AA sobre concreto), no con opacidad. */
+.dcbw-barrio .bw-horario .dcbw-cerrado {
+  opacity: 1;
 }
 
-.dcbw-barrio .bw-horario .bw-cerrado td {
+.dcbw-barrio .bw-horario .dcbw-cerrado .dcbw-horario-rango {
   font-weight: 500;
   color: var(--bw-tinta-suave);
 }
@@ -7955,8 +7992,8 @@ img.dcbw-es-equipo-foto {
     width: auto;
   }
 
-  .dcbw-barrio .bw-nota-num {
-    font-size: 15rem;
+  .dcbw-barrio .bw-comillas {
+    display: block;
   }
 
   .dcbw-barrio .bw-ubicacion-rejilla {
@@ -8006,6 +8043,11 @@ img.dcbw-es-equipo-foto {
   .dcbw-barrio .bw-cinta-via,
   .dcbw-barrio .bw-portada-foto img {
     animation: none;
+  }
+
+  /* Quieta no necesita botón de pausa. */
+  .dcbw-barrio .bw-cinta-pausa {
+    display: none;
   }
 
   .dcbw-barrio .bw-boton,

@@ -1125,8 +1125,10 @@ export const BARBER_WEB_MANIFESTS: Record<BarberWebTemplateId, BarberWebManifest
         ],
         copia: [
           ...copiaPortada("Reservar cita", "Fades, barba y diseño."),
-          { clave: "portada.sello", etiqueta: "Portada · pegatina (texto grande)", porDefecto: "Cita en 1 minuto", maxLen: 24 },
-          { clave: "portada.lema", etiqueta: "Portada · pegatina (texto chico)", porDefecto: "sin llamar", maxLen: 60 },
+          // Claves propias: portada.sello/lema son el sello de año de vintage,
+          // carta y club («EST. 1998»), no un botón de reservar (revisión U4).
+          { clave: "portada.pegatina", etiqueta: "Portada · pegatina (texto grande)", porDefecto: "Cita en 1 minuto", maxLen: 24 },
+          { clave: "portada.pegatinaNota", etiqueta: "Portada · pegatina (texto chico)", porDefecto: "sin llamar", maxLen: 40 },
         ],
       },
       {
@@ -1161,8 +1163,12 @@ export const BARBER_WEB_MANIFESTS: Record<BarberWebTemplateId, BarberWebManifest
           { campo: "subtitulo", etiqueta: "Bajada del equipo", porDefecto: "Elige con quién. Cada uno tiene su estilo." },
         ],
         copia: [
-          { ...COPIA_EQUIPO_CTA, etiqueta: "Equipo · botón de cada barbero (va seguido de su nombre)", porDefecto: "Reservar con" },
-          { clave: "equipo.sinHorario", etiqueta: "Equipo · aviso del barbero sin horario", porDefecto: "Todavía sin citas en línea", maxLen: 60 },
+          // Igual que Oficio: «con» va en el código y el texto es solo el verbo, como
+          // en las otras doce. Así «Reservar con» guardado aquí no sale «Reservar
+          // con con Juan» en Oficio ni «Reservar con →» en las demás (revisión U3).
+          { ...COPIA_EQUIPO_CTA, etiqueta: "Equipo · botón de cada barbero (sigue «con <nombre>»)" },
+          // La misma clave y etiqueta que Oficio (revisión, U-menor).
+          { clave: "equipo.sinHorario", etiqueta: "Equipo · nota del barbero sin horario", porDefecto: "Todavía sin citas en línea", maxLen: 60 },
         ],
       },
       {
@@ -1170,9 +1176,6 @@ export const BARBER_WEB_MANIFESTS: Record<BarberWebTemplateId, BarberWebManifest
         nombre: "Reseñas de clientes",
         consume: ["resenas"],
         textos: [{ campo: "titulo", etiqueta: "Título de reseñas", porDefecto: "Reseñas" }],
-        copia: [
-          { clave: "resenas.promedio", etiqueta: "Reseñas · texto junto al promedio", porDefecto: "de 5, según nuestros clientes", maxLen: 60 },
-        ],
       },
       secContacto({
         textos: [
