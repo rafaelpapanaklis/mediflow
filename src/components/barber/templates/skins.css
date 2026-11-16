@@ -7030,6 +7030,9 @@ img.dcbw-es-equipo-foto {
 
 .dcbw-barrio .bw-grupo {
   margin-top: 48px;
+  /* Los chips de categoría saltan aquí: sin esto el título del grupo quedaba
+     debajo de la tira fija. */
+  scroll-margin-top: calc(var(--bw-tira) + 14px);
 }
 
 .dcbw-barrio .bw-grupo-titulo {
