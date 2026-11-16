@@ -119,6 +119,12 @@ test("nombre de 40 letras: el titular calcula su tamaño por renglón y no por l
 test("1 y 9 barberos; sin horario sale sin «Reservar», con su aviso", () => {
   const uno = pinta(datos({ barberos: [barbero(1, { apodo: "Dani", bio: "Fades." })] }));
   assert.ok(uno.includes("Reservar con Dani") && uno.includes("/b/filo/reservar?barbero=b1"));
+  // U3: «con» va en el código, como en Oficio; el texto es solo el verbo.
+  const cta = BARBER_WEB_MANIFESTS.barrio.secciones.find((s) => s.id === "equipo")!.copia!.find((c) => c.clave === "equipo.cta")!;
+  assert.equal(cta.porDefecto, "Reservar");
+  const agendar = pinta(datos({ barberos: [barbero(1, { nombre: "Juan Pérez" })] }, { copia: { "equipo.cta": "Agendar" } }));
+  assert.ok(agendar.includes("Agendar con Juan"), "el verbo reescrito no sigue «con <nombre>»");
+  assert.ok(!/con\s*(<!-- -->)?\s*con/.test(agendar), "«con con»");
   const nueve = pinta(datos({ barberos: Array.from({ length: 9 }, (_, i) => barbero(i, { sinHorario: i === 4 })) }));
   assert.equal((nueve.match(/class="bw-barbero"/g) ?? []).length, 9);
   assert.ok(!nueve.includes("barbero=b4"), "ofrece reservar con quien no tiene horario");

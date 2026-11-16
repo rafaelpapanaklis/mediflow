@@ -1055,7 +1055,10 @@ export const BARBER_WEB_MANIFESTS: Record<BarberWebTemplateId, BarberWebManifest
           { campo: "subtitulo", etiqueta: "Bajada del equipo", porDefecto: "Elige con quién. Cada uno tiene su estilo." },
         ],
         copia: [
-          { ...COPIA_EQUIPO_CTA, etiqueta: "Equipo · botón de cada barbero (va seguido de su nombre)", porDefecto: "Reservar con" },
+          // Igual que Oficio: «con» va en el código y el texto es solo el verbo, como
+          // en las otras doce. Así «Reservar con» guardado aquí no sale «Reservar
+          // con con Juan» en Oficio ni «Reservar con →» en las demás (revisión U3).
+          { ...COPIA_EQUIPO_CTA, etiqueta: "Equipo · botón de cada barbero (sigue «con <nombre>»)" },
           { clave: "equipo.sinHorario", etiqueta: "Equipo · aviso del barbero sin horario", porDefecto: "Todavía sin citas en línea", maxLen: 60 },
         ],
       },

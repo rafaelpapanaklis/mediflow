@@ -440,7 +440,7 @@ export function PlantillaBarrio({ data }: { data: BarberWebData }) {
                     {/* Sin horario no se ofrece «Reservar»: sigue en el equipo, no engaña (L3 ronda 2). */}
                     {!b.sinHorario ? (
                       <a className="bw-boton bw-boton-blanco" href={rutaReservaBarberia(shop.slug, b.id)}>
-                        {copia(data, "equipo", "equipo.cta")} {b.apodo || b.nombre.trim().split(/\s+/)[0]}
+                        {copia(data, "equipo", "equipo.cta")} con {b.apodo?.trim() || b.nombre.trim().split(/\s+/)[0]}
                       </a>
                     ) : (
                       <p className="bw-barbero-nota">{copia(data, "equipo", "equipo.sinHorario")}</p>
