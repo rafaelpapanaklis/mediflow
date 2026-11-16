@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
@@ -59,6 +59,10 @@ export function ComisionesClient({
   const [entries, setEntries] = useState<Record<string, CommissionEntryRow[] | "loading">>({});
   const [payRow, setPayRow] = useState<CommissionSummaryRow | null>(null);
   const [busy, setBusy] = useState(false);
+  // El refresco del servidor tarda 1-5 s: mientras tanto la fila sigue diciendo PENDIENTE.
+  // Se avisa «Actualizando…» y el botón de pagar espera (QA de cierre E), como en Caja.
+  const [refreshing, startRefresh] = useTransition();
+  const refresh = () => startRefresh(() => router.refresh());
   // Revisión ws6-t8 (N1): con caja abierta viene MARCADA (lo normal es pagar del cajón).
   const [fromCash, setFromCash] = useState(Boolean(cashOut?.sessionOpen));
   const [toCash, setToCash] = useState(Boolean(cashIn?.sessionOpen));
@@ -119,7 +123,7 @@ export function ComisionesClient({
         if (data.code === "PAYOUT_CHANGED") {
           setPayRow(null);
           setEntries({});
-          router.refresh();
+          refresh();
         }
         return;
       }
@@ -131,7 +135,7 @@ export function ComisionesClient({
       setPayRow(null);
       setFromCash(false);
       setEntries({});
-      router.refresh();
+      refresh();
     } catch {
       toast.error(t("common.error"));
     } finally {
@@ -147,7 +151,7 @@ export function ComisionesClient({
       <div className="bcaja-head">
         <div>
           <h1 className="bcaja-head__title">{t("comisiones.title")}</h1>
-          <p className="bcaja-head__sub">{t("comisiones.subtitle")}</p>
+          <p className="bcaja-head__sub">{refreshing ? <span role="status" aria-live="polite">{t("common.updating")}</span> : t("comisiones.subtitle")}</p>
         </div>
         <div className="bcaja-head__actions">
           <PeriodNav period={summary.periodKey} onChange={goPeriod} locale={locale} prevLabel={t("common.prevPeriod")} nextLabel={t("common.nextPeriod")} maxPeriod={maxPeriod} />
@@ -251,7 +255,7 @@ export function ComisionesClient({
                               {t("comisiones.receipt")}
                             </Link>
                             {canManage && r.paidStatus !== "PAID" && r.paidStatus !== "EMPTY" && (
-                              <button type="button" className="bcom-act bcom-act--primary" onClick={() => { setFromCash(Boolean(cashOut?.sessionOpen)); setToCash(Boolean(cashIn?.sessionOpen)); setPayRow(r); }}>
+                              <button type="button" className="bcom-act bcom-act--primary" disabled={refreshing} onClick={() => { setFromCash(Boolean(cashOut?.sessionOpen)); setToCash(Boolean(cashIn?.sessionOpen)); setPayRow(r); }}>
                                 <BadgeCheck size={14} aria-hidden="true" />
                                 {/* Renta de silla mayor que lo producido: el barbero le paga al dueño (lógica L2). */}
                                 {r.totalToPay < 0 ? t("comisiones.markOwed") : t("comisiones.markPaid")}

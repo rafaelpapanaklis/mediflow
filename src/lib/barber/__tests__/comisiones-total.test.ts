@@ -73,3 +73,15 @@ test("la tarjeta usa lo pagado a barberos y avisa aparte de la renta ya cobrada 
   assert.equal(en("barber.caja.comisiones.kpiRentReceived", { paid: "$300.00" }), "Rent already paid to you this period: $300.00");
   assert.equal(en("barber.caja.comisiones.kpiRentYouPaid", { paid: "$300.00" }), "Rent you already paid this period: $300.00");
 });
+
+// QA de cierre E: tras «Sí, marcar pagado» la fila tardaba ~5 s en dejar de decir PENDIENTE,
+// con el botón activo y sin ningún aviso.
+test("mientras la pantalla se actualiza tras un pago: «Actualizando…» y «Marcar pagado» espera", () => {
+  const src = readFileSync(path.resolve(__dirname, "../../../components/barber/commissions/comisiones-client.tsx"), "utf8");
+  assert.match(src, /startRefresh\(\(\) => router\.refresh\(\)\)/);
+  assert.equal(src.match(/router\.refresh\(\)/g)?.length, 1, "todo refresco pasa por la transición");
+  assert.match(src, /refreshing \? <span role="status" aria-live="polite">\{t\("common\.updating"\)\}/);
+  assert.match(src, /bcom-act--primary" disabled=\{refreshing\}/);
+  assert.equal(getBarberT("es")("barber.caja.common.updating"), "Actualizando…");
+  assert.equal(getBarberT("en")("barber.caja.common.updating"), "Updating…");
+});

@@ -108,3 +108,6 @@
 @media screen {
   .barber-shell .bcom-recibo:not(.bcaja-print--thermal) { overflow-x: auto; }
 }
+
+/* «Marcar pagado» espera mientras la pantalla se actualiza tras un pago (QA de cierre E). */
+.barber-shell .bcom-act:disabled { opacity: 0.55; cursor: default; }
