@@ -40,6 +40,8 @@
     "precios": "Quote prices",
     "horarios": "Give opening hours",
     "ubicacion": "Give the address",
+    "productos": "Answer about store products",
+    "productosHint": "Says the price and whether it is in stock, and sends the link to reserve it. Only products with «Show on my page»; it never says how many are left.",
     "reagendarLocked": "Moving an appointment requires booking."
   },
   "hours": {

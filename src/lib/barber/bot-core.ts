@@ -37,6 +37,10 @@ export const BARBER_BOT_ABILITY_KEYS = [
   "precios",
   "horarios",
   "ubicacion",
+  // Contestar sobre los productos de la tienda (precio, si hay, liga para
+  // apartar). Encendido por omisión, pero solo actúa si la barbería tiene
+  // productos con «Mostrar en mi página»: sin eso el bot contesta como antes.
+  "productos",
 ] as const;
 
 export type BarberBotAbility = (typeof BARBER_BOT_ABILITY_KEYS)[number];
@@ -50,6 +54,7 @@ export const DEFAULT_BARBER_BOT_ABILITIES: BarberBotAbilities = {
   precios: true,
   horarios: true,
   ubicacion: true,
+  productos: true,
 };
 
 /* ── Horario en el que contesta ────────────────────────────────────── */

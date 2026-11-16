@@ -40,6 +40,8 @@
     "precios": "Decir precios",
     "horarios": "Decir horarios",
     "ubicacion": "Decir la dirección",
+    "productos": "Contestar sobre productos de la tienda",
+    "productosHint": "Dice el precio y si hay, y manda la liga para apartar. Solo los productos con «Mostrar en mi página»; nunca dice cuántas piezas quedan.",
     "reagendarLocked": "Para mover una cita hay que poder agendar."
   },
   "hours": {

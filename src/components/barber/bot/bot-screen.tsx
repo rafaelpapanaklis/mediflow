@@ -270,7 +270,9 @@ function Screen({ locale, timezone, initial, connected, canEdit, canAttend }: Ba
               hint={
                 key === "reagendar" && !settings.abilities.agendar
                   ? t("abilities.reagendarLocked")
-                  : undefined
+                  : key === "productos"
+                    ? t("abilities.productosHint")
+                    : undefined
               }
               checked={settings.abilities[key]}
               disabled={
