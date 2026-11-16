@@ -128,6 +128,16 @@ import {
   type BarberSaleTag,
 } from "@/lib/barber/memberships-core";
 
+import { cajaResumen, discountFromItems, esperadoEnEfectivo, type CajaResumen, type ResumenTicket } from "@/lib/barber/caja-resumen";
+import {
+  cashMovementsReady,
+  lastLeftForNext,
+  loadMovements,
+  loadSessionExtras,
+  type CashMovementRow,
+  type SessionExtras,
+} from "@/lib/barber/cash-movements";
+
 type Tx = Prisma.TransactionClient;
 
 // ── Constantes del módulo ───────────────────────────────────────────────
@@ -297,6 +307,10 @@ export interface CashSessionRow {
   salesTotal: number;
   tipsTotal: number;
   cashTotal: number;
+  /** Conteo del corte por denominación (sql/barber_caja_completa.sql); null = total directo o sin SQL. */
+  countedBreakdown?: Record<string, number> | null;
+  /** Fondo que se dejó para el siguiente turno; null = no se dijo o sin SQL. */
+  leftForNext?: number | null;
 }
 
 export interface CashSessionSummary {
@@ -304,9 +318,18 @@ export interface CashSessionSummary {
   byMethod: MethodBreakdown;
   /** Propinas cobradas en efectivo (están en el cajón; son del barbero). */
   cashTips: number;
-  /** fondo + Σ total de tickets en efectivo (incluye propinas en efectivo). */
+  /**
+   * Efectivo esperado en el cajón = resumen.esperado.expected (la fórmula
+   * única de caja-resumen.ts). Sin movimientos: fondo + Σ tickets en efectivo.
+   */
   expectedCash: number;
   sales: SaleRow[];
+  /** Gastos, retiros, entradas y pagos del turno (vacío sin el SQL). Anulados incluidos, marcados. */
+  movements: CashMovementRow[];
+  /** sql/barber_caja_completa.sql ya está pegado. */
+  movementsReady: boolean;
+  /** El resumen completo del turno (ingresos, gastos, esperado desglosado…). */
+  resumen: CajaResumen;
 }
 
 export interface ClientLookup {
@@ -378,6 +401,10 @@ export interface CashState {
   open: CashSessionSummary | null;
   history: CashSessionRow[];
   timezone: string;
+  /** sql/barber_caja_completa.sql ya está pegado (sin él, la caja se ve como antes). */
+  movementsReady?: boolean;
+  /** Fondo que se dejó en el último corte: se sugiere al abrir. null = no hay. */
+  suggestedOpening?: number | null;
 }
 
 // ── Helpers de lectura ──────────────────────────────────────────────────
@@ -466,9 +493,14 @@ export function breakdownOf(sales: Pick<SaleRow, "cancelled" | "paymentMethod" |
   return { byMethod, cashTips: acc.CASH.tip, cashTotal: acc.CASH.total };
 }
 
-/** Esperado en efectivo = fondo + Σ total de tickets en efectivo (sin cancelados). */
+/**
+ * Esperado en efectivo SOLO con tickets = fondo + Σ total de tickets en
+ * efectivo (sin cancelados). Es la fórmula única de caja-resumen.ts
+ * (esperadoEnEfectivo) sin movimientos: el resumen de un turno con gastos,
+ * retiros, entradas y pagos sale de cajaResumen().
+ */
 export function expectedCashFor(openingAmount: Money, cashSalesTotal: Money): Money {
-  return money(openingAmount.plus(cashSalesTotal));
+  return money(esperadoEnEfectivo({ opening: openingAmount, cashCharged: cashSalesTotal }));
 }
 
 type SessionWithUsers = Prisma.BarberCashSessionGetPayload<{
@@ -509,13 +541,50 @@ function toSessionRow(s: SessionWithUsers, sales: SaleRow[]): CashSessionRow {
   };
 }
 
-async function salesOfSession(barbershopId: string, sessionId: string): Promise<SaleRow[]> {
-  const rows = await prisma.barberSale.findMany({
+async function salesOfSession(barbershopId: string, sessionId: string, db: Tx | typeof prisma = prisma): Promise<SaleRow[]> {
+  const rows = await db.barberSale.findMany({
     where: { barbershopId, cashSessionId: sessionId },
     orderBy: { createdAt: "desc" },
     include: saleInclude,
   });
   return rows.map(toSaleRow);
+}
+
+/** Un ticket del turno → lo que pide cajaResumen (el descuento sale de sus líneas). */
+export function resumenTicketOf(s: SaleRow): ResumenTicket {
+  return {
+    paymentMethod: s.paymentMethod,
+    subtotal: s.subtotal,
+    tip: s.tip,
+    total: s.total,
+    cancelled: s.cancelled,
+    kind: s.kind,
+    barberId: s.barberId,
+    barberName: s.barberName,
+    items: s.items,
+  };
+}
+
+/**
+ * Resumen de un turno: tickets + movimientos (si el SQL ya está pegado) por
+ * la función única cajaResumen. Sin el SQL, movimientos vacíos = la cuenta de
+ * antes, número por número.
+ */
+async function resumenOfSession(
+  db: Tx | typeof prisma,
+  barbershopId: string,
+  session: { id: string; openingAmount: Prisma.Decimal },
+  sales: SaleRow[],
+): Promise<{ resumen: CajaResumen; movements: CashMovementRow[]; ready: boolean; extras: SessionExtras | null }> {
+  const ready = await cashMovementsReady(db);
+  const movements = ready ? await loadMovements(db, { barbershopId, sessionIds: [session.id] }) : [];
+  const extras = ready ? (await loadSessionExtras(db, barbershopId, [session.id])).get(session.id) ?? null : null;
+  const resumen = cajaResumen({
+    openingAmount: session.openingAmount,
+    tickets: sales.map(resumenTicketOf),
+    movements,
+  });
+  return { resumen, movements, ready, extras };
 }
 
 // ── Turnos ──────────────────────────────────────────────────────────────
@@ -531,15 +600,20 @@ export async function getOpenCashSession(barbershopId: string) {
 export async function summarizeSession(
   barbershopId: string,
   session: SessionWithUsers,
+  db: Tx | typeof prisma = prisma,
 ): Promise<CashSessionSummary> {
-  const sales = await salesOfSession(barbershopId, session.id);
-  const { byMethod, cashTips, cashTotal } = breakdownOf(sales);
+  const sales = await salesOfSession(barbershopId, session.id, db);
+  const { byMethod, cashTips } = breakdownOf(sales);
+  const { resumen, movements, ready, extras } = await resumenOfSession(db, barbershopId, session, sales);
   return {
-    session: toSessionRow(session, sales),
+    session: { ...toSessionRow(session, sales), countedBreakdown: extras?.countedBreakdown ?? null, leftForNext: extras?.leftForNext ?? null },
     byMethod,
     cashTips: toNum(cashTips),
-    expectedCash: toNum(expectedCashFor(D(session.openingAmount), cashTotal)),
+    expectedCash: resumen.expectedCash,
     sales,
+    movements,
+    movementsReady: ready,
+    resumen,
   };
 }
 
@@ -658,7 +732,13 @@ export async function listCashSessions(
     list.push(row);
     bySession.set(s.cashSessionId!, list);
   }
-  return sessions.map((s) => toSessionRow(s, bySession.get(s.id) ?? []));
+  const extras = (await cashMovementsReady(prisma))
+    ? await loadSessionExtras(prisma, ctx.barbershopId, sessions.map((s) => s.id))
+    : new Map<string, SessionExtras>();
+  return sessions.map((s) => {
+    const e = extras.get(s.id);
+    return { ...toSessionRow(s, bySession.get(s.id) ?? []), countedBreakdown: e?.countedBreakdown ?? null, leftForNext: e?.leftForNext ?? null };
+  });
 }
 
 /** Estado completo de la caja para la página. */
@@ -669,7 +749,42 @@ export async function getCashState(ctx: BarberContext): Promise<CashState> {
     open ? summarizeSession(ctx.barbershopId, open) : Promise.resolve(null),
     listCashSessions(ctx, { limit: 15, onlyClosed: true }),
   ]);
-  return { open: openSummary, history, timezone: ctx.barbershop.timezone || DEFAULT_BARBER_TZ };
+  const movementsReady = await cashMovementsReady(prisma);
+  const suggestedOpening = movementsReady && !open ? await lastLeftForNext(prisma, ctx.barbershopId) : null;
+  return {
+    open: openSummary,
+    history,
+    timezone: ctx.barbershop.timezone || DEFAULT_BARBER_TZ,
+    movementsReady,
+    suggestedOpening,
+  };
+}
+
+/**
+ * Resumen de caja de un PERIODO [from, to) de la sede de la sesión: todos los
+ * tickets registrados en el rango (de cualquier turno) y todos los
+ * movimientos (también los gastos fuera de caja). Sin fondo: el «esperado»
+ * aquí es el flujo neto de efectivo del periodo, no un cajón. Para Inicio y
+ * Reportes (cash.view). Sin el SQL de caja completa, solo tickets.
+ */
+export async function getCajaResumenPeriodo(
+  ctx: BarberContext,
+  range: { from: Date; to: Date },
+): Promise<{ resumen: CajaResumen; movementsReady: boolean }> {
+  assertBarberPermission(ctx, "cash.view");
+  const barbershopId = ctx.barbershopId;
+  if (!barbershopId) throw new BarberCajaError(400, "NO_SHOP", "Sin barbería");
+  const rows = await prisma.barberSale.findMany({
+    where: { barbershopId, createdAt: { gte: range.from, lt: range.to } },
+    orderBy: { createdAt: "asc" },
+    include: saleInclude,
+  });
+  const ready = await cashMovementsReady(prisma);
+  const movements = ready ? await loadMovements(prisma, { barbershopId, from: range.from, to: range.to }) : [];
+  return {
+    resumen: cajaResumen({ openingAmount: 0, tickets: rows.map((r) => resumenTicketOf(toSaleRow(r))), movements }),
+    movementsReady: ready,
+  };
 }
 
 // ── Contexto de cobro (catálogos + citas por cobrar) ────────────────────
@@ -1969,12 +2084,9 @@ export async function getSaleDetail(ctx: BarberContext, saleId: string): Promise
   const row = toSaleRow(s);
   const gross = sumMoney(row.items.filter((it) => it.unitPrice >= 0).map((it) => D(it.unitPrice).times(it.qty)));
   const negative = row.items.filter((it) => it.unitPrice < 0);
-  // Ni el anticipo aplicado ni la devolución de un anticipo son un descuento.
-  const discount = sumMoney(
-    negative
-      .filter((it) => !isDepositLine(it.description) && !isDepositRefundLine(it.description))
-      .map((it) => D(it.unitPrice).times(it.qty)),
-  ).abs();
+  // Ni el anticipo aplicado ni la devolución de un anticipo son un descuento
+  // (la misma regla que usa el resumen de caja).
+  const discount = discountFromItems(row.items);
   const depositApplied = sumMoney(negative.filter((it) => isDepositLine(it.description)).map((it) => D(it.unitPrice).times(it.qty))).abs();
   const shop = ctx.barbershop;
   return {

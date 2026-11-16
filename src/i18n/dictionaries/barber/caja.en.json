@@ -150,7 +150,15 @@
     "cashCharged": "Cash charged this shift",
     "cashChargedTips": "Includes {tips} in tips: already counted here, do not add them again.",
     "expectedHow": "Opening float + cash charged.",
-    "outsideDrawer": "Not in the drawer (do not count it):"
+    "outsideDrawer": "Not in the drawer (do not count it):",
+    "expectedHowFull": "Float + cash charged + cash in − cash expenses, withdrawals, payouts and refunds.",
+    "sum": {
+      "cashIn": "Cash added",
+      "cashExpenses": "Expenses paid in cash",
+      "withdrawals": "Withdrawals",
+      "cashPayouts": "Cash paid to barbers",
+      "cashRefunds": "Deposits refunded in cash"
+    }
   },
   "ticket": {
     "title": "Charge",

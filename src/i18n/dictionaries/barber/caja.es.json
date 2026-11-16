@@ -150,7 +150,15 @@
     "cashCharged": "Efectivo cobrado en el turno",
     "cashChargedTips": "Incluye {tips} de propinas: ya van dentro, no se suman aparte.",
     "expectedHow": "Fondo inicial + efectivo cobrado.",
-    "outsideDrawer": "No está en el cajón (no lo cuentes):"
+    "outsideDrawer": "No está en el cajón (no lo cuentes):",
+    "expectedHowFull": "Fondo + efectivo cobrado + entradas − gastos, retiros, pagos y devoluciones en efectivo.",
+    "sum": {
+      "cashIn": "Entradas de efectivo",
+      "cashExpenses": "Gastos pagados en efectivo",
+      "withdrawals": "Retiros",
+      "cashPayouts": "Pagos a barberos en efectivo",
+      "cashRefunds": "Anticipos devueltos en efectivo"
+    }
   },
   "ticket": {
     "title": "Cobrar",

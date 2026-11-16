@@ -38,6 +38,15 @@ export function CloseExpectedBreakdown({ view, t }: { view: CloseExpectedView; t
           {t("session.cashChargedTips", { tips: fmtMoney(view.cashTipsIncluded) })}
         </div>
       )}
+      {view.extras.map((x) => (
+        <div key={x.key} className="bcaja-totals__row" data-sum={x.key}>
+          <span>
+            <span className="bcaja-totals__op" aria-hidden="true">{x.sign}</span>
+            {t(`session.sum.${x.key}`)}
+          </span>
+          <span>{fmtMoney(x.amount)}</span>
+        </div>
+      ))}
       <div className="bcaja-totals__row bcaja-totals__row--big" data-sum="expected">
         <span>
           <span className="bcaja-totals__op" aria-hidden="true">=</span>
@@ -45,7 +54,7 @@ export function CloseExpectedBreakdown({ view, t }: { view: CloseExpectedView; t
         </span>
         <span>{fmtMoney(view.expected)}</span>
       </div>
-      <div className="bcaja-totals__note">{t("session.expectedHow")}</div>
+      <div className="bcaja-totals__note">{t(view.extras.length > 0 ? "session.expectedHowFull" : "session.expectedHow")}</div>
 
       <div className="bcaja-totals__aside">
         <div className="bcaja-hint">{t("session.outsideDrawer")}</div>
