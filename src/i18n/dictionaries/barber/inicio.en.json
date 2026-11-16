@@ -286,7 +286,7 @@
       "chairRent": "chair rent {amount}",
       "approx": "approx.",
       "paidOut": "Handed over to barbers",
-      "paidOutHint": "Advances, commissions, wages and tips handed over in the period. For reference: profit already subtracts what they earned.",
+      "paidOutHint": "Advances, commissions, wages and tips handed over in the period and recorded in the Register; what you marked as paid in Commissions without “Paid in cash from the register” isn't shown here. For reference: profit already subtracts what they earned.",
       "onlineNotIncluded": "Doesn't include online payments (deposits, memberships and shop)",
       "truncated": "A location has more than {limit} movements in this period: expenses and payouts may be incomplete. Pick a shorter period.",
       "byMethod": "Income by method",
@@ -300,7 +300,7 @@
       "vsPrev": "vs. previous period",
       "methods": { "CASH": "Cash", "CARD": "Card", "SPEI": "SPEI", "ONLINE": "Online" },
       "kind": { "ADVANCE": "Advances", "COMMISSION": "Commissions", "SALARY": "Wages", "OTHER": "Other" },
-      "colPaidOut": "Paid",
+      "colPaidOut": "Paid via Register",
       "colAdvances": "Advances"
     },
     "weekdays": ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
@@ -369,7 +369,7 @@
         "income": "Income (without tips)",
         "expenses": "Expenses",
         "expensesCash": "Cash expenses",
-        "payouts": "Handed over to barbers (for reference)",
+        "payouts": "Handed over to barbers, recorded in the Register (for reference)",
         "barberCost": "Commissions and wages earned (without tips)",
         "note": "Note",
         "profit": "Profit",
@@ -378,7 +378,7 @@
         "category": "Category",
         "kind": "Type",
         "count": "Count",
-        "paidOut": "Paid",
+        "paidOut": "Paid via Register",
         "advances": "Advances"
       }
     },

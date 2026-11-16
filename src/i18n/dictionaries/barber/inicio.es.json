@@ -286,7 +286,7 @@
       "chairRent": "renta de silla {amount}",
       "approx": "aprox.",
       "paidOut": "Entregado a barberos",
-      "paidOutHint": "Adelantos, comisiones, sueldos y propinas entregadas en el periodo. Es informativo: la ganancia ya resta lo que les toca.",
+      "paidOutHint": "Adelantos, comisiones, sueldos y propinas entregadas en el periodo y anotadas en Caja; lo que marcaste como pagado en Comisiones sin «Sale de la caja» no aparece aquí. Es informativo: la ganancia ya resta lo que les toca.",
       "onlineNotIncluded": "No incluye cobros en línea (anticipos, membresías y tienda)",
       "truncated": "Una sede tiene más de {limit} movimientos en este periodo: los gastos y los pagos pueden estar incompletos. Elige un periodo más corto.",
       "byMethod": "Ingresos por método",
@@ -300,7 +300,7 @@
       "vsPrev": "vs. periodo anterior",
       "methods": { "CASH": "Efectivo", "CARD": "Tarjeta", "SPEI": "SPEI", "ONLINE": "En línea" },
       "kind": { "ADVANCE": "Adelantos / vales", "COMMISSION": "Comisiones", "SALARY": "Sueldos", "OTHER": "Otros" },
-      "colPaidOut": "Pagado",
+      "colPaidOut": "Pagado en Caja",
       "colAdvances": "Adelantos"
     },
     "weekdays": ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"],
@@ -369,7 +369,7 @@
         "income": "Ingresos (sin propinas)",
         "expenses": "Gastos",
         "expensesCash": "Gastos en efectivo",
-        "payouts": "Entregado a barberos (informativo)",
+        "payouts": "Entregado a barberos, anotado en Caja (informativo)",
         "barberCost": "Comisiones y sueldos devengados (sin propinas)",
         "note": "Nota",
         "profit": "Ganancia",
@@ -378,7 +378,7 @@
         "category": "Categoría",
         "kind": "Tipo",
         "count": "Cantidad",
-        "paidOut": "Pagado",
+        "paidOut": "Pagado en Caja",
         "advances": "Adelantos"
       }
     },
