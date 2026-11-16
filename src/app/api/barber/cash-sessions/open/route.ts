@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
   try {
     await assertBarberFeature(ctx, "cash");
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
-    const summary = await openCashSession(ctx, { openingAmount: body.openingAmount, notes: body.notes });
+    const summary = await openCashSession(ctx, { openingAmount: body.openingAmount, notes: body.notes, confirmDifference: body.confirmDifference });
     return NextResponse.json(summary, { status: 201 });
   } catch (e) {
     return moneyErrorResponse(e);

@@ -418,6 +418,7 @@ export function CajaClient({
           pendingAppointments={checkout.pendingAppointments.length}
           shopName={shopName}
           categoryLabel={(c) => categoryLabel(t, c)}
+          canTakeOut={can.withdraw}
           onClose={closeModal}
           onDone={() => {
             closeModal();

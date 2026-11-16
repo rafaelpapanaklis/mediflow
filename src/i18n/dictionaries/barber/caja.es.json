@@ -160,7 +160,10 @@
       "cashPayouts": "Pagos a barberos en efectivo",
       "cashRefunds": "Anticipos devueltos en efectivo"
     },
-    "openingSuggested": "Es el fondo que se dejó en el último corte ({amount}). Cámbialo si no es lo que hay."
+    "openingSuggested": "Es el fondo que se dejó en el último corte ({amount}). Cámbialo si no es lo que hay.",
+    "openWithDiff": "Abrir con esa diferencia",
+    "openDiffShort": "En el último corte se dejaron {left} de fondo y vas a abrir con {amount}: faltan {diff}. Si es correcto, vuelve a pulsar; queda anotado en el corte.",
+    "openDiffOver": "En el último corte se dejaron {left} de fondo y vas a abrir con {amount}: sobran {diff}. Si es correcto, vuelve a pulsar; queda anotado en el corte."
   },
   "ticket": {
     "title": "Cobrar",
@@ -753,7 +756,8 @@
     "leftTake": "Te llevas {amount}.",
     "leftSummary": "Se deja {left} de fondo para mañana; se retiran {take}.",
     "reprint": "Reimprimir corte",
-    "whoLine": "Abrió {opened} · cerró {closed} ({when})"
+    "whoLine": "Abrió {opened} · cerró {closed} ({when})",
+    "leftAll": "Todo el efectivo contado se queda de fondo para mañana. Llevarse efectivo al cerrar pide el permiso «Sacar efectivo y pagar a barberos»."
   },
   "tabs": {
     "hoy": "Hoy",

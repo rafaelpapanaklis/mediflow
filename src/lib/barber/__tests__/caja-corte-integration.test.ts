@@ -87,6 +87,32 @@ test("conteo por billete/moneda: el total sale del conteo; fondo para mañana gu
   assert.equal(state.history[0].leftForNext, 300);
 });
 
+test("M3: sin «Sacar efectivo» el fondo para mañana = lo contado; abrir con otro fondo pide confirmar y lo anota", { skip: skipDb }, async (t) => {
+  if (skip) return t.skip(skip);
+  const ctx = await shop();
+  const recep = await prisma.barberUser.create({
+    data: { barbershopId: ctx.barbershopId, supabaseId: `${RUN}-rec-${n}`, email: `${RUN}-rec-${n}@test.local`, firstName: "Rita", lastName: "R", role: "RECEPTION" },
+  });
+  const rctx = { ...ctx, barberUserId: recep.id, user: recep, role: "RECEPTION" } as BarberContext;
+  await openCashSession(rctx, { openingAmount: 500 });
+  // Recepción intenta llevarse $400 dejando $100: el servidor deja de fondo TODO lo contado.
+  const closed = await closeCashSession(rctx, { countedAmount: 500, leftForNext: 100 });
+  assert.equal(closed.session.leftForNext, 500, "sin cash.withdraw no se lleva nada");
+  // Abrir con $300 cuando se dejaron $500: 409 con la diferencia; confirmado, se anota.
+  const e = await errorOf(openCashSession(rctx, { openingAmount: 300 }));
+  assert.equal(e.code, "OPENING_DIFFERS");
+  assert.deepEqual(e.details, { suggested: 500, difference: -200 });
+  const abierta = await openCashSession(rctx, { openingAmount: 300, confirmDifference: true, notes: "faltó cambio" });
+  assert.match(abierta.session.notes ?? "", /se dejaron \$500\.00 y se abrió con \$300\.00 \(faltan \$200\.00\)/);
+  assert.match(abierta.session.notes ?? "", /faltó cambio/);
+  // El dueño (con cash.withdraw) sí puede dejar menos de lo contado.
+  const c2 = await closeCashSession(ctx, { countedAmount: 300, leftForNext: 100 });
+  assert.equal(c2.session.leftForNext, 100);
+  const igual = await openCashSession(ctx, { openingAmount: 100 });
+  assert.equal(igual.session.notes, null, "con el mismo fondo no pide nada ni anota");
+  await closeCashSession(ctx, { countedAmount: 100 });
+});
+
 test("total escrito que no coincide con el conteo → 400; fondo mayor que lo contado → 400; conteo con letras → 400", { skip: skipDb }, async (t) => {
   if (skip) return t.skip(skip);
   const ctx = await shop();

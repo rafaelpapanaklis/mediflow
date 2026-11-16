@@ -53,14 +53,27 @@ export function OpenSessionModal({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const amount = parseRequiredAmountText(amountText);
+  // Revisión ws6-t8 (M3): abrir con otro fondo que el que se dejó se confirma
+  // y queda anotado en el corte (lo escribe el servidor).
+  const diffCents = suggested !== null && suggested !== undefined && amount !== null ? toCents(amount) - toCents(suggested) : 0;
+  const [confirming, setConfirming] = useState(false);
 
   async function submit() {
     if (amount === null || busy) return;
+    if (diffCents !== 0 && !confirming) {
+      setConfirming(true);
+      return;
+    }
     setBusy(true);
     setError(null);
-    const r = await postJson("/api/barber/cash-sessions/open", { openingAmount: amount, notes: notes.trim() || null });
+    const r = await postJson("/api/barber/cash-sessions/open", { openingAmount: amount, notes: notes.trim() || null, confirmDifference: confirming });
     setBusy(false);
     if (!r.ok) {
+      if (r.code === "OPENING_DIFFERS") {
+        setConfirming(true);
+        setError(r.error);
+        return;
+      }
       setError(r.error === "network" || !r.error ? t("common.error") : r.error);
       return;
     }
@@ -77,7 +90,7 @@ export function OpenSessionModal({
         <>
           <button type="button" className="btn-new btn-new--ghost" onClick={onClose} disabled={busy}>{t("common.cancel")}</button>
           <button type="button" className="btn-new barber-btn-primary" onClick={submit} disabled={amount === null || busy}>
-            {busy ? t("common.saving") : t("session.openConfirm")}
+            {busy ? t("common.saving") : confirming && diffCents !== 0 ? t("session.openWithDiff") : t("session.openConfirm")}
           </button>
         </>
       }
@@ -87,12 +100,21 @@ export function OpenSessionModal({
         {error && <div className="bcaja-alert bcaja-alert--danger" role="alert">{error}</div>}
         <div className="field-new">
           <label className="field-new__label">{t("session.openingAmount")}</label>
-          <input className="input-new bcaja-amount" inputMode="decimal" autoFocus value={amountText} onChange={(e) => setAmountText(e.target.value)} placeholder="0.00" />
+          <input className="input-new bcaja-amount" inputMode="decimal" autoFocus value={amountText} onChange={(e) => { setAmountText(e.target.value); setConfirming(false); }} placeholder="0.00" data-fondo-abrir />
           {amountText.trim() === "" && <div className="bcaja-hint">{t("session.openingRequired")}</div>}
           {suggested !== null && suggested !== undefined && (
             <div className="bcaja-hint" data-fondo-sugerido>{t("session.openingSuggested", { amount: fmtMoney(suggested) })}</div>
           )}
           {amountText.trim() !== "" && amount === null && <div className="bcaja-hint" role="alert" style={{ color: "var(--danger)" }}>{t("session.amountInvalid")}</div>}
+          {confirming && diffCents !== 0 && suggested !== null && amount !== null && (
+            <div className={`bcaja-alert ${diffCents < 0 ? "bcaja-alert--danger" : "bcaja-alert--warning"}`} role="alert" style={{ marginTop: 8 }} data-fondo-distinto>
+              {t(diffCents < 0 ? "session.openDiffShort" : "session.openDiffOver", {
+                left: fmtMoney(suggested),
+                amount: fmtMoney(amount),
+                diff: fmtMoney(Math.abs(fromCents(diffCents))),
+              })}
+            </div>
+          )}
         </div>
         <div className="field-new">
           <label className="field-new__label">{t("session.openNotes")}</label>
@@ -120,9 +142,15 @@ export function CloseSessionModal({
   pendingAppointments = 0,
   shopName = "",
   categoryLabel = (c: string) => c,
+  canTakeOut = false,
   onClose,
   onDone,
 }: {
+  /**
+   * Puede llevarse efectivo al cerrar (cash.withdraw; revisión ws6-t8, M3).
+   * Sin ella, todo lo contado se queda de fondo (el servidor también lo hace).
+   */
+  canTakeOut?: boolean;
   dict: Dictionary;
   summary: CashSessionSummary;
   tz: string;
@@ -158,7 +186,7 @@ export function CloseSessionModal({
   const expectedCents = toCents(summary.expectedCash);
   const diffCents = counted === null ? null : toCents(counted) - expectedCents;
   const left = leftText.trim() === "" ? null : parseRequiredAmountText(leftText);
-  const leftInvalid = leftText.trim() !== "" && (left === null || (counted !== null && toCents(left) > toCents(counted)));
+  const leftInvalid = canTakeOut && leftText.trim() !== "" && (left === null || (counted !== null && toCents(left) > toCents(counted)));
   const live = useMemo(() => summary.sales.filter((s) => !s.cancelled), [summary.sales]);
   const ready = summary.movementsReady === true;
 
@@ -181,7 +209,7 @@ export function CloseSessionModal({
       sessionId: summary.session.id,
       countedAmount: counted,
       countedBreakdown: mode === "count" ? parsedCount?.count ?? null : null,
-      leftForNext: ready && left !== null ? left : null,
+      leftForNext: ready && canTakeOut && left !== null ? left : null,
       notes: notes.trim() || null,
     });
     setBusy(false);
@@ -345,7 +373,10 @@ export function CloseSessionModal({
           </div>
         </div>
 
-        {ready && (
+        {ready && !canTakeOut && (
+          <div className="bcaja-hint" data-fondo-todo>{t("corte.leftAll")}</div>
+        )}
+        {ready && canTakeOut && (
           <div className="field-new">
             <label className="field-new__label" htmlFor="bcaja-left">{t("corte.leftQuestion")} <span className="bcaja-muted">({t("common.optional")})</span></label>
             <input id="bcaja-left" className="input-new bcaja-amount" inputMode="decimal" value={leftText} onChange={(e) => setLeftText(e.target.value)} placeholder="0.00" data-fondo-manana />

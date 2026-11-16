@@ -40,6 +40,7 @@ import { prisma } from "@/lib/prisma";
 import {
   assertBarberPermission,
   BarberForbiddenError,
+  hasBarberPermission,
   type BarberContext,
 } from "@/lib/barber-auth";
 import { barberFeatureLabel } from "@/lib/barber/plan-shared";
@@ -638,11 +639,33 @@ export async function getCashSessionSummary(
  *  barbería (chequeo + índice único parcial en sql/barber_caja.sql). */
 export async function openCashSession(
   ctx: BarberContext,
-  input: { openingAmount?: unknown; notes?: unknown },
+  input: { openingAmount?: unknown; notes?: unknown; confirmDifference?: unknown },
 ): Promise<CashSessionSummary> {
   assertBarberPermission(ctx, "cash.manage");
   const openingAmount = parseMoneyInput(input.openingAmount, { field: "openingAmount" });
-  const notes = cleanNotes(input.notes);
+  let notes = cleanNotes(input.notes);
+
+  // Revisión ws6-t8 (M3): el fondo que se dejó en el último corte tiene que
+  // ser el que se abre. Si no, se pide confirmar y la diferencia queda
+  // anotada en el turno nuevo (se ve en su corte, impreso y en el CSV).
+  if (await cashMovementsReady(prisma)) {
+    const left = await lastLeftForNext(prisma, ctx.barbershopId);
+    if (left !== null) {
+      const diff = money(openingAmount.minus(left));
+      if (!diff.isZero()) {
+        if (input.confirmDifference !== true) {
+          throw new BarberCajaError(
+            409,
+            "OPENING_DIFFERS",
+            `En el último corte se dejaron $${D(left).toFixed(2)} de fondo y vas a abrir con $${openingAmount.toFixed(2)}. Confirma para abrir así (queda anotado en el corte).`,
+            { suggested: left, difference: diff.toNumber() },
+          );
+        }
+        const nota = `Fondo distinto al del último corte: se dejaron $${D(left).toFixed(2)} y se abrió con $${openingAmount.toFixed(2)} (${diff.isNegative() ? "faltan" : "sobran"} $${diff.abs().toFixed(2)}).`;
+        notes = [nota, notes].filter(Boolean).join("\n");
+      }
+    }
+  }
 
   const created = await prisma.$transaction(async (tx) => {
     const existing = await tx.barberCashSession.findFirst({
@@ -719,6 +742,12 @@ export async function closeCashSession(
     if (leftForNext.gt(countedAmount)) {
       throw new BarberCajaError(400, "LEFT_TOO_BIG", "No puedes dejar de fondo más de lo que contaste.");
     }
+  }
+  // Revisión ws6-t8 (M3): llevarse efectivo al cerrar (fondo < contado) es
+  // sacar efectivo: solo con cash.withdraw. Sin ella, todo lo contado se
+  // queda de fondo para el siguiente turno.
+  if (!hasBarberPermission({ role: ctx.role, permissionsOverride: ctx.user.permissionsOverride }, "cash.withdraw")) {
+    leftForNext = countedAmount;
   }
   const notes = cleanNotes(input.notes);
   const wantedId = typeof input.sessionId === "string" && input.sessionId ? input.sessionId : null;

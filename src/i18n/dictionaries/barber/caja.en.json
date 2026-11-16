@@ -160,7 +160,10 @@
       "cashPayouts": "Cash paid to barbers",
       "cashRefunds": "Deposits refunded in cash"
     },
-    "openingSuggested": "This is the float left at the last close ({amount}). Change it if it's not what's there."
+    "openingSuggested": "This is the float left at the last close ({amount}). Change it if it's not what's there.",
+    "openWithDiff": "Open with that difference",
+    "openDiffShort": "The last close left a float of {left} and you're opening with {amount}: {diff} short. If that's right, press again; it's noted in the close.",
+    "openDiffOver": "The last close left a float of {left} and you're opening with {amount}: {diff} over. If that's right, press again; it's noted in the close."
   },
   "ticket": {
     "title": "Charge",
@@ -753,7 +756,8 @@
     "leftTake": "You take {amount}.",
     "leftSummary": "{left} left as float for tomorrow; {take} taken out.",
     "reprint": "Reprint close",
-    "whoLine": "Opened by {opened} · closed by {closed} ({when})"
+    "whoLine": "Opened by {opened} · closed by {closed} ({when})",
+    "leftAll": "All counted cash stays as tomorrow's float. Taking cash out when closing requires the «Take cash out and pay barbers» permission."
   },
   "tabs": {
     "hoy": "Today",
