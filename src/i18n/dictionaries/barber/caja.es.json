@@ -366,6 +366,8 @@
     "kpiToPayYou": "A pagarte",
     "kpiRentYouOwe": "Debes de renta",
     "kpiRentYouOweHint": "Renta de silla que lo que tienes pendiente no alcanza a cubrir.",
+    "kpiRentReceived": "Ya te pagaron de renta en el periodo: {paid}",
+    "kpiRentYouPaid": "Ya pagaste de renta en el periodo: {paid}",
     "colPaid": "Ya pagado",
     "toPayExplain": "«A pagar» es solo lo pendiente: comisión sin pagar + propinas de tickets sin pagar − renta de silla si aún no se descontó. Lo ya pagado se muestra aparte y no vuelve a sumarse.",
     "rentAlreadyDiscounted": "La renta de silla de este periodo ya se descontó en un pago anterior: no vuelve a restarse.",

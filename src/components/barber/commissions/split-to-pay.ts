@@ -20,3 +20,24 @@ export function splitToPay(rows: ReadonlyArray<{ totalToPay: number }>): {
   const redondea = (n: number) => Math.round(n * 100) / 100;
   return { toPayBarbers: redondea(toPayBarbers), rentOwed: redondea(rentOwed) };
 }
+
+/**
+ * Lo mismo para lo YA pagado (QA de cierre E). El «Ya pagado» de cada fila
+ * llega con signo: positivo = se le pagó al barbero; negativo = el de renta de
+ * silla le pagó al dueño. Sumados juntos, una renta cobrada de $300 tapaba
+ * $300 de pagos a barberos («Ya pagado en el periodo: $51.50» con $351.50
+ * entregados). SOLO PRESENTACIÓN: paidToBarbers − rentReceived = Σ «ya pagado».
+ */
+export function splitPaid(rows: ReadonlyArray<{ paidTotal: number }>): {
+  paidToBarbers: number;
+  rentReceived: number;
+} {
+  let paidToBarbers = 0;
+  let rentReceived = 0;
+  for (const r of rows) {
+    if (r.paidTotal > 0) paidToBarbers += r.paidTotal;
+    else if (r.paidTotal < 0) rentReceived -= r.paidTotal;
+  }
+  const redondea = (n: number) => Math.round(n * 100) / 100;
+  return { paidToBarbers: redondea(paidToBarbers), rentReceived: redondea(rentReceived) };
+}

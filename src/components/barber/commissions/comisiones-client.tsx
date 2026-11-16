@@ -14,7 +14,7 @@ import { BarberModal } from "@/components/barber/cash/modal";
 import { PeriodNav } from "@/components/barber/cash/period-nav";
 import { useBarberT } from "@/components/barber/cash/use-barber-t";
 import { fmtDateTime, fmtMoney, fmtPct, fmtPeriod, fmtSigned } from "@/components/barber/cash/money";
-import { splitToPay } from "./split-to-pay";
+import { splitPaid, splitToPay } from "./split-to-pay";
 import { salaryLabel } from "@/lib/barber/sueldo-texto";
 import "./comisiones.css";
 
@@ -69,9 +69,16 @@ export function ComisionesClient({
   // que se le debe a los barberos de lo que los de renta de silla le deben al
   // dueño. El «A pagar» por fila y el recibo siguen siendo los de siempre.
   const { toPayBarbers, rentOwed } = splitToPay(summary.rows);
+  // Lo ya pagado también va partido: la renta que ya le pagaron al dueño no
+  // se resta de lo que él les pagó a los barberos (QA de cierre E).
+  const { paidToBarbers, rentReceived } = splitPaid(summary.rows);
   // Al dueño la tarjeta de renta le sale siempre (como hasta ahora); al
-  // Barbero, solo si de verdad debe renta.
-  const showRentCard = !summary.selfOnly || rentOwed > 0;
+  // Barbero, solo si de verdad debe renta o ya la pagó en el periodo.
+  const showRentCard = !summary.selfOnly || rentOwed > 0 || rentReceived > 0;
+  const rentHint = [
+    summary.selfOnly ? t("comisiones.kpiRentYouOweHint") : t("comisiones.kpiRentOwedHint"),
+    ...(rentReceived > 0 ? [t(summary.selfOnly ? "comisiones.kpiRentYouPaid" : "comisiones.kpiRentReceived", { paid: fmtMoney(rentReceived) })] : []),
+  ].join(" ");
 
   function goPeriod(p: string) {
     router.push(`/barber/comisiones?period=${p}`);
@@ -160,13 +167,13 @@ export function ComisionesClient({
           label={summary.selfOnly ? t("comisiones.kpiToPayYou") : t("comisiones.kpiToPayBarbers")}
           value={fmtMoney(toPayBarbers)}
           icon={Wallet}
-          hint={t("comisiones.kpiToPayBarbersHint", { paid: fmtMoney(summary.totals.paidTotal) })}
+          hint={t("comisiones.kpiToPayBarbersHint", { paid: fmtMoney(paidToBarbers) })}
         />
         {showRentCard && (
           <KpiCard
             label={summary.selfOnly ? t("comisiones.kpiRentYouOwe") : t("comisiones.kpiRentOwed")}
             value={fmtMoney(rentOwed)}
-            hint={summary.selfOnly ? t("comisiones.kpiRentYouOweHint") : t("comisiones.kpiRentOwedHint")}
+            hint={rentHint}
           />
         )}
       </div>

@@ -12,7 +12,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { splitToPay } from "@/components/barber/commissions/split-to-pay";
+import { splitPaid, splitToPay } from "@/components/barber/commissions/split-to-pay";
 import { getBarberT } from "@/i18n/dictionaries/barber";
 
 test("los positivos van a «Por pagar a barberos»; los negativos, en positivo, a «Te deben de renta»", () => {
@@ -50,4 +50,26 @@ test("textos nuevos en es y en", () => {
     assert.notEqual(es(`barber.caja.comisiones.${k}`, { paid: "$0" }), `barber.caja.comisiones.${k}`);
     assert.notEqual(en(`barber.caja.comisiones.${k}`, { paid: "$0" }), `barber.caja.comisiones.${k}`);
   }
+});
+
+// QA de cierre E (16-nov): con $280 y $123.50 pagados a dos barberos y $300 de
+// renta cobrados a un tercero, la tarjeta decía «Ya pagado en el periodo: $103.50».
+test("lo ya pagado se parte igual: la renta cobrada no tapa lo pagado a los barberos", () => {
+  const r = splitPaid([{ paidTotal: 280 }, { paidTotal: -300 }, { paidTotal: 123.5 }]);
+  assert.deepEqual(r, { paidToBarbers: 403.5, rentReceived: 300 });
+  assert.equal(r.paidToBarbers - r.rentReceived, 103.5, "sigue cuadrando con el total con signo de siempre");
+  assert.deepEqual(splitPaid([{ paidTotal: 0.1 }, { paidTotal: 0.2 }, { paidTotal: 0 }]), { paidToBarbers: 0.3, rentReceived: 0 });
+  assert.deepEqual(splitPaid([]), { paidToBarbers: 0, rentReceived: 0 });
+});
+
+test("la tarjeta usa lo pagado a barberos y avisa aparte de la renta ya cobrada (es y en)", () => {
+  const src = readFileSync(path.resolve(__dirname, "../../../components/barber/commissions/comisiones-client.tsx"), "utf8");
+  assert.match(src, /kpiToPayBarbersHint", \{ paid: fmtMoney\(paidToBarbers\) \}/);
+  assert.doesNotMatch(src, /fmtMoney\(summary\.totals\.paidTotal\)/, "el total con signo ya no se enseña como «ya pagado»");
+  const es = getBarberT("es");
+  const en = getBarberT("en");
+  assert.equal(es("barber.caja.comisiones.kpiRentReceived", { paid: "$300.00" }), "Ya te pagaron de renta en el periodo: $300.00");
+  assert.equal(es("barber.caja.comisiones.kpiRentYouPaid", { paid: "$300.00" }), "Ya pagaste de renta en el periodo: $300.00");
+  assert.equal(en("barber.caja.comisiones.kpiRentReceived", { paid: "$300.00" }), "Rent already paid to you this period: $300.00");
+  assert.equal(en("barber.caja.comisiones.kpiRentYouPaid", { paid: "$300.00" }), "Rent you already paid this period: $300.00");
 });
