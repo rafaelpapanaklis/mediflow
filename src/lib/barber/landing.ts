@@ -1033,6 +1033,35 @@ export function rutaCuentaBarberia(slug: string): string {
 }
 
 /**
+ * Lo contrario: el horario de la PUERTA sacado de los turnos de los barberos
+ * (lógica L3, 15-nov). Cada día abre con el primero que entra y cierra con el
+ * último que sale; un día sin nadie queda cerrado. Así el dueño no captura dos
+ * veces lo mismo (Agenda → Horarios y Mi web → Horario).
+ *
+ * Entra 0 = domingo (agenda); sale 0 = lunes (local). Devuelve null si no hay
+ * ni un turno válido: no se inventa una semana cerrada.
+ */
+export function horarioDelLocalDesdeTurnos(
+  turnos: { dayOfWeek: number; startMinute: number; endMinute: number }[],
+): BarberWebConfig["horario"] | null {
+  const abre = new Array<number | null>(7).fill(null);
+  const cierra = new Array<number | null>(7).fill(null);
+  for (const t of turnos) {
+    if (t.dayOfWeek < 0 || t.dayOfWeek > 6 || t.endMinute <= t.startMinute) continue;
+    const dia = (t.dayOfWeek + 6) % 7;
+    abre[dia] = abre[dia] === null ? t.startMinute : Math.min(abre[dia]!, t.startMinute);
+    cierra[dia] = cierra[dia] === null ? t.endMinute : Math.max(cierra[dia]!, t.endMinute);
+  }
+  if (abre.every((a) => a === null)) return null;
+  const hhmm = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+  return abre.map((a, dia) =>
+    a === null
+      ? { dia, abierto: false, desde: "09:00", hasta: "20:00" }
+      : { dia, abierto: true, desde: hhmm(a), hasta: hhmm(Math.min(cierra[dia]!, 23 * 60 + 59)) },
+  );
+}
+
+/**
  * El horario del local convertido en turnos de un barbero nuevo (BarberSchedule).
  *
  * El local usa 0 = lunes … 6 = domingo; la agenda usa 0 = domingo … 6 = sábado.

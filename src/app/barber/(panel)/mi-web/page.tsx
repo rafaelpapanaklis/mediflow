@@ -8,6 +8,7 @@ import { getBarberPlan } from "@/lib/barber/plans";
 import { getBarberDict, getBarberT } from "@/i18n/dictionaries/barber";
 import { rutaWebBarberia } from "@/lib/barber/landing";
 import { cargarBarberWeb } from "@/app/b/[slug]/_shared/shop-data";
+import { prisma } from "@/lib/prisma";
 import { EditorWebBarberia } from "@/components/barber/landing/editor";
 import { UpsellWebBarberia } from "@/components/barber/landing/upsell";
 
@@ -66,6 +67,13 @@ export default async function PaginaMiWeb() {
 
   const urlPublica = `${SITE_URL}${rutaWebBarberia(ctx.barbershop.slug)}`;
   const plan = await getBarberPlan(ctx.barbershop.plan);
+  // Turnos de los barberos activos de ESTA sede: alimentan «Tomar el horario de mis barberos».
+  const turnosBarberos = await prisma.barberSchedule
+    .findMany({
+      where: { barbershopId: ctx.barbershop.id, isActive: true, barber: { isActive: true } },
+      select: { dayOfWeek: true, startMinute: true, endMinute: true },
+    })
+    .catch(() => []);
 
   if (plan.features.miniWebEditor !== true) {
     return (
@@ -89,6 +97,7 @@ export default async function PaginaMiWeb() {
       publishedAtIso={carga.publishedAt ? carga.publishedAt.toISOString() : null}
       urlPublica={urlPublica}
       sinTabla={carga.sinTabla}
+      turnosBarberos={turnosBarberos}
     />
   );
 }

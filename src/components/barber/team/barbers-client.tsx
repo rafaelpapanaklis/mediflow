@@ -208,7 +208,12 @@ export function BarbersClient({
           { method: "PATCH", json: payload },
         );
         saved = barber;
-        setBarbers((list) => list.map((b) => (b.id === barber.id ? barber : b)));
+        // Se cambió de sede (L3 ronda 2): en la vista de UNA sede deja de estar aquí.
+        setBarbers((list) =>
+          !isConsolidated && activeBranchId && barber.barbershopId !== activeBranchId
+            ? list.filter((b) => b.id !== barber.id)
+            : list.map((b) => (b.id === barber.id ? barber : b)),
+        );
       } else {
         const { barber } = await apiCall<{ barber: BarberProfileRow }>(
           "/api/barber/team/barbers",
@@ -347,7 +352,12 @@ export function BarbersClient({
                 <div className={s.memberPay}>
                   <Chip tone="brand">{payChip(b)}</Chip>
                   {!b.isActive ? <Chip tone="muted">{t("common.inactive")}</Chip> : null}
-                  {b.noSchedule ? <Chip tone="warn">{t("team.noScheduleWarn")}</Chip> : null}
+                  {b.noSchedule ? (
+                    // Lleva directo al horario de ESE barbero: el aviso es la tarea pendiente.
+                    <Link href={`/barber/agenda/horarios?barbero=${encodeURIComponent(b.id)}`} title={t("team.noScheduleAction")}>
+                      <Chip tone="warn">{t("team.noScheduleWarn")} →</Chip>
+                    </Link>
+                  ) : null}
                   {isConsolidated ? (
                     <Chip tone="muted">{branchLabelById.get(b.barbershopId) ?? ""}</Chip>
                   ) : null}
@@ -549,8 +559,8 @@ export function BarbersClient({
             <p className={s.hint}>{t("barbers.salaryHint")}</p>
           ) : null}
 
-          {!form.id && branches.length > 1 ? (
-            <Field label={t("branch.label")}>
+          {branches.length > 1 ? (
+            <Field label={t("branch.label")} hint={form.id ? t("barbers.moveBranchHint") : undefined}>
               {(id) => (
                 <Select
                   id={id}
@@ -560,7 +570,7 @@ export function BarbersClient({
                   {branches.map((b) => (
                     // Una sede cerrada no recibe altas (el servidor responde 409):
                     // se ve, marcada, pero no se puede elegir (QA B, 15-nov).
-                    <option key={b.id} value={b.id} disabled={!b.isActive}>
+                    <option key={b.id} value={b.id} disabled={!b.isActive && b.id !== form.barbershopId}>
                       {b.isActive ? b.label : `${b.label} (${t("branch.closed").toLowerCase()})`}
                     </option>
                   ))}

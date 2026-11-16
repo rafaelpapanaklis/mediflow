@@ -29,7 +29,8 @@
     "sub": "No preference? Pick the first one and we'll assign whoever is free.",
     "cualquiera": "Anyone available",
     "cualquieraSub": "More times to choose from",
-    "vacio": "This barbershop hasn't published its team yet."
+    "vacio": "This barbershop hasn't published its team yet.",
+    "sinHorarioCorto": "No online hours for now"
   },
   "fecha": {
     "title": "Which day?",

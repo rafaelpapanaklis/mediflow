@@ -1,10 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { Building2, Copy, KeyRound, Pencil, Plus, ShieldCheck, UserPlus, Users } from "lucide-react";
 import type { BarberRole } from "@/lib/barber/types";
 import type { BarberMemberRow, BarberTeamContext } from "@/lib/barber/team";
 import type { AdminBranchOption } from "./admin-nav";
+import { opcionesDeFicha } from "@/lib/barber/team-fichas";
 import { PermissionMatrix } from "./permission-matrix";
 import {
   adminStyles as s,
@@ -56,6 +58,8 @@ type EditState = {
   role: BarberRole;
   barberId: string;
   isActive: boolean;
+  /** Sede de la persona: solo se ofrecen las fichas de ahí. */
+  barbershopId: string;
 };
 
 export function TeamClient({
@@ -83,7 +87,23 @@ export function TeamClient({
   const [copied, setCopied] = useState(false);
   const { saving, error, setError, run } = useSaving();
 
-  const writeBranchId = activeBranchId ?? branches[0]?.id ?? "";
+  // Alta por defecto en la sede que se ve, salvo que esté cerrada (igual que Barberos).
+  const openBranches = branches.filter((b) => b.isActive);
+  const writeBranchId =
+    (activeBranchId && openBranches.some((b) => b.id === activeBranchId) ? activeBranchId : openBranches[0]?.id) ??
+    activeBranchId ??
+    branches[0]?.id ??
+    "";
+
+  /** Opciones de ficha con «ya es de …» y solo de la sede de la persona. */
+  function fichaOptions(barbershopId: string, miembroId: string | null, actual: string | null = null) {
+    return opcionesDeFicha(barbers, members, { barbershopId, miembroId, actual }).map((o) => (
+      // El servidor ya no deja ligar una ficha ocupada (409): aquí se ve y no se elige.
+      <option key={o.id} value={o.id} disabled={Boolean(o.ligadaA) && o.id !== actual}>
+        {o.ligadaA ? t("team.linkedBarberTaken", { name: o.name, who: o.ligadaA }) : o.name}
+      </option>
+    ));
+  }
   const branchLabelById = useMemo(
     () => new Map(branches.map((b) => [b.id, b.label])),
     [branches],
@@ -221,7 +241,11 @@ export function TeamClient({
                   {m.barberName ? (
                     <Chip tone="muted">{t("team.linkedBarberChip", { name: m.barberName })}</Chip>
                   ) : null}
-                  {m.noSchedule ? <Chip tone="warn">{t("team.noScheduleWarn")}</Chip> : null}
+                  {m.noSchedule && m.barberId ? (
+                    <Link href={`/barber/agenda/horarios?barbero=${encodeURIComponent(m.barberId)}`} title={t("team.noScheduleAction")}>
+                      <Chip tone="warn">{t("team.noScheduleWarn")} →</Chip>
+                    </Link>
+                  ) : null}
                   {isConsolidated ? (
                     <Chip tone="muted">{branchLabelById.get(m.barbershopId) ?? ""}</Chip>
                   ) : null}
@@ -261,6 +285,7 @@ export function TeamClient({
                           role: m.role,
                           barberId: m.barberId ?? "",
                           isActive: m.isActive,
+                          barbershopId: m.barbershopId,
                         })
                       }
                     >
@@ -341,7 +366,10 @@ export function TeamClient({
                 </Select>
               )}
             </Field>
-            <Field label={t("team.linkedBarber")} hint={t("team.linkedBarberHint")}>
+            <Field
+              label={t("team.linkedBarber")}
+              hint={invite.role === "BARBER" && !invite.barberId ? t("team.barberWithoutFicha") : t("team.linkedBarberHint")}
+            >
               {(id) => (
                 <Select
                   id={id}
@@ -349,13 +377,7 @@ export function TeamClient({
                   onChange={(e) => setInvite({ ...invite, barberId: e.target.value })}
                 >
                   <option value="">{t("team.linkedBarberNone")}</option>
-                  {barbers
-                    .filter((b) => b.barbershopId === invite.barbershopId)
-                    .map((b) => (
-                      <option key={b.id} value={b.id}>
-                        {b.name}
-                      </option>
-                    ))}
+                  {fichaOptions(invite.barbershopId, null)}
                 </Select>
               )}
             </Field>
@@ -370,8 +392,9 @@ export function TeamClient({
                     }
                   >
                     {branches.map((b) => (
-                      <option key={b.id} value={b.id}>
-                        {b.label}
+                      // Una sede cerrada no recibe altas: se ve, marcada, sin poder elegirse.
+                      <option key={b.id} value={b.id} disabled={!b.isActive}>
+                        {b.isActive ? b.label : `${b.label} (${t("branch.closed").toLowerCase()})`}
                       </option>
                     ))}
                   </Select>
@@ -489,7 +512,10 @@ export function TeamClient({
                 </Select>
               )}
             </Field>
-            <Field label={t("team.linkedBarber")} hint={t("team.linkedBarberHint")}>
+            <Field
+              label={t("team.linkedBarber")}
+              hint={edit.role === "BARBER" && !edit.barberId ? t("team.barberWithoutFicha") : t("team.linkedBarberHint")}
+            >
               {(id) => (
                 <Select
                   id={id}
@@ -497,11 +523,7 @@ export function TeamClient({
                   onChange={(e) => setEdit({ ...edit, barberId: e.target.value })}
                 >
                   <option value="">{t("team.linkedBarberNone")}</option>
-                  {barbers.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name}
-                    </option>
-                  ))}
+                  {fichaOptions(edit.barbershopId, edit.id, edit.barberId || null)}
                 </Select>
               )}
             </Field>

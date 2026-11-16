@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { PlantillaBarberWeb } from "@/components/barber/templates";
-import { rutaWebBarberia } from "@/lib/barber/landing";
+import { rutaCuentaBarberia, rutaWebBarberia } from "@/lib/barber/landing";
+import { barberiaTieneWhatsApp } from "@/lib/barber/wa-conectado";
 import { cargarBarberWeb, cargarSeoBarberWeb, cargarSedeCerrada } from "./_shared/shop-data";
 import { SedeCerrada } from "./_shared/sede-cerrada";
 import { loadFeaturedProducts } from "@/lib/barber/tienda";
@@ -138,6 +139,9 @@ export default async function PaginaBarberia(props: Props) {
     );
   }
 
+  // «Mis citas» en el pie: solo si el cliente puede recibir su código por WhatsApp.
+  const conWhatsApp = await barberiaTieneWhatsApp(carga.data.shop.id).catch(() => false);
+
   // Destacados de la tienda (ws6-t1). Nunca truena: sin SQL o sin plan, [].
   const productos = (await loadFeaturedProducts({ id: carga.data.shop.id })).map((p) => ({
     id: p.id,
@@ -162,7 +166,14 @@ export default async function PaginaBarberia(props: Props) {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: serializarJsonLd(ld) }}
       />
-      <PlantillaBarberWeb data={{ ...carga.data, productos, tiendaUrl: productos.length > 0 ? rutaTienda(carga.data.shop.slug) : null }} />
+      <PlantillaBarberWeb
+        data={{
+          ...carga.data,
+          productos,
+          tiendaUrl: productos.length > 0 ? rutaTienda(carga.data.shop.slug) : null,
+          cuentaUrl: conWhatsApp ? rutaCuentaBarberia(carga.data.shop.slug) : null,
+        }}
+      />
     </>
   );
 }

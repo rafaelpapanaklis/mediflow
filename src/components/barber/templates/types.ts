@@ -51,6 +51,8 @@ export interface BarberWebBarbero {
   apodo: string | null;
   fotoUrl: string | null;
   bio: string | null;
+  /** true = activo pero sin un solo turno: sale en el equipo sin «Reservar». */
+  sinHorario?: boolean;
 }
 
 /** Un producto destacado en la página (solo lo público: sin costo ni existencias exactas). */
@@ -78,6 +80,11 @@ export interface BarberWebData {
   productos?: BarberWebProducto[];
   /** Liga a /b/<slug>/tienda (solo si hay productos). */
   tiendaUrl?: string | null;
+  /**
+   * Liga a /b/<slug>/mi-cuenta (sus citas y estrellas). Solo con WhatsApp
+   * conectado: la entrada es con un código por WhatsApp.
+   */
+  cuentaUrl?: string | null;
   /**
    * true = se está pintando dentro del editor.
    *

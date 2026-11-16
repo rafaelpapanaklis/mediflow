@@ -25,6 +25,11 @@ export const BARBER_PERMISSIONS = [
   { key: "barbers.manage", label: "Administrar barberos" },
   // Horario recurrente (BarberSchedule) y bloqueos (BarberTimeOff).
   { key: "schedule.manage", label: "Administrar horarios y bloqueos" },
+  // Bloqueos sin horario (L3 ronda 2, decisión del gerente 15-nov): Recepción
+  // bloquea al barbero que se enfermó; el Barbero pone y quita SOLO los suyos
+  // (comida, permiso). Ninguno de los dos toca el horario recurrente.
+  { key: "timeoff.manage", label: "Poner y quitar bloqueos de cualquiera" },
+  { key: "timeoff.own", label: "Poner y quitar sus propios bloqueos" },
   { key: "walkin.manage", label: "Operar la fila virtual" },
   { key: "requests.manage", label: "Atender solicitudes de reserva" },
   { key: "cash.view", label: "Ver caja" },
@@ -97,8 +102,10 @@ export const BARBER_ROLE_DEFAULT_PERMISSIONS: Record<BarberRole, BarberPermissio
     "products.view",
     "whatsapp.view",
     "whatsapp.send",
+    // Bloqueos sí, horarios no (L3 ronda 2).
+    "timeoff.manage",
   ],
-  BARBER: ["agenda.view", "clients.view", "walkin.manage", "commissions.view"],
+  BARBER: ["agenda.view", "clients.view", "walkin.manage", "commissions.view", "timeoff.own"],
 };
 
 /**
@@ -110,7 +117,36 @@ export const BARBER_ROLE_DEFAULT_PERMISSIONS: Record<BarberRole, BarberPermissio
 export const BARBER_PERMISSION_IMPLIES: Partial<Record<BarberPermissionKey, BarberPermissionKey[]>> = {
   "memberships.manage": ["memberships.sell"],
   "products.manage": ["products.view"],
+  "schedule.manage": ["timeoff.manage", "timeoff.own"],
+  "timeoff.manage": ["timeoff.own"],
 };
+
+/**
+ * Qué bloqueos puede poner y quitar esta persona (L3 ronda 2):
+ * - "all": de cualquier barbero y de toda la barbería (día festivo);
+ * - { barberId }: solo los de SU ficha (rol Barbero ligado);
+ * - null: ninguno (solo mira).
+ * Sin ficha ligada, timeoff.own no da nada: no hay «suyos».
+ */
+export type BarberTimeOffScope = "all" | { barberId: string } | null;
+
+export function timeOffScope(user: {
+  role: BarberRole;
+  permissionsOverride?: string[] | null;
+  ownBarberId: string | null;
+}): BarberTimeOffScope {
+  const set = resolveBarberPermissions(user.role, user.permissionsOverride);
+  if (set.has("timeoff.manage")) return "all";
+  if (set.has("timeoff.own") && user.ownBarberId) return { barberId: user.ownBarberId };
+  return null;
+}
+
+/** ¿Este alcance permite tocar un bloqueo de este barbero (null = toda la barbería)? */
+export function timeOffAllowed(scope: BarberTimeOffScope, barberId: string | null): boolean {
+  if (scope === "all") return true;
+  if (!scope) return false;
+  return barberId !== null && barberId === scope.barberId;
+}
 
 /**
  * Set efectivo de permisos: override REEMPLAZA al default del rol si trae

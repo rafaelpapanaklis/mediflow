@@ -34,6 +34,7 @@ import {
   BARBER_WEB_ACCENTS,
   BARBER_WEB_DIAS,
   BARBER_WEB_TEMPLATE_DEFAULT,
+  horarioDelLocalDesdeTurnos,
   normalizarConfigBarberWeb,
   ordenDeSecciones,
   tieneHorario,
@@ -65,6 +66,8 @@ export interface EditorProps {
   version: number;
   publishedAtIso: string | null;
   urlPublica: string;
+  /** Turnos activos de los barberos activos de esta sede (para «Tomar el horario de mis barberos»). */
+  turnosBarberos?: { dayOfWeek: number; startMinute: number; endMinute: number }[];
   /** true = la tabla barber_landing_configs todavía no existe en Supabase. */
   sinTabla?: boolean;
 }
@@ -86,6 +89,7 @@ export function EditorWebBarberia(props: EditorProps) {
   }, [props.dict]);
 
   const inicial = useMemo(() => normalizarConfigBarberWeb(props.config), [props.config]);
+  const horarioDeBarberos = useMemo(() => horarioDelLocalDesdeTurnos(props.turnosBarberos ?? []), [props.turnosBarberos]);
 
   const [config, setConfig] = useState<BarberWebConfig>(inicial);
   const [template, setTemplate] = useState<string>(props.template || BARBER_WEB_TEMPLATE_DEFAULT);
@@ -507,6 +511,19 @@ export function EditorWebBarberia(props: EditorProps) {
 
           {/* Horario */}
           <Panel titulo={t("horarioTitulo")} ayuda={t("horarioAyuda")}>
+            {horarioDeBarberos ? (
+              // Lógica L3: el horario ya está capturado por barbero en la Agenda;
+              // aquí se copia de un clic en vez de volver a teclearlo.
+              <p style={{ margin: "0 0 10px" }}>
+                <button
+                  type="button"
+                  className="dcbwe-btn dcbwe-btn-suave"
+                  onClick={() => cambiar((c) => ({ ...c, horario: horarioDeBarberos }))}
+                >
+                  {t("horarioDeBarberos")}
+                </button>
+              </p>
+            ) : null}
             <Horario t={t} dias={config.horario} onChange={(h) => cambiar((c) => ({ ...c, horario: h }))} />
           </Panel>
 

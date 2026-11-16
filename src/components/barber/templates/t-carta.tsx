@@ -220,9 +220,12 @@ export function PlantillaCarta({ data }: { data: BarberWebData }) {
                           <h3>{b.nombre}</h3>
                           {b.apodo && <p className="dcbw-ca-apodo">«{b.apodo}»</p>}
                           {b.bio && <p className="dcbw-ca-bio">{b.bio}</p>}
-                          <a href={rutaReservaBarberia(shop.slug, b.id)} className="dcbw-ca-liga">
-                            {copia(data, "equipo", "equipo.cta")}
-                          </a>
+                          {/* Sin horario no se ofrece «Reservar»: sigue en el equipo, no engaña (L3 ronda 2). */}
+                          {!b.sinHorario ? (
+                            <a href={rutaReservaBarberia(shop.slug, b.id)} className="dcbw-ca-liga">
+                              {copia(data, "equipo", "equipo.cta")}
+                            </a>
+                          ) : null}
                         </div>
                       </li>
                     ))}
@@ -346,7 +349,7 @@ export function PlantillaCarta({ data }: { data: BarberWebData }) {
       </div>
 
       <SeccionProductos data={data} />
-      <Pie nombre={shop.name} />
+      <Pie nombre={shop.name} cuentaUrl={data.cuentaUrl} />
     </div>
   );
 }

@@ -102,9 +102,12 @@ export function PlantillaEquipo({ data }: { data: BarberWebData }) {
                       </div>
                     </div>
                     {b.bio && <p className="dcbw-bio">{b.bio}</p>}
-                    <Boton href={rutaReservaBarberia(shop.slug, b.id)} className="dcbw-equipo-cta">
-                      {copia(data, "equipo", "equipo.cta")} <IcoFlecha size={14} />
-                    </Boton>
+                    {/* Sin horario no se ofrece «Reservar»: sigue en el equipo, no engaña (L3 ronda 2). */}
+                    {!b.sinHorario ? (
+                      <Boton href={rutaReservaBarberia(shop.slug, b.id)} className="dcbw-equipo-cta">
+                        {copia(data, "equipo", "equipo.cta")} <IcoFlecha size={14} />
+                      </Boton>
+                    ) : null}
                   </li>
                 ))}
               </ul>
@@ -201,7 +204,7 @@ export function PlantillaEquipo({ data }: { data: BarberWebData }) {
       ))}
 
       <SeccionProductos data={data} />
-      <Pie nombre={shop.name} />
+      <Pie nombre={shop.name} cuentaUrl={data.cuentaUrl} />
     </div>
   );
 }

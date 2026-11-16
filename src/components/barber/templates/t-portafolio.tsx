@@ -144,9 +144,12 @@ export function PlantillaPortafolio({ data }: { data: BarberWebData }) {
                       <span className="dcbw-inicial dcbw-inicial-cuadro">{b.nombre.charAt(0)}</span>
                     )}
                     <h3>{b.apodo || b.nombre}</h3>
-                    <a href={rutaReservaBarberia(shop.slug, b.id)} className="dcbw-enlace">
-                      {copia(data, "equipo", "equipo.cta")}
-                    </a>
+                    {/* Sin horario no se ofrece «Reservar»: sigue en el equipo, no engaña (L3 ronda 2). */}
+                    {!b.sinHorario ? (
+                      <a href={rutaReservaBarberia(shop.slug, b.id)} className="dcbw-enlace">
+                        {copia(data, "equipo", "equipo.cta")}
+                      </a>
+                    ) : null}
                   </li>
                 ))}
               </ul>
@@ -207,7 +210,7 @@ export function PlantillaPortafolio({ data }: { data: BarberWebData }) {
       ))}
 
       <SeccionProductos data={data} />
-      <Pie nombre={shop.name} />
+      <Pie nombre={shop.name} cuentaUrl={data.cuentaUrl} />
 
       {/* ── Barra de reserva pegada abajo ─────────────────────── */}
       <div className="dcbw-pf-barra">
