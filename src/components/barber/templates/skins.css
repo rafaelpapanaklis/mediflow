@@ -5102,3 +5102,1349 @@ img.dcbw-es-equipo-foto {
 .dcbw-producto:focus-visible { outline: 2px solid currentColor; outline-offset: 4px; border-radius: 14px; }
 .dcbw-producto-cat { font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; opacity: 0.65; }
 .dcbw-producto-nombre { font-size: 15px; font-weight: 600; line-height: 1.3; }
+
+/* ═══════════════════════════════════════════════════════════════
+   PLANTILLA 13 — REVISTA (ws6-t6, 16-nov; mockup C)
+   Índice fijo a la izquierda, nombre enorme en serif ligera, fotos en
+   cápsula y una sola nota de color. Sin fotos: tipografía y aire.
+
+   Fuentes AUTOALOJADAS (public/barber/fuentes/, OFL): Newsreader para la
+   serif y Hanken Grotesk para el texto. Nombres propios de familia para
+   no chocar con otra plantilla que declare las mismas. El navegador solo
+   las descarga si algo de esta plantilla las usa.
+
+   La medida va por @container como en las demás. El contenido (al lado
+   de la lateral) es además su PROPIO contenedor (`dcbw-rv`): así los
+   `cqi` de los titulares miden el ancho que de verdad tienen, no el de la
+   página entera con la lateral incluida.
+   ═══════════════════════════════════════════════════════════════ */
+
+@font-face {
+  font-family: "DCBW Revista Serif";
+  src: url("/barber/fuentes/newsreader-300-600.woff2") format("woff2");
+  font-weight: 300 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "DCBW Revista Serif";
+  src: url("/barber/fuentes/newsreader-italic-300-600.woff2") format("woff2");
+  font-weight: 300 600;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "DCBW Revista Sans";
+  src: url("/barber/fuentes/hanken-grotesk-latin-var.woff2") format("woff2");
+  font-weight: 300 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+.dcbw-revista {
+  /* Hueso, piedra y noche. Contraste medido: tinta-2 sobre hueso 6,1:1 y
+     sobre piedra 5,3:1; sobre-noche-2 sobre noche 7,9:1. */
+  --dcbw-bg: #f4f3ef;
+  --dcbw-bg-2: #e8e7e1;
+  --dcbw-tinta: #1b1d1a;
+  --dcbw-tinta-2: #55584f;
+  --dcbw-tinta-3: #55584f;
+  --dcbw-borde: rgba(27, 29, 26, 0.15);
+  --dcbw-borde-fuerte: rgba(27, 29, 26, 0.32);
+  --dcbw-radio: 28px;
+  --dcbw-ancho: 1040px;
+  --dcbw-lado: 20px;
+  --dcbw-aire: 88px;
+  --dcbw-serif: "DCBW Revista Serif", "Iowan Old Style", Georgia, serif;
+  --dcbw-sans: "DCBW Revista Sans", "Helvetica Neue", Arial, sans-serif;
+  --dcbw-rv-superficie: #fbfaf7;
+  --dcbw-rv-retrato: #dfe0d9;
+  --dcbw-rv-noche: #1e211d;
+  --dcbw-rv-sobre-noche: #f1f0ea;
+  --dcbw-rv-sobre-noche-2: #aeb1a8;
+  --dcbw-rv-borde-noche: rgba(241, 240, 234, 0.2);
+  --dcbw-rv-capsula: 999px;
+
+  font-size: 17px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Tipografía ────────────────────────────────────────────── */
+
+.dcbw-revista .dcbw-h2 {
+  font-family: var(--dcbw-serif);
+  font-weight: 300;
+  font-size: clamp(42px, 11cqi, 72px);
+  line-height: 1;
+  letter-spacing: -0.022em;
+}
+
+.dcbw-revista .dcbw-encabezado {
+  gap: 0;
+  margin-bottom: 36px;
+}
+
+.dcbw-revista .dcbw-bajada {
+  max-width: 34ch;
+  margin-top: 16px;
+  font-size: 17px;
+  color: var(--dcbw-tinta-2);
+}
+
+.dcbw-rv-punto {
+  display: inline-block;
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--dcbw-acento);
+}
+
+/* ── Botones y enlaces ─────────────────────────────────────── */
+
+.dcbw-revista .dcbw-btn {
+  min-height: 52px;
+  padding: 0 26px;
+  gap: 10px;
+  border-width: 1px;
+  font-family: var(--dcbw-sans);
+  font-size: 16px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: background 200ms ease, color 200ms ease, border-color 200ms ease;
+}
+
+.dcbw-revista .dcbw-btn-fantasma.dcbw-rv-btn-linea {
+  border-color: var(--dcbw-tinta);
+  color: var(--dcbw-tinta);
+  opacity: 1;
+}
+
+.dcbw-revista .dcbw-btn-fantasma.dcbw-rv-btn-linea:hover {
+  background: var(--dcbw-tinta);
+  color: var(--dcbw-bg);
+}
+
+.dcbw-rv-enlace {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  font-weight: 500;
+  text-decoration: underline;
+  text-decoration-color: var(--dcbw-acento);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 6px;
+}
+
+.dcbw-rv-enlace:hover {
+  color: var(--dcbw-acento-fuerte);
+}
+
+/* Sobre noche el acento base no da 3:1 para el foco ni el subrayado. */
+.dcbw-rv-noche {
+  background: var(--dcbw-rv-noche);
+  color: var(--dcbw-rv-sobre-noche);
+}
+
+.dcbw-rv-noche .dcbw-bajada {
+  color: var(--dcbw-rv-sobre-noche-2);
+}
+
+.dcbw-rv-noche .dcbw-rv-enlace {
+  text-decoration-color: var(--dcbw-acento-claro);
+}
+
+.dcbw-rv-noche .dcbw-rv-enlace:hover {
+  color: var(--dcbw-acento-claro);
+}
+
+.dcbw-revista .dcbw-rv-noche :where(a, button, [tabindex]):focus-visible,
+.dcbw-revista .dcbw-pie a:focus-visible {
+  outline-color: var(--dcbw-acento-claro);
+}
+
+.dcbw-rv-piedra {
+  background: var(--dcbw-bg-2);
+}
+
+/* ── Cápsulas ──────────────────────────────────────────────── */
+
+.dcbw-rv-capsula {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--dcbw-rv-capsula);
+  background: var(--dcbw-bg-2);
+  container-type: inline-size;
+}
+
+.dcbw-rv-capsula img,
+.dcbw-rv-retrato img,
+.dcbw-rv-tira img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* La inicial que hace de foto cuando no hay ninguna. */
+.dcbw-rv-letra {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  font-family: var(--dcbw-serif);
+  font-style: italic;
+  font-weight: 300;
+  font-size: 62cqi;
+  line-height: 1;
+  color: var(--dcbw-tinta-2);
+  user-select: none;
+}
+
+/* ── Marco: una columna en el teléfono, lateral + contenido ≥1000 ── */
+
+.dcbw-rv-contenido {
+  min-width: 0;
+  container-type: inline-size;
+  container-name: dcbw-rv;
+}
+
+/* ── La lateral (cabecera mínima en el teléfono) ───────────── */
+
+.dcbw-rv-lado {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 64px;
+  padding: 10px var(--dcbw-lado);
+}
+
+.dcbw-rv-marca {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  min-height: 44px;
+}
+
+.dcbw-rv-logo {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
+}
+
+.dcbw-rv-marca-nombre {
+  min-width: 0;
+  font-family: var(--dcbw-serif);
+  font-size: 26px;
+  font-weight: 400;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dcbw-rv-mis {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.dcbw-rv-indice,
+.dcbw-rv-lado-pie {
+  display: none;
+}
+
+/* ── Barra de abajo (solo teléfono) ────────────────────────── */
+
+.dcbw-rv-abajo {
+  position: sticky;
+  bottom: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 12px 10px 8px;
+  padding-bottom: max(10px, env(safe-area-inset-bottom));
+  background: color-mix(in srgb, var(--dcbw-rv-superficie) 96%, transparent);
+  backdrop-filter: blur(12px);
+  border-top: 1px solid var(--dcbw-borde);
+}
+
+.dcbw-rv-abajo > a:not(.dcbw-btn) {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 52px;
+  font-size: 15px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dcbw-revista .dcbw-rv-abajo-btn {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 60%;
+  margin-left: auto;
+  padding: 0 22px;
+  overflow: hidden;
+}
+
+/* ── Portada ───────────────────────────────────────────────── */
+
+.dcbw-revista .dcbw-rv-portada {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1fr);
+  grid-template-areas:
+    "txt txt"
+    "datos foto";
+  align-items: end;
+  gap: 24px 16px;
+  padding-top: 10px;
+  padding-bottom: 56px;
+}
+
+.dcbw-revista .dcbw-rv-portada.dcbw-rv-sin-datos {
+  grid-template-areas:
+    "txt txt"
+    "foto foto";
+}
+
+.dcbw-rv-sin-datos .dcbw-rv-portada-foto {
+  justify-self: end;
+  width: 62%;
+}
+
+.dcbw-rv-portada-txt {
+  grid-area: txt;
+  min-width: 0;
+}
+
+.dcbw-rv-que {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+  color: var(--dcbw-tinta-2);
+}
+
+.dcbw-rv-titular {
+  margin-top: 14px;
+  font-family: var(--dcbw-serif);
+  font-weight: 300;
+  line-height: 0.9;
+  letter-spacing: -0.022em;
+  text-wrap: balance;
+  overflow-wrap: break-word;
+}
+
+/* La talla la decide la palabra más larga del nombre (t-revista.tsx). */
+.dcbw-rv-talla-s {
+  font-size: clamp(64px, 21cqi, 104px);
+}
+
+.dcbw-rv-talla-m {
+  font-size: clamp(40px, 15cqi, 64px);
+  line-height: 0.95;
+}
+
+.dcbw-rv-talla-l {
+  font-size: clamp(32px, 10.5cqi, 46px);
+  line-height: 1;
+}
+
+.dcbw-rv-frase {
+  max-width: 17ch;
+  margin-top: 22px;
+  font-family: var(--dcbw-serif);
+  font-style: italic;
+  font-weight: 300;
+  font-size: 26px;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  text-wrap: pretty;
+}
+
+.dcbw-rv-acciones {
+  display: none;
+}
+
+.dcbw-rv-datos {
+  grid-area: datos;
+  display: grid;
+  gap: 14px;
+  margin: 0;
+  padding-bottom: 10px;
+  font-size: 15px;
+}
+
+.dcbw-rv-datos dt {
+  font-size: 13px;
+  color: var(--dcbw-tinta-2);
+}
+
+.dcbw-rv-datos dd span {
+  display: block;
+}
+
+.dcbw-rv-rango {
+  white-space: nowrap;
+}
+
+.dcbw-rv-datos dd {
+  margin: 0;
+  font-weight: 500;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.dcbw-rv-datos a {
+  text-decoration: underline;
+  text-decoration-color: var(--dcbw-borde-fuerte);
+  text-underline-offset: 4px;
+}
+
+.dcbw-rv-datos a:hover {
+  text-decoration-color: var(--dcbw-acento);
+}
+
+.dcbw-rv-portada-foto {
+  grid-area: foto;
+  aspect-ratio: 3 / 4.2;
+}
+
+.dcbw-rv-portada-foto .dcbw-rv-foto {
+  filter: saturate(0.8);
+  animation: dcbw-rv-asomar 1.2s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+@keyframes dcbw-rv-asomar {
+  from {
+    transform: scale(1.08);
+    opacity: 0.4;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+.dcbw-rv-sin-foto {
+  background: var(--dcbw-acento-suave);
+}
+
+.dcbw-rv-sin-foto .dcbw-rv-letra {
+  color: var(--dcbw-acento-fuerte);
+}
+
+.dcbw-rv-capsula-aviso {
+  position: absolute;
+  inset: auto 0 18% 0;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--dcbw-acento-fuerte);
+}
+
+/* ── Servicios ─────────────────────────────────────────────── */
+
+.dcbw-rv-grupo + .dcbw-rv-grupo {
+  margin-top: 56px;
+}
+
+.dcbw-rv-categoria {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--dcbw-tinta);
+  font-family: var(--dcbw-serif);
+  font-style: italic;
+  font-weight: 300;
+  font-size: 26px;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+}
+
+.dcbw-rv-destacada {
+  padding: 8px 20px;
+  border-radius: var(--dcbw-radio);
+  background: var(--dcbw-acento-suave);
+}
+
+.dcbw-rv-destacada .dcbw-rv-categoria {
+  padding: 18px 0 12px;
+  border-bottom: 0;
+}
+
+.dcbw-rv-destacada li {
+  border-top: 1px solid var(--dcbw-borde);
+}
+
+.dcbw-rv-servicio {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 2px 16px;
+  min-height: 68px;
+  padding: 17px 0;
+  border-bottom: 1px solid var(--dcbw-borde);
+}
+
+.dcbw-rv-destacada .dcbw-rv-servicio {
+  border-bottom: 0;
+}
+
+.dcbw-rv-servicio-nombre {
+  grid-column: 1;
+  grid-row: 1;
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.dcbw-revista .dcbw-rv-servicio-precio {
+  grid-column: 2;
+  grid-row: 1;
+  font-family: var(--dcbw-serif);
+  font-weight: 400;
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: -0.01em;
+  text-align: right;
+}
+
+.dcbw-rv-servicio-nota {
+  grid-column: 1;
+  grid-row: 2;
+  max-width: 40ch;
+  font-size: 15px;
+  line-height: 1.45;
+  color: var(--dcbw-tinta-2);
+}
+
+.dcbw-revista .dcbw-rv-servicio-dur {
+  grid-column: 2;
+  grid-row: 2;
+  font-size: 15px;
+  font-weight: 400;
+  color: var(--dcbw-tinta-2);
+  text-align: right;
+}
+
+.dcbw-rv-servicio:hover .dcbw-rv-servicio-nombre {
+  text-decoration: underline;
+  text-decoration-color: var(--dcbw-acento);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 5px;
+}
+
+/* ── Tienda (la pieza compartida, con cápsulas) ────────────── */
+
+.dcbw-revista .dcbw-sec-tienda {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.dcbw-revista .dcbw-sec-tienda .dcbw-encabezado {
+  margin-bottom: 0;
+}
+
+.dcbw-revista .dcbw-sec-tienda > p {
+  grid-row: 2;
+  margin-top: 12px !important;
+}
+
+.dcbw-revista .dcbw-productos {
+  grid-row: 3;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 36px 16px;
+  margin-top: 36px;
+}
+
+.dcbw-revista .dcbw-producto {
+  align-items: flex-start;
+  gap: 0;
+}
+
+.dcbw-revista .dcbw-producto-foto {
+  width: 100%;
+  aspect-ratio: 3 / 3.9;
+  margin-bottom: 16px;
+  border: 0;
+  border-radius: var(--dcbw-rv-capsula);
+  background: var(--dcbw-rv-superficie);
+  container-type: inline-size;
+}
+
+.dcbw-revista .dcbw-producto-foto > span {
+  font-family: var(--dcbw-serif);
+  font-style: italic;
+  font-weight: 300;
+  font-size: 50cqi;
+  color: var(--dcbw-tinta-2);
+}
+
+.dcbw-revista .dcbw-producto:focus-visible {
+  outline: 3px solid var(--dcbw-acento);
+  border-radius: 28px;
+}
+
+.dcbw-revista .dcbw-producto-nombre {
+  order: 1;
+  font-size: 17px;
+  font-weight: 500;
+}
+
+.dcbw-revista .dcbw-producto-cat {
+  order: 2;
+  font-size: 13px;
+  letter-spacing: 0;
+  text-transform: none;
+  opacity: 1;
+  color: var(--dcbw-tinta-2);
+}
+
+.dcbw-revista .dcbw-producto .dcbw-precio {
+  order: 3;
+  margin-top: 6px;
+  font-family: var(--dcbw-serif);
+  font-weight: 400;
+  font-size: 24px;
+  line-height: 1.1;
+}
+
+.dcbw-revista .dcbw-producto .dcbw-precio ~ .dcbw-producto-cat {
+  order: 4;
+}
+
+.dcbw-revista .dcbw-producto:hover .dcbw-producto-nombre {
+  text-decoration: underline;
+  text-decoration-color: var(--dcbw-acento);
+  text-underline-offset: 4px;
+}
+
+/* «Ver toda la tienda» como enlace subrayado, no como botón. */
+.dcbw-revista .dcbw-sec-tienda .dcbw-btn-fantasma {
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  opacity: 1;
+  text-decoration: underline;
+  text-decoration-color: var(--dcbw-acento);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 6px;
+}
+
+.dcbw-revista .dcbw-sec-tienda .dcbw-btn-fantasma:hover {
+  color: var(--dcbw-acento-fuerte);
+}
+
+/* ── Equipo ────────────────────────────────────────────────── */
+
+.dcbw-rv-barberos li {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  align-items: center;
+  gap: 20px;
+  padding: 22px 0;
+  border-top: 1px solid var(--dcbw-borde);
+}
+
+.dcbw-rv-barberos li:last-child {
+  border-bottom: 1px solid var(--dcbw-borde);
+}
+
+.dcbw-rv-retrato {
+  aspect-ratio: 3 / 4.1;
+  overflow: hidden;
+  border-radius: var(--dcbw-rv-capsula);
+  background: var(--dcbw-rv-retrato);
+  container-type: inline-size;
+}
+
+.dcbw-rv-barbero-txt {
+  min-width: 0;
+}
+
+.dcbw-rv-barbero-txt h3 {
+  font-family: var(--dcbw-serif);
+  font-weight: 400;
+  font-size: 28px;
+  line-height: 1.05;
+  letter-spacing: -0.015em;
+  overflow-wrap: break-word;
+}
+
+.dcbw-rv-apodo {
+  font-family: var(--dcbw-serif);
+  font-style: italic;
+  font-weight: 300;
+  font-size: 18px;
+  line-height: 1.2;
+  color: var(--dcbw-tinta-2);
+}
+
+.dcbw-rv-bio {
+  margin-top: 8px;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--dcbw-tinta-2);
+}
+
+.dcbw-rv-barbero-txt .dcbw-rv-enlace {
+  margin-top: 4px;
+}
+
+.dcbw-rv-nota {
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--dcbw-tinta-2);
+}
+
+/* ── Trabajo: tira de cápsulas ─────────────────────────────── */
+
+.dcbw-rv-trabajo-cab {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.dcbw-rv-trabajo-cab .dcbw-encabezado {
+  margin-bottom: 0;
+}
+
+.dcbw-rv-tira {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  margin: 36px calc(-1 * var(--dcbw-lado)) 0;
+  padding-inline: var(--dcbw-lado);
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-padding-inline: var(--dcbw-lado);
+  scrollbar-width: none;
+}
+
+.dcbw-rv-tira::-webkit-scrollbar {
+  display: none;
+}
+
+.dcbw-rv-tira figure {
+  flex: none;
+  width: min(52cqi, 240px);
+  aspect-ratio: 3 / 4.6;
+  overflow: hidden;
+  border-radius: var(--dcbw-rv-capsula);
+  background: #343830;
+  scroll-snap-align: start;
+}
+
+.dcbw-rv-tira figure:nth-child(even) {
+  aspect-ratio: 3 / 3.9;
+}
+
+.dcbw-rv-tira .dcbw-hueco {
+  height: 100%;
+  border-radius: inherit;
+  color: var(--dcbw-rv-sobre-noche-2);
+  border-color: var(--dcbw-rv-borde-noche);
+}
+
+/* ── Reseñas ───────────────────────────────────────────────── */
+
+.dcbw-revista .dcbw-rv-resenas .dcbw-estrellas {
+  color: var(--dcbw-acento);
+}
+
+.dcbw-rv-cita-mayor p {
+  font-family: var(--dcbw-serif);
+  font-weight: 300;
+  font-size: clamp(30px, 8cqi, 52px);
+  line-height: 1.14;
+  letter-spacing: -0.02em;
+  text-wrap: pretty;
+  overflow-wrap: break-word;
+}
+
+.dcbw-rv-cita-larga p {
+  font-size: clamp(22px, 5.4cqi, 34px);
+  line-height: 1.22;
+}
+
+.dcbw-rv-cita-mayor figcaption {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  margin-top: 22px;
+  font-weight: 500;
+}
+
+.dcbw-rv-citas {
+  margin-top: 56px;
+}
+
+.dcbw-rv-citas li {
+  padding: 22px 0;
+  border-top: 1px solid var(--dcbw-borde);
+}
+
+.dcbw-rv-citas p {
+  margin-top: 10px;
+  font-family: var(--dcbw-serif);
+  font-weight: 300;
+  font-size: 21px;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+  overflow-wrap: break-word;
+}
+
+.dcbw-rv-citas cite {
+  display: block;
+  margin-top: 12px;
+  font-style: normal;
+  font-weight: 500;
+  font-size: 15px;
+}
+
+/* ── Visita ────────────────────────────────────────────────── */
+
+.dcbw-rv-mapa {
+  background: var(--dcbw-rv-retrato);
+  aspect-ratio: 1 / 1.12;
+}
+
+.dcbw-revista .dcbw-rv-mapa .dcbw-mapa {
+  min-height: 0;
+  border-radius: 0;
+  filter: grayscale(0.6) contrast(1.02);
+}
+
+.dcbw-rv-visita-datos {
+  min-width: 0;
+}
+
+.dcbw-rv-mapa + .dcbw-rv-visita-datos {
+  margin-top: 36px;
+}
+
+.dcbw-rv-direccion {
+  max-width: 14ch;
+  font-family: var(--dcbw-serif);
+  font-weight: 300;
+  font-size: 34px;
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+  overflow-wrap: break-word;
+}
+
+.dcbw-rv-direccion-nota {
+  max-width: 30ch;
+  margin-top: 10px;
+  color: var(--dcbw-tinta-2);
+}
+
+.dcbw-rv-visita-datos .dcbw-rv-btn-linea {
+  margin-top: 18px;
+}
+
+.dcbw-rv-horario {
+  margin-top: 36px;
+}
+
+.dcbw-rv-rotulo {
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--dcbw-tinta-2);
+}
+
+.dcbw-revista .dcbw-rv-horario .dcbw-horario {
+  gap: 0;
+  max-width: none;
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+.dcbw-revista .dcbw-rv-horario .dcbw-horario li {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--dcbw-borde);
+}
+
+.dcbw-revista .dcbw-rv-horario .dcbw-horario li:first-child {
+  border-top: 1px solid var(--dcbw-borde);
+}
+
+.dcbw-revista .dcbw-rv-horario .dcbw-horario-dia {
+  color: var(--dcbw-tinta);
+}
+
+.dcbw-revista .dcbw-rv-horario .dcbw-horario-rango {
+  font-weight: 400;
+}
+
+/* Cerrado en tinta suave y no con opacidad: a 0,5 no pasaba AA. */
+.dcbw-revista .dcbw-rv-horario .dcbw-cerrado {
+  opacity: 1;
+}
+
+.dcbw-revista .dcbw-rv-horario .dcbw-cerrado span {
+  color: var(--dcbw-tinta-2);
+}
+
+.dcbw-rv-contacto {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 24px;
+  margin-top: 24px;
+}
+
+.dcbw-revista .dcbw-rv-redes {
+  gap: 4px;
+  margin: 8px 0 0 -12px;
+}
+
+.dcbw-revista .dcbw-rv-redes a {
+  width: 48px;
+  height: 48px;
+  border: 0;
+  color: var(--dcbw-tinta);
+}
+
+.dcbw-revista .dcbw-rv-redes a:hover {
+  background: var(--dcbw-rv-superficie);
+  color: var(--dcbw-acento-fuerte);
+}
+
+/* ── Cierre y pie ──────────────────────────────────────────── */
+
+.dcbw-revista .dcbw-rv-cierre .dcbw-h2 {
+  font-size: clamp(45px, 13cqi, 96px);
+}
+
+.dcbw-revista .dcbw-rv-cierre .dcbw-bajada {
+  max-width: 28ch;
+}
+
+.dcbw-revista .dcbw-rv-cierre .dcbw-btn {
+  min-height: 58px;
+  margin-top: 28px;
+  padding: 0 32px;
+}
+
+.dcbw-revista .dcbw-pie {
+  padding: 24px var(--dcbw-lado);
+  border-top: 1px solid var(--dcbw-rv-borde-noche);
+  background: var(--dcbw-rv-noche);
+  color: var(--dcbw-rv-sobre-noche-2);
+  font-size: 15px;
+}
+
+.dcbw-revista .dcbw-pie a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--dcbw-rv-sobre-noche);
+}
+
+.dcbw-revista .dcbw-pie a:hover {
+  color: var(--dcbw-rv-sobre-noche);
+  text-decoration: underline;
+}
+
+/* ── Medidas ───────────────────────────────────────────────── */
+
+@container dcbw-rv (min-width: 620px) {
+  .dcbw-revista .dcbw-rv-portada-foto {
+    max-width: 420px;
+    justify-self: end;
+    width: 100%;
+  }
+}
+
+/* A partir de 1000: el índice se queda quieto a la izquierda. La rejilla
+   va en el marco (hijo de la raíz): la raíz no puede consultarse a sí. */
+@container dcbw (min-width: 1000px) {
+  .dcbw-rv-marco {
+    display: grid;
+    grid-template-columns: 312px minmax(0, 1fr);
+  }
+
+  .dcbw-rv-contenido {
+    --dcbw-lado: 64px;
+    --dcbw-aire: 128px;
+    /* Como el mockup: 1040 de caja con 64 de margen = 912 de texto. */
+    --dcbw-ancho: 912px;
+  }
+
+  .dcbw-rv-columna {
+    border-right: 1px solid var(--dcbw-borde);
+  }
+
+  .dcbw-rv-lado {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    height: 100vh;
+    max-height: 1080px;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    gap: 0;
+    padding: 40px 36px 32px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+  }
+
+  .dcbw-rv-solo-cel,
+  .dcbw-rv-abajo {
+    display: none;
+  }
+
+  .dcbw-rv-logo {
+    width: 40px;
+    height: 40px;
+  }
+
+  .dcbw-rv-marca-nombre.dcbw-rv-marca-l {
+    font-size: 26px;
+  }
+
+  .dcbw-rv-marca-nombre {
+    font-size: 36px;
+    white-space: normal;
+    text-overflow: clip;
+    text-wrap: balance;
+    overflow-wrap: break-word;
+  }
+
+  .dcbw-rv-indice {
+    display: block;
+    margin-top: 56px;
+  }
+
+  .dcbw-rv-indice li a {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 46px;
+    border-bottom: 1px solid var(--dcbw-borde);
+    font-family: var(--dcbw-serif);
+    font-weight: 300;
+    font-size: 24px;
+    line-height: 1.1;
+    letter-spacing: -0.015em;
+  }
+
+  .dcbw-rv-indice li:first-child a {
+    border-top: 1px solid var(--dcbw-borde);
+  }
+
+  .dcbw-rv-indice li a::after {
+    content: "";
+    flex: none;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--dcbw-acento);
+    opacity: 0;
+    transition: opacity 200ms ease;
+  }
+
+  .dcbw-rv-indice li a:hover::after,
+  .dcbw-rv-indice li a:focus-visible::after {
+    opacity: 1;
+  }
+
+  .dcbw-rv-indice .dcbw-rv-mis {
+    margin-top: 10px;
+  }
+
+  .dcbw-rv-lado-pie {
+    display: block;
+    margin-top: auto;
+    padding-top: 32px;
+    font-size: 15px;
+  }
+
+  .dcbw-rv-abierto {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--dcbw-tinta-2);
+  }
+
+  .dcbw-revista .dcbw-rv-lado-btn {
+    width: 100%;
+    margin-top: 18px;
+  }
+
+  .dcbw-rv-wa {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 48px;
+    margin-top: 6px;
+    font-weight: 500;
+  }
+
+  .dcbw-rv-wa:hover {
+    color: var(--dcbw-acento-fuerte);
+  }
+
+  /* Portada: texto a la izquierda, cápsula a la derecha. */
+  .dcbw-revista .dcbw-rv-portada,
+  .dcbw-revista .dcbw-rv-portada.dcbw-rv-sin-datos {
+    min-height: min(100vh, 880px);
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+    grid-template-areas:
+      "txt foto"
+      "datos foto";
+    grid-template-rows: auto 1fr;
+    align-content: center;
+    align-items: start;
+    gap: 0 64px;
+    padding-top: 72px;
+    padding-bottom: 128px;
+  }
+
+  .dcbw-revista .dcbw-rv-portada-foto,
+  .dcbw-rv-sin-datos .dcbw-rv-portada-foto {
+    align-self: center;
+    justify-self: end;
+    width: 100%;
+    max-width: none;
+    max-height: 680px;
+    aspect-ratio: 3 / 4.3;
+  }
+
+  .dcbw-rv-titular {
+    margin-top: 22px;
+  }
+
+  .dcbw-rv-talla-s {
+    font-size: clamp(80px, calc(16cqi - 30px), 168px);
+  }
+
+  .dcbw-rv-talla-m {
+    font-size: clamp(48px, calc(10.4cqi - 22px), 108px);
+  }
+
+  .dcbw-rv-talla-l {
+    font-size: clamp(36px, calc(7cqi - 14px), 76px);
+  }
+
+  .dcbw-rv-frase {
+    max-width: 16ch;
+    margin-top: 30px;
+    font-size: 36px;
+  }
+
+  .dcbw-rv-acciones {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 36px;
+  }
+
+  .dcbw-rv-datos dd span:first-child:not(:only-child)::after {
+    content: ":";
+  }
+
+  .dcbw-rv-datos dd span {
+    display: inline;
+  }
+
+  .dcbw-rv-datos {
+    grid-template-columns: auto auto;
+    justify-content: start;
+    align-content: start;
+    gap: 8px 40px;
+    margin-top: 72px;
+    padding: 0;
+  }
+
+  /* Servicios: el encabezado se queda quieto mientras corre la carta. */
+  .dcbw-revista .dcbw-rv-servicios {
+    display: grid;
+    grid-template-columns: minmax(0, 0.62fr) minmax(0, 1.38fr);
+    align-items: start;
+    gap: 72px;
+  }
+
+  .dcbw-rv-servicios-izq {
+    position: sticky;
+    top: 64px;
+  }
+
+  .dcbw-rv-destacada {
+    padding: 10px 32px;
+  }
+
+  .dcbw-rv-servicio {
+    grid-template-columns: minmax(0, 1fr) 110px 96px;
+    gap: 0 20px;
+    padding: 20px 0;
+  }
+
+  .dcbw-revista .dcbw-rv-servicio-dur {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .dcbw-revista .dcbw-rv-servicio-precio {
+    grid-column: 3;
+    grid-row: 1;
+    font-size: 28px;
+  }
+
+  /* Tienda: «Ver toda la tienda» a la derecha del título. */
+  .dcbw-revista .dcbw-sec-tienda {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
+    column-gap: 40px;
+  }
+
+  .dcbw-revista .dcbw-sec-tienda > p {
+    grid-row: 1;
+    grid-column: 2;
+    margin-top: 0 !important;
+  }
+
+  .dcbw-revista .dcbw-productos {
+    grid-row: 2;
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 64px 32px;
+    margin-top: 56px;
+  }
+
+  .dcbw-revista .dcbw-producto-foto {
+    aspect-ratio: 3 / 3.5;
+  }
+
+  .dcbw-rv-barberos {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 64px;
+  }
+
+  .dcbw-rv-barberos li {
+    grid-template-columns: 148px minmax(0, 1fr);
+    gap: 28px;
+    padding: 30px 0;
+  }
+
+  .dcbw-rv-barberos li:nth-last-child(2) {
+    border-bottom: 1px solid var(--dcbw-borde);
+  }
+
+  .dcbw-rv-trabajo-cab {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 40px;
+  }
+
+  .dcbw-rv-tira {
+    gap: 18px;
+    margin-inline: 0;
+    padding-inline: 0;
+    padding-bottom: 6px;
+    scrollbar-width: thin;
+  }
+
+  .dcbw-rv-tira::-webkit-scrollbar {
+    display: block;
+    height: 6px;
+  }
+
+  .dcbw-rv-tira figure {
+    width: calc((100% - 4 * 18px) / 5);
+  }
+
+  .dcbw-rv-resenas-rejilla {
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
+    align-items: start;
+    gap: 80px;
+  }
+
+  .dcbw-rv-resenas-rejilla.dcbw-rv-una {
+    grid-template-columns: minmax(0, 1fr);
+    max-width: 820px;
+  }
+
+  .dcbw-rv-citas {
+    margin-top: 0;
+  }
+
+  .dcbw-rv-visita-rejilla {
+    display: grid;
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+    align-items: start;
+    gap: 80px;
+  }
+
+  .dcbw-rv-visita-rejilla.dcbw-rv-sin-mapa {
+    grid-template-columns: minmax(0, 1fr);
+    max-width: 640px;
+  }
+
+  .dcbw-rv-mapa {
+    aspect-ratio: 1 / 1.2;
+  }
+
+  .dcbw-rv-mapa + .dcbw-rv-visita-datos {
+    margin-top: 0;
+  }
+
+  .dcbw-rv-direccion {
+    font-size: 48px;
+  }
+
+  .dcbw-revista .dcbw-rv-cierre {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 40px;
+  }
+
+  .dcbw-revista .dcbw-rv-cierre .dcbw-btn {
+    flex: none;
+  }
+
+  .dcbw-revista .dcbw-pie {
+    padding-block: 24px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dcbw-rv-portada-foto .dcbw-rv-foto {
+    animation: none;
+  }
+  .dcbw-revista .dcbw-btn,
+  .dcbw-rv-indice li a::after {
+    transition: none;
+  }
+}

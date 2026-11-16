@@ -134,8 +134,8 @@ test("las doce plantillas del manifiesto son exactamente las declaradas", () => 
     Object.keys(BARBER_WEB_MANIFESTS).sort(),
     [...BARBER_WEB_TEMPLATE_IDS].sort(),
   );
-  // 8 de la ola de la mini-web + estudio, carta, nocturna y club.
-  assert.equal(BARBER_WEB_TEMPLATE_IDS.length, 12);
+  // 8 de la ola de la mini-web + estudio, carta, nocturna y club + revista (ws6-t6).
+  assert.equal(BARBER_WEB_TEMPLATE_IDS.length, 13);
 });
 
 test("el contenido compartido sobrevive a un cambio de plantilla", () => {
