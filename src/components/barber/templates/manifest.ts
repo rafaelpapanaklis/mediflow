@@ -982,6 +982,110 @@ export const BARBER_WEB_MANIFESTS: Record<BarberWebTemplateId, BarberWebManifest
       }),
     ],
   },
+
+  /* ────────────────────────────────────────────────────────────────
+     13 · OFICIO — la barbería de toda la vida, con el ARCO del espejo
+     (ws6-t2, 16-nov; mockup A de entregas-ws6/barber-web-mockups).
+     Estructura: portada oscura con la foto dentro de un arco de espejo,
+     servicios en dos columnas (los combos en un tablero oscuro aparte y
+     la carta con puntitos al lado), la VITRINA de productos justo
+     después de la carta, equipo en arcos escalonados, pared de cortes,
+     una reseña grande y las demás en lista, «Visítanos» con el mapa en
+     arco y un cierre en papel. Es la única con la tienda tras servicios.
+     ──────────────────────────────────────────────────────────────── */
+  oficio: {
+    id: "oficio",
+    nombre: "Oficio",
+    para: "La barbería de toda la vida: espresso y papel, letra de rótulo y el arco del espejo.",
+    estructura: "Portada con arco de espejo · combos en tablero aparte · vitrina tras la carta · equipo en arcos",
+    acentoSugerido: "vino",
+    oscura: true,
+    secciones: [
+      {
+        id: "portada",
+        nombre: "Portada",
+        obligatoria: true,
+        consume: [],
+        fotos: [
+          FOTO_LOGO,
+          { ...FOTO_PORTADA, proporcion: "vertical o cuadrada", ayuda: "Sale dentro de un arco de espejo: lo de en medio es lo que se ve." },
+          { ...FOTO_AMBIENTE, ayuda: "El arco chico de la portada, en computadora: la puerta, un sillón, un detalle." },
+        ],
+        copia: copiaPortada("Reservar cita", "Corte, barba y navaja a la antigua."),
+      },
+      {
+        id: "servicios",
+        nombre: "Servicios y precios",
+        consume: ["servicios"],
+        textos: [
+          { campo: "titulo", etiqueta: "Título de servicios", porDefecto: "Servicios y precios" },
+          {
+            campo: "subtitulo",
+            etiqueta: "Bajada de servicios",
+            porDefecto: "Precios claros, sin sorpresas al pagar. Toca un servicio para apartar tu hora.",
+          },
+        ],
+        copia: [{ clave: "servicios.cta", etiqueta: "Servicios · botón de cada corte", porDefecto: "Reservar", maxLen: 40 }],
+      },
+      {
+        id: "equipo",
+        nombre: "Barberos",
+        consume: ["barberos"],
+        textos: [
+          { campo: "titulo", etiqueta: "Título del equipo", porDefecto: "Quién te atiende" },
+          { campo: "subtitulo", etiqueta: "Bajada del equipo", porDefecto: "Elige con quién te sientas. Cada quien tiene su mano." },
+        ],
+        copia: [
+          { ...COPIA_EQUIPO_CTA, etiqueta: "Equipo · botón de cada barbero (sigue «con <nombre>»)" },
+          { clave: "equipo.sinHorario", etiqueta: "Equipo · nota del barbero sin horario", porDefecto: "Todavía sin citas en línea.", maxLen: 60 },
+        ],
+      },
+      {
+        id: "portafolio",
+        nombre: "Portafolio de cortes",
+        consume: ["galeria"],
+        textos: [
+          { campo: "titulo", etiqueta: "Título del portafolio", porDefecto: "Recién salidos del sillón" },
+          { campo: "subtitulo", etiqueta: "Bajada del portafolio", porDefecto: "Enséñanos el que te guste al reservar." },
+        ],
+        copia: [
+          { clave: "portafolio.instagram", etiqueta: "Portafolio · liga a Instagram (sigue tu @)", porDefecto: "Más cortes en", maxLen: 40 },
+        ],
+      },
+      {
+        id: "resenas",
+        nombre: "Reseñas de clientes",
+        consume: ["resenas"],
+        textos: [{ campo: "titulo", etiqueta: "Título de reseñas", porDefecto: "Lo que dicen los clientes" }],
+      },
+      secContacto({
+        textos: [
+          { campo: "titulo", etiqueta: "Título de contacto", porDefecto: "Visítanos" },
+          { campo: "subtitulo", etiqueta: "Bajada de contacto", porDefecto: "" },
+        ],
+        copia: [
+          ...COPIA_CONTACTO.filter((c) => c.clave !== "contacto.etiquetaTelefono" && c.clave !== "contacto.whatsapp"),
+          { clave: "contacto.etiquetaTelefono", etiqueta: "Contacto · rótulo de WhatsApp y teléfono", porDefecto: "Escríbenos o llama", maxLen: 40 },
+          { clave: "contacto.whatsapp", etiqueta: "Contacto · botón de WhatsApp", porDefecto: "WhatsApp", maxLen: 60 },
+          { clave: "contacto.etiquetaRedes", etiqueta: "Contacto · rótulo de las redes", porDefecto: "Síguenos", maxLen: 40 },
+        ],
+      }),
+      {
+        id: "reservar",
+        nombre: "Cierre con reserva",
+        consume: [],
+        textos: [
+          { campo: "titulo", etiqueta: "Título del cierre", porDefecto: "Tu sillón te espera" },
+          {
+            campo: "subtitulo",
+            etiqueta: "Bajada del cierre",
+            porDefecto: "Aparta tu lugar en menos de un minuto. Sin llamadas y sin hacer fila.",
+          },
+        ],
+        copia: [{ clave: "reservar.cta", etiqueta: "Cierre · botón", porDefecto: "Reservar cita", maxLen: 40 }],
+      },
+    ],
+  },
 };
 
 /* ── Tienda (ws6-t1, 16-nov) ─────────────────────────────────────────
@@ -1023,9 +1127,32 @@ export const BARBER_WEB_MANIFEST_LIST: BarberWebManifest[] = [
   BARBER_WEB_MANIFESTS.carta,
   BARBER_WEB_MANIFESTS.nocturna,
   BARBER_WEB_MANIFESTS.club,
+  BARBER_WEB_MANIFESTS.oficio,
 ];
 
 /** El manifiesto de una plantilla, cayendo a la clásica si el id no existe. */
 export function manifiestoBarberWeb(id: string | null | undefined): BarberWebManifest {
   return BARBER_WEB_MANIFESTS[(id ?? "") as BarberWebTemplateId] ?? BARBER_WEB_MANIFESTS.clasica;
+}
+
+/* ── Oficio (ws6-t2): la vitrina va JUSTO después de la carta ────────
+   El bucle de la Tienda de arriba la pone al final, como en las demás.
+   En Oficio la vitrina es parte de la estructura (el mockup A la pone tras
+   «Servicios y precios») y trae SUS textos por defecto: «La vitrina», no
+   «Productos». Mismo id, mismas claves (tienda.cta, tienda.menu): la
+   barbería que ya la reescribió en otra plantilla conserva lo suyo. Un
+   orden guardado que no la menciona la recibe aquí (ordenDeSecciones). */
+{
+  const s = BARBER_WEB_MANIFESTS.oficio.secciones;
+  const i = s.findIndex((x) => x.id === "tienda");
+  const tienda = s.splice(i, 1)[0];
+  tienda.textos = [
+    { campo: "titulo", etiqueta: "Título de la tienda", porDefecto: "La vitrina" },
+    {
+      campo: "subtitulo",
+      etiqueta: "Bajada de la tienda",
+      porDefecto: "Lo mismo que usamos en el sillón. Apártalo en línea y recógelo aquí.",
+    },
+  ];
+  s.splice(s.findIndex((x) => x.id === "servicios") + 1, 0, tienda);
 }

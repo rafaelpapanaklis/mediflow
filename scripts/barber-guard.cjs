@@ -39,6 +39,9 @@ const OWN_PREFIXES = [
   "src/components/barber/",
   "src/lib/barber/",
   "src/i18n/dictionaries/barber/",
+  // Archivos estáticos del vertical (ws6, 16-nov): las fuentes autoalojadas
+  // de las plantillas de la página web (public/barber/fuentes/*.woff2).
+  "public/barber/",
   // Sección BARBERÍAS del panel de plataforma. Viven bajo src/app/admin/**
   // y src/components/admin/** porque ahí es donde el admin las espera, pero
   // son carpetas EXCLUSIVAS del vertical: nada del dental las importa. Todo
