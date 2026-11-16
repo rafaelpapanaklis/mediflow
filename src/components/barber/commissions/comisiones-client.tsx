@@ -15,6 +15,7 @@ import { PeriodNav } from "@/components/barber/cash/period-nav";
 import { useBarberT } from "@/components/barber/cash/use-barber-t";
 import { fmtDateTime, fmtMoney, fmtPct, fmtPeriod, fmtSigned } from "@/components/barber/cash/money";
 import { splitToPay } from "./split-to-pay";
+import { salaryLabel } from "@/lib/barber/sueldo-texto";
 import "./comisiones.css";
 
 const STATUS_TONE: Record<CommissionSummaryRow["paidStatus"], "neutral" | "warning" | "info" | "success"> = {
@@ -190,7 +191,16 @@ export function ComisionesClient({
                           <strong>{r.nickname || r.barberName}</strong>
                           {!r.isActive && <span className="bcaja-muted"> · {t("comisiones.inactive")}</span>}
                         </td>
-                        <td data-label={t("comisiones.colScheme")}>{schemeLabel(r)}</td>
+                        <td data-label={t("comisiones.colScheme")}>
+                          {schemeLabel(r)}
+                          {/* «Sueldo del periodo» (ws6-t6): solo si cobra por Sueldo y tiene monto. */}
+                          {r.salaryPeriodTotal != null && (
+                            <div className="bcaja-hint" style={{ marginTop: 2 }} title={r.salaryApprox ? t("comisiones.salaryApproxHint") : undefined}>
+                              {t("comisiones.salaryOfPeriod")} {fmtMoney(r.salaryPeriodTotal)}
+                              {r.salaryApprox ? ` ${t("comisiones.salaryApprox")}` : ""}
+                            </div>
+                          )}
+                        </td>
                         <td className="bcaja-num" data-label={t("comisiones.colTickets")}>{r.ticketCount}</td>
                         <td className="bcaja-num" data-label={t("comisiones.colProduced")}>{fmtMoney(r.produced)}</td>
                         <td className="bcaja-num" data-label={t("comisiones.colBase")}>{fmtMoney(r.commissionBase)}</td>
@@ -225,7 +235,15 @@ export function ComisionesClient({
                           <td colSpan={12} style={{ background: "var(--bg-elev-2)", whiteSpace: "normal" }}>
                             <div className="bcaja-hint" style={{ marginBottom: 8 }}>{t("comisiones.toPayExplain")}</div>
                             {r.commissionType === "CHAIR_RENT" && r.chairRentDiscounted && <div className="bcaja-hint" style={{ marginBottom: 8 }}>{t("comisiones.rentAlreadyDiscounted")}</div>}
-                            {r.commissionType === "SALARY" && <div className="bcaja-hint" style={{ marginBottom: 8 }}>{t("comisiones.salaryNote")}</div>}
+                            {r.commissionType === "SALARY" && (
+                              <div className="bcaja-hint" style={{ marginBottom: 8 }}>
+                                {r.salaryPeriodTotal != null && r.salaryAmount != null && r.salaryPeriod
+                                  ? t("comisiones.salaryNoteWithAmount", { salary: salaryLabel(r.salaryAmount, r.salaryPeriod, t, "comisiones") })
+                                  : t("comisiones.salaryNote")}
+                                {r.salaryApprox ? ` ${t("comisiones.salaryApproxHint")}` : ""}
+                                {r.salaryPaid != null ? ` ${t("comisiones.salaryPaidNote", { amount: fmtMoney(r.salaryPaid) })}` : ""}
+                              </div>
+                            )}
                             {r.commissionType === "CHAIR_RENT" && r.totalToPay < 0 && <div className="bcaja-hint" style={{ marginBottom: 8, color: "var(--danger)" }}>{t("comisiones.rentNegative")}</div>}
                             {rows === "loading" || !rows ? (
                               <span className="bcaja-hint">{t("common.loading")}</span>
@@ -299,6 +317,15 @@ export function ComisionesClient({
           <div className="bcaja-totals">
             <div className="bcaja-totals__row"><span>{t("comisiones.payCommission")}</span><span>{fmtMoney(payRow.commissionPending)}</span></div>
             <div className="bcaja-totals__row"><span>{t("comisiones.payTips")}</span><span>{fmtMoney(payRow.tipsPending)}</span></div>
+            {payRow.salaryPending != null && payRow.salaryPending > 0 && (
+              <div className="bcaja-totals__row">
+                <span>
+                  {t("comisiones.paySalary")}
+                  {payRow.salaryApprox ? ` (${t("comisiones.salaryApprox")})` : ""}
+                </span>
+                <span>{fmtMoney(payRow.salaryPending)}</span>
+              </div>
+            )}
             {payRow.chairRentPending !== null && payRow.chairRentPending > 0 && (
               <div className="bcaja-totals__row"><span>{t("comisiones.payRent")}</span><span>−{fmtMoney(payRow.chairRentPending)}</span></div>
             )}

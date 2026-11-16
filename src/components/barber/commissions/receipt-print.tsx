@@ -9,6 +9,7 @@ import type { CommissionEntryRow, CommissionSummaryRow } from "@/lib/barber/comm
 import { useBarberT } from "@/components/barber/cash/use-barber-t";
 import { fmtDate, fmtDateTime, fmtMoney, fmtPct, fmtPeriod, fmtSigned } from "@/components/barber/cash/money";
 import { upperFirst } from "@/components/barber/upper-first";
+import { salaryLabel } from "@/lib/barber/sueldo-texto";
 
 export function ReceiptPrint({
   dict,
@@ -77,7 +78,18 @@ export function ReceiptPrint({
         <div className="bcaja-print__row"><span>{t("print.receiptCommission")}</span><span>{fmtMoney(row.commissionTotal)}</span></div>
         <div className="bcaja-print__row"><span>{t("print.receiptTips")}</span><span>{fmtMoney(row.tips)}</span></div>
         {row.chairRent !== null && <div className="bcaja-print__row"><span>{t("print.receiptRent")}</span><span>−{fmtMoney(row.chairRent)}</span></div>}
-        {row.commissionType === "SALARY" && <div className="bcaja-print__meta" style={{ padding: "4px 0" }}>{t("print.receiptSalaryNote")}</div>}
+        {/* Sueldo del periodo (ws6-t6): con monto capturado, renglón propio; sin él, la nota de siempre. */}
+        {row.salaryPeriodTotal != null ? (
+          <div className="bcaja-print__row">
+            <span>
+              {t("comisiones.salaryOfPeriod")}
+              {row.salaryAmount != null && row.salaryPeriod ? ` (${salaryLabel(row.salaryAmount, row.salaryPeriod, t, "comisiones")}${row.salaryApprox ? `, ${t("comisiones.salaryApprox")}` : ""})` : ""}
+            </span>
+            <span>{fmtMoney(row.salaryPeriodTotal)}</span>
+          </div>
+        ) : (
+          row.commissionType === "SALARY" && <div className="bcaja-print__meta" style={{ padding: "4px 0" }}>{t("print.receiptSalaryNote")}</div>
+        )}
         {/* Tres renglones que suman: lo del periodo = ya pagado + a pagar.
             «A pagar» es la misma cifra de la tabla y del diálogo de pagar. */}
         <div className="bcaja-print__row"><span>{t("print.receiptPeriodTotal")}</span><span>{fmtSigned(row.periodTotal)}</span></div>
