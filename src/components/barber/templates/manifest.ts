@@ -982,6 +982,114 @@ export const BARBER_WEB_MANIFESTS: Record<BarberWebTemplateId, BarberWebManifest
       }),
     ],
   },
+
+  /* ────────────────────────────────────────────────────────────────
+     13 · BARRIO — negro y concreto, una sola familia (Archivo) de muy
+     condensada a muy ancha (ws6-t3, mockup B, 16-nov).
+     Estructura: tira de secciones pegada arriba, portada con el nombre
+     a todo lo ancho y una PEGATINA girada que lleva a reservar, cinta
+     corredera con los servicios Y SUS PRECIOS de la tabla, servicios
+     con los combos en tarjetas, cortes en REJILLA DE INSTAGRAM (con la
+     cuenta si la hay), retratos 4:5 en blanco y negro, reseñas sobre el
+     color de la barbería a bloque completo y, en el celular, un muelle
+     flotante con WhatsApp y «Reservar». No es `urbana`: ésa es de
+     bloques pegados sin aire y una cinta con TEXTO; ésta respira, va
+     sobre concreto claro y oscuro alternados y la cinta son los precios.
+     ──────────────────────────────────────────────────────────────── */
+  barrio: {
+    id: "barrio",
+    nombre: "Barrio",
+    para: "Barbería de barrio con estilo de calle: negro, concreto y tu color a bloque.",
+    estructura:
+      "Tira de secciones fija · nombre a todo lo ancho con pegatina · cinta con los precios · cortes en rejilla de Instagram · reseñas sobre tu color",
+    acentoSugerido: "cobre",
+    oscura: true,
+    secciones: [
+      {
+        id: "portada",
+        nombre: "Portada",
+        obligatoria: true,
+        consume: [],
+        fotos: [
+          FOTO_LOGO,
+          {
+            ...FOTO_PORTADA,
+            ayuda: "Sale en blanco y negro y oscurecida, con tu nombre encima. Si no subes ninguna, va el fondo negro.",
+          },
+        ],
+        copia: [
+          ...copiaPortada("Reservar cita", "Fades, barba y diseño."),
+          { clave: "portada.sello", etiqueta: "Portada · pegatina (texto grande)", porDefecto: "Cita en 1 minuto", maxLen: 24 },
+          { clave: "portada.lema", etiqueta: "Portada · pegatina (texto chico)", porDefecto: "sin llamar", maxLen: 60 },
+        ],
+      },
+      {
+        id: "servicios",
+        nombre: "Servicios y precios",
+        consume: ["servicios"],
+        textos: [
+          { campo: "titulo", etiqueta: "Título de servicios", porDefecto: "Servicios" },
+          {
+            campo: "subtitulo",
+            etiqueta: "Bajada de servicios",
+            porDefecto: "Toca el que quieras y aparta tu hora. El precio que ves es el que pagas.",
+          },
+        ],
+      },
+      {
+        id: "portafolio",
+        nombre: "Portafolio de cortes",
+        consume: ["galeria"],
+        textos: [{ campo: "titulo", etiqueta: "Título del portafolio", porDefecto: "Cortes" }],
+        copia: [
+          { clave: "portafolio.nota", etiqueta: "Portafolio · nota bajo tu Instagram", porDefecto: "Lo último que salió del sillón", maxLen: 60 },
+          { clave: "portafolio.seguir", etiqueta: "Portafolio · botón de Instagram", porDefecto: "Seguir", maxLen: 24 },
+        ],
+      },
+      {
+        id: "equipo",
+        nombre: "Barberos",
+        consume: ["barberos"],
+        textos: [
+          { campo: "titulo", etiqueta: "Título del equipo", porDefecto: "Barberos" },
+          { campo: "subtitulo", etiqueta: "Bajada del equipo", porDefecto: "Elige con quién. Cada uno tiene su estilo." },
+        ],
+        copia: [
+          { ...COPIA_EQUIPO_CTA, etiqueta: "Equipo · botón de cada barbero (va seguido de su nombre)", porDefecto: "Reservar con" },
+          { clave: "equipo.sinHorario", etiqueta: "Equipo · aviso del barbero sin horario", porDefecto: "Todavía sin citas en línea", maxLen: 60 },
+        ],
+      },
+      {
+        id: "resenas",
+        nombre: "Reseñas de clientes",
+        consume: ["resenas"],
+        textos: [{ campo: "titulo", etiqueta: "Título de reseñas", porDefecto: "Reseñas" }],
+        copia: [
+          { clave: "resenas.promedio", etiqueta: "Reseñas · texto junto al promedio", porDefecto: "de 5, según nuestros clientes", maxLen: 60 },
+        ],
+      },
+      secContacto({
+        textos: [
+          { campo: "titulo", etiqueta: "Título de contacto", porDefecto: "Ubicación" },
+          { campo: "subtitulo", etiqueta: "Bajada de contacto", porDefecto: "" },
+        ],
+        copia: [
+          { clave: "contacto.comoLlegar", etiqueta: "Contacto · botón del mapa", porDefecto: "Cómo llegar", maxLen: 40 },
+          { clave: "contacto.whatsapp", etiqueta: "Contacto · botón de WhatsApp", porDefecto: "WhatsApp", maxLen: 60 },
+        ],
+      }),
+      {
+        id: "reservar",
+        nombre: "Cierre con reserva",
+        consume: [],
+        textos: [
+          { campo: "titulo", etiqueta: "Título del cierre", porDefecto: "Te toca." },
+          { campo: "subtitulo", etiqueta: "Bajada del cierre", porDefecto: "Aparta tu hora en un minuto. Sin llamadas y sin hacer fila." },
+        ],
+        copia: [{ clave: "reservar.cta", etiqueta: "Cierre · botón", porDefecto: "Reservar cita", maxLen: 40 }],
+      },
+    ],
+  },
 };
 
 /* ── Tienda (ws6-t1, 16-nov) ─────────────────────────────────────────
@@ -1023,9 +1131,27 @@ export const BARBER_WEB_MANIFEST_LIST: BarberWebManifest[] = [
   BARBER_WEB_MANIFESTS.carta,
   BARBER_WEB_MANIFESTS.nocturna,
   BARBER_WEB_MANIFESTS.club,
+  BARBER_WEB_MANIFESTS.barrio,
 ];
 
 /** El manifiesto de una plantilla, cayendo a la clásica si el id no existe. */
 export function manifiestoBarberWeb(id: string | null | undefined): BarberWebManifest {
   return BARBER_WEB_MANIFESTS[(id ?? "") as BarberWebTemplateId] ?? BARBER_WEB_MANIFESTS.clasica;
+}
+
+/* ── Barrio (ws6-t3): la tienda va JUSTO DESPUÉS de servicios ─────────
+   Así está en su maqueta: la tienda es parte de «lo que se vende», y en la
+   tira de arriba «Tienda» queda junto a «Servicios». Se mueve aquí, después
+   del `for` que la agrega al final de todas, para no tocar ese bucle ni el
+   orden de las otras doce. La barbería la sigue moviendo y apagando igual
+   (el orden guardado manda: ordenDeSecciones). El título dice «Tienda»
+   porque es la palabra de la tira y de la maqueta. */
+{
+  const lista = BARBER_WEB_MANIFESTS.barrio.secciones;
+  const i = lista.findIndex((s) => s.id === "tienda");
+  if (i >= 0) {
+    const [tienda] = lista.splice(i, 1);
+    tienda.textos = (tienda.textos ?? []).map((t) => (t.campo === "titulo" ? { ...t, porDefecto: "Tienda" } : t));
+    lista.splice(lista.findIndex((s) => s.id === "servicios") + 1, 0, tienda);
+  }
 }

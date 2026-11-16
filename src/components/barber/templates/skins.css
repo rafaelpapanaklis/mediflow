@@ -5102,3 +5102,1649 @@ img.dcbw-es-equipo-foto {
 .dcbw-producto:focus-visible { outline: 2px solid currentColor; outline-offset: 4px; border-radius: 14px; }
 .dcbw-producto-cat { font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; opacity: 0.65; }
 .dcbw-producto-nombre { font-size: 15px; font-weight: 600; line-height: 1.3; }
+
+/* ══════════════════════════════════════════════════════════════
+   13 · BARRIO (ws6-t3) — negro y concreto, una sola familia.
+
+   Mockup B: entregas-ws6/barber-web-mockups-474acf4e/web-b.html.
+   La familia es Archivo variable (peso 400–900, ancho 62–125 %),
+   AUTOALOJADA en /public/barber/fuentes: nada de Google Fonts en vivo.
+   Se llama «DCBW Archivo» para no chocar con otra fuente del panel.
+
+   Colores por ROL en variables de la piel (--bw-*); el acento, como en
+   todas, de --dcbw-acento-* (texto blanco SOLO sobre -fuerte: AA).
+   Todo cuelga de .dcbw-barrio y las clases propias llevan «bw-».
+   Medidas por @container dcbw (el editor la pinta a 390 y a 1280).
+   ══════════════════════════════════════════════════════════════ */
+
+@font-face {
+  font-family: "DCBW Archivo";
+  src: url("/barber/fuentes/archivo-400-900.woff2") format("woff2");
+  font-weight: 400 900;
+  font-stretch: 62% 125%;
+  font-style: normal;
+  font-display: swap;
+}
+
+.dcbw-barrio {
+  --bw-negro: #0c0c0c;
+  --bw-carbon: #1a1a1a;
+  --bw-concreto: #e9e7e2;
+  --bw-concreto-2: #cfccc4;
+  --bw-blanco: #f8f7f3;
+  --bw-tinta: #0c0c0c;
+  --bw-tinta-suave: #54524d;
+  --bw-sobre: #f6f5f0;
+  --bw-sobre-suave: #a9a7a1;
+  --bw-linea: rgba(12, 12, 12, 0.16);
+  --bw-linea-o: rgba(246, 245, 240, 0.18);
+  --bw-f: "DCBW Archivo", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+  --bw-radio: 26px;
+  --bw-tira: 48px;
+  /* Ancho medio de una MAYÚSCULA del titular (900, ancho 62 %), en em.
+     Con él se calcula cuánta letra cabe a lo ancho (ver --bw-letras). */
+  --bw-k: 0.5;
+  --bw-foco: var(--dcbw-acento-claro);
+
+  --dcbw-bg: var(--bw-negro);
+  --dcbw-bg-2: var(--bw-carbon);
+  --dcbw-tinta: var(--bw-sobre);
+  --dcbw-tinta-2: var(--bw-sobre-suave);
+  --dcbw-tinta-3: var(--bw-sobre-suave);
+  --dcbw-borde: var(--bw-linea-o);
+  --dcbw-borde-fuerte: var(--bw-linea-o);
+  --dcbw-radio: var(--bw-radio);
+  --dcbw-ancho: 1160px;
+  --dcbw-lado: 16px;
+  --dcbw-aire: 72px;
+  --dcbw-sans: var(--bw-f);
+
+  font-family: var(--bw-f);
+  font-size: 17px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+.dcbw-barrio ::selection {
+  background: var(--dcbw-acento-fuerte);
+  color: #fff;
+}
+
+.dcbw-barrio :where(a, button):focus-visible {
+  outline: 3px solid var(--bw-foco);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+.dcbw-barrio .bw-clara {
+  --bw-foco: var(--bw-tinta);
+  background: var(--bw-concreto);
+  color: var(--bw-tinta);
+}
+
+.dcbw-barrio .bw-oscura {
+  background: var(--bw-negro);
+  color: var(--bw-sobre);
+}
+
+.dcbw-barrio .bw-bloque {
+  --bw-foco: #fff;
+  background: var(--dcbw-acento-fuerte);
+  color: #fff;
+}
+
+/* El titular: muy condensado, negro y en mayúsculas. */
+.dcbw-barrio .bw-titular,
+.dcbw-barrio .dcbw-h2 {
+  font-family: var(--bw-f);
+  font-weight: 900;
+  font-stretch: 62%;
+  text-transform: uppercase;
+  line-height: 0.84;
+  letter-spacing: -0.012em;
+  overflow-wrap: anywhere;
+}
+
+.dcbw-barrio .dcbw-encabezado {
+  gap: 12px;
+  margin-bottom: 0;
+}
+
+.dcbw-barrio .dcbw-h2 {
+  font-size: clamp(3.4rem, 19cqi, 8.5rem);
+}
+
+.dcbw-barrio .dcbw-bajada {
+  color: var(--bw-tinta-suave);
+  max-width: 32ch;
+  font-size: 1.125rem;
+  line-height: 1.4;
+}
+
+.dcbw-barrio .bw-oscura .dcbw-bajada,
+.dcbw-barrio .dcbw-sec-productos .dcbw-bajada {
+  color: var(--bw-sobre-suave);
+}
+
+/* ── Botones ─────────────────────────────────────────────────── */
+.dcbw-barrio .bw-boton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 54px;
+  padding: 0 26px;
+  border-radius: 999px;
+  border: 2px solid transparent;
+  font-family: var(--bw-f);
+  font-weight: 700;
+  font-stretch: 108%;
+  font-size: 1rem;
+  line-height: 1;
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color 0.16s, color 0.16s, border-color 0.16s;
+}
+
+.dcbw-barrio .bw-boton-acento {
+  background: var(--dcbw-acento-fuerte);
+  color: #fff;
+}
+
+.dcbw-barrio .bw-boton-acento:hover {
+  background: color-mix(in srgb, var(--dcbw-acento-fuerte) 80%, #000);
+}
+
+.dcbw-barrio .bw-boton-blanco {
+  background: var(--bw-blanco);
+  color: var(--bw-tinta);
+}
+
+.dcbw-barrio .bw-boton-blanco:hover {
+  background: var(--dcbw-acento-suave);
+}
+
+.dcbw-barrio .bw-boton-negro {
+  background: var(--bw-tinta);
+  color: var(--bw-sobre);
+}
+
+.dcbw-barrio .bw-boton-negro:hover {
+  background: var(--dcbw-acento-fuerte);
+  color: #fff;
+}
+
+.dcbw-barrio .bw-boton-linea {
+  border-color: currentColor;
+  background: transparent;
+  color: inherit;
+}
+
+.dcbw-barrio .bw-boton-linea:hover {
+  background: var(--bw-sobre);
+  color: var(--bw-tinta);
+  border-color: var(--bw-sobre);
+}
+
+.dcbw-barrio .bw-clara .bw-boton-linea:hover {
+  background: var(--bw-tinta);
+  color: var(--bw-sobre);
+  border-color: var(--bw-tinta);
+}
+
+/* ── Marca, cabecera del celular y tira de secciones ──────────── */
+.dcbw-barrio .bw-marca {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  min-width: 0;
+  text-decoration: none;
+  color: var(--bw-sobre);
+}
+
+.dcbw-barrio .bw-marca-logo {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border-radius: 9px;
+  object-fit: cover;
+}
+
+.dcbw-barrio .bw-marca-letra {
+  display: grid;
+  place-items: center;
+  background: var(--dcbw-acento-fuerte);
+  color: #fff;
+  font-weight: 900;
+  font-stretch: 100%;
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.dcbw-barrio .bw-marca-nombre {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-weight: 900;
+  font-stretch: 125%;
+  font-size: 1.3125rem;
+  letter-spacing: 0.02em;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+
+.dcbw-barrio .bw-mis {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  min-height: 44px;
+  font-weight: 600;
+  font-size: 0.9375rem;
+  color: var(--bw-sobre);
+  text-decoration: none;
+}
+
+.dcbw-barrio .bw-cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  height: 60px;
+  padding-inline: max(var(--dcbw-lado), calc((100% - var(--dcbw-ancho)) / 2));
+  background: var(--bw-negro);
+  color: var(--bw-sobre);
+}
+
+.dcbw-barrio .bw-tira {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: var(--bw-negro);
+  color: var(--bw-sobre);
+  border-block: 1px solid var(--bw-linea-o);
+}
+
+.dcbw-barrio .bw-tira nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: var(--bw-tira);
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-inline: max(var(--dcbw-lado), calc((100% - var(--dcbw-ancho)) / 2));
+}
+
+.dcbw-barrio .bw-tira nav::-webkit-scrollbar {
+  display: none;
+}
+
+.dcbw-barrio .bw-tira nav > a,
+.dcbw-barrio .bw-tira-acciones > a {
+  outline-offset: -3px;
+}
+
+.dcbw-barrio .bw-tira nav > a:not(.bw-marca) {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: 44px;
+  padding: 0 12px;
+  font-weight: 700;
+  font-stretch: 70%;
+  font-size: 1.125rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  color: var(--bw-sobre-suave);
+  text-decoration: none;
+}
+
+.dcbw-barrio .bw-tira nav > a:not(.bw-marca):hover {
+  color: var(--bw-sobre);
+}
+
+.dcbw-barrio .bw-tira-marca,
+.dcbw-barrio .bw-tira-acciones {
+  display: none;
+}
+
+/* ── Portada ─────────────────────────────────────────────────── */
+.dcbw-barrio .bw-portada {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  min-height: min(calc(100svh - 204px), 620px);
+  padding: 0;
+  background:
+    repeating-linear-gradient(135deg, transparent 0 26px, rgba(246, 245, 240, 0.025) 26px 52px),
+    var(--bw-negro);
+  color: var(--bw-sobre);
+}
+
+.dcbw-barrio .bw-portada-foto {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+}
+
+.dcbw-barrio .bw-portada-foto img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: grayscale(1) contrast(1.25) brightness(0.62);
+  animation: bw-revelar 1.1s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+.dcbw-barrio .bw-portada-foto::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, var(--bw-negro) 2%, rgba(12, 12, 12, 0.2) 62%, rgba(12, 12, 12, 0.55));
+}
+
+.dcbw-barrio .bw-portada-foto .dcbw-hueco {
+  height: 100%;
+  border-radius: 0;
+  border-color: var(--bw-linea-o);
+  color: var(--bw-sobre-suave);
+  align-items: start;
+  padding-top: 24px;
+}
+
+@keyframes bw-revelar {
+  from {
+    transform: scale(1.14);
+  }
+  to {
+    transform: none;
+  }
+}
+
+.dcbw-barrio .bw-portada-in {
+  position: relative;
+  width: 100%;
+  padding: 120px max(var(--dcbw-lado), calc((100% - var(--dcbw-ancho)) / 2)) 26px;
+}
+
+/* El nombre: tan grande como quepa. --bw-letras (lo pone el JSX) es lo
+   que tiene que entrar en un renglón; --bw-k, el ancho de una letra. */
+.dcbw-barrio .bw-portada-nombre {
+  font-size: max(
+    2.5rem,
+    min(29cqi, 15rem, calc((100cqi - 2 * var(--dcbw-lado)) / (var(--bw-letras, 6) * var(--bw-k))))
+  );
+  text-wrap: balance;
+}
+
+.dcbw-barrio .bw-portada-frase {
+  font-size: 1.25rem;
+  line-height: 1.3;
+  font-weight: 500;
+  max-width: 22ch;
+  margin-top: 18px;
+}
+
+.dcbw-barrio .bw-portada-hoy {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 18px;
+  min-height: 40px;
+  padding: 6px 16px 6px 14px;
+  border-radius: 999px;
+  background: var(--bw-blanco);
+  color: var(--bw-tinta);
+  font-weight: 600;
+  font-size: 0.9375rem;
+  line-height: 1.25;
+}
+
+.dcbw-barrio .bw-portada-acciones {
+  display: none;
+}
+
+.dcbw-barrio .bw-pegatina {
+  position: absolute;
+  right: 14px;
+  top: 22px;
+  z-index: 1;
+  width: 118px;
+  height: 118px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  padding: 10px;
+  text-align: center;
+  text-decoration: none;
+  background: var(--dcbw-acento-fuerte);
+  color: #fff;
+  transform: rotate(11deg);
+  font-weight: 900;
+  font-stretch: 62%;
+  text-transform: uppercase;
+  font-size: 1.375rem;
+  line-height: 0.92;
+  overflow-wrap: anywhere;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+.dcbw-barrio .bw-pegatina small {
+  display: block;
+  margin-top: 5px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  font-stretch: 100%;
+  letter-spacing: 0.04em;
+}
+
+.dcbw-barrio .bw-pegatina:hover {
+  background: color-mix(in srgb, var(--dcbw-acento-fuerte) 80%, #000);
+}
+
+/* ── Cinta: la carta corriendo ───────────────────────────────── */
+.dcbw-barrio .bw-cinta {
+  overflow: hidden;
+  white-space: nowrap;
+  background: var(--dcbw-acento-fuerte);
+  color: #fff;
+  border-block: 2px solid var(--bw-negro);
+}
+
+.dcbw-barrio .bw-cinta-via {
+  display: inline-flex;
+  animation: bw-correr var(--bw-cinta-s, 38s) linear infinite;
+}
+
+.dcbw-barrio .bw-cinta span {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 13px 0;
+  font-weight: 900;
+  font-stretch: 62%;
+  text-transform: uppercase;
+  font-size: 1.625rem;
+  line-height: 1;
+}
+
+.dcbw-barrio .bw-cinta b,
+.dcbw-barrio .bw-cinta b .dcbw-precio {
+  font-weight: 500;
+  font-stretch: 100%;
+  font-size: 1.0625rem;
+  /* Sin opacidad: blanco atenuado sobre -fuerte baja de 4.5:1 (whisky). */
+  padding: 0;
+}
+
+.dcbw-barrio .bw-cinta-via > span::after {
+  content: "/";
+  margin: 0 18px;
+  opacity: 0.5;
+  font-weight: 400;
+}
+
+@keyframes bw-correr {
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+/* ── Servicios ───────────────────────────────────────────────── */
+.dcbw-barrio .bw-fichas {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  margin: 24px calc(var(--dcbw-lado) * -1) 0;
+  padding: 3px var(--dcbw-lado) 6px;
+}
+
+.dcbw-barrio .bw-fichas::-webkit-scrollbar {
+  display: none;
+}
+
+.dcbw-barrio .bw-fichas a {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  min-height: 46px;
+  padding: 0 20px;
+  border-radius: 999px;
+  border: 2px solid var(--bw-tinta);
+  font-weight: 700;
+  font-size: 0.9375rem;
+  text-decoration: none;
+}
+
+.dcbw-barrio .bw-fichas a:hover,
+.dcbw-barrio .bw-fichas a:first-child {
+  background: var(--bw-tinta);
+  color: var(--bw-sobre);
+}
+
+.dcbw-barrio .bw-combos {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  margin: 32px calc(var(--dcbw-lado) * -1) 0;
+  padding-inline: var(--dcbw-lado);
+  scroll-padding-inline: var(--dcbw-lado);
+}
+
+.dcbw-barrio .bw-combos::-webkit-scrollbar {
+  display: none;
+}
+
+.dcbw-barrio .bw-combos > li {
+  flex: none;
+  width: min(80cqi, 340px);
+  scroll-snap-align: start;
+  display: flex;
+  container-type: inline-size;
+}
+
+.dcbw-barrio .bw-combo {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 236px;
+  padding: 22px 22px 20px;
+  border-radius: var(--bw-radio);
+  background: var(--bw-negro);
+  color: var(--bw-sobre);
+  text-decoration: none;
+  overflow: hidden;
+}
+
+.dcbw-barrio .bw-combos > li:nth-child(2n) .bw-combo {
+  background: var(--dcbw-acento-fuerte);
+  color: #fff;
+}
+
+.dcbw-barrio .bw-combo-marca {
+  align-self: flex-start;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--bw-blanco);
+  color: var(--bw-tinta);
+  font-weight: 700;
+  font-size: 0.8125rem;
+}
+
+.dcbw-barrio .bw-combo-nombre {
+  margin-top: 16px;
+  /* Medida por la TARJETA (container-type en el li): a dos columnas la
+     tarjeta mide ~200 px y un nombre largo partía palabras. */
+  font-size: min(2.75rem, 15cqi);
+  line-height: 0.88;
+}
+
+.dcbw-barrio .bw-combo-desc {
+  margin-top: 8px;
+  max-width: 26ch;
+  font-size: 0.9375rem;
+  line-height: 1.4;
+  /* Sin opacidad: en la tarjeta del acento bajaría de AA. */
+}
+
+.dcbw-barrio .bw-combo-pie {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: auto;
+  padding-top: 18px;
+}
+
+.dcbw-barrio .bw-combo-precio {
+  font-size: 3.5rem;
+  line-height: 0.8;
+}
+
+.dcbw-barrio .bw-combo-dur {
+  color: inherit;
+  font-size: 0.9375rem;
+  font-weight: 500;
+}
+
+.dcbw-barrio .bw-grupo {
+  margin-top: 48px;
+}
+
+.dcbw-barrio .bw-grupo-titulo {
+  font-size: 2.125rem;
+  line-height: 1;
+  padding-bottom: 10px;
+  border-bottom: 3px solid var(--bw-tinta);
+}
+
+.dcbw-barrio .bw-servicio {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 44px;
+  align-items: center;
+  gap: 0 12px;
+  min-height: 72px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--bw-linea);
+  text-decoration: none;
+}
+
+.dcbw-barrio .bw-servicio-nombre {
+  font-weight: 700;
+  font-size: 1.1875rem;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.dcbw-barrio .bw-servicio-nota {
+  display: block;
+  margin-top: 3px;
+  font-weight: 400;
+  font-size: 0.9375rem;
+  line-height: 1.35;
+  color: var(--bw-tinta-suave);
+}
+
+.dcbw-barrio .bw-servicio-nota .dcbw-duracion {
+  font-size: inherit;
+  font-weight: inherit;
+  color: inherit;
+}
+
+.dcbw-barrio .bw-servicio-precio {
+  font-size: 2.375rem;
+  line-height: 1;
+}
+
+.dcbw-barrio .bw-servicio-ir {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 2px solid var(--bw-tinta);
+  transition: background-color 0.16s, color 0.16s, border-color 0.16s;
+}
+
+.dcbw-barrio .bw-servicio:hover .bw-servicio-ir,
+.dcbw-barrio .bw-servicio:focus-visible .bw-servicio-ir {
+  background: var(--dcbw-acento-fuerte);
+  border-color: var(--dcbw-acento-fuerte);
+  color: #fff;
+}
+
+/* ── Tienda: la pieza compartida, vestida de Barrio ──────────── */
+.dcbw-barrio .dcbw-sec-productos {
+  background: var(--bw-negro);
+  color: var(--bw-sobre);
+}
+
+.dcbw-barrio .dcbw-productos {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 26px 12px;
+  margin-top: 32px;
+}
+
+.dcbw-barrio .dcbw-producto {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: 0;
+  border-radius: var(--bw-radio);
+}
+
+/* Foto y precio en la MISMA celda: la etiqueta del precio va encima de la
+   foto, abajo a la derecha, como en la maqueta. El orden del HTML es el
+   de la pieza (foto, categoría, nombre, precio, agotado); la rejilla lo
+   recoloca sin tocar el componente compartido. */
+.dcbw-barrio .dcbw-producto-foto {
+  grid-area: 1 / 1;
+  aspect-ratio: 1;
+  margin: 0;
+  border: 0;
+  border-radius: var(--bw-radio);
+  background: var(--bw-concreto);
+  color: var(--bw-tinta);
+  font-weight: 900;
+  font-stretch: 62%;
+  font-size: 5rem;
+}
+
+.dcbw-barrio .dcbw-producto:nth-child(4n + 2) .dcbw-producto-foto,
+.dcbw-barrio .dcbw-producto:nth-child(4n + 3) .dcbw-producto-foto {
+  background: var(--bw-concreto-2);
+}
+
+.dcbw-barrio .dcbw-producto > .dcbw-precio {
+  grid-area: 1 / 1;
+  align-self: end;
+  justify-self: end;
+  margin: 8px;
+  padding: 8px 13px 7px;
+  border-radius: 999px;
+  background: var(--dcbw-acento-fuerte);
+  color: #fff;
+  font-weight: 900;
+  font-stretch: 62%;
+  font-size: 1.75rem;
+  line-height: 1;
+  transform: rotate(-5deg);
+}
+
+.dcbw-barrio .dcbw-producto-nombre {
+  grid-row: 2;
+  margin-top: 12px;
+  font-weight: 700;
+  font-size: 1.0625rem;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.dcbw-barrio .dcbw-producto-cat {
+  grid-row: 3;
+  margin-top: 2px;
+  font-size: 0.8125rem;
+  letter-spacing: 0;
+  text-transform: none;
+  opacity: 1;
+  color: var(--bw-sobre-suave);
+}
+
+/* «Agotado»: el último hijo de la pieza (la categoría va ANTES del
+   nombre, así que nunca es la última). Sale como banda cruzada. */
+.dcbw-barrio .dcbw-producto > .dcbw-producto-cat:last-child {
+  grid-area: 1 / 1;
+  align-self: center;
+  justify-self: stretch;
+  margin: 0;
+  padding: 7px 0 6px;
+  transform: rotate(-9deg);
+  background: var(--bw-negro);
+  color: var(--bw-sobre);
+  text-align: center;
+  text-transform: uppercase;
+  font-weight: 900;
+  font-stretch: 62%;
+  font-size: 1.5rem;
+  letter-spacing: 0.06em;
+}
+
+.dcbw-barrio .dcbw-producto:has(> .dcbw-producto-cat:last-child) .dcbw-producto-foto {
+  opacity: 0.35;
+  filter: grayscale(1);
+}
+
+.dcbw-barrio .dcbw-producto:has(> .dcbw-producto-cat:last-child) > .dcbw-precio {
+  background: var(--bw-carbon);
+  color: var(--bw-sobre-suave);
+}
+
+.dcbw-barrio .dcbw-producto:hover .dcbw-producto-foto {
+  outline: 3px solid var(--dcbw-acento-claro);
+  outline-offset: -3px;
+}
+
+.dcbw-barrio .dcbw-sec-productos > p .dcbw-btn {
+  width: 100%;
+  min-height: 54px;
+  padding: 0 26px;
+  border: 0;
+  background: var(--bw-blanco);
+  color: var(--bw-tinta);
+  font-weight: 700;
+  font-stretch: 108%;
+  font-size: 1rem;
+  opacity: 1;
+}
+
+.dcbw-barrio .dcbw-sec-productos > p .dcbw-btn:hover {
+  background: var(--dcbw-acento-suave);
+  color: var(--bw-tinta);
+}
+
+.dcbw-barrio .dcbw-sec-productos > p {
+  margin-top: 32px !important;
+}
+
+/* ── Cortes: rejilla de Instagram ────────────────────────────── */
+.dcbw-barrio .bw-cortes-cab {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.dcbw-barrio .bw-ig {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+  min-width: 0;
+}
+
+.dcbw-barrio .bw-ig-avatar {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--bw-tinta);
+  color: var(--bw-sobre);
+}
+
+.dcbw-barrio .bw-ig-nombre {
+  min-width: 0;
+  font-weight: 700;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.dcbw-barrio .bw-ig-nombre small {
+  display: block;
+  font-weight: 400;
+  font-size: 0.8125rem;
+  color: var(--bw-tinta-suave);
+}
+
+.dcbw-barrio .bw-ig .bw-boton {
+  margin-left: auto;
+  min-height: 44px;
+  padding: 0 18px;
+  font-size: 0.9375rem;
+}
+
+.dcbw-barrio .bw-rejilla {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 3px;
+  margin-top: 24px;
+  margin-inline: calc(var(--dcbw-lado) * -1);
+}
+
+.dcbw-barrio .bw-rejilla figure {
+  grid-column: span var(--bw-c-col, 1);
+  grid-row: span var(--bw-c-fila, 1);
+  aspect-ratio: var(--bw-c-prop, 1 / 1);
+  overflow: hidden;
+  margin: 0;
+  background: var(--bw-concreto-2);
+}
+
+.dcbw-barrio .bw-rejilla img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: grayscale(1) contrast(1.12);
+  transition: filter 0.3s;
+}
+
+/* El color vuelve al pasar el ratón: el corte se ve como es. */
+.dcbw-barrio .bw-rejilla figure:hover img {
+  filter: none;
+}
+
+.dcbw-barrio .bw-rejilla .bw-oculta-cel {
+  display: none;
+}
+
+.dcbw-barrio .bw-rejilla-hueco {
+  margin-top: 24px;
+  min-height: 220px;
+  border-color: var(--bw-linea);
+  color: var(--bw-tinta-suave);
+}
+
+/* ── Barberos ────────────────────────────────────────────────── */
+.dcbw-barrio .bw-barberos {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  margin: 32px calc(var(--dcbw-lado) * -1) 0;
+  padding-inline: var(--dcbw-lado);
+  scroll-padding-inline: var(--dcbw-lado);
+}
+
+.dcbw-barrio .bw-barberos::-webkit-scrollbar {
+  display: none;
+}
+
+.dcbw-barrio .bw-barbero {
+  flex: none;
+  width: min(76cqi, 320px);
+  scroll-snap-align: start;
+  display: flex;
+  flex-direction: column;
+  container-type: inline-size;
+}
+
+.dcbw-barrio .bw-barbero:only-child {
+  width: min(100%, 360px);
+}
+
+.dcbw-barrio .bw-barbero-foto {
+  position: relative;
+  aspect-ratio: 4 / 5;
+  border-radius: var(--bw-radio);
+  overflow: hidden;
+  background: #2a2a2a;
+  color: var(--bw-sobre);
+}
+
+.dcbw-barrio .bw-barbero-foto[data-tono="1"] {
+  background: var(--dcbw-acento-fuerte);
+}
+
+.dcbw-barrio .bw-barbero-foto[data-tono="2"] {
+  background: #d8d5cd;
+  color: var(--bw-tinta);
+}
+
+.dcbw-barrio .bw-barbero-foto[data-tono="3"] {
+  background: #3a3a3a;
+}
+
+.dcbw-barrio .bw-barbero-foto img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: grayscale(1) contrast(1.08);
+}
+
+.dcbw-barrio .bw-barbero-inicial {
+  position: absolute;
+  inset: 0 0 30%;
+  display: grid;
+  place-items: center;
+  font-weight: 900;
+  font-stretch: 62%;
+  font-size: 46cqi;
+  line-height: 1;
+  opacity: 0.9;
+}
+
+.dcbw-barrio .bw-barbero-foto::after {
+  content: "";
+  position: absolute;
+  inset: 50% 0 0;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.82), transparent);
+}
+
+.dcbw-barrio .bw-barbero-nombre {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 14px;
+  z-index: 1;
+  color: #fff;
+  font-size: min(3.25rem, 17cqi);
+}
+
+.dcbw-barrio .bw-barbero-apodo {
+  position: absolute;
+  left: 14px;
+  top: 14px;
+  z-index: 1;
+  max-width: calc(100% - 28px);
+  padding: 7px 13px;
+  border-radius: 999px;
+  background: var(--bw-blanco);
+  color: var(--bw-tinta);
+  font-weight: 700;
+  font-size: 0.9375rem;
+  line-height: 1.2;
+  transform: rotate(-4deg);
+  overflow-wrap: anywhere;
+}
+
+.dcbw-barrio .bw-barbero-bio {
+  flex: 1;
+  margin-top: 14px;
+  line-height: 1.4;
+  color: var(--bw-sobre-suave);
+}
+
+.dcbw-barrio .bw-barbero .bw-boton {
+  margin-top: 14px;
+  white-space: normal;
+  text-align: center;
+  line-height: 1.15;
+}
+
+.dcbw-barrio .bw-barbero-nota {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 14px;
+  min-height: 54px;
+  padding: 6px 16px;
+  border: 2px dashed var(--bw-linea-o);
+  border-radius: 999px;
+  color: var(--bw-sobre-suave);
+  font-size: 0.9375rem;
+  text-align: center;
+}
+
+/* ── Reseñas: el color de la barbería a bloque ───────────────── */
+.dcbw-barrio .bw-resenas .dcbw-h2 {
+  color: #fff;
+}
+
+.dcbw-barrio .bw-nota-total {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  margin-top: 24px;
+}
+
+.dcbw-barrio .bw-nota-num {
+  font-size: clamp(7rem, 40cqi, 13rem);
+  line-height: 0.74;
+}
+
+.dcbw-barrio .bw-nota-de {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 14ch;
+  padding-bottom: 6px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.dcbw-barrio .bw-nota-de .dcbw-estrellas {
+  color: #fff;
+}
+
+.dcbw-barrio .bw-resenas-lista {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  margin: 32px calc(var(--dcbw-lado) * -1) 0;
+  padding: 8px var(--dcbw-lado);
+  scroll-padding-inline: var(--dcbw-lado);
+}
+
+.dcbw-barrio .bw-resenas-lista::-webkit-scrollbar {
+  display: none;
+}
+
+.dcbw-barrio .bw-resena {
+  flex: none;
+  width: min(80cqi, 360px);
+  scroll-snap-align: start;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 22px;
+  border-radius: var(--bw-radio);
+  background: var(--bw-blanco);
+  color: var(--bw-tinta);
+  transform: rotate(-0.8deg);
+}
+
+.dcbw-barrio .bw-resena:nth-child(even) {
+  transform: rotate(1.2deg);
+}
+
+.dcbw-barrio .bw-resena .dcbw-estrellas {
+  color: var(--dcbw-acento-fuerte);
+}
+
+.dcbw-barrio .bw-resena p {
+  flex: 1;
+  font-size: 1.1875rem;
+  line-height: 1.35;
+  font-weight: 500;
+  color: var(--bw-tinta);
+  overflow-wrap: anywhere;
+}
+
+.dcbw-barrio .bw-resena cite {
+  margin: 0;
+  font-style: normal;
+  font-weight: 700;
+  font-size: 0.9375rem;
+  color: var(--bw-tinta);
+}
+
+/* ── Ubicación ───────────────────────────────────────────────── */
+.dcbw-barrio .bw-ubicacion-rejilla {
+  display: grid;
+  gap: 24px;
+  margin-top: 32px;
+}
+
+.dcbw-barrio .bw-mapa {
+  position: relative;
+  aspect-ratio: 4 / 3.4;
+  border-radius: var(--bw-radio);
+  overflow: hidden;
+  border: 3px solid var(--bw-tinta);
+  background: var(--bw-concreto-2);
+}
+
+.dcbw-barrio .bw-mapa .dcbw-mapa {
+  position: absolute;
+  inset: 0;
+  min-height: 0;
+  border-radius: 0;
+  filter: grayscale(1) contrast(1.05);
+}
+
+.dcbw-barrio .bw-mapa .bw-boton {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+}
+
+.dcbw-barrio .bw-direccion {
+  font-size: 2.5rem;
+  line-height: 0.9;
+}
+
+.dcbw-barrio .bw-direccion small {
+  display: block;
+  margin-top: 8px;
+  font-weight: 500;
+  font-stretch: 100%;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 1.0625rem;
+  line-height: 1.4;
+  color: var(--bw-tinta-suave);
+}
+
+.dcbw-barrio .bw-horario {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.dcbw-barrio .bw-horario th,
+.dcbw-barrio .bw-horario td {
+  padding: 13px 0;
+  border-top: 1px solid var(--bw-linea);
+  font-weight: 500;
+}
+
+.dcbw-barrio .bw-horario th {
+  text-align: left;
+  padding-right: 12px;
+}
+
+.dcbw-barrio .bw-horario td {
+  text-align: right;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.dcbw-barrio .bw-horario tr:last-child th,
+.dcbw-barrio .bw-horario tr:last-child td {
+  border-bottom: 1px solid var(--bw-linea);
+}
+
+.dcbw-barrio .bw-horario .bw-cerrado td {
+  font-weight: 500;
+  color: var(--bw-tinta-suave);
+}
+
+.dcbw-barrio .bw-ubicacion-datos {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  min-width: 0;
+}
+
+.dcbw-barrio .bw-contacto {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.dcbw-barrio .bw-contacto .bw-boton {
+  padding: 0 12px;
+  font-size: 0.9375rem;
+}
+
+.dcbw-barrio .bw-redes {
+  gap: 10px;
+  margin-top: 0;
+}
+
+.dcbw-barrio .bw-redes a {
+  width: 52px;
+  height: 52px;
+  border: 0;
+  background: var(--bw-tinta);
+  color: var(--bw-sobre);
+}
+
+.dcbw-barrio .bw-redes a:hover {
+  background: var(--dcbw-acento-fuerte);
+  color: #fff;
+}
+
+/* ── Cierre y pie ────────────────────────────────────────────── */
+.dcbw-barrio .bw-cierre {
+  padding-bottom: 48px;
+  overflow: hidden;
+}
+
+.dcbw-barrio .bw-cierre-titulo {
+  font-size: max(
+    3rem,
+    min(33cqi, 17rem, calc((100cqi - 2 * var(--dcbw-lado)) / (var(--bw-letras, 5) * var(--bw-k))))
+  );
+}
+
+.dcbw-barrio .bw-cierre-bajada {
+  margin-top: 16px;
+  max-width: 26ch;
+  font-size: 1.125rem;
+  color: var(--bw-sobre-suave);
+}
+
+.dcbw-barrio .bw-boton-grande {
+  margin-top: 24px;
+  min-height: 60px;
+  padding: 0 30px;
+  font-size: 1.0625rem;
+}
+
+.dcbw-barrio .dcbw-pie {
+  padding: 24px max(var(--dcbw-lado), calc((100% - var(--dcbw-ancho)) / 2));
+  background: var(--bw-negro);
+  border-top: 1px solid var(--bw-linea-o);
+  color: var(--bw-sobre-suave);
+  font-size: 0.9375rem;
+}
+
+.dcbw-barrio .dcbw-pie a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--bw-sobre);
+  font-weight: 600;
+}
+
+.dcbw-barrio .dcbw-pie a:hover {
+  color: var(--dcbw-acento-claro);
+}
+
+/* ── Muelle del celular ──────────────────────────────────────────
+   `sticky` y no `fixed`: dentro del lienzo escalado del editor un
+   `fixed` se ancla al lienzo (tiene transform) y se iría con el scroll.
+   Pegado abajo como ÚLTIMO hijo de la raíz, flota sobre toda la página
+   y al final ocupa su propio lugar después del pie. */
+.dcbw-barrio .bw-muelle {
+  position: sticky;
+  bottom: calc(10px + env(safe-area-inset-bottom));
+  z-index: 40;
+  display: flex;
+  gap: 6px;
+  margin: 0 10px calc(10px + env(safe-area-inset-bottom));
+  padding: 6px;
+  border-radius: 999px;
+  background: rgba(26, 26, 26, 0.94);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--bw-linea-o);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+}
+
+.dcbw-barrio .bw-muelle a {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 56px;
+  border-radius: 999px;
+  text-decoration: none;
+  font-weight: 700;
+  font-stretch: 108%;
+}
+
+.dcbw-barrio .bw-muelle-wa {
+  flex: none;
+  width: 56px;
+  color: var(--bw-sobre);
+  border: 1.5px solid var(--bw-linea-o);
+}
+
+.dcbw-barrio .bw-muelle-ir {
+  flex: 1;
+  background: var(--dcbw-acento-fuerte);
+  color: #fff;
+  font-size: 1.0625rem;
+}
+
+/* ═══ Computadora (≥ 900 px de plantilla, no de pantalla) ═══════ */
+@container dcbw (min-width: 900px) {
+  .dcbw-barrio {
+    --dcbw-lado: 40px;
+    --dcbw-aire: 104px;
+    --bw-tira: 64px;
+  }
+
+  .dcbw-barrio .bw-cabecera,
+  .dcbw-barrio .bw-muelle {
+    display: none;
+  }
+
+  .dcbw-barrio .bw-tira nav {
+    gap: 2px;
+  }
+
+  .dcbw-barrio .bw-tira-marca {
+    display: flex;
+    margin-right: auto;
+    padding-right: 16px;
+    max-width: 320px;
+  }
+
+  .dcbw-barrio .bw-tira nav > a:not(.bw-marca) {
+    font-size: 1.1875rem;
+    padding: 0 14px;
+  }
+
+  .dcbw-barrio .bw-tira-acciones {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: none;
+    margin-left: auto;
+    padding-left: 20px;
+  }
+
+  .dcbw-barrio .bw-tira-acciones .bw-mis {
+    padding: 0 8px;
+  }
+
+  .dcbw-barrio .bw-tira-acciones .bw-boton {
+    min-height: 46px;
+    height: 46px;
+    padding: 0 22px;
+    font-size: 0.9375rem;
+  }
+
+  .dcbw-barrio .bw-portada {
+    min-height: min(calc(100svh - var(--bw-tira)), 800px);
+  }
+
+  .dcbw-barrio .bw-portada-in {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
+    gap: 40px;
+    padding-bottom: 48px;
+  }
+
+  .dcbw-barrio .bw-portada-nombre {
+    font-size: max(
+      4rem,
+      min(19.5cqi, 17rem, calc((min(100cqi - 80px, var(--dcbw-ancho)) - 440px) / (var(--bw-letras, 6) * var(--bw-k))))
+    );
+  }
+
+  .dcbw-barrio .bw-portada-lado {
+    max-width: 400px;
+    padding-bottom: 14px;
+  }
+
+  .dcbw-barrio .bw-portada-frase {
+    margin-top: 0;
+    font-size: 1.5rem;
+  }
+
+  .dcbw-barrio .bw-portada-acciones {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 22px;
+  }
+
+  .dcbw-barrio .bw-pegatina {
+    right: 40px;
+    top: 40px;
+    width: 168px;
+    height: 168px;
+    font-size: 2rem;
+  }
+
+  .dcbw-barrio .bw-pegatina small {
+    font-size: 0.875rem;
+  }
+
+  .dcbw-barrio .bw-cinta span {
+    padding: 16px 0;
+    font-size: 2rem;
+  }
+
+  .dcbw-barrio .bw-servicios-rejilla {
+    display: grid;
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+    gap: 80px;
+    align-items: start;
+  }
+
+  .dcbw-barrio .bw-servicios-rejilla.bw-solo-izq {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dcbw-barrio .bw-servicios-izq {
+    position: sticky;
+    top: calc(var(--bw-tira) + 32px);
+  }
+
+  /* La columna mide 0.9fr: a 8.5rem «SERVICIOS» (526 px) no cabe en sus
+     486 px y se partía en «SERVICIO / S». La maqueta lo dejaba salirse al
+     hueco; aquí la letra se ajusta al ancho y la palabra queda entera. */
+  .dcbw-barrio .bw-servicios-izq .dcbw-h2 {
+    font-size: min(8.5rem, 8.4cqi);
+  }
+
+  .dcbw-barrio .bw-fichas {
+    flex-wrap: wrap;
+    margin-inline: 0;
+    padding-inline: 0;
+  }
+
+  .dcbw-barrio .bw-combos {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin-inline: 0;
+    padding-inline: 0;
+    overflow: visible;
+  }
+
+  .dcbw-barrio .bw-combos > li {
+    width: auto;
+  }
+
+  .dcbw-barrio .bw-servicios-der .bw-grupo:first-child {
+    margin-top: 0;
+  }
+
+  .dcbw-barrio .bw-servicio {
+    grid-template-columns: minmax(0, 1fr) auto 48px;
+    gap: 0 20px;
+    min-height: 84px;
+  }
+
+  .dcbw-barrio .bw-servicio-nombre {
+    font-size: 1.375rem;
+  }
+
+  .dcbw-barrio .bw-servicio-precio {
+    font-size: 3rem;
+  }
+
+  .dcbw-barrio .bw-servicio-ir {
+    width: 48px;
+    height: 48px;
+  }
+
+  .dcbw-barrio .dcbw-productos {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 48px 20px;
+  }
+
+  .dcbw-barrio .dcbw-producto > .dcbw-precio {
+    margin: 14px;
+    padding: 10px 18px 9px;
+    font-size: 2.25rem;
+  }
+
+  .dcbw-barrio .dcbw-producto-nombre {
+    font-size: 1.25rem;
+  }
+
+  .dcbw-barrio .dcbw-sec-productos > p .dcbw-btn {
+    width: auto;
+  }
+
+  .dcbw-barrio .bw-cortes-cab {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: flex-end;
+  }
+
+  .dcbw-barrio .bw-ig {
+    margin-top: 0;
+    gap: 14px;
+  }
+
+  .dcbw-barrio .bw-rejilla {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 4px;
+    margin-inline: 0;
+    border-radius: var(--bw-radio);
+    overflow: hidden;
+  }
+
+  .dcbw-barrio .bw-rejilla figure {
+    grid-column: span var(--bw-p-col, 1);
+    grid-row: span var(--bw-p-fila, 1);
+    aspect-ratio: var(--bw-p-prop, 1 / 1);
+  }
+
+  .dcbw-barrio .bw-rejilla .bw-oculta-cel {
+    display: block;
+  }
+
+  .dcbw-barrio .bw-rejilla .bw-oculta-pc {
+    display: none;
+  }
+
+  .dcbw-barrio .bw-barberos {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 40px 20px;
+    margin-inline: 0;
+    padding-inline: 0;
+    overflow: visible;
+  }
+
+  .dcbw-barrio .bw-barbero,
+  .dcbw-barrio .bw-barbero:only-child {
+    width: auto;
+  }
+
+  .dcbw-barrio .bw-barbero-nombre {
+    font-size: min(3.75rem, 17cqi);
+  }
+
+  .dcbw-barrio .bw-resenas-rejilla {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 72px;
+    align-items: start;
+  }
+
+  .dcbw-barrio .bw-resenas-lista {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px;
+    margin: 0;
+    padding: 0;
+    overflow: visible;
+  }
+
+  .dcbw-barrio .bw-resena {
+    width: auto;
+  }
+
+  .dcbw-barrio .bw-nota-num {
+    font-size: 15rem;
+  }
+
+  .dcbw-barrio .bw-ubicacion-rejilla {
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+    gap: 72px;
+    align-items: start;
+  }
+
+  .dcbw-barrio .bw-ubicacion-rejilla.bw-sin-mapa {
+    grid-template-columns: minmax(0, 1fr);
+    max-width: 640px;
+  }
+
+  .dcbw-barrio .bw-mapa {
+    aspect-ratio: 4 / 3.2;
+  }
+
+  .dcbw-barrio .bw-direccion {
+    font-size: 3.5rem;
+  }
+
+  .dcbw-barrio .bw-cierre-in {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 40px;
+  }
+
+  .dcbw-barrio .bw-cierre-titulo {
+    font-size: max(
+      4rem,
+      min(17rem, calc((min(100cqi - 80px, var(--dcbw-ancho)) - 320px) / (var(--bw-letras, 5) * var(--bw-k))))
+    );
+  }
+
+  .dcbw-barrio .bw-boton-grande {
+    flex: none;
+  }
+}
+
+/* La cinta para y la portada no hace zoom si la persona lo pidió. */
+@media (prefers-reduced-motion: reduce) {
+  .dcbw-barrio .bw-cinta {
+    overflow-x: auto;
+  }
+
+  .dcbw-barrio .bw-cinta-via,
+  .dcbw-barrio .bw-portada-foto img {
+    animation: none;
+  }
+
+  .dcbw-barrio .bw-boton,
+  .dcbw-barrio .bw-servicio-ir,
+  .dcbw-barrio .bw-rejilla img {
+    transition: none;
+  }
+}

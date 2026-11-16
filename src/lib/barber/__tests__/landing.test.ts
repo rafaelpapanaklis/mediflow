@@ -135,7 +135,8 @@ test("las doce plantillas del manifiesto son exactamente las declaradas", () => 
     [...BARBER_WEB_TEMPLATE_IDS].sort(),
   );
   // 8 de la ola de la mini-web + estudio, carta, nocturna y club.
-  assert.equal(BARBER_WEB_TEMPLATE_IDS.length, 12);
+  // + barrio (ws6-t3, 16-nov). Oficio (t2) y Revista (t6) suman una cada una.
+  assert.equal(BARBER_WEB_TEMPLATE_IDS.length, 13);
 });
 
 test("el contenido compartido sobrevive a un cambio de plantilla", () => {

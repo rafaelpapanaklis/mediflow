@@ -26,6 +26,7 @@ import { PlantillaPrecios } from "./t-precios";
 import { PlantillaPremium } from "./t-premium";
 import { PlantillaUrbana } from "./t-urbana";
 import { PlantillaVintage } from "./t-vintage";
+import { PlantillaBarrio } from "./t-barrio";
 import "./skins.css";
 
 export const BARBER_WEB_TEMPLATES: Record<BarberWebTemplateId, BarberWebTemplateComponent> = {
@@ -41,6 +42,7 @@ export const BARBER_WEB_TEMPLATES: Record<BarberWebTemplateId, BarberWebTemplate
   carta: PlantillaCarta,
   nocturna: PlantillaNocturna,
   club: PlantillaClub,
+  barrio: PlantillaBarrio,
 };
 
 /**
