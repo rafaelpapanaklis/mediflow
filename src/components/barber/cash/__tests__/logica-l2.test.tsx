@@ -116,3 +116,8 @@ test("ronda 2 · «Cambiar método de pago»: dice con qué se cobró y solo ofr
   assert.match(en, /Change payment method/);
   assert.match(en, /After the cash count, it can only be cancelled/);
 });
+
+test("ronda 2 · bajo «Barbero» del ticket: «Si atendieron dos, haz un ticket por barbero» (es/en)", () => {
+  assert.equal(makeBarberT(cajaDict("es"))("ticket.barberOneHint"), "Si atendieron dos, haz un ticket por barbero.");
+  assert.equal(makeBarberT(cajaDict("en"))("ticket.barberOneHint"), "If two barbers worked on it, make one ticket per barber.");
+});

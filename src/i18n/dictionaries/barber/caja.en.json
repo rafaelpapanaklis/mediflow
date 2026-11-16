@@ -157,6 +157,7 @@
     "fromAppointment": "Appointment at {time}",
     "barber": "Barber",
     "barberNone": "No barber (counter sale)",
+    "barberOneHint": "If two barbers worked on it, make one ticket per barber.",
     "client": "Client",
     "clientSearch": "Search by name or phone…",
     "clientNone": "No client",

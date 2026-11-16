@@ -532,6 +532,8 @@ export function TicketModal({
                 <option key={b.id} value={b.id}>{b.nickname || b.name}</option>
               ))}
             </select>
+            {/* Un ticket es de UN barbero (comisión y propina van a él): decisión D5, lógica L2. */}
+            <div className="bcaja-hint" data-ticket-un-barbero>{t("ticket.barberOneHint")}</div>
           </div>
 
           {/* Cliente */}

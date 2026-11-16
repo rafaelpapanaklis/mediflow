@@ -157,6 +157,7 @@
     "fromAppointment": "Cita de {time}",
     "barber": "Barbero",
     "barberNone": "Sin barbero (venta de mostrador)",
+    "barberOneHint": "Si atendieron dos, haz un ticket por barbero.",
     "client": "Cliente",
     "clientSearch": "Buscar por nombre o teléfono…",
     "clientNone": "Sin cliente",
