@@ -19,7 +19,6 @@ import {
   BARBER_DURATION_STEP_MIN,
   BARBER_MAX_APPOINTMENT_MIN,
   BARBER_MIN_APPOINTMENT_MIN,
-  appointmentMinutes,
   clampAppointmentMinutes,
   formatMXN,
   hhmmToMinute,
@@ -36,6 +35,7 @@ import { TelefonoConPais } from "@/components/barber/telefono-con-pais";
 import { formatBarberPhone } from "@/lib/barber/phone-format";
 import { Field, Modal, agendaCss as css } from "./agenda-ui";
 import { BarberoSelect } from "./barbero-select";
+import { durationToSend, initialCustomMinutes, type NewClientSeed } from "./dialogo-inicial";
 import { pickBarbers, type TimeOffLike, type VisitLike } from "@/lib/barber/quien-trabaja";
 import type { ScheduleLike } from "@/lib/barber/agenda";
 
@@ -74,6 +74,12 @@ export interface AppointmentDialogProps {
    * y nota copiados de otra visita. La hora la pone initialStartAt.
    */
   prefill?: BarberAppointmentDTO | null;
+  /**
+   * «Agendar» desde la ficha o Mensajes (?nueva=): SOLO el cliente. No es
+   * un «repetir»: no trae servicios, nota ni duración (la duración sale de
+   * los servicios que se elijan). Ver dialogo-inicial.ts.
+   */
+  newClient?: NewClientSeed | null;
   t: (key: string, vars?: Record<string, string | number>) => string;
   onClose: () => void;
   onSaved: (appointment: BarberAppointmentDTO) => void;
@@ -95,12 +101,20 @@ export function AppointmentDialog(props: AppointmentDialogProps) {
 
   const startDate = editing ? new Date(appointment.startAt) : (props.initialStartAt ?? new Date());
 
-  const [clientId, setClientId] = useState<string | null>(source ? source.clientId : null);
-  const [clientName, setClientName] = useState(source ? (source.clientName ?? "") : "");
+  // «Agendar» a un cliente (?nueva=): solo el cliente, sin nada de «repetir».
+  const newClient = mode === "create" && !source ? (props.newClient ?? null) : null;
+  const [clientId, setClientId] = useState<string | null>(
+    source ? source.clientId : (newClient?.clientId ?? null),
+  );
+  const [clientName, setClientName] = useState(source ? (source.clientName ?? "") : (newClient?.clientName ?? ""));
   // Teléfono escrito a mano: país + número local. Lo guardado («+34…») se parte
   // para que al editar se vea su bandera (telefono-panel.ts).
   const [clientPhone, setClientPhone] = useState(
-    source ? (source.clientId ? (source.clientPhone ?? "") : splitStoredPhone(source.clientPhone).local) : "",
+    source
+      ? source.clientId
+        ? (source.clientPhone ?? "")
+        : splitStoredPhone(source.clientPhone).local
+      : (newClient?.clientPhone ?? ""),
   );
   const [phoneIso, setPhoneIso] = useState(source ? splitStoredPhone(source.clientPhone).iso || "MX" : "MX");
   const [query, setQuery] = useState("");
@@ -218,16 +232,12 @@ export function AppointmentDialog(props: AppointmentDialogProps) {
   // Duración a mano. `null` = "sigue al catálogo". Al editar arranca a mano
   // solo si la visita guardada YA no coincide con lo que suma su catálogo:
   // si coincide, tocar un servicio debe seguir ajustando la duración sola.
-  const [customMinutes, setCustomMinutes] = useState<number | null>(() => {
-    // Al repetir también: si la original duró distinto que su catálogo, la
-    // copia dura lo mismo que la original.
-    if (!source) return null;
-    const saved = appointmentMinutes(source);
-    const fromCatalog = totalServiceMinutes(
-      props.services.filter((s) => source.services.some((x) => x.serviceId === s.id)),
-    );
-    return saved === fromCatalog ? null : saved;
-  });
+  // Al repetir también: si la original duró distinto que su catálogo, la
+  // copia dura lo mismo que la original. Una fuente sin duración real
+  // (0 min) nunca fija la duración: sigue a los servicios (dialogo-inicial.ts).
+  const [customMinutes, setCustomMinutes] = useState<number | null>(() =>
+    initialCustomMinutes(source, props.services),
+  );
   const durationMin = customMinutes ?? catalogMinutes;
   const durationEditable = durationMin > 0 || customMinutes !== null;
 
@@ -288,7 +298,7 @@ export function AppointmentDialog(props: AppointmentDialogProps) {
           serviceIds: selected,
           // Solo viaja si alguien la escribió: sin esto, el servidor la
           // calcula del catálogo como siempre.
-          durationMin: customMinutes,
+          durationMin: durationToSend(customMinutes),
           notes: notes.trim() || null,
           clientId,
           clientName: clientName.trim(),
