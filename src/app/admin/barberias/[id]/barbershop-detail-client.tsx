@@ -48,6 +48,7 @@ import {
   relativeDate,
   shortDate,
   subscriptionFace,
+  textoSedes,
 } from "@/components/admin/barberias/shared";
 import {
   ManualActionModal,
@@ -70,6 +71,9 @@ export function AdminBarbershopDetailClient({ detail }: { detail: AdminBarbersho
   const [action, setAction] = useState<ManualActionKind | null>(null);
 
   const { shop, plan, plans, team, barbers, branches, whatsapp, activity, manualActions } = detail;
+  // Sedes = la matriz + sus sucursales abiertas (la matriz cuenta: nunca «0»).
+  const sucursalesAbiertas = branches.filter((b) => b.isActive).length;
+  const sedes = textoSedes(sucursalesAbiertas, branches.length - sucursalesAbiertas);
   const face = subscriptionFace(shop.subscriptionStatus);
   const quotaUnlimited = isBarberUnlimited(whatsapp.quota);
   const quotaPct = whatsapp.usedPct;
@@ -97,9 +101,7 @@ export function AdminBarbershopDetailClient({ detail }: { detail: AdminBarbersho
               {shop.state ? `, ${shop.state}` : ""}
               {shop.isBranch
                 ? ` · sucursal${shop.parentName ? ` de ${shop.parentName}` : ""}`
-                : branches.length > 0
-                  ? ` · matriz de ${formatInt(branches.length)} ${branches.length === 1 ? "sucursal" : "sucursales"}`
-                  : ""}
+                : ` · ${textoSedes(sucursalesAbiertas)}`}
             </p>
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -406,13 +408,22 @@ export function AdminBarbershopDetailClient({ detail }: { detail: AdminBarbersho
             </div>
           </CardNew>
 
-          {/* ── Sucursales ─────────────────────────────────────────── */}
+          {/* ── Sedes (la matriz cuenta como una) ───────────────────── */}
           <CardNew>
             <div className="dcba-cardtitle">
               <Building2 size={14} />
-              Sucursales ({formatInt(branches.length)})
+              {shop.isBranch ? "Sede" : sedes}
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {!shop.isBranch && (
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                  <span style={{ fontSize: 12.5, color: "var(--text-2)" }}>
+                    {shop.name}
+                    {shop.city ? ` · ${shop.city}` : ""}
+                  </span>
+                  <BadgeNew tone="neutral">Matriz</BadgeNew>
+                </div>
+              )}
               {branches.map((b) => (
                 <div key={b.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
                   <Link
@@ -433,7 +444,9 @@ export function AdminBarbershopDetailClient({ detail }: { detail: AdminBarbersho
               ))}
               {branches.length === 0 && (
                 <p className="dcba-note">
-                  {shop.isBranch ? "Esta sede es una sucursal." : "Sólo la matriz, sin sucursales."}
+                  {shop.isBranch
+                    ? `Esta sede es una sucursal${shop.parentName ? ` de ${shop.parentName}` : ""}: las sedes de la cadena se ven en la ficha de su matriz.`
+                    : "Sin sucursales: la matriz es su única sede."}
                 </p>
               )}
             </div>
