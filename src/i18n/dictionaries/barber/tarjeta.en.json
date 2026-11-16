@@ -1,0 +1,31 @@
+{
+  "meta": {
+    "title": "My star card · {shop}"
+  },
+  "title": "Your star card",
+  "sub": "Enter your WhatsApp number and we'll send your card to it.",
+  "why": "We don't show it here so nobody else can see yours.",
+  "phone": "Your WhatsApp",
+  "country": "Phone country",
+  "placeholderMx": "10 digits",
+  "placeholderOther": "Number without country code",
+  "send": "Send me my card",
+  "sending": "Sending…",
+  "sentTitle": "Check your WhatsApp",
+  "sent": "If your number is registered, your card was sent to you on WhatsApp.",
+  "sentHint": "Didn't get it? Make sure it's the number you gave the barbershop, or ask for it on your next visit.",
+  "again": "Use another number",
+  "askTitle": "Ask the barbershop for your card",
+  "ask": "They'll give it to you with a QR code. Message them or ask on your next visit.",
+  "whatsapp": "Message on WhatsApp",
+  "call": "Call",
+  "off": "This barbershop doesn't use a star card.",
+  "book": "Book a visit",
+  "back": "Back to the barbershop's page",
+  "errors": {
+    "phone": "Enter your full WhatsApp number (10 digits in Mexico).",
+    "generic": "We couldn't process your request. Please try again.",
+    "network": "No connection. Check your internet and try again.",
+    "tooMany": "Too many attempts. Wait a few minutes and try again."
+  }
+}

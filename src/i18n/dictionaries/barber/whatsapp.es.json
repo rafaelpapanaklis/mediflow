@@ -83,7 +83,8 @@
       "walkinTurn": "Ya casi es tu turno",
       "bookingConfirmed": "Reserva confirmada",
       "birthday": "Felicitación de cumpleaños",
-      "winback": "Te extrañamos"
+      "winback": "Te extrañamos",
+      "starsCardRequest": "Mi tarjeta (cuando el cliente pide su tarjeta de estrellas en tu página)"
     },
     "created": "Se dieron de alta {count}. Meta las revisa y suelen aprobarse en minutos.",
     "noneNeeded": "No falta ninguna.",

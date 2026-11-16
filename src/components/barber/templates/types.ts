@@ -86,6 +86,12 @@ export interface BarberWebData {
    */
   cuentaUrl?: string | null;
   /**
+   * Liga a /b/<slug>/mi-tarjeta («Mi tarjeta» de estrellas, ws6-t2). Solo si
+   * la barbería usa estrellas. Es una liga fija: no lleva ningún dato del
+   * cliente (la tarjeta se pide con el teléfono y llega por WhatsApp).
+   */
+  tarjetaUrl?: string | null;
+  /**
    * true = se está pintando dentro del editor.
    *
    * Lo usan las plantillas para NO ocultar una sección vacía: la barbería

@@ -53,7 +53,9 @@ import {
   Redes,
   SeccionProductos,
   TablaHorario,
+  enlaceTarjeta,
   enlaceTienda,
+  TEXTO_MI_TARJETA,
   porCategoria,
 } from "./pieces";
 import {
@@ -249,6 +251,7 @@ export function PlantillaBarrio({ data }: { data: BarberWebData }) {
   const wa = urlWhatsApp(config.whatsapp, `Hola, quiero reservar en ${shop.name}`);
   const marca = logo(data);
   const tienda = enlaceTienda(data);
+  const tarjeta = enlaceTarjeta(data);
   const portadaFoto = foto(data, "portada");
   const cta = copia(data, "portada", "portada.cta");
   const textoWa = copia(data, "portada", "portada.whatsapp");
@@ -309,10 +312,16 @@ export function PlantillaBarrio({ data }: { data: BarberWebData }) {
           {tienda && !tieneSeccion(secs, "servicios") ? ligaTienda : null}
           {menu.map((s) => (
             <Fragment key={s.id}>
-              <a href={`#${s.id}`}>{titulo(data, s.id) || s.nombre}</a>
+              {/* En el teléfono «Mi tarjeta» se adelanta (queda a la vista sin
+                  deslizar): todo lo que no es Servicios va después. */}
+              <a href={`#${s.id}`} className={s.id === "servicios" ? undefined : "bw-tira-despues"}>
+                {titulo(data, s.id) || s.nombre}
+              </a>
               {s.id === "servicios" ? ligaTienda : null}
             </Fragment>
           ))}
+          {/* «Mi tarjeta» (otra página): la tarjeta de estrellas, al final de la tira. */}
+          {tarjeta ? <a href={tarjeta}>{TEXTO_MI_TARJETA}</a> : null}
           <span className="bw-tira-acciones">
             {data.cuentaUrl ? (
               <a className="bw-mis" href={data.cuentaUrl}>
@@ -479,7 +488,7 @@ export function PlantillaBarrio({ data }: { data: BarberWebData }) {
         </Fragment>
       ))}
 
-      <Pie nombre={shop.name} cuentaUrl={data.cuentaUrl} />
+      <Pie nombre={shop.name} cuentaUrl={data.cuentaUrl} tarjetaUrl={tarjeta} />
 
       {/* ── Muelle del celular: Reservar siempre a la mano ─────── */}
       <div className="bw-muelle">

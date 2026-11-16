@@ -259,7 +259,8 @@ export type BarberWaKind =
   | "walkinTurn"
   | "bookingConfirmed"
   | "birthday"
-  | "winback";
+  | "winback"
+  | "starsCardRequest";
 
 export interface BarberWaTemplate {
   kind: BarberWaKind;
@@ -410,6 +411,27 @@ export const BARBER_WA_TEMPLATES: readonly BarberWaTemplate[] = [
     variables: ["cliente", "barbería", "promoción"],
     sample: ["Luis", "Barbería El Corte", "Aparta tu lugar cuando gustes."],
     optional: true,
+  },
+  {
+    // «MI TARJETA» (ws6-t2): el cliente pidió SU tarjeta de estrellas desde la
+    // página web de la barbería y se le manda su enlace personal a su número.
+    // Utilidad, no marketing: responde a algo que él mismo pidió. El enlace es
+    // la llave de la tarjeta, por eso el texto avisa que es personal.
+    kind: "starsCardRequest",
+    name: "dc_barber_mi_tarjeta",
+    category: "UTILITY",
+    lang: BARBER_WA_LANG,
+    body:
+      "Hola {{1}}, aquí está tu tarjeta de estrellas de {{2}}:\n\n" +
+      "{{3}}\n\n" +
+      "Ábrela cuando quieras para ver tus estrellas y tus bonos. Es personal: no la compartas.",
+    variables: ["cliente", "barbería", "enlace de su tarjeta"],
+    sample: [
+      "Luis",
+      "Barbería El Corte",
+      "https://www.dalecontrol.com/b/barberia-el-corte/tarjeta/ejemplo",
+    ],
+    optional: false,
   },
 ] as const;
 

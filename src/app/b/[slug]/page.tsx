@@ -2,6 +2,9 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { PlantillaBarberWeb } from "@/components/barber/templates";
 import { rutaCuentaBarberia, rutaWebBarberia } from "@/lib/barber/landing";
+import { prisma } from "@/lib/prisma";
+import { getLoyaltyRule } from "@/lib/barber/loyalty-core";
+import { rutaMiTarjeta } from "@/lib/barber/tarjeta-web-core";
 import { barberiaTieneWhatsApp } from "@/lib/barber/wa-conectado";
 import { cargarBarberWeb, cargarSeoBarberWeb, cargarSedeCerrada } from "./_shared/shop-data";
 import { SedeCerrada } from "./_shared/sede-cerrada";
@@ -142,6 +145,13 @@ export default async function PaginaBarberia(props: Props) {
   // «Mis citas» en el pie: solo si el cliente puede recibir su código por WhatsApp.
   const conWhatsApp = await barberiaTieneWhatsApp(carga.data.shop.id).catch(() => false);
 
+  // «Mi tarjeta» en el menú (ws6-t2): solo si la barbería usa estrellas. Es
+  // una liga fija; el interruptor se cambia en Clientes → Estrellas y bonos,
+  // que revalida esta página. Ante un error de base, sin liga.
+  const usaEstrellas = await getLoyaltyRule(prisma, carga.data.shop.id)
+    .then((r) => r.enabled)
+    .catch(() => false);
+
   // Sección «Tienda» (ws6-t1). Nunca truena: sin SQL o sin plan, []. Si la
   // barbería la apagó en Mi web, la plantilla no la pinta ni la pone en el
   // menú (la liga directa de un producto sigue abriendo: la tienda no depende
@@ -176,6 +186,7 @@ export default async function PaginaBarberia(props: Props) {
           productos,
           tiendaUrl: productos.length > 0 ? rutaTienda(carga.data.shop.slug) : null,
           cuentaUrl: conWhatsApp ? rutaCuentaBarberia(carga.data.shop.slug) : null,
+          tarjetaUrl: usaEstrellas ? rutaMiTarjeta(carga.data.shop.slug) : null,
         }}
       />
     </>

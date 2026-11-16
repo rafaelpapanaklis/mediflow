@@ -59,6 +59,8 @@ import cobrosEs from "./cobros.es.json"; // cobros del cliente desde su ficha (w
 import cobrosEn from "./cobros.en.json";
 import tiendaEs from "./tienda.es.json"; // tienda pública de productos (ws6-t1)
 import tiendaEn from "./tienda.en.json";
+import tarjetaEs from "./tarjeta.es.json"; // «Mi tarjeta» en la página web + agregar a inicio (ws6-t2)
+import tarjetaEn from "./tarjeta.en.json";
 
 const ES: Dictionary = {
   barber: {
@@ -84,6 +86,7 @@ const ES: Dictionary = {
     estrellas: estrellasEs as unknown as Dictionary,
     cobros: cobrosEs as unknown as Dictionary,
     tienda: tiendaEs as unknown as Dictionary,
+    tarjeta: tarjetaEs as unknown as Dictionary,
   },
 };
 
@@ -111,6 +114,7 @@ const EN: Dictionary = {
     estrellas: estrellasEn as unknown as Dictionary,
     cobros: cobrosEn as unknown as Dictionary,
     tienda: tiendaEn as unknown as Dictionary,
+    tarjeta: tarjetaEn as unknown as Dictionary,
   },
 };
 

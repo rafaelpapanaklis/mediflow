@@ -54,7 +54,9 @@ import {
   Redes,
   SeccionProductos,
   TablaHorario,
+  enlaceTarjeta,
   enlaceTienda,
+  TEXTO_MI_TARJETA,
   porCategoria,
 } from "./pieces";
 import {
@@ -136,6 +138,7 @@ export function PlantillaOficio({ data }: { data: BarberWebData }) {
   const wa = urlWhatsApp(config.whatsapp, `Hola, quiero reservar en ${shop.name}`);
   const marca = logo(data);
   const tienda = enlaceTienda(data);
+  const tarjeta = enlaceTarjeta(data);
   const inicial = inicialDe(shop.name);
   const cta = copia(data, "portada", "portada.cta");
   const fotoPortada = foto(data, "portada");
@@ -176,12 +179,18 @@ export function PlantillaOficio({ data }: { data: BarberWebData }) {
             .filter((s) => MENU[s.id] && (s.id !== "contacto" || hayContacto))
             .map((s) => (
               <Fragment key={s.id}>
-                <a href={`#${s.id}`}>{MENU[s.id]}</a>
+                {/* En el teléfono «Mi tarjeta» se adelanta (queda a la vista sin
+                    deslizar): todo lo que no es Servicios va después. */}
+                <a href={`#${s.id}`} className={s.id === "servicios" ? undefined : "dcbw-of-menu-despues"}>
+                  {MENU[s.id]}
+                </a>
                 {/* «Tienda» va a la tienda (otra página), al lado de Servicios. */}
                 {s.id === "servicios" && tienda ? <a href={tienda}>{copia(data, "tienda", "tienda.menu")}</a> : null}
               </Fragment>
             ))}
           {tienda && !tieneSeccion(secs, "servicios") ? <a href={tienda}>{copia(data, "tienda", "tienda.menu")}</a> : null}
+          {/* «Mi tarjeta» (otra página): la tarjeta de estrellas, al final del menú. */}
+          {tarjeta ? <a href={tarjeta}>{TEXTO_MI_TARJETA}</a> : null}
           {data.cuentaUrl ? (
             <a href={data.cuentaUrl} className="dcbw-of-solo-cel">
               Mis citas
@@ -471,7 +480,7 @@ export function PlantillaOficio({ data }: { data: BarberWebData }) {
         </Fragment>
       ))}
 
-      <Pie nombre={shop.name} cuentaUrl={data.cuentaUrl} />
+      <Pie nombre={shop.name} cuentaUrl={data.cuentaUrl} tarjetaUrl={tarjeta} />
 
       {/* Teléfono: «Reservar» siempre a la mano, en la zona del pulgar. */}
       <div className="dcbw-of-reserva-fija">
