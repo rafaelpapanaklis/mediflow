@@ -202,6 +202,13 @@ export async function voidCashMovement(
   if (!found) throw new BarberCajaError(404, "MOVEMENT_NOT_FOUND", "Movimiento no encontrado");
   assertBarberPermission(ctx, permissionForMovement(found.type));
   if (found.voidedAt) throw new BarberCajaError(409, "ALREADY_VOIDED", "Ese movimiento ya estaba anulado.");
+  if (found.settledAt) {
+    throw new BarberCajaError(
+      409,
+      "ADVANCE_SETTLED",
+      "Ese adelanto ya se descontó en un pago de comisiones o sueldo. Para corregirlo, anula primero ese pago.",
+    );
+  }
   if (found.type === "BARBER_PAYOUT" && (found.payoutKind === "COMMISSION" || found.payoutKind === "SALARY")) {
     throw new BarberCajaError(
       409,

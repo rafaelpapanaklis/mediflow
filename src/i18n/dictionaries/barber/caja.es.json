@@ -286,7 +286,9 @@
     "receiptPeriodTotal": "Total del periodo",
     "receiptAlreadyPaid": "Ya pagado",
     "receiptPartial": "Pago parcial el {date}; hay pendiente",
-    "receiptCoveredNote": "Incluye cortes cubiertos por membresía o lealtad: el cliente pagó $0 en ese ticket y la comisión se calcula sobre el precio normal del servicio."
+    "receiptCoveredNote": "Incluye cortes cubiertos por membresía o lealtad: el cliente pagó $0 en ese ticket y la comisión se calcula sobre el precio normal del servicio.",
+    "receiptAdvances": "Adelantos/vales del periodo (ya entregados)",
+    "receiptToHand": "A entregar (pendiente)"
   },
   "comisiones": {
     "title": "Comisiones",
@@ -371,11 +373,12 @@
     "markedPaidAmount": "Pago registrado: {amount}",
     "nothingToPay": "No había nada pendiente por pagar.",
     "entryCovered": "Cubierto por membresía o lealtad: comisiona sobre el precio normal",
-    "advances": "Adelantos del periodo: {amount}",
-    "advancesPay": "Este periodo se le dieron {amount} en adelantos/vales desde Caja. Descuéntalos al entregarle el dinero.",
+    "advances": "Ya restados: −{amount} de adelantos",
     "fromCash": "Sale de la caja en efectivo ({amount})",
     "fromCashHint": "Queda como pago a barbero en la caja abierta y baja lo que debe haber en el cajón. Un solo registro: no lo anotes otra vez en Caja.",
-    "fromCashNoSession": "No hay caja abierta: ábrela en Caja para pagar desde el cajón."
+    "fromCashNoSession": "No hay caja abierta: ábrela en Caja para pagar desde el cajón.",
+    "payAdvances": "− Adelantos/vales del periodo (ya se le dieron)",
+    "colToHand": "A entregar"
   },
   "productos": {
     "title": "Productos",

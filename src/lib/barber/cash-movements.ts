@@ -26,14 +26,17 @@ let seen = false;
 export async function cashMovementsReady(db: MovementsDb): Promise<boolean> {
   if (seen) return true;
   try {
+    // Las dos columnas del turno + la tabla con su columna "settledAt" (que
+    // llegó en una segunda versión del archivo: sin ella, como si no estuviera).
     const rows = await db.$queryRaw<Array<{ n: number; t: boolean }>>`
       SELECT
         (SELECT COUNT(*)::int FROM information_schema.columns
-          WHERE table_schema = 'public' AND table_name = 'barber_cash_sessions'
-            AND column_name IN ('countedBreakdown', 'leftForNext')) AS "n",
+          WHERE table_schema = 'public'
+            AND ((table_name = 'barber_cash_sessions' AND column_name IN ('countedBreakdown', 'leftForNext'))
+              OR (table_name = 'barber_cash_movements' AND column_name = 'settledAt'))) AS "n",
         (to_regclass('public.barber_cash_movements') IS NOT NULL) AS "t"
     `;
-    const ok = Number(rows[0]?.n ?? 0) === 2 && rows[0]?.t === true;
+    const ok = Number(rows[0]?.n ?? 0) === 3 && rows[0]?.t === true;
     if (ok) seen = true;
     return ok;
   } catch {
@@ -68,6 +71,8 @@ export interface CashMovementRow {
   voidedAt: string | null;
   voidedByName: string | null;
   voidReason: string | null;
+  /** Adelanto ya descontado en un pago de comisión/sueldo (hora de ese pago). */
+  settledAt: string | null;
 }
 
 interface RawMovement {
@@ -92,6 +97,7 @@ interface RawMovement {
   vFirst: string | null;
   vLast: string | null;
   voidReason: string | null;
+  settledAt: Date | null;
 }
 
 function name(first: string | null, last: string | null): string {
@@ -118,6 +124,7 @@ function toRow(r: RawMovement): CashMovementRow {
     voidedAt: r.voidedAt ? new Date(r.voidedAt).toISOString() : null,
     voidedByName: r.voidedAt ? name(r.vFirst, r.vLast) : null,
     voidReason: r.voidReason,
+    settledAt: r.settledAt ? new Date(r.settledAt).toISOString() : null,
   };
 }
 
@@ -126,7 +133,7 @@ const SELECT_MOVEMENT = Prisma.sql`
          m."barberId", b."name" AS "barberName", b."nickname" AS "barberNick",
          m."payoutKind", m."periodKey", m."receiptUrl", m."createdAt", m."createdByUserId",
          cu."firstName" AS "cFirst", cu."lastName" AS "cLast",
-         m."voidedAt", vu."firstName" AS "vFirst", vu."lastName" AS "vLast", m."voidReason"
+         m."voidedAt", vu."firstName" AS "vFirst", vu."lastName" AS "vLast", m."voidReason", m."settledAt"
   FROM "barber_cash_movements" m
   LEFT JOIN "barber_barbers" b ON b."id" = m."barberId"
   LEFT JOIN "barber_users" cu ON cu."id" = m."createdByUserId"
@@ -272,26 +279,55 @@ export async function markMovementVoided(
   return db.$executeRaw`
     UPDATE "barber_cash_movements"
     SET "voidedAt" = ${p.now}, "voidedByUserId" = ${p.userId}, "voidReason" = ${p.reason}
-    WHERE "id" = ${p.id} AND "barbershopId" = ${p.barbershopId} AND "voidedAt" IS NULL
+    WHERE "id" = ${p.id} AND "barbershopId" = ${p.barbershopId} AND "voidedAt" IS NULL AND "settledAt" IS NULL
   `;
 }
 
-/** Adelantos/vales VIVOS por barbero en un periodo de Comisiones («YYYY-MM»). */
-export async function sumAdvances(
+export interface AdvanceRow {
+  id: string;
+  barberId: string;
+  amount: Prisma.Decimal;
+  /** null = todavía se resta del siguiente pago del periodo. */
+  settledAt: Date | null;
+}
+
+/** Adelantos/vales VIVOS (no anulados) de un periodo de Comisiones («YYYY-MM»). */
+export async function loadAdvances(
   db: MovementsDb,
-  p: { barbershopId: string; barberIds: string[]; periodKey: string },
-): Promise<Map<string, Prisma.Decimal>> {
-  const out = new Map<string, Prisma.Decimal>();
-  if (!p.barbershopId || p.barberIds.length === 0) return out;
-  const rows = await db.$queryRaw<Array<{ barberId: string; total: Prisma.Decimal | string | number }>>`
-    SELECT "barberId", SUM("amount") AS "total" FROM "barber_cash_movements"
+  p: { barbershopId: string; barberIds: string[] | null; periodKey: string },
+): Promise<AdvanceRow[]> {
+  if (!p.barbershopId) return [];
+  if (p.barberIds && p.barberIds.length === 0) return [];
+  const byBarber = p.barberIds ? Prisma.sql`AND "barberId" = ANY(${p.barberIds}::text[])` : Prisma.sql`AND "barberId" IS NOT NULL`;
+  const rows = await db.$queryRaw<Array<{ id: string; barberId: string; amount: Prisma.Decimal | string | number; settledAt: Date | null }>>`
+    SELECT "id", "barberId", "amount", "settledAt" FROM "barber_cash_movements"
     WHERE "barbershopId" = ${p.barbershopId} AND "type" = 'BARBER_PAYOUT' AND "payoutKind" = 'ADVANCE'
-      AND "periodKey" = ${p.periodKey} AND "voidedAt" IS NULL
-      AND "barberId" = ANY(${p.barberIds}::text[])
-    GROUP BY "barberId"
+      AND "periodKey" = ${p.periodKey} AND "voidedAt" IS NULL ${byBarber}
+    ORDER BY "createdAt" ASC
   `;
-  for (const r of rows) out.set(r.barberId, new Prisma.Decimal(r.total));
-  return out;
+  return rows.map((r) => ({ id: r.id, barberId: r.barberId, amount: new Prisma.Decimal(r.amount), settledAt: r.settledAt ? new Date(r.settledAt) : null }));
+}
+
+/** Marca como descontados en el pago de las `at` estos adelantos (solo los vivos y sin descontar). */
+export async function settleAdvances(db: MovementsDb, p: { barbershopId: string; ids: string[]; at: Date }): Promise<number> {
+  if (p.ids.length === 0) return 0;
+  return db.$executeRaw`
+    UPDATE "barber_cash_movements" SET "settledAt" = ${p.at}
+    WHERE "barbershopId" = ${p.barbershopId} AND "id" = ANY(${p.ids}::text[])
+      AND "voidedAt" IS NULL AND "settledAt" IS NULL
+  `;
+}
+
+/** Deshace el descuento de los adelantos de un pago (al anular ese pago). */
+export async function unsettleAdvances(
+  db: MovementsDb,
+  p: { barbershopId: string; barberId: string; periodKey: string; at: Date },
+): Promise<number> {
+  return db.$executeRaw`
+    UPDATE "barber_cash_movements" SET "settledAt" = NULL
+    WHERE "barbershopId" = ${p.barbershopId} AND "barberId" = ${p.barberId} AND "periodKey" = ${p.periodKey}
+      AND "type" = 'BARBER_PAYOUT' AND "payoutKind" = 'ADVANCE' AND "settledAt" = ${p.at}
+  `;
 }
 
 /** El fondo que se dejó en el ÚLTIMO corte de la barbería (para sugerirlo al abrir). */

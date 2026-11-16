@@ -149,7 +149,7 @@ test("sin «sale de la caja» todo es como antes (sin movimiento); sin cash.with
   assert.equal((await movementsOf(ctx.barbershopId)).length, 0);
 });
 
-test("adelanto/vale: queda solo como movimiento y se VE en Comisiones como «adelantos del periodo» (anulado no cuenta)", { skip: skipDb }, async (t) => {
+test("adelanto/vale: se RESTA SOLO de «a pagar» y cuenta como ya pagado (el anulado no cuenta)", { skip: skipDb }, async (t) => {
   if (skip) return t.skip(skip);
   const { ctx, juan } = await shop();
   await createCashMovement(ctx, { type: "BARBER_PAYOUT", amount: 200, barberId: juan });
@@ -157,7 +157,56 @@ test("adelanto/vale: queda solo como movimiento y se VE en Comisiones como «ade
   await voidCashMovement(ctx, malo.movement.id, {});
   const row = (await getCommissionSummary(ctx, PERIOD)).rows.find((r) => r.barberId === juan)!;
   assert.equal(row.advances, 200);
-  assert.equal(row.totalToPay, 0, "el adelanto NO se resta solo de «A pagar» (se descuenta a mano)");
+  assert.equal(row.totalToPay, -200, "sin tickets aún: el adelanto lo deja debiendo $200");
+  assert.equal(row.paidTotal, 200);
+  assert.equal(row.grossToPay, 0);
+});
+
+test("G1 (caso de t8): adelanto $200 y $3,000 a pagar → salen $2,800 de la caja; el corte cuadra; pagado $3,000 = $2,800 + $200", { skip: skipDb }, async (t) => {
+  if (skip) return t.skip(skip);
+  const { ctx, juan } = await shop();
+  const caro = (await prisma.barberService.create({ data: { barbershopId: ctx.barbershopId, name: "Paquete", durationMin: 60, price: new Prisma.Decimal(6000) } })).id;
+  await createSale(ctx, { barberId: juan, items: [{ kind: "service", id: caro }], paymentMethod: "CARD" }, FEATURES);
+  const adelanto = await createCashMovement(ctx, { type: "BARBER_PAYOUT", amount: 200, barberId: juan, payoutKind: "ADVANCE" });
+  const antes = (await getCommissionSummary(ctx, PERIOD)).rows.find((r) => r.barberId === juan)!;
+  assert.equal(antes.grossToPay, 3000);
+  assert.equal(antes.advances, 200);
+  assert.equal(antes.totalToPay, 2800, "a entregar = 3,000 − 200");
+  assert.equal(antes.periodTotal, 3000);
+
+  const r = await markCommissionsPaid(ctx, { barberId: juan, periodKey: PERIOD, expectedTotal: 2800 }, new Date(), { cashOut: { method: "CASH" } });
+  assert.equal(r.paidAmount, 2800);
+  assert.equal(r.advancesDeducted, 200);
+  const movs = (await movementsOf(ctx.barbershopId)).filter((m) => m.payoutKind === "COMMISSION");
+  assert.equal(new Prisma.Decimal(movs[0].amount).toNumber(), 2800, "el movimiento ligado es por lo que de verdad se entrega");
+
+  // El corte: 1,000 de fondo − 200 de adelanto − 2,800 del pago = −2,000 esperado (salió todo lo que se dio).
+  const state = await getCashState(ctx);
+  assert.equal(state.open!.expectedCash, 1000 - 200 - 2800);
+  assert.equal(state.open!.resumen.payouts.total, 3000, "pagos a barberos = 2,800 + 200");
+
+  const despues = (await getCommissionSummary(ctx, PERIOD)).rows.find((x) => x.barberId === juan)!;
+  assert.equal(despues.totalToPay, 0);
+  assert.equal(despues.paidTotal, 3000, "Pagado $3,000 = $2,800 + $200");
+  assert.equal(despues.advances, 0, "ya descontado");
+  assert.equal(despues.advancesSettled, 200);
+
+  // Un adelanto ya descontado no se anula suelto ni se vuelve a restar.
+  const e = await errorOf(voidCashMovement(ctx, adelanto.movement.id, {}));
+  assert.ok(e instanceof BarberCajaError && e.code === "ADVANCE_SETTLED", String(e));
+  await createSale(ctx, { barberId: juan, items: [{ kind: "service", id: caro }], paymentMethod: "CARD" }, FEATURES);
+  const otra = (await getCommissionSummary(ctx, PERIOD)).rows.find((x) => x.barberId === juan)!;
+  assert.equal(otra.totalToPay, 3000, "el siguiente pago del mismo periodo ya no resta los $200");
+});
+
+test("G1: un adelanto de OTRO periodo no se resta en este", { skip: skipDb }, async (t) => {
+  if (skip) return t.skip(skip);
+  const { ctx, juan } = await shop();
+  await createCashMovement(ctx, { type: "BARBER_PAYOUT", amount: 300, barberId: juan });
+  await prisma.$executeRaw`UPDATE "barber_cash_movements" SET "periodKey" = '2026-01' WHERE "barbershopId" = ${ctx.barbershopId}`;
+  const row = (await getCommissionSummary(ctx, PERIOD)).rows.find((r) => r.barberId === juan)!;
+  assert.equal(row.advances, 0);
+  assert.equal(row.totalToPay, 0);
 });
 
 test("sueldo: el pago desde la caja queda como SALARY con su monto congelado", { skip: skipDb }, async (t) => {

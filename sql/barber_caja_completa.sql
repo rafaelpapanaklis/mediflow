@@ -21,7 +21,8 @@
 --          transferencia, la luz con tarjeta).
 --        · "payoutKind" (solo en pagos a barbero): ADVANCE (adelanto/vale),
 --          COMMISSION, SALARY, OTHER. "periodKey" (YYYY-MM) liga el pago al
---          periodo de Comisiones.
+--          periodo de Comisiones. Un adelanto se RESTA SOLO del siguiente
+--          pago de su periodo; "settledAt" dice en qué pago se descontó.
 --
 --   2. Dos columnas en "barber_cash_sessions":
 --        · "countedBreakdown" — el conteo del corte por billete/moneda
@@ -111,6 +112,12 @@ CREATE INDEX IF NOT EXISTS "barber_cash_movements_session_idx"
 CREATE INDEX IF NOT EXISTS "barber_cash_movements_payout_idx"
     ON "barber_cash_movements" ("barbershopId", "barberId", "periodKey")
     WHERE "type" = 'BARBER_PAYOUT';
+
+-- Adelanto/vale YA DESCONTADO en un pago de comisión o sueldo: la hora de
+-- ese pago. NULL = todavía se resta del siguiente «a pagar» de su periodo.
+-- (Va aparte del CREATE TABLE para que pegarlo encima de la versión anterior
+-- también la agregue.)
+ALTER TABLE "barber_cash_movements" ADD COLUMN IF NOT EXISTS "settledAt" TIMESTAMPTZ;
 
 -- ── 2. Conteo del corte y fondo para el siguiente turno ────────────────
 ALTER TABLE "barber_cash_sessions" ADD COLUMN IF NOT EXISTS "countedBreakdown" JSONB;

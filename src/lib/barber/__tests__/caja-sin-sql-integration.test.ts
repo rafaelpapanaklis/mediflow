@@ -90,7 +90,7 @@ test("sin el SQL: abrir, cobrar, resumen y cerrar como antes; lo nuevo dice 409 
   const period = currentPeriodKey(TZ);
   assert.equal(await code(markCommissionsPaid(ctx, { barberId: juan, periodKey: period }, new Date(), { cashOut: { method: "CASH" } })), "CAJA_SQL_PENDING");
   const row = (await getCommissionSummary(ctx, period)).rows.find((r) => r.barberId === juan)!;
-  assert.equal(row.advances, undefined, "sin SQL no hay «adelantos del periodo»");
+  assert.equal(row.advances ?? 0, 0, "sin SQL no hay «adelantos del periodo»");
   assert.equal(row.totalToPay, 220, "nada se marcó: 50%·400 + 20");
 
   // Cerrar con conteo por billete: el total cuenta, el conteo no se guarda (no hay columna).

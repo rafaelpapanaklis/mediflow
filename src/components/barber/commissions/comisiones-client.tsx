@@ -344,15 +344,14 @@ export function ComisionesClient({
             {payRow.chairRentPending !== null && payRow.chairRentPending > 0 && (
               <div className="bcaja-totals__row"><span>{t("comisiones.payRent")}</span><span>−{fmtMoney(payRow.chairRentPending)}</span></div>
             )}
-            <div className="bcaja-totals__row bcaja-totals__row--big"><span>{t("comisiones.colToPay")}</span><span>{fmtSigned(payRow.totalToPay)}</span></div>
+            {/* Adelantos/vales del periodo: ya se le dieron, se restan solos (caja completa). */}
+            {payRow.advances != null && payRow.advances > 0 && (
+              <div className="bcaja-totals__row" data-adelantos-pago><span>{t("comisiones.payAdvances")}</span><span>−{fmtMoney(payRow.advances)}</span></div>
+            )}
+            <div className="bcaja-totals__row bcaja-totals__row--big"><span>{t(payRow.advances ? "comisiones.colToHand" : "comisiones.colToPay")}</span><span>{fmtSigned(payRow.totalToPay)}</span></div>
           </div>
           {payRow.paidTotal !== 0 && (
             <p className="bcaja-hint" style={{ margin: "10px 0 0" }}>{t("comisiones.payAlreadyPaid", { amount: fmtSigned(payRow.paidTotal) })}</p>
-          )}
-          {payRow.advances != null && payRow.advances > 0 && (
-            <div className="bcaja-alert bcaja-alert--info" style={{ marginTop: 10 }} data-adelantos-pago>
-              {t("comisiones.advancesPay", { amount: fmtMoney(payRow.advances) })}
-            </div>
           )}
           {cashOut && payRow.totalToPay > 0 && (
             <label style={{ display: "flex", gap: 8, alignItems: "flex-start", marginTop: 12, fontSize: 13.5, color: cashOut.sessionOpen ? "var(--text-1)" : "var(--text-3)" }} data-sale-de-caja>
