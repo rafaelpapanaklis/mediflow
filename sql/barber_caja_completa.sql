@@ -116,10 +116,8 @@ CREATE INDEX IF NOT EXISTS "barber_cash_movements_payout_idx"
 ALTER TABLE "barber_cash_sessions" ADD COLUMN IF NOT EXISTS "countedBreakdown" JSONB;
 ALTER TABLE "barber_cash_sessions" ADD COLUMN IF NOT EXISTS "leftForNext" DECIMAL(10,2);
 
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'barber_cash_sessions_left_for_next_chk') THEN
-    ALTER TABLE "barber_cash_sessions" ADD CONSTRAINT "barber_cash_sessions_left_for_next_chk"
-      CHECK ("leftForNext" IS NULL OR "leftForNext" >= 0);
-  END IF;
-END $$;
+-- Plano, sin bloques anónimos: quitar y volver a poner deja lo mismo (también si ya
+-- se había pegado la versión anterior de este archivo).
+ALTER TABLE "barber_cash_sessions" DROP CONSTRAINT IF EXISTS "barber_cash_sessions_left_for_next_chk";
+ALTER TABLE "barber_cash_sessions" ADD CONSTRAINT "barber_cash_sessions_left_for_next_chk"
+  CHECK ("leftForNext" IS NULL OR "leftForNext" >= 0);
