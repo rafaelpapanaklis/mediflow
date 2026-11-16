@@ -130,7 +130,7 @@ test("el PATCH acepta lo bueno y lo normaliza", () => {
    3 · Cambiar de plantilla NO borra contenido
    ══════════════════════════════════════════════════════════════ */
 
-test("las doce plantillas del manifiesto son exactamente las declaradas", () => {
+test("las plantillas del manifiesto son exactamente las declaradas", () => {
   assert.deepEqual(
     Object.keys(BARBER_WEB_MANIFESTS).sort(),
     [...BARBER_WEB_TEMPLATE_IDS].sort(),
@@ -138,7 +138,10 @@ test("las doce plantillas del manifiesto son exactamente las declaradas", () => 
   // 8 de la ola de la mini-web + estudio, carta, nocturna y club + las tres
   // de ws6 (16-nov): oficio, barrio y revista. Todas siguen REGISTRADAS
   // aunque el selector solo ofrezca las tres nuevas (BARBER_WEB_OFRECIDAS).
-  assert.equal(BARBER_WEB_TEMPLATE_IDS.length, 15);
+  // «Al menos 13» y no un número fijo (revisión ws6-t8 §5.1): un número que
+  // cada rama pisa es justo lo que rompió la unión; lo que importa es que
+  // las tres estén. Cuántas se OFRECEN lo fija ofrecidas.test.ts (3).
+  assert.ok(BARBER_WEB_TEMPLATE_IDS.length >= 13);
   for (const id of ["oficio", "barrio", "revista"]) {
     assert.ok((BARBER_WEB_TEMPLATE_IDS as readonly string[]).includes(id), id);
   }
