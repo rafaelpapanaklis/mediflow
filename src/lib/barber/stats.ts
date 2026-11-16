@@ -1082,6 +1082,13 @@ export interface ReportBarberRow {
   avgTicket: number | null;
   /** null = sin permiso commissions.view (la columna no viaja). */
   commission: number | null;
+  /**
+   * Caja completa (ws6-t5): lo que se le pagó en el periodo (adelantos,
+   * comisión, sueldo, otro) y, de eso, los adelantos/vales. Ausente = sin
+   * cash.view o sin el SQL de caja completa (la columna no viaja).
+   */
+  paidOut?: number;
+  advances?: number;
 }
 
 /**
@@ -1701,6 +1708,12 @@ export async function getReportsSummary(ctx: BarberContext, opts: ReportsOptions
           vsPrevExpensesPct: cambioPct(c.expenses.total, p.expenses.total),
           barberFiltered: barberIds !== null,
         };
+        const porBarbero = new Map(c.byBarber.map((b) => [b.barberId, b]));
+        for (const row of byBarber) {
+          const b = porBarbero.get(row.barberId);
+          row.paidOut = b?.paidOut ?? 0;
+          row.advances = b?.advances ?? 0;
+        }
       }
     } catch (e) {
       // Reportes se pinta igual sin esta sección; no tumba la pantalla.
@@ -1949,11 +1962,15 @@ export function buildReportsCsv(s: ReportsSummary, L: ReportsCsvLabels): string 
   push([L.sections.byBarber]);
   const barberHead = [L.barber, L.tickets, L.produced, L.tips, L.avgTicket];
   if (s.can.commissions) barberHead.push(L.commission);
+  // Pagado y adelantos del periodo (ws6-t5): solo si viajó «Ingresos y gastos».
   const M = moneyLabelsOf(L);
+  const paid = Boolean(s.cashFlow && M);
+  if (paid) barberHead.push(M!.paidOut, M!.advances);
   push(barberHead);
   for (const b of s.byBarber) {
     const row: unknown[] = [b.nickname || b.name, b.tickets, b.produced, b.tips, b.avgTicket ?? ""];
     if (s.can.commissions) row.push(b.commission ?? "");
+    if (paid) row.push(b.paidOut ?? 0, b.advances ?? 0);
     push(row);
   }
   blank();
