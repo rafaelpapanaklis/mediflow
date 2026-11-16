@@ -205,6 +205,14 @@
       "cooldownBad": "Escribe un número entero de {min} a {max} días.",
       "saved": "Guardado"
     },
+    "starsCard": {
+      "title": "Tarjeta de estrellas por WhatsApp",
+      "sub": "Que el cliente tenga su tarjeta a la mano sin pedirla.",
+      "enabled": "Mandar la tarjeta de estrellas después de cobrar",
+      "enabledHint": "Al cobrar un ticket que suma estrellas (o usa un bono), al cliente le llega «Llevas 4 de 6 estrellas» con el enlace a su tarjeta. Una sola vez por ticket.",
+      "note": "Sale por el WhatsApp conectado de la barbería. Si el cliente no te escribió en las últimas 24 h, hace falta la plantilla «Tu tarjeta de estrellas» aprobada (WhatsApp → Plantillas). Si no puede salir sola, Caja te deja mandarla con un botón.",
+      "saved": "Guardado"
+    },
     "booking": {
       "title": "Reservas en línea",
       "sub": "Qué pasa cuando un cliente reserva desde tu página.",

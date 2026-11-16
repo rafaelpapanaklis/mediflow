@@ -84,7 +84,8 @@
       "walkinTurn": "You're almost up",
       "bookingConfirmed": "Booking confirmed",
       "birthday": "Birthday message",
-      "winback": "We miss you"
+      "winback": "We miss you",
+      "starsCard": "Your stars card (after checkout)"
     },
     "created": "{count} registered. Meta reviews them, usually within minutes.",
     "noneNeeded": "None missing.",

@@ -2,11 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Banknote, CheckCircle2, Copy, CreditCard, Landmark, Minus, Plus, Printer, Star, Trash2, type LucideIcon } from "lucide-react";
+import { Banknote, CheckCircle2, Copy, CreditCard, Landmark, MessageCircle, Minus, Plus, Printer, Star, Trash2, type LucideIcon } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import type { Dictionary } from "@/i18n/t";
 import type { CheckoutContext, ClientLookup, PendingAppointment, SaleRow } from "@/lib/barber/cash";
 import type { BonusPublic, SaleStarsOutcome, StarBonus, StarsView } from "@/lib/barber/stars-core";
+import type { StarsCardChargeResult } from "@/lib/barber/tarjeta-cobro-core";
 import type { SaleDraftRow } from "@/lib/barber/sale-drafts";
 import { StarsCard, bonusWhatText, starsT } from "@/components/barber/stars/stars-card";
 import type { BarberPaymentMethod } from "@/lib/barber/types";
@@ -67,7 +68,7 @@ const TIP_FIXED = [20, 50, 100];
 const TIP_PCT = [10, 15];
 
 /** Lo que devuelve POST /api/barber/sales: el ticket + el resumen de estrellas. */
-type ChargedSale = SaleRow & { stars?: SaleStarsOutcome | null };
+type ChargedSale = SaleRow & { stars?: SaleStarsOutcome | null; starsCard?: StarsCardChargeResult | null };
 
 /** El catálogo de Caja → lo que pinta la tarjeta (sin importar nada del servidor). */
 function toPublic(b: StarBonus): BonusPublic {
@@ -404,6 +405,8 @@ export function TicketModal({
   if (result) {
     const out = result.stars ?? null;
     const cardUrl = out && typeof window !== "undefined" ? `${window.location.origin}${out.cardPath}` : null;
+    // ws6-t1: ¿le llegó sola por WhatsApp, o queda el botón para mandarla a mano?
+    const envio = result.starsCard ?? null;
     // La tarjeta dibujada con lo que dijo el servidor (sin otra llamada).
     const miniView: StarsView | null = out
       ? {
@@ -466,6 +469,28 @@ export function TicketModal({
                   >
                     <Copy size={13} /> {linkCopied ? st("staff.copied") : st("staff.copy")}
                   </button>
+                </div>
+              ) : null}
+              {envio?.status === "sent" ? (
+                <div className="bcaja-alert bcaja-alert--success" role="status" data-tarjeta-envio="sent">
+                  {st("caja.cardSentWa", { name: out.firstName })}
+                </div>
+              ) : envio?.status === "queued" ? (
+                <div className="bcaja-hint" data-tarjeta-envio="queued" style={{ textAlign: "center" }}>
+                  {st("caja.cardQueuedWa", { name: out.firstName })}
+                </div>
+              ) : envio?.status === "manual" && envio.manualHref ? (
+                <div style={{ display: "grid", justifyItems: "center", gap: 4 }} data-tarjeta-envio="manual">
+                  <a
+                    href={envio.manualHref}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn-new btn-new--secondary btn-new--sm"
+                    data-accion="mandar-su-tarjeta"
+                  >
+                    <MessageCircle size={13} /> {st("caja.sendCardManual")}
+                  </a>
+                  <div className="bcaja-hint" style={{ textAlign: "center" }}>{st("caja.sendCardManualHint")}</div>
                 </div>
               ) : null}
             </div>

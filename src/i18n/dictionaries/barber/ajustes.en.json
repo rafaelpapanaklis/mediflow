@@ -205,6 +205,14 @@
       "cooldownBad": "Enter a whole number from {min} to {max} days.",
       "saved": "Saved"
     },
+    "starsCard": {
+      "title": "Star card on WhatsApp",
+      "sub": "So clients have their card at hand without asking for it.",
+      "enabled": "Send the star card after checkout",
+      "enabledHint": "When a ticket adds stars (or uses a reward), the client gets “You have 4 of 6 stars” with a link to their card. Only once per ticket.",
+      "note": "It goes out from the shop's connected WhatsApp. If the client hasn't messaged you in the last 24 h, the “Your stars card” template must be approved (WhatsApp → Templates). If it can't go out on its own, Checkout lets you send it with a button.",
+      "saved": "Saved"
+    },
     "booking": {
       "title": "Online booking",
       "sub": "What happens when a client books from your page.",

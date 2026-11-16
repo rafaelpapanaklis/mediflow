@@ -50,6 +50,7 @@ import {
   saveBarberCampaignConfig,
 } from "@/lib/barber/campaigns";
 import type { BarberBookingPolicy } from "@/lib/barber/booking";
+import { readStarsCardSetting } from "@/lib/barber/tarjeta-cobro-ajuste";
 
 // ── Límites ─────────────────────────────────────────────────────────────
 export const SHOP_NAME_MAX = 120;
@@ -116,6 +117,11 @@ export interface BarberShopProfile {
 export interface BarberSettingsView {
   profile: BarberShopProfile;
   slug: string;
+  /**
+   * «Mandar la tarjeta de estrellas después de cobrar» (ws6-t1, 16-nov).
+   * persisted=false: falta sql/barber_tarjeta_cobro.sql (encendido y sin poder apagarse).
+   */
+  starsCard: { enabled: boolean; persisted: boolean };
   loyalty: {
     enabled: boolean;
     threshold: number;
@@ -255,11 +261,12 @@ export async function saveBookingPolicy(
 
 export async function getBarberSettings(ctx: BarberContext): Promise<BarberSettingsView> {
   assertBarberPermission(ctx, "settings.edit");
-  const [profile, clients, campaigns, booking] = await Promise.all([
+  const [profile, clients, campaigns, booking, starsCard] = await Promise.all([
     readProfile(ctx),
     getBarberClientsConfig(ctx),
     getBarberCampaignConfig(ctx),
     readBookingPolicySetting(ctx),
+    readStarsCardSetting(ctx.barbershopId),
   ]);
   const { slug, ...rest } = profile;
   return {
@@ -287,6 +294,7 @@ export async function getBarberSettings(ctx: BarberContext): Promise<BarberSetti
       max: CAMPAIGN_COOLDOWN_MAX,
     },
     booking,
+    starsCard,
     timezones: BARBER_TIMEZONES.includes(profile.timezone)
       ? BARBER_TIMEZONES
       : [profile.timezone, ...BARBER_TIMEZONES],

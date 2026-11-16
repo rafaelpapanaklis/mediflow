@@ -56,6 +56,7 @@ const SQL_FILES = {
   inactivity: "sql/barber_clientes.sql",
   campaigns: "sql/barber_campanas.sql",
   booking: "sql/barber_settings.sql",
+  starsCard: "sql/barber_tarjeta_cobro.sql",
 } as const;
 
 export function ConfiguracionScreen({
@@ -105,6 +106,11 @@ export function ConfiguracionScreen({
           bonos={starsDict ? { note: st("bonos.configNote"), link: st("bonos.configLink") } : null}
           value={settings.loyalty}
           onSaved={(loyalty) => setSettings((v) => ({ ...v, loyalty }))}
+        />
+        <StarsCardAfterChargeCard
+          t={t}
+          value={settings.starsCard}
+          onSaved={(starsCard) => setSettings((v) => ({ ...v, starsCard }))}
         />
         <InactivityCard
           t={t}
@@ -783,6 +789,55 @@ function CampaignsCard({
           </div>
         )}
       </Field>
+    </Card>
+  );
+}
+
+// ── La tarjeta de estrellas por WhatsApp tras cobrar (ws6-t1) ──────────
+
+function StarsCardAfterChargeCard({
+  t,
+  value,
+  onSaved,
+}: {
+  t: T;
+  value: BarberSettingsView["starsCard"];
+  onSaved: (v: BarberSettingsView["starsCard"]) => void;
+}) {
+  const { saving, error, run } = useSaving();
+
+  async function toggle(enabled: boolean) {
+    const done = await run(async () => {
+      const r = await apiCall<{ value: BarberSettingsView["starsCard"] }>("/api/barber/settings", {
+        method: "PATCH",
+        json: { section: "starsCard", enabled },
+      });
+      onSaved(r.value);
+    });
+    if (done) toast.success(t("configuracion.starsCard.saved"));
+  }
+
+  return (
+    <Card
+      icon={<MessageCircle size={18} />}
+      title={t("configuracion.starsCard.title")}
+      sub={t("configuracion.starsCard.sub")}
+      foot={error ? <ErrorText>{error}</ErrorText> : undefined}
+    >
+      {!value.persisted ? <SqlPending t={t} file={SQL_FILES.starsCard} /> : null}
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>{t("configuracion.starsCard.enabled")}</div>
+          <p className={s.hint} style={{ marginTop: 2 }}>{t("configuracion.starsCard.enabledHint")}</p>
+        </div>
+        <Switch
+          checked={value.enabled}
+          onChange={(v) => void toggle(v)}
+          label={t("configuracion.starsCard.enabled")}
+          disabled={!value.persisted || saving}
+        />
+      </div>
+      <p className={s.hint}>{t("configuracion.starsCard.note")}</p>
     </Card>
   );
 }

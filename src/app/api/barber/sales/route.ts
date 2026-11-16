@@ -9,6 +9,7 @@ import {
 } from "@/lib/barber/cash";
 import { prisma } from "@/lib/prisma";
 import { saleStarsOutcome } from "@/lib/barber/stars-core";
+import { origenPublicoDe } from "@/lib/url-publica";
 
 export const dynamic = "force-dynamic";
 
@@ -54,7 +55,24 @@ export async function POST(req: NextRequest) {
       console.warn("[api/barber/sales] resumen de estrellas:", (e as Error).message);
       return null;
     });
-    return NextResponse.json({ ...sale, stars }, { status: 201 });
+    // ws6-t1 (16-nov): la tarjeta de estrellas le llega sola por WhatsApp
+    // (una vez por ticket). Si no puede salir sola, Caja ofrece mandarla a
+    // mano. Nunca lanza: el cobro ya quedó. Import diferido: el emisor de
+    // WhatsApp es server-only y esta ruta la cargan pruebas sin Next.
+    const starsCard = await import("@/lib/barber/tarjeta-cobro")
+      .then(({ sendStarsCardAfterCharge }) =>
+        sendStarsCardAfterCharge({
+          barbershopId: ctx.barbershopId,
+          saleId: sale.id,
+          origin: origenPublicoDe(req, req.url),
+          outcome: stars,
+        }),
+      )
+      .catch((e) => {
+        console.warn("[api/barber/sales] tarjeta por WhatsApp:", (e as Error).message);
+        return null;
+      });
+    return NextResponse.json({ ...sale, stars, starsCard }, { status: 201 });
   } catch (e) {
     return moneyErrorResponse(e);
   }

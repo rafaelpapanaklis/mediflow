@@ -141,6 +141,10 @@
     "needsService": "Add {service} to the ticket to use this reward.",
     "bonusDiscount": "Reward “{bonus}”",
     "bonusGift": "Hand over: {text}. It's noted on the ticket.",
-    "starsShort": "{count} ★"
+    "starsShort": "{count} ★",
+    "cardSentWa": "{name} got their star card on WhatsApp.",
+    "cardQueuedWa": "Their star card is on its way on WhatsApp.",
+    "sendCardManual": "Send their card",
+    "sendCardManualHint": "It didn't go out on its own: open it and send it from your phone."
   }
 }

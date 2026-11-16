@@ -9,6 +9,7 @@ import {
   updateBarberProfile,
 } from "@/lib/barber/settings";
 import { gateSettings, readJson, revalidateShopWeb } from "./_gate";
+import { saveStarsCardSetting } from "@/lib/barber/tarjeta-cobro-ajuste";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +31,7 @@ const SQL_POR_SECCION: Record<string, string> = {
   inactivity: "sql/barber_clientes.sql",
   campaigns: "sql/barber_campanas.sql",
   booking: "sql/barber_settings.sql",
+  starsCard: "sql/barber_tarjeta_cobro.sql",
 };
 
 /**
@@ -41,6 +43,7 @@ const SQL_POR_SECCION: Record<string, string> = {
  *   section = "inactivity" → { days }
  *   section = "campaigns"  → { cooldownDays }
  *   section = "booking"    → { policy: "auto" | "manual" }
+ *   section = "starsCard"  → { enabled } (mandar la tarjeta de estrellas tras cobrar)
  *
  * Cada sección se guarda sola: un número fuera de rango en fidelidad no
  * impide guardar el teléfono. Si el SQL de la sección no está aplicado se
@@ -58,6 +61,27 @@ export async function PATCH(req: Request) {
       const profile = await updateBarberProfile(ctx, body);
       revalidateShopWeb(ctx.barbershop.slug);
       return NextResponse.json({ profile });
+    }
+
+    if (section === "starsCard") {
+      if (typeof body.enabled !== "boolean") {
+        return NextResponse.json({ error: "Falta decir si se manda o no." }, { status: 400 });
+      }
+      const r = await saveStarsCardSetting(ctx.barbershopId, body.enabled);
+      if (!r.ok) {
+        const pendiente = r.reason === "sql_pendiente";
+        return NextResponse.json(
+          {
+            error: pendiente
+              ? `Este ajuste todavía no se puede guardar: falta aplicar ${SQL_POR_SECCION.starsCard} en la base de datos.`
+              : "No se pudo guardar el ajuste. Inténtalo otra vez.",
+            sqlPendiente: pendiente,
+            value: r.value,
+          },
+          { status: pendiente ? 409 : 500 },
+        );
+      }
+      return NextResponse.json({ value: r.value });
     }
 
     let result:
