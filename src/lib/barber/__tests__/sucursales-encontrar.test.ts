@@ -132,6 +132,11 @@ test("Sucursales: la sede cerrada dice qué le pasa y su PRIMER botón es «Reab
   assert.match(primerBoton, /btnPrimary/);
   assert.doesNotMatch(acciones.slice(0, acciones.indexOf("</article>")), /Cerrar sede/, "una cerrada no ofrece cerrarse");
   assert.match(sucursales("en"), /Reopen location/);
+  // La tarjeta cerrada atenúa lo informativo, no los botones (antes opacity en la tarjeta entera).
+  assert.match(es, /<article class="rowCard rowCardClosed">/);
+  const css = leer("src/components/barber/team/admin.module.css");
+  assert.match(css, /\.rowCardClosed \.avatar,\s*\.rowCardClosed \.rowTitle,\s*\.rowCardClosed \.rowMeta \{ opacity: \.68; \}/);
+  assert.doesNotMatch(css, /\.rowCardClosed \{[^}]*opacity/);
 });
 
 test("Reabrir pide confirmación y, al reabrir, refresca el servidor (el selector la ve sin recargar)", () => {

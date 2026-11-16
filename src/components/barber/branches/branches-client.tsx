@@ -297,7 +297,7 @@ export function BranchesClient({
               key={b.id}
               className={[
                 s.rowCard,
-                b.isActive ? "" : s.rowCardMuted,
+                b.isActive ? "" : s.rowCardClosed,
                 isCurrent ? s.rowCardCurrent : "",
               ]
                 .filter(Boolean)
