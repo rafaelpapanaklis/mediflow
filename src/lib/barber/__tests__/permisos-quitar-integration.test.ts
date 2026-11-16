@@ -254,6 +254,40 @@ test("M1 · «Administrar comisiones» trae «Ver comisiones»: pagar no respond
   await dejarCon("rita", RECEPCION);
 });
 
+test("G2 · Inicio: quitar «Ver caja» quita el dinero del día en la siguiente carga (y al Barbero, «Ver comisiones»)", { skip }, async () => {
+  await prisma.barberSale.create({
+    data: { barbershopId: shopId, soldByUserId: uid.dueno, barberId: barberoId, subtotal: new Prisma.Decimal(300), total: new Prisma.Decimal(320), tip: new Prisma.Decimal(20) },
+  });
+  type Inicio = { can: { money: boolean }; today: { revenue: number; produced: number; total: number; tips: number; tickets: number; avgTicket: number | null }; compare: { vsYesterdayPct: number | null } };
+  const inicio = async (tag: string) => {
+    const r = await como(tag, "stats/inicio", "GET");
+    assert.equal(r.status, 200, JSON.stringify(r.body).slice(0, 200));
+    return r.body as Inicio;
+  };
+  await dejarCon("rita", RECEPCION);
+  const con = await inicio("rita");
+  assert.equal(con.can.money, true);
+  assert.ok(con.today.revenue >= 300, `con «Ver caja» ve el ingreso: ${con.today.revenue}`);
+  await dejarCon("rita", RECEPCION.filter((k) => k !== "cash.view"));
+  const sin = await inicio("rita");
+  assert.equal(sin.can.money, false);
+  assert.deepEqual(
+    [sin.today.revenue, sin.today.total, sin.today.tips, sin.today.tickets, sin.today.avgTicket, sin.compare.vsYesterdayPct],
+    [0, 0, 0, 0, null, null],
+    "sin «Ver caja» no viaja nada del dinero",
+  );
+  await dejarCon("rita", RECEPCION);
+  // Barbero: su producción, con «Ver comisiones» (de fábrica); sin ella, nada.
+  const b = await inicio("barbero");
+  assert.equal(b.can.money, true);
+  assert.ok(b.today.produced > 0, "el Barbero ve lo que produjo");
+  await dejarCon("barbero", BARBER_ROLE_DEFAULT_PERMISSIONS.BARBER.filter((k) => k !== "commissions.view"));
+  const b2 = await inicio("barbero");
+  assert.equal(b2.can.money, false);
+  assert.equal(b2.today.produced, 0);
+  await dejarCon("barbero", BARBER_ROLE_DEFAULT_PERMISSIONS.BARBER);
+});
+
 test("cambiar el ROL tiene efecto en la siguiente llamada (Recepción → Barbero → Recepción)", { skip }, async () => {
   await dejarCon("rita", RECEPCION);
   assert.equal((await como("rita", "sales", "GET")).status, 200);

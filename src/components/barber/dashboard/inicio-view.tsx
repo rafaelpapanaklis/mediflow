@@ -229,7 +229,9 @@ export function InicioView({
             ))}
           </div>
         </CardNew>
-      ) : (
+      ) : s.can.money === false ? null : (
+        // Sin «Ver caja» (o el Barbero sin «Ver comisiones») no hay banda de
+        // dinero: el servidor ya no la manda (auditoría de permisos, G2).
         // Rediseño D (punto 10): UNA tarjeta con cuatro celdas separadas por
         // líneas, y el ingreso del día manda. Mismos datos que las 4 KpiCard
         // de antes; markup propio para no tocar el KpiCard del dental.
