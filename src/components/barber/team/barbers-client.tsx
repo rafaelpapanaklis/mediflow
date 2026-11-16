@@ -9,6 +9,8 @@ import type { BarberCommissionType } from "@/lib/barber/types";
 import { esFotoSubida } from "@/lib/barber/barber-photo";
 import { prepararFoto } from "@/components/barber/landing/imagen";
 import type { BarberProfileRow, BarberSeatLimit } from "@/lib/barber/team";
+import { BARBER_SALARY_PERIODS, parseSalaryInput, type BarberSalaryPeriod } from "@/lib/barber/sueldo-core";
+import { salaryLabel } from "@/lib/barber/sueldo-texto";
 import type { AdminBranchOption } from "./admin-nav";
 import {
   adminStyles as s,
@@ -49,6 +51,9 @@ type FormState = {
   chairRent: string;
   isActive: boolean;
   barbershopId: string;
+  /** Sueldo opcional (ws6-t6): vacío = sin sueldo, como hasta hoy. */
+  salaryAmount: string;
+  salaryPeriod: BarberSalaryPeriod | "";
 };
 
 function emptyForm(barbershopId: string): FormState {
@@ -63,6 +68,8 @@ function emptyForm(barbershopId: string): FormState {
     chairRent: "",
     isActive: true,
     barbershopId,
+    salaryAmount: "",
+    salaryPeriod: "",
   };
 }
 
@@ -78,6 +85,8 @@ function toForm(b: BarberProfileRow): FormState {
     chairRent: b.chairRent === null ? "" : String(b.chairRent),
     isActive: b.isActive,
     barbershopId: b.barbershopId,
+    salaryAmount: b.salaryAmount === null ? "" : String(b.salaryAmount),
+    salaryPeriod: b.salaryPeriod ?? "",
   };
 }
 
@@ -87,12 +96,15 @@ export function BarbersClient({
   branches,
   activeBranchId,
   isConsolidated,
+  salaryReady = false,
 }: {
   initialBarbers: BarberProfileRow[];
   seat: BarberSeatLimit;
   branches: AdminBranchOption[];
   activeBranchId: string | null;
   isConsolidated: boolean;
+  /** ¿Ya se pegó sql/barber_sueldo.sql? Si no, «Sueldo» se ve como hoy. */
+  salaryReady?: boolean;
 }) {
   const t = useT();
   const [barbers, setBarbers] = useState(initialBarbers);
@@ -189,6 +201,11 @@ export function BarbersClient({
       chairRent: form.commissionType === "CHAIR_RENT" ? form.chairRent : null,
       isActive: form.isActive,
       barbershopId: form.barbershopId,
+      // Sueldo (ws6-t6): solo viaja cobrando por Sueldo; en Comisión o Renta
+      // no se toca y se conserva para cuando vuelva.
+      ...(salaryReady && form.commissionType === "SALARY"
+        ? { salaryAmount: form.salaryAmount, salaryPeriod: form.salaryPeriod || null }
+        : {}),
     };
     const ok = await run(async () => {
       let saved: BarberProfileRow;
@@ -261,12 +278,23 @@ export function BarbersClient({
     }
   }
 
+  // Validación del sueldo mientras se teclea: el «Guardar» se apaga y dice por qué junto al campo.
+  const salaryCheck =
+    form && salaryReady && form.commissionType === "SALARY"
+      ? parseSalaryInput(form.salaryAmount, form.salaryPeriod || null)
+      : null;
+  const salaryError = salaryCheck && !salaryCheck.ok ? t(`barbers.salaryErr_${salaryCheck.error}`) : null;
+
   function payChip(b: BarberProfileRow) {
     if (b.commissionType === "COMMISSION") {
       return `${t("barbers.payCommission")} · ${b.commissionPct ?? 0}%`;
     }
     if (b.commissionType === "CHAIR_RENT") {
       return `${t("barbers.payChairRent")} · $${b.chairRent ?? 0} ${t("barbers.perMonth")}`;
+    }
+    // «Sueldo · $3,000 semanal» si lo tiene capturado.
+    if (b.salaryAmount != null && b.salaryPeriod) {
+      return `${t("barbers.paySalary")} · ${salaryLabel(b.salaryAmount, b.salaryPeriod, t)}`;
     }
     return t("barbers.paySalary");
   }
@@ -424,7 +452,7 @@ export function BarbersClient({
               <Btn variant="ghost" onClick={() => openForm(null)} disabled={saving}>
                 {t("common.cancel")}
               </Btn>
-              <Btn variant="primary" onClick={save} disabled={saving}>
+              <Btn variant="primary" onClick={save} disabled={saving || Boolean(salaryError)}>
                 {saving ? t("common.saving") : t("common.save")}
               </Btn>
             </>
@@ -556,7 +584,58 @@ export function BarbersClient({
           ) : null}
 
           {form.commissionType === "SALARY" ? (
-            <p className={s.hint}>{t("barbers.salaryHint")}</p>
+            salaryReady ? (
+              <>
+                <Field
+                  label={t("barbers.salaryAmount")}
+                  hint={t("barbers.salaryAmountHint")}
+                >
+                  {(id) => (
+                    <TextInput
+                      id={id}
+                      value={form.salaryAmount}
+                      inputMode="decimal"
+                      placeholder="0.00"
+                      aria-invalid={salaryCheck && !salaryCheck.ok && salaryCheck.error !== "periodMissing" ? true : undefined}
+                      onChange={(e) => patch({ salaryAmount: e.target.value })}
+                    />
+                  )}
+                </Field>
+                <Field label={t("barbers.salaryPeriod")}>
+                  {(id) => (
+                    <Select
+                      id={id}
+                      value={form.salaryPeriod}
+                      aria-invalid={salaryCheck && !salaryCheck.ok && salaryCheck.error === "periodMissing" ? true : undefined}
+                      onChange={(e) => patch({ salaryPeriod: e.target.value as BarberSalaryPeriod | "" })}
+                    >
+                      <option value="">{t("barbers.salaryPeriodNone")}</option>
+                      {BARBER_SALARY_PERIODS.map((p) => (
+                        <option key={p} value={p}>
+                          {t(`barbers.period_${p}`)}
+                        </option>
+                      ))}
+                    </Select>
+                  )}
+                </Field>
+                {salaryError ? (
+                  <p className={s.hint} role="alert" style={{ color: "var(--danger)" }}>
+                    {salaryError}
+                  </p>
+                ) : (
+                  <p className={s.hint}>{t("barbers.salaryHintWithAmount")}</p>
+                )}
+              </>
+            ) : (
+              <p className={s.hint}>{t("barbers.salaryHint")}</p>
+            )
+          ) : form.salaryAmount && form.salaryPeriod ? (
+            // Cobra por Comisión o Renta con un sueldo guardado: se ve apagado y no cuenta.
+            <p className={s.hint} style={{ opacity: 0.7 }}>
+              {t("barbers.salarySavedOff", {
+                salary: salaryLabel(Number(form.salaryAmount), form.salaryPeriod, t),
+              })}
+            </p>
           ) : null}
 
           {branches.length > 1 ? (
