@@ -15,6 +15,7 @@ import { BarberSidebar } from "@/components/barber/barber-sidebar";
 import { BarberTopbar } from "@/components/barber/barber-topbar";
 import { BarberBranchBadge } from "@/components/barber/barber-branch-badge";
 import { BarberSedePin } from "@/components/barber/barber-sede-pin";
+import { RegistradorUso } from "@/components/barber/uso/registrador-uso";
 import { listBranchOptions, readBranchCookie } from "@/lib/barber/branches";
 import { BARBER_BRANCH_ALL } from "@/lib/barber/branch-cookie";
 import { getBarberWaChatAcceso } from "@/lib/barber/wa-chat";
@@ -94,6 +95,8 @@ export default async function BarberPanelLayout({
     <div className="barber-shell barber-panel mf-extpanel flex min-h-screen font-sans">
       {/* Cada escritura lleva la sede de ESTA pantalla (ronda 2, M3). */}
       <BarberSedePin branchId={ctx.barbershopId} message={t("barber.shell.topbar.branchChanged")} />
+      {/* Uso del panel (entradas, pantallas y toques) para /admin/barberias: ver registrador-uso.tsx. */}
+      <RegistradorUso />
       <BarberSidebar
         shopName={ctx.barbershop.name}
         items={items}
