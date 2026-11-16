@@ -54,6 +54,9 @@ const OWN_PREFIXES = [
   // propósito, porque documentan de quién es la carpeta y no cuestan nada.
   "src/app/barberias/comparar/",
   "src/components/public/barberias/comparar/",
+  // Archivos estáticos del vertical (las fuentes autoalojadas de las
+  // plantillas de Mi web: ws6, 16-nov). Nada del dental vive aquí.
+  "public/barber/",
 ];
 
 // PROPIO de barber: archivos exactos.
