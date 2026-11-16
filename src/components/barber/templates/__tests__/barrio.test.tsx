@@ -215,6 +215,20 @@ test("B2 · tramoMasLargo sale de las filas del horario, no del texto", () => {
   assert.equal(tramoMasLargo(c([dia(0, true), dia(2, true), dia(3, true), dia(4, true)])), "Mié – Vie: 11:00 am – 9:00 pm");
 });
 
+test("U4 · la pegatina usa claves propias: el sello de año de Vintage no se vuelve un botón de reservar", () => {
+  const portada = BARBER_WEB_MANIFESTS.barrio.secciones.find((s) => s.id === "portada")!;
+  const claves = (portada.copia ?? []).map((c) => c.clave);
+  assert.ok(claves.includes("portada.pegatina") && claves.includes("portada.pegatinaNota"));
+  assert.ok(!claves.includes("portada.sello") && !claves.includes("portada.lema"));
+  // Lo que la barbería escribió en Vintage no aparece en Barrio…
+  const vintage = pinta(datos({}, { copia: { "portada.sello": "EST. 1998", "portada.lema": "Barbería tradicional" } }));
+  assert.ok(!vintage.includes("EST. 1998") && !vintage.includes("Barbería tradicional"));
+  assert.match(vintage, /<a class="bw-pegatina" href="\/b\/filo\/reservar"><span>Cita en 1 minuto<small>sin llamar<\/small>/);
+  // …y lo suyo sí.
+  const propia = pinta(datos({}, { copia: { "portada.pegatina": "Sin fila", "portada.pegatinaNota": "con cita" } }));
+  assert.match(propia, /<span>Sin fila<small>con cita<\/small><\/span>/);
+});
+
 test("B1 · la cinta se puede pausar (WCAG 2.2.2): botón fuera de aria-hidden, hover/foco y reduced-motion", () => {
   const html = pinta(datos({ servicios: [sv(1), sv(2)] }));
   const cinta = html.slice(html.indexOf('<div class="bw-cinta">'), html.indexOf("bw-cinta-via"));

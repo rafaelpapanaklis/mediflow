@@ -269,8 +269,8 @@ export function PlantillaBarrio({ data }: { data: BarberWebData }) {
   // No dice «hoy»: el HTML se cachea y no sabe qué día lo abren.
   const horarioPortada = tramoMasLargo(config);
 
-  const sello = copia(data, "portada", "portada.sello");
-  const lema = copia(data, "portada", "portada.lema");
+  const pegatina = copia(data, "portada", "portada.pegatina");
+  const pegatinaNota = copia(data, "portada", "portada.pegatinaNota");
 
   return (
     <div className="dcbw dcbw-barrio" style={varsDeAcento(data)}>
@@ -342,11 +342,11 @@ export function PlantillaBarrio({ data }: { data: BarberWebData }) {
                   />
                 </div>
               ) : null}
-              {sello ? (
+              {pegatina ? (
                 <a className="bw-pegatina" href={reservar}>
                   <span>
-                    {sello}
-                    {lema ? <small>{lema}</small> : null}
+                    {pegatina}
+                    {pegatinaNota ? <small>{pegatinaNota}</small> : null}
                   </span>
                 </a>
               ) : null}

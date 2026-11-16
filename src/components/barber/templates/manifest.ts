@@ -1019,8 +1019,10 @@ export const BARBER_WEB_MANIFESTS: Record<BarberWebTemplateId, BarberWebManifest
         ],
         copia: [
           ...copiaPortada("Reservar cita", "Fades, barba y diseño."),
-          { clave: "portada.sello", etiqueta: "Portada · pegatina (texto grande)", porDefecto: "Cita en 1 minuto", maxLen: 24 },
-          { clave: "portada.lema", etiqueta: "Portada · pegatina (texto chico)", porDefecto: "sin llamar", maxLen: 60 },
+          // Claves propias: portada.sello/lema son el sello de año de vintage,
+          // carta y club («EST. 1998»), no un botón de reservar (revisión U4).
+          { clave: "portada.pegatina", etiqueta: "Portada · pegatina (texto grande)", porDefecto: "Cita en 1 minuto", maxLen: 24 },
+          { clave: "portada.pegatinaNota", etiqueta: "Portada · pegatina (texto chico)", porDefecto: "sin llamar", maxLen: 40 },
         ],
       },
       {
