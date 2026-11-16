@@ -443,6 +443,22 @@ body:has(.barber-shell) {
   }
 }
 
+/* MENÚ A TODO EL ALTO AL BAJAR (16-nov, Rafael en Socios y Mi web con
+   monitor ancho: «el menú termina a media pantalla»). En escritorio la
+   que desplaza es la COLUMNA del panel (lg:max-h-screen + overflow-y-auto,
+   layout.tsx), no el documento. Pero la columna no estaba posicionada, y
+   todo lo `position: absolute` de adentro que no tiene un padre posicionado
+   (textos para lector de pantalla, el <input> escondido de cada
+   interruptor) se anclaba a la PÁGINA: la alargaba y el documento
+   desplazaba también, llevándose el menú (sticky dentro de un .barber-shell
+   de 100vh) hacia arriba. Posicionada, esos elementos se quedan dentro de
+   la columna y el documento ya no crece. */
+@media (min-width: 1024px) {
+  .barber-shell .barber-columna {
+    position: relative;
+  }
+}
+
 /* Escritorio: la hamburguesa no existe. Ya la escondía `lg:hidden`; se
    repite aquí para no depender del orden en que Tailwind emite sus
    utilidades frente a .icon-btn-new (display: grid). */
