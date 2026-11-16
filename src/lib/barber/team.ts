@@ -11,7 +11,6 @@ import {
   BARBER_NO_PERMISSIONS,
   BARBER_PERMISSIONS,
   BARBER_PERMISSION_KEYS,
-  BARBER_ROLE_DEFAULT_PERMISSIONS,
   resolveBarberPermissions,
   type BarberPermissionKey,
 } from "@/lib/barber/permissions";
@@ -153,7 +152,9 @@ export function describeMemberPermissions(
   role: BarberRole,
   permissionsOverride?: string[] | null,
 ): BarberPermissionSummary {
-  const roleSet = new Set<string>(BARBER_ROLE_DEFAULT_PERMISSIONS[role] ?? []);
+  // Con lo incluido (M2): «sus propios bloqueos» de Recepción viene del rol
+  // (por «bloqueos de cualquiera»), no es una excepción «añadida».
+  const roleSet = new Set<string>(resolveBarberPermissions(role, []));
   // resolveBarberPermissions es el MISMO motor que usa assertBarberPermission:
   // la pantalla no puede mentir sobre lo que el servidor va a validar.
   const effectiveSet = resolveBarberPermissions(role, permissionsOverride);
@@ -198,8 +199,15 @@ export function overrideFromEffective(
   effectiveKeys: Iterable<string>,
 ): string[] {
   const effective = canonicalPermissions(effectiveKeys);
-  const roleDefaults = canonicalPermissions(BARBER_ROLE_DEFAULT_PERMISSIONS[role] ?? []);
-  if (sameKeySet(effective, roleDefaults)) return [];
+  // Se compara con lo INCLUIDO sumado de los dos lados (auditoría 16-nov, M2):
+  // la matriz manda el conjunto efectivo, que ya trae lo incluido (Recepción:
+  // «sus propios bloqueos» por «bloqueos de cualquiera»), y los defaults del
+  // rol no. Antes eso nunca cuadraba y TODA edición dejaba a la persona con
+  // excepciones fijas: un permiso nuevo del rol ya no le llegaba.
+  const conIncluidos = (keys: string[]) =>
+    canonicalPermissions(resolveBarberPermissions(role, [...keys, BARBER_NO_PERMISSIONS]));
+  const roleDefaults = canonicalPermissions(resolveBarberPermissions(role, []));
+  if (sameKeySet(conIncluidos(effective), roleDefaults)) return [];
   // TODO apagado (G1, 16-nov): [] sería «hereda el rol» y le devolvería todo.
   return effective.length > 0 ? effective : [BARBER_NO_PERMISSIONS];
 }

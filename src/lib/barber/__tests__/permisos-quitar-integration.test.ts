@@ -45,7 +45,7 @@ test("G1 · «ningún permiso» se guarda como nada, no como «hereda el rol»",
     const d = describeMemberPermissions(role, guardado);
     assert.equal(d.hasOverride, true, "la matriz dice que hay excepciones");
     assert.deepEqual(d.effective, []);
-    assert.deepEqual(d.removed.sort(), [...BARBER_ROLE_DEFAULT_PERMISSIONS[role]].sort(), "todo lo del rol, quitado");
+    assert.deepEqual(d.removed.sort(), [...resolveBarberPermissions(role, [])].sort(), "todo lo del rol, quitado");
   }
   // Lo de siempre no cambia: [] sigue siendo «hereda el rol» y un override
   // con claves sigue reemplazando.
@@ -54,6 +54,26 @@ test("G1 · «ningún permiso» se guarda como nada, no como «hereda el rol»",
   assert.deepEqual([...resolveBarberPermissions("BARBER", ["agenda.view"])], ["agenda.view"]);
   // La marca no es un permiso: junto a claves de verdad no estorba.
   assert.deepEqual([...resolveBarberPermissions("BARBER", [BARBER_NO_PERMISSIONS, "agenda.view"])], ["agenda.view"]);
+});
+
+test("M2 · volver a dejar todo como el rol vuelve a HEREDAR (lo incluido no cuenta como excepción)", () => {
+  // Lo que manda la matriz: el conjunto efectivo, con lo incluido
+  // («sus propios bloqueos» viene con «bloqueos de cualquiera»).
+  for (const role of ["MANAGER", "RECEPTION", "BARBER"] as const) {
+    const efectivo = [...resolveBarberPermissions(role, [])];
+    assert.deepEqual(overrideFromEffective(role, efectivo), [], `${role}: el efectivo del rol es «hereda»`);
+    assert.deepEqual(overrideFromEffective(role, BARBER_ROLE_DEFAULT_PERMISSIONS[role]), [], `${role}: los defaults a secas también`);
+    const d = describeMemberPermissions(role, []);
+    assert.deepEqual(d.added, [], `${role}: nada sale como «Añadido» sin que nadie lo añadiera`);
+    assert.equal(d.hasOverride, false);
+  }
+  // Quitar SOLO lo incluido no se puede (viene con el otro), y no deja excepción fija.
+  const sinPropios = resolveBarberPermissions("RECEPTION", []);
+  sinPropios.delete("timeoff.own");
+  assert.deepEqual(overrideFromEffective("RECEPTION", sinPropios), []);
+  // Una excepción de verdad sigue guardándose entera.
+  const conComisiones = [...resolveBarberPermissions("RECEPTION", []), "commissions.view"];
+  assert.ok(overrideFromEffective("RECEPTION", conComisiones).includes("commissions.view"));
 });
 
 // ── Integración ─────────────────────────────────────────────────────────
@@ -208,6 +228,18 @@ for (const c of CASOS) {
     assert.ok(pasa(otraVez), `devuelto ${c.permiso} vuelve a pasar: ${otraVez.status}`);
   });
 }
+
+test("M2 · apagar «Cobrar» y volver a encenderlo (como en panel.108) deja a la persona HEREDANDO el rol", { skip }, async () => {
+  const efectivo = [...resolveBarberPermissions("RECEPTION", [])]; // lo que pinta y manda la matriz
+  await dejarCon("rita", efectivo.filter((k) => k !== "cash.manage"));
+  await dejarCon("rita", efectivo);
+  const fila = await prisma.barberUser.findUniqueOrThrow({ where: { id: uid.rita } });
+  assert.deepEqual(fila.permissionsOverride, [], "sin excepciones fijas (en la base quedaban las 15 claves)");
+  const lista = await como("dueno", "team/members", "GET");
+  const m = (lista.body as { members: { id: string; permissions: { hasOverride: boolean; added: string[] } }[] }).members.find((x) => x.id === uid.rita)!;
+  assert.equal(m.permissions.hasOverride, false, "la tarjeta dice «Hereda los permisos de Recepción»");
+  assert.deepEqual(m.permissions.added, []);
+});
 
 test("G1 · el dueño le apaga TODO → la siguiente llamada ya no pasa (antes: recuperaba TODO lo del rol)", { skip }, async () => {
   await dejarCon("rita", RECEPCION);
