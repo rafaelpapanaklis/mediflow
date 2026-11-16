@@ -25,7 +25,7 @@ import {
   esPlantillaOfrecidaBarberWeb,
 } from "@/lib/barber/landing";
 import { BARBER_WEB_TEMPLATE_COUNT } from "@/lib/barber/marketing";
-import { BARBER_WEB_MANIFEST_LIST, BARBER_WEB_TEMPLATES } from "../index";
+import { BARBER_WEB_MANIFESTS, BARBER_WEB_MANIFEST_LIST, BARBER_WEB_TEMPLATES } from "../index";
 
 const SRC = path.resolve(__dirname, "../../../..");
 const leer = (rel: string) => readFileSync(path.join(SRC, rel), "utf8");
@@ -34,6 +34,22 @@ test("se ofrecen SOLO Oficio, Barrio y Revista, en ese orden", () => {
   assert.deepEqual([...BARBER_WEB_OFRECIDAS], ["oficio", "barrio", "revista"]);
   assert.deepEqual(BARBER_WEB_SELECTOR_LIST.map((m) => m.id), ["oficio", "barrio", "revista"]);
   assert.deepEqual(BARBER_WEB_SELECTOR_LIST.map((m) => m.nombre), ["Oficio", "Barrio", "Revista"]);
+});
+
+test("el selector se arma DESPUÉS de los manifiestos y de sus bloques del final", () => {
+  // BARBER_WEB_SELECTOR_LIST vive en landing.ts y se calcula al cargarla, cuando
+  // manifest.ts ya corrió entero (manifiestos de las quince + los bloques que
+  // mueven la tienda de oficio, barrio y revista). Son los MISMOS objetos, ya
+  // con la tienda tras servicios: nada de copias tomadas a medias.
+  for (const m of BARBER_WEB_SELECTOR_LIST) {
+    assert.equal(m, BARBER_WEB_MANIFESTS[m.id], `${m.id}: el selector tiene otro objeto`);
+    const ids = m.secciones.map((s) => s.id);
+    assert.equal(ids.indexOf("tienda"), ids.indexOf("servicios") + 1, `${m.id}: la tienda no va tras servicios`);
+    assert.equal(ids.filter((x) => x === "tienda").length, 1, `${m.id}: tienda repetida`);
+  }
+  const landing = leer("lib/barber/landing.ts");
+  assert.match(landing, /export const BARBER_WEB_SELECTOR_LIST = BARBER_WEB_OFRECIDAS\.map\(\(id\) => BARBER_WEB_MANIFESTS\[id\]\)/);
+  assert.doesNotMatch(leer("components/barber/templates/manifest.ts"), /export const BARBER_WEB_(SELECTOR_LIST|NUEVAS)\b/);
 });
 
 test("la de por defecto es una de las ofrecidas (Oficio)", () => {
