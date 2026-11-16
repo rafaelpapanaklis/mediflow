@@ -1061,7 +1061,8 @@ export const BARBER_WEB_MANIFESTS: Record<BarberWebTemplateId, BarberWebManifest
           // en las otras doce. Así «Reservar con» guardado aquí no sale «Reservar
           // con con Juan» en Oficio ni «Reservar con →» en las demás (revisión U3).
           { ...COPIA_EQUIPO_CTA, etiqueta: "Equipo · botón de cada barbero (sigue «con <nombre>»)" },
-          { clave: "equipo.sinHorario", etiqueta: "Equipo · aviso del barbero sin horario", porDefecto: "Todavía sin citas en línea", maxLen: 60 },
+          // La misma clave y etiqueta que Oficio (revisión, U-menor).
+          { clave: "equipo.sinHorario", etiqueta: "Equipo · nota del barbero sin horario", porDefecto: "Todavía sin citas en línea", maxLen: 60 },
         ],
       },
       {

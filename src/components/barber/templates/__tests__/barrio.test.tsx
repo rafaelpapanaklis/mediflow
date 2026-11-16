@@ -129,6 +129,12 @@ test("1 y 9 barberos; sin horario sale sin «Reservar», con su aviso", () => {
   assert.equal((nueve.match(/class="bw-barbero"/g) ?? []).length, 9);
   assert.ok(!nueve.includes("barbero=b4"), "ofrece reservar con quien no tiene horario");
   assert.ok(nueve.includes("Barbero 4") && nueve.includes("Todavía sin citas en línea"));
+  // U-menor: la nota sale de equipo.sinHorario, la misma clave que Oficio
+  // (no equipo.sinCitas): reescrita una vez, sigue al cambiar de plantilla.
+  const decl = BARBER_WEB_MANIFESTS.barrio.secciones.find((s) => s.id === "equipo")!.copia!.map((c) => c.clave);
+  assert.ok(decl.includes("equipo.sinHorario") && !decl.includes("equipo.sinCitas"));
+  const propia = pinta(datos({ barberos: [barbero(1, { sinHorario: true })] }, { copia: { "equipo.sinHorario": "Pronto en línea" } }));
+  assert.ok(propia.includes('<p class="bw-barbero-nota">Pronto en línea</p>'));
 });
 
 test("30 servicios: todos con su liga, los combos en tarjetas y fichas por categoría", () => {
