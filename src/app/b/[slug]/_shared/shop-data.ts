@@ -69,7 +69,7 @@ export interface BarberWebCarga {
  * la barbería está dada de baja.
  *
  * Una barbería SIN fila en `barber_landing_configs` tiene página igual:
- * plantilla clásica y todo por defecto, con su nombre, dirección,
+ * plantilla por defecto («Oficio») y todo por defecto, con su nombre, dirección,
  * teléfono, servicios y barberos reales. Es la página del plan Básico,
  * que no tiene editor — y por eso no puede depender de que exista una
  * fila que solo escribe el editor.

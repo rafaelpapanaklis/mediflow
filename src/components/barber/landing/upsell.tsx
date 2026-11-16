@@ -4,7 +4,8 @@
    PLAN BÁSICO: PÁGINA SÍ, EDITOR NO.
 
    Esta pantalla existe porque "no tienes acceso" habría sido mentira. En
-   Básico la barbería SÍ tiene página web —con la plantilla Clásica, sus
+   Básico la barbería SÍ tiene página web —con la plantilla Oficio (la de
+   por defecto, BARBER_WEB_TEMPLATE_DEFAULT), sus
    servicios de verdad, sus barberos de verdad y su botón de reservar—, lo
    que no tiene es el editor.
 

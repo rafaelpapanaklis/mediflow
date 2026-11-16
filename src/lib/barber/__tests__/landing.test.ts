@@ -19,6 +19,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   BARBER_WEB_ACCENTS,
+  BARBER_WEB_TEMPLATE_DEFAULT,
   BARBER_WEB_TEMPLATE_IDS,
   configBarberWebVacia,
   esUrlDeMapa,
@@ -388,10 +389,19 @@ test("las ocho se diferencian en ESTRUCTURA, no solo en color", () => {
   }
 });
 
-test("un id de plantilla desconocido cae a la clásica, no a una pantalla en blanco", () => {
-  assert.equal(manifiestoBarberWeb("no-existe").id, "clasica");
-  assert.equal(manifiestoBarberWeb(null).id, "clasica");
+test("un id de plantilla desconocido cae a «Oficio» (la de por defecto), no a una pantalla en blanco", () => {
+  assert.equal(manifiestoBarberWeb("no-existe").id, "oficio");
+  assert.equal(manifiestoBarberWeb(null).id, "oficio");
   assert.equal(manifiestoBarberWeb("vintage").id, "vintage");
+  // «Clásica» deja de ser la de por defecto pero sigue para quien la elija.
+  assert.equal(manifiestoBarberWeb("clasica").id, "clasica");
+});
+
+test("«Oficio» es la de por defecto: la que ve quien nunca eligió y la fija del Básico", () => {
+  // Una sola constante la decide para la página pública (shop-data), el
+  // editor, la API y el plan Básico (que no tiene editor ni fila guardada).
+  assert.equal(BARBER_WEB_TEMPLATE_DEFAULT, "oficio");
+  assert.equal(manifiestoBarberWeb(BARBER_WEB_TEMPLATE_DEFAULT).nombre, "Oficio");
 });
 
 test("el horario del local pasa a turnos del barbero: lunes=1, domingo=0, cerrados fuera", () => {

@@ -1130,9 +1130,9 @@ export const BARBER_WEB_MANIFEST_LIST: BarberWebManifest[] = [
   BARBER_WEB_MANIFESTS.oficio,
 ];
 
-/** El manifiesto de una plantilla, cayendo a la clásica si el id no existe. */
+/** El manifiesto de una plantilla, cayendo a «Oficio» (la de por defecto) si el id no existe. */
 export function manifiestoBarberWeb(id: string | null | undefined): BarberWebManifest {
-  return BARBER_WEB_MANIFESTS[(id ?? "") as BarberWebTemplateId] ?? BARBER_WEB_MANIFESTS.clasica;
+  return BARBER_WEB_MANIFESTS[(id ?? "") as BarberWebTemplateId] ?? BARBER_WEB_MANIFESTS.oficio;
 }
 
 /* ── Oficio (ws6-t2): la vitrina va JUSTO después de la carta ────────

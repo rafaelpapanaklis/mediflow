@@ -16,7 +16,7 @@ import assert from "node:assert/strict";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { configBarberWebVacia, normalizarConfigBarberWeb, ordenDeSecciones } from "@/lib/barber/landing";
-import { BARBER_WEB_MANIFESTS, BARBER_WEB_TEMPLATES } from "../index";
+import { BARBER_WEB_MANIFESTS, BARBER_WEB_TEMPLATES, PlantillaBarberWeb } from "../index";
 import type { BarberWebBarbero, BarberWebData, BarberWebServicio } from "../types";
 
 const HORARIO = [0, 1, 2, 3, 4, 5, 6].map((dia) => ({ dia, abierto: dia < 6, desde: "10:00", hasta: "20:00" }));
@@ -190,6 +190,11 @@ test("en el editor, la portada sin foto enseña el hueco (nunca en público)", (
   d.config = { ...d.config, fotos: {} };
   assert.ok(pinta(d).includes("dcbw-hueco"));
   assert.ok(!pinta({ ...d, editando: false }).includes("dcbw-hueco"));
+});
+
+test("una plantilla retirada (id desconocido) se pinta con Oficio, la de por defecto", () => {
+  const d = datos({ manifest: { ...BARBER_WEB_MANIFESTS.oficio, id: "retirada" as never } });
+  assert.ok(renderToStaticMarkup(<PlantillaBarberWeb data={d} />).includes("dcbw-oficio"));
 });
 
 test("WhatsApp: sin número no hay botón redondo ni de portada", () => {

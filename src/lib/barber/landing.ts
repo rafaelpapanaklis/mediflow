@@ -54,8 +54,13 @@ export const BARBER_WEB_TEMPLATE_IDS = [
 
 export type BarberWebTemplateId = (typeof BARBER_WEB_TEMPLATE_IDS)[number];
 
-/** La de arranque. Es la que ve una barbería que nunca abrió el editor. */
-export const BARBER_WEB_TEMPLATE_DEFAULT: BarberWebTemplateId = "clasica";
+/**
+ * La de arranque. Es la que ve una barbería que nunca abrió el editor, la
+ * fija del plan Básico (que no tiene editor) y la caída de un id desconocido.
+ * «Oficio» desde el 16-nov (ws6-t2); antes era «clasica», que sigue en el
+ * selector para quien la quiera.
+ */
+export const BARBER_WEB_TEMPLATE_DEFAULT: BarberWebTemplateId = "oficio";
 
 export function esPlantillaBarberWeb(v: unknown): v is BarberWebTemplateId {
   return typeof v === "string" && (BARBER_WEB_TEMPLATE_IDS as readonly string[]).includes(v);

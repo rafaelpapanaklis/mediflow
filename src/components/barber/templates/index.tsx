@@ -48,11 +48,11 @@ export const BARBER_WEB_TEMPLATES: Record<BarberWebTemplateId, BarberWebTemplate
 /**
  * Pinta la plantilla que diga `data.manifest.id`.
  *
- * Cae a la clásica si el id no existe: una barbería con una plantilla
+ * Cae a «Oficio» (la de por defecto) si el id no existe: una barbería con una plantilla
  * retirada de la lista sigue teniendo página, no una pantalla en blanco.
  */
 export function PlantillaBarberWeb({ data }: { data: BarberWebData }) {
-  const Componente = BARBER_WEB_TEMPLATES[data.manifest.id] ?? PlantillaClasica;
+  const Componente = BARBER_WEB_TEMPLATES[data.manifest.id] ?? PlantillaOficio;
   return <Componente data={data} />;
 }
 
