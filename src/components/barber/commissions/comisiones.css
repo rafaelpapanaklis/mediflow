@@ -50,8 +50,13 @@
   box-shadow: -10px 0 10px -10px var(--border-strong);
 }
 
-/* Celular / contenedor angosto: una tarjeta por barbero. */
-@container bcom (max-width: 1180px) {
+/* Celular / contenedor angosto: una tarjeta por barbero.
+   El quiebre es el ancho que la tabla NECESITA, no un número de teléfono: con pagos
+   pendientes (tres botones, «Ya restados…», «Sueldo del periodo…») mide 1,629 px y el
+   contenedor del panel llega a 1,318. Con 1180, entre 1181 y 1318 (ventanas de 1440 a
+   1920) quedaba la tabla y los botones fijos TAPABAN «A pagar» y «Estado» (QA de cierre
+   D y E). Mientras la tabla no quepa, tarjetas. */
+@container bcom (max-width: 1640px) {
   .barber-shell .bcom-table,
   .barber-shell .bcom-table > tbody { display: block; }
   .barber-shell .bcom-table > thead { display: none; }
@@ -97,7 +102,7 @@
 /* ── Rediseño D · tanda 2 (15-nov-2026): radios y rayas del tema. ── */
 .barber-shell .bcom-act { border-radius: var(--radius-md); }
 .barber-shell .bcom-name { font-weight: 600; }
-@container bcom (max-width: 1180px) {
+@container bcom (max-width: 1640px) {
   .barber-shell .bcom-table > tbody > tr.bcom-row { border-top-color: var(--line); }
   .barber-shell .bcom-table > tbody > tr.bcom-row:hover { background: var(--bg-elev-2); }
 }

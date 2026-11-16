@@ -85,3 +85,13 @@ test("mientras la pantalla se actualiza tras un pago: «Actualizando…» y «Ma
   assert.equal(getBarberT("es")("barber.caja.common.updating"), "Actualizando…");
   assert.equal(getBarberT("en")("barber.caja.common.updating"), "Updating…");
 });
+
+// QA de cierre D y E: a 1440–1920 la tabla (1,629 px con pagos pendientes) no cabe en el
+// contenedor (máx. 1,318) y los botones fijos tapaban «A pagar» y «Estado».
+test("la tabla solo se usa si cabe: el quiebre a tarjetas va por encima del ancho que necesita", () => {
+  const css = readFileSync(path.resolve(__dirname, "../../../components/barber/commissions/comisiones.css"), "utf8");
+  const quiebres = [...css.matchAll(/@container bcom \(max-width: (\d+)px\)/g)].map((m) => Number(m[1]));
+  assert.equal(quiebres.length, 2, "las dos reglas de tarjeta");
+  assert.ok(quiebres.every((q) => q === quiebres[0]), "las dos con el mismo quiebre");
+  assert.ok(quiebres[0] >= 1630, `el quiebre (${quiebres[0]}) cubre el ancho medido de la tabla con pendientes (1,629 px)`);
+});
