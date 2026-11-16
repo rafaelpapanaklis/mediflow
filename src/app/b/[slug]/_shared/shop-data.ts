@@ -1,7 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
 import {
-  BARBER_WEB_TEMPLATE_DEFAULT,
+  plantillaOfrecidaBarberWeb,
   normalizarConfigBarberWeb,
   type BarberWebConfig,
 } from "@/lib/barber/landing";
@@ -69,7 +69,7 @@ export interface BarberWebCarga {
  * la barbería está dada de baja.
  *
  * Una barbería SIN fila en `barber_landing_configs` tiene página igual:
- * plantilla clásica y todo por defecto, con su nombre, dirección,
+ * plantilla por defecto («Oficio») y todo por defecto, con su nombre, dirección,
  * teléfono, servicios y barberos reales. Es la página del plan Básico,
  * que no tiene editor — y por eso no puede depender de que exista una
  * fila que solo escribe el editor.
@@ -171,7 +171,10 @@ export async function cargarBarberWeb(slug: string): Promise<BarberWebCarga | nu
         logoUrl: shop.logoUrl,
       },
       config,
-      manifest: manifiestoBarberWeb(landing?.template ?? BARBER_WEB_TEMPLATE_DEFAULT),
+      // Una de las doce viejas guardada (p. ej. «clasica») se PINTA con la de
+      // por defecto: ya no se ofrecen. Se resuelve al leer; la fila no se toca
+      // y los textos, fotos y reseñas siguen (claves compartidas).
+      manifest: manifiestoBarberWeb(plantillaOfrecidaBarberWeb(landing?.template)),
       servicios: servicios.map((sv) => ({
         id: sv.id,
         nombre: sv.name,

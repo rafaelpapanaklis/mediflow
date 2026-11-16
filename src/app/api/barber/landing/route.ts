@@ -4,8 +4,11 @@ import { prisma } from "@/lib/prisma";
 import { getBarberContext, assertBarberPermission, BarberForbiddenError } from "@/lib/barber-auth";
 import { getBarberPlan } from "@/lib/barber/plans";
 import {
+  BARBER_WEB_OFRECIDAS,
   BARBER_WEB_TEMPLATE_DEFAULT,
-  esPlantillaBarberWeb,
+  esPlantillaOfrecidaBarberWeb,
+  BARBER_WEB_SELECTOR_LIST,
+  plantillaOfrecidaBarberWeb,
   fusionarConfigBarberWeb,
   fusionarPlantilla,
   normalizarConfigBarberWeb,
@@ -127,7 +130,9 @@ export async function GET() {
     });
 
     return NextResponse.json({
-      template: esPlantillaBarberWeb(fila?.template) ? fila!.template : BARBER_WEB_TEMPLATE_DEFAULT,
+      // Una plantilla guardada que ya no se ofrece se devuelve como la de por
+      // defecto: es lo que pinta la página y lo que el editor tiene elegido.
+      template: plantillaOfrecidaBarberWeb(fila?.template),
       config: normalizarConfigBarberWeb(fila?.config),
       version: fila?.version ?? 0,
       publishedAt: fila?.publishedAt ?? null,
@@ -162,7 +167,22 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "Falta la versión de la página" }, { status: 400 });
   }
 
-  const template = esPlantillaBarberWeb(body.template) ? body.template : BARBER_WEB_TEMPLATE_DEFAULT;
+  /* Solo se GUARDA una de las que se ofrecen (BARBER_WEB_OFRECIDAS). Las doce
+     viejas siguen registradas en el código, pero mandar «clasica» a mano ya
+     no entra: 400 con la lista de las que sí, en vez de guardarla en silencio
+     o cambiarla por otra sin decir nada. Sin `template` en el cuerpo, la de
+     por defecto, como siempre. */
+  if (body.template !== undefined && body.template !== null && !esPlantillaOfrecidaBarberWeb(body.template)) {
+    const nombres = BARBER_WEB_SELECTOR_LIST.map((m) => m.nombre);
+    return NextResponse.json(
+      {
+        error: `La plantilla «${String(body.template).slice(0, 40)}» ya no se puede elegir. Elige ${nombres.slice(0, -1).join(", ")} o ${nombres.at(-1)}.`,
+        plantillasOfrecidas: [...BARBER_WEB_OFRECIDAS],
+      },
+      { status: 400 },
+    );
+  }
+  const template = esPlantillaOfrecidaBarberWeb(body.template) ? body.template : BARBER_WEB_TEMPLATE_DEFAULT;
 
   const { config, invalidos } = validarConfigBarberWeb(body.config);
   if (!config) {
@@ -179,9 +199,9 @@ export async function PATCH(req: NextRequest) {
      permite distinguir "me pisaron" de "toqué algo que el otro no tocó". */
   const baseCruda = (body.base ?? {}) as Record<string, unknown>;
   const baseConfig = normalizarConfigBarberWeb(baseCruda.config);
-  const baseTemplate = esPlantillaBarberWeb(baseCruda.template)
-    ? (baseCruda.template as string)
-    : BARBER_WEB_TEMPLATE_DEFAULT;
+  // La base y la fila se leen igual que las pinta la página: una vieja cuenta
+  // como la de por defecto. Así una fusión nunca vuelve a escribir «clasica».
+  const baseTemplate = plantillaOfrecidaBarberWeb(baseCruda.template);
 
   const ahora = new Date();
   const comun = {
@@ -231,9 +251,7 @@ export async function PATCH(req: NextRequest) {
 
       /* 3 · La fila se movió. Fusionar en vez de rendirse. */
       const servidorConfig = normalizarConfigBarberWeb(fila.config);
-      const servidorTemplate = esPlantillaBarberWeb(fila.template)
-        ? fila.template
-        : BARBER_WEB_TEMPLATE_DEFAULT;
+      const servidorTemplate = plantillaOfrecidaBarberWeb(fila.template);
 
       const fusion = fusionarConfigBarberWeb(baseConfig, config, servidorConfig);
       const plantillaFundida = fusionarPlantilla(baseTemplate, template, servidorTemplate);

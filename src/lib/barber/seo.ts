@@ -179,7 +179,7 @@ export interface BarberWebSitemapEntry {
  * Porque en este producto `publishedAt` NO es la llave de la puerta.
  * Una barbería del plan Básico no tiene editor y por tanto no tiene
  * fila en `barber_landing_configs`: su `publishedAt` es null para
- * siempre y aun así su página está VIVA (plantilla clásica con su
+ * siempre y aun así su página está VIVA (plantilla por defecto, «Oficio», con su
  * nombre, dirección, servicios y barberos reales — es justo lo que se
  * le vende). Exigir `publishedAt != null` habría borrado del sitemap a
  * todo el plan Básico, que es el grueso del padrón.

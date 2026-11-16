@@ -39,7 +39,7 @@ import {
 import { BARBER_WA_PRICE_USD } from "@/lib/barber/whatsapp-core";
 import { BARBER_BOT_USD_MXN_FALLBACK } from "@/lib/barber/bot-core";
 import { BARBER_LOYALTY_GOAL } from "@/lib/barber/portal-core";
-import { BARBER_WEB_MANIFEST_LIST } from "@/components/barber/templates/manifest";
+import { BARBER_WEB_OFRECIDAS } from "@/lib/barber/landing";
 
 // ── Rutas ───────────────────────────────────────────────────────────────
 export const BARBER_LANDING_PATH = "/barberias" as const;
@@ -443,8 +443,8 @@ export const BARBER_LANDING_FORBIDDEN_WORDS: readonly string[] = [
   "expediente",
 ];
 
-/** Cuántas plantillas trae "Mi web" — de la fuente, no escrito a mano. */
-export const BARBER_WEB_TEMPLATE_COUNT = BARBER_WEB_MANIFEST_LIST.length;
+/** Cuántas plantillas OFRECE "Mi web" (hoy 3) — de la fuente, no escrito a mano. */
+export const BARBER_WEB_TEMPLATE_COUNT = BARBER_WEB_OFRECIDAS.length;
 
 /**
  * Citas al mes del ejemplo de costo de WhatsApp. Es el mismo ejemplo que

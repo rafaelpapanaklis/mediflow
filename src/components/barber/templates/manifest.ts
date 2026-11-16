@@ -9,7 +9,9 @@
    ── AGREGAR LA DECIMOTERCERA PLANTILLA ────────────────────────────
    1. Añade su id a BARBER_WEB_TEMPLATE_IDS (src/lib/barber/landing.ts).
    2. Escribe su manifiesto aquí abajo (y súmalo a BARBER_WEB_MANIFEST_LIST,
-      que es lo que ofrece el selector del editor).
+      la lista completa del motor). Para que el selector del editor la
+      OFREZCA, además, su id va en BARBER_WEB_OFRECIDAS (landing.ts): desde
+      el 16-nov solo se ofrecen oficio, barrio y revista.
    3. Escribe su componente en ./t-<id>.tsx.
    4. Regístralo en ./index.tsx (una línea en BARBER_WEB_TEMPLATES).
    5. Escribe su piel en ./skins.css bajo `.dcbw-<id>` (si el id choca con
@@ -982,6 +984,334 @@ export const BARBER_WEB_MANIFESTS: Record<BarberWebTemplateId, BarberWebManifest
       }),
     ],
   },
+
+  /* ────────────────────────────────────────────────────────────────
+     13 · OFICIO — la barbería de toda la vida, con el ARCO del espejo
+     (ws6-t2, 16-nov; mockup A de entregas-ws6/barber-web-mockups).
+     Estructura: portada oscura con la foto dentro de un arco de espejo,
+     servicios en dos columnas (los combos en un tablero oscuro aparte y
+     la carta con puntitos al lado), la VITRINA de productos justo
+     después de la carta, equipo en arcos escalonados, pared de cortes,
+     una reseña grande y las demás en lista, «Visítanos» con el mapa en
+     arco y un cierre en papel. Es la única con la tienda tras servicios.
+     ──────────────────────────────────────────────────────────────── */
+  oficio: {
+    id: "oficio",
+    nombre: "Oficio",
+    para: "La barbería de toda la vida: espresso y papel, letra de rótulo y el arco del espejo.",
+    estructura: "Portada con arco de espejo · combos en tablero aparte · vitrina tras la carta · equipo en arcos",
+    acentoSugerido: "vino",
+    oscura: true,
+    secciones: [
+      {
+        id: "portada",
+        nombre: "Portada",
+        obligatoria: true,
+        consume: [],
+        fotos: [
+          FOTO_LOGO,
+          { ...FOTO_PORTADA, proporcion: "vertical o cuadrada", ayuda: "Sale dentro de un arco de espejo: lo de en medio es lo que se ve." },
+          { ...FOTO_AMBIENTE, ayuda: "El arco chico de la portada, en computadora: la puerta, un sillón, un detalle." },
+        ],
+        copia: copiaPortada("Reservar cita", "Corte, barba y navaja a la antigua."),
+      },
+      {
+        id: "servicios",
+        nombre: "Servicios y precios",
+        consume: ["servicios"],
+        textos: [
+          { campo: "titulo", etiqueta: "Título de servicios", porDefecto: "Servicios y precios" },
+          {
+            campo: "subtitulo",
+            etiqueta: "Bajada de servicios",
+            porDefecto: "Precios claros, sin sorpresas al pagar. Toca un servicio para apartar tu hora.",
+          },
+        ],
+        copia: [{ clave: "servicios.cta", etiqueta: "Servicios · botón de cada corte", porDefecto: "Reservar", maxLen: 40 }],
+      },
+      {
+        id: "equipo",
+        nombre: "Barberos",
+        consume: ["barberos"],
+        textos: [
+          { campo: "titulo", etiqueta: "Título del equipo", porDefecto: "Quién te atiende" },
+          { campo: "subtitulo", etiqueta: "Bajada del equipo", porDefecto: "Elige con quién te sientas. Cada quien tiene su mano." },
+        ],
+        copia: [
+          { ...COPIA_EQUIPO_CTA, etiqueta: "Equipo · botón de cada barbero (sigue «con <nombre>»)" },
+          { clave: "equipo.sinHorario", etiqueta: "Equipo · nota del barbero sin horario", porDefecto: "Todavía sin citas en línea.", maxLen: 60 },
+        ],
+      },
+      {
+        id: "portafolio",
+        nombre: "Portafolio de cortes",
+        consume: ["galeria"],
+        textos: [
+          { campo: "titulo", etiqueta: "Título del portafolio", porDefecto: "Recién salidos del sillón" },
+          { campo: "subtitulo", etiqueta: "Bajada del portafolio", porDefecto: "Enséñanos el que te guste al reservar." },
+        ],
+        copia: [
+          { clave: "portafolio.instagram", etiqueta: "Portafolio · liga a Instagram (sigue tu @)", porDefecto: "Más cortes en", maxLen: 40 },
+        ],
+      },
+      {
+        id: "resenas",
+        nombre: "Reseñas de clientes",
+        consume: ["resenas"],
+        textos: [{ campo: "titulo", etiqueta: "Título de reseñas", porDefecto: "Lo que dicen los clientes" }],
+      },
+      secContacto({
+        textos: [
+          { campo: "titulo", etiqueta: "Título de contacto", porDefecto: "Visítanos" },
+          { campo: "subtitulo", etiqueta: "Bajada de contacto", porDefecto: "" },
+        ],
+        copia: [
+          ...COPIA_CONTACTO.filter((c) => c.clave !== "contacto.etiquetaTelefono" && c.clave !== "contacto.whatsapp"),
+          { clave: "contacto.etiquetaTelefono", etiqueta: "Contacto · rótulo de WhatsApp y teléfono", porDefecto: "Escríbenos o llama", maxLen: 40 },
+          { clave: "contacto.whatsapp", etiqueta: "Contacto · botón de WhatsApp", porDefecto: "WhatsApp", maxLen: 60 },
+          { clave: "contacto.etiquetaRedes", etiqueta: "Contacto · rótulo de las redes", porDefecto: "Síguenos", maxLen: 40 },
+        ],
+      }),
+      {
+        id: "reservar",
+        nombre: "Cierre con reserva",
+        consume: [],
+        textos: [
+          { campo: "titulo", etiqueta: "Título del cierre", porDefecto: "Tu sillón te espera" },
+          {
+            campo: "subtitulo",
+            etiqueta: "Bajada del cierre",
+            porDefecto: "Aparta tu lugar en menos de un minuto. Sin llamadas y sin hacer fila.",
+          },
+        ],
+        copia: [{ clave: "reservar.cta", etiqueta: "Cierre · botón", porDefecto: "Reservar cita", maxLen: 40 }],
+      },
+    ],
+  },
+
+  /* ────────────────────────────────────────────────────────────────
+     13 · BARRIO — negro y concreto, una sola familia (Archivo) de muy
+     condensada a muy ancha (ws6-t3, mockup B, 16-nov).
+     Estructura: tira de secciones pegada arriba, portada con el nombre
+     a todo lo ancho y una PEGATINA girada que lleva a reservar, cinta
+     corredera con los servicios Y SUS PRECIOS de la tabla, servicios
+     con los combos en tarjetas, cortes en REJILLA DE INSTAGRAM (con la
+     cuenta si la hay), retratos 4:5 en blanco y negro, reseñas sobre el
+     color de la barbería a bloque completo y, en el celular, un muelle
+     flotante con WhatsApp y «Reservar». No es `urbana`: ésa es de
+     bloques pegados sin aire y una cinta con TEXTO; ésta respira, va
+     sobre concreto claro y oscuro alternados y la cinta son los precios.
+     ──────────────────────────────────────────────────────────────── */
+  barrio: {
+    id: "barrio",
+    nombre: "Barrio",
+    para: "Barbería de barrio con estilo de calle: negro, concreto y tu color a bloque.",
+    estructura:
+      "Tira de secciones fija · nombre a todo lo ancho con pegatina · cinta con los precios · cortes en rejilla de Instagram · reseñas sobre tu color",
+    acentoSugerido: "cobre",
+    oscura: true,
+    secciones: [
+      {
+        id: "portada",
+        nombre: "Portada",
+        obligatoria: true,
+        consume: [],
+        fotos: [
+          FOTO_LOGO,
+          {
+            ...FOTO_PORTADA,
+            ayuda: "Sale en blanco y negro y oscurecida, con tu nombre encima. Si no subes ninguna, va el fondo negro.",
+          },
+        ],
+        copia: [
+          ...copiaPortada("Reservar cita", "Fades, barba y diseño."),
+          // Claves propias: portada.sello/lema son el sello de año de vintage,
+          // carta y club («EST. 1998»), no un botón de reservar (revisión U4).
+          { clave: "portada.pegatina", etiqueta: "Portada · pegatina (texto grande)", porDefecto: "Cita en 1 minuto", maxLen: 24 },
+          { clave: "portada.pegatinaNota", etiqueta: "Portada · pegatina (texto chico)", porDefecto: "sin llamar", maxLen: 40 },
+        ],
+      },
+      {
+        id: "servicios",
+        nombre: "Servicios y precios",
+        consume: ["servicios"],
+        textos: [
+          { campo: "titulo", etiqueta: "Título de servicios", porDefecto: "Servicios" },
+          {
+            campo: "subtitulo",
+            etiqueta: "Bajada de servicios",
+            porDefecto: "Toca el que quieras y aparta tu hora. El precio que ves es el que pagas.",
+          },
+        ],
+      },
+      {
+        id: "portafolio",
+        nombre: "Portafolio de cortes",
+        consume: ["galeria"],
+        textos: [{ campo: "titulo", etiqueta: "Título del portafolio", porDefecto: "Cortes" }],
+        copia: [
+          { clave: "portafolio.nota", etiqueta: "Portafolio · nota bajo tu Instagram", porDefecto: "Lo último que salió del sillón", maxLen: 60 },
+          { clave: "portafolio.seguir", etiqueta: "Portafolio · botón de Instagram", porDefecto: "Seguir", maxLen: 24 },
+        ],
+      },
+      {
+        id: "equipo",
+        nombre: "Barberos",
+        consume: ["barberos"],
+        textos: [
+          { campo: "titulo", etiqueta: "Título del equipo", porDefecto: "Barberos" },
+          { campo: "subtitulo", etiqueta: "Bajada del equipo", porDefecto: "Elige con quién. Cada uno tiene su estilo." },
+        ],
+        copia: [
+          // Igual que Oficio: «con» va en el código y el texto es solo el verbo, como
+          // en las otras doce. Así «Reservar con» guardado aquí no sale «Reservar
+          // con con Juan» en Oficio ni «Reservar con →» en las demás (revisión U3).
+          { ...COPIA_EQUIPO_CTA, etiqueta: "Equipo · botón de cada barbero (sigue «con <nombre>»)" },
+          // La misma clave y etiqueta que Oficio (revisión, U-menor).
+          { clave: "equipo.sinHorario", etiqueta: "Equipo · nota del barbero sin horario", porDefecto: "Todavía sin citas en línea", maxLen: 60 },
+        ],
+      },
+      {
+        id: "resenas",
+        nombre: "Reseñas de clientes",
+        consume: ["resenas"],
+        textos: [{ campo: "titulo", etiqueta: "Título de reseñas", porDefecto: "Reseñas" }],
+      },
+      secContacto({
+        textos: [
+          { campo: "titulo", etiqueta: "Título de contacto", porDefecto: "Ubicación" },
+          { campo: "subtitulo", etiqueta: "Bajada de contacto", porDefecto: "" },
+        ],
+        copia: [
+          { clave: "contacto.comoLlegar", etiqueta: "Contacto · botón del mapa", porDefecto: "Cómo llegar", maxLen: 40 },
+          { clave: "contacto.whatsapp", etiqueta: "Contacto · botón de WhatsApp", porDefecto: "WhatsApp", maxLen: 60 },
+        ],
+      }),
+      {
+        id: "reservar",
+        nombre: "Cierre con reserva",
+        consume: [],
+        textos: [
+          { campo: "titulo", etiqueta: "Título del cierre", porDefecto: "Te toca." },
+          { campo: "subtitulo", etiqueta: "Bajada del cierre", porDefecto: "Aparta tu hora en un minuto. Sin llamadas y sin hacer fila." },
+        ],
+        copia: [{ clave: "reservar.cta", etiqueta: "Cierre · botón", porDefecto: "Reservar cita", maxLen: 40 }],
+      },
+    ],
+  },
+
+  /* ────────────────────────────────────────────────────────────────
+     13 · REVISTA — premium y tranquila, como una revista de estudio.
+     Estructura: en escritorio, una columna FIJA a la izquierda que es el
+     ÍNDICE de la página (secciones en serif, «Mis citas», el horario y
+     Reservar abajo); en el teléfono, cabecera mínima y una barra abajo con
+     Servicios · Tienda · Visita · Reservar. Portada con el nombre enorme en
+     serif ligera y la foto en CÁPSULA; servicios con el encabezado quieto a
+     la izquierda; trabajo en tira de cápsulas sobre noche; una reseña en
+     grande; cierre oscuro. Sin fotos sigue siendo tipografía y aire: la
+     cápsula de portada se vuelve la inicial en itálica sobre el acento.
+     (La que en el mockup C se llamaba «Estudio»: ese id ya era de la 9.)
+     ──────────────────────────────────────────────────────────────── */
+  revista: {
+    id: "revista",
+    nombre: "Revista",
+    para: "Premium y tranquila: mucho aire, serif ligera y fotos en cápsula. Brilla con buenas fotos y sin ellas sigue fina.",
+    estructura: "Índice fijo a la izquierda con horario y Reservar · nombre enorme en serif · fotos en cápsula · barra abajo en el teléfono",
+    acentoSugerido: "vino",
+    secciones: [
+      {
+        id: "portada",
+        nombre: "Portada e índice",
+        obligatoria: true,
+        consume: [],
+        fotos: [
+          FOTO_LOGO,
+          {
+            id: "portada",
+            nombre: "Foto de portada",
+            proporcion: "3:4 vertical",
+            ayuda: "Sale en una cápsula alta, a la derecha del nombre. Un detalle (tijeras, la silla, una nuca) luce más que el local entero.",
+          },
+        ],
+        copia: [
+          { clave: "portada.kicker", etiqueta: "Portada · línea sobre el nombre", porDefecto: "Barbería con cita previa", maxLen: 60 },
+          ...copiaPortada("Reservar cita", "Un corte tranquilo, con cita y sin prisa.", "WhatsApp"),
+          { clave: "portada.secundario", etiqueta: "Portada · botón de ver servicios", porDefecto: "Ver servicios", maxLen: 40 },
+        ],
+      },
+      {
+        id: "servicios",
+        nombre: "Servicios y precios",
+        consume: ["servicios"],
+        textos: [
+          { campo: "titulo", etiqueta: "Título de servicios", porDefecto: "Servicios" },
+          { campo: "subtitulo", etiqueta: "Bajada de servicios", porDefecto: "Toca uno para elegir tu hora." },
+        ],
+        copia: [{ clave: "servicios.menu", etiqueta: "Servicios · en el índice", porDefecto: "Servicios", maxLen: 24 }],
+      },
+      {
+        id: "equipo",
+        nombre: "Barberos",
+        consume: ["barberos"],
+        textos: [
+          { campo: "titulo", etiqueta: "Título del equipo", porDefecto: "Equipo" },
+          {
+            campo: "subtitulo",
+            etiqueta: "Bajada del equipo",
+            porDefecto: "Puedes elegir con quién, o dejar que te asignemos al primero disponible.",
+          },
+        ],
+        copia: [
+          { ...COPIA_EQUIPO_CTA, etiqueta: "Equipo · botón de cada barbero (sigue «con <nombre>»)" },
+          { clave: "equipo.sinHorario", etiqueta: "Equipo · nota del barbero sin horario", porDefecto: "Todavía sin citas en línea.", maxLen: 60 },
+          { clave: "equipo.menu", etiqueta: "Equipo · en el índice", porDefecto: "Equipo", maxLen: 24 },
+        ],
+      },
+      {
+        id: "portafolio",
+        nombre: "Portafolio de cortes",
+        consume: ["galeria"],
+        textos: [
+          { campo: "titulo", etiqueta: "Título del portafolio", porDefecto: "Trabajo reciente" },
+          { campo: "subtitulo", etiqueta: "Bajada del portafolio", porDefecto: "Algunos cortes hechos aquí." },
+        ],
+        copia: [{ clave: "portafolio.menu", etiqueta: "Portafolio · en el índice", porDefecto: "Trabajo", maxLen: 24 }],
+      },
+      {
+        id: "resenas",
+        nombre: "Reseñas de clientes",
+        consume: ["resenas"],
+        textos: [{ campo: "titulo", etiqueta: "Título de reseñas", porDefecto: "Reseñas" }],
+        copia: [{ clave: "resenas.menu", etiqueta: "Reseñas · en el índice", porDefecto: "Reseñas", maxLen: 24 }],
+      },
+      secContacto({
+        textos: [
+          { campo: "titulo", etiqueta: "Título de contacto", porDefecto: "Visita" },
+          { campo: "subtitulo", etiqueta: "Bajada de contacto", porDefecto: "" },
+        ],
+        // Mismas claves que el resto (quien las reescribió no las pierde),
+        // con los literales de esta: «Dónde» y «WhatsApp» a secas.
+        copia: [
+          { clave: "contacto.etiquetaDireccion", etiqueta: "Contacto · rótulo de la dirección", porDefecto: "Dónde", maxLen: 40 },
+          { clave: "contacto.etiquetaHorario", etiqueta: "Contacto · rótulo del horario", porDefecto: "Horario", maxLen: 40 },
+          { clave: "contacto.etiquetaTelefono", etiqueta: "Contacto · rótulo del teléfono", porDefecto: "Teléfono", maxLen: 40 },
+          { clave: "contacto.comoLlegar", etiqueta: "Contacto · botón del mapa", porDefecto: "Cómo llegar", maxLen: 40 },
+          { clave: "contacto.whatsapp", etiqueta: "Contacto · botón de WhatsApp", porDefecto: "WhatsApp", maxLen: 60 },
+          { clave: "contacto.menu", etiqueta: "Contacto · en el índice", porDefecto: "Visita", maxLen: 24 },
+        ],
+      }),
+      {
+        id: "reservar",
+        nombre: "Cierre con reserva",
+        consume: [],
+        textos: [
+          { campo: "titulo", etiqueta: "Título del cierre", porDefecto: "Tu hora, cuando te quede bien." },
+          { campo: "subtitulo", etiqueta: "Bajada del cierre", porDefecto: "Reserva en un minuto." },
+        ],
+        copia: [{ clave: "reservar.cta", etiqueta: "Cierre · botón", porDefecto: "Reservar cita", maxLen: 40 }],
+      },
+    ],
+  },
 };
 
 /* ── Tienda (ws6-t1, 16-nov) ─────────────────────────────────────────
@@ -1009,7 +1339,11 @@ function secTienda(): BarberWebManifestSeccion {
 }
 for (const m of Object.values(BARBER_WEB_MANIFESTS)) m.secciones.push(secTienda());
 
-/** La lista para el selector del editor, en el orden en que se presentan. */
+/**
+ * La lista COMPLETA del motor (las quince registradas). El selector del
+ * editor NO la pinta entera: pinta BARBER_WEB_SELECTOR_LIST (landing.ts),
+ * que son solo las de BARBER_WEB_OFRECIDAS.
+ */
 export const BARBER_WEB_MANIFEST_LIST: BarberWebManifest[] = [
   BARBER_WEB_MANIFESTS.clasica,
   BARBER_WEB_MANIFESTS.equipo,
@@ -1023,9 +1357,73 @@ export const BARBER_WEB_MANIFEST_LIST: BarberWebManifest[] = [
   BARBER_WEB_MANIFESTS.carta,
   BARBER_WEB_MANIFESTS.nocturna,
   BARBER_WEB_MANIFESTS.club,
+  BARBER_WEB_MANIFESTS.oficio,
+  BARBER_WEB_MANIFESTS.barrio,
+  BARBER_WEB_MANIFESTS.revista,
 ];
 
-/** El manifiesto de una plantilla, cayendo a la clásica si el id no existe. */
+/** El manifiesto de una plantilla, cayendo a «Oficio» (la de por defecto) si el id no existe. */
 export function manifiestoBarberWeb(id: string | null | undefined): BarberWebManifest {
-  return BARBER_WEB_MANIFESTS[(id ?? "") as BarberWebTemplateId] ?? BARBER_WEB_MANIFESTS.clasica;
+  return BARBER_WEB_MANIFESTS[(id ?? "") as BarberWebTemplateId] ?? BARBER_WEB_MANIFESTS.oficio;
+}
+
+/* ── Oficio (ws6-t2): la vitrina va JUSTO después de la carta ────────
+   El bucle de la Tienda de arriba la pone al final, como en las demás.
+   En Oficio la vitrina es parte de la estructura (el mockup A la pone tras
+   «Servicios y precios») y trae SUS textos por defecto: «La vitrina», no
+   «Productos». Mismo id, mismas claves (tienda.cta, tienda.menu): la
+   barbería que ya la reescribió en otra plantilla conserva lo suyo. Un
+   orden guardado que no la menciona la recibe aquí (ordenDeSecciones). */
+{
+  const s = BARBER_WEB_MANIFESTS.oficio.secciones;
+  const i = s.findIndex((x) => x.id === "tienda");
+  // Sin la tienda en la lista, splice(-1, 1) se llevaría la ÚLTIMA sección
+  // («reservar»). Hoy el bucle de arriba siempre la agrega; esto es por si no.
+  if (i >= 0) {
+    const tienda = s.splice(i, 1)[0];
+    tienda.textos = [
+      { campo: "titulo", etiqueta: "Título de la tienda", porDefecto: "La vitrina" },
+      {
+        campo: "subtitulo",
+        etiqueta: "Bajada de la tienda",
+        porDefecto: "Lo mismo que usamos en el sillón. Apártalo en línea y recógelo aquí.",
+      },
+    ];
+    s.splice(s.findIndex((x) => x.id === "servicios") + 1, 0, tienda);
+  }
+}
+
+/* ── Barrio (ws6-t3): la tienda va JUSTO DESPUÉS de servicios ─────────
+   Así está en su maqueta: la tienda es parte de «lo que se vende», y en la
+   tira de arriba «Tienda» queda junto a «Servicios». Se mueve aquí, después
+   del `for` que la agrega al final de todas, para no tocar ese bucle ni el
+   orden de las otras doce. La barbería la sigue moviendo y apagando igual
+   (el orden guardado manda: ordenDeSecciones). El título dice «Tienda»
+   porque es la palabra de la tira y de la maqueta. */
+{
+  const lista = BARBER_WEB_MANIFESTS.barrio.secciones;
+  const i = lista.findIndex((s) => s.id === "tienda");
+  if (i >= 0) {
+    const [tienda] = lista.splice(i, 1);
+    tienda.textos = (tienda.textos ?? []).map((t) => (t.campo === "titulo" ? { ...t, porDefecto: "Tienda" } : t));
+    lista.splice(lista.findIndex((s) => s.id === "servicios") + 1, 0, tienda);
+  }
+}
+
+/* ── Revista (ws6-t6): la tienda va justo después de Servicios ──────
+   Como en su mockup: «Tienda» al lado de «Servicios» también en el orden
+   de la página, no al final. Solo cambia la POSICIÓN por omisión (quien ya
+   guardó un orden lo conserva, ver ordenDeSecciones) y los dos textos, con
+   los literales de esta plantilla; la sección es la misma de las doce. */
+{
+  const s = BARBER_WEB_MANIFESTS.revista.secciones;
+  const i = s.findIndex((x) => x.id === "tienda");
+  if (i >= 0) {
+    const [tienda] = s.splice(i, 1);
+    tienda.textos = [
+      { campo: "titulo", etiqueta: "Título de la tienda", porDefecto: "Tienda" },
+      { campo: "subtitulo", etiqueta: "Bajada de la tienda", porDefecto: "Lo que usamos aquí. Apártalo en línea y recógelo en tu cita." },
+    ];
+    s.splice(s.findIndex((x) => x.id === "servicios") + 1, 0, tienda);
+  }
 }

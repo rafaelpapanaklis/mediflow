@@ -101,7 +101,7 @@
   "sinTablaTitulo": "Falta un paso en la base de datos",
   "sinTablaCuerpo": "La tabla de la mini-web todavía no existe. Hay que aplicar sql/barber_complemento.sql en Supabase para poder guardar.",
   "upsellTitulo": "Tu página web ya está en línea",
-  "upsellCuerpo": "Con el plan Básico tu barbería tiene página web con la plantilla Clásica, tus servicios, tus barberos y tu botón de reservar. Para elegir entre las 8 plantillas, cambiar textos, subir tus fotos y publicar cuando quieras, sube a Avanzado.",
+  "upsellCuerpo": "Con el plan Básico tu barbería tiene página web con la plantilla {plantilla}, tus servicios, tus barberos y tu botón de reservar. Para elegir entre Oficio, Barrio y Revista, cambiar textos, subir tus fotos y publicar cuando quieras, sube a Avanzado.",
   "upsellBoton": "Ver planes",
   "upsellTuPagina": "Tu página",
   "textosTitulo": "Textos",

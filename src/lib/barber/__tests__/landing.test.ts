@@ -19,6 +19,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   BARBER_WEB_ACCENTS,
+  BARBER_WEB_TEMPLATE_DEFAULT,
   BARBER_WEB_TEMPLATE_IDS,
   configBarberWebVacia,
   esUrlDeMapa,
@@ -129,13 +130,21 @@ test("el PATCH acepta lo bueno y lo normaliza", () => {
    3 · Cambiar de plantilla NO borra contenido
    ══════════════════════════════════════════════════════════════ */
 
-test("las doce plantillas del manifiesto son exactamente las declaradas", () => {
+test("las plantillas del manifiesto son exactamente las declaradas", () => {
   assert.deepEqual(
     Object.keys(BARBER_WEB_MANIFESTS).sort(),
     [...BARBER_WEB_TEMPLATE_IDS].sort(),
   );
-  // 8 de la ola de la mini-web + estudio, carta, nocturna y club.
-  assert.equal(BARBER_WEB_TEMPLATE_IDS.length, 12);
+  // 8 de la ola de la mini-web + estudio, carta, nocturna y club + las tres
+  // de ws6 (16-nov): oficio, barrio y revista. Todas siguen REGISTRADAS
+  // aunque el selector solo ofrezca las tres nuevas (BARBER_WEB_OFRECIDAS).
+  // «Al menos 13» y no un número fijo (revisión ws6-t8 §5.1): un número que
+  // cada rama pisa es justo lo que rompió la unión; lo que importa es que
+  // las tres estén. Cuántas se OFRECEN lo fija ofrecidas.test.ts (3).
+  assert.ok(BARBER_WEB_TEMPLATE_IDS.length >= 13);
+  for (const id of ["oficio", "barrio", "revista"]) {
+    assert.ok((BARBER_WEB_TEMPLATE_IDS as readonly string[]).includes(id), id);
+  }
 });
 
 test("el contenido compartido sobrevive a un cambio de plantilla", () => {
@@ -376,19 +385,37 @@ test("las ocho se diferencian en ESTRUCTURA, no solo en color", () => {
   // La firma de una plantilla es el orden de sus secciones. Dos plantillas
   // con la misma firma son la misma con otro color, que es exactamente lo
   // que este vertical NO quiere vender.
+  //
+  // UNA excepción, a sabiendas: «oficio» y «revista» (ws6, 16-nov) llevan
+  // el MISMO orden porque sus mockups (A y C, aprobados tal cual por Rafael)
+  // lo llevan; lo que las separa es todo lo demás (arco del espejo y vitrina
+  // en Oficio; editorial a dos columnas y serif fina en Revista). Mover una
+  // sección solo para pasar esta prueba las apartaría del mockup aprobado.
+  // Cualquier OTRA pareja gemela sigue fallando.
+  const GEMELAS_PERMITIDAS = new Set(["oficio|revista"]);
   const firmas = new Map<string, string>();
   for (const id of BARBER_WEB_TEMPLATE_IDS) {
     const firma = BARBER_WEB_MANIFESTS[id].secciones.map((s) => s.id).join(">");
     const gemela = firmas.get(firma);
+    if (gemela && GEMELAS_PERMITIDAS.has([gemela, id].sort().join("|"))) continue;
     assert.equal(gemela, undefined, `«${id}» tiene la misma estructura que «${gemela}»: ${firma}`);
     firmas.set(firma, id);
   }
 });
 
-test("un id de plantilla desconocido cae a la clásica, no a una pantalla en blanco", () => {
-  assert.equal(manifiestoBarberWeb("no-existe").id, "clasica");
-  assert.equal(manifiestoBarberWeb(null).id, "clasica");
+test("un id de plantilla desconocido cae a «Oficio» (la de por defecto), no a una pantalla en blanco", () => {
+  assert.equal(manifiestoBarberWeb("no-existe").id, "oficio");
+  assert.equal(manifiestoBarberWeb(null).id, "oficio");
   assert.equal(manifiestoBarberWeb("vintage").id, "vintage");
+  // «Clásica» deja de ser la de por defecto pero sigue para quien la elija.
+  assert.equal(manifiestoBarberWeb("clasica").id, "clasica");
+});
+
+test("«Oficio» es la de por defecto: la que ve quien nunca eligió y la fija del Básico", () => {
+  // Una sola constante la decide para la página pública (shop-data), el
+  // editor, la API y el plan Básico (que no tiene editor ni fila guardada).
+  assert.equal(BARBER_WEB_TEMPLATE_DEFAULT, "oficio");
+  assert.equal(manifiestoBarberWeb(BARBER_WEB_TEMPLATE_DEFAULT).nombre, "Oficio");
 });
 
 test("el horario del local pasa a turnos del barbero: lunes=1, domingo=0, cerrados fuera", () => {

@@ -49,16 +49,57 @@ export const BARBER_WEB_TEMPLATE_IDS = [
   "carta",
   "nocturna",
   "club",
+  "oficio",
+  "barrio",
+  "revista",
 ] as const;
 
 export type BarberWebTemplateId = (typeof BARBER_WEB_TEMPLATE_IDS)[number];
 
-/** La de arranque. Es la que ve una barbería que nunca abrió el editor. */
-export const BARBER_WEB_TEMPLATE_DEFAULT: BarberWebTemplateId = "clasica";
+/**
+ * Las ÚNICAS que se OFRECEN, en el orden del selector de Mi web (16-nov,
+ * Rafael: «solo quiero que haya estas 3»).
+ *
+ * Las otras doce de BARBER_WEB_TEMPLATE_IDS siguen REGISTRADAS —su código,
+ * su manifiesto y sus pruebas no se tocan; Rafael decide luego si se
+ * quitan— pero ya no se eligen: no salen en el selector ni en miniatura, la
+ * API no las guarda (400) y una barbería que tenga una guardada se ve con
+ * la de por defecto. Eso se resuelve al LEER (plantillaOfrecidaBarberWeb),
+ * sin escribir en la base; sus textos, fotos y reseñas siguen, porque las
+ * claves de copia son compartidas entre plantillas.
+ */
+export const BARBER_WEB_OFRECIDAS = ["oficio", "barrio", "revista"] as const satisfies readonly BarberWebTemplateId[];
+
+export type BarberWebPlantillaOfrecida = (typeof BARBER_WEB_OFRECIDAS)[number];
+
+/**
+ * La de arranque. Es la que ve una barbería que nunca abrió el editor, la
+ * fija del plan Básico (que no tiene editor), la caída de un id desconocido
+ * y la que sustituye a una plantilla guardada que ya no se ofrece.
+ * «Oficio» desde el 16-nov (ws6-t2); antes era «clasica».
+ */
+export const BARBER_WEB_TEMPLATE_DEFAULT: BarberWebPlantillaOfrecida = "oficio";
 
 export function esPlantillaBarberWeb(v: unknown): v is BarberWebTemplateId {
   return typeof v === "string" && (BARBER_WEB_TEMPLATE_IDS as readonly string[]).includes(v);
 }
+
+/** ¿Se puede ELEGIR hoy? (Registrada no basta: tiene que estar en BARBER_WEB_OFRECIDAS.) */
+export function esPlantillaOfrecidaBarberWeb(v: unknown): v is BarberWebPlantillaOfrecida {
+  return typeof v === "string" && (BARBER_WEB_OFRECIDAS as readonly string[]).includes(v);
+}
+
+/**
+ * La plantilla que se PINTA para lo que haya guardado: la misma si se
+ * ofrece; si no —una de las doce viejas, un id desconocido o nada—, la de
+ * por defecto. La usan la página pública, el editor y la API al leer.
+ */
+export function plantillaOfrecidaBarberWeb(v: unknown): BarberWebPlantillaOfrecida {
+  return esPlantillaOfrecidaBarberWeb(v) ? v : BARBER_WEB_TEMPLATE_DEFAULT;
+}
+
+/** Los manifiestos del selector de Mi web: las ofrecidas, en su orden. */
+export const BARBER_WEB_SELECTOR_LIST = BARBER_WEB_OFRECIDAS.map((id) => BARBER_WEB_MANIFESTS[id]);
 
 /* ══════════════════════════════════════════════════════════════
    2 · Tipos del manifiesto

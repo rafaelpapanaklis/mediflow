@@ -26,6 +26,9 @@ import { PlantillaPrecios } from "./t-precios";
 import { PlantillaPremium } from "./t-premium";
 import { PlantillaUrbana } from "./t-urbana";
 import { PlantillaVintage } from "./t-vintage";
+import { PlantillaOficio } from "./t-oficio";
+import { PlantillaBarrio } from "./t-barrio";
+import { PlantillaRevista } from "./t-revista";
 import "./skins.css";
 
 export const BARBER_WEB_TEMPLATES: Record<BarberWebTemplateId, BarberWebTemplateComponent> = {
@@ -41,16 +44,19 @@ export const BARBER_WEB_TEMPLATES: Record<BarberWebTemplateId, BarberWebTemplate
   carta: PlantillaCarta,
   nocturna: PlantillaNocturna,
   club: PlantillaClub,
+  oficio: PlantillaOficio,
+  barrio: PlantillaBarrio,
+  revista: PlantillaRevista,
 };
 
 /**
  * Pinta la plantilla que diga `data.manifest.id`.
  *
- * Cae a la clásica si el id no existe: una barbería con una plantilla
+ * Cae a «Oficio» (la de por defecto) si el id no existe: una barbería con una plantilla
  * retirada de la lista sigue teniendo página, no una pantalla en blanco.
  */
 export function PlantillaBarberWeb({ data }: { data: BarberWebData }) {
-  const Componente = BARBER_WEB_TEMPLATES[data.manifest.id] ?? PlantillaClasica;
+  const Componente = BARBER_WEB_TEMPLATES[data.manifest.id] ?? PlantillaOficio;
   return <Componente data={data} />;
 }
 
