@@ -86,7 +86,10 @@
     "noResults": "No matches. You can add them below.",
     "newClient": "New client",
     "clientName": "Name",
-    "clientPhone": "WhatsApp (10 digits)",
+    "clientPhone": "WhatsApp",
+    "phoneCountry": "Phone country",
+    "phonePlaceholderMx": "10 digits",
+    "phonePlaceholderOther": "Number, without the country code",
     "visits": {
       "one": "{count} visit",
       "other": "{count} visits"
@@ -112,7 +115,8 @@
       "services": "Pick at least one service.",
       "barber": "Pick a barber.",
       "time": "Pick a valid time.",
-      "phone": "Type the WhatsApp number with 10 digits, or leave it empty."
+      "phone": "Type the WhatsApp number with 10 digits, or leave it empty.",
+      "phoneOther": "Type the {country} number ({len} digits, without the country code), or leave it empty."
     },
     "durationAuto": "Worked out from the services you picked. You can change it.",
     "durationManual": "Custom duration: this one wins over the catalog.",
@@ -215,7 +219,7 @@
     "add": "Add someone",
     "addTitle": "Add to the queue",
     "name": "Name",
-    "phone": "WhatsApp (10 digits)",
+    "phone": "WhatsApp",
     "phoneHint": "With WhatsApp you can ping them when they're almost up.",
     "barber": "With whom?",
     "anyBarber": "Whoever is free",

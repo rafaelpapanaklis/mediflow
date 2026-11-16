@@ -8,7 +8,7 @@
 // ═══════════════════════════════════════════════════════════════════════
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { mxTenDigits } from "@/lib/phone-mx";
+import { panelPhone } from "@/lib/barber/telefono-panel";
 import { hasBarberPermission } from "@/lib/barber/permissions";
 import { clientsViewScope, scopeUserFromCtx } from "@/lib/barber/own-visits";
 import {
@@ -147,7 +147,12 @@ export async function POST(req: Request) {
   const clientName = (asString(body.clientName) ?? "").slice(0, MAX_NAME);
   if (!clientName) return jsonError("Escribe el nombre del cliente.", 400);
 
-  const phone = mxTenDigits(asString(body.phone) ?? "");
+  // México igual que siempre; otro país con su lada (telefono-panel.ts). Uno
+  // escrito y malo se avisa (el mostrador ya lo valida igual antes de enviar).
+  const rawPhone = asString(body.phone) ?? "";
+  const tel = rawPhone ? panelPhone(asString(body.phoneCountry), rawPhone) : null;
+  if (tel && !tel.ok) return jsonError(tel.error, 400, { code: "PHONE_INVALID" });
+  const phone = tel ? tel.stored : null;
   const barberId = asString(body.barberId);
   if (barberId) {
     const barber = await prisma.barber.findFirst({

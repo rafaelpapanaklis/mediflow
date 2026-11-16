@@ -1,6 +1,6 @@
 "use client";
 
-import { soloDigitosTelefono } from "@/lib/barber/phone-format";
+import { TelefonoConPais } from "@/components/barber/telefono-con-pais";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -524,6 +524,8 @@ function NewClientModal({
   const [form, setForm] = useState({
     name: initialName,
     phone: initialPhone,
+    // País del teléfono: México por omisión (telefono-panel.ts decide qué se guarda).
+    phoneCountry: "MX",
     email: "",
     birthday: "",
     notes: "",
@@ -598,13 +600,18 @@ function NewClientModal({
         hint={t("search.hint")}
         error={err("phone")}
       >
-        <input
-          id="nc-phone"
-          className={s.input}
+        {/* México por omisión (como siempre); el turista elige su país. */}
+        <TelefonoConPais
+          inputId="nc-phone"
+          iso={form.phoneCountry}
+          onIsoChange={(iso) => setForm((f) => ({ ...f, phoneCountry: iso }))}
           value={form.phone}
-          inputMode="tel"
-          placeholder={t("form.phonePlaceholder")}
-          onChange={(e) => setForm((f) => ({ ...f, phone: soloDigitosTelefono(e.target.value) }))}
+          onValueChange={(phone) => setForm((f) => ({ ...f, phone }))}
+          selectClassName={s.select}
+          inputClassName={s.input}
+          countryLabel={t("form.phoneCountry")}
+          placeholderMx={t("form.phonePlaceholder")}
+          placeholderOther={t("form.phonePlaceholderOther")}
         />
       </Field>
 

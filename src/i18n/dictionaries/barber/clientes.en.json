@@ -89,6 +89,8 @@
     "namePlaceholder": "What you call them",
     "phone": "Phone",
     "phonePlaceholder": "10 digits",
+    "phoneCountry": "Phone country",
+    "phonePlaceholderOther": "Number, without the country code",
     "email": "Email (optional)",
     "birthday": "Birthday (optional)",
     "notes": "Notes",

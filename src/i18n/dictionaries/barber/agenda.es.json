@@ -86,7 +86,10 @@
     "noResults": "Sin resultados. Puedes darlo de alta abajo.",
     "newClient": "Cliente nuevo",
     "clientName": "Nombre",
-    "clientPhone": "WhatsApp (10 dígitos)",
+    "clientPhone": "WhatsApp",
+    "phoneCountry": "País del teléfono",
+    "phonePlaceholderMx": "10 dígitos",
+    "phonePlaceholderOther": "Número, sin la lada",
     "visits": {
       "one": "{count} visita",
       "other": "{count} visitas"
@@ -112,7 +115,8 @@
       "services": "Elige al menos un servicio.",
       "barber": "Elige al barbero.",
       "time": "Elige una hora válida.",
-      "phone": "Escribe el WhatsApp a 10 dígitos o déjalo vacío."
+      "phone": "Escribe el WhatsApp a 10 dígitos o déjalo vacío.",
+      "phoneOther": "Escribe el número de {country} ({len} dígitos, sin la lada) o déjalo vacío."
     },
     "durationAuto": "La calculan los servicios elegidos. Puedes cambiarla.",
     "durationManual": "Duración a mano: manda esta, no la del catálogo.",
@@ -215,7 +219,7 @@
     "add": "Anotar a alguien",
     "addTitle": "Anotar en la fila",
     "name": "Nombre",
-    "phone": "WhatsApp (10 dígitos)",
+    "phone": "WhatsApp",
     "phoneHint": "Con WhatsApp le puedes avisar cuando ya casi le toca.",
     "barber": "¿Con quién?",
     "anyBarber": "El que esté libre",

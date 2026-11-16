@@ -12,7 +12,6 @@
 // El aviso por WhatsApp de esta ola solo REGISTRA el evento (encola una
 // fila BarberMessage PENDING). El envío lo conecta la ola de WhatsApp.
 // ═══════════════════════════════════════════════════════════════════════
-import { soloDigitosTelefono } from "@/lib/barber/phone-format";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { BellRing, LogOut, Plus, RefreshCw, Scissors, Volume2 } from "lucide-react";
 import { type Dictionary } from "@/i18n/t";
@@ -33,6 +32,9 @@ import { Field, Modal, Pill, agendaCss } from "@/components/barber/agenda/agenda
 import { formatBarberPhone } from "@/lib/barber/phone-format";
 import { mxTenDigits } from "@/lib/phone-mx";
 import { WalkinQr } from "./walkin-qr";
+import { TelefonoConPais } from "@/components/barber/telefono-con-pais";
+import { panelPhone } from "@/lib/barber/telefono-panel";
+import { barberPhoneCountry } from "@/lib/barber/phone-countries";
 import { BarberoSelect } from "@/components/barber/agenda/barbero-select";
 import type { BarberPick } from "@/lib/barber/quien-trabaja";
 import css from "./walkin.module.css";
@@ -284,7 +286,8 @@ export function WalkinPanel(props: WalkinPanelProps) {
                             {t("barber.agenda.queue.actions.uncall")}
                           </button>
                         ) : null}
-                        {row.phone ? (
+                        {/* El aviso sale por el WhatsApp de la barbería: hoy solo a números de México. */}
+                        {mxTenDigits(row.phone ?? "") ? (
                           <button
                             type="button"
                             className={agendaCss.btn}
@@ -390,6 +393,8 @@ function AddWalkInDialog(props: {
   const { t } = props;
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
+  // México por omisión; el turista elige su país (telefono-panel.ts).
+  const [phoneIso, setPhoneIso] = useState("MX");
   const [barberId, setBarberId] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -397,7 +402,17 @@ function AddWalkInDialog(props: {
   const submit = async () => {
     if (!name.trim()) return setError(t("barber.agenda.queue.errors.name"));
     // Un teléfono a medias no se descarta en silencio: se avisa (igual que en la agenda).
-    if (phone.trim() && !mxTenDigits(phone)) return setError(t("barber.agenda.modal.errors.phone"));
+    if (phone.trim()) {
+      const tel = panelPhone(phoneIso, phone);
+      if (!tel.ok) {
+        const c = barberPhoneCountry(phoneIso);
+        return setError(
+          c.iso === "MX"
+            ? t("barber.agenda.modal.errors.phone")
+            : t("barber.agenda.modal.errors.phoneOther", { country: c.name, len: c.len }),
+        );
+      }
+    }
     setBusy(true);
     setError(null);
     try {
@@ -408,6 +423,7 @@ function AddWalkInDialog(props: {
           branchId: props.branchId,
           clientName: name.trim(),
           phone: phone.trim(),
+          phoneCountry: phoneIso,
           barberId: barberId || null,
         }),
       });
@@ -450,11 +466,17 @@ function AddWalkInDialog(props: {
         <input className={agendaCss.input} value={name} onChange={(e) => setName(e.target.value)} />
       </Field>
       <Field label={t("barber.agenda.queue.phone")} hint={t("barber.agenda.queue.phoneHint")}>
-        <input
-          className={agendaCss.input}
+        <TelefonoConPais
+          iso={phoneIso}
+          onIsoChange={setPhoneIso}
           value={phone}
-          onChange={(e) => setPhone(soloDigitosTelefono(e.target.value))}
-          inputMode="numeric"
+          onValueChange={setPhone}
+          selectClassName={agendaCss.select}
+          inputClassName={agendaCss.input}
+          countryLabel={t("barber.agenda.modal.phoneCountry")}
+          inputLabel={t("barber.agenda.queue.phone")}
+          placeholderMx={t("barber.agenda.modal.phonePlaceholderMx")}
+          placeholderOther={t("barber.agenda.modal.phonePlaceholderOther")}
         />
       </Field>
       <Field label={t("barber.agenda.queue.barber")}>

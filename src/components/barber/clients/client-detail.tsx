@@ -1,6 +1,8 @@
 "use client";
 
-import { soloDigitosTelefono } from "@/lib/barber/phone-format";
+import { mxTenDigits } from "@/lib/phone-mx";
+import { splitStoredPhone, telHref } from "@/lib/barber/telefono-panel";
+import { TelefonoConPais } from "@/components/barber/telefono-con-pais";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -287,7 +289,7 @@ export function BarberClientDetailScreen({
                   </span>
                   <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
                     <h1 className={s.detailName}>{client.name}</h1>
-                    <a className={s.detailPhone} href={`tel:+52${client.phone}`}>
+                    <a className={s.detailPhone} href={telHref(client.phone)}>
                       {prettyPhone(client.phone)}
                     </a>
                   </div>
@@ -296,7 +298,7 @@ export function BarberClientDetailScreen({
                 {/* Lo que se hace con un cliente en la mano: darle cita y
                     escribirle. Los dos se quedan DENTRO del panel: la Agenda
                     con él ya puesto y SU chat en Mensajes (no wa.me). */}
-                {canBook || (canMessage && client.phone) ? (
+                {canBook || (canMessage && mxTenDigits(client.phone)) ? (
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap", width: "100%" }}>
                     {canBook ? (
                       <Link
@@ -307,9 +309,9 @@ export function BarberClientDetailScreen({
                         {t("detail.book")}
                       </Link>
                     ) : null}
-                    {canMessage && client.phone ? (
+                    {canMessage && mxTenDigits(client.phone) ? (
                       <Link
-                        href={`/barber/mensajes?tel=${encodeURIComponent(soloDigitosTelefono(client.phone).slice(-10))}`}
+                        href={`/barber/mensajes?tel=${encodeURIComponent(mxTenDigits(client.phone) ?? "")}`}
                         className={`${s.btn} ${s.btnSm}`}
                         title={t("detail.messageTitle")}
                       >
@@ -718,7 +720,9 @@ function EditClientModal({
 }) {
   const [form, setForm] = useState({
     name: client.name,
-    phone: client.phone,
+    // Lo guardado, partido en país + número local (+34612345678 → ES · 612345678).
+    phone: splitStoredPhone(client.phone).local,
+    phoneCountry: splitStoredPhone(client.phone).iso || "MX",
     email: client.email ?? "",
     // El cumpleaños se ancla a mediodía UTC en el servidor, así que se
     // formatea con los getters UTC o el día se corre uno hacia atrás.
@@ -789,12 +793,17 @@ function EditClientModal({
       </Field>
 
       <Field label={t("form.phone")} htmlFor="ed-phone" error={err("phone")}>
-        <input
-          id="ed-phone"
-          className={s.input}
-          inputMode="tel"
+        <TelefonoConPais
+          inputId="ed-phone"
+          iso={form.phoneCountry}
+          onIsoChange={(iso) => setForm((f) => ({ ...f, phoneCountry: iso }))}
           value={form.phone}
-          onChange={(e) => setForm((f) => ({ ...f, phone: soloDigitosTelefono(e.target.value) }))}
+          onValueChange={(phone) => setForm((f) => ({ ...f, phone }))}
+          selectClassName={s.select}
+          inputClassName={s.input}
+          countryLabel={t("form.phoneCountry")}
+          placeholderMx={t("form.phonePlaceholder")}
+          placeholderOther={t("form.phonePlaceholderOther")}
         />
       </Field>
 

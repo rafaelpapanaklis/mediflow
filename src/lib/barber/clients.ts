@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { isMissingColumnError } from "@/lib/barber/db-errors";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { mxTenDigits } from "@/lib/phone-mx";
+import { panelPhone } from "@/lib/barber/telefono-panel";
 // Constantes de T6 (caja). Se IMPORTAN, no se copian: si la caja cambia el
 // sufijo con el que marca un canje, este módulo lo sigue viendo.
 import {
@@ -854,6 +855,8 @@ export async function listBarberClients(
 export interface UpsertClientInput {
   name?: unknown;
   phone?: unknown;
+  /** ISO-2 del país del teléfono (panel). Vacío o "MX" = México, como siempre (telefono-panel.ts). */
+  phoneCountry?: unknown;
   email?: unknown;
   birthday?: unknown;
   notes?: unknown;
@@ -899,10 +902,10 @@ export async function createOrLinkBarberClient(
   const name = typeof input.name === "string" ? input.name.trim().slice(0, 120) : "";
   if (!name) return { ok: false, error: "Escribe el nombre del cliente.", field: "name" };
 
-  const phone = normalizeBarberPhone(input.phone);
-  if (!phone) {
-    return { ok: false, error: "Escribe el teléfono a 10 dígitos.", field: "phone" };
-  }
+  // México igual que siempre (10 dígitos); otro país en «+E.164» (telefono-panel.ts).
+  const tel = panelPhone(input.phoneCountry, input.phone);
+  if (!tel.ok) return { ok: false, error: tel.error, field: "phone" };
+  const phone = tel.stored;
 
   const email = cleanEmail(input.email);
   if (email === "") return { ok: false, error: "Ese correo no se ve bien.", field: "email" };
@@ -1011,8 +1014,9 @@ export async function updateBarberClient(
   }
 
   if (input.phone !== undefined) {
-    const phone = normalizeBarberPhone(input.phone);
-    if (!phone) return { ok: false, error: "Escribe el teléfono a 10 dígitos.", field: "phone" };
+    const tel = panelPhone(input.phoneCountry, input.phone);
+    if (!tel.ok) return { ok: false, error: tel.error, field: "phone" };
+    const phone = tel.stored;
     if (phone !== row.phone) {
       const clash = await prisma.barberClient.findFirst({
         where: { barbershopId: ctx.barbershopId, phone, id: { not: clientId } },

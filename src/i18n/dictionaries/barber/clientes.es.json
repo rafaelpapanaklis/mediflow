@@ -89,6 +89,8 @@
     "namePlaceholder": "Como le dices tú",
     "phone": "Teléfono",
     "phonePlaceholder": "10 dígitos",
+    "phoneCountry": "País del teléfono",
+    "phonePlaceholderOther": "Número, sin la lada",
     "email": "Correo (opcional)",
     "birthday": "Cumpleaños (opcional)",
     "notes": "Notas",
