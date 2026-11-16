@@ -103,6 +103,11 @@ const PERMITIDOS_PANEL = new Set([
   "src/components/barber/afiliados/afiliados-screen.tsx", // compartir tu liga de afiliado
   "src/components/barber/billing/billing-screen.tsx", // hablar con DaleControl
   "src/components/barber/products/productos-client.tsx", // compartir un producto (waMeLink)
+  // Caja completa (ws6-t1): «Mandar resumen por WhatsApp» del corte. Sin número
+  // (no es un cliente): solo abre WhatsApp con el texto para quien elija el dueño.
+  "src/components/barber/cash/corte-core.ts",
+  "src/components/barber/cash/corte-print.tsx",
+  "src/components/barber/cash/session-modals.tsx",
 ]);
 // Pantallas del CLIENTE (él le escribe a la barbería): wa.me está bien.
 const PUBLICOS = [

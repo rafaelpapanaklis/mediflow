@@ -206,6 +206,94 @@ export async function loadSessionExtras(db: MovementsDb, barbershopId: string, s
   return out;
 }
 
+// ── Escritura de bajo nivel (sin permisos: las reglas viven en caja-movimientos.ts) ──
+
+/**
+ * El turno ABIERTO de la barbería, bloqueado FOR SHARE dentro de la
+ * transacción: dos gastos a la vez entran los dos, pero el cierre (que toma
+ * FOR UPDATE) espera a que terminen y un gasto que llega después del cierre
+ * ya no encuentra turno abierto. null = no hay caja abierta.
+ */
+export async function lockOpenSessionShared(db: MovementsDb, barbershopId: string): Promise<{ id: string } | null> {
+  if (!barbershopId) return null;
+  const rows = await db.$queryRaw<Array<{ id: string }>>`
+    SELECT "id" FROM "barber_cash_sessions"
+    WHERE "barbershopId" = ${barbershopId} AND "closedAt" IS NULL
+    ORDER BY "openedAt" DESC LIMIT 1
+    FOR SHARE
+  `;
+  return rows[0] ?? null;
+}
+
+/** ¿Este turno de ESTA barbería sigue abierto? (FOR SHARE: el cierre espera). */
+export async function lockSessionIfOpen(db: MovementsDb, barbershopId: string, sessionId: string): Promise<boolean> {
+  const rows = await db.$queryRaw<Array<{ id: string }>>`
+    SELECT "id" FROM "barber_cash_sessions"
+    WHERE "id" = ${sessionId} AND "barbershopId" = ${barbershopId} AND "closedAt" IS NULL
+    FOR SHARE
+  `;
+  return rows.length > 0;
+}
+
+export interface NewMovement {
+  id: string;
+  barbershopId: string;
+  sessionId: string | null;
+  type: CashMovementType;
+  method: CashMovementMethod;
+  /** Ya validado (> 0, 2 decimales). */
+  amount: Prisma.Decimal;
+  category: string | null;
+  note: string | null;
+  barberId: string | null;
+  payoutKind: BarberPayoutKind | null;
+  periodKey: string | null;
+  receiptUrl: string | null;
+  createdByUserId: string;
+  createdAt: Date;
+}
+
+export async function insertMovement(db: MovementsDb, m: NewMovement): Promise<void> {
+  await db.$executeRaw`
+    INSERT INTO "barber_cash_movements"
+      ("id", "barbershopId", "sessionId", "type", "method", "amount", "category", "note",
+       "barberId", "payoutKind", "periodKey", "receiptUrl", "createdByUserId", "createdAt")
+    VALUES (${m.id}, ${m.barbershopId}, ${m.sessionId}, ${m.type}, ${m.method}, ${m.amount.toFixed(2)}::numeric,
+            ${m.category}, ${m.note}, ${m.barberId}, ${m.payoutKind}, ${m.periodKey}, ${m.receiptUrl},
+            ${m.createdByUserId}, ${m.createdAt})
+  `;
+}
+
+/** Anula (nunca borra). 0 = ya estaba anulado o no es de esta barbería. */
+export async function markMovementVoided(
+  db: MovementsDb,
+  p: { barbershopId: string; id: string; userId: string; reason: string | null; now: Date },
+): Promise<number> {
+  return db.$executeRaw`
+    UPDATE "barber_cash_movements"
+    SET "voidedAt" = ${p.now}, "voidedByUserId" = ${p.userId}, "voidReason" = ${p.reason}
+    WHERE "id" = ${p.id} AND "barbershopId" = ${p.barbershopId} AND "voidedAt" IS NULL
+  `;
+}
+
+/** Adelantos/vales VIVOS por barbero en un periodo de Comisiones («YYYY-MM»). */
+export async function sumAdvances(
+  db: MovementsDb,
+  p: { barbershopId: string; barberIds: string[]; periodKey: string },
+): Promise<Map<string, Prisma.Decimal>> {
+  const out = new Map<string, Prisma.Decimal>();
+  if (!p.barbershopId || p.barberIds.length === 0) return out;
+  const rows = await db.$queryRaw<Array<{ barberId: string; total: Prisma.Decimal | string | number }>>`
+    SELECT "barberId", SUM("amount") AS "total" FROM "barber_cash_movements"
+    WHERE "barbershopId" = ${p.barbershopId} AND "type" = 'BARBER_PAYOUT' AND "payoutKind" = 'ADVANCE'
+      AND "periodKey" = ${p.periodKey} AND "voidedAt" IS NULL
+      AND "barberId" = ANY(${p.barberIds}::text[])
+    GROUP BY "barberId"
+  `;
+  for (const r of rows) out.set(r.barberId, new Prisma.Decimal(r.total));
+  return out;
+}
+
 /** El fondo que se dejó en el ÚLTIMO corte de la barbería (para sugerirlo al abrir). */
 export async function lastLeftForNext(db: MovementsDb, barbershopId: string): Promise<number | null> {
   if (!barbershopId) return null;

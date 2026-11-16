@@ -65,6 +65,7 @@ import {
   parseMoneyInput,
   parseQty,
   periodKeyFor,
+  periodRange,
   startOfDayInTz,
   sumMoney,
   toNum,
@@ -129,9 +130,11 @@ import {
 } from "@/lib/barber/memberships-core";
 
 import { cajaResumen, discountFromItems, esperadoEnEfectivo, type CajaResumen, type ResumenTicket } from "@/lib/barber/caja-resumen";
+import { parseCashCount, type CashCount } from "@/lib/barber/caja-movimientos-core";
 import {
   cashMovementsReady,
   lastLeftForNext,
+  lockOpenSessionShared,
   loadMovements,
   loadSessionExtras,
   type CashMovementRow,
@@ -669,43 +672,108 @@ export async function openCashSession(
 }
 
 /**
- * Cierra el turno abierto con el efectivo contado. Congela expectedAmount
- * (fondo + efectivo de tickets) y registra quién cerró. La diferencia se
- * deriva (contado − esperado). Guarda contra doble cierre (updateMany con
- * closedAt: null → 0 filas = ya estaba cerrado).
+ * Cierra el turno abierto (el corte). Contado = el total escrito o, si llega
+ * `countedBreakdown` (piezas por billete/moneda), la suma del conteo en
+ * Decimal (un total escrito distinto → 400). Congela expectedAmount con la
+ * fórmula única de caja-resumen.ts (fondo + efectivo + entradas − gastos −
+ * retiros − pagos − devoluciones en efectivo) y registra quién cerró; con
+ * el SQL de caja completa guarda también el conteo y el fondo para mañana
+ * (≤ contado). La diferencia se deriva (contado − esperado). No se cierra
+ * dos veces: el turno se bloquea FOR UPDATE; la segunda pestaña recibe 409
+ * SESSION_CLOSED con { sessionId } para enseñar el corte ya hecho.
  */
 export async function closeCashSession(
   ctx: BarberContext,
-  input: { countedAmount?: unknown; notes?: unknown },
+  input: { countedAmount?: unknown; countedBreakdown?: unknown; leftForNext?: unknown; notes?: unknown; sessionId?: unknown },
   now: Date = new Date(),
 ): Promise<CashSessionSummary> {
   assertBarberPermission(ctx, "cash.manage");
-  const countedAmount = parseMoneyInput(input.countedAmount, { field: "countedAmount", required: true });
+  const barbershopId = ctx.barbershopId;
+  if (!barbershopId) throw new BarberCajaError(401, "NO_SHOP", "Sin barbería");
+
+  // Conteo por billete/moneda (opcional): el total sale del conteo, en Decimal.
+  const hasBreakdown =
+    input.countedBreakdown !== undefined &&
+    input.countedBreakdown !== null &&
+    !(typeof input.countedBreakdown === "object" && Object.keys(input.countedBreakdown as object).length === 0);
+  let breakdown: CashCount | null = null;
+  let countedAmount: Money;
+  if (hasBreakdown) {
+    const parsed = parseCashCount(input.countedBreakdown);
+    if (!parsed) throw new BarberCajaError(400, "INVALID_COUNT", "El conteo por billete y moneda no es válido (solo números enteros).");
+    breakdown = parsed.count;
+    countedAmount = money(new Prisma.Decimal(parsed.cents).dividedBy(100));
+    if (input.countedAmount !== undefined && input.countedAmount !== null && input.countedAmount !== "") {
+      const typed = parseMoneyInput(input.countedAmount, { field: "countedAmount" });
+      if (!typed.equals(countedAmount)) {
+        throw new BarberCajaError(400, "COUNT_MISMATCH", `El total escrito no coincide con el conteo (${countedAmount.toFixed(2)}).`);
+      }
+    }
+  } else {
+    countedAmount = parseMoneyInput(input.countedAmount, { field: "countedAmount", required: true });
+  }
+  let leftForNext: Money | null = null;
+  if (input.leftForNext !== undefined && input.leftForNext !== null && input.leftForNext !== "") {
+    leftForNext = parseMoneyInput(input.leftForNext, { field: "leftForNext" });
+    if (leftForNext.gt(countedAmount)) {
+      throw new BarberCajaError(400, "LEFT_TOO_BIG", "No puedes dejar de fondo más de lo que contaste.");
+    }
+  }
   const notes = cleanNotes(input.notes);
+  const wantedId = typeof input.sessionId === "string" && input.sessionId ? input.sessionId : null;
 
-  const open = await getOpenCashSession(ctx.barbershopId);
-  if (!open) throw new BarberCajaError(409, "NO_OPEN_SESSION", "No hay un turno abierto");
-
-  const summary = await summarizeSession(ctx.barbershopId, open);
-  const expected = money(summary.expectedCash);
-
-  const r = await prisma.barberCashSession.updateMany({
-    where: { id: open.id, barbershopId: ctx.barbershopId, closedAt: null },
-    data: {
-      closedAt: now,
-      closedByUserId: ctx.barberUserId,
-      countedAmount,
-      expectedAmount: expected,
-      notes: [open.notes, notes].filter(Boolean).join("\n") || null,
+  // Una transacción con el turno bloqueado FOR UPDATE: dos pestañas que
+  // cierran a la vez se forman; la segunda ya lo encuentra cerrado (409 con
+  // el id para enseñar el corte hecho). Los gastos/retiros toman FOR SHARE,
+  // así que uno que llega mientras se cierra espera y luego ya no entra.
+  const closedId = await prisma.$transaction(
+    async (tx) => {
+      const locked = wantedId
+        ? await tx.$queryRaw<Array<{ id: string; closedAt: Date | null }>>`
+            SELECT "id", "closedAt" FROM "barber_cash_sessions"
+            WHERE "id" = ${wantedId} AND "barbershopId" = ${barbershopId} FOR UPDATE`
+        : await tx.$queryRaw<Array<{ id: string; closedAt: Date | null }>>`
+            SELECT "id", "closedAt" FROM "barber_cash_sessions"
+            WHERE "barbershopId" = ${barbershopId} AND "closedAt" IS NULL
+            ORDER BY "openedAt" DESC LIMIT 1 FOR UPDATE`;
+      const row = locked[0];
+      if (!row) {
+        throw new BarberCajaError(wantedId ? 404 : 409, wantedId ? "SESSION_NOT_FOUND" : "NO_OPEN_SESSION", wantedId ? "Turno no encontrado" : "No hay un turno abierto");
+      }
+      if (row.closedAt) {
+        throw new BarberCajaError(409, "SESSION_CLOSED", "Esta caja ya se cerró (otra persona o pestaña hizo el corte).", { sessionId: row.id });
+      }
+      const session = await tx.barberCashSession.findFirstOrThrow({ where: { id: row.id, barbershopId }, include: sessionInclude });
+      const summary = await summarizeSession(barbershopId, session, tx);
+      const r = await tx.barberCashSession.updateMany({
+        where: { id: row.id, barbershopId, closedAt: null },
+        data: {
+          closedAt: now,
+          closedByUserId: ctx.barberUserId,
+          countedAmount,
+          expectedAmount: money(summary.expectedCash),
+          notes: [session.notes, notes].filter(Boolean).join("\n") || null,
+        },
+      });
+      if (r.count === 0) throw new BarberCajaError(409, "SESSION_CLOSED", "Esta caja ya se cerró.", { sessionId: row.id });
+      if (summary.movementsReady && (breakdown || leftForNext)) {
+        await tx.$executeRaw`
+          UPDATE "barber_cash_sessions"
+          SET "countedBreakdown" = ${breakdown ? JSON.stringify(breakdown) : null}::jsonb,
+              "leftForNext" = ${leftForNext ? leftForNext.toFixed(2) : null}::numeric
+          WHERE "id" = ${row.id} AND "barbershopId" = ${barbershopId}
+        `;
+      }
+      return row.id;
     },
-  });
-  if (r.count === 0) throw new BarberCajaError(409, "SESSION_CLOSED", "El turno ya estaba cerrado");
+    { maxWait: 5000, timeout: 20000 },
+  );
 
   const closed = await prisma.barberCashSession.findFirstOrThrow({
-    where: { id: open.id, barbershopId: ctx.barbershopId },
+    where: { id: closedId, barbershopId },
     include: sessionInclude,
   });
-  return summarizeSession(ctx.barbershopId, closed);
+  return summarizeSession(barbershopId, closed);
 }
 
 export async function listCashSessions(
@@ -738,6 +806,59 @@ export async function listCashSessions(
   return sessions.map((s) => {
     const e = extras.get(s.id);
     return { ...toSessionRow(s, bySession.get(s.id) ?? []), countedBreakdown: e?.countedBreakdown ?? null, leftForNext: e?.leftForNext ?? null };
+  });
+}
+
+/** Un corte de la pestaña «Cortes»: el turno + su resumen (esperado desglosado e ingresos). */
+export interface CorteRow extends CashSessionRow {
+  resumen: CajaResumen;
+}
+
+/**
+ * Pestaña «Cortes» (y su CSV): los turnos ABIERTOS en un mes («YYYY-MM» en
+ * la zona de la barbería), del más reciente al más viejo, cada uno con su
+ * resumen. Tickets y movimientos se leen EN LOTE (dos consultas para todo el
+ * mes, no una por turno). cash.view.
+ */
+export async function listCortes(ctx: BarberContext, periodKey: string): Promise<CorteRow[]> {
+  assertBarberPermission(ctx, "cash.view");
+  const barbershopId = ctx.barbershopId;
+  if (!barbershopId) throw new BarberCajaError(400, "NO_SHOP", "Sin barbería");
+  const { start, end } = periodRange(periodKey, ctx.barbershop.timezone || DEFAULT_BARBER_TZ);
+  const sessions = await prisma.barberCashSession.findMany({
+    where: { barbershopId, openedAt: { gte: start, lt: end } },
+    orderBy: { openedAt: "desc" },
+    take: 200,
+    include: sessionInclude,
+  });
+  if (sessions.length === 0) return [];
+  const ids = sessions.map((s) => s.id);
+  const sales = await prisma.barberSale.findMany({ where: { barbershopId, cashSessionId: { in: ids } }, include: saleInclude });
+  const ready = await cashMovementsReady(prisma);
+  const [movements, extras] = ready
+    ? await Promise.all([loadMovements(prisma, { barbershopId, sessionIds: ids }), loadSessionExtras(prisma, barbershopId, ids)])
+    : [[] as CashMovementRow[], new Map<string, SessionExtras>()];
+  const salesBy = new Map<string, SaleRow[]>();
+  for (const s of sales) {
+    const list = salesBy.get(s.cashSessionId!) ?? [];
+    list.push(toSaleRow(s));
+    salesBy.set(s.cashSessionId!, list);
+  }
+  const movBy = new Map<string, CashMovementRow[]>();
+  for (const m of movements) {
+    const list = movBy.get(m.sessionId!) ?? [];
+    list.push(m);
+    movBy.set(m.sessionId!, list);
+  }
+  return sessions.map((s) => {
+    const rows = salesBy.get(s.id) ?? [];
+    const e = extras.get(s.id);
+    return {
+      ...toSessionRow(s, rows),
+      countedBreakdown: e?.countedBreakdown ?? null,
+      leftForNext: e?.leftForNext ?? null,
+      resumen: cajaResumen({ openingAmount: s.openingAmount, tickets: rows.map(resumenTicketOf), movements: movBy.get(s.id) ?? [] }),
+    };
   });
 }
 
@@ -1106,10 +1227,8 @@ export async function createCounterTicketTx(tx: Tx, input: CounterTicketInput): 
     throw new BarberCajaError(500, "INVALID_COUNTER_TICKET", "Línea de ticket de mostrador inválida");
   }
 
-  const session = await tx.barberCashSession.findFirst({
-    where: { barbershopId: input.barbershopId, closedAt: null },
-    select: { id: true },
-  });
+  // FOR SHARE: igual que un cobro, no se cuela en un corte que se está cerrando.
+  const session = await lockOpenSessionShared(tx, input.barbershopId);
   if (!session) throw new BarberCajaError(409, "NO_OPEN_SESSION", input.noSessionMessage);
 
   const created = await tx.barberSale.create({
@@ -1338,11 +1457,11 @@ export async function createSale(
 
   const sale = await prisma.$transaction(
     async (tx) => {
-      // 1. Turno abierto (se re-verifica DENTRO de la transacción).
-      const session = await tx.barberCashSession.findFirst({
-        where: { barbershopId, closedAt: null },
-        select: { id: true },
-      });
+      // 1. Turno abierto (se re-verifica DENTRO de la transacción) y
+      //    bloqueado FOR SHARE: un cierre en curso (FOR UPDATE) espera a que
+      //    este cobro termine, y un cobro que llega durante el cierre ya no
+      //    encuentra turno abierto (no se cuela en un corte congelado).
+      const session = await lockOpenSessionShared(tx, barbershopId);
       if (!session) throw new BarberCajaError(409, "NO_OPEN_SESSION", "Abre un turno antes de cobrar");
 
       // 2. Cita (opcional): de esta barbería, COMPLETADA y sin ticket vivo.

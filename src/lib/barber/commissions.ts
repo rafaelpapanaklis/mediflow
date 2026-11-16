@@ -55,6 +55,8 @@ import { isLoyaltyFreeLine } from "@/lib/barber/loyalty-core";
 // Sueldo opcional del barbero (ws6-t6): núcleo puro + SQL crudo que degrada.
 import { activeSalary, salaryForPeriodKey, type BarberSalary, type BarberSalaryPeriod } from "@/lib/barber/sueldo-core";
 import { insertSalaryPayment, loadSalaries, loadSalaryPaid, salaryReady } from "@/lib/barber/sueldo";
+import { cashMovementsReady, insertMovement, lockOpenSessionShared, sumAdvances } from "@/lib/barber/cash-movements";
+import { isCashMovementMethod, type CashMovementMethod } from "@/lib/barber/caja-movimientos-core";
 import { randomUUID } from "node:crypto";
 
 // ── Dinero ──────────────────────────────────────────────────────────────
@@ -519,6 +521,11 @@ export interface CommissionSummaryRow {
   paidStatus: CommissionPaidStatus;
   lastPaidAt: string | null;
   entryCount: number;
+  /**
+   * Adelantos/vales del periodo que se le dieron desde Caja (caja completa,
+   * ws6-t1). Informativo: NO se restan solos de «A pagar». Sin el SQL, ausente.
+   */
+  advances?: number;
 }
 
 export interface CommissionSummary {
@@ -826,6 +833,13 @@ export async function getCommissionSummary(
   });
   const rows = barbers.map((b) => ledgerRowFor(b, sales, entries, { salaries, periodKey }).row);
 
+  // Adelantos/vales del periodo registrados en Caja (sql/barber_caja_completa.sql).
+  // Solo se ENSEÑAN para descontarlos a mano: no cambian «A pagar» (ver reporte ws6-t1).
+  if (rows.length > 0 && (await cashMovementsReady(prisma))) {
+    const adv = await sumAdvances(prisma, { barbershopId, barberIds: rows.map((r) => r.barberId), periodKey });
+    for (const r of rows) r.advances = toNum(adv.get(r.barberId) ?? ZERO);
+  }
+
   const totals = rows.reduce(
     (t, r) => ({
       produced: t.produced.plus(r.produced),
@@ -944,6 +958,17 @@ export interface CommissionPayoutResult {
   paidAt: string;
   /** Lo que cubrió ESTE pago: el «a pagar» que había justo antes de marcar. */
   paidAmount: number;
+  /**
+   * Movimiento de caja que se creó con el pago («sale de la caja», caja
+   * completa ws6-t1). null = el pago no se registró en caja (o no había nada
+   * que entregar: «a pagar» ≤ 0).
+   */
+  movementId?: string | null;
+}
+
+/** Cómo sale el dinero del pago, si se registra en Caja (caja completa). */
+export interface CommissionCashOut {
+  method: CashMovementMethod;
 }
 
 /**
@@ -967,10 +992,20 @@ export async function markCommissionsPaid(
   ctx: BarberContext,
   params: { barberId: string; periodKey: string; expectedTotal?: unknown },
   now: Date = new Date(),
+  opts: { cashOut?: CommissionCashOut | null } = {},
 ): Promise<CommissionPayoutResult> {
   assertBarberPermission(ctx, "commissions.manage");
   if (!canMarkCommissionsPaid({ role: ctx.role, permissionsOverride: ctx.user.permissionsOverride })) {
     throw new BarberForbiddenError("commissions.manage");
+  }
+  // «Sale de la caja» (caja completa): además pide sacar efectivo y el SQL.
+  const cashOut = opts.cashOut ?? null;
+  if (cashOut) {
+    assertBarberPermission(ctx, "cash.withdraw");
+    if (!isCashMovementMethod(cashOut.method)) throw new BarberCajaError(400, "INVALID_METHOD", "¿Con qué se pagó? Efectivo, tarjeta, transferencia u otro.");
+    if (!(await cashMovementsReady(prisma))) {
+      throw new BarberCajaError(409, "CAJA_SQL_PENDING", "Falta aplicar sql/barber_caja_completa.sql: el pago no se puede registrar en Caja.");
+    }
   }
   if (!isValidPeriodKey(params.periodKey)) {
     throw new BarberCajaError(400, "INVALID_PERIOD", "Periodo inválido (usa YYYY-MM)");
@@ -1003,7 +1038,7 @@ export async function markCommissionsPaid(
         periodKey: params.periodKey,
       });
       if (pendingEntryIds.length === 0 && !salaryDue) {
-        return { marked: 0, paidAt: now.toISOString(), paidAmount: 0 };
+        return { marked: 0, paidAt: now.toISOString(), paidAmount: 0, movementId: null };
       }
       if (expected !== null && !expected.equals(money(row.totalToPay))) {
         throw new BarberCajaError(
@@ -1036,7 +1071,34 @@ export async function markCommissionsPaid(
           paidByUserId: ctx.barberUserId ?? null,
         });
       }
-      return { marked: r.count + (salaryMarked ? 1 : 0), paidAt: now.toISOString(), paidAmount: row.totalToPay };
+      // Un solo pago = un solo registro (las entradas/sueldo marcados) + SU
+      // movimiento de caja, en la MISMA transacción: si no hay caja abierta
+      // para pagar en efectivo, no se marca nada.
+      let movementId: string | null = null;
+      if (cashOut && money(row.totalToPay).gt(ZERO)) {
+        const session = await lockOpenSessionShared(tx, barbershopId);
+        if (!session && cashOut.method === "CASH") {
+          throw new BarberCajaError(409, "NO_OPEN_SESSION", "No hay caja abierta: ábrela para pagar en efectivo desde la caja, o quita «sale de la caja».");
+        }
+        movementId = randomUUID();
+        await insertMovement(tx, {
+          id: movementId,
+          barbershopId,
+          sessionId: session?.id ?? null,
+          type: "BARBER_PAYOUT",
+          method: cashOut.method,
+          amount: money(row.totalToPay),
+          category: null,
+          note: null,
+          barberId: params.barberId,
+          payoutKind: barber.commissionType === "SALARY" ? "SALARY" : "COMMISSION",
+          periodKey: params.periodKey,
+          receiptUrl: null,
+          createdByUserId: ctx.barberUserId,
+          createdAt: now,
+        });
+      }
+      return { marked: r.count + (salaryMarked ? 1 : 0), paidAt: now.toISOString(), paidAmount: row.totalToPay, movementId };
     },
     { maxWait: 5000, timeout: 15000 },
   );
