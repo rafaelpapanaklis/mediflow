@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import toast from "react-hot-toast";
 import {
+  ArrowLeftRight,
   Banknote,
   CreditCard,
   Landmark,
@@ -29,7 +30,7 @@ import { TicketModal } from "./ticket-modal";
 import type { SaleDraftList, SaleDraftRow } from "@/lib/barber/sale-drafts";
 import { SaleDraftsList } from "@/components/barber/clients/sale-drafts-list";
 import { ClientChargeBridge } from "@/components/barber/clients/client-charge-bridge";
-import { CancelSaleModal, CloseSessionModal, OpenSessionModal } from "./session-modals";
+import { CancelSaleModal, ChangeMethodModal, CloseSessionModal, OpenSessionModal } from "./session-modals";
 import { SessionDetailModal } from "./session-detail";
 
 type ModalState =
@@ -38,6 +39,7 @@ type ModalState =
   | { kind: "open" }
   | { kind: "close" }
   | { kind: "cancel"; sale: SaleRow }
+  | { kind: "method"; sale: SaleRow }
   | { kind: "history"; row: CashSessionRow };
 
 const METHOD_ICON: Record<BarberPaymentMethod, LucideIcon> = {
@@ -250,7 +252,14 @@ export function CajaClient({
                       <td data-label={t("caja.colItems")} style={{ whiteSpace: "normal", maxWidth: 260 }}>
                         {s.cancelled ? <BadgeNew tone="neutral">{t("common.cancelled")}</BadgeNew> : s.itemsSummary}
                       </td>
-                      <td data-label={t("caja.colMethod")}>{methodLabel(s.paymentMethod)}</td>
+                      <td data-label={t("caja.colMethod")}>
+                        {methodLabel(s.paymentMethod)}
+                        {(s.methodChanges ?? []).length > 0 ? (
+                          <span className="bcaja-muted" style={{ display: "block", fontSize: 11.5 }} title={(s.methodChanges ?? []).map((m) => t("caja.changedBy", { from: methodLabel(m.from), to: methodLabel(m.to), name: m.by, time: fmtTime(m.at, tz) })).join("\n")}>
+                            {t("caja.changedFrom", { method: methodLabel(s.methodChanges[0].from) })}
+                          </span>
+                        ) : null}
+                      </td>
                       <td className="bcaja-num" data-label={t("caja.colTip")}>{fmtMoney(s.tip)}</td>
                       <td className="bcaja-num" data-label={t("caja.colTotal")}><strong>{fmtMoney(s.total)}</strong></td>
                       <td>
@@ -258,6 +267,11 @@ export function CajaClient({
                           <Link href={`/barber/caja/ticket/${s.id}`} className="icon-btn-new" title={t("caja.view")} aria-label={t("caja.view")}>
                             <Printer size={13} />
                           </Link>
+                          {canManage && !s.cancelled && s.paymentMethod !== "STRIPE" && (
+                            <button type="button" className="icon-btn-new" title={t("caja.changeMethod")} aria-label={t("caja.changeMethod")} onClick={() => setModal({ kind: "method", sale: s })}>
+                              <ArrowLeftRight size={13} />
+                            </button>
+                          )}
                           {canManage && !s.cancelled && (
                             <button type="button" className="icon-btn-new" title={t("caja.cancelTicket")} aria-label={t("caja.cancelTicket")} onClick={() => setModal({ kind: "cancel", sale: s })}>
                               <XCircle size={13} />
@@ -403,6 +417,18 @@ export function CajaClient({
       )}
       {modal.kind === "history" && (
         <SessionDetailModal dict={dict} row={modal.row} tz={tz} onClose={closeModal} />
+      )}
+      {modal.kind === "method" && (
+        <ChangeMethodModal
+          dict={dict}
+          sale={modal.sale}
+          onClose={closeModal}
+          onDone={(m) => {
+            toast.success(t("caja.changeMethodDone", { method: methodLabel(m) }));
+            closeModal();
+            refresh();
+          }}
+        />
       )}
       {modal.kind === "cancel" && (
         <CancelSaleModal

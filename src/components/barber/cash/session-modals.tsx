@@ -8,6 +8,8 @@ import { closeExpectedView } from "./close-expected";
 import { CloseExpectedBreakdown } from "./close-expected-breakdown";
 import { BarberModal } from "./modal";
 import { useBarberT } from "./use-barber-t";
+import type { BarberPaymentMethod } from "@/lib/barber/types";
+import { COUNTER_METHODS } from "@/lib/barber/method-change-core";
 import { fmtMoney, fmtSigned, fmtTime, parseRequiredAmountText, toCents, fromCents, PAYMENT_METHOD_KEYS } from "./money";
 
 // Forma única (sin unión discriminada): con strict:false TS no estrecha
@@ -298,6 +300,68 @@ export function CancelSaleModal({ dict, sale, onClose, onDone }: { dict: Diction
           <label className="field-new__label">{t("common.reason")}</label>
           <input className="input-new" autoFocus value={reason} onChange={(e) => setReason(e.target.value)} placeholder={t("caja.cancelReasonPlaceholder")} maxLength={300} />
         </div>
+      </div>
+    </BarberModal>
+  );
+}
+
+/**
+ * «Cambiar método de pago» de un ticket ya cobrado (lógica L2, ronda 2): se
+ * marcó Efectivo y era Tarjeta. Solo con el turno abierto (Caja solo enseña
+ * este botón en los tickets del turno vivo); el servidor lo vuelve a revisar
+ * y deja la bitácora. El corte por método se recalcula solo.
+ */
+export function ChangeMethodModal({ dict, sale, onClose, onDone }: { dict: Dictionary; sale: SaleRow; onClose: () => void; onDone: (method: BarberPaymentMethod) => void }) {
+  const t = useBarberT(dict);
+  const [method, setMethod] = useState<BarberPaymentMethod | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit() {
+    if (!method || busy) return;
+    setBusy(true);
+    setError(null);
+    const r = await postJson(`/api/barber/sales/${sale.id}/payment-method`, { paymentMethod: method });
+    setBusy(false);
+    if (!r.ok) {
+      setError(r.error === "network" || !r.error ? t("common.error") : r.error);
+      return;
+    }
+    onDone(method);
+  }
+
+  return (
+    <BarberModal
+      open
+      title={t("caja.changeMethodTitle")}
+      onClose={onClose}
+      closeLabel={t("common.close")}
+      footer={
+        <>
+          <button type="button" className="btn-new btn-new--ghost" onClick={onClose} disabled={busy}>{t("common.back")}</button>
+          <button type="button" className="btn-new barber-btn-primary" onClick={submit} disabled={!method || busy}>
+            {busy ? t("common.saving") : method ? t("caja.changeMethodConfirm", { method: t(PAYMENT_METHOD_KEYS[method]) }) : t("caja.changeMethod")}
+          </button>
+        </>
+      }
+    >
+      <div className="bcaja-form">
+        <div className="bcaja-totals">
+          <div className="bcaja-totals__row"><span>{sale.itemsSummary}</span><span>{fmtMoney(sale.total)}</span></div>
+          <div className="bcaja-totals__row"><span>{t("caja.changeMethodNow")}</span><span>{t(PAYMENT_METHOD_KEYS[sale.paymentMethod])}</span></div>
+        </div>
+        <div className="field-new">
+          <label className="field-new__label">{t("caja.changeMethodTo")}</label>
+          <div className="bcaja-seg" role="radiogroup" aria-label={t("caja.changeMethodTo")}>
+            {COUNTER_METHODS.filter((m) => m !== sale.paymentMethod).map((m) => (
+              <button key={m} type="button" role="radio" aria-checked={method === m} className={`bcaja-seg__btn ${method === m ? "bcaja-seg__btn--on" : ""}`} onClick={() => setMethod(m)}>
+                {t(PAYMENT_METHOD_KEYS[m])}
+              </button>
+            ))}
+          </div>
+        </div>
+        <p className="bcaja-hint" style={{ margin: 0 }}>{t("caja.changeMethodBody")}</p>
+        {error && <div className="bcaja-alert bcaja-alert--danger" role="alert">{error}</div>}
       </div>
     </BarberModal>
   );

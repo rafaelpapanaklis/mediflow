@@ -14,7 +14,7 @@ import { getBarberDict } from "@/i18n/dictionaries/barber";
 import type { Dictionary } from "@/i18n/t";
 import { makeBarberT } from "@/lib/barber/i18n";
 import { PENDING_LOOKBACK_DAYS } from "@/lib/barber/cash";
-import { CloseSessionModal } from "../session-modals";
+import { ChangeMethodModal, CloseSessionModal } from "../session-modals";
 import { SessionDetailModal } from "../session-detail";
 import { TicketNewClient, newClientPrefill } from "../ticket-new-client";
 
@@ -102,4 +102,17 @@ test("comisiones: con renta mayor que lo producido el botón dice «Registrar su
   const t = makeBarberT(cajaDict("es"));
   assert.equal(t("comisiones.markOwed"), "Registrar su pago");
   assert.match(t("comisiones.markOwedBody", { name: "Dos", amount: "$1,310.00", period: "noviembre 2026" }), /^Dos te debe \$1,310\.00 en noviembre 2026/);
+});
+
+test("ronda 2 · «Cambiar método de pago»: dice con qué se cobró y solo ofrece los OTROS métodos del mostrador", () => {
+  const sale = { id: "v1", itemsSummary: "Corte de cabello", total: 180, paymentMethod: "CASH", methodChanges: [] } as unknown as Parameters<typeof ChangeMethodModal>[0]["sale"];
+  const es = texto(renderToStaticMarkup(<ChangeMethodModal dict={cajaDict("es")} sale={sale} onClose={() => {}} onDone={() => {}} />));
+  assert.match(es, /Cambiar método de pago/);
+  assert.match(es, /Cobrado con Efectivo/);
+  assert.match(es, /Cambiar a Tarjeta Transferencia \(SPEI\)/, "las opciones son los otros dos");
+  assert.doesNotMatch(es, /Cambiar a Efectivo/);
+  assert.match(es, /Después del corte, solo se puede cancelar/);
+  const en = texto(renderToStaticMarkup(<ChangeMethodModal dict={cajaDict("en")} sale={sale} onClose={() => {}} onDone={() => {}} />));
+  assert.match(en, /Change payment method/);
+  assert.match(en, /After the cash count, it can only be cancelled/);
 });

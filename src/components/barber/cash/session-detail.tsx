@@ -94,7 +94,14 @@ export function SessionDetailModal({
                       <td data-label={t("caja.colItems")} style={{ whiteSpace: "normal", maxWidth: 260 }}>
                         {s.cancelled ? <BadgeNew tone="neutral">{t("common.cancelled")}</BadgeNew> : s.itemsSummary}
                       </td>
-                      <td data-label={t("caja.colMethod")}>{methodLabel(s.paymentMethod)}</td>
+                      <td data-label={t("caja.colMethod")}>
+                        {methodLabel(s.paymentMethod)}
+                        {(s.methodChanges ?? []).length > 0 ? (
+                          <span className="bcaja-muted" style={{ display: "block", fontSize: 11.5 }}>
+                            {t("caja.changedFrom", { method: methodLabel(s.methodChanges[0].from) })}
+                          </span>
+                        ) : null}
+                      </td>
                       <td className="bcaja-num" data-label={t("caja.colTip")}>{fmtMoney(s.tip)}</td>
                       <td className="bcaja-num" data-label={t("caja.colTotal")}><strong>{fmtMoney(s.total)}</strong></td>
                       <td>

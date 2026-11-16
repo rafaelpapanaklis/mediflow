@@ -104,6 +104,14 @@ import {
   type StarBonus,
 } from "@/lib/barber/stars-core";
 import {
+  appendMethodChange,
+  METHOD_CHANGE_MESSAGES,
+  METHOD_CHANGE_PREFIX,
+  methodChangeBlocker,
+  parseMethodChanges,
+  type MethodChange,
+} from "@/lib/barber/method-change-core";
+import {
   BARBER_DEPOSIT_LINE_PREFIX,
   BARBER_SALE_TAG_PREFIX,
   buildSaleTag,
@@ -239,6 +247,8 @@ export interface SaleRow {
   kind: BarberSaleKind;
   items: BarberSaleItemDTO[];
   itemsSummary: string;
+  /** Bitácora de «Cambiar método» (quién, cuándo, de qué a qué), en orden. */
+  methodChanges: MethodChange[];
 }
 
 export interface SaleDetail extends SaleRow {
@@ -411,6 +421,7 @@ export function toSaleRow(s: SaleWithRelations): SaleRow {
     notes: stripSaleTag(s.notes),
     cancelled: isSaleCancelled(s),
     kind: saleKindOf(s.notes),
+    methodChanges: parseMethodChanges(s.notes),
     items: s.items.map((it) => ({
       id: it.id,
       serviceId: it.serviceId,
@@ -428,7 +439,7 @@ function emptyBreakdown(): MethodBreakdown {
   return { CASH: z(), CARD: z(), SPEI: z(), STRIPE: z() };
 }
 
-function breakdownOf(sales: SaleRow[]): { byMethod: MethodBreakdown; cashTips: Money; cashTotal: Money } {
+export function breakdownOf(sales: Pick<SaleRow, "cancelled" | "paymentMethod" | "subtotal" | "tip" | "total">[]): { byMethod: MethodBreakdown; cashTips: Money; cashTotal: Money } {
   const acc: Record<BarberPaymentMethod, { count: number; subtotal: Money; tip: Money; total: Money }> = {
     CASH: { count: 0, subtotal: ZERO, tip: ZERO, total: ZERO },
     CARD: { count: 0, subtotal: ZERO, tip: ZERO, total: ZERO },
@@ -1111,6 +1122,10 @@ function cleanNotes(raw: unknown, max = 500): string | null {
   // El sello interno de los tickets de mostrador solo lo escribe el servidor.
   if (s.includes(BARBER_SALE_TAG_PREFIX)) {
     throw new BarberCajaError(400, "INVALID_INPUT", `La nota no puede contener "${BARBER_SALE_TAG_PREFIX.trim()}"`);
+  }
+  // Ni la bitácora de cambios de método (la escribe solo changeSalePaymentMethod).
+  if (s.includes(METHOD_CHANGE_PREFIX)) {
+    throw new BarberCajaError(400, "INVALID_INPUT", `La nota no puede contener "${METHOD_CHANGE_PREFIX.trim()}"`);
   }
   return s;
 }
@@ -1878,6 +1893,67 @@ export async function cancelSale(
         now,
       );
       return tx.barberSale.findUniqueOrThrow({ where: { id: saleId }, include: saleInclude });
+    },
+    { maxWait: 5000, timeout: 15000 },
+  );
+  return toSaleRow(sale);
+}
+
+/**
+ * «Cambiar método de pago» de un ticket YA COBRADO (lógica L2, ronda 2).
+ * Requisitos: cash.manage, ticket de ESTA barbería, no cancelado, cobrado en
+ * el mostrador (no STRIPE) y su turno sigue ABIERTO. Después del corte solo
+ * se cancela. Deja la bitácora (quién, cuándo, de qué a qué) al final de las
+ * notas; el corte por método y el esperado en efectivo se recalculan solos
+ * porque salen de `paymentMethod`. Si el ticket vendió/renovó una membresía,
+ * el periodo que pagó se corrige igual (la tarjeta enseña ese método).
+ */
+export async function changeSalePaymentMethod(
+  ctx: BarberContext,
+  saleId: string,
+  input: { paymentMethod?: unknown } = {},
+  now: Date = new Date(),
+): Promise<SaleRow> {
+  assertBarberPermission(ctx, "cash.manage");
+  const barbershopId = ctx.barbershopId;
+  const sale = await prisma.$transaction(
+    async (tx) => {
+      // Candado del ticket: no se cruza con una cancelación ni con otro cambio.
+      await tx.$queryRaw`
+        SELECT "id" FROM "barber_sales"
+        WHERE "id" = ${saleId} AND "barbershopId" = ${barbershopId}
+        FOR UPDATE
+      `;
+      const s = await tx.barberSale.findFirst({
+        where: { id: saleId, barbershopId },
+        select: { id: true, notes: true, paymentMethod: true, cashSessionId: true, cashSession: { select: { closedAt: true } } },
+      });
+      if (!s) throw new BarberCajaError(404, "SALE_NOT_FOUND", "Ticket no encontrado");
+      const blocker = methodChangeBlocker({
+        current: s.paymentMethod,
+        next: input.paymentMethod,
+        cancelled: isSaleCancelled(s),
+        hasSession: Boolean(s.cashSessionId && s.cashSession),
+        sessionClosed: Boolean(s.cashSession?.closedAt),
+      });
+      if (blocker) {
+        const m = METHOD_CHANGE_MESSAGES[blocker];
+        throw new BarberCajaError(m.status, blocker, m.message);
+      }
+      const next = input.paymentMethod as BarberPaymentMethod;
+      const userName = `${ctx.user.firstName} ${ctx.user.lastName}`.trim();
+      await tx.barberSale.update({
+        where: { id: s.id },
+        data: {
+          paymentMethod: next,
+          notes: appendMethodChange(s.notes, { at: now.toISOString(), by: userName, from: s.paymentMethod, to: next }),
+        },
+      });
+      const tag = parseSaleTag(s.notes);
+      if (tag?.k === "membership") {
+        await tx.barberClientMembership.updateMany({ where: { id: tag.cm, barbershopId }, data: { paymentMethod: next } });
+      }
+      return tx.barberSale.findUniqueOrThrow({ where: { id: s.id }, include: saleInclude });
     },
     { maxWait: 5000, timeout: 15000 },
   );
