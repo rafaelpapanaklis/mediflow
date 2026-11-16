@@ -54,6 +54,7 @@
     "scheduleLink": "Ir a la agenda",
     "formNew": "Nuevo barbero",
     "formEdit": "Editar barbero",
+    "moveBranchHint": "Para cambiarlo de sede no debe tener citas próximas. Su horario y sus bloqueos se van con él.",
     "name": "Nombre",
     "namePlaceholder": "Ej. Luis Ramírez",
     "nickname": "Apodo",

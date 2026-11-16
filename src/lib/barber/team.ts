@@ -21,6 +21,7 @@ import {
   cleanText,
 } from "@/lib/barber/branches";
 import { normalizarConfigBarberWeb, turnosDesdeHorarioDelLocal } from "@/lib/barber/landing";
+import { BARBER_NON_BLOCKING_STATUSES } from "@/lib/barber/agenda";
 import { getBarberPlan } from "@/lib/barber/plans";
 import { barberPlanHasFeature, isBarberUnlimited } from "@/lib/barber/plan-shared";
 import type { BarberCommissionType, BarberRole } from "@/lib/barber/types";
@@ -483,6 +484,7 @@ export async function updateBarberProfile(
     where: { id: barberId, barbershopId: { in: ids } },
     select: {
       id: true,
+      barbershopId: true,
       isActive: true,
       commissionType: true,
       commissionPct: true,
@@ -490,6 +492,22 @@ export async function updateBarberProfile(
     },
   });
   if (!current) throw new BarberAdminError("Barbero no encontrado.", 404);
+
+  // Cambio de sede (L3 ronda 2, D4): solo sin citas futuras. Si las tiene, se
+  // dice cuántas y no se mueve nada (las citas son de la sede donde se apartaron).
+  let nuevaSede: string | null = null;
+  if (typeof input.barbershopId === "string" && input.barbershopId && input.barbershopId !== current.barbershopId) {
+    nuevaSede = await targetBranchId(ctx, input.barbershopId);
+    const futuras = await prisma.barberAppointment.count({
+      where: {
+        barberId,
+        barbershopId: current.barbershopId,
+        startAt: { gte: new Date() },
+        status: { notIn: BARBER_NON_BLOCKING_STATUSES },
+      },
+    });
+    if (futuras > 0) throw new BarberAdminError(mensajeCitasFuturas(futuras), 409);
+  }
 
   const data: Record<string, unknown> = {};
   if (input.name !== undefined) {
@@ -528,12 +546,39 @@ export async function updateBarberProfile(
     }
   }
 
+  if (nuevaSede) {
+    // Al final de la lista de la sede nueva; su horario y sus bloqueos que
+    // aún no terminan se van con él (si no, quedarían colgados en la vieja).
+    const last = await prisma.barber.findFirst({
+      where: { barbershopId: nuevaSede },
+      orderBy: { sortOrder: "desc" },
+      select: { sortOrder: true },
+    });
+    data.barbershopId = nuevaSede;
+    data.sortOrder = (last?.sortOrder ?? -1) + 1;
+    const desde = current.barbershopId;
+    const [, , updated] = await prisma.$transaction([
+      prisma.barberSchedule.updateMany({ where: { barberId, barbershopId: desde }, data: { barbershopId: nuevaSede } }),
+      prisma.barberTimeOff.updateMany({
+        where: { barberId, barbershopId: desde, endAt: { gt: new Date() } },
+        data: { barbershopId: nuevaSede },
+      }),
+      prisma.barber.update({ where: { id: barberId }, data, select: BARBER_SELECT }),
+    ]);
+    return toBarberRow(updated as BarberRowRaw);
+  }
+
   const updated = await prisma.barber.update({
     where: { id: barberId },
     data,
     select: BARBER_SELECT,
   });
   return toBarberRow(updated as BarberRowRaw);
+}
+
+/** «Tiene 3 citas próximas…»: el porqué de no moverlo de sede (puro, probado). */
+export function mensajeCitasFuturas(n: number): string {
+  return `Tiene ${n} ${n === 1 ? "cita próxima" : "citas próximas"} en esta sede. Muévelas a otro barbero o cancélalas en la Agenda y luego cámbialo de sede.`;
 }
 
 /**

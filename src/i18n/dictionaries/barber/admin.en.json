@@ -54,6 +54,7 @@
     "scheduleLink": "Go to the calendar",
     "formNew": "New barber",
     "formEdit": "Edit barber",
+    "moveBranchHint": "To move them to another location they must have no upcoming appointments. Their hours and time off move with them.",
     "name": "Name",
     "namePlaceholder": "e.g. Luis Ramirez",
     "nickname": "Nickname",

@@ -26,7 +26,8 @@ test("el error de un formulario de administración se trae a la vista al aparece
 
 test("la sede cerrada sale marcada y deshabilitada, y el alta por defecto va a una abierta", () => {
   const src = leer("components/barber/team/barbers-client.tsx");
-  assert.match(src, /<option key=\{b\.id\} value=\{b\.id\} disabled=\{!b\.isActive\}>/);
+  // Cerrada = deshabilitada, salvo la sede actual del barbero al editarlo (L3 ronda 2).
+  assert.match(src, /<option key=\{b\.id\} value=\{b\.id\} disabled=\{!b\.isActive && b\.id !== form\.barbershopId\}>/);
   assert.match(src, /b\.isActive \? b\.label : `\$\{b\.label\} \(\$\{t\("branch\.closed"\)\.toLowerCase\(\)\}\)`/);
   assert.match(src, /const openBranches = branches\.filter\(\(b\) => b\.isActive\)/);
 });
