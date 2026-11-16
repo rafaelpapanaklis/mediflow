@@ -55,7 +55,7 @@ import { isLoyaltyFreeLine } from "@/lib/barber/loyalty-core";
 // Sueldo opcional del barbero (ws6-t6): núcleo puro + SQL crudo que degrada.
 import { activeSalary, salaryForPeriodKey, type BarberSalary, type BarberSalaryPeriod } from "@/lib/barber/sueldo-core";
 import { insertSalaryPayment, loadSalaries, loadSalaryPaid, salaryReady } from "@/lib/barber/sueldo";
-import { cashMovementsReady, insertMovement, loadAdvances, lockOpenSessionShared, settleAdvances, type AdvanceRow } from "@/lib/barber/cash-movements";
+import { cashMovementsReady, insertMovement, loadAdvances, lockOpenSessionShared, settleAdvances, unsettleAdvances, type AdvanceRow } from "@/lib/barber/cash-movements";
 import { isCashMovementMethod, type CashMovementMethod } from "@/lib/barber/caja-movimientos-core";
 import { randomUUID } from "node:crypto";
 
@@ -1149,6 +1149,47 @@ export async function markCommissionsPaid(
     },
     { maxWait: 5000, timeout: 15000 },
   );
+}
+
+/**
+ * Deshace un pago de comisión ligado a Caja (revisión ws6-t8, N2): dentro de
+ * la transacción de quien anula el movimiento, con el MISMO candado del pago.
+ * Las entradas de comisión de ese pago (paidAt = la hora del pago) vuelven a
+ * quedar pendientes y los adelantos que descontó vuelven a restarse.
+ *
+ * NO deshace un pago que incluyó SUELDO: el sueldo pagado es un renglón de
+ * barber_salary_payments (uno por barbero y periodo) y deshacerlo sería
+ * borrarlo. En ese caso, 409 SALARY_PAID_NOT_UNDOABLE y no se toca nada.
+ */
+export async function undoCommissionPaymentTx(
+  tx: Prisma.TransactionClient,
+  ctx: BarberContext,
+  p: { barberId: string; periodKey: string; paidAt: Date },
+): Promise<{ unmarked: number; advancesRestored: number }> {
+  if (!canMarkCommissionsPaid({ role: ctx.role, permissionsOverride: ctx.user.permissionsOverride })) {
+    throw new BarberForbiddenError("commissions.manage");
+  }
+  const barbershopId = ctx.barbershopId;
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`dcb:pay:${barbershopId}:${p.barberId}:${p.periodKey}`}))`;
+  if (await salaryReady(tx)) {
+    const sal = await tx.$queryRaw<Array<{ n: number }>>`
+      SELECT COUNT(*)::int AS "n" FROM "barber_salary_payments"
+      WHERE "barbershopId" = ${barbershopId} AND "barberId" = ${p.barberId} AND "periodKey" = ${p.periodKey} AND "paidAt" = ${p.paidAt}
+    `;
+    if (Number(sal[0]?.n ?? 0) > 0) {
+      throw new BarberCajaError(
+        409,
+        "SALARY_PAID_NOT_UNDOABLE",
+        "Ese pago incluyó el sueldo del periodo y el sueldo pagado no se puede deshacer desde Caja. Corrígelo con un movimiento de caja y una nota.",
+      );
+    }
+  }
+  const r = await tx.barberCommissionEntry.updateMany({
+    where: { barbershopId, barberId: p.barberId, periodKey: p.periodKey, paidAt: p.paidAt },
+    data: { paidAt: null },
+  });
+  const advancesRestored = await unsettleAdvances(tx, { barbershopId, barberId: p.barberId, periodKey: p.periodKey, at: p.paidAt });
+  return { unmarked: r.count, advancesRestored };
 }
 
 /** Recibo imprimible: resumen del barbero + sus entradas del periodo. */

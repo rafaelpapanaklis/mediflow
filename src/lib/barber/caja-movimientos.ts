@@ -26,6 +26,7 @@ import type { BarberPermissionKey } from "@/lib/barber/permissions";
 import {
   BarberCajaError,
   DEFAULT_BARBER_TZ,
+  undoCommissionPaymentTx,
   isValidPeriodKey,
   periodKeyFor,
   periodRange,
@@ -35,6 +36,7 @@ import {
   CASH_ONLY_TYPES,
   cleanOptionalText,
   isBarberPayoutKind,
+  isLinkedCommissionMovement,
   isCashExpenseCategory,
   isCashMovementMethod,
   isCashMovementType,
@@ -209,12 +211,11 @@ export async function voidCashMovement(
       "Ese adelanto ya se descontó en un pago de comisiones o sueldo. Para corregirlo, anula primero ese pago.",
     );
   }
-  if (found.type === "BARBER_PAYOUT" && (found.payoutKind === "COMMISSION" || found.payoutKind === "SALARY")) {
-    throw new BarberCajaError(
-      409,
-      "LINKED_PAYOUT",
-      "Ese pago se marcó en Comisiones (comisión o sueldo) y no se anula desde Caja.",
-    );
+  // Pago marcado en Comisiones: anularlo DESHACE ese pago (revisión ws6-t8,
+  // N2). Pide además poder marcar pagado (commissions.manage, no rol Barbero).
+  const linked = isLinkedCommissionMovement(found);
+  if (linked && (!found.barberId || !found.periodKey)) {
+    throw new BarberCajaError(409, "LINKED_PAYOUT", "Ese pago no dice de qué barbero ni de qué periodo: no se puede deshacer.");
   }
   const reason = cleanOptionalText(input.reason, 300);
 
@@ -225,6 +226,9 @@ export async function voidCashMovement(
       }
       const n = await markMovementVoided(tx, { barbershopId, id: found.id, userId: ctx.barberUserId, reason, now });
       if (n === 0) throw new BarberCajaError(409, "ALREADY_VOIDED", "Ese movimiento ya estaba anulado.");
+      if (linked) {
+        await undoCommissionPaymentTx(tx, ctx, { barberId: found.barberId!, periodKey: found.periodKey!, paidAt: new Date(found.createdAt) });
+      }
     },
     { maxWait: 5000, timeout: 15000 },
   );

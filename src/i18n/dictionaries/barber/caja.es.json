@@ -717,7 +717,8 @@
     "voidTitle": "Anular movimiento",
     "voidBody": "No se borra: queda tachado en la lista, con quién lo anuló y cuándo, y deja de contar en el corte.",
     "voidConfirm": "Anular",
-    "voided": "Movimiento anulado"
+    "voided": "Movimiento anulado",
+    "voidLinkedBody": "Deshace el pago marcado en Comisiones: la comisión vuelve a quedar pendiente, los adelantos que descontó vuelven a restarse y este movimiento queda tachado. Un pago que incluyó sueldo no se puede deshacer."
   },
   "corte": {
     "title": "Corte de caja",

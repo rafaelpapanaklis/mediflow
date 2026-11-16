@@ -8,6 +8,7 @@ import type { CashMovementRow } from "@/lib/barber/cash-movements";
 import {
   CASH_EXPENSE_CATEGORIES,
   CASH_MOVEMENT_METHODS,
+  isLinkedCommissionMovement,
   parseMovementAmount,
   type BarberPayoutKind,
   type CashMovementMethod,
@@ -326,7 +327,7 @@ export function VoidMovementModal({
             <span>{fmtMoney(movement.amount)}</span>
           </div>
         </div>
-        <div className="bcaja-alert bcaja-alert--warning">{t("mov.voidBody")}</div>
+        <div className="bcaja-alert bcaja-alert--warning">{t(isLinkedCommissionMovement(movement) ? "mov.voidLinkedBody" : "mov.voidBody")}</div>
         {error && <div className="bcaja-alert bcaja-alert--danger" role="alert">{error}</div>}
         <div className="field-new">
           <label className="field-new__label" htmlFor="bcaja-void-reason">{t("common.reason")} <span className="bcaja-muted">({t("common.optional")})</span></label>

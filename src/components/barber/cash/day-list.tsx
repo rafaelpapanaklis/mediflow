@@ -202,7 +202,7 @@ function DayRowView({
               <ImageIcon size={13} />
             </a>
           )}
-          {!readOnly && !m.voidedAt && onVoidMovement && (canVoid ? canVoid(m) : false) && m.payoutKind !== "COMMISSION" && m.payoutKind !== "SALARY" && (
+          {!readOnly && !m.voidedAt && !m.settledAt && onVoidMovement && (canVoid ? canVoid(m) : false) && (
             <button type="button" className="icon-btn-new" title={t("mov.void")} aria-label={t("mov.void")} onClick={() => onVoidMovement(m)} data-mov-anular-abrir>
               <XCircle size={13} />
             </button>

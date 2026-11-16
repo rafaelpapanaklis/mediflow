@@ -19,7 +19,7 @@ import {
 import type { Dictionary } from "@/i18n/t";
 import type { CashState, CheckoutContext, PendingAppointment, SaleRow } from "@/lib/barber/cash";
 import type { CashMovementRow } from "@/lib/barber/cash-movements";
-import type { CashMovementType } from "@/lib/barber/caja-movimientos-core";
+import { isLinkedCommissionMovement, type CashMovementType } from "@/lib/barber/caja-movimientos-core";
 import { sumMoneyBy } from "@/lib/barber/money";
 import { CardNew } from "@/components/ui/design-system/card-new";
 import { KpiCard } from "@/components/ui/design-system/kpi-card";
@@ -120,7 +120,9 @@ export function CajaClient({
   const resumen = open?.resumen ?? null;
   const currentPeriod = todayKey.slice(0, 7);
   const tabs: Array<"hoy" | "cortes" | "gastos"> = ready ? ["hoy", "cortes", "gastos"] : ["hoy", "cortes"];
-  const canVoid = (m: CashMovementRow) => (m.type === "EXPENSE" || m.type === "DEPOSIT" ? can.expenses : can.withdraw);
+  // Un pago marcado en Comisiones se anula deshaciendo ese pago: pide además poder marcar pagado.
+  const canVoid = (m: CashMovementRow) =>
+    (m.type === "EXPENSE" || m.type === "DEPOSIT" ? can.expenses : can.withdraw) && (!isLinkedCommissionMovement(m) || can.payCommissions);
 
   const moveButtons: Array<{ type: CashMovementType; icon: typeof Banknote; show: boolean; needsOpen: boolean }> = [
     { type: "EXPENSE", icon: ShoppingBag, show: can.expenses, needsOpen: false },

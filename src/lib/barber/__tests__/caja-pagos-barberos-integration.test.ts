@@ -110,9 +110,43 @@ test("«sale de la caja en efectivo»: UN pago (entradas marcadas) + SU movimien
   assert.equal(otra.marked, 0);
   assert.equal((await movementsOf(ctx.barbershopId)).length, 1, "un solo movimiento");
 
-  // Y ese pago ligado no se anula desde Caja.
-  const e = await errorOf(voidCashMovement(ctx, r.movementId!, {}));
-  assert.ok(e instanceof BarberCajaError && e.code === "LINKED_PAYOUT");
+  // N2: anular ese pago desde Caja (caja abierta) lo DESHACE: comisión pendiente otra vez, esperado de vuelta.
+  const sinComisiones = { ...ctx, user: { ...ctx.user, permissionsOverride: ["cash.view", "cash.withdraw", "cash.expenses"] } } as BarberContext;
+  const e = await errorOf(voidCashMovement(sinComisiones, r.movementId!, {}));
+  assert.ok(e instanceof BarberForbiddenError && e.permission === "commissions.manage", "pide la llave de marcar pagado");
+  const v = await voidCashMovement(ctx, r.movementId!, { reason: "clic equivocado" });
+  assert.ok(v.voidedAt);
+  const deshecho = (await getCommissionSummary(ctx, PERIOD)).rows.find((x) => x.barberId === juan)!;
+  assert.equal(deshecho.totalToPay, 120, "vuelve a deberse");
+  assert.equal(deshecho.paidStatus, "PENDING");
+  assert.equal((await getCashState(ctx)).open!.expectedCash, 1000 + 220, "el pago anulado ya no resta");
+  // Y se puede volver a pagar, una sola vez.
+  const otra2 = await markCommissionsPaid(ctx, { barberId: juan, periodKey: PERIOD, expectedTotal: 120 }, new Date(), { cashOut: { method: "CASH" } });
+  assert.equal(otra2.paidAmount, 120);
+});
+
+test("N2: deshacer un pago con adelanto descontado devuelve el adelanto a restar; con sueldo no se deshace (409)", { skip: skipDb }, async (t) => {
+  if (skip) return t.skip(skip);
+  const { ctx, juan, corte } = await shop();
+  await createSale(ctx, { barberId: juan, items: [{ kind: "service", id: corte }], paymentMethod: "CARD" }, FEATURES);
+  const adelanto = await createCashMovement(ctx, { type: "BARBER_PAYOUT", amount: 30, barberId: juan });
+  const pago = await markCommissionsPaid(ctx, { barberId: juan, periodKey: PERIOD, expectedTotal: 70 }, new Date(), { cashOut: { method: "CASH" } });
+  assert.equal(pago.paidAmount, 70, "100 − 30");
+  await voidCashMovement(ctx, pago.movementId!, {});
+  const row = (await getCommissionSummary(ctx, PERIOD)).rows.find((x) => x.barberId === juan)!;
+  assert.equal(row.advances, 30, "el adelanto vuelve a restarse");
+  assert.equal(row.totalToPay, 70);
+  const ad = (await getCashState(ctx)).open!.movements.find((m) => m.id === adelanto.movement.id)!;
+  assert.equal(ad.settledAt, null);
+
+  if (!hasSalary) return;
+  const fijo = (await prisma.barber.create({ data: { barbershopId: ctx.barbershopId, name: "Fijo", commissionType: "SALARY" } })).id;
+  await prisma.$executeRaw`UPDATE "barber_barbers" SET "salaryAmount" = 500, "salaryPeriod" = 'MONTHLY' WHERE "id" = ${fijo}`;
+  const ps = await markCommissionsPaid(ctx, { barberId: fijo, periodKey: PERIOD }, new Date(), { cashOut: { method: "CASH" } });
+  const e = await errorOf(voidCashMovement(ctx, ps.movementId!, {}));
+  assert.ok(e instanceof BarberCajaError && e.code === "SALARY_PAID_NOT_UNDOABLE", String(e));
+  const sigue = (await getCashState(ctx)).open!.movements.find((m) => m.id === ps.movementId)!;
+  assert.equal(sigue.voidedAt, null, "no se tocó nada");
 });
 
 test("en efectivo SIN caja abierta → 409 y NO se marca nada; por transferencia sí, fuera de caja", { skip: skipDb }, async (t) => {

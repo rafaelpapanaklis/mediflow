@@ -717,7 +717,8 @@
     "voidTitle": "Void entry",
     "voidBody": "It isn't deleted: it stays crossed out, with who voided it and when, and stops counting in the close.",
     "voidConfirm": "Void",
-    "voided": "Entry voided"
+    "voided": "Entry voided",
+    "voidLinkedBody": "Undoes the payment marked in Commissions: the commission goes back to pending, the advances it deducted are deducted again and this entry stays crossed out. A payment that included salary can't be undone."
   },
   "corte": {
     "title": "Register close",

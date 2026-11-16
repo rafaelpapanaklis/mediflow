@@ -64,6 +64,21 @@ export function drawerSign(m: { type: CashMovementType; method: CashMovementMeth
   return m.type === "DEPOSIT" ? 1 : -1;
 }
 
+/**
+ * ¿Es el movimiento de un pago marcado en Comisiones? (revisión ws6-t8):
+ * el pago de comisión/sueldo «sale de la caja» y, con renta de silla a favor
+ * del dueño, la entrada «entra a la caja». Anularlo deshace ese pago.
+ */
+export function isLinkedCommissionMovement(m: {
+  type: CashMovementType;
+  payoutKind: BarberPayoutKind | null;
+  barberId: string | null;
+  periodKey: string | null;
+}): boolean {
+  if (m.type === "BARBER_PAYOUT") return m.payoutKind === "COMMISSION" || m.payoutKind === "SALARY";
+  return m.type === "DEPOSIT" && m.barberId !== null && m.periodKey !== null;
+}
+
 // ── Monto tecleado ──────────────────────────────────────────────────────
 
 export type AmountError = "required" | "format" | "zero" | "tooBig";
