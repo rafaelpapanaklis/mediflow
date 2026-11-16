@@ -370,7 +370,12 @@
     "payAlreadyPaid": "Ya pagado antes en este periodo: {amount}.",
     "markedPaidAmount": "Pago registrado: {amount}",
     "nothingToPay": "No había nada pendiente por pagar.",
-    "entryCovered": "Cubierto por membresía o lealtad: comisiona sobre el precio normal"
+    "entryCovered": "Cubierto por membresía o lealtad: comisiona sobre el precio normal",
+    "advances": "Adelantos del periodo: {amount}",
+    "advancesPay": "Este periodo se le dieron {amount} en adelantos/vales desde Caja. Descuéntalos al entregarle el dinero.",
+    "fromCash": "Sale de la caja en efectivo ({amount})",
+    "fromCashHint": "Queda como pago a barbero en la caja abierta y baja lo que debe haber en el cajón. Un solo registro: no lo anotes otra vez en Caja.",
+    "fromCashNoSession": "No hay caja abierta: ábrela en Caja para pagar desde el cajón."
   },
   "productos": {
     "title": "Productos",
@@ -797,5 +802,13 @@
       "no": "No",
       "voided": "Anulado"
     }
+  },
+  "payc": {
+    "pickBarber": "Elige el barbero para ver lo que se le debe.",
+    "body": "Se paga TODO lo pendiente de {period}, igual que «Marcar pagado» en Comisiones (un solo registro).",
+    "nothing": "No tiene nada pendiente por pagar en este periodo.",
+    "needsOpen": "Para pagar en efectivo desde el cajón, abre la caja primero.",
+    "confirm": "Marcar pagado {amount}",
+    "done": "Pago registrado: {amount}"
   }
 }

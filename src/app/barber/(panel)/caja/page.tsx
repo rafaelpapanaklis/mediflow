@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import "@/components/barber/cash/money.css";
 import { redirect } from "next/navigation";
 import { getBarberContext, hasBarberPermission } from "@/lib/barber-auth";
+import { canMarkCommissionsPaid } from "@/lib/barber/permissions";
 import { requireBarberPaidAccess } from "@/lib/barber/paid-access";
 import { getBarberPlan } from "@/lib/barber/plans";
 import { getBarberDict, getBarberT } from "@/i18n/dictionaries/barber";
@@ -64,6 +65,8 @@ export default async function Page() {
       perms={{
         expenses: hasBarberPermission(permUser, "cash.expenses"),
         withdraw: hasBarberPermission(permUser, "cash.withdraw"),
+        // Comisión/sueldo desde Caja = el mismo «Marcar pagado» de Comisiones.
+        payCommissions: plan.features.commissions === true && canMarkCommissionsPaid(permUser),
       }}
       starsDict={((getBarberDict(ctx.barbershop.locale).barber as Dictionary).estrellas ?? {}) as Dictionary}
       locale={ctx.barbershop.locale === "en" ? "en" : "es"}

@@ -34,6 +34,7 @@ import { CortesTab } from "./cortes-tab";
 import { GastosTab } from "./gastos-tab";
 import { categoryLabel, MovementModal, VoidMovementModal } from "./movement-modals";
 import { DayList } from "./day-list";
+import { PayCommissionPanel } from "./pay-commission-panel";
 import { dayKeyInTz, isStaleSession } from "./caja-dia-core";
 
 type ModalState =
@@ -62,6 +63,8 @@ export interface CajaPermissions {
   expenses: boolean;
   /** cash.withdraw: sacar efectivo y pagar a barberos. */
   withdraw: boolean;
+  /** Puede «Marcar pagado» comisión/sueldo (commissions.manage, no rol Barbero, plan con comisiones). */
+  payCommissions: boolean;
 }
 
 export function CajaClient({
@@ -105,7 +108,12 @@ export function CajaClient({
   const open = state.open;
   const tz = state.timezone;
   const ready = state.movementsReady === true;
-  const can: CajaPermissions = { manage: canManage, expenses: ready && perms?.expenses === true, withdraw: ready && perms?.withdraw === true };
+  const can: CajaPermissions = {
+    manage: canManage,
+    expenses: ready && perms?.expenses === true,
+    withdraw: ready && perms?.withdraw === true,
+    payCommissions: ready && perms?.withdraw === true && perms?.payCommissions === true,
+  };
   const now = new Date();
   const todayKey = dayKeyInTz(now.toISOString(), tz);
   const stale = open ? isStaleSession(open.session.openedAt, now, tz) : false;
@@ -446,6 +454,28 @@ export function CajaClient({
           type={modal.type}
           sessionOpen={Boolean(open)}
           barbers={checkout.barbers}
+          extraPayout={
+            can.payCommissions
+              ? {
+                  kinds: ["COMMISSION", "SALARY"],
+                  render: ({ barberId }) => (
+                    <PayCommissionPanel
+                      dict={dict}
+                      barberId={barberId}
+                      periodKey={currentPeriod}
+                      locale={locale}
+                      sessionOpen={Boolean(open)}
+                      onCancel={closeModal}
+                      onPaid={(amount) => {
+                        toast.success(t("payc.done", { amount: fmtMoney(amount) }));
+                        closeModal();
+                        refresh();
+                      }}
+                    />
+                  ),
+                }
+              : undefined
+          }
           onClose={closeModal}
           onDone={(r) => {
             if (r.outsideSession) toast(t("mov.savedOutside"), { icon: "ℹ️" });
