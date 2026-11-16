@@ -13,7 +13,13 @@ export async function POST(req: NextRequest) {
   try {
     await assertBarberFeature(ctx, "cash");
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
-    const summary = await closeCashSession(ctx, { countedAmount: body.countedAmount, notes: body.notes });
+    const summary = await closeCashSession(ctx, {
+      countedAmount: body.countedAmount,
+      countedBreakdown: body.countedBreakdown,
+      leftForNext: body.leftForNext,
+      notes: body.notes,
+      sessionId: body.sessionId,
+    });
     return NextResponse.json(summary);
   } catch (e) {
     return moneyErrorResponse(e);

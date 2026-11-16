@@ -32,7 +32,7 @@ import { SaleDraftsList } from "@/components/barber/clients/sale-drafts-list";
 import { ClientChargeBridge } from "@/components/barber/clients/client-charge-bridge";
 import { CancelSaleModal, ChangeMethodModal, CloseSessionModal, OpenSessionModal } from "./session-modals";
 import { SessionDetailModal } from "./session-detail";
-import { MovementModal, VoidMovementModal } from "./movement-modals";
+import { categoryLabel, MovementModal, VoidMovementModal } from "./movement-modals";
 import { DayList } from "./day-list";
 import { dayKeyInTz, isStaleSession } from "./caja-dia-core";
 
@@ -75,6 +75,7 @@ export function CajaClient({
   locale = "es",
   drafts = null,
   cobrosDict,
+  shopName = "",
 }: {
   dict: Dictionary;
   state: CashState;
@@ -89,6 +90,8 @@ export function CajaClient({
   drafts?: SaleDraftList | null;
   /** Sub-árbol barber.cobros (textos de las notas «Por cobrar»). */
   cobrosDict?: Dictionary;
+  /** Nombre de la sede (encabezado del corte por WhatsApp). */
+  shopName?: string;
 }) {
   const t = useBarberT(dict);
   const router = useRouter();
@@ -430,6 +433,8 @@ export function CajaClient({
           tz={tz}
           openDrafts={drafts?.ready ? drafts.openCount : 0}
           pendingAppointments={checkout.pendingAppointments.length}
+          shopName={shopName}
+          categoryLabel={(c) => categoryLabel(t, c)}
           onClose={closeModal}
           onDone={() => {
             closeModal();

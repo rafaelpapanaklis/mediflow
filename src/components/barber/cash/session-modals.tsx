@@ -10,7 +10,10 @@ import { BarberModal } from "./modal";
 import { useBarberT } from "./use-barber-t";
 import type { BarberPaymentMethod } from "@/lib/barber/types";
 import { COUNTER_METHODS } from "@/lib/barber/method-change-core";
-import { fmtMoney, fmtSigned, fmtTime, parseRequiredAmountText, toCents, fromCents, PAYMENT_METHOD_KEYS } from "./money";
+import { CASH_DENOMINATIONS, differenceKind, parseCashCount } from "@/lib/barber/caja-movimientos-core";
+import { MessageCircle, Printer } from "lucide-react";
+import { corteDiffCents, corteDiffLabel, corteWhatsappText, denominationLabel, waMeLink } from "./corte-core";
+import { fmtDateTime, fmtMoney, fmtSigned, fmtTime, parseRequiredAmountText, toCents, fromCents, PAYMENT_METHOD_KEYS } from "./money";
 
 // Forma única (sin unión discriminada): con strict:false TS no estrecha
 // `ok: true | false`, así que el caller mira `error` directamente.
@@ -100,12 +103,23 @@ export function OpenSessionModal({
   );
 }
 
+/**
+ * Cerrar caja (corte). Conteo OPCIONAL por billete y moneda que suma solo, o
+ * el total escrito directo; el esperado desglosado (fondo + efectivo +
+ * entradas − gastos − retiros − pagos − devoluciones) y la diferencia en
+ * color: «Cuadra», «Sobran $X» o «Faltan $X». Nota y fondo para mañana,
+ * opcionales. Al cerrar: imprimir (80/58 mm o carta) y mandar por WhatsApp.
+ * Si otra pestaña cerró primero, se enseña ese corte (el servidor no cierra
+ * dos veces: 409 SESSION_CLOSED con el id).
+ */
 export function CloseSessionModal({
   dict,
   summary,
   tz,
   openDrafts = 0,
   pendingAppointments = 0,
+  shopName = "",
+  categoryLabel = (c: string) => c,
   onClose,
   onDone,
 }: {
@@ -119,28 +133,63 @@ export function CloseSessionModal({
   openDrafts?: number;
   /** Citas TERMINADAS sin ticket (lógica L2): cerrar sin cobrarlas descuadra el efectivo. Solo se avisa. */
   pendingAppointments?: number;
+  /** Nombre de la barbería (encabezado del texto de WhatsApp). */
+  shopName?: string;
+  /** Nombre de una categoría de gasto (texto de WhatsApp). */
+  categoryLabel?: (c: string) => string;
   onClose: () => void;
   onDone: () => void;
 }) {
   const t = useBarberT(dict);
+  const [mode, setMode] = useState<"total" | "count">("total");
   const [countedText, setCountedText] = useState("");
+  const [count, setCount] = useState<Record<string, string>>({});
+  const [leftText, setLeftText] = useState("");
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [closed, setClosed] = useState<CashSessionSummary | null>(null);
+  const [byOther, setByOther] = useState(false);
 
-  const counted = parseRequiredAmountText(countedText);
+  const parsedCount = useMemo(() => parseCashCount(count), [count]);
+  const countCents = parsedCount ? parsedCount.cents : null;
+  const typed = parseRequiredAmountText(countedText);
+  const counted = mode === "count" ? (countCents === null || Object.keys(parsedCount?.count ?? {}).length === 0 ? null : fromCents(countCents)) : typed;
   const expectedCents = toCents(summary.expectedCash);
   const diffCents = counted === null ? null : toCents(counted) - expectedCents;
+  const left = leftText.trim() === "" ? null : parseRequiredAmountText(leftText);
+  const leftInvalid = leftText.trim() !== "" && (left === null || (counted !== null && toCents(left) > toCents(counted)));
   const live = useMemo(() => summary.sales.filter((s) => !s.cancelled), [summary.sales]);
+  const ready = summary.movementsReady === true;
+
+  async function showClosed(sessionId: string) {
+    try {
+      const res = await fetch(`/api/barber/cash-sessions/${encodeURIComponent(sessionId)}`, { cache: "no-store" });
+      if (!res.ok) throw new Error(String(res.status));
+      setByOther(true);
+      setClosed((await res.json()) as CashSessionSummary);
+    } catch {
+      setError(t("corte.closedElsewhere"));
+    }
+  }
 
   async function submit() {
-    if (counted === null || busy) return;
+    if (counted === null || busy || leftInvalid) return;
     setBusy(true);
     setError(null);
-    const r = await postJson<CashSessionSummary>("/api/barber/cash-sessions/close", { countedAmount: counted, notes: notes.trim() || null });
+    const r = await postJson<CashSessionSummary>("/api/barber/cash-sessions/close", {
+      sessionId: summary.session.id,
+      countedAmount: counted,
+      countedBreakdown: mode === "count" ? parsedCount?.count ?? null : null,
+      leftForNext: ready && left !== null ? left : null,
+      notes: notes.trim() || null,
+    });
     setBusy(false);
     if (!r.ok || !r.data) {
+      if (r.code === "SESSION_CLOSED") {
+        await showClosed(summary.session.id);
+        return;
+      }
       setError(r.error === "network" || !r.error ? t("common.error") : r.error);
       return;
     }
@@ -148,15 +197,51 @@ export function CloseSessionModal({
   }
 
   if (closed) {
-    const d = closed.session.difference ?? 0;
+    const diff = corteDiffCents(closed) ?? 0;
+    const kind = differenceKind(diff);
+    const text = corteWhatsappText(closed, { shopName, tz, t, categoryLabel });
     return (
-      <BarberModal open title={t("session.closedTitle")} onClose={onDone} closeLabel={t("common.close")} footer={<button type="button" className="btn-new barber-btn-primary" onClick={onDone}>{t("common.close")}</button>}>
-        <div className={`bcaja-alert ${d === 0 ? "bcaja-alert--success" : d > 0 ? "bcaja-alert--info" : "bcaja-alert--danger"}`}>
-          {t("session.closedBody", {
-            expected: fmtMoney(closed.session.expectedAmount ?? 0),
-            counted: fmtMoney(closed.session.countedAmount ?? 0),
-            difference: fmtSigned(d),
-          })}
+      <BarberModal
+        open
+        wide
+        title={t("session.closedTitle")}
+        onClose={onDone}
+        closeLabel={t("common.close")}
+        footer={
+          <>
+            <a className="btn-new btn-new--secondary" href={waMeLink(text)} target="_blank" rel="noopener noreferrer" data-corte-whatsapp>
+              <MessageCircle size={14} /> {t("corte.whatsapp")}
+            </a>
+            <a className="btn-new btn-new--secondary" href={`/barber/caja/corte/${encodeURIComponent(closed.session.id)}?imprimir=1`} data-corte-imprimir>
+              <Printer size={14} /> {t("corte.print")}
+            </a>
+            <button type="button" className="btn-new barber-btn-primary" onClick={onDone}>{t("common.close")}</button>
+          </>
+        }
+      >
+        <div className="bcaja-form" data-corte-hecho>
+          {byOther && (
+            <div className="bcaja-alert bcaja-alert--info" role="status" data-corte-ya-hecho>
+              {t("corte.alreadyClosed", { name: closed.session.closedByName ?? "—", time: fmtDateTime(closed.session.closedAt, tz) })}
+            </div>
+          )}
+          <div className={`bcaja-alert ${kind === "ok" ? "bcaja-alert--success" : kind === "over" ? "bcaja-alert--info" : "bcaja-alert--danger"}`}>
+            {t("session.closedBody", {
+              expected: fmtMoney(closed.session.expectedAmount ?? 0),
+              counted: fmtMoney(closed.session.countedAmount ?? 0),
+              difference: fmtSigned(fromCents(diff)),
+            })}{" "}
+            <strong className={`bcaja-diff bcaja-diff--${kind}`}>{corteDiffLabel(t, diff)}</strong>
+          </div>
+          <CloseExpectedBreakdown view={closeExpectedView(closed)} t={t} />
+          {closed.session.leftForNext !== null && closed.session.leftForNext !== undefined && (
+            <p className="bcaja-hint" style={{ margin: 0 }} data-fondo-dejado>
+              {t("corte.leftSummary", {
+                left: fmtMoney(closed.session.leftForNext),
+                take: fmtMoney(fromCents(toCents(closed.session.countedAmount ?? 0) - toCents(closed.session.leftForNext))),
+              })}
+            </p>
+          )}
         </div>
       </BarberModal>
     );
@@ -172,7 +257,7 @@ export function CloseSessionModal({
       footer={
         <>
           <button type="button" className="btn-new btn-new--ghost" onClick={onClose} disabled={busy}>{t("common.cancel")}</button>
-          <button type="button" className="btn-new barber-btn-primary" onClick={submit} disabled={counted === null || busy}>
+          <button type="button" className="btn-new barber-btn-primary" onClick={submit} disabled={counted === null || busy || leftInvalid} data-confirmar-corte>
             {busy ? t("common.saving") : t("session.closeConfirm")}
           </button>
         </>
@@ -202,27 +287,77 @@ export function CloseSessionModal({
 
         <CloseExpectedBreakdown view={closeExpectedView(summary)} t={t} />
 
+        <div className="field-new">
+          <label className="field-new__label">{t("corte.howCount")}</label>
+          <div className="bcaja-seg" role="radiogroup" aria-label={t("corte.howCount")} style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}>
+            {(["total", "count"] as const).map((m) => (
+              <button key={m} type="button" role="radio" aria-checked={mode === m} className={`bcaja-seg__btn ${mode === m ? "bcaja-seg__btn--on" : ""}`} onClick={() => setMode(m)} data-modo-conteo={m}>
+                {t(m === "total" ? "corte.modeTotal" : "corte.modeCount")}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {mode === "count" && (
+          <div className="bcaja-denoms" data-conteo>
+            {CASH_DENOMINATIONS.map((d) => (
+              <label key={d.key} className="bcaja-denom">
+                <span>{denominationLabel(t, d.key)}</span>
+                <input
+                  className="input-new"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  aria-label={t("corte.pieces", { denom: denominationLabel(t, d.key) })}
+                  value={count[d.key] ?? ""}
+                  onChange={(e) => setCount((c) => ({ ...c, [d.key]: e.target.value.replace(/[^\d]/g, "") }))}
+                  placeholder="0"
+                />
+              </label>
+            ))}
+          </div>
+        )}
+
         <div className="bcaja-form__grid">
           <div className="field-new">
             <label className="field-new__label">{t("session.countedAmount")}</label>
-            <input className="input-new bcaja-amount" inputMode="decimal" autoFocus value={countedText} onChange={(e) => setCountedText(e.target.value)} placeholder="0.00" />
-            {countedText.trim() === "" && <div className="bcaja-hint">{t("session.countedRequired")}</div>}
-            {countedText.trim() !== "" && counted === null && <div className="bcaja-hint" role="alert" style={{ color: "var(--danger)" }}>{t("session.amountInvalid")}</div>}
+            {mode === "total" ? (
+              <>
+                <input className="input-new bcaja-amount" inputMode="decimal" autoFocus value={countedText} onChange={(e) => setCountedText(e.target.value)} placeholder="0.00" data-contado />
+                {countedText.trim() === "" && <div className="bcaja-hint">{t("session.countedRequired")}</div>}
+                {countedText.trim() !== "" && typed === null && <div className="bcaja-hint" role="alert" style={{ color: "var(--danger)" }}>{t("session.amountInvalid")}</div>}
+              </>
+            ) : (
+              <div className="input-new bcaja-amount" aria-live="polite" data-contado-suma>{counted === null ? "—" : fmtMoney(counted)}</div>
+            )}
           </div>
           <div className="field-new">
             <label className="field-new__label">{t("session.difference")}</label>
-            <div className="input-new bcaja-amount" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div className="input-new bcaja-amount" style={{ display: "flex", alignItems: "center", gap: 8 }} data-diferencia>
               {diffCents === null ? "—" : (
                 <>
                   <span>{fmtSigned(fromCents(diffCents))}</span>
                   <BadgeNew tone={diffCents === 0 ? "success" : diffCents > 0 ? "info" : "danger"}>
-                    {diffCents === 0 ? t("session.differenceOk") : diffCents > 0 ? t("session.differenceOver") : t("session.differenceShort")}
+                    {corteDiffLabel(t, diffCents)}
                   </BadgeNew>
                 </>
               )}
             </div>
           </div>
         </div>
+
+        {ready && (
+          <div className="field-new">
+            <label className="field-new__label" htmlFor="bcaja-left">{t("corte.leftQuestion")} <span className="bcaja-muted">({t("common.optional")})</span></label>
+            <input id="bcaja-left" className="input-new bcaja-amount" inputMode="decimal" value={leftText} onChange={(e) => setLeftText(e.target.value)} placeholder="0.00" data-fondo-manana />
+            {leftInvalid ? (
+              <div className="bcaja-hint" role="alert" style={{ color: "var(--danger)" }}>{left === null ? t("session.amountInvalid") : t("corte.leftTooBig")}</div>
+            ) : left !== null && counted !== null ? (
+              <div className="bcaja-hint">{t("corte.leftTake", { amount: fmtMoney(fromCents(toCents(counted) - toCents(left))) })}</div>
+            ) : (
+              <div className="bcaja-hint">{t("corte.leftHint")}</div>
+            )}
+          </div>
+        )}
 
         <div className="field-new">
           <label className="field-new__label">{t("session.breakdown")} · {t("session.ticketsInSession", { count: live.length })}</label>
@@ -253,7 +388,7 @@ export function CloseSessionModal({
         </div>
 
         <div className="field-new">
-          <label className="field-new__label">{t("session.closeNotes")}</label>
+          <label className="field-new__label">{t("session.closeNotes")} <span className="bcaja-muted">({t("common.optional")})</span></label>
           <input className="input-new" value={notes} onChange={(e) => setNotes(e.target.value)} maxLength={500} />
         </div>
         <div className="bcaja-alert bcaja-alert--warning">{t("session.closeWarning")}</div>

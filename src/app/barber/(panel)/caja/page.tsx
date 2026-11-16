@@ -60,6 +60,7 @@ export default async function Page() {
       state={state}
       checkout={checkout}
       canManage={hasBarberPermission(permUser, "cash.manage")}
+      shopName={ctx.barbershop.name}
       perms={{
         expenses: hasBarberPermission(permUser, "cash.expenses"),
         withdraw: hasBarberPermission(permUser, "cash.withdraw"),
