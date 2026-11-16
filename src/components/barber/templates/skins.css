@@ -5467,14 +5467,16 @@ img.dcbw-es-equipo-foto {
 .dcbw-oficio .dcbw-of-espejo-in img {
   animation: dcbw-of-abrir 1s cubic-bezier(0.2, 0.7, 0.2, 1) both;
 }
+/* La foto entra aclarándose desde la madera del arco (opacidad), sin ningún
+   `filter`: una vez dentro se ve TAL CUAL la subió la barbería. */
 @keyframes dcbw-of-abrir {
   from {
     transform: scale(1.12);
-    filter: brightness(0.4);
+    opacity: 0.4;
   }
   to {
     transform: none;
-    filter: none;
+    opacity: 1;
   }
 }
 /* Sin foto: la inicial en letra de rótulo sobre madera, con el poste
@@ -5857,9 +5859,8 @@ img.dcbw-es-equipo-foto {
 .dcbw-of-pared .dcbw-of-arco {
   border-radius: var(--of-arco);
 }
-.dcbw-of-pared img {
-  filter: sepia(0.28) saturate(0.82) contrast(1.04);
-}
+/* Los cortes de la pared salen a color, como los subió la barbería: aquí
+   había un sepia (Rafael, 16-nov: «la foto así como la sube el dueño»). */
 .dcbw-of-pared-pie {
   margin-top: 24px;
 }
