@@ -483,8 +483,25 @@ function Cinta({ servicios }: { servicios: BarberWebServicio[] }) {
   const tanda = Array.from({ length: vueltas }, () => servicios).flat();
   const piezas = [...tanda, ...tanda];
   return (
-    <div className="bw-cinta" aria-hidden>
-      <div className="bw-cinta-via" style={vars({ "--bw-cinta-s": `${Math.max(30, tanda.length * 6)}s` })}>
+    <div className="bw-cinta">
+      {/* WCAG 2.2.2: lo que se mueve solo más de 5 s se tiene que poder
+          pausar. Sin JavaScript (la plantilla se pinta en el servidor): una
+          casilla de verdad —se enfoca con Tab y se marca con Espacio— y la
+          piel para la cinta con `:has(:checked)`. Además para sola al pasar
+          el ratón o con el foco dentro, y con prefers-reduced-motion ni
+          corre ni sale el botón. Los precios ya están en la carta: la cinta
+          es decoración (aria-hidden), el botón no. */}
+      <label className="bw-cinta-pausa">
+        <input type="checkbox" className="dcbw-oculto" aria-label="Pausar la cinta de precios" />
+        <svg className="bw-cinta-ico-pausa" width="14" height="14" viewBox="0 0 24 24" aria-hidden focusable="false">
+          <rect x="6" y="5" width="4" height="14" rx="1" fill="currentColor" />
+          <rect x="14" y="5" width="4" height="14" rx="1" fill="currentColor" />
+        </svg>
+        <svg className="bw-cinta-ico-seguir" width="14" height="14" viewBox="0 0 24 24" aria-hidden focusable="false">
+          <path d="M8 5l11 7-11 7z" fill="currentColor" />
+        </svg>
+      </label>
+      <div className="bw-cinta-via" aria-hidden style={vars({ "--bw-cinta-s": `${Math.max(30, tanda.length * 6)}s` })}>
         {piezas.map((sv, i) => (
           <span key={i}>
             {sv.nombre} <b><Precio n={sv.precio} /></b>

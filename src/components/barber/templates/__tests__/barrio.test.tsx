@@ -182,6 +182,20 @@ test("«Mis citas» arriba solo con WhatsApp conectado (cuentaUrl)", () => {
   assert.ok(!pinta(datos()).includes("Mis citas"));
 });
 
+test("B1 · la cinta se puede pausar (WCAG 2.2.2): botón fuera de aria-hidden, hover/foco y reduced-motion", () => {
+  const html = pinta(datos({ servicios: [sv(1), sv(2)] }));
+  const cinta = html.slice(html.indexOf('<div class="bw-cinta">'), html.indexOf("bw-cinta-via"));
+  assert.match(cinta, /<label class="bw-cinta-pausa"><input type="checkbox"[^>]*aria-label="Pausar la cinta de precios"/);
+  assert.ok(!cinta.includes("aria-hidden=\"true\"><label"), "el botón quedó dentro de aria-hidden");
+  assert.match(html, /class="bw-cinta-via" aria-hidden="true"/);
+  const css = readFileSync(path.resolve(__dirname, "../skins.css"), "utf8");
+  const piel = css.slice(css.indexOf("13 · BARRIO"));
+  assert.match(piel, /\.bw-cinta:hover \.bw-cinta-via,\s*\.dcbw-barrio \.bw-cinta:focus-within \.bw-cinta-via,\s*\.dcbw-barrio \.bw-cinta:has\(\.bw-cinta-pausa input:checked\) \.bw-cinta-via \{\s*animation-play-state: paused;/);
+  const quieta = piel.slice(piel.indexOf("@media (prefers-reduced-motion: reduce)"));
+  assert.match(quieta, /\.bw-cinta-via,[\s\S]*?animation: none/);
+  assert.match(quieta, /\.bw-cinta-pausa \{\s*display: none;/);
+});
+
 test("la piel no escribe colores de acento sueltos y respeta prefers-reduced-motion", () => {
   const css = readFileSync(path.resolve(__dirname, "../skins.css"), "utf8");
   const piel = css.slice(css.indexOf("13 · BARRIO"));

@@ -5550,11 +5550,55 @@ img.dcbw-es-equipo-foto {
 
 /* ── Cinta: la carta corriendo ───────────────────────────────── */
 .dcbw-barrio .bw-cinta {
+  position: relative;
   overflow: hidden;
   white-space: nowrap;
   background: var(--dcbw-acento-fuerte);
   color: #fff;
   border-block: 2px solid var(--bw-negro);
+}
+
+/* WCAG 2.2.2: la cinta para con su botón (casilla marcada), al pasar el
+   ratón y con el foco dentro. */
+.dcbw-barrio .bw-cinta:hover .bw-cinta-via,
+.dcbw-barrio .bw-cinta:focus-within .bw-cinta-via,
+.dcbw-barrio .bw-cinta:has(.bw-cinta-pausa input:checked) .bw-cinta-via {
+  animation-play-state: paused;
+}
+
+.dcbw-barrio .bw-cinta-pausa {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin-top: -22px;
+  border-radius: 50%;
+  background: var(--bw-negro);
+  color: var(--bw-sobre);
+  border: 2px solid var(--bw-sobre);
+  cursor: pointer;
+}
+
+.dcbw-barrio .bw-cinta-pausa:hover {
+  background: var(--bw-carbon);
+}
+
+.dcbw-barrio .bw-cinta-pausa:has(input:focus-visible) {
+  outline: 3px solid #fff;
+  outline-offset: 2px;
+}
+
+.dcbw-barrio .bw-cinta-ico-seguir,
+.dcbw-barrio .bw-cinta-pausa:has(input:checked) .bw-cinta-ico-pausa {
+  display: none;
+}
+
+.dcbw-barrio .bw-cinta-pausa:has(input:checked) .bw-cinta-ico-seguir {
+  display: block;
 }
 
 .dcbw-barrio .bw-cinta-via {
@@ -6740,6 +6784,11 @@ img.dcbw-es-equipo-foto {
   .dcbw-barrio .bw-cinta-via,
   .dcbw-barrio .bw-portada-foto img {
     animation: none;
+  }
+
+  /* Quieta no necesita botón de pausa. */
+  .dcbw-barrio .bw-cinta-pausa {
+    display: none;
   }
 
   .dcbw-barrio .bw-boton,
