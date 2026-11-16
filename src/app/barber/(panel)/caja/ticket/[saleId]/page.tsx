@@ -10,6 +10,8 @@ import type { Dictionary } from "@/i18n/t";
 import { getSaleDetail } from "@/lib/barber/cash";
 import { BarberDenied } from "@/components/barber/cash/denied";
 import { TicketPrint } from "@/components/barber/cash/ticket-print";
+import { prisma } from "@/lib/prisma";
+import { ticketStarsCardPath } from "@/lib/barber/stars-core";
 
 /** /barber/caja/ticket/[saleId] — ticket imprimible. Solo tickets de la
  *  barbería en sesión (uno ajeno → 404, sin filtrar existencia). */
@@ -33,5 +35,12 @@ export default async function Page(props: { params: Promise<{ saleId: string }> 
   const sale = await getSaleDetail(ctx, params.saleId);
   if (!sale) notFound();
 
-  return <TicketPrint sale={sale} dict={dict} />;
+  // ws6-t1 (16-nov): el QR de la tarjeta de estrellas del cliente del ticket.
+  // Sin cliente, con la tarjeta apagada o con el ticket cancelado no sale. Si
+  // fallara la consulta, el ticket se imprime igual (sin QR).
+  const starsCardPath = sale.cancelled
+    ? null
+    : await ticketStarsCardPath(prisma, { barbershopId: ctx.barbershopId, slug: ctx.barbershop.slug, saleId: sale.id }).catch(() => null);
+
+  return <TicketPrint sale={sale} dict={dict} starsCardPath={starsCardPath} />;
 }

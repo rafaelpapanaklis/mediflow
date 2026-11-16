@@ -314,3 +314,59 @@ test("un ticket de OTRA barbería no se puede usar para mandar (filtro por barbe
   assert.equal(r.status, "none");
   assert.equal(mensajes().length, 0);
 });
+
+// ── Punto 3: el QR de su tarjeta en el ticket impreso ──
+
+test("ticket con cliente y estrellas encendidas: da la ruta de SU tarjeta (la misma del mensaje)", { skip }, async () => {
+  const starsCore = await import("../stars-core");
+  const c = await cliente(CON);
+  const sale = await cobrar(CON, c.id);
+  const ruta = await starsCore.ticketStarsCardPath(prisma, { barbershopId: CON.id, slug: CON.slug, saleId: sale.id });
+  assert.ok(ruta);
+  assert.match(ruta!, new RegExp(`^/b/${CON.slug}/tarjeta/`));
+  assert.equal(ruta, sale.stars.cardPath, "el QR del ticket abre la misma tarjeta que el enlace");
+});
+
+test("ticket sin cliente: sin QR", { skip }, async () => {
+  const starsCore = await import("../stars-core");
+  session = CON.ctx;
+  const sale = await cash.createSale(CON.ctx, { items: [{ kind: "service", id: CON.serviceId }], paymentMethod: "CASH" } as never, FEATURES);
+  assert.equal(await starsCore.ticketStarsCardPath(prisma, { barbershopId: CON.id, slug: CON.slug, saleId: sale.id }), null);
+});
+
+test("estrellas apagadas en la barbería: sin QR (y tampoco mensaje)", { skip }, async () => {
+  const starsCore = await import("../stars-core");
+  const c = await cliente(CON);
+  await prisma.barbershop.update({ where: { id: CON.id }, data: { loyaltyEnabled: false } });
+  try {
+    const sale = await cobrar(CON, c.id);
+    assert.equal(sale.starsCard.status, "none");
+    assert.equal(await starsCore.ticketStarsCardPath(prisma, { barbershopId: CON.id, slug: CON.slug, saleId: sale.id }), null);
+  } finally {
+    await prisma.barbershop.update({ where: { id: CON.id }, data: { loyaltyEnabled: true } });
+  }
+});
+
+test("ticket de otra barbería: sin QR (filtro por barbershopId)", { skip }, async () => {
+  const starsCore = await import("../stars-core");
+  const c = await cliente(CON);
+  const sale = await cobrar(CON, c.id);
+  assert.equal(await starsCore.ticketStarsCardPath(prisma, { barbershopId: SIN.id, slug: SIN.slug, saleId: sale.id }), null);
+});
+
+test("cableado del ticket impreso: QR solo con ruta y sin cancelar; texto es/en; reusa print-* (carta, 80, 58)", () => {
+  const pagina = fs.readFileSync(path.join(ROOT, "src/app/barber/(panel)/caja/ticket/[saleId]/page.tsx"), "utf8");
+  assert.match(pagina, /sale\.cancelled\s*\?\s*null\s*:\s*await ticketStarsCardPath\(/);
+  const comp = fs.readFileSync(path.join(ROOT, "src/components/barber/cash/ticket-print.tsx"), "utf8");
+  assert.match(comp, /!sale\.cancelled && starsCardUrl && \(/);
+  assert.match(comp, /t\("print\.starsCardQr"\)/);
+  assert.match(comp, /usePrintSetup\(\)/, "mismo ancho de impresión que el resto del ticket");
+  const css = fs.readFileSync(path.join(ROOT, "src/components/barber/cash/money.css"), "utf8");
+  assert.match(css, /\.bcaja-print--t58 \.bcaja-print__qr-code \{ width: 30mm; height: 30mm; \}/, "en 58 mm el QR mide 30 mm (área útil ~48 mm)");
+  const bloque = css.slice(css.indexOf("/* QR de la tarjeta de estrellas"), css.indexOf(".bcaja-print-actions"));
+  assert.ok(!/#[0-9a-fA-F]{3,8}\b/.test(bloque), "sin colores fijos");
+  for (const l of ["es", "en"]) {
+    const d = JSON.parse(fs.readFileSync(path.join(ROOT, `src/i18n/dictionaries/barber/caja.${l}.json`), "utf8"));
+    assert.ok(d.print.starsCardQr, l);
+  }
+});

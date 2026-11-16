@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { QRCodeSVG } from "qrcode.react";
 import Link from "next/link";
 import { ArrowLeft, MessageCircle } from "lucide-react";
 import type { Dictionary } from "@/i18n/t";
@@ -12,8 +13,23 @@ import { PrintSetupControls, printWithWidth, usePrintSetup } from "./print-setup
 import { ChatClienteLink } from "../wa-chat";
 
 /** Ticket imprimible / compartible. Todo el dinero viene ya calculado del server. */
-export function TicketPrint({ sale, dict }: { sale: SaleDetail; dict: Dictionary }) {
+export function TicketPrint({
+  sale,
+  dict,
+  starsCardPath = null,
+}: {
+  sale: SaleDetail;
+  dict: Dictionary;
+  /** Ruta de la tarjeta de estrellas del cliente (null = sin QR). */
+  starsCardPath?: string | null;
+}) {
   const t = useBarberT(dict);
+  // El enlace ABSOLUTO se arma en el navegador (el dominio con el que se abrió
+  // el panel), igual que el QR de la pantalla «Cobrado».
+  const [starsCardUrl, setStarsCardUrl] = useState<string | null>(null);
+  useEffect(() => {
+    setStarsCardUrl(starsCardPath ? `${window.location.origin}${starsCardPath}` : null);
+  }, [starsCardPath]);
   // Hoja carta o impresora térmica de 80/58 mm (recordado en este navegador).
   const printSetup = usePrintSetup();
   const ticketRef = useRef<HTMLDivElement | null>(null);
@@ -96,6 +112,14 @@ export function TicketPrint({ sale, dict }: { sale: SaleDetail; dict: Dictionary
         <div className="bcaja-print__row bcaja-print__row--total"><span>{t("print.total")}</span><span>{fmtMoney(sale.total)}</span></div>
 
         {!sale.cancelled && <div className="bcaja-print__thanks">{t("print.thanks")}</div>}
+
+        {/* ws6-t1: «Escanea y ve tus estrellas» con el enlace personal del cliente. */}
+        {!sale.cancelled && starsCardUrl && (
+          <div className="bcaja-print__qr" data-qr-tarjeta>
+            <div className="bcaja-print__qr-label">{t("print.starsCardQr")}</div>
+            <QRCodeSVG value={starsCardUrl} size={128} level="M" marginSize={2} className="bcaja-print__qr-code" />
+          </div>
+        )}
       </div>
     </>
   );

@@ -262,6 +262,7 @@
     "tip": "Tip",
     "total": "Total",
     "thanks": "Thanks for your visit!",
+    "starsCardQr": "Scan to see your stars",
     "cancelledStamp": "CANCELLED TICKET",
     "shareText": "Your ticket from {shop}: total {total}. Thanks for your visit!",
     "shareWhatsapp": "Send via WhatsApp",
