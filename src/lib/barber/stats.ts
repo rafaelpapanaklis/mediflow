@@ -47,7 +47,9 @@ import {
 } from "@/lib/barber-auth";
 import { resolveBranchScope } from "@/lib/barber/branches";
 import { expectedCashFor, resolveBarberFeatures } from "@/lib/barber/cash";
-import { getDineroPeriodo } from "@/lib/barber/caja-dinero";
+import { cambioPct, getDineroPeriodo, type DineroPeriodo } from "@/lib/barber/caja-dinero";
+import { RESUMEN_INCOME_METHODS } from "@/lib/barber/caja-resumen";
+import { BARBER_PAYOUT_KINDS } from "@/lib/barber/caja-movimientos-core";
 import {
   BarberCajaError,
   CANCELLED_MARK,
@@ -1082,6 +1084,20 @@ export interface ReportBarberRow {
   commission: number | null;
 }
 
+/**
+ * «Ingresos y gastos» de Reportes (ws6-t5). Las cuentas salen de cajaResumen
+ * (ws6-t1) vía caja-dinero.ts. Es de TODA la sede (o la cadena): el filtro
+ * de barbero no la recorta (barberFiltered lo avisa).
+ */
+export interface ReportCashFlow {
+  current: DineroPeriodo;
+  previous: { income: number; expenses: number; payouts: number; profit: number };
+  /** Ganancia vs. el periodo anterior de la misma longitud. null = el anterior fue 0. */
+  vsPrevProfitPct: number | null;
+  vsPrevExpensesPct: number | null;
+  barberFiltered: boolean;
+}
+
 export interface ReportItemRow {
   id: string;
   kind: "service" | "product";
@@ -1185,6 +1201,8 @@ export interface ReportsSummary {
   noShows: ReportNoShows;
   retention: ReportRetention;
   payments: ReportPayment[];
+  /** Ausente/null = no viaja: sin cash.view, rol Barbero, plan sin caja o sin el SQL de caja completa. */
+  cashFlow?: ReportCashFlow | null;
 }
 
 export interface ReportsOptions extends StatsScopeInput {
@@ -1664,6 +1682,33 @@ export async function getReportsSummary(ctx: BarberContext, opts: ReportsOptions
     })
     .filter((p) => p.count > 0 || p.method !== "STRIPE");
 
+  // ── Ingresos y gastos (caja completa, ws6-t5) ──
+  // Solo quien ve la caja (cash.view), nunca el rol Barbero, con el plan que
+  // trae caja y con sql/barber_caja_completa.sql pegado. Periodo y anterior
+  // en serie (cada uno ya junta sus lecturas en un Promise.all).
+  let cashFlow: ReportCashFlow | null = null;
+  if (!selfOnly && features.cash === true && can(ctx, "cash.view")) {
+    try {
+      const cur = await getDineroPeriodo(ctx, branchIds, { from: start, to: end });
+      const prev = cur ? await getDineroPeriodo(ctx, branchIds, { from: prevStart, to: start }) : null;
+      if (cur && prev) {
+        const c = cur.dinero;
+        const p = prev.dinero;
+        cashFlow = {
+          current: c,
+          previous: { income: p.income, expenses: p.expenses.total, payouts: p.payouts.total, profit: p.profit },
+          vsPrevProfitPct: cambioPct(c.profit, p.profit),
+          vsPrevExpensesPct: cambioPct(c.expenses.total, p.expenses.total),
+          barberFiltered: barberIds !== null,
+        };
+      }
+    } catch (e) {
+      // Reportes se pinta igual sin esta sección; no tumba la pantalla.
+      console.error("[barber/reportes] ingresos y gastos", e);
+      cashFlow = null;
+    }
+  }
+
   const revenue = money(tot.revenue);
   return {
     generatedAt: now.toISOString(),
@@ -1713,6 +1758,7 @@ export async function getReportsSummary(ctx: BarberContext, opts: ReportsOptions
       returnRate: ratioPct(newReturned, newClients),
     },
     payments,
+    ...(cashFlow ? { cashFlow } : {}),
   };
 }
 
@@ -1777,6 +1823,89 @@ export interface ReportsCsvLabels {
     newReturned: string;
     returnRate: string;
   };
+  /**
+   * «Ingresos y gastos» (ws6-t5). Opcional: sin estas etiquetas (o sin
+   * s.cashFlow) la sección no se escribe y el CSV sale como antes.
+   */
+  money?: ReportsCsvMoneyLabels;
+}
+
+export interface ReportsCsvMoneyLabels {
+  sections: { money: string; byMethod: string; byCategory: string; byKind: string };
+  metrics: {
+    charged: string;
+    tips: string;
+    income: string;
+    expenses: string;
+    expensesCash: string;
+    payouts: string;
+    profit: string;
+    prevProfit: string;
+    cashNet: string;
+  };
+  method: string;
+  category: string;
+  kind: string;
+  count: string;
+  total: string;
+  barber: string;
+  paidOut: string;
+  advances: string;
+  methods: Record<string, string>;
+  categories: Record<string, string>;
+  kinds: Record<string, string>;
+}
+
+/** Las etiquetas de dinero, solo si vienen completas (un llamador viejo sin ellas → CSV como antes). */
+function moneyLabelsOf(L: ReportsCsvLabels): ReportsCsvMoneyLabels | null {
+  const m = L.money;
+  return m && typeof m === "object" && typeof m.sections === "object" && typeof m.metrics === "object" ? m : null;
+}
+
+/** Las filas de «Ingresos y gastos» (sin BOM). Vacío si la sección no viaja. */
+function cashFlowCsvLines(s: ReportsSummary, L: ReportsCsvLabels, M: ReportsCsvMoneyLabels): string[] {
+  const cf = s.cashFlow;
+  if (!cf) return [];
+  const c = cf.current;
+  const lines: string[] = [];
+  const push = (cells: unknown[]) => lines.push(csvLine(cells));
+  const blank = () => lines.push("");
+
+  push([M.sections.money]);
+  push([L.metric, L.value]);
+  push([L.metrics.period, `${s.period.from} → ${s.period.to}`]);
+  push([M.metrics.charged, c.charged]);
+  push([M.metrics.tips, c.tips]);
+  push([M.metrics.income, c.income]);
+  push([M.metrics.expenses, c.expenses.total]);
+  push([M.metrics.expensesCash, c.expenses.cash]);
+  push([M.metrics.payouts, c.payouts.total]);
+  push([M.metrics.profit, c.profit]);
+  push([M.metrics.prevProfit, cf.previous.profit]);
+  push([M.metrics.cashNet, c.cashNet]);
+  blank();
+
+  push([M.sections.byMethod]);
+  push([M.method, M.count, M.total]);
+  for (const m of RESUMEN_INCOME_METHODS) push([M.methods[m] ?? m, c.byMethod[m].count, c.byMethod[m].total]);
+  blank();
+
+  push([M.sections.byCategory]);
+  push([M.category, M.count, M.total]);
+  for (const r of c.expenses.byCategory) push([M.categories[r.category] ?? r.category, r.count, r.total]);
+  blank();
+
+  push([M.sections.byKind]);
+  push([M.kind, M.total]);
+  for (const k of BARBER_PAYOUT_KINDS) push([M.kinds[k] ?? k, c.payouts.byKind[k]]);
+  return lines;
+}
+
+/** CSV SOLO de «Ingresos y gastos» (botón de su tarjeta). Mismo formato que buildReportsCsv. */
+export function buildCashFlowCsv(s: ReportsSummary, L: ReportsCsvLabels): string {
+  const M = moneyLabelsOf(L);
+  const lines = M ? cashFlowCsvLines(s, L, M) : [];
+  return String.fromCharCode(0xfeff) + lines.join("\r\n") + "\r\n";
 }
 
 function csvCell(v: unknown): string {
@@ -1820,6 +1949,7 @@ export function buildReportsCsv(s: ReportsSummary, L: ReportsCsvLabels): string 
   push([L.sections.byBarber]);
   const barberHead = [L.barber, L.tickets, L.produced, L.tips, L.avgTicket];
   if (s.can.commissions) barberHead.push(L.commission);
+  const M = moneyLabelsOf(L);
   push(barberHead);
   for (const b of s.byBarber) {
     const row: unknown[] = [b.nickname || b.name, b.tickets, b.produced, b.tips, b.avgTicket ?? ""];
@@ -1867,6 +1997,12 @@ export function buildReportsCsv(s: ReportsSummary, L: ReportsCsvLabels): string 
   push([L.sections.payments]);
   push([L.method, L.tickets, L.revenue, L.tips, L.total, L.share]);
   for (const p of s.payments) push([L.methods[p.method] ?? p.method, p.count, p.revenue, p.tips, p.total, p.share ?? ""]);
+
+  // Ingresos y gastos (ws6-t5): solo si viajó (cash.view + SQL de caja completa).
+  if (s.cashFlow && M) {
+    blank();
+    lines.push(...cashFlowCsvLines(s, L, M));
+  }
 
   // BOM para que Excel abra el UTF-8 con acentos; CRLF por el mismo motivo.
   return String.fromCharCode(0xfeff) + lines.join("\r\n") + "\r\n";

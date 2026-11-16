@@ -13,6 +13,7 @@ import { fmtDateTime, fmtHour, fmtInt, fmtMediumDay, fmtMoney, fmtPct, fmtPctSig
 import { RevenueChart } from "./revenue-chart";
 import { Heatmap } from "./heatmap";
 import { ItemBars, PaymentsBar } from "./bars";
+import { CashFlowCard } from "./cash-flow-card";
 import type { BranchOption } from "./branch-select";
 
 export interface BarberOption {
@@ -261,6 +262,9 @@ export function ReportesView({
           </div>
         )}
       </CardNew>
+
+      {/* Ingresos y gastos (ws6-t5): solo viaja con «Ver caja» y el SQL de caja completa. */}
+      {s.cashFlow && <CashFlowCard cf={s.cashFlow} locale={locale} csvHref={`${csvHref}&section=money`} t={t} />}
 
       <div className="bdash-grid bdash-grid--even">
         {/* Por barbero */}

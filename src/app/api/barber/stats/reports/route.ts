@@ -3,7 +3,15 @@ import { getBarberContext } from "@/lib/barber-auth";
 import { getBarberPlan } from "@/lib/barber/plans";
 import { assertBarberFeature, barberGateErrorPayload } from "@/lib/barber/gating";
 import { moneyErrorResponse } from "@/lib/barber/cash";
-import { buildReportsCsv, getReportsSummary, type ReportsCsvLabels } from "@/lib/barber/stats";
+import {
+  buildCashFlowCsv,
+  buildReportsCsv,
+  getReportsSummary,
+  type ReportsCsvLabels,
+  type ReportsCsvMoneyLabels,
+} from "@/lib/barber/stats";
+import { RESUMEN_INCOME_METHODS } from "@/lib/barber/caja-resumen";
+import { BARBER_PAYOUT_KINDS, CASH_EXPENSE_CATEGORIES } from "@/lib/barber/caja-movimientos-core";
 import { getBarberT } from "@/i18n/dictionaries/barber";
 
 export const dynamic = "force-dynamic";
@@ -74,6 +82,44 @@ function csvLabelsFor(t: ReturnType<typeof getBarberT>): ReportsCsvLabels {
       newReturned: c("metrics.newReturned"),
       returnRate: c("metrics.returnRate"),
     },
+    money: moneyLabelsFor(t),
+  };
+}
+
+/** Etiquetas de «Ingresos y gastos» (ws6-t5): barber.reportes.csv.* y barber.reportes.money.*. */
+function moneyLabelsFor(t: ReturnType<typeof getBarberT>): ReportsCsvMoneyLabels {
+  const c = (key: string) => t(`barber.reportes.csv.${key}`);
+  const m = (key: string) => t(`barber.reportes.money.${key}`);
+  const map = (prefix: string, keys: readonly string[]) => Object.fromEntries(keys.map((k) => [k, m(`${prefix}.${k}`)]));
+  return {
+    sections: {
+      money: c("sections.money"),
+      byMethod: c("sections.moneyByMethod"),
+      byCategory: c("sections.moneyByCategory"),
+      byKind: c("sections.moneyByKind"),
+    },
+    metrics: {
+      charged: c("metrics.charged"),
+      tips: c("metrics.tips"),
+      income: c("metrics.income"),
+      expenses: c("metrics.expenses"),
+      expensesCash: c("metrics.expensesCash"),
+      payouts: c("metrics.payouts"),
+      profit: c("metrics.profit"),
+      prevProfit: c("metrics.prevProfit"),
+      cashNet: c("metrics.cashNet"),
+    },
+    method: c("method"),
+    category: c("metrics.category"),
+    kind: c("metrics.kind"),
+    count: c("metrics.count"),
+    total: c("total"),
+    barber: c("barber"),
+    paidOut: c("metrics.paidOut"),
+    advances: c("metrics.advances"),
+    methods: map("methods", RESUMEN_INCOME_METHODS),
+    categories: map("cat", CASH_EXPENSE_CATEGORIES),
+    kinds: map("kind", BARBER_PAYOUT_KINDS),
   };
 }
 
@@ -102,12 +148,20 @@ export async function GET(req: NextRequest) {
     });
 
     if (sp.get("format") === "csv") {
-      const csv = buildReportsCsv(summary, csvLabelsFor(getBarberT(ctx.barbershop.locale)));
+      const labels = csvLabelsFor(getBarberT(ctx.barbershop.locale));
+      // section=money: solo «Ingresos y gastos» (el botón de esa tarjeta). Sin
+      // cash.view la sección no viaja → 403, no un archivo vacío.
+      const onlyMoney = sp.get("section") === "money";
+      if (onlyMoney && !summary.cashFlow) {
+        return NextResponse.json({ error: "Sin permiso para ver la caja", code: "FORBIDDEN" }, { status: 403 });
+      }
+      const csv = onlyMoney ? buildCashFlowCsv(summary, labels) : buildReportsCsv(summary, labels);
+      const name = onlyMoney ? "ingresos-y-gastos" : "reportes";
       return new NextResponse(csv, {
         status: 200,
         headers: {
           "Content-Type": "text/csv; charset=utf-8",
-          "Content-Disposition": `attachment; filename="reportes-${summary.period.from}-${summary.period.to}.csv"`,
+          "Content-Disposition": `attachment; filename="${name}-${summary.period.from}-${summary.period.to}.csv"`,
           "Cache-Control": "no-store",
         },
       });
