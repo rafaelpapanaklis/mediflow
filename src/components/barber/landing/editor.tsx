@@ -33,6 +33,7 @@ import { makeBarberT } from "@/lib/barber/i18n";
 import {
   BARBER_WEB_ACCENTS,
   BARBER_WEB_DIAS,
+  BARBER_WEB_SELECTOR_LIST,
   BARBER_WEB_TEMPLATE_DEFAULT,
   horarioDelLocalDesdeTurnos,
   normalizarConfigBarberWeb,
@@ -43,7 +44,7 @@ import {
   type BarberWebFuente,
   type BarberWebTemplateId,
 } from "@/lib/barber/landing";
-import { BARBER_WEB_SELECTOR_LIST, manifiestoBarberWeb } from "@/components/barber/templates/manifest";
+import { manifiestoBarberWeb } from "@/components/barber/templates/manifest";
 import type {
   BarberWebBarbero,
   BarberWebData,
@@ -448,7 +449,8 @@ export function EditorWebBarberia(props: EditorProps) {
                 <details> las dejaría en el DOM ocupando memoria y trabajo
                 de pintado para algo que nadie está mirando. */}
             <div className="dcbwe-plantillas">
-              {/* Las nuevas primero, con «Nueva» (ver BARBER_WEB_NUEVAS). */}
+              {/* Solo las que se ofrecen (BARBER_WEB_OFRECIDAS): las doce viejas siguen
+                  registradas, pero ya no se eligen ni se montan en miniatura. */}
               {BARBER_WEB_SELECTOR_LIST.map((m) => (
                 <div
                   key={m.id}
@@ -460,10 +462,7 @@ export function EditorWebBarberia(props: EditorProps) {
                     <div className="dcbwe-mini dcbwe-mini-hueco" />
                   )}
                   <div className="dcbwe-plantilla-txt">
-                    <strong>
-                      {m.nombre}
-                      {m.nueva ? <span className="dcbwe-pastilla dcbwe-pastilla-nueva">{t("plantillaNueva")}</span> : null}
-                    </strong>
+                    <strong>{m.nombre}</strong>
                     <p>{m.para}</p>
                     <p className="dcbwe-plantilla-estructura">{m.estructura}</p>
                     {m.id === manifest.id ? (

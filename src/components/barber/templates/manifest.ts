@@ -9,7 +9,9 @@
    ── AGREGAR LA DECIMOTERCERA PLANTILLA ────────────────────────────
    1. Añade su id a BARBER_WEB_TEMPLATE_IDS (src/lib/barber/landing.ts).
    2. Escribe su manifiesto aquí abajo (y súmalo a BARBER_WEB_MANIFEST_LIST,
-      que es lo que ofrece el selector del editor).
+      la lista completa del motor). Para que el selector del editor la
+      OFREZCA, además, su id va en BARBER_WEB_OFRECIDAS (landing.ts): desde
+      el 16-nov solo se ofrecen oficio, barrio y revista.
    3. Escribe su componente en ./t-<id>.tsx.
    4. Regístralo en ./index.tsx (una línea en BARBER_WEB_TEMPLATES).
    5. Escribe su piel en ./skins.css bajo `.dcbw-<id>` (si el id choca con
@@ -1334,7 +1336,11 @@ function secTienda(): BarberWebManifestSeccion {
 }
 for (const m of Object.values(BARBER_WEB_MANIFESTS)) m.secciones.push(secTienda());
 
-/** La lista para el selector del editor, en el orden en que se presentan. */
+/**
+ * La lista COMPLETA del motor (las quince registradas). El selector del
+ * editor NO la pinta entera: pinta BARBER_WEB_SELECTOR_LIST (landing.ts),
+ * que son solo las de BARBER_WEB_OFRECIDAS.
+ */
 export const BARBER_WEB_MANIFEST_LIST: BarberWebManifest[] = [
   BARBER_WEB_MANIFESTS.clasica,
   BARBER_WEB_MANIFESTS.equipo,
@@ -1379,31 +1385,6 @@ export function manifiestoBarberWeb(id: string | null | undefined): BarberWebMan
   ];
   s.splice(s.findIndex((x) => x.id === "servicios") + 1, 0, tienda);
 }
-
-/* ── Las nuevas, PRIMERO y con «Nueva» en el selector (ws6-t2) ───────
-   Las tres de los mockups del 16-nov, en este orden. Se declaran por id y
-   no reordenando BARBER_WEB_MANIFEST_LIST: así cada plantilla se suma al
-   final de esa lista (como dice la cabecera) y el selector las sube solo.
-   Una id que todavía no existe (barrio y revista llegan en sus ramas) se
-   salta sin romper nada. Para que una deje de ser «Nueva», se quita de aquí. */
-export const BARBER_WEB_NUEVAS: readonly string[] = ["oficio", "barrio", "revista"];
-
-for (const id of BARBER_WEB_NUEVAS) {
-  const m = BARBER_WEB_MANIFESTS[id as BarberWebTemplateId];
-  if (m) m.nueva = true;
-}
-
-/**
- * Lo que enseña el selector de Mi web: las nuevas primero (en el orden de
- * BARBER_WEB_NUEVAS) y después las demás en el de BARBER_WEB_MANIFEST_LIST.
- * Son las MISMAS plantillas que la lista, ni una más ni una menos.
- */
-export const BARBER_WEB_SELECTOR_LIST: BarberWebManifest[] = [
-  ...BARBER_WEB_NUEVAS.map((id) => BARBER_WEB_MANIFEST_LIST.find((m) => m.id === id)).filter(
-    (m): m is BarberWebManifest => !!m,
-  ),
-  ...BARBER_WEB_MANIFEST_LIST.filter((m) => !BARBER_WEB_NUEVAS.includes(m.id)),
-];
 
 /* ── Barrio (ws6-t3): la tienda va JUSTO DESPUÉS de servicios ─────────
    Así está en su maqueta: la tienda es parte de «lo que se vende», y en la

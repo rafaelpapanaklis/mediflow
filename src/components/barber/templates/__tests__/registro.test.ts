@@ -9,8 +9,10 @@
    línea del registro y la piel. Los tipos cazan tres de ellos (un id sin
    manifiesto o sin componente no compila), pero NO cazan los otros dos:
 
-     · una plantilla que no está en BARBER_WEB_MANIFEST_LIST existe para el
-       motor y es INVISIBLE en el selector del editor — nadie la puede elegir;
+     · una plantilla que no está en BARBER_WEB_MANIFEST_LIST (la lista
+       completa del motor) queda a medias: su manifiesto no se recorre. Que
+       el selector la OFREZCA es otra cosa (BARBER_WEB_OFRECIDAS, ver
+       ofrecidas.test.ts: desde el 16-nov se ofrecen 3 de las 15);
      · una plantilla sin su bloque `.dcbw-<id>` en skins.css se pinta con
        los neutros de la raíz: sale "en blanco", sin su piel, y parece rota.
 
@@ -24,7 +26,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
-import { BARBER_WEB_ACCENTS, BARBER_WEB_TEMPLATE_IDS } from "@/lib/barber/landing";
+import { BARBER_WEB_ACCENTS, BARBER_WEB_SELECTOR_LIST, BARBER_WEB_TEMPLATE_IDS } from "@/lib/barber/landing";
 import { BARBER_WEB_MANIFESTS, BARBER_WEB_MANIFEST_LIST, BARBER_WEB_TEMPLATES } from "../index";
 
 const CARPETA = path.resolve(__dirname, "..");
@@ -45,13 +47,23 @@ test("cada id declarado tiene su manifiesto, y el manifiesto lleva su propio id"
   assert.deepEqual(Object.keys(BARBER_WEB_MANIFESTS).sort(), [...BARBER_WEB_TEMPLATE_IDS].sort());
 });
 
-test("cada id aparece en la lista del selector del editor (BARBER_WEB_MANIFEST_LIST), una sola vez", () => {
+test("cada id aparece en la lista completa del motor (BARBER_WEB_MANIFEST_LIST), una sola vez", () => {
   const enLista = BARBER_WEB_MANIFEST_LIST.map((m) => m.id);
   for (const id of BARBER_WEB_TEMPLATE_IDS) {
     const veces = enLista.filter((x) => x === id).length;
-    assert.equal(veces, 1, `«${id}» aparece ${veces} veces en BARBER_WEB_MANIFEST_LIST (el editor no la ofrece o la repite)`);
+    assert.equal(veces, 1, `«${id}» aparece ${veces} veces en BARBER_WEB_MANIFEST_LIST (registrada a medias o repetida)`);
   }
-  assert.equal(enLista.length, BARBER_WEB_TEMPLATE_IDS.length, "la lista del selector tiene ids que no están declarados");
+  assert.equal(enLista.length, BARBER_WEB_TEMPLATE_IDS.length, "la lista del motor tiene ids que no están declarados");
+});
+
+test("la lista OFRECIDA son 3 registradas de verdad; las otras siguen en el motor", () => {
+  // Las doce viejas no se borran (Rafael decide luego): siguen arriba, en la
+  // lista del motor. Lo que se ofrece en Mi web es BARBER_WEB_SELECTOR_LIST.
+  assert.equal(BARBER_WEB_SELECTOR_LIST.length, 3);
+  for (const m of BARBER_WEB_SELECTOR_LIST) {
+    assert.equal(BARBER_WEB_MANIFESTS[m.id], m, `«${m.id}» se ofrece sin estar registrada`);
+  }
+  assert.equal(BARBER_WEB_MANIFEST_LIST.length, BARBER_WEB_TEMPLATE_IDS.length);
 });
 
 test("cada id tiene componente registrado en index.tsx, y es un componente de verdad", () => {
