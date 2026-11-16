@@ -5,7 +5,8 @@
  *
  * REGLA (misma semántica que User.permissionsOverride del dental): si
  * permissionsOverride tiene keys, esas REEMPLAZAN el default del rol — no se
- * suman. Un permiso NUEVO agregado a un rol NO le llega a un usuario con
+ * suman. «Ningún permiso» se guarda como [BARBER_NO_PERMISSIONS], nunca
+ * como [] (que es «hereda el rol»). Un permiso NUEVO agregado a un rol NO le llega a un usuario con
  * override; hay que agregarlo a su override también.
  *
  * Las otras olas NO inventan su propio check: usan hasBarberPermission /
@@ -149,19 +150,31 @@ export function timeOffAllowed(scope: BarberTimeOffScope, barberId: string | nul
 }
 
 /**
+ * Marca que se guarda en permissionsOverride cuando el dueño le apaga TODO a
+ * alguien (auditoría de permisos 16-nov, G1). Sin ella, «ningún permiso» se
+ * guardaba como [] — que el motor lee como «hereda el rol» — y la persona
+ * recuperaba todos los permisos de fábrica justo al quitárselos. No es una
+ * clave de permiso: nunca sale en la matriz ni da nada.
+ */
+export const BARBER_NO_PERMISSIONS = "__ninguno";
+
+/**
  * Set efectivo de permisos: override REEMPLAZA al default del rol si trae
- * keys (mismo contrato que el dental). Keys desconocidas se ignoran. Al
+ * keys (mismo contrato que el dental). Keys desconocidas se ignoran. Un
+ * override con BARBER_NO_PERMISSIONS es «nada» (no hereda el rol). Al
  * final se suman los permisos incluidos (BARBER_PERMISSION_IMPLIES).
  */
 export function resolveBarberPermissions(
   role: BarberRole,
   permissionsOverride?: string[] | null,
 ): Set<BarberPermissionKey> {
-  const override = (permissionsOverride ?? []).filter((k): k is BarberPermissionKey =>
+  const raw = permissionsOverride ?? [];
+  const override = raw.filter((k): k is BarberPermissionKey =>
     (BARBER_PERMISSION_KEYS as string[]).includes(k),
   );
+  const replaces = override.length > 0 || raw.includes(BARBER_NO_PERMISSIONS);
   const set = new Set<BarberPermissionKey>(
-    override.length > 0 ? override : BARBER_ROLE_DEFAULT_PERMISSIONS[role] ?? [],
+    replaces ? override : BARBER_ROLE_DEFAULT_PERMISSIONS[role] ?? [],
   );
   for (const [key, implied] of Object.entries(BARBER_PERMISSION_IMPLIES)) {
     if (set.has(key as BarberPermissionKey)) for (const k of implied ?? []) set.add(k);

@@ -8,6 +8,7 @@ import {
   type BarberContext,
 } from "@/lib/barber-auth";
 import {
+  BARBER_NO_PERMISSIONS,
   BARBER_PERMISSIONS,
   BARBER_PERMISSION_KEYS,
   BARBER_ROLE_DEFAULT_PERMISSIONS,
@@ -156,7 +157,9 @@ export function describeMemberPermissions(
   // resolveBarberPermissions es el MISMO motor que usa assertBarberPermission:
   // la pantalla no puede mentir sobre lo que el servidor va a validar.
   const effectiveSet = resolveBarberPermissions(role, permissionsOverride);
-  const hasOverride = canonicalPermissions(permissionsOverride ?? []).length > 0;
+  const hasOverride =
+    canonicalPermissions(permissionsOverride ?? []).length > 0 ||
+    (permissionsOverride ?? []).includes(BARBER_NO_PERMISSIONS);
 
   const items: BarberPermissionState[] = BARBER_PERMISSIONS.map((p) => {
     const fromRole = roleSet.has(p.key);
@@ -187,14 +190,18 @@ export function describeMemberPermissions(
  *   así un permiso NUEVO que se agregue al rol mañana le llega solo).
  * · Si no -> el conjunto COMPLETO, nunca un delta. Ese es el contrato del
  *   motor y es lo que evita que darle un permiso apague los demás.
+ * · Si es VACÍO (el dueño le apagó todo) -> [BARBER_NO_PERMISSIONS]: [] sería
+ *   «hereda el rol» y le devolvería todo lo que se le acaba de quitar.
  */
 export function overrideFromEffective(
   role: BarberRole,
   effectiveKeys: Iterable<string>,
-): BarberPermissionKey[] {
+): string[] {
   const effective = canonicalPermissions(effectiveKeys);
   const roleDefaults = canonicalPermissions(BARBER_ROLE_DEFAULT_PERMISSIONS[role] ?? []);
-  return sameKeySet(effective, roleDefaults) ? [] : effective;
+  if (sameKeySet(effective, roleDefaults)) return [];
+  // TODO apagado (G1, 16-nov): [] sería «hereda el rol» y le devolvería todo.
+  return effective.length > 0 ? effective : [BARBER_NO_PERMISSIONS];
 }
 
 // ═══════════════════════════════════════════════════════════════════════
