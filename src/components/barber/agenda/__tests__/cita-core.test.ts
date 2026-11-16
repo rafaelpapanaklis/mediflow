@@ -14,7 +14,13 @@ import {
   cancelReasonText,
   citaSteps,
   depositBody,
+  addMonthsISO,
+  calendarDayState,
+  closedWeekdays,
   findNextVisitSlot,
+  findNextVisitSlotOnDate,
+  monthGrid,
+  NEXT_VISIT_MAX_DAYS,
   nextVisitOptions,
   parseDepositAmount,
   routeSupports,
@@ -162,6 +168,82 @@ test("su próxima: respeta la duración (una de 60 min no cabe en un hueco de 30
   const r = findNextVisitSlot({ appointment: largo, weeks: 3, timezone: TZ, day, now: NOW });
   assert.equal(r?.exact, null);
   assert.ok(r?.nearby.every((s) => hhmm(s.startAt) !== "15:00"));
+});
+
+// ── «Otra fecha»: el calendario de su próxima (ws6-t8) ──────────────────
+// «si quiere en 5 semanas no se puede» → domingo 20-dic-2026.
+const t5 = "2026-12-20";
+
+test("otra fecha: el día elegido propone la MISMA hora y el MISMO barbero", () => {
+  const r = findNextVisitSlotOnDate({ appointment: appt, dateISO: t5, timezone: TZ, day: base(), now: NOW });
+  assert.ok(r?.exact);
+  assert.equal(r.dateISO, t5);
+  assert.equal(hhmm(r.exact.startAt), "15:00");
+  assert.equal(shopDateISO(r.exact.startAt, TZ), t5);
+  assert.equal(r.exact.barberId, "lalo");
+});
+
+test("otra fecha: ocupado a esa hora → los huecos más cercanos de ESE día", () => {
+  const day = base();
+  day.appointments.push({ barberId: "lalo", startAt: mx(t5, "14:30"), endAt: mx(t5, "15:45"), status: "CONFIRMED" });
+  const r = findNextVisitSlotOnDate({ appointment: appt, dateISO: t5, timezone: TZ, day, now: NOW });
+  assert.equal(r?.exact, null);
+  assert.deepEqual(r?.nearby.map((s) => hhmm(s.startAt)), ["14:00", "15:45", "16:00"]);
+  assert.ok(r?.nearby.every((s) => shopDateISO(s.startAt, TZ) === t5 && s.barberId === "lalo"));
+});
+
+test("otra fecha: un lunes usa el turno del lunes, no el del día de la visita", () => {
+  const day = base();
+  day.schedules.push(turno("lalo", 1, 16 * 60, 20 * 60)); // lunes solo por la tarde
+  const r = findNextVisitSlotOnDate({ appointment: appt, dateISO: "2026-12-21", timezone: TZ, day, now: NOW });
+  assert.equal(r?.exact, null, "a las 15:00 aún no entra");
+  assert.deepEqual(r?.nearby.map((s) => hhmm(s.startAt)), ["16:00", "16:15", "16:30"]);
+});
+
+test("otra fecha: HOY solo propone lo que todavía no pasó", () => {
+  const r = findNextVisitSlotOnDate({ appointment: appt, dateISO: "2026-11-15", timezone: TZ, day: base(), now: NOW });
+  assert.ok(r);
+  const todos = [r.exact, ...r.nearby].filter(Boolean).map((s) => s!.startAt.getTime());
+  assert.ok(todos.every((ms) => ms > NOW.getTime()));
+});
+
+test("otra fecha: con semanas da lo mismo que el día elegido a mano", () => {
+  const porSemanas = findNextVisitSlot({ appointment: appt, weeks: 5, timezone: TZ, day: base(), now: NOW });
+  const porDia = findNextVisitSlotOnDate({ appointment: appt, dateISO: t5, timezone: TZ, day: base(), now: NOW });
+  assert.deepEqual(porSemanas, porDia);
+});
+
+test("calendario: días que la barbería cierra = ningún barbero activo trabaja", () => {
+  const s = [turno("lalo", 2, 600, 1140), turno("beto", 3, 600, 1140), { ...turno("beto", 4, 600, 1140), isActive: false }, turno("ido", 5, 600, 1140)];
+  const barbers = [{ id: "lalo", isActive: true }, { id: "beto", isActive: true }, { id: "ido", isActive: false }];
+  assert.deepEqual([...closedWeekdays(s, barbers)].sort(), [0, 1, 4, 5, 6]);
+  // Sin horario cargado no se apaga nada (no un calendario muerto).
+  assert.equal(closedWeekdays([], barbers).size, 0);
+});
+
+test("calendario: pasado, cerrado, demasiado lejos y abierto", () => {
+  const closed = new Set([1]); // lunes
+  const today = "2026-11-15";
+  assert.equal(calendarDayState({ dateISO: "2026-11-14", todayISO: today, closed }), "past");
+  assert.equal(calendarDayState({ dateISO: today, todayISO: today, closed }), "open");
+  assert.equal(calendarDayState({ dateISO: "2026-11-16", todayISO: today, closed }), "closed");
+  assert.equal(calendarDayState({ dateISO: t5, todayISO: today, closed }), "open");
+  assert.equal(NEXT_VISIT_MAX_DAYS, 365);
+  assert.equal(calendarDayState({ dateISO: "2027-11-15", todayISO: today, closed: new Set() }), "open");
+  assert.equal(calendarDayState({ dateISO: "2027-11-16", todayISO: today, closed: new Set() }), "far");
+});
+
+test("calendario: la rejilla del mes empieza en lunes", () => {
+  const nov = monthGrid("2026-11"); // 1-nov-2026 es domingo
+  assert.equal(nov[0].length, 7);
+  assert.deepEqual(nov[0], [null, null, null, null, null, null, "2026-11-01"]);
+  assert.equal(nov.flat().filter(Boolean).length, 30);
+  assert.equal(nov.at(-1)?.[0], "2026-11-30");
+  const feb = monthGrid("2027-02"); // 1-feb-2027 es lunes, 28 días: 4 semanas justas
+  assert.equal(feb.length, 4);
+  assert.equal(feb[0][0], "2027-02-01");
+  assert.equal(addMonthsISO("2026-12", 1), "2027-01");
+  assert.equal(addMonthsISO("2026-01", -1), "2025-12");
 });
 
 // ── Anticipo ────────────────────────────────────────────────────────────

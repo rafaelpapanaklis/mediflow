@@ -514,7 +514,18 @@
       "confirm": "Book",
       "created": "Their next visit is booked: {day} at {time}",
       "noBarber": "This visit has no barber: use “Repeat this visit” to choose day and barber.",
-      "error": "Couldn't look for a slot. Try again."
+      "error": "Couldn't look for a slot. Try again.",
+      "otherDate": "Other date",
+      "otherDateLabel": "Pick another day on the calendar",
+      "calTitle": "Pick the day of their next visit",
+      "calPrev": "Previous month",
+      "calNext": "Next month",
+      "calLoading": "Loading calendar…",
+      "calClosed": "{day}: the shop is closed",
+      "calPast": "{day}: already gone",
+      "calUsual": "{day}: due (usually every {weeks} wk)",
+      "calLegendUsual": "Due by their usual rhythm",
+      "calLegendClosed": "Closed"
     },
     "actions": {
       "repeat": "Repeat this visit",

@@ -8,6 +8,7 @@ import { getBarberWaConnection, getBarberWaQuota, listBarberThreads } from "@/li
 import { isBarberWaLinked, isBarberWaUnlimited } from "@/lib/barber/whatsapp-core";
 import { getBarberBotSettings, listBarberBotPauses } from "@/lib/barber/bot";
 import { MensajesScreen } from "@/components/barber/mensajes/mensajes-screen";
+import { barberMensajesTextoInicial } from "@/lib/barber/wa-chat-core";
 
 export const dynamic = "force-dynamic";
 
@@ -23,13 +24,13 @@ export const dynamic = "force-dynamic";
  * plan trae bot, si está encendido y en qué chats está en pausa. Todo con
  * las MISMAS funciones que ya usan las APIs; nada nuevo en el servidor.
  */
-export default async function Page(props: { searchParams: Promise<{ tel?: string | string[] }> }) {
+export default async function Page(props: { searchParams: Promise<{ tel?: string | string[]; texto?: string | string[] }> }) {
   const ctx = await getBarberContext();
   if (!ctx) redirect("/barber/entrar");
   await requireBarberPaidAccess(ctx);
 
   // Después del candado (candado-suscripcion lo exige como segundo await).
-  const { tel } = await props.searchParams;
+  const { tel, texto } = await props.searchParams;
 
   const locale = resolveBarberLocale(ctx.barbershop.locale);
   const t = getBarberT(locale);
@@ -83,6 +84,9 @@ export default async function Page(props: { searchParams: Promise<{ tel?: string
         agenda: barberPlanHasFeature(plan, "agenda") && hasBarberPermission(permUser, "agenda.view"),
       }}
       initialPhone={telefono.length === 10 ? telefono : null}
+      // Texto ya escrito (ticket, pedido): solo con un chat que abrir y
+      // permiso de contestar; el redactor solo aparece con la ventana abierta.
+      initialText={telefono.length === 10 && canSend ? barberMensajesTextoInicial(texto) : null}
     />
   );
 }

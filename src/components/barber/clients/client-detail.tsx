@@ -1,6 +1,8 @@
 "use client";
 
 import { soloDigitosTelefono } from "@/lib/barber/phone-format";
+import { mxTenDigits } from "@/lib/phone-mx";
+import { ChatClienteLink } from "../wa-chat";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -14,6 +16,7 @@ import {
   EyeOff,
   Mail,
   Pencil,
+  MessageCircle,
   Phone,
   ShieldCheck,
   Trash2,
@@ -358,8 +361,16 @@ export function BarberClientDetailScreen({
                   ) : null}
                 </div>
 
-                {canEdit ? (
+                {canEdit || mxTenDigits(client.phone) ? (
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap", width: "100%" }}>
+                    {mxTenDigits(client.phone) ? (
+                      <ChatClienteLink className={`${s.btn} ${s.btnSm}`} phone={client.phone}>
+                        <MessageCircle size={13} />
+                        {t("detail.whatsapp")}
+                      </ChatClienteLink>
+                    ) : null}
+                    {canEdit ? (
+                      <>
                     <button
                       type="button"
                       className={`${s.btn} ${s.btnSm}`}
@@ -379,6 +390,8 @@ export function BarberClientDetailScreen({
                       <Ban size={13} />
                       {blocked ? t("block.unblock") : t("block.block")}
                     </button>
+                      </>
+                    ) : null}
                   </div>
                 ) : null}
               </section>

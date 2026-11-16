@@ -14,7 +14,7 @@
 // ═══════════════════════════════════════════════════════════════════════
 import { soloDigitosTelefono } from "@/lib/barber/phone-format";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { BellRing, LogOut, Plus, RefreshCw, Scissors, Volume2 } from "lucide-react";
+import { BellRing, LogOut, MessageCircle, Plus, RefreshCw, Scissors, Volume2 } from "lucide-react";
 import { type Dictionary } from "@/i18n/t";
 import { makeBarberT } from "@/lib/barber/i18n";
 import {
@@ -33,6 +33,7 @@ import { Field, Modal, Pill, agendaCss } from "@/components/barber/agenda/agenda
 import { formatBarberPhone } from "@/lib/barber/phone-format";
 import { mxTenDigits } from "@/lib/phone-mx";
 import { WalkinQr } from "./walkin-qr";
+import { ChatClienteLink } from "../wa-chat";
 import css from "./walkin.module.css";
 
 interface QueueRow extends BarberWalkInDTO {
@@ -289,6 +290,11 @@ export function WalkinPanel(props: WalkinPanelProps) {
                           >
                             <BellRing size={14} /> {t("barber.agenda.queue.actions.notify")}
                           </button>
+                        ) : null}
+                        {mxTenDigits(row.phone) ? (
+                          <ChatClienteLink className={agendaCss.btn} phone={row.phone}>
+                            <MessageCircle size={14} /> {t("barber.agenda.cita.client.whatsapp")}
+                          </ChatClienteLink>
                         ) : null}
                         <button
                           type="button"

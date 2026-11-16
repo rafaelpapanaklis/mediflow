@@ -442,12 +442,97 @@
   font-weight: 600;
   cursor: pointer;
   font-variant-numeric: tabular-nums;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
 .chip:hover:not(:disabled) { background: var(--bg-hover); }
 .chip[aria-pressed="true"] { background: var(--brand-soft); border-color: var(--border-brand); color: var(--brand-ink); }
 .chip:disabled { opacity: 0.5; cursor: not-allowed; }
 .chipUsual { font-size: 12px; color: var(--text-3); }
 .slotRow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+/* ── «Otra fecha»: calendario del mes (ws6-t8) ─────────────────────────
+   Celdas de 44 px de alto (dedo); a lo ancho se reparten las 7 columnas,
+   así cabe en 320 px sin scroll. */
+.cal {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  background: var(--bg-elev);
+  max-width: 360px;
+}
+.calHead { display: flex; align-items: center; gap: 6px; }
+.calMonth { flex: 1; text-align: center; font-size: 14px; font-weight: 700; color: var(--text-1); }
+/* «diciembre de 2026» → «Diciembre de 2026» (capitalize daría «De»). */
+.calMonth::first-letter { text-transform: uppercase; }
+.calNav {
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-elev);
+  color: var(--text-1);
+  cursor: pointer;
+}
+.calNav:hover:not(:disabled) { background: var(--bg-hover); }
+.calNav:disabled { opacity: 0.35; cursor: not-allowed; }
+.calGrid { display: flex; flex-direction: column; gap: 2px; }
+.calRow { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px; }
+.calWd { text-align: center; font-size: 11px; font-weight: 600; color: var(--text-3); text-transform: uppercase; padding: 2px 0; }
+.calEmpty { min-height: 44px; }
+.calDay {
+  position: relative;
+  width: 100%;
+  /* height y no min-height: la regla de dedo del tema (min-height 40 px,
+     más específica) ganaría a un min-height de aquí. */
+  height: 44px;
+  border-radius: var(--radius-sm, 8px);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-1);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+/* Solo con ratón: con el dedo el :hover se queda pegado tras el toque y
+   tapaba el día elegido. */
+@media (hover: hover) {
+  .calDay:hover:not(:disabled):not([aria-pressed="true"]) { background: var(--bg-hover); }
+}
+.calDay:focus-visible { outline: 2px solid var(--brand-ink); outline-offset: 1px; }
+.calDay:disabled { color: var(--text-3); opacity: 0.45; cursor: not-allowed; }
+.calClosed:disabled { text-decoration: line-through; }
+.calToday { border-color: var(--border-strong); }
+.calUsual { border-color: var(--border-brand); color: var(--brand-ink); }
+.calUsual::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 6px;
+  width: 5px;
+  height: 5px;
+  margin-left: -2.5px;
+  border-radius: 999px;
+  background: var(--caramel-600);
+}
+.calDay[aria-pressed="true"] { background: var(--caramel-600); border-color: var(--caramel-700); color: var(--on-brand); }
+.calDay[aria-pressed="true"]::after { background: var(--on-brand); }
+.calLegend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; color: var(--text-3); }
+.calLegend span { display: inline-flex; align-items: center; gap: 6px; }
+.calDot { display: inline-block; width: 8px; height: 8px; border-radius: 999px; }
+.calDotUsual { background: var(--caramel-600); }
+.calDotClosed { background: var(--text-3); opacity: 0.45; }
 
 /* ── Pie: la acción que sigue, grande ──────────────────────────────── */
 .foot {

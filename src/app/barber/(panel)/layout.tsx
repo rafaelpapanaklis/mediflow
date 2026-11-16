@@ -17,6 +17,8 @@ import { BarberBranchBadge } from "@/components/barber/barber-branch-badge";
 import { BarberSedePin } from "@/components/barber/barber-sede-pin";
 import { listBranchOptions, readBranchCookie } from "@/lib/barber/branches";
 import { BARBER_BRANCH_ALL } from "@/lib/barber/branch-cookie";
+import { getBarberWaChatAcceso } from "@/lib/barber/wa-chat";
+import { BarberWaChatProvider } from "@/components/barber/wa-chat";
 import "@/app/panel-chrome-va.css";
 import "../barber-theme.css";
 
@@ -101,9 +103,11 @@ export default async function BarberPanelLayout({
   // Sede activa en la barra de arriba (sucursales de verdad, 15-nov). Las
   // opciones son las que la sesión YA alcanza (getAccessibleBranchIds); con
   // una sola sede no se pinta nada.
-  const [branchOptions, branchCookie] = await Promise.all([
+  // ¿Los botones «WhatsApp» de un cliente abren Mensajes o wa.me? (ws6-t8)
+  const [branchOptions, branchCookie, waChat] = await Promise.all([
     listBranchOptions(ctx).catch(() => []),
     readBranchCookie(),
+    getBarberWaChatAcceso(ctx, plan, paid),
   ]);
 
   const sectionLabels: Record<string, string> = {
@@ -163,7 +167,7 @@ export default async function BarberPanelLayout({
             paddingTop: "clamp(16px, 2vw, 24px)",
           }}
         >
-          {children}
+          <BarberWaChatProvider value={waChat}>{children}</BarberWaChatProvider>
         </main>
       </div>
     </div>

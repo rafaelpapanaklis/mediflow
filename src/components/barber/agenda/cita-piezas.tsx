@@ -9,6 +9,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
+  CalendarDays,
   CalendarPlus,
   IdCard,
   MessageCircle,
@@ -21,6 +22,7 @@ import {
   User,
 } from "lucide-react";
 import { formatBarberPhone } from "@/lib/barber/phone-format";
+import { ChatClienteLink } from "../wa-chat";
 import type {
   BarberAppointmentDTO,
   BarberDTO,
@@ -44,7 +46,8 @@ import {
   CANCEL_REASONS,
   CANCEL_REASON_MAX,
   cancelReasonText,
-  findNextVisitSlot,
+  closedWeekdays,
+  findNextVisitSlotOnDate,
   nextVisitDateISO,
   nextVisitOptions,
   parseDepositAmount,
@@ -53,6 +56,7 @@ import {
   type NextSlot,
   type NextVisitResult,
 } from "./cita-core";
+import { OtraFechaCalendario } from "./otra-fecha";
 import css from "./cita.module.css";
 
 export type T = (key: string, vars?: Record<string, string | number>) => string;
@@ -151,14 +155,9 @@ export function ClientColumn(props: {
         <div className={css.contact}>
           {props.phoneDigits.length === 10 ? (
             <>
-              <a
-                className={css.btn}
-                href={`https://wa.me/52${props.phoneDigits}`}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
+              <ChatClienteLink className={css.btn} phone={props.phoneDigits}>
                 <MessageCircle size={16} /> {t("barber.agenda.cita.client.whatsapp")}
-              </a>
+              </ChatClienteLink>
               <a className={css.btn} href={`tel:+52${props.phoneDigits}`}>
                 <Phone size={16} /> {t("barber.agenda.cita.client.call")}
               </a>
@@ -429,7 +428,7 @@ export function VisitPhotos(props: {
   );
 }
 
-// ═══ Agendar su próxima (2 / 3 / 4 semanas) ════════════════════════════
+// ═══ Agendar su próxima (2 / 3 / 4 semanas u «Otra fecha») ═════════════
 export function NextVisit(props: {
   appt: CitaDTO;
   usual: number | null;
@@ -443,6 +442,10 @@ export function NextVisit(props: {
 }) {
   const { appt, t, timezone } = props;
   const [weeks, setWeeks] = useState<number | null>(null);
+  // «Otra fecha»: el calendario abierto, el día elegido y los días que cierra.
+  const [calOpen, setCalOpen] = useState(false);
+  const [calDay, setCalDay] = useState<string | null>(null);
+  const [closed, setClosed] = useState<Set<number> | null>(null);
   const [state, setState] = useState<"idle" | "searching" | "ready" | "error" | "saving">("idle");
   const [result, setResult] = useState<NextVisitResult | null>(null);
   const [picked, setPicked] = useState<NextSlot | null>(null);
@@ -461,21 +464,51 @@ export function NextVisit(props: {
     );
   const fmtTime = (d: Date) => minuteToLabel(shopMinuteOfDay(d, timezone));
 
-  const search = async (w: number) => {
+  const todayISO = shopDateISO(new Date(), timezone);
+  const usualISO = props.usual ? nextVisitDateISO(appt.startAt, props.usual, timezone) : null;
+
+  // Los días que la barbería cierra salen de su horario semanal (lo trae la
+  // misma lectura de la agenda; se pide una vez, al abrir el calendario).
+  const openCalendar = async () => {
+    const abrir = !calOpen;
+    setCalOpen(abrir);
+    if (!abrir || closed) return;
+    try {
+      const res = await fetch(`/api/barber/appointments?date=${todayISO}&days=1&branchId=${props.branchId}`);
+      const day = res.ok ? ((await res.json()) as DayWindow) : null;
+      setClosed(day ? closedWeekdays(day.schedules, day.barbers) : new Set());
+    } catch {
+      // Sin horario no se apaga nada: mejor dejar elegir que un calendario muerto.
+      setClosed(new Set());
+    }
+  };
+
+  const search = (w: number) => {
+    setCalOpen(false);
+    setCalDay(null);
     setWeeks(w);
+    return searchDate(nextVisitDateISO(appt.startAt, w, timezone));
+  };
+
+  const pickDay = (dateISO: string) => {
+    setWeeks(null);
+    setCalDay(dateISO);
+    return searchDate(dateISO);
+  };
+
+  const searchDate = async (dateISO: string) => {
     setPicked(null);
     setError(null);
     setResult(null);
     setState("searching");
     try {
-      const dateISO = nextVisitDateISO(appt.startAt, w, timezone);
       const res = await fetch(`/api/barber/appointments?date=${dateISO}&days=1&branchId=${props.branchId}`);
       if (!res.ok) {
         setState("error");
         return;
       }
       const day = (await res.json()) as DayWindow;
-      const r = findNextVisitSlot({ appointment: appt, weeks: w, timezone, day, now: new Date() });
+      const r = findNextVisitSlotOnDate({ appointment: appt, dateISO, timezone, day, now: new Date() });
       setResult(r);
       setPicked(r?.exact ?? null);
       setState("ready");
@@ -517,6 +550,8 @@ export function NextVisit(props: {
       });
       props.onCreated?.(data.appointment as BarberAppointmentDTO, note);
       setWeeks(null);
+      setCalDay(null);
+      setCalOpen(false);
       setResult(null);
       setPicked(null);
       setState("idle");
@@ -552,8 +587,37 @@ export function NextVisit(props: {
               {t("barber.agenda.cita.next.weeks", { weeks: w })}
             </button>
           ))}
+          <button
+            type="button"
+            className={css.chip}
+            aria-pressed={calOpen || calDay !== null}
+            aria-expanded={calOpen}
+            aria-label={t("barber.agenda.cita.next.otherDateLabel")}
+            onClick={() => void openCalendar()}
+            disabled={state === "saving"}
+            data-accion="otra-fecha"
+          >
+            <CalendarDays size={14} /> {t("barber.agenda.cita.next.otherDate")}
+          </button>
         </div>
       )}
+      {calOpen && appt.barberId ? (
+        closed ? (
+          <OtraFechaCalendario
+            todayISO={todayISO}
+            closed={closed}
+            usualISO={usualISO}
+            usualWeeks={props.usual}
+            selectedISO={calDay}
+            intlLocale={props.intlLocale}
+            disabled={state === "searching" || state === "saving"}
+            onPick={(d) => void pickDay(d)}
+            t={t}
+          />
+        ) : (
+          <p className={css.small}>{t("barber.agenda.cita.next.calLoading")}</p>
+        )
+      ) : null}
       {state === "searching" ? <p className={css.small}>{t("barber.agenda.cita.next.searching")}</p> : null}
       {state === "error" ? <p className={css.small}>{t("barber.agenda.cita.next.error")}</p> : null}
       {result && (state === "ready" || state === "saving") ? (

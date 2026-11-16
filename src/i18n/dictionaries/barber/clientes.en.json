@@ -101,6 +101,7 @@
   "detail": {
     "back": "Back to clients",
     "edit": "Edit details",
+    "whatsapp": "WhatsApp",
     "notFound": "That profile doesn't exist in this barbershop.",
     "since": "Client since {date}",
     "visits": {

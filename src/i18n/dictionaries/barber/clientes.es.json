@@ -101,6 +101,7 @@
   "detail": {
     "back": "Volver a clientes",
     "edit": "Editar datos",
+    "whatsapp": "WhatsApp",
     "notFound": "Esa ficha no existe en esta barbería.",
     "since": "Cliente desde {date}",
     "visits": {

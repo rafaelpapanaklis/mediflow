@@ -4044,12 +4044,22 @@ export async function listBarberThreadMessages(
   const visible = rows.filter((r) => !isBarberWaSysRow(r.templateName));
   const lastIn = visible.find((r) => r.direction === "INBOUND");
   const withClient = rows.find((r) => r.client);
+  // Sin conversación todavía (el botón «WhatsApp» de la cita o la ficha abre
+  // Mensajes con ?tel=), el nombre sale de la ficha del cliente de ESTA
+  // barbería, para que el chat diga a quién le escribes (ws6-t8).
+  const ficha =
+    withClient?.client ??
+    (await prisma.barberClient.findFirst({
+      where: { barbershopId, phone: { in: [clean, `52${clean}`, `+52${clean}`, `521${clean}`] } },
+      orderBy: { updatedAt: "desc" },
+      select: { id: true, name: true },
+    }));
 
   return {
     messages: visible.reverse().map(toMessageDTO),
     windowOpen: barberWaWindowOpen(lastIn?.createdAt ?? null),
-    clientId: withClient?.client?.id ?? null,
-    clientName: withClient?.client?.name ?? null,
+    clientId: ficha?.id ?? null,
+    clientName: ficha?.name ?? null,
   };
 }
 
