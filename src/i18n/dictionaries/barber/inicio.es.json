@@ -66,7 +66,24 @@
       "tips": "Propinas",
       "closedBody": "Abre un turno con tu fondo inicial para empezar a cobrar.",
       "openCta": "Abrir turno",
-      "goCash": "Ver caja"
+      "goCash": "Ver caja",
+      "inDrawer": "En caja ahora",
+      "inDrawerHint": "Fondo {opening} + efectivo cobrado + entradas − gastos, retiros y pagos en efectivo",
+      "stale": "Esta caja sigue abierta desde el {day}",
+      "staleHint": "Ciérrala para que el corte de ese día cuadre y abre una nueva para hoy.",
+      "staleCta": "Cerrarla en Caja"
+    },
+    "money": {
+      "title": "Dinero de hoy",
+      "profit": "Te queda hoy",
+      "profitHint": "Ingresos − gastos − pagos a barberos",
+      "income": "Ingresos",
+      "expenses": "Gastos de hoy",
+      "expensesCount": { "one": "1 gasto", "other": "{count} gastos" },
+      "expensesCash": "{amount} en efectivo",
+      "payouts": "Pagos a barberos",
+      "goCash": "Ver gastos",
+      "noTips": "Sin propinas: son de los barberos."
     },
     "queue": {
       "title": "Fila virtual",

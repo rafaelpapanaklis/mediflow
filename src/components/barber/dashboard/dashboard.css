@@ -731,3 +731,36 @@
 .barber-shell .bdash-upcoming__link:hover .bdash-upcoming__go { color: var(--brand-ink); transform: translateX(2px); }
 .barber-shell .bdash-upcoming__link:focus-visible { outline: none; box-shadow: var(--ring); }
 @media (prefers-reduced-motion: reduce) { .barber-shell .bdash-upcoming__go { transition: none; } }
+
+/* ── Caja completa en Inicio y Reportes (ws6-t5, 16-nov) ─────────────────
+   «Dinero de hoy» (Inicio) y «Ingresos y gastos» (Reportes): renglones de
+   cuenta (ingresos − gastos − pagos = te queda) y barras de un solo tono.
+   Solo tokens del tema; los gastos llevan --danger (también lo dice el
+   signo «−» y el título: nada se codifica solo con color). */
+.barber-shell .bdash-big--neg { color: var(--danger); }
+.barber-shell .bdash-callout--wrap { flex-wrap: wrap; }
+.barber-shell .bdash-callout--wrap .bdash-callout__text { flex: 1 1 200px; }
+.barber-shell .bdash-ledger { margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; }
+.barber-shell .bdash-ledger__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+}
+.barber-shell .bdash-ledger__row:first-child { border-top: 0; }
+.barber-shell .bdash-ledger__row dt { color: var(--text-2); min-width: 0; }
+.barber-shell .bdash-ledger__row dd { margin: 0; color: var(--text-1); font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.barber-shell .bdash-ledger__meta { display: block; font-size: 11.5px; color: var(--text-3); margin-top: 2px; }
+.barber-shell .bdash-ledger__row--total { border-top: 2px solid var(--line); font-size: 14px; }
+.barber-shell .bdash-ledger__row--total dt { color: var(--text-1); font-weight: 700; }
+.barber-shell .bdash-ledger__row--total dd { font-size: 16px; font-weight: 700; }
+.barber-shell .bdash-ledger__row--neg dd { color: var(--danger); }
+.barber-shell .bdash-bar__fill--exp { background: var(--danger); }
+.barber-shell .bdash-money { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; }
+@container bdash (min-width: 720px) {
+  .barber-shell .bdash-money { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+.barber-shell .bdash-money__sub { font-size: 12.5px; font-weight: 700; color: var(--text-2); margin: 0 0 8px; }

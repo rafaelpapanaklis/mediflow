@@ -47,6 +47,7 @@ import {
 } from "@/lib/barber-auth";
 import { resolveBranchScope } from "@/lib/barber/branches";
 import { expectedCashFor, resolveBarberFeatures } from "@/lib/barber/cash";
+import { getDineroPeriodo } from "@/lib/barber/caja-dinero";
 import {
   BarberCajaError,
   CANCELLED_MARK,
@@ -331,6 +332,32 @@ export interface InicioCash {
   ticketCount: number;
   salesTotal: number;
   tipsTotal: number;
+  /**
+   * Caja completa (ws6-t5): expectedCash ya es «lo que hay en el cajón ahora»
+   * con gastos, retiros, entradas y pagos (summarizeSession, la cuenta de la
+   * Caja). false/ausente = sin sql/barber_caja_completa.sql: fondo + efectivo.
+   */
+  full?: boolean;
+  /** Día local (YYYY-MM-DD) en que se abrió, si NO es hoy: la caja quedó abierta. null = es de hoy. */
+  staleSince?: string | null;
+}
+
+/**
+ * Dinero completo de HOY (ws6-t5): solo con cash.view y el SQL de caja
+ * completa pegado. Sale de caja-dinero.ts (cajaResumen de ws6-t1).
+ */
+export interface InicioMoney {
+  /** Ingresos del negocio (= «Ingresos de hoy» de la banda: sin propinas). */
+  income: number;
+  /** Gastos de hoy (todos los medios; los anulados no). */
+  expenses: number;
+  expensesCount: number;
+  /** De esos gastos, los pagados en efectivo. */
+  expensesCash: number;
+  /** Pagos a barberos de hoy (adelantos, comisión, sueldo…). */
+  payouts: number;
+  /** Te queda hoy = ingresos − gastos − pagos a barberos. */
+  profit: number;
 }
 
 export interface InicioAlerts {
@@ -420,6 +447,8 @@ export interface InicioSummary {
   } | null;
   upcoming: InicioUpcoming[];
   cash: InicioCash | null;
+  /** null/ausente = no viaja (sin cash.view, rol Barbero o sin el SQL de caja completa). */
+  money?: InicioMoney | null;
   queue: { waiting: number; called: number } | null;
   alerts: InicioAlerts;
   setup: InicioSetup;
@@ -813,6 +842,52 @@ export async function getInicioSummary(ctx: BarberContext, opts: InicioOptions =
     viewingLabel: viewing?.label ?? null,
   };
 
+  // Caja completa (ws6-t5): gastos, pagos y «te queda» de hoy, y el cajón con
+  // TODOS sus movimientos. Las cuentas son las de la Caja (cajaResumen vía
+  // getDineroPeriodo). Sin el SQL pegado, money = null y
+  // la tarjeta de caja se queda con la cuenta de siempre. Si la lectura
+  // falla, Inicio se pinta igual sin esto (no tumba la pantalla de entrada).
+  let money: InicioMoney | null = null;
+  let fullExpected: number | null = null;
+  let staleSince: string | null = null;
+  if (canCash) {
+    const r = await getDineroPeriodo(
+      ctx,
+      branchIds,
+      { from: todayStart, to: tomorrowStart },
+      {
+        openSession: openSession
+          ? {
+              id: openSession.id,
+              barbershopId: cashShopId,
+              openingAmount: D(openSession.openingAmount as never),
+              openedAt: new Date(openSession.openedAt),
+            }
+          : null,
+        now,
+      },
+    ).catch((e) => {
+      console.error("[barber/inicio] dinero de hoy", e);
+      return null;
+    });
+    if (r) {
+      const d = r.dinero;
+      money = {
+        income: d.income,
+        expenses: d.expenses.total,
+        expensesCount: d.expenses.count,
+        expensesCash: d.expenses.cash,
+        payouts: d.payouts.total,
+        profit: d.profit,
+      };
+      fullExpected = r.openExpected;
+      if (openSession) {
+        const openedDay = dateKeyInTz(new Date(openSession.openedAt), tz);
+        staleSince = openedDay !== todayKey ? openedDay : null;
+      }
+    }
+  }
+
   const cash: InicioCash | null = canCash
     ? openSession
       ? {
@@ -820,12 +895,16 @@ export async function getInicioSummary(ctx: BarberContext, opts: InicioOptions =
           sessionId: openSession.id,
           openedAt: new Date(openSession.openedAt).toISOString(),
           openedByName: openSession.opened_by || "—",
-          // MISMA regla que la caja: fondo + Σ total de tickets vivos en efectivo.
-          expectedCash: toNum(expectedCashFor(D(openSession.openingAmount as never), D(openSession.cash_total as never))),
+          // MISMA regla que la caja: con el SQL de caja completa, el esperado
+          // del turno con sus movimientos (summarizeSession); sin él, fondo +
+          // Σ total de tickets vivos en efectivo.
+          expectedCash:
+            fullExpected ?? toNum(expectedCashFor(D(openSession.openingAmount as never), D(openSession.cash_total as never))),
           openingAmount: toNum(D(openSession.openingAmount as never)),
           ticketCount: intOf(openSession.tickets),
           salesTotal: toNum(D(openSession.sales_total as never)),
           tipsTotal: toNum(D(openSession.tips_total as never)),
+          ...(money ? { full: fullExpected !== null, staleSince } : {}),
         }
       : {
           open: false,
@@ -876,6 +955,7 @@ export async function getInicioSummary(ctx: BarberContext, opts: InicioOptions =
     visits,
     upcoming,
     cash,
+    ...(money ? { money } : {}),
     queue,
     alerts,
     setup,
