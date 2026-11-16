@@ -153,7 +153,11 @@ test("1 barbero y 9 barberos: todos salen; el sin horario sin «Reservar» y con
   // La misma clave que Oficio y Barrio: lo que la barbería escribió la sigue al cambiar.
   const reescrita = pinta(datos({ barberos: nueve, config: { copia: { "equipo.sinHorario": "Pronto con agenda" } } }));
   assert.ok(reescrita.includes("Pronto con agenda"));
-  assert.ok(html.includes('aria-label="Reservar con Barbero 0"'));
+  // «con» en el código y el defecto «Reservar»: «Reservar con <nombre corto>».
+  assert.ok(html.includes(">Reservar con Barbero <"), "el enlace del barbero no dice «Reservar con <nombre>»");
+  assert.ok(!/con con/.test(html));
+  const apodo = pinta(datos({ barberos: [barbero(1, { nombre: "Rodrigo Ibarra", apodo: "Rodri" })] }));
+  assert.ok(apodo.includes(">Reservar con Rodri <"));
 });
 
 test("nombre de 40 letras: talla chica en portada y en la lateral", () => {
