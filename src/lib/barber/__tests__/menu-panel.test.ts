@@ -155,9 +155,10 @@ test("Sucursales: entrada propia junto a Equipo, solo con branches.manage y con 
   for (const [rol, ve] of [["OWNER", true], ["MANAGER", true], ["RECEPTION", false], ["BARBER", false]] as const) {
     assert.equal(hasBarberPermission({ role: rol, permissionsOverride: null }, "branches.manage"), ve, rol);
   }
-  // El layout es el que corta por plan; el menú del celular es el mismo sidebar.
-  const layout = leer("src/app/barber/(panel)/layout.tsx");
-  assert.match(layout, /if \(item\.featureKey && plan\.features\[item\.featureKey\] !== true\) return false;/);
+  // El corte por plan vive en nav.ts (lo usan el layout y GET /api/barber/nav); el menú del
+  // celular es el mismo sidebar. Unión pase 22: permisos-audit (m4) lo movió del layout a nav.ts.
+  const nav = leer("src/lib/barber/nav.ts");
+  assert.match(nav, /if \(item\.featureKey && features\[item\.featureKey\] !== true\) return false;/);
 });
 
 test("Barberos ↔ Equipo: cada pantalla dice qué es la otra y la ficha sin cuenta lleva a darla de alta", () => {

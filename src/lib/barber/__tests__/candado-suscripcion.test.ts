@@ -256,8 +256,12 @@ test("el layout del panel recorta el menú con barberNavItemsWhileUnpaid", () =>
 
   // El recorte va ANTES del filtro de plan/permiso: si fuera después, un
   // empleado sin billing.manage vería el menú VACÍO y sin una sola pista.
-  const iRecorte = layout.indexOf("barberNavItemsWhileUnpaid");
-  const iPermiso = layout.indexOf("hasBarberPermission(permUser");
+  // El orden se mide DENTRO del filtro del menú (nav.ts). Unión pase 22: el layout ya usa
+  // hasBarberPermission(permUser, "branches.manage") para «Administrar sucursales…» del
+  // selector de sede (ws6-t6), que no es el menú y aparecía antes en el texto concatenado.
+  const filtro = sinComentarios(leer("src/lib/barber/nav.ts"));
+  const iRecorte = filtro.indexOf("barberNavItemsWhileUnpaid(");
+  const iPermiso = filtro.indexOf("hasBarberPermission(permUser");
   assert.ok(
     iRecorte !== -1 && iPermiso !== -1 && iRecorte < iPermiso,
     `${LAYOUT}: el recorte por impago va ANTES del filtro de permiso/feature`,
