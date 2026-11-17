@@ -8501,8 +8501,9 @@ img.dcbw-es-equipo-foto {
   aspect-ratio: 3 / 4.2;
 }
 
+/* La foto de portada, con todo su color: aquí había un saturate(0.8)
+   (Rafael, 16-nov: «la foto así como la sube el dueño»). */
 .dcbw-rv-portada-foto .dcbw-rv-foto {
-  filter: saturate(0.8);
   animation: dcbw-rv-asomar 1.2s cubic-bezier(0.2, 0.7, 0.2, 1) both;
 }
 

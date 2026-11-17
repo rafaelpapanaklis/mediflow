@@ -27,7 +27,7 @@ const CARPETA = path.resolve(__dirname, "..");
 const css = readFileSync(path.join(CARPETA, "skins.css"), "utf8");
 
 /** Las pieles revisadas, en el orden en que aparecen en skins.css. */
-const PIELES = ["oficio", "barrio"] as const;
+const PIELES = ["oficio", "barrio", "revista"] as const;
 
 /** Dónde empieza cada una de las tres que se ofrecen (van al final del archivo, en este orden). */
 const ORDEN = ["oficio", "barrio", "revista"];
