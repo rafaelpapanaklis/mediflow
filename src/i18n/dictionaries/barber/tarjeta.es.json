@@ -27,5 +27,16 @@
     "generic": "No pudimos atender tu solicitud. Intenta de nuevo.",
     "network": "No hay conexión. Revisa tu internet e intenta de nuevo.",
     "tooMany": "Demasiados intentos. Espera unos minutos y vuelve a intentar."
+  },
+  "install": {
+    "title": "Tenla siempre a la mano",
+    "body": "Agrega tu tarjeta a la pantalla de inicio y ábrela con un toque, como una app.",
+    "button": "Agregar a mi pantalla de inicio",
+    "close": "Cerrar este aviso",
+    "iphoneStep1": "Toca «Compartir» en la barra de tu navegador.",
+    "iphoneStep2": "Elige «Agregar a inicio».",
+    "androidStep1": "Abre el menú de tres puntos de tu navegador.",
+    "androidStep2": "Toca «Agregar a la pantalla principal».",
+    "done": "Listo: tu tarjeta ya está en tu pantalla de inicio."
   }
 }

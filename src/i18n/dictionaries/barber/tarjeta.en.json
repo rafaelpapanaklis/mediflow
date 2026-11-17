@@ -27,5 +27,16 @@
     "generic": "We couldn't process your request. Please try again.",
     "network": "No connection. Check your internet and try again.",
     "tooMany": "Too many attempts. Wait a few minutes and try again."
+  },
+  "install": {
+    "title": "Keep it handy",
+    "body": "Add your card to your home screen and open it with one tap, like an app.",
+    "button": "Add to my home screen",
+    "close": "Close this notice",
+    "iphoneStep1": "Tap Share in your browser's toolbar.",
+    "iphoneStep2": "Choose “Add to Home Screen”.",
+    "androidStep1": "Open your browser's three-dot menu.",
+    "androidStep2": "Tap “Add to Home screen”.",
+    "done": "Done: your card is now on your home screen."
   }
 }
