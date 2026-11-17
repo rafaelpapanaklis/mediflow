@@ -63,6 +63,7 @@ type SortKey =
   | "pago"
   | "createdAt"
   | "barbers"
+  | "clients"
   | "lastActivityAt"
   | "uso"
   | "whatsapp";
@@ -74,6 +75,8 @@ const COLUMNS: { key: SortKey; label: string; cls?: string; align?: "right" | "c
   { key: "status", label: "Suscripción" },
   { key: "pago", label: "Paga al mes", align: "right" },
   { key: "barbers", label: "Barberos", align: "right" },
+  // Como «Pacientes» en la lista de clínicas (ws6-t1): de cada sede.
+  { key: "clients", label: "Clientes", align: "right" },
   { key: "whatsapp", label: "WhatsApp", cls: "dcba-col-xwide" },
   { key: "uso", label: "Uso del panel", cls: "dcba-col-wide" },
   { key: "lastActivityAt", label: "Última actividad", cls: "dcba-col-wide" },
@@ -94,6 +97,8 @@ function sortValue(row: AdminBarbershopRow, key: SortKey): string | number {
       return Number(row.pagoMensual);
     case "barbers":
       return row.barbers;
+    case "clients":
+      return row.clients;
     case "whatsapp":
       return row.whatsappConnected ? 1 : 0;
     case "lastActivityAt":
@@ -565,6 +570,11 @@ export function AdminBarberiasClient() {
                               {formatInt(row.barbers)}
                             </span>
                             <div className="dcba-note">{formatInt(row.teamUsers)} con acceso</div>
+                          </td>
+                          <td style={{ textAlign: "right" }}>
+                            <span className="mono" style={{ fontSize: 13, color: "var(--text-1)" }}>
+                              {formatInt(row.clients)}
+                            </span>
                           </td>
                           <td className="dcba-col-xwide">
                             {row.whatsappConnected ? (

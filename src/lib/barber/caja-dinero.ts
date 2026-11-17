@@ -290,19 +290,25 @@ function assertCashView(ctx: BarberContext): void {
  * Movimientos de las sedes, en tandas de ≤ 5 lecturas en paralelo (regla del
  * pooler). `truncated` = alguna sede llegó al tope de loadMovements (N5).
  */
-async function movementsOf(branchIds: string[], range: { from: Date; to: Date }): Promise<{ rows: CashMovementRow[]; truncated: boolean }> {
+async function movementsOf(
+  branchIds: string[],
+  range: { from: Date; to: Date },
+): Promise<{ rows: CashMovementRow[]; truncated: boolean; porSede: Map<string, CashMovementRow[]> }> {
   const rows: CashMovementRow[] = [];
+  const porSede = new Map<string, CashMovementRow[]>();
   let truncated = false;
   for (let i = 0; i < branchIds.length; i += 5) {
+    const ids = branchIds.slice(i, i + 5);
     const tanda = await Promise.all(
-      branchIds.slice(i, i + 5).map((id) => loadMovements(prisma, { barbershopId: id, from: range.from, to: range.to, limit: MOVEMENTS_LIMIT })),
+      ids.map((id) => loadMovements(prisma, { barbershopId: id, from: range.from, to: range.to, limit: MOVEMENTS_LIMIT })),
     );
-    for (const r of tanda) {
+    tanda.forEach((r, k) => {
       if (r.length >= MOVEMENTS_LIMIT) truncated = true;
       rows.push(...r);
-    }
+      porSede.set(ids[k], r);
+    });
   }
-  return { rows, truncated };
+  return { rows, truncated, porSede };
 }
 
 /** «YYYY-MM-DD» del instante en la zona de la barbería. */
@@ -320,6 +326,18 @@ export interface DineroResultado {
   dinero: DineroPeriodo;
   /** El esperado del turno abierto con todos sus movimientos (la cuenta de la Caja). null = no se pidió. */
   openExpected: number | null;
+  /** El resumen de la Caja de todo el alcance (tickets y promedio que DineroPeriodo no trae). */
+  resumen: CajaResumen;
+  /** Con `porSede`: el MISMO cajaResumen de cada sede por separado (sin el costo de barberos). */
+  porSede: Map<string, CajaResumen> | null;
+}
+
+/** Lo que getDineroPeriodo saca de la sesión, dado a mano (el panel de /admin no tiene sesión de barbería). */
+export interface DineroSedesOpts extends DineroOpts {
+  /** Zona de la barbería: solo para prorratear sueldos y rentas por día. */
+  tz: string;
+  /** Además del total, el resumen de cada sede (desglose de /admin/barberias/[id]). */
+  porSede?: boolean;
 }
 
 /**
@@ -343,6 +361,20 @@ export async function getDineroPeriodo(
   opts: DineroOpts = {},
 ): Promise<DineroResultado | null> {
   assertCashView(ctx);
+  return cargarDineroDeSedes(branchIds, range, { ...opts, tz: ctx.barbershop?.timezone || "America/Mexico_City" });
+}
+
+/**
+ * El cuerpo de getDineroPeriodo SIN la sesión de barbería: la misma carga y la
+ * misma fórmula (cajaResumen + dineroDe). Quien llama ya decidió el alcance y
+ * los permisos: getDineroPeriodo (cash.view de la sesión) o el panel de
+ * plataforma /admin/barberias/[id] (sesión de admin de DaleControl, ws6-t1).
+ */
+export async function cargarDineroDeSedes(
+  branchIds: string[],
+  range: { from: Date; to: Date },
+  opts: DineroSedesOpts,
+): Promise<DineroResultado | null> {
   const ids = Array.from(new Set(branchIds.filter(Boolean)));
   if (ids.length === 0) return null;
   if (!(await cashMovementsReady(prisma))) return null;
@@ -353,7 +385,7 @@ export async function getDineroPeriodo(
   const openInside =
     open !== null && ids.includes(open.barbershopId) && open.openedAt.getTime() >= range.from.getTime() && range.to.getTime() > now.getTime();
   const apart = open !== null && !openInside;
-  const tz = ctx.barbershop?.timezone || "America/Mexico_City";
+  const tz = opts.tz;
   const [tickets, mov, apartTickets, apartMovements, entryGroups, barbers] = await Promise.all([
     prisma.$queryRaw<TicketSql[]>`
       ${SELECT_TICKET}
@@ -404,7 +436,26 @@ export async function getDineroPeriodo(
     const sMovements = apart ? apartMovements : movements.filter((m) => m.sessionId === open.id);
     openExpected = cajaResumen({ openingAmount: open.openingAmount, tickets: sTickets.map(ticketOf), movements: sMovements }).expectedCash;
   }
-  return { dinero: dineroDe(resumen, adelantosPorBarbero(movements), barberCost, mov.truncated), openExpected };
+  let porSede: Map<string, CajaResumen> | null = null;
+  if (opts.porSede) {
+    porSede = new Map();
+    for (const id of ids) {
+      porSede.set(
+        id,
+        cajaResumen({
+          openingAmount: 0,
+          tickets: tickets.filter((t) => t.barbershopId === id).map(ticketOf),
+          movements: mov.porSede.get(id) ?? [],
+        }),
+      );
+    }
+  }
+  return {
+    dinero: dineroDe(resumen, adelantosPorBarbero(movements), barberCost, mov.truncated),
+    openExpected,
+    resumen,
+    porSede,
+  };
 }
 
 /** Para pruebas y para quien necesite la forma de un DineroPeriodo vacío. */

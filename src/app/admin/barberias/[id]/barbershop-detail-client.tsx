@@ -59,6 +59,7 @@ import {
 import { BotonVerComoBarberia } from "@/components/admin/barberias/boton-ver-como-barberia";
 import { ActividadPanel } from "@/components/admin/barberias/actividad-panel";
 import { PagosADaleControl } from "@/components/admin/barberias/pagos-a-dalecontrol";
+import { NumerosNegocioPanel } from "@/components/admin/barberias/numeros-negocio";
 import "@/components/admin/barberias/barberias.css";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -273,6 +274,11 @@ export function AdminBarbershopDetailClient({
         {/* ── Lo que paga a DaleControl: cobros, total, último, rechazados (ws6-t1) ── */}
         <div className="dcba-section">
           <PagosADaleControl barbershopId={shop.id} pagos={pagos} matrizNombre={shop.parentName} />
+        </div>
+
+        {/* ── El negocio de la barbería con SUS clientes, por mes y por sede (ws6-t1) ── */}
+        <div className="dcba-section">
+          <NumerosNegocioPanel barbershopId={shop.id} />
         </div>
 
         {/* ── WhatsApp ─────────────────────────────────────────────── */}
