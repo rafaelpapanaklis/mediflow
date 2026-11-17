@@ -76,7 +76,7 @@
     "money": {
       "title": "Today's money",
       "profit": "You keep today",
-      "profitHint": "What came in minus what went out today",
+      "profitHint": "Income − expenses − what the barbers earned",
       "income": "Income",
       "expenses": "Today's expenses",
       "expensesCount": { "one": "1 expense", "other": "{count} expenses" },

@@ -76,7 +76,7 @@
     "money": {
       "title": "Dinero de hoy",
       "profit": "Te queda hoy",
-      "profitHint": "Lo que entró menos lo que salió hoy",
+      "profitHint": "Ingresos − gastos − lo que les toca a los barberos",
       "income": "Ingresos",
       "expenses": "Gastos de hoy",
       "expensesCount": { "one": "1 gasto", "other": "{count} gastos" },
