@@ -36,7 +36,9 @@ import { KpiCard } from "@/components/ui/design-system/kpi-card";
 import { BARBER_ROLE_LABELS, type BarberRole } from "@/lib/barber/types";
 import { isBarberUnlimited } from "@/lib/barber/plan-shared";
 import type { AdminBarbershopDetail } from "@/lib/barber/admin";
+import type { PagosBarberiaDTO } from "@/lib/barber/admin-pagos-core";
 import {
+  COBRO_FACE,
   MANUAL_ACTION_LABELS,
   PLAN_TONES,
   TICKET_PRIORITY_FACE,
@@ -56,6 +58,7 @@ import {
 } from "@/components/admin/barberias/manual-action-modal";
 import { BotonVerComoBarberia } from "@/components/admin/barberias/boton-ver-como-barberia";
 import { ActividadPanel } from "@/components/admin/barberias/actividad-panel";
+import { PagosADaleControl } from "@/components/admin/barberias/pagos-a-dalecontrol";
 import "@/components/admin/barberias/barberias.css";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -67,7 +70,14 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-export function AdminBarbershopDetailClient({ detail }: { detail: AdminBarbershopDetail }) {
+export function AdminBarbershopDetailClient({
+  detail,
+  pagos = null,
+}: {
+  detail: AdminBarbershopDetail;
+  /** Cobros de la suscripción a DaleControl (admin-pagos.ts); null = no se pudieron leer. */
+  pagos?: PagosBarberiaDTO | null;
+}) {
   const router = useRouter();
   const [action, setAction] = useState<ManualActionKind | null>(null);
 
@@ -163,7 +173,7 @@ export function AdminBarbershopDetailClient({ detail }: { detail: AdminBarbersho
             hint={`${formatInt(activity.doneThisMonth)} atendidas · ${formatInt(activity.cancelledThisMonth)} canceladas`}
           />
           <KpiCard
-            label="Tickets del mes"
+            label="Tickets de soporte del mes"
             value={formatInt(activity.ticketsThisMonth)}
             icon={MessageSquare}
             tone={activity.openTickets > 0 ? "warning" : undefined}
@@ -219,6 +229,20 @@ export function AdminBarbershopDetailClient({ detail }: { detail: AdminBarbersho
             </div>
             <div className="dcba-fields">
               <Field label="Precio de lista">{formatMoney(shop.planPriceMonthly)}/mes</Field>
+              {/* Lo que paga DE VERDAD (lo que cobra Stripe, anual ÷ 12) y cuándo renueva (ws6-t1). */}
+              <Field label="Paga al mes">
+                {shop.isBranch ? (
+                  "La paga la matriz"
+                ) : (
+                  <>
+                    {formatMoney(shop.pagoMensual)}
+                    <div className="dcba-note">{(COBRO_FACE[shop.cobro] ?? COBRO_FACE.sin_pagar).label}</div>
+                  </>
+                )}
+              </Field>
+              <Field label="Próxima renovación">
+                <span title={fullDate(pagos?.proximaRenovacion)}>{shortDate(pagos?.proximaRenovacion)}</span>
+              </Field>
               <Field label="Estado en BD">
                 <span className="mono">{shop.subscriptionStatus}</span>
               </Field>
@@ -244,6 +268,11 @@ export function AdminBarbershopDetailClient({ detail }: { detail: AdminBarbersho
               editarlos ahí cambia esta ficha sin volver a desplegar.
             </p>
           </CardNew>
+        </div>
+
+        {/* ── Lo que paga a DaleControl: cobros, total, último, rechazados (ws6-t1) ── */}
+        <div className="dcba-section">
+          <PagosADaleControl barbershopId={shop.id} pagos={pagos} matrizNombre={shop.parentName} />
         </div>
 
         {/* ── WhatsApp ─────────────────────────────────────────────── */}
