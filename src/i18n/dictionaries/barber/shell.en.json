@@ -52,6 +52,11 @@
     "body": "This section is under construction. You will be able to manage it from here very soon.",
     "hint": "The DaleControl team is working on this area of the panel."
   },
+  "notFound": {
+    "title": "We couldn't find this page",
+    "body": "Check that the link is complete, or go back to Home and use the menu.",
+    "cta": "Back to Home"
+  },
   "areas": {
     "inicio": "Your barbershop at a glance: today's appointments, queue, sales and shortcuts.",
     "agenda": "Appointment schedule per barber: create, confirm, reschedule and charge each visit.",
