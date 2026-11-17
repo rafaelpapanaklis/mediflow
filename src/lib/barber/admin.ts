@@ -2,6 +2,7 @@ import "server-only";
 import { Prisma } from "@prisma/client";
 import { createClient as createSupabaseAdmin } from "@supabase/supabase-js";
 import { prisma } from "@/lib/prisma";
+import { usoParaLista } from "@/lib/barber/uso/actividad";
 import { isMissingTableError } from "@/lib/barber/db-errors";
 import { getBarberPlans } from "@/lib/barber/plans";
 import {
@@ -234,6 +235,13 @@ export interface AdminBarbershopRow {
   messageQuota: number;
   lastActivityAt: string | null;
   openTickets: number;
+  /**
+   * Uso del panel (sql/barber_usage_events.sql, ws6-t4): último uso en los
+   * últimos 90 días (null = sin uso en ese tiempo) y clics del mes en curso
+   * (null = la tabla no está pegada; con ella, 0 si no hubo clics).
+   */
+  lastUsageAt: string | null;
+  clicksThisMonth: number | null;
 }
 
 export interface AdminBarbershopFilters {
@@ -350,6 +358,9 @@ export async function listBarbershopsForAdmin(
       }),
     ]);
 
+  // Aparte y sin tumbar nada: sin la tabla de uso el mapa viene vacío.
+  const uso = await usoParaLista(ids);
+
   const barbersBy = new Map(barberCounts.map((r) => [r.barbershopId, r._count._all]));
   const ticketsBy = new Map(ticketCounts.map((r) => [r.barbershopId, r._count._all]));
   const apptBy = new Map(lastAppt.map((r) => [r.barbershopId, r._max.createdAt]));
@@ -394,6 +405,8 @@ export async function listBarbershopsForAdmin(
         latest(apptBy.get(s.id), saleBy.get(s.id), loginBy.get(s.id), s.createdAt),
       ),
       openTickets: ticketsBy.get(s.id) ?? 0,
+      lastUsageAt: uso.porBarberia.get(s.id)?.ultimoUso ?? null,
+      clicksThisMonth: uso.disponible ? (uso.porBarberia.get(s.id)?.clicsMes ?? 0) : null,
     };
   });
 }
@@ -907,6 +920,8 @@ export async function getBarbershopDetailForAdmin(
     messageQuota: quota,
     lastActivityAt: null,
     openTickets,
+    lastUsageAt: null,
+    clicksThisMonth: null,
   };
 
   const manualActions = await listBarberAdminActions(shop.id);
