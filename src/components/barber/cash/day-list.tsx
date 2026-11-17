@@ -184,7 +184,7 @@ function DayRowView({
         <strong>{movementTitle(t, m)}</strong>
         {m.note ? <span className="bcaja-muted"> · {m.note}</span> : null}
         {m.voidedAt ? (
-          <span className="bcaja-muted" style={{ display: "block", fontSize: 11.5, textDecoration: "none" }} data-anulado>
+          <span className="bcaja-muted" style={{ fontSize: 11.5 }} data-anulado>
             {t("day.voidedBy", { name: m.voidedByName ?? "—", when: fmtDateTime(m.voidedAt, tz) })}
             {m.voidReason ? ` · ${m.voidReason}` : ""}
           </span>

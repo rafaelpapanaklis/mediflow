@@ -118,7 +118,7 @@
     "openNotes": "Nota (opcional)",
     "openConfirm": "Abrir turno",
     "closeTitle": "Cerrar turno",
-    "closeBody": "Cuenta el efectivo del cajón y captúralo. Debe haber lo que había al abrir más lo que se cobró en efectivo.",
+    "closeBody": "Cuenta el efectivo del cajón y captúralo. Abajo está la cuenta de lo que debe haber: el fondo, lo cobrado en efectivo y lo que entró o salió del cajón.",
     "draftsPending": {
       "one": "Queda 1 nota por cobrar.",
       "other": "Quedan {count} notas por cobrar."
@@ -139,7 +139,7 @@
     "differenceOver": "Sobra",
     "differenceShort": "Falta",
     "breakdown": "Desglose del turno",
-    "closeNotes": "Nota del cierre (opcional)",
+    "closeNotes": "Nota del cierre",
     "closeConfirm": "Cerrar turno",
     "closeWarning": "Un turno cerrado no se puede reabrir. Para corregir algo después, abre un turno nuevo y déjalo anotado.",
     "closedTitle": "Turno cerrado",
@@ -602,7 +602,7 @@
     "expensesHint": "En efectivo: {cash}",
     "expensesHintPayouts": "En efectivo: {cash} · pagos a barberos: {payouts}",
     "moves": "Retiros / entradas",
-    "movesHint": "Entradas {in} · {out} retiros · {inCount} entradas",
+    "movesHint": "Entradas {in} · Retiros hechos: {out} · Entradas hechas: {inCount}",
     "incomeTips": "Propinas {tips}"
   },
   "day": {
@@ -691,6 +691,7 @@
     "methodLabel": "¿Con qué se pagó?",
     "outsideWarning": "No hay caja abierta: este gasto se registra fuera de caja y no entra en ningún corte.",
     "notDrawer": "No sale del cajón: no cambia lo que debe haber en caja.",
+    "overDrawer": "En el cajón debe haber {drawer}: este monto son {over} más de lo que hay. Revísalo; si lo registras así, la caja queda en negativo.",
     "note": "Nota",
     "notePlaceholder": {
       "EXPENSE": "Ej. garrafón, navajas",
@@ -792,7 +793,7 @@
       "counted": "Contado",
       "difference": "Diferencia",
       "leftForNext": "Fondo para mañana",
-      "income": "Ingresos",
+      "income": "Cobrado (con propinas)",
       "card": "Tarjeta",
       "transfer": "Transferencia",
       "online": "En línea",

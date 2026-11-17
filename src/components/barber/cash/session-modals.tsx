@@ -28,7 +28,7 @@ async function postJson<T>(url: string, body: unknown): Promise<PostResult<T>> {
   try {
     const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     const data = (await res.json().catch(() => ({}))) as T & { error?: string; code?: string };
-    if (!res.ok) return { ok: false, data: null, error: data.error ?? "Error", code: data.code };
+    if (!res.ok) return { ok: false, data: null, error: data.error ?? "network" /* respuesta sin mensaje (502 del proxy): texto genérico, no «Error» pelado */, code: data.code };
     return { ok: true, data, error: null };
   } catch {
     return { ok: false, data: null, error: "network" };

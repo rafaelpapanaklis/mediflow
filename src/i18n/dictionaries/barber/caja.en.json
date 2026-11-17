@@ -118,7 +118,7 @@
     "openNotes": "Note (optional)",
     "openConfirm": "Open shift",
     "closeTitle": "Close shift",
-    "closeBody": "Count the cash in the drawer and enter it. It should hold what was there at opening plus what was charged in cash.",
+    "closeBody": "Count the cash in the drawer and enter it. Below is how much it should hold: the float, what was charged in cash and what went in or out of the drawer.",
     "draftsPending": {
       "one": "1 note is still to be charged.",
       "other": "{count} notes are still to be charged."
@@ -139,7 +139,7 @@
     "differenceOver": "Over",
     "differenceShort": "Short",
     "breakdown": "Shift breakdown",
-    "closeNotes": "Closing note (optional)",
+    "closeNotes": "Closing note",
     "closeConfirm": "Close shift",
     "closeWarning": "A closed shift can't be reopened. To fix something later, open a new shift and leave a note.",
     "closedTitle": "Shift closed",
@@ -602,7 +602,7 @@
     "expensesHint": "In cash: {cash}",
     "expensesHintPayouts": "In cash: {cash} · paid to barbers: {payouts}",
     "moves": "Withdrawals / cash in",
-    "movesHint": "Cash in {in} · {out} withdrawals · {inCount} cash in",
+    "movesHint": "Cash in {in} · Withdrawals made: {out} · Cash-ins made: {inCount}",
     "incomeTips": "Tips {tips}"
   },
   "day": {
@@ -691,6 +691,7 @@
     "methodLabel": "How was it paid?",
     "outsideWarning": "No register is open: this expense is saved outside the register and won't be in any close.",
     "notDrawer": "Doesn't leave the drawer: doesn't change what should be in it.",
+    "overDrawer": "The drawer should hold {drawer}: this amount is {over} more than there is. Check it; if you save it like this, the register goes negative.",
     "note": "Note",
     "notePlaceholder": {
       "EXPENSE": "E.g. water jug, blades",
@@ -792,7 +793,7 @@
       "counted": "Counted",
       "difference": "Difference",
       "leftForNext": "Float for tomorrow",
-      "income": "Income",
+      "income": "Charged (incl. tips)",
       "card": "Card",
       "transfer": "Transfer",
       "online": "Online",

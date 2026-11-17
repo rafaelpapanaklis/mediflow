@@ -26,8 +26,11 @@ export function GastosTab({
   currentPeriod,
   canAdd,
   openSessionId,
+  drawerCash = null,
   onChanged,
 }: {
+  /** Lo que debe haber en el cajón ahora (null sin caja): para avisar de un gasto en efectivo mayor. */
+  drawerCash?: number | null;
   dict: Dictionary;
   tz: string;
   locale: string;
@@ -151,7 +154,7 @@ export function GastosTab({
                       <td data-label={t("mov.note")} style={{ whiteSpace: "normal" }}>
                         {m.note ?? <span className="bcaja-muted">—</span>}
                         {m.voidedAt && (
-                          <span className="bcaja-muted" style={{ display: "block", fontSize: 11.5 }} data-anulado>
+                          <span className="bcaja-muted" style={{ fontSize: 11.5 }} data-anulado>
                             {t("day.voidedBy", { name: m.voidedByName ?? "—", when: fmtDateTime(m.voidedAt, tz) })}
                             {m.voidReason ? ` · ${m.voidReason}` : ""}
                           </span>
@@ -189,6 +192,7 @@ export function GastosTab({
           dict={dict}
           type="EXPENSE"
           sessionOpen={openSessionId !== null}
+          drawerCash={drawerCash}
           onClose={() => setAdding(false)}
           onDone={(r) => {
             if (r.outsideSession) toast(t("mov.savedOutside"), { icon: "ℹ️" });

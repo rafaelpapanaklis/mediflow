@@ -178,6 +178,26 @@ export function parseCashCount(raw: unknown): { count: CashCount; cents: number 
   return { count, cents };
 }
 
+/**
+ * ¿Cuántos centavos se pasa del cajón una SALIDA en efectivo? (QA de cierre C,
+ * 16-nov: con $500 en el cajón se podían «sacar» $1,000 sin aviso y la caja
+ * quedaba en −$500). 0 = cabe, no es salida en efectivo, o no hay caja
+ * abierta (`drawerCash` null: el gasto cae fuera de caja). Solo AVISA: el
+ * movimiento se puede registrar igual (puede faltar capturar un cobro).
+ */
+export function overDrawerCents(input: {
+  type: CashMovementType;
+  method: CashMovementMethod;
+  amountCents: number;
+  /** Lo que debe haber en el cajón ahora (resumen.expectedCash); null sin caja abierta. */
+  drawerCash: number | null | undefined;
+}): number {
+  if (input.drawerCash === null || input.drawerCash === undefined || !Number.isFinite(input.drawerCash)) return 0;
+  if (drawerSign({ type: input.type, method: input.method }) !== -1) return 0;
+  const over = input.amountCents - Math.round(input.drawerCash * 100);
+  return over > 0 ? over : 0;
+}
+
 /** Diferencia del corte en centavos → «cuadra», «sobra» o «falta». */
 export function differenceKind(diffCents: number): "ok" | "over" | "short" {
   return diffCents === 0 ? "ok" : diffCents > 0 ? "over" : "short";

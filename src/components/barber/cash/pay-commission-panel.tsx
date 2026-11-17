@@ -49,7 +49,8 @@ export function PayCommissionPanel({
       .then(async (res) => {
         if (!res.ok) throw new Error(String(res.status));
         const json = (await res.json()) as CommissionSummary;
-        if (alive) setRow(json.rows.find((r) => r.barberId === barberId) ?? null);
+        // null = «todavía no se pide» (se lee como cargando); sin renglón, error.
+        if (alive) setRow(json.rows.find((r) => r.barberId === barberId) ?? "error");
       })
       .catch(() => {
         if (alive) setRow("error");
@@ -90,9 +91,9 @@ export function PayCommissionPanel({
     <div className="bcaja-form" data-pago-comision>
       {!barberId ? (
         <p className="bcaja-hint" style={{ margin: 0 }}>{t("payc.pickBarber")}</p>
-      ) : row === "loading" ? (
+      ) : row === "loading" || row === null ? (
         <p className="bcaja-hint" style={{ margin: 0 }}>{t("common.loading")}</p>
-      ) : row === "error" || row === null ? (
+      ) : row === "error" ? (
         <div className="bcaja-alert bcaja-alert--danger" role="alert">{t("common.error")}</div>
       ) : (
         <>
@@ -104,11 +105,11 @@ export function PayCommissionPanel({
               <div className="bcaja-totals__row"><span>{t("comisiones.paySalary")}</span><span>{fmtMoney(row.salaryPending)}</span></div>
             )}
             {row.chairRentPending !== null && row.chairRentPending > 0 && (
-              <div className="bcaja-totals__row"><span>{t("comisiones.payRent")}</span><span>−{fmtMoney(row.chairRentPending)}</span></div>
+              <div className="bcaja-totals__row"><span>{t("comisiones.payRent")}</span><span style={{ whiteSpace: "nowrap" }}>−{fmtMoney(row.chairRentPending)}</span></div>
             )}
             {/* Adelantos/vales del periodo: ya se le dieron, se restan solos (caja completa). */}
             {row.advances != null && row.advances > 0 && (
-              <div className="bcaja-totals__row" data-adelantos-pago><span>{t("comisiones.payAdvances")}</span><span>−{fmtMoney(row.advances)}</span></div>
+              <div className="bcaja-totals__row" data-adelantos-pago><span>{t("comisiones.payAdvances")}</span><span style={{ whiteSpace: "nowrap" }}>−{fmtMoney(row.advances)}</span></div>
             )}
             <div className="bcaja-totals__row bcaja-totals__row--big"><span>{t(row.advances ? "comisiones.colToHand" : "comisiones.colToPay")}</span><span>{fmtSigned(row.totalToPay)}</span></div>
           </div>
