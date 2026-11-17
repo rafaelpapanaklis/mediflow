@@ -139,7 +139,7 @@
     "differenceOver": "Over",
     "differenceShort": "Short",
     "breakdown": "Shift breakdown",
-    "closeNotes": "Closing note (optional)",
+    "closeNotes": "Closing note",
     "closeConfirm": "Close shift",
     "closeWarning": "A closed shift can't be reopened. To fix something later, open a new shift and leave a note.",
     "closedTitle": "Shift closed",
