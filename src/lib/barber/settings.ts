@@ -572,6 +572,18 @@ export async function saveLoyaltySettings(
     patch.loyaltyReward = reward;
   }
   const r = await saveBarberClientsConfig(ctx, patch);
+  // «Mi tarjeta» sale en el menú de la página web solo con las estrellas
+  // encendidas (ws6-t2): al cambiar el interruptor se revalida la página para
+  // que la liga aparezca o se quite al momento y no a los 5 min del ISR.
+  // Fuera de una petición de Next (pruebas) no hay nada que revalidar.
+  if (input.enabled !== undefined && ctx.barbershop?.slug) {
+    try {
+      const { revalidatePath } = await import("next/cache");
+      revalidatePath(`/b/${ctx.barbershop.slug}`);
+    } catch {
+      /* queda el ISR de 5 min */
+    }
+  }
   const view = {
     enabled: r.config.loyaltyEnabled,
     threshold: r.config.loyaltyThreshold,

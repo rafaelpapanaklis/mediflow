@@ -46,6 +46,8 @@ export const BARBER_CAPTCHA_ACTIONS = {
   register: "barber-register",
   /** Apartar un producto en /b/<slug>/tienda (ws6-t1). */
   shopOrder: "barber-shop-order",
+  /** Pedir «Mi tarjeta» de estrellas en /b/<slug>/mi-tarjeta (ws6-t2). */
+  starsCard: "barber-stars-card",
 } as const;
 
 export type BarberCaptchaAction =

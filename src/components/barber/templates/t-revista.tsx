@@ -55,7 +55,10 @@ import {
   Redes,
   SeccionProductos,
   TablaHorario,
+  IcoEstrella,
+  enlaceTarjeta,
   enlaceTienda,
+  TEXTO_MI_TARJETA,
   porCategoria,
 } from "./pieces";
 import {
@@ -144,6 +147,7 @@ export function PlantillaRevista({ data }: { data: BarberWebData }) {
   const wa = urlWhatsApp(config.whatsapp, `Hola, quisiera reservar en ${shop.name}`);
   const marca = logo(data);
   const tienda = enlaceTienda(data);
+  const tarjeta = enlaceTarjeta(data);
   const cuenta = data.cuentaUrl ?? null;
   const conHorario = tieneHorario(config);
   // Solo los tramos abiertos: «Lun: Cerrado» no le dice a nadie cuándo ir.
@@ -179,6 +183,8 @@ export function PlantillaRevista({ data }: { data: BarberWebData }) {
     if (s.id === "servicios" && tienda) indice.push({ href: tienda, texto: etiquetaTienda });
   }
   if (tienda && !hay("servicios")) indice.unshift({ href: tienda, texto: etiquetaTienda });
+  // «Mi tarjeta» (otra página): la tarjeta de estrellas, al final del índice.
+  if (tarjeta) indice.push({ href: tarjeta, texto: TEXTO_MI_TARJETA });
 
   return (
     <div className="dcbw dcbw-revista" style={varsDeAcento(data)}>
@@ -190,6 +196,12 @@ export function PlantillaRevista({ data }: { data: BarberWebData }) {
               {marca && <Foto src={marca} alt="" className="dcbw-rv-logo" prioridad />}
               <span className={`dcbw-rv-marca-nombre dcbw-rv-marca-${tallaNombre(shop.name)}`}>{shop.name}</span>
             </a>
+            {/* En el teléfono no hay índice: «Mi tarjeta» va arriba, junto a «Mis citas». */}
+            {tarjeta && (
+              <a className="dcbw-rv-mis dcbw-rv-solo-cel" href={tarjeta}>
+                <IcoEstrella /> {TEXTO_MI_TARJETA}
+              </a>
+            )}
             {cuenta && (
               <a className="dcbw-rv-mis dcbw-rv-solo-cel" href={cuenta}>
                 <IcoAgenda /> Mis citas
@@ -527,7 +539,7 @@ export function PlantillaRevista({ data }: { data: BarberWebData }) {
             </Fragment>
           ))}
 
-          <Pie nombre={shop.name} cuentaUrl={cuenta} />
+          <Pie nombre={shop.name} cuentaUrl={cuenta} tarjetaUrl={tarjeta} />
 
           {/* ── Barra de abajo (solo teléfono): menú y Reservar ──── */}
           <nav className="dcbw-rv-abajo" aria-label="Menú">

@@ -5385,6 +5385,12 @@ img.dcbw-es-equipo-foto {
 .dcbw-of-menu a:hover {
   color: var(--of-sobre);
 }
+/* Teléfono (ws6-t2): «Mi tarjeta» queda después de Servicios/Tienda, a la
+   vista sin deslizar; en escritorio vuelve al final (ver más abajo). */
+.dcbw-of-menu .dcbw-of-menu-despues,
+.dcbw-of-menu .dcbw-of-solo-cel {
+  order: 1;
+}
 .dcbw-of-barra-acciones {
   display: none;
 }
@@ -6077,6 +6083,24 @@ img.dcbw-es-equipo-foto {
   .dcbw-of-menu a {
     padding: 0 14px;
   }
+  /* Menú lleno (ws6-t2: con «Mi tarjeta» pueden ser siete ligas). Centrado y
+     desbordado, el menú escondía «Servicios» por la izquierda: `safe` lo
+     alinea al inicio cuando no cabe; las ligas se juntan un poco y la marca
+     es la que cede (elipsis) antes de que el menú tenga que deslizarse. */
+  .dcbw-of-menu {
+    flex: 1 1 auto;
+    justify-content: safe center;
+  }
+  .dcbw-of-menu .dcbw-of-menu-despues {
+    order: 0;
+  }
+  .dcbw-of-marca {
+    flex: 0 50 auto;
+    min-width: 46px;
+  }
+  .dcbw-of-menu:has(> a:nth-of-type(7):not(.dcbw-of-solo-cel)) a {
+    padding: 0 9px;
+  }
   .dcbw-of-barra-acciones {
     display: flex;
     align-items: center;
@@ -6671,6 +6695,12 @@ img.dcbw-es-equipo-foto {
 
 .dcbw-barrio .bw-tira nav > a:not(.bw-marca):hover {
   color: var(--bw-sobre);
+}
+
+/* Teléfono (ws6-t2): «Mi tarjeta» queda después de Servicios/Tienda, a la
+   vista sin deslizar; en escritorio vuelve al final (ver más abajo). */
+.dcbw-barrio .bw-tira nav > .bw-tira-despues {
+  order: 1;
 }
 
 .dcbw-barrio .bw-tira-marca,
@@ -7768,6 +7798,16 @@ img.dcbw-es-equipo-foto {
   .dcbw-barrio .bw-tira nav > a:not(.bw-marca) {
     font-size: 1.1875rem;
     padding: 0 14px;
+  }
+
+  /* Tira llena (ws6-t2: con «Mi tarjeta» pueden ser siete ligas): se juntan
+     un poco para que la marca no quede en dos letras. */
+  .dcbw-barrio .bw-tira nav > .bw-tira-despues {
+    order: 0;
+  }
+  .dcbw-barrio .bw-tira nav:has(> a:nth-of-type(8)) > a:not(.bw-marca) {
+    font-size: 1.0625rem;
+    padding: 0 8px;
   }
 
   .dcbw-barrio .bw-tira-acciones {

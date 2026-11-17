@@ -1,0 +1,47 @@
+{
+  "meta": {
+    "title": "Mi tarjeta de estrellas · {shop}"
+  },
+  "title": "Tu tarjeta de estrellas",
+  "sub": "Escribe el teléfono que le diste a la barbería y la ves aquí mismo.",
+  "phone": "Tu teléfono",
+  "country": "País del teléfono",
+  "placeholderMx": "10 dígitos",
+  "placeholderOther": "Número sin la lada",
+  "remember": "Recordar mi número en este teléfono",
+  "send": "Ver mi tarjeta",
+  "sending": "Buscando…",
+  "hello": "Hola, {name}",
+  "cardSub": "Esta es tu tarjeta de estrellas.",
+  "notMe": "No soy yo",
+  "linkTitle": "Tu enlace personal",
+  "linkBody": "Con él abres tu tarjeta directo, sin escribir tu número. Guárdalo o mándatelo.",
+  "linkOpen": "Abrir con mi enlace",
+  "linkCopy": "Copiar enlace",
+  "linkCopied": "Enlace copiado",
+  "notFoundTitle": "No encontramos ese número en {shop}",
+  "notFoundBody": "Revisa que sea el teléfono que le diste a la barbería. Si todavía no eres cliente, tu tarjeta empieza con tu primera visita.",
+  "tryAgain": "Probar con otro número",
+  "whatsapp": "Escribir por WhatsApp",
+  "call": "Llamar",
+  "off": "Esta barbería no usa tarjeta de estrellas.",
+  "book": "Reservar cita",
+  "back": "Volver a la página de la barbería",
+  "errors": {
+    "phone": "Escribe tu teléfono completo (10 dígitos en México).",
+    "generic": "No pudimos atender tu solicitud. Intenta de nuevo.",
+    "network": "No hay conexión. Revisa tu internet e intenta de nuevo.",
+    "tooMany": "Demasiados intentos. Espera unos minutos y vuelve a intentar."
+  },
+  "install": {
+    "title": "Guárdala en tu inicio",
+    "body": "Agrega tu tarjeta a la pantalla de inicio y ábrela con un toque, como una app.",
+    "button": "Agregar a mi pantalla de inicio",
+    "close": "Cerrar este aviso",
+    "iphoneStep1": "Toca «Compartir» en la barra de tu navegador.",
+    "iphoneStep2": "Elige «Agregar a inicio».",
+    "androidStep1": "Abre el menú de tres puntos de tu navegador.",
+    "androidStep2": "Toca «Agregar a la pantalla principal».",
+    "done": "Listo: tu tarjeta ya está en tu pantalla de inicio."
+  }
+}

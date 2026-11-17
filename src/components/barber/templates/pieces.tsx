@@ -469,7 +469,27 @@ export function Redes({
    se edita. El enlace sale a la web de DaleControl con `<a>`.
    ══════════════════════════════════════════════════════════════ */
 
-export function Pie({ nombre, cuentaUrl }: { nombre: string; cuentaUrl?: string | null }) {
+/**
+ * «Mi tarjeta» (ws6-t2): el rótulo y la liga, en un solo sitio para las tres
+ * plantillas. Texto fijo, como «Mis citas»: no es una sección de Mi web.
+ * La liga sale SOLO si la barbería usa estrellas (lo decide quien arma los
+ * datos: la página pública).
+ */
+export const TEXTO_MI_TARJETA = "Mi tarjeta";
+
+export function enlaceTarjeta(data: BarberWebData): string | null {
+  return data.tarjetaUrl || null;
+}
+
+export function Pie({
+  nombre,
+  cuentaUrl,
+  tarjetaUrl,
+}: {
+  nombre: string;
+  cuentaUrl?: string | null;
+  tarjetaUrl?: string | null;
+}) {
   const anio = 2020; // Sin new Date(): el HTML se cachea por ISR y un año
   // calculado en el servidor se congela con la caché. El aviso legal no
   // necesita año, así que no se pinta ninguno.
@@ -481,6 +501,7 @@ export function Pie({ nombre, cuentaUrl }: { nombre: string; cuentaUrl?: string 
           ver sus estrellas). Sin ella, «mi cuenta» solo se veía justo después
           de reservar (lógica L3, 15-nov). */}
       {cuentaUrl ? <a href={cuentaUrl}>Mis citas</a> : null}
+      {tarjetaUrl ? <a href={tarjetaUrl}>{TEXTO_MI_TARJETA}</a> : null}
       <a href="https://www.dalecontrol.com" target="_blank" rel="noopener noreferrer">
         Hecho con DaleControl
       </a>
