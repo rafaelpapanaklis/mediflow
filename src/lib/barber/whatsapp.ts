@@ -54,6 +54,13 @@ import {
 } from "@/lib/barber/wa-acuse-core";
 import { getBarberWaAck } from "@/lib/barber/wa-acuse";
 import { wabaIdsFromDebugToken } from "@/lib/barber/wa-signup-core";
+import { cleanNoticePhone, type OrderNoticeKind } from "@/lib/barber/pedido-avisos-core";
+import {
+  decideOwnerWa,
+  parseOwnerOrderWaBody,
+  renderOwnerOrderWaText,
+  type OwnerWaDecision,
+} from "@/lib/barber/pedido-avisos-wa-core";
 import {
   decideBarberTemplateNameTaken,
   isBarberTemplateNameTaken,
@@ -1166,6 +1173,8 @@ function outboxKindOf(templateName: string | null): BarberOutboxKind {
   if (templateName === BARBER_WALKIN_NOTIFY_TEMPLATE) return "walkinTurn";
   if (templateName === barberWaTemplate("reminder").name) return "reminder";
   if (templateName === barberWaTemplate("bookingConfirmed").name) return "bookingConfirmed";
+  // El aviso «pedido nuevo» al DUEÑO (pedido-avisos-wa-core.ts).
+  if (templateName === barberWaTemplate("ownerOrder").name) return "ownerOrder";
   return "other";
 }
 
@@ -1225,6 +1234,16 @@ function planDelivery(
     return {
       text: renderBookingText(params),
       template: { tpl: barberWaTemplate("bookingConfirmed"), params },
+    };
+  }
+  if (kind === "ownerOrder") {
+    // El cuerpo de la fila ES el texto libre (un dato por renglón); de él
+    // salen los tres parámetros de la plantilla, en su orden. Si alguien
+    // encolara esta plantilla con otro cuerpo, no hay parámetros: solo texto.
+    const params = parseOwnerOrderWaBody(row.body);
+    return {
+      text: (row.body ?? "").trim() || null,
+      template: params ? { tpl: barberWaTemplate("ownerOrder"), params } : null,
     };
   }
   return { text: (row.body ?? "").trim() || null, template: null };
@@ -1697,6 +1716,113 @@ export async function notifyBarberWalkIn(args: {
   if (sent.status === "SENT") return { outcome: "sent", messageId: row.id, error: null, code: null };
   if (sent.status === "PENDING") return { outcome: "queued", messageId: row.id, error: null, code: sent.code };
   return { outcome: "failed", messageId: row.id, error: sent.error, code: sent.code };
+}
+
+/* ─────────────── aviso al DUEÑO: «pedido nuevo en tu tienda» ─────────── */
+
+export interface OwnerOrderWaResult {
+  /**
+   * sent    = Meta lo aceptó;
+   * skipped = no tocaba mandarlo (interruptor apagado, sin número, sin
+   *           WhatsApp conectado, plantilla sin aprobar, sin cupo…): `reason`
+   *           dice cuál. No es un fallo;
+   * queued  = quedó en la cola (otra pasada lo está mandando);
+   * failed  = se intentó y no salió.
+   */
+  outcome: "sent" | "skipped" | "queued" | "failed";
+  reason: string | null;
+  messageId: string | null;
+}
+
+/**
+ * Le avisa por WhatsApp al DUEÑO que entró un pedido a su tienda (ws6-t6,
+ * 16-nov-2026). Sale del número de ESTA barbería al WhatsApp que el dueño
+ * escribió en Configuración → Notificaciones.
+ *
+ * Las reglas (decideOwnerWa, pedido-avisos-wa-core.ts) y por qué:
+ *   · solo con el interruptor encendido —nace APAGADO: fuera de la ventana de
+ *     24 h Meta le cobra cada plantilla a la barbería— y con un número;
+ *   · solo si la barbería tiene SU WhatsApp conectado y cupo en su plan;
+ *   · si el dueño le escribió a ese número en las últimas 24 h, va como TEXTO
+ *     (gratis); si no, con la plantilla `dc_barber_pedido_nuevo_dueno` y SOLO
+ *     si Meta ya la aprobó. Si no lo está, no se manda nada (el correo basta)
+ *     y NO se queda en cola esperando la aprobación.
+ *
+ * El envío es el del drenado (deliverBarberMessageNow): reclamo, cupo y
+ * estados de entrega. Quien llama (pedido-avisos.ts) ya garantizó «una sola
+ * vez por pedido». NUNCA lanza.
+ */
+export async function notifyBarberOwnerOrder(args: {
+  barbershopId: string;
+  kind: OrderNoticeKind;
+  /** Interruptor «Avisarme por WhatsApp» de la sede. */
+  enabled: boolean;
+  /** WhatsApp del dueño tal como está guardado. */
+  ownerPhone: string | null;
+  /** [folio, total, forma de pago], en el orden de la plantilla. */
+  params: readonly string[];
+}): Promise<OwnerOrderWaResult> {
+  const skipped = (d: OwnerWaDecision): OwnerOrderWaResult => ({
+    outcome: "skipped",
+    reason: d.reason ?? null,
+    messageId: null,
+  });
+  try {
+    const ownerPhone = cleanNoticePhone(args.ownerPhone);
+    const facts = {
+      enabled: args.enabled,
+      kind: args.kind,
+      ownerPhone,
+      connected: true,
+      shopPhone: null as string | null,
+      hasQuota: true,
+      windowOpen: false,
+      templateStatus: "APPROVED" as string | null,
+    };
+    // Lo que se sabe sin tocar la base ni a Meta: apagado, otro motivo, sin número.
+    let decision = decideOwnerWa(facts);
+    if (decision.send === null) return skipped(decision);
+
+    const shop = await loadShop(args.barbershopId);
+    const creds = shop && shop.isActive ? resolveSenderCredentials(shop) : null;
+    facts.connected = !!creds;
+    facts.shopPhone = mxTenDigits(shop?.phone ?? null);
+    decision = decideOwnerWa(facts);
+    if (decision.send === null || !shop || !creds || !ownerPhone) return skipped(decision);
+
+    facts.hasQuota = quotaRoom(await getBarberWaQuota(shop.id)) > 0;
+    facts.windowOpen = barberWaWindowOpen(await lastInboundAt(shop.id, ownerPhone));
+    const tpl = barberWaTemplate("ownerOrder");
+    facts.templateStatus = null;
+    if (facts.hasQuota && !facts.windowOpen && creds.wabaId) {
+      // Fuera de la ventana solo sirve la plantilla, y solo si Meta ya la
+      // aprobó: se pregunta por ESA plantilla (una llamada corta, sin costo).
+      try {
+        const found = pickBarberTemplateRow(await fetchBarberTemplateRows(creds, { name: tpl.name }), tpl.name, tpl.lang);
+        facts.templateStatus = found ? (found.otherLanguage ? "OTHER_LANGUAGE" : found.status) : "MISSING";
+      } catch {
+        facts.templateStatus = null; // no se pudo leer: se trata como «no aprobada»
+      }
+    }
+    decision = decideOwnerWa(facts);
+    if (decision.send === null) return skipped(decision);
+
+    const messageId = await enqueueBarberMessage({
+      barbershopId: shop.id,
+      phone: ownerPhone,
+      body: renderOwnerOrderWaText(args.params),
+      templateName: tpl.name,
+    });
+    if (!messageId) return { outcome: "skipped", reason: "noPhone", messageId: null };
+
+    const sent = await deliverBarberMessageNow(shop.id, messageId);
+    if (sent.status === "SENT") return { outcome: "sent", reason: null, messageId };
+    if (sent.status === "PENDING") return { outcome: "queued", reason: sent.code, messageId };
+    return { outcome: "failed", reason: sent.error ?? sent.code ?? "No se pudo enviar", messageId };
+  } catch (err) {
+    console.error(`[barber/wa] aviso de pedido al dueño (${args.barbershopId}) no enviado:`, err);
+    return { outcome: "failed", reason: "No se pudo enviar el aviso.", messageId: null };
+  }
 }
 
 /* ──────────────────────── recordatorios de cita ──────────────────────── */

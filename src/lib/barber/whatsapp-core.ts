@@ -259,7 +259,8 @@ export type BarberWaKind =
   | "walkinTurn"
   | "bookingConfirmed"
   | "birthday"
-  | "winback";
+  | "winback"
+  | "ownerOrder";
 
 export interface BarberWaTemplate {
   kind: BarberWaKind;
@@ -410,6 +411,26 @@ export const BARBER_WA_TEMPLATES: readonly BarberWaTemplate[] = [
     variables: ["cliente", "barbería", "promoción"],
     sample: ["Luis", "Barbería El Corte", "Aparta tu lugar cuando gustes."],
     optional: true,
+  },
+  {
+    // AVISO AL DUEÑO (no al cliente): «entró un pedido a tu tienda». Sale del
+    // número de la barbería al WhatsApp que el dueño escribió en
+    // Configuración → Notificaciones, y SOLO si encendió ese interruptor (nace
+    // apagado: fuera de la ventana de 24 h Meta cobra cada plantilla).
+    // Va al final a propósito: el orden del catálogo es el de la pantalla.
+    // Tres variables, en este orden (ownerOrderWaParams, pedido-avisos-core.ts):
+    // folio, total y forma de pago. Se da de alta con las demás de utilidad.
+    kind: "ownerOrder",
+    name: "dc_barber_pedido_nuevo_dueno",
+    category: "UTILITY",
+    lang: BARBER_WA_LANG,
+    body:
+      "🛍️ Pedido nuevo en tu tienda.\n\n" +
+      "Folio: {{1}}\nTotal: {{2}}\nPago: {{3}}\n\n" +
+      "Revísalo en tu panel, en Productos → Pedidos.",
+    variables: ["folio", "total", "forma de pago"],
+    sample: ["K7M2Q", "$349.50", "Pagado en línea"],
+    optional: false,
   },
 ] as const;
 
@@ -678,7 +699,10 @@ export const BARBER_WA_CLAIM_LOST_MESSAGE =
 /** Un "casi es tu turno" de hace más de esto ya no ayuda a nadie. */
 export const BARBER_WALKIN_NOTICE_TTL_MS = 30 * 60 * 1000;
 
-export type BarberOutboxKind = "reminder" | "bookingConfirmed" | "walkinTurn" | "other";
+/** Un «pedido nuevo» al dueño que no salió en este rato ya no es noticia: el correo y el panel ya avisaron. */
+export const BARBER_OWNER_NOTICE_TTL_MS = 2 * 60 * 60 * 1000;
+
+export type BarberOutboxKind = "reminder" | "bookingConfirmed" | "walkinTurn" | "ownerOrder" | "other";
 
 /**
  * ¿Esta fila de la cola YA NO debe salir? Devuelve el motivo, o null si se
@@ -703,6 +727,11 @@ export function barberOutboxStaleReason(args: {
   if (args.kind === "walkinTurn") {
     return args.now.getTime() - args.createdAt.getTime() > BARBER_WALKIN_NOTICE_TTL_MS
       ? "el aviso de la fila caducó antes de poder enviarse"
+      : null;
+  }
+  if (args.kind === "ownerOrder") {
+    return args.now.getTime() - args.createdAt.getTime() > BARBER_OWNER_NOTICE_TTL_MS
+      ? "el aviso del pedido caducó antes de poder enviarse"
       : null;
   }
   if (args.kind === "reminder" || args.kind === "bookingConfirmed") {

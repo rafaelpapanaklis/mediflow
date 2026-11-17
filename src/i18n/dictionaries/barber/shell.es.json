@@ -53,6 +53,8 @@
   "navLabel": "Menú principal",
   "unreadChats": "{count} chats sin leer",
   "unreadChat": "1 chat sin leer",
+  "pendingOrders": "{count} pedidos de la tienda por atender",
+  "pendingOrder": "1 pedido de la tienda por atender",
   "placeholder": {
     "soon": "Próximamente",
     "body": "Esta sección está en construcción. Muy pronto vas a poder administrarla desde aquí.",

@@ -36,6 +36,7 @@ import {
 import { prepararFoto } from "@/components/barber/landing/imagen";
 import { MiContrasenaCard } from "./mi-contrasena-card";
 import { PagosEnLineaCard, type EstadoPagosEnLinea } from "./pagos-en-linea-card";
+import { NotificacionesCard } from "./notificaciones-card";
 import s from "./configuracion.module.css";
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -121,6 +122,11 @@ export function ConfiguracionScreen({
           value={settings.booking}
           inPlan={publicBookingInPlan}
           onSaved={(booking) => setSettings((v) => ({ ...v, booking }))}
+        />
+        <NotificacionesCard
+          t={t}
+          value={settings.orderNotices}
+          onSaved={(orderNotices) => setSettings((v) => ({ ...v, orderNotices }))}
         />
         {payments ? (
           <PagosEnLineaCard t={t} initial={payments.initial} locale={payments.locale} timeZone={payments.timeZone} />

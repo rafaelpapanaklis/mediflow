@@ -24,6 +24,8 @@ import { addDaysISO } from "@/lib/barber/agenda";
 import { CardNew } from "@/components/ui/design-system/card-new";
 import type { TFunction } from "@/i18n/t";
 import type { InicioSummary } from "@/lib/barber/stats";
+import type { OrdersNotice } from "@/lib/barber/tienda-avisos";
+import { PedidosCard } from "./pedidos-card";
 import { fmtInt, fmtLongDay, fmtMoney, fmtPctSigned, fmtTime, weekdayOfKey } from "./format";
 import { RefreshButton } from "./refresh-button";
 import { IrASede } from "./ir-a-sede";
@@ -42,7 +44,14 @@ export function InicioView({
   firstName,
   branches,
   slug,
+  shopOrders = null,
 }: {
+  /**
+   * Pedidos de la tienda por atender en la sede que se opera (null = no hay,
+   * o esta sesión no los ve: sin products.view, sin productos en el plan o sin
+   * la tabla de pedidos). Lo resuelve loadOrdersNotice en la página.
+   */
+  shopOrders?: OrdersNotice | null;
   summary: InicioSummary;
   t: TFunction;
   locale: string;
@@ -268,6 +277,10 @@ export function InicioView({
 
       <div className="bdash-grid">
         <div className="bdash-stack">
+          {/* Pedidos de la tienda por atender: lo primero de la columna (en
+              celular queda justo bajo las cifras del día). Sin pedidos no sale. */}
+          <PedidosCard notice={shopOrders} t={t} />
+
           {v && !s.setup.isFresh && (
             <CardNew
               title={k("visits.title")}

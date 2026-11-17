@@ -9,6 +9,7 @@ import { listBranchOptions, readBranchCookie } from "@/lib/barber/branches";
 import { getInicioSummary } from "@/lib/barber/stats";
 import { prisma } from "@/lib/prisma";
 import { normalizarConfigBarberWeb } from "@/lib/barber/landing";
+import { loadOrdersNotice } from "@/lib/barber/tienda-avisos";
 import { getBarberT } from "@/i18n/dictionaries/barber";
 import { InicioView } from "@/components/barber/dashboard/inicio-view";
 
@@ -49,6 +50,11 @@ export default async function Page() {
   ]);
   const webOnline = Boolean(webShop?.isActive) && !normalizarConfigBarberWeb(landing?.config).oculta;
 
+  // Pedidos de la tienda por atender (16-nov): los de la sede que se OPERA
+  // (ctx.barbershopId), la misma que abre Productos → Pedidos y la que cuenta
+  // el numerito del menú. Nunca lanza; null = no hay o esta sesión no los ve.
+  const shopOrders = await loadOrdersNotice(ctx, plan.features);
+
   return (
     <InicioView
       summary={{ ...summary, setup: { ...summary.setup, hasWeb: webOnline } }}
@@ -57,6 +63,7 @@ export default async function Page() {
       firstName={ctx.user.firstName}
       branches={branches.map((b) => ({ id: b.id, label: b.label }))}
       slug={ctx.barbershop.slug}
+      shopOrders={shopOrders}
     />
   );
 }

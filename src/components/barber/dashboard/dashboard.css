@@ -764,3 +764,23 @@
   .barber-shell .bdash-money { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 .barber-shell .bdash-money__sub { font-size: 12.5px; font-weight: 700; color: var(--text-2); margin: 0 0 8px; }
+
+/* ── Pedidos de la tienda por atender (16-nov) ───────────────────────────
+   Renglones como «Próximas visitas»: folio, cliente y debajo cómo paga; el
+   total a la derecha. A 390 px el nombre se recorta con «…» y el folio y el
+   total nunca se parten. «Pagado en línea» va en verde Y lo dice el texto
+   (nada se codifica solo con color). Solo tokens del tema. */
+.barber-shell .bdash-orders__folio {
+  flex: none;
+  min-width: 58px;
+  font-size: 13.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-1);
+  white-space: nowrap;
+}
+.barber-shell .bdash-orders__pay { font-weight: 600; color: var(--text-2); }
+.barber-shell .bdash-orders__pay--paid { color: var(--success); }
+.barber-shell .bdash-orders__foot > span { flex: 1 1 140px; min-width: 0; }
+.barber-shell .bdash-orders__foot > a { flex: none; }

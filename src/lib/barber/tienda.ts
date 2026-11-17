@@ -13,7 +13,9 @@ import {
   TIENDA_FEATURED_MAX,
   TIENDA_MAX_OPEN_PER_PHONE,
   TiendaError,
+  countOrdersNeedingAction,
   isOpenOrderStatus,
+  orderNeedsAction,
   makeFolio,
   orderExpiresAt,
   orderTotalCents,
@@ -183,7 +185,7 @@ export interface ProductOrderRow {
 export interface ProductOrderList {
   ready: boolean;
   orders: ProductOrderRow[];
-  /** Pedidos que esperan acción (PENDING o pagados sin marcar «Listo»). */
+  /** Pedidos POR ATENDER: la regla única de tienda-core.ts (orderNeedsAction). */
   newCount: number;
 }
 
@@ -242,19 +244,20 @@ export async function listProductOrders(ctx: BarberContext): Promise<ProductOrde
     LIMIT ${ORDER_LIST_MAX}
   `;
   const orders = rows.map(toOrderRow);
-  const newCount = orders.filter((o) => o.status === "PENDING" || o.status === "PAID_ONLINE").length;
+  // El MISMO número que el menú y que Inicio (16-nov): nuevos sin atender +
+  // pagados en línea sin entregar. Lo vencido ya se barrió arriba.
+  const newCount = orders.filter((o) => orderNeedsAction(o)).length;
   return { ready: true, orders, newCount };
 }
 
-/** Solo el contador (la pestaña lo enseña sin cargar la lista). */
+/**
+ * Solo el contador (la pestaña lo enseña sin cargar la lista). La consulta es
+ * la del menú y la de Inicio: countOrdersNeedingAction (tienda-core.ts).
+ */
 export async function countNewProductOrders(barbershopId: string): Promise<number> {
   if (!(await tiendaReady(prisma)).orders) return 0;
   await sweepExpiredOrders(prisma, [barbershopId]);
-  const rows = await prisma.$queryRaw<Array<{ n: number }>>`
-    SELECT COUNT(*)::int AS "n" FROM "barber_product_orders"
-    WHERE "barbershop_id" = ${barbershopId} AND "status" IN ('PENDING', 'PAID_ONLINE')
-  `;
-  return Number(rows[0]?.n ?? 0);
+  return countOrdersNeedingAction(prisma, barbershopId);
 }
 
 /** ¿Puede actuar sobre pedidos? Ver + cobrar (Recepción sí; Barbero no). */

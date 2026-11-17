@@ -8,6 +8,7 @@ import {
   saveLoyaltySettings,
   updateBarberProfile,
 } from "@/lib/barber/settings";
+import { saveOrderNoticeSettings } from "@/lib/barber/pedido-avisos";
 import { gateSettings, readJson, revalidateShopWeb } from "./_gate";
 
 export const dynamic = "force-dynamic";
@@ -30,6 +31,7 @@ const SQL_POR_SECCION: Record<string, string> = {
   inactivity: "sql/barber_clientes.sql",
   campaigns: "sql/barber_campanas.sql",
   booking: "sql/barber_settings.sql",
+  orderNotices: "sql/barber_pedidos_avisos.sql",
 };
 
 /**
@@ -41,6 +43,7 @@ const SQL_POR_SECCION: Record<string, string> = {
  *   section = "inactivity" → { days }
  *   section = "campaigns"  → { cooldownDays }
  *   section = "booking"    → { policy: "auto" | "manual" }
+ *   section = "orderNotices" → { email, whatsapp, phone } (avisos de pedidos de la tienda al dueño)
  *
  * Cada sección se guarda sola: un número fuera de rango en fidelidad no
  * impide guardar el teléfono. Si el SQL de la sección no está aplicado se
@@ -64,12 +67,14 @@ export async function PATCH(req: Request) {
       | Awaited<ReturnType<typeof saveLoyaltySettings>>
       | Awaited<ReturnType<typeof saveInactivitySettings>>
       | Awaited<ReturnType<typeof saveCampaignSettings>>
-      | Awaited<ReturnType<typeof saveBookingPolicy>>;
+      | Awaited<ReturnType<typeof saveBookingPolicy>>
+      | Awaited<ReturnType<typeof saveOrderNoticeSettings>>;
 
     if (section === "loyalty") result = await saveLoyaltySettings(ctx, body);
     else if (section === "inactivity") result = await saveInactivitySettings(ctx, body);
     else if (section === "campaigns") result = await saveCampaignSettings(ctx, body);
     else if (section === "booking") result = await saveBookingPolicy(ctx, body.policy);
+    else if (section === "orderNotices") result = await saveOrderNoticeSettings(ctx, body);
     else return NextResponse.json({ error: "Sección desconocida." }, { status: 400 });
 
     if (!result.ok) {

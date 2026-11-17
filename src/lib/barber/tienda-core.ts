@@ -54,6 +54,55 @@ export function isOpenOrderStatus(s: unknown): s is ProductOrderStatus {
   return typeof s === "string" && (OPEN_ORDER_STATUSES as readonly string[]).includes(s);
 }
 
+// ── «Por atender»: el número del menú, de la pestaña y de Inicio ─────────
+//
+// UNA sola definición (16-nov, «¿dónde le llega al dueño?»). Con lo que ya
+// guarda la tabla, un pedido pide que alguien haga algo cuando:
+//   · es NUEVO: status PENDING — el cliente lo apartó y nadie lo ha marcado
+//     «Listo», entregado ni cancelado (y, si no está pagado, no ha vencido);
+//   · está PAGADO EN LÍNEA y SIN ENTREGAR: paid_at con status PAID_ONLINE
+//     (nadie lo ha tocado) o READY (ya está listo, pero el dinero ya entró y
+//     el producto sigue en la barbería).
+// Deja de contar al entregarlo, cancelarlo o vencer; y un apartado SIN pagar
+// deja de contar al marcarlo «Listo» (ahí ya solo falta que el cliente pase).
+
+/**
+ * ¿Un pedido pagado en línea y ya «Listo» sigue contando hasta entregarlo?
+ * true = sí (lo que pidió el encargo: «pagados en línea sin entregar»).
+ * false = deja de contar al marcarlo «Listo», como los apartados sin pagar.
+ * DECISIÓN PARA RAFAEL: es el único interruptor de la regla.
+ */
+export const ORDER_ACTION_COUNTS_PAID_READY = true;
+
+/**
+ * La regla, en JS (para una lista ya leída y con lo vencido ya barrido). La
+ * MISMA regla en SQL está en countOrdersNeedingAction: si cambias una, cambia
+ * la otra (16-nov: comparadas caso por caso contra Postgres, todos los
+ * estados × pagado × antigüedad; ver REPORTE-ws6-t6-pedidos-aviso).
+ */
+export function orderNeedsAction(
+  o: { status: string; paidOnline: boolean },
+  countPaidReady: boolean = ORDER_ACTION_COUNTS_PAID_READY,
+): boolean {
+  if (o.status === "PENDING" || o.status === "PAID_ONLINE") return true;
+  return countPaidReady && o.status === "READY" && o.paidOnline;
+}
+
+/** Lo que Inicio enseña de cada pedido por atender (sin teléfono ni piezas). */
+export interface OrderNotice {
+  id: string;
+  folio: string;
+  clientName: string;
+  total: number;
+  /** Se pagó en línea (paid_at). */
+  paidOnline: boolean;
+  status: ProductOrderStatus;
+  createdAt: string;
+}
+
+/** Cuántos renglones enseña la tarjeta de Inicio. */
+export const ORDER_NOTICE_RECENT = 3;
+
 export class TiendaError extends Error {
   readonly status: number;
   readonly code: string;
@@ -300,6 +349,65 @@ export async function reservedByProduct(db: QueryDb, barbershopIds: string[]): P
   `;
   for (const r of rows) out.set(r.productId, Number(r.qty) || 0);
   return out;
+}
+
+/**
+ * Pedidos POR ATENDER de una sede (ver orderNeedsAction). Solo LEE: no barre
+ * lo vencido (lo pide el menú cada minuto), así que la condición de las 72 h
+ * va en la consulta y da lo mismo que después de barrer.
+ */
+export async function countOrdersNeedingAction(
+  db: QueryDb,
+  barbershopId: string,
+  countPaidReady: boolean = ORDER_ACTION_COUNTS_PAID_READY,
+): Promise<number> {
+  if (!barbershopId) return 0;
+  const rows = await db.$queryRaw<Array<{ n: number }>>`
+    SELECT COUNT(*)::int AS "n" FROM "barber_product_orders"
+    WHERE "barbershop_id" = ${barbershopId}
+      AND (
+        "status" = 'PAID_ONLINE'
+        OR ("status" = 'PENDING' AND ("paid_at" IS NOT NULL
+             OR "created_at" > now() - make_interval(hours => ${TIENDA_HOLD_HOURS}::int)))
+        OR ("status" = 'READY' AND "paid_at" IS NOT NULL AND ${countPaidReady}::boolean)
+      )
+  `;
+  return Number(rows[0]?.n ?? 0);
+}
+
+/** Los más recientes de esos mismos pedidos (para la tarjeta de Inicio). */
+export async function recentOrdersNeedingAction(
+  db: QueryDb,
+  barbershopId: string,
+  limit: number = ORDER_NOTICE_RECENT,
+  countPaidReady: boolean = ORDER_ACTION_COUNTS_PAID_READY,
+): Promise<OrderNotice[]> {
+  if (!barbershopId) return [];
+  const take = Math.max(1, Math.min(20, Math.trunc(limit) || ORDER_NOTICE_RECENT));
+  const rows = await db.$queryRaw<
+    Array<{ id: string; folio: string; client_name: string; total: unknown; paid_at: Date | null; status: string; created_at: Date }>
+  >`
+    SELECT "id", "folio", "client_name", "total", "paid_at", "status", "created_at"
+    FROM "barber_product_orders"
+    WHERE "barbershop_id" = ${barbershopId}
+      AND (
+        "status" = 'PAID_ONLINE'
+        OR ("status" = 'PENDING' AND ("paid_at" IS NOT NULL
+             OR "created_at" > now() - make_interval(hours => ${TIENDA_HOLD_HOURS}::int)))
+        OR ("status" = 'READY' AND "paid_at" IS NOT NULL AND ${countPaidReady}::boolean)
+      )
+    ORDER BY "created_at" DESC
+    LIMIT ${take}
+  `;
+  return rows.map((r) => ({
+    id: r.id,
+    folio: r.folio,
+    clientName: r.client_name,
+    total: Number(r.total),
+    paidOnline: r.paid_at !== null,
+    status: r.status as ProductOrderStatus,
+    createdAt: new Date(r.created_at).toISOString(),
+  }));
 }
 
 // ── Entregar desde Caja (dentro de la transacción del ticket) ───────────

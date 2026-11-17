@@ -50,6 +50,7 @@ import {
   saveBarberCampaignConfig,
 } from "@/lib/barber/campaigns";
 import type { BarberBookingPolicy } from "@/lib/barber/booking";
+import { getOrderNoticeSettings, type OrderNoticeSettingsView } from "@/lib/barber/pedido-avisos";
 
 // ── Límites ─────────────────────────────────────────────────────────────
 export const SHOP_NAME_MAX = 120;
@@ -144,6 +145,11 @@ export interface BarberSettingsView {
     /** false = falta sql/barber_settings.sql. */
     persisted: boolean;
   };
+  /**
+   * Avisos de pedidos de la tienda (ws6-t6): correo y WhatsApp al dueño.
+   * `persisted: false` = falta sql/barber_pedidos_avisos.sql.
+   */
+  orderNotices: OrderNoticeSettingsView;
   timezones: string[];
   limits: {
     name: number;
@@ -255,11 +261,12 @@ export async function saveBookingPolicy(
 
 export async function getBarberSettings(ctx: BarberContext): Promise<BarberSettingsView> {
   assertBarberPermission(ctx, "settings.edit");
-  const [profile, clients, campaigns, booking] = await Promise.all([
+  const [profile, clients, campaigns, booking, orderNotices] = await Promise.all([
     readProfile(ctx),
     getBarberClientsConfig(ctx),
     getBarberCampaignConfig(ctx),
     readBookingPolicySetting(ctx),
+    getOrderNoticeSettings(ctx),
   ]);
   const { slug, ...rest } = profile;
   return {
@@ -287,6 +294,7 @@ export async function getBarberSettings(ctx: BarberContext): Promise<BarberSetti
       max: CAMPAIGN_COOLDOWN_MAX,
     },
     booking,
+    orderNotices,
     timezones: BARBER_TIMEZONES.includes(profile.timezone)
       ? BARBER_TIMEZONES
       : [profile.timezone, ...BARBER_TIMEZONES],

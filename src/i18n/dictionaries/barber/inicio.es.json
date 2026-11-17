@@ -90,6 +90,16 @@
       "unavailable": "No se pudo leer el dinero de hoy. Vuelve a cargar en un momento; mientras, revisa la Caja.",
       "goCash": "Ver gastos"
     },
+    "orders": {
+      "title": { "one": "1 pedido de la tienda por atender", "other": "{count} pedidos de la tienda por atender" },
+      "listLabel": "Los pedidos más recientes",
+      "paidOnline": "Pagado en línea",
+      "payAtShop": "Paga en barbería",
+      "ready": "listo, falta entregarlo",
+      "more": { "one": "y 1 más", "other": "y {count} más" },
+      "hint": "Salen de aquí en cuanto los atiendes.",
+      "cta": "Ver pedidos"
+    },
     "queue": {
       "title": "Fila virtual",
       "waiting": { "one": "1 esperando", "other": "{count} esperando" },
