@@ -145,6 +145,7 @@
     "cardSentWa": "{name} got their star card on WhatsApp.",
     "cardQueuedWa": "Their star card is on its way on WhatsApp.",
     "sendCardManual": "Send their card",
-    "sendCardManualHint": "It didn't go out on its own: open it and send it from your phone."
+    "sendCardManualHint": "It didn't go out on its own: open it and send it from your phone.",
+    "sendCardManualHintFree": "It didn't go out on its own because the client hasn't messaged you in 24 h and Meta would charge for it. Send it from your phone (free)."
   }
 }

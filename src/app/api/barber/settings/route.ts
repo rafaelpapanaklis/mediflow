@@ -43,7 +43,7 @@ const SQL_POR_SECCION: Record<string, string> = {
  *   section = "inactivity" → { days }
  *   section = "campaigns"  → { cooldownDays }
  *   section = "booking"    → { policy: "auto" | "manual" }
- *   section = "starsCard"  → { enabled } (mandar la tarjeta de estrellas tras cobrar)
+ *   section = "starsCard"  → { mode: "free" | "always" | "off" } (la tarjeta de estrellas tras cobrar)
  *
  * Cada sección se guarda sola: un número fuera de rango en fidelidad no
  * impide guardar el teléfono. Si el SQL de la sección no está aplicado se
@@ -64,10 +64,10 @@ export async function PATCH(req: Request) {
     }
 
     if (section === "starsCard") {
-      if (typeof body.enabled !== "boolean") {
-        return NextResponse.json({ error: "Falta decir si se manda o no." }, { status: 400 });
+      if (body.mode !== "free" && body.mode !== "always" && body.mode !== "off") {
+        return NextResponse.json({ error: "Elige cuándo se manda: solo cuando sea gratis, siempre o no mandar." }, { status: 400 });
       }
-      const r = await saveStarsCardSetting(ctx.barbershopId, body.enabled);
+      const r = await saveStarsCardSetting(ctx.barbershopId, body.mode);
       if (!r.ok) {
         const pendiente = r.reason === "sql_pendiente";
         return NextResponse.json(

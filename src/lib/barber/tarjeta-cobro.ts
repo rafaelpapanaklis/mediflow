@@ -1,7 +1,8 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
 import { barberiaTieneWhatsApp } from "@/lib/barber/wa-conectado";
-import { barberClientOptedOut } from "@/lib/barber/whatsapp-core";
+import { barberClientOptedOut, barberWaWindowOpen } from "@/lib/barber/whatsapp-core";
+import { mxTenDigits } from "@/lib/phone-mx";
 import { deliverBarberMessageNow } from "@/lib/barber/whatsapp";
 import type { SaleStarsOutcome } from "@/lib/barber/stars-core";
 import { readStarsCardSetting } from "@/lib/barber/tarjeta-cobro-ajuste";
@@ -12,6 +13,7 @@ import {
   renderStarsCardText,
   starsCardChargeMoves,
   starsCardMark,
+  starsCardMarks,
   starsCardParams,
   starsCardTotal,
   type StarsCardChargeResult,
@@ -32,8 +34,14 @@ export { readStarsCardSetting, saveStarsCardSetting, _reiniciarTarjetaCobro, typ
 
 /**
  * Tras un cobro con estrellas: encola y manda AHORA «Llevas 4 de 6 estrellas
- * · Ver mi tarjeta». Una sola vez por ticket (la marca auto:tarjeta:<ticket>,
- * comprobada con un candado por ticket). Nunca lanza: el cobro ya quedó.
+ * · Ver mi tarjeta». Una sola vez por ticket (las marcas auto:tarjeta…:<ticket>,
+ * comprobadas con un candado por ticket). Nunca lanza: el cobro ya quedó.
+ *
+ * Con «Solo cuando sea gratis» (el de por defecto) solo se encola si el
+ * cliente escribió en las últimas 24 h, y la fila lleva la marca «gratis»:
+ * el emisor NUNCA la manda con plantilla (si la ventana se cerró en el
+ * camino, caduca). Así ninguna barbería recibe un cobro de Meta sin haber
+ * elegido «Siempre».
  *
  * `outcome` es lo que la ruta de cobro ya calculó (saleStarsOutcome); null =
  * el ticket no tiene cliente o la tarjeta está apagada → no hay nada que mandar.
@@ -70,13 +78,14 @@ export async function sendStarsCardAfterCharge(args: {
     phone = sale.client.phone;
 
     const setting = await readStarsCardSetting(barbershopId);
-    const connected = setting.enabled ? await barberiaTieneWhatsApp(barbershopId) : false;
-    const mark = starsCardMark(saleId);
+    const connected = setting.mode !== "off" ? await barberiaTieneWhatsApp(barbershopId) : false;
+    const windowOpen = connected ? await windowOpenFor(barbershopId, phone) : false;
 
     // Una vez por ticket: candado por ticket + ¿ya hay una fila con su marca?
     const queued = await prisma.$transaction(async (tx) => {
       const pre = decideStarsCardSend({
-        enabled: setting.enabled,
+        mode: setting.mode,
+        windowOpen,
         hasStars: true,
         phone,
         optedOut: barberClientOptedOut(sale.client!.preferences),
@@ -87,9 +96,10 @@ export async function sendStarsCardAfterCharge(args: {
       if ("skip" in pre) return { skip: pre.skip, id: null as string | null };
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`dcb:tarjeta:${barbershopId}:${saleId}`}))`;
       const ya = await tx.barberMessage.findFirst({
-        where: { barbershopId, direction: "OUTBOUND", templateName: mark },
+        where: { barbershopId, direction: "OUTBOUND", templateName: { in: starsCardMarks(saleId) } },
         select: { id: true },
       });
+      const mark = starsCardMark(saleId, pre.freeOnly);
       if (ya) return { skip: "already" as const, id: null };
       // La fila nace dentro del candado: la segunda petición del mismo ticket ya la ve.
       const id = await enqueueBarberMessageTx(tx, { barbershopId, phone: pre.phone, body: text, templateName: mark, clientId: sale.clientId });
@@ -103,12 +113,30 @@ export async function sendStarsCardAfterCharge(args: {
     const sent = await deliverBarberMessageNow(barbershopId, queued.id);
     if (sent.status === "SENT") return { status: "sent", manualHref: null, reason: null };
     if (sent.status === "PENDING") return { status: "queued", manualHref: null, reason: null };
-    const reason = sent.code === "TEMPLATE_PENDING" ? "templatePending" : sent.code === "QUOTA" ? "quota" : sent.code === "NOT_CONNECTED" ? "notConnected" : "sendFailed";
+    const reason =
+      sent.code === "TEMPLATE_PENDING" ? "templatePending"
+      : sent.code === "QUOTA" ? "quota"
+      : sent.code === "NOT_CONNECTED" ? "notConnected"
+      // Una fila «gratis» cuya ventana se cerró en el camino caduca: no se paga.
+      : sent.code === "STALE" ? "outsideWindow"
+      : "sendFailed";
     return manualStarsCardResult(phone, text, reason);
   } catch (e) {
     console.warn(`[barber/tarjeta-cobro] no se pudo mandar la tarjeta del ticket ${saleId}:`, (e as Error).message);
     return manualStarsCardResult(phone, text, "sendFailed");
   }
+}
+
+/** ¿El cliente escribió en las últimas 24 h? (la misma regla que la cola: barberWaWindowOpen). */
+async function windowOpenFor(barbershopId: string, phone: string | null): Promise<boolean> {
+  const diez = mxTenDigits(phone ?? "");
+  if (!diez) return false;
+  const last = await prisma.barberMessage.findFirst({
+    where: { barbershopId, phone: diez, direction: "INBOUND" },
+    orderBy: { createdAt: "desc" },
+    select: { createdAt: true },
+  });
+  return barberWaWindowOpen(last?.createdAt ?? null);
 }
 
 /** Lo mismo que enqueueBarberMessage (whatsapp.ts), dentro de la transacción del candado. */

@@ -490,7 +490,9 @@ export function TicketModal({
                   >
                     <MessageCircle size={13} /> {st("caja.sendCardManual")}
                   </a>
-                  <div className="bcaja-hint" style={{ textAlign: "center" }}>{st("caja.sendCardManualHint")}</div>
+                  <div className="bcaja-hint" style={{ textAlign: "center" }}>
+                    {st(envio.reason === "outsideWindow" ? "caja.sendCardManualHintFree" : "caja.sendCardManualHint")}
+                  </div>
                 </div>
               ) : null}
             </div>

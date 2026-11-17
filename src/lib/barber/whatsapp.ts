@@ -39,6 +39,7 @@ import {
   renderStarsCardText,
   saleIdOfStarsCardRow,
   starsCardParams,
+  starsCardRowMayUseTemplate,
   starsCardTotal,
 } from "@/lib/barber/tarjeta-cobro-core";
 import { getBarberPlan } from "@/lib/barber/plans";
@@ -1250,7 +1251,12 @@ function planDelivery(
         total: starsCardTotal(stars.stars, stars.next),
         url: absoluteCardUrl(origin, stars.cardPath),
       });
-      return { text: renderStarsCardText(params), template: { tpl: barberWaTemplate("starsCard"), params } };
+      // «Solo cuando sea gratis»: SIN plantilla. Si la ventana ya se cerró,
+      // la fila caduca (más abajo) en vez de salir como plantilla de pago.
+      return {
+        text: renderStarsCardText(params),
+        template: starsCardRowMayUseTemplate(row.templateName) ? { tpl: barberWaTemplate("starsCard"), params } : null,
+      };
     }
   }
   if (kind === "bookingConfirmed" && appt) {

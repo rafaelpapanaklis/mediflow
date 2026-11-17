@@ -804,38 +804,67 @@ function StarsCardAfterChargeCard({
   value: BarberSettingsView["starsCard"];
   onSaved: (v: BarberSettingsView["starsCard"]) => void;
 }) {
+  const [mode, setMode] = useState(value.mode);
   const { saving, error, run } = useSaving();
+  const canSave = value.persisted && mode !== value.mode && !saving;
 
-  async function toggle(enabled: boolean) {
+  async function save() {
     const done = await run(async () => {
       const r = await apiCall<{ value: BarberSettingsView["starsCard"] }>("/api/barber/settings", {
         method: "PATCH",
-        json: { section: "starsCard", enabled },
+        json: { section: "starsCard", mode },
       });
       onSaved(r.value);
     });
     if (done) toast.success(t("configuracion.starsCard.saved"));
   }
 
+  // Tres posiciones (Rafael, 16-nov): que a ninguna barbería le llegue un
+  // cobro de Meta que no eligió. «Solo cuando sea gratis» es la de fábrica.
+  const options: Array<{ id: BarberSettingsView["starsCard"]["mode"]; title: string; hint: string; warn?: string }> = [
+    { id: "free", title: t("configuracion.starsCard.free"), hint: t("configuracion.starsCard.freeHint") },
+    { id: "always", title: t("configuracion.starsCard.always"), hint: t("configuracion.starsCard.alwaysHint"), warn: t("configuracion.starsCard.alwaysCost") },
+    { id: "off", title: t("configuracion.starsCard.off"), hint: t("configuracion.starsCard.offHint") },
+  ];
+
   return (
     <Card
       icon={<MessageCircle size={18} />}
       title={t("configuracion.starsCard.title")}
       sub={t("configuracion.starsCard.sub")}
-      foot={error ? <ErrorText>{error}</ErrorText> : undefined}
+      foot={
+        <>
+          <ErrorText>{error}</ErrorText>
+          <Btn variant="primary" onClick={save} disabled={!canSave}>
+            {saving ? t("common.saving") : t("common.save")}
+          </Btn>
+        </>
+      }
     >
       {!value.persisted ? <SqlPending t={t} file={SQL_FILES.starsCard} /> : null}
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>{t("configuracion.starsCard.enabled")}</div>
-          <p className={s.hint} style={{ marginTop: 2 }}>{t("configuracion.starsCard.enabledHint")}</p>
-        </div>
-        <Switch
-          checked={value.enabled}
-          onChange={(v) => void toggle(v)}
-          label={t("configuracion.starsCard.enabled")}
-          disabled={!value.persisted || saving}
-        />
+      <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>{t("configuracion.starsCard.enabled")}</div>
+      <div className={s.optionList} role="radiogroup" aria-label={t("configuracion.starsCard.enabled")}>
+        {options.map((o) => (
+          <button
+            key={o.id}
+            type="button"
+            role="radio"
+            aria-checked={mode === o.id}
+            className={s.option}
+            disabled={!value.persisted}
+            onClick={() => setMode(o.id)}
+            data-modo-tarjeta={o.id}
+          >
+            <span className={s.optionDot} aria-hidden="true" />
+            <span style={{ minWidth: 0 }}>
+              <span className={s.optionTitle} style={{ display: "block" }}>{o.title}</span>
+              <span className={s.optionHint} style={{ display: "block" }}>{o.hint}</span>
+              {o.warn ? (
+                <span className={s.optionHint} style={{ display: "block", marginTop: 4, color: "var(--warning)", fontWeight: 600 }}>{o.warn}</span>
+              ) : null}
+            </span>
+          </button>
+        ))}
       </div>
       <p className={s.hint}>{t("configuracion.starsCard.note")}</p>
     </Card>

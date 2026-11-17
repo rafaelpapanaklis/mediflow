@@ -10,10 +10,15 @@
 // (getBarberContext) y Meta (fetch interceptado: NADA sale a la red, una
 // llamada no prevista revienta la prueba). Solo contra una base LOCAL.
 //
-// Fija: con WhatsApp conectado sale sola (texto con la ventana abierta,
-// plantilla fuera de ella); sin plantilla aprobada, sin WhatsApp, con el
-// interruptor apagado o con el cliente dado de baja NO sale y Caja recibe el
-// wa.me para mandarla a mano; una venta solo de productos no manda nada; un
+// Fija los TRES modos (Rafael, 16-nov: «que a ninguna barbería le llegue un
+// cobro de Meta inesperado»):
+//   · «Solo cuando sea gratis» (de fábrica): con la ventana de 24 h abierta
+//     sale como texto; cerrada, NO sale (ni plantilla) y queda el botón; una
+//     fila «gratis» cuya ventana se cerró en el camino caduca sin plantilla;
+//   · «Siempre»: texto dentro de la ventana, plantilla fuera;
+//   · «No mandar».
+// Y: sin plantilla aprobada, sin WhatsApp o con el cliente dado de baja NO
+// sale y Caja recibe el wa.me para mandarla a mano; una venta solo de productos no manda nada; un
 // ticket manda UNA vez aunque se pida dos veces a la vez.
 // ═══════════════════════════════════════════════════════════════════════
 import { test, before, after, beforeEach } from "node:test";
@@ -142,7 +147,26 @@ async function cobrar(shop: Shop, clientId: string, items = [{ kind: "service", 
 }
 
 const filasDe = (shop: Shop, saleId: string) =>
-  prisma.barberMessage.findMany({ where: { barbershopId: shop.id, templateName: `auto:tarjeta:${saleId}` } });
+  prisma.barberMessage.findMany({
+    where: { barbershopId: shop.id, templateName: { in: [`auto:tarjeta:${saleId}`, `auto:tarjeta-gratis:${saleId}`] } },
+  });
+
+/** El cliente escribió hace `horasAtras` (ventana de 24 h abierta si < 24). */
+const escribio = (shop: Shop, phone: string, horasAtras = 1) =>
+  prisma.barberMessage.create({
+    data: { barbershopId: shop.id, direction: "INBOUND", phone, body: "hola", status: "DELIVERED" as never, createdAt: new Date(Date.now() - horasAtras * 3600_000) },
+  });
+
+/** Corre `fn` con el interruptor en `modo` y lo deja como estaba (de fábrica: «free»). */
+async function conModo<T>(modo: "free" | "always" | "off", fn: () => Promise<T>): Promise<T> {
+  const r = await lib.saveStarsCardSetting(CON.id, modo);
+  assert.equal(r.ok, true, JSON.stringify(r));
+  try {
+    return await fn();
+  } finally {
+    await lib.saveStarsCardSetting(CON.id, "free");
+  }
+}
 
 async function aplicarSql() {
   const sql = fs.readFileSync(path.join(ROOT, "sql/barber_tarjeta_cobro.sql"), "utf8").replace(/^\s*--.*$/gm, "");
@@ -151,7 +175,7 @@ async function aplicarSql() {
 async function hayColumna(): Promise<boolean> {
   const r = await prisma.$queryRaw<{ n: number }[]>`
     SELECT count(*)::int AS "n" FROM information_schema.columns
-    WHERE table_name = 'barber_shops' AND column_name = 'starsCardAfterCharge'`;
+    WHERE table_name = 'barber_shops' AND column_name = 'starsCardMode'`;
   return (r[0]?.n ?? 0) > 0;
 }
 
@@ -193,25 +217,74 @@ after(async () => {
   await prisma.$disconnect();
 });
 
-test("sin el SQL: el envío está ENCENDIDO (por defecto) y apagarlo dice «falta el SQL»", { skip }, async (t) => {
+test("sin el SQL: vale «Solo cuando sea gratis» y cambiarlo dice «falta el SQL»", { skip }, async (t) => {
   if (await hayColumna()) return t.skip("la columna ya existe en esta base (corrida anterior): se prueba con el SQL pegado");
   lib._reiniciarTarjetaCobro();
-  assert.deepEqual(await lib.readStarsCardSetting(CON.id), { enabled: true, persisted: false });
-  const r = await lib.saveStarsCardSetting(CON.id, false);
+  assert.deepEqual(await lib.readStarsCardSetting(CON.id), { mode: "free", persisted: false });
+  const r = await lib.saveStarsCardSetting(CON.id, "always");
   assert.equal(r.ok, false);
   assert.equal(r.reason, "sql_pendiente");
 });
 
-test("el SQL se pega dos veces sin error y el interruptor queda encendido", { skip }, async () => {
+test("el SQL se pega dos veces sin error; queda «Solo cuando sea gratis» y no admite otro valor", { skip }, async () => {
   await aplicarSql();
   await aplicarSql();
   lib._reiniciarTarjetaCobro();
-  assert.deepEqual(await lib.readStarsCardSetting(CON.id), { enabled: true, persisted: true });
+  assert.deepEqual(await lib.readStarsCardSetting(CON.id), { mode: "free", persisted: true });
+  await assert.rejects(() => prisma.$executeRawUnsafe(`UPDATE "barber_shops" SET "starsCardMode" = 'gratis' WHERE "id" = $1`, CON.id));
+  await assert.rejects(() => lib.saveStarsCardSetting(CON.id, "gratis"));
 });
 
-test("fuera de la ventana de 24 h: sale con la plantilla y sus 4 variables (nombre, estrellas, total, enlace)", { skip }, async () => {
+test("DE FÁBRICA, ventana cerrada (nunca escribió): no sale NADA —ni plantilla— y queda el botón manual", { skip }, async () => {
   const c = await cliente(CON);
   const sale = await cobrar(CON, c.id);
+  assert.equal(sale.starsCard.status, "manual");
+  assert.equal(sale.starsCard.reason, "outsideWindow");
+  assert.match(sale.starsCard.manualHref, new RegExp(`^https://wa\\.me/52${c.phone}\\?text=`));
+  assert.equal(mensajes().length, 0, "ninguna llamada a Meta");
+  assert.equal((await filasDe(CON, sale.id)).length, 0, "ni siquiera se encola");
+});
+
+test("DE FÁBRICA, la ventana se cerró hace poco (escribió hace 25 h): tampoco sale", { skip }, async () => {
+  const c = await cliente(CON);
+  await escribio(CON, c.phone, 25);
+  const sale = await cobrar(CON, c.id);
+  assert.equal(sale.starsCard.reason, "outsideWindow");
+  assert.equal(mensajes().length, 0);
+});
+
+test("DE FÁBRICA, ventana abierta (escribió hace 23 h): sale como TEXTO, gratis, con la marca «gratis»", { skip }, async () => {
+  const c = await cliente(CON);
+  await escribio(CON, c.phone, 23);
+  const sale = await cobrar(CON, c.id);
+  assert.equal(sale.starsCard.status, "sent");
+  const [m] = mensajes();
+  assert.equal(m.body.type, "text");
+  const [fila] = await filasDe(CON, sale.id);
+  assert.equal(fila.templateName, `auto:tarjeta-gratis:${sale.id}`);
+});
+
+test("una fila «gratis» cuya ventana se cerró antes de salir CADUCA: nunca sale con plantilla de pago", { skip }, async () => {
+  const c = await cliente(CON);
+  const sale = await cobrar(CON, c.id); // ventana cerrada: no se encoló nada
+  // Como si se hubiera encolado con la ventana abierta y ésta se cerrara en el camino.
+  const fila = await prisma.barberMessage.create({
+    data: { barbershopId: CON.id, direction: "OUTBOUND", phone: c.phone, body: "Ve tu tarjeta aquí: https://panel.test/b/x", templateName: `auto:tarjeta-gratis:${sale.id}`, status: "PENDING", clientId: c.id },
+  });
+  const wa = await import("@/lib/barber/whatsapp");
+  const r = await wa.deliverBarberMessageNow(CON.id, fila.id);
+  assert.equal(r.status, "FAILED");
+  assert.equal(r.code, "STALE");
+  assert.equal(mensajes().length, 0, "no se llamó a Meta: ni texto (fuera de ventana) ni plantilla");
+  // Y el drenado del cron tampoco la manda.
+  const d = await wa.drainBarberOutbox(CON.id);
+  assert.equal(d.sent, 0);
+  assert.equal(mensajes().length, 0);
+});
+
+test("«SIEMPRE», fuera de la ventana de 24 h: sale con la plantilla y sus 4 variables (nombre, estrellas, total, enlace)", { skip }, async () => {
+  const c = await cliente(CON);
+  const sale = await conModo("always", () => cobrar(CON, c.id));
   assert.equal(sale.starsCard.status, "sent", JSON.stringify(sale.starsCard));
   const [m] = mensajes();
   assert.equal(m.body.type, "template");
@@ -229,10 +302,10 @@ test("fuera de la ventana de 24 h: sale con la plantilla y sus 4 variables (nomb
   assert.equal(filas[0].clientId, c.id);
 });
 
-test("con la ventana abierta: sale como TEXTO con las mismas palabras", { skip }, async () => {
+test("«SIEMPRE», con la ventana abierta: sale como TEXTO (gratis) con las mismas palabras", { skip }, async () => {
   const c = await cliente(CON);
-  await prisma.barberMessage.create({ data: { barbershopId: CON.id, direction: "INBOUND", phone: c.phone, body: "hola", status: "DELIVERED" as never } });
-  const sale = await cobrar(CON, c.id);
+  await escribio(CON, c.phone);
+  const sale = await conModo("always", () => cobrar(CON, c.id));
   assert.equal(sale.starsCard.status, "sent");
   const [m] = mensajes();
   assert.equal(m.body.type, "text");
@@ -240,10 +313,10 @@ test("con la ventana abierta: sale como TEXTO con las mismas palabras", { skip }
   assert.match(m.body.text.body, /Ve tu tarjeta aquí: https:\/\/panel\.test\/b\//);
 });
 
-test("sin plantilla aprobada (132001): no sale nada y Caja recibe el botón manual (wa.me con el texto)", { skip }, async () => {
+test("«SIEMPRE», sin plantilla aprobada (132001): no sale nada y Caja recibe el botón manual (wa.me con el texto)", { skip }, async () => {
   metaRechaza = { status: 404, json: { error: { code: 132001, message: "Template name does not exist in the translation" } } };
   const c = await cliente(CON);
-  const sale = await cobrar(CON, c.id);
+  const sale = await conModo("always", () => cobrar(CON, c.id));
   assert.equal(sale.starsCard.status, "manual");
   assert.equal(sale.starsCard.reason, "templatePending");
   assert.match(sale.starsCard.manualHref, new RegExp(`^https://wa\\.me/52${c.phone}\\?text=`));
@@ -261,18 +334,13 @@ test("sin WhatsApp conectado: no se encola nada; botón manual", { skip }, async
   assert.equal((await filasDe(SIN, sale.id)).length, 0);
 });
 
-test("con el interruptor APAGADO: no se manda; botón manual", { skip }, async () => {
-  const r = await lib.saveStarsCardSetting(CON.id, false);
-  assert.equal(r.ok, true);
-  try {
-    const c = await cliente(CON);
-    const sale = await cobrar(CON, c.id);
-    assert.equal(sale.starsCard.status, "manual");
-    assert.equal(sale.starsCard.reason, "off");
-    assert.equal(mensajes().length, 0);
-  } finally {
-    await lib.saveStarsCardSetting(CON.id, true);
-  }
+test("«NO MANDAR»: no se manda ni con la ventana abierta; botón manual", { skip }, async () => {
+  const c = await cliente(CON);
+  await escribio(CON, c.phone);
+  const sale = await conModo("off", () => cobrar(CON, c.id));
+  assert.equal(sale.starsCard.status, "manual");
+  assert.equal(sale.starsCard.reason, "off");
+  assert.equal(mensajes().length, 0);
 });
 
 test("cliente que pidió la baja: no se le escribe solo", { skip }, async () => {
@@ -292,6 +360,7 @@ test("una venta solo de productos no mueve la tarjeta: no se manda nada", { skip
 
 test("una vez por ticket: dos envíos a la vez del mismo ticket = un solo mensaje", { skip }, async () => {
   const c = await cliente(CON);
+  await escribio(CON, c.phone);
   const sale = await cobrar(CON, c.id);
   assert.equal(mensajes().length, 1);
   const starsCore = await import("../stars-core");

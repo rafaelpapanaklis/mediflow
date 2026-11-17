@@ -118,10 +118,11 @@ export interface BarberSettingsView {
   profile: BarberShopProfile;
   slug: string;
   /**
-   * «Mandar la tarjeta de estrellas después de cobrar» (ws6-t1, 16-nov).
-   * persisted=false: falta sql/barber_tarjeta_cobro.sql (encendido y sin poder apagarse).
+   * «Mandar la tarjeta de estrellas después de cobrar» (ws6-t1, 16-nov):
+   * "free" (solo cuando sea gratis, por defecto) | "always" | "off".
+   * persisted=false: falta sql/barber_tarjeta_cobro.sql (vale "free" y no se puede cambiar).
    */
-  starsCard: { enabled: boolean; persisted: boolean };
+  starsCard: { mode: "free" | "always" | "off"; persisted: boolean };
   loyalty: {
     enabled: boolean;
     threshold: number;

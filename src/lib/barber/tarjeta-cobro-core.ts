@@ -11,29 +11,58 @@
  *    tarjeta. Ve tu tarjeta aquí: <enlace>»
  *
  * Reglas:
- *   · solo si la barbería tiene WhatsApp conectado y el interruptor de
- *     Configuración está encendido (por defecto, sí);
+ *   · solo si la barbería tiene WhatsApp conectado;
+ *   · el interruptor de Configuración tiene TRES posiciones (Rafael, 16-nov:
+ *     «que a ninguna barbería le llegue un cobro de Meta inesperado»):
+ *       «Solo cuando sea gratis» (free, POR DEFECTO) → solo con la ventana de
+ *         24 h abierta (texto libre: Meta no cobra); si no, botón manual;
+ *       «Siempre» (always) → dentro de las 24 h gratis; fuera, con la
+ *         plantilla aprobada (Meta lo cobra a la cuenta de la barbería);
+ *       «No mandar» (off);
  *   · solo si el ticket tiene cliente con la tarjeta de estrellas encendida
  *     y un celular de 10 dígitos; nunca a quien pidió la baja;
  *   · UNA vez por ticket: la fila de la cola lleva la marca
- *     `auto:tarjeta:<ticket>` y no se encola otra con la misma;
- *   · con la ventana de 24 h abierta sale como texto; fuera de ella, con la
- *     plantilla UTILITY `dc_barber_tarjeta_estrellas` (whatsapp-core). Sin
- *     plantilla aprobada no sale nada y Caja ofrece «Mandar su tarjeta».
+ *     `auto:tarjeta:<ticket>` («Siempre») o `auto:tarjeta-gratis:<ticket>`
+ *     («Solo cuando sea gratis») y no se encola otra para el mismo ticket;
+ *   · una fila «gratis» NUNCA sale con plantilla: si al mandarla la ventana
+ *     ya se cerró, caduca (whatsapp.ts → planDelivery);
+ *   · en «Siempre», fuera de la ventana sale con la plantilla UTILITY
+ *     `dc_barber_tarjeta_estrellas`; sin plantilla aprobada no sale nada y
+ *     Caja ofrece «Mandar su tarjeta».
  * ═══════════════════════════════════════════════════════════════════════
  */
 import { mxTenDigits } from "@/lib/phone-mx";
 import { barberWaMeHref } from "@/lib/barber/wa-chat-core";
 import { BARBER_STARS_CARD_TTL_MS } from "@/lib/barber/whatsapp-core";
 
-/** Prefijo de la marca en barber_messages.templateName (no empieza por `sys:`: SÍ es un mensaje). */
-export const STARS_CARD_MARK_PREFIX = "auto:tarjeta:" as const;
+/**
+ * Prefijo COMÚN de las dos marcas en barber_messages.templateName (no empieza
+ * por `sys:`: SÍ es un mensaje). Las dos marcas empiezan así.
+ */
+export const STARS_CARD_MARK_PREFIX = "auto:tarjeta" as const;
+/** «Siempre»: puede salir con plantilla fuera de la ventana. */
+const MARK_ALWAYS = "auto:tarjeta:";
+/** «Solo cuando sea gratis»: nunca con plantilla. */
+const MARK_FREE = "auto:tarjeta-gratis:";
 
 /** Nombre EXACTO de la plantilla en Meta (vive en el catálogo de whatsapp-core). */
 export const STARS_CARD_TEMPLATE_NAME = "dc_barber_tarjeta_estrellas" as const;
 
-/** Por defecto el envío está ENCENDIDO (decisión de Rafael, 16-nov). */
-export const STARS_CARD_AFTER_CHARGE_DEFAULT = true;
+/** Las tres posiciones del interruptor de Configuración. */
+export type StarsCardMode = "free" | "always" | "off";
+export const STARS_CARD_MODES: readonly StarsCardMode[] = ["free", "always", "off"];
+
+/** Por defecto: «Solo cuando sea gratis» (decisión de Rafael, 16-nov). */
+export const STARS_CARD_MODE_DEFAULT: StarsCardMode = "free";
+
+export function isStarsCardMode(v: unknown): v is StarsCardMode {
+  return v === "free" || v === "always" || v === "off";
+}
+
+/** De lo que haya en la base a un modo válido (cualquier otra cosa: el de por defecto). */
+export function readStarsCardMode(raw: unknown): StarsCardMode {
+  return isStarsCardMode(raw) ? raw : STARS_CARD_MODE_DEFAULT;
+}
 
 /**
  * Pasado esto, una fila que no salió ya no se manda: «llevas 4 de 6» de un
@@ -43,19 +72,38 @@ export const STARS_CARD_TTL_MS = BARBER_STARS_CARD_TTL_MS;
 
 export const SQL_TARJETA_COBRO = "sql/barber_tarjeta_cobro.sql";
 
-export function starsCardMark(saleId: string): string {
-  return `${STARS_CARD_MARK_PREFIX}${saleId}`;
+/** La marca de la fila: «gratis» (freeOnly) o «siempre». */
+export function starsCardMark(saleId: string, freeOnly: boolean): string {
+  return `${freeOnly ? MARK_FREE : MARK_ALWAYS}${saleId}`;
+}
+
+/** Las dos marcas posibles de un ticket (para «una vez por ticket»). */
+export function starsCardMarks(saleId: string): [string, string] {
+  return [starsCardMark(saleId, false), starsCardMark(saleId, true)];
+}
+
+/** Lee la marca: el ticket y si es «solo gratis». null si no es una fila de la tarjeta. */
+export function parseStarsCardRow(templateName: string | null | undefined): { saleId: string; freeOnly: boolean } | null {
+  if (typeof templateName !== "string") return null;
+  const freeOnly = templateName.startsWith(MARK_FREE);
+  if (!freeOnly && !templateName.startsWith(MARK_ALWAYS)) return null;
+  const saleId = templateName.slice((freeOnly ? MARK_FREE : MARK_ALWAYS).length).trim();
+  return saleId ? { saleId, freeOnly } : null;
 }
 
 export function isStarsCardRow(templateName: string | null | undefined): boolean {
-  return typeof templateName === "string" && templateName.startsWith(STARS_CARD_MARK_PREFIX);
+  return parseStarsCardRow(templateName) !== null;
 }
 
 /** El ticket de la marca, o null si no es una fila de la tarjeta. */
 export function saleIdOfStarsCardRow(templateName: string | null | undefined): string | null {
-  if (!isStarsCardRow(templateName)) return null;
-  const id = String(templateName).slice(STARS_CARD_MARK_PREFIX.length).trim();
-  return id || null;
+  return parseStarsCardRow(templateName)?.saleId ?? null;
+}
+
+/** ¿Esta fila puede salir con plantilla (de pago) fuera de la ventana? Solo las de «Siempre». */
+export function starsCardRowMayUseTemplate(templateName: string | null | undefined): boolean {
+  const p = parseStarsCardRow(templateName);
+  return !!p && !p.freeOnly;
 }
 
 export interface StarsCardMessage {
@@ -120,7 +168,8 @@ export function absoluteCardUrl(origin: string, cardPath: string): string {
 // ── ¿Sale solo, o se queda el botón manual? ─────────────────────────────
 
 export type StarsCardSkip =
-  | "off" // el interruptor de Configuración está apagado
+  | "off" // el interruptor de Configuración está en «No mandar»
+  | "outsideWindow" // «Solo cuando sea gratis» y el cliente no escribió en 24 h (sería de pago)
   | "noStars" // el ticket no tiene cliente o la tarjeta de estrellas está apagada
   | "noPhone" // el cliente no tiene un celular de 10 dígitos
   | "optedOut" // el cliente pidió que no le escribieran
@@ -128,7 +177,9 @@ export type StarsCardSkip =
   | "already"; // este ticket ya mandó (o encoló) su tarjeta
 
 export interface StarsCardDecisionInput {
-  enabled: boolean;
+  mode: StarsCardMode;
+  /** ¿El cliente escribió en las últimas 24 h? (ventana abierta = Meta no cobra) */
+  windowOpen: boolean;
   hasStars: boolean;
   phone: string | null | undefined;
   optedOut: boolean;
@@ -136,15 +187,19 @@ export interface StarsCardDecisionInput {
   alreadyQueued: boolean;
 }
 
-export function decideStarsCardSend(i: StarsCardDecisionInput): { send: true; phone: string } | { send: false; skip: StarsCardSkip } {
+export function decideStarsCardSend(
+  i: StarsCardDecisionInput,
+): { send: true; phone: string; freeOnly: boolean } | { send: false; skip: StarsCardSkip } {
   if (!i.hasStars) return { send: false, skip: "noStars" };
-  if (!i.enabled) return { send: false, skip: "off" };
+  if (i.mode === "off") return { send: false, skip: "off" };
   const phone = mxTenDigits(i.phone ?? "");
   if (!phone) return { send: false, skip: "noPhone" };
   if (i.optedOut) return { send: false, skip: "optedOut" };
   if (!i.connected) return { send: false, skip: "notConnected" };
   if (i.alreadyQueued) return { send: false, skip: "already" };
-  return { send: true, phone };
+  // «Solo cuando sea gratis»: fuera de la ventana sería una plantilla de pago.
+  if (i.mode === "free" && !i.windowOpen) return { send: false, skip: "outsideWindow" };
+  return { send: true, phone, freeOnly: i.mode === "free" };
 }
 
 /**
