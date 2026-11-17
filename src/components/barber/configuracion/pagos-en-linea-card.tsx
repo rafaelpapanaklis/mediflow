@@ -31,7 +31,7 @@ export interface EstadoPagosEnLinea {
 }
 
 const CONECTAR = "/api/barber/mercadopago/oauth/conectar";
-const MOTIVOS = ["permiso", "plataforma", "estado", "sesion", "canje", "guardar"] as const;
+const MOTIVOS = ["permiso", "plataforma", "estado", "sesion", "canje", "guardar", "ver_como"] as const;
 
 function fechaCorta(iso: string | null, locale: string, timeZone: string): string | null {
   if (!iso) return null;
@@ -100,8 +100,12 @@ export function PagosEnLineaCard({
       setEstado(r.status);
       setConfirmar(false);
       toast.success(t("configuracion.payments.disconnectedToast"));
-    } catch {
-      setError(t("configuracion.payments.disconnectError"));
+    } catch (e) {
+      // «Ver como barbería» (ws6-t1): el servidor dice por qué no; lo demás, el aviso de siempre.
+      const msg = e instanceof Error ? e.message : "";
+      setError(msg.includes("Ver como barbería") || msg.includes("viewing as this barbershop")
+        ? t("configuracion.payments.errors.ver_como")
+        : t("configuracion.payments.disconnectError"));
     } finally {
       setTrabajando(false);
     }

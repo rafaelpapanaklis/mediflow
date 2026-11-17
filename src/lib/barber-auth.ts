@@ -9,6 +9,7 @@ import {
 } from "@/lib/barber/permissions";
 import { barberDebeCambiarContrasena, ultimoAccesoPorEscribir } from "@/lib/barber/contrasena";
 import { BARBER_BRANCH_ALL, BARBER_BRANCH_COOKIE, BARBER_BRANCH_PIN_HEADER } from "@/lib/barber/branch-cookie";
+import { estadoVerComoDe } from "@/lib/barber/ver-como";
 
 export { BarberForbiddenError, hasBarberPermission };
 export type { BarberPermissionKey };
@@ -58,6 +59,14 @@ export interface BarberContext {
    * no romper los contextos de prueba que ya existen.
    */
   mustChangePassword?: boolean;
+  /**
+   * «Ver como barbería» (ws6-t1, 16-nov): la sesión es la de un admin de
+   * DaleControl que entró desde /admin/barberias como el dueño. null/ausente =
+   * sesión normal. Con ella: la barra «Estás viendo…», no se anota el «último
+   * acceso» del dueño, no se fuerza su cambio de contraseña y las rutas de
+   * BLOQUEOS_VER_COMO responden 403 (respuestaSiVerComo).
+   */
+  verComo?: { id: string; adminEmail: string; expiresAt: string } | null;
 }
 
 export async function getBarberContext(): Promise<BarberContext | null> {
@@ -66,6 +75,12 @@ export async function getBarberContext(): Promise<BarberContext | null> {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return null;
 
+    // «Ver como barbería» vencido (2 h) o cerrado = SIN sesión, aunque el
+    // navegador conserve las cookies (mismo corte que getSession del dental).
+    const verComo = await estadoVerComoDe(supabase);
+    if (verComo.tipo === "terminada") return null;
+    const inspeccion = verComo.tipo === "activa" ? verComo.fila : null;
+
     const bu = await prisma.barberUser.findFirst({
       where: { supabaseId: user.id, isActive: true },
       include: { barbershop: true, barber: true },
@@ -73,7 +88,9 @@ export async function getBarberContext(): Promise<BarberContext | null> {
     });
     if (!bu) return null;
 
-    await anotarUltimoAcceso(user.id, bu, user.last_sign_in_at);
+    // Entrar a inspeccionar no es un acceso del dueño (su «Último acceso» en
+    // Equipo y en /admin no se mueve), igual que el dental no lo cuenta.
+    if (!inspeccion) await anotarUltimoAcceso(user.id, bu, user.last_sign_in_at);
 
     const home: BarberContext = {
       barberUserId: bu.id,
@@ -84,7 +101,11 @@ export async function getBarberContext(): Promise<BarberContext | null> {
       user: bu,
       barber: bu.barber,
       role: bu.role,
-      mustChangePassword: barberDebeCambiarContrasena(user.app_metadata),
+      // Su contraseña temporal es SUYA: el admin no la cambia por él.
+      mustChangePassword: inspeccion ? false : barberDebeCambiarContrasena(user.app_metadata),
+      verComo: inspeccion
+        ? { id: inspeccion.id, adminEmail: inspeccion.adminEmail, expiresAt: new Date(inspeccion.expiresAt).toISOString() }
+        : null,
     };
     let ctx: BarberContext;
     try {

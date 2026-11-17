@@ -23,6 +23,7 @@ const CODIGOS = new Set([
   "rechazada",
   "demasiados",
   "error",
+  "ver_como",
 ]);
 
 /**
@@ -58,7 +59,11 @@ export function MiContrasenaCard({ dict }: { dict: Dictionary }) {
       });
       if (!res.ok) {
         const data = (await res.json().catch(() => null)) as { code?: string } | null;
-        const code = res.status === 429 ? "demasiados" : data?.code && CODIGOS.has(data.code) ? data.code : "error";
+        const code = res.status === 429
+          ? "demasiados"
+          : data?.code === "VER_COMO_BLOQUEADO" // «Ver como barbería» desde /admin (ws6-t1)
+            ? "ver_como"
+            : data?.code && CODIGOS.has(data.code) ? data.code : "error";
         setError(t(`configuracion.password.errors.${code}`));
         return;
       }

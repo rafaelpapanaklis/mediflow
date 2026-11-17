@@ -29,6 +29,7 @@ import {
 } from "@/lib/barber/whatsapp";
 import { asString, jsonError, openWaGate, readJson } from "../_server";
 import { pickBarberSignupNumber, type WabaListing } from "@/lib/barber/wa-signup-core";
+import { respuestaSiVerComo } from "@/lib/barber/ver-como";
 
 /** Cuántas cuentas compartidas se revisan como mucho al buscar el número. */
 const MAX_WABAS_TO_SEARCH = 5;
@@ -44,6 +45,9 @@ export async function POST(req: Request) {
     branchId: asString(body?.branchId),
   });
   if (gate.response) return gate.response;
+  // «Ver como barbería» (ws6-t1): esto no es soporte, es de la cuenta del dueño.
+  const bloqueo = respuestaSiVerComo(gate.gate.ctx);
+  if (bloqueo) return bloqueo;
   const { shopId } = gate.gate;
 
   const code = asString(body?.code);
@@ -220,6 +224,9 @@ export async function DELETE(req: Request) {
   const branchId = new URL(req.url).searchParams.get("branchId");
   const gate = await openWaGate({ permission: "settings.edit", branchId });
   if (gate.response) return gate.response;
+  // «Ver como barbería» (ws6-t1): esto no es soporte, es de la cuenta del dueño.
+  const bloqueo = respuestaSiVerComo(gate.gate.ctx);
+  if (bloqueo) return bloqueo;
 
   try {
     // El historial de mensajes NO se borra: es de la barbería, no de la

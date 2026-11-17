@@ -29,6 +29,9 @@ export async function GET(req: NextRequest) {
 
   const ctx = await getBarberContext();
   if (!ctx) return NextResponse.redirect(`${base}/barber/entrar`);
+  // «Ver como barbería» (ws6-t1): esto no es soporte, es de la cuenta del dueño.
+  if (ctx.verComo) return NextResponse.redirect(`${pantalla}?mp=error&motivo=ver_como#pagos-en-linea`);
+  // (respuestaSiVerComo responde JSON; esta ruta es una navegación y vuelve a la pantalla.)
   const rootId = matrizDelDueno(ctx);
   if (!rootId) return NextResponse.redirect(`${pantalla}?mp=error&motivo=permiso#pagos-en-linea`);
 

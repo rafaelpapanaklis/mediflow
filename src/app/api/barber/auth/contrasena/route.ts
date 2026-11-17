@@ -10,6 +10,7 @@ import {
   barberDebeCambiarContrasena,
   problemaContrasenaNueva,
 } from "@/lib/barber/contrasena";
+import { respuestaSiVerComo } from "@/lib/barber/ver-como";
 
 export const dynamic = "force-dynamic";
 
@@ -92,6 +93,9 @@ function codigoDeSupabase(error: unknown): Codigo {
 export async function POST(req: NextRequest) {
   const ctx = await getBarberContext();
   if (!ctx) return falla("sin_sesion", 401);
+  // «Ver como barbería» (ws6-t1): esto no es soporte, es de la cuenta del dueño.
+  const bloqueo = respuestaSiVerComo(ctx);
+  if (bloqueo) return bloqueo;
 
   let body: Record<string, unknown>;
   try {

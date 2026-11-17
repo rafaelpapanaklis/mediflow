@@ -193,6 +193,29 @@ export function formatInt(n: number): string {
   return new Intl.NumberFormat("es-MX").format(n);
 }
 
+// ── Sedes de una barbería (ws6-t1, 16-nov) ──────────────────────────────
+//
+// Rafael: «dice que tiene 0 sucursales… Barba Negra no debería ser 1?». La
+// matriz ES una sede: una barbería sin sucursales tiene 1 sede, no 0. Las
+// pantallas de /admin/barberias cuentan las sedes con esto y nunca enseñan
+// un «0 sucursales» suelto para una barbería que tiene su sede principal.
+
+/** "Sedes: 1 (matriz)" · "Sedes: 3 (matriz + 2 sucursales)". `sucursales` = las ABIERTAS. */
+export function textoSedes(sucursales: number, cerradas = 0): string {
+  const n = Math.max(0, Math.trunc(sucursales) || 0);
+  const detalle = n === 0 ? "matriz" : `matriz + ${formatInt(n)} ${n === 1 ? "sucursal" : "sucursales"}`;
+  const c = Math.max(0, Math.trunc(cerradas) || 0);
+  const extra = c > 0 ? ` · ${formatInt(c)} ${c === 1 ? "sucursal cerrada" : "sucursales cerradas"} aparte` : "";
+  return `Sedes: ${formatInt(n + 1)} (${detalle})${extra}`;
+}
+
+/** Métrica de arriba: "Sedes en total: 7 (5 matrices + 2 sucursales)". */
+export function textoSedesTotales(matrices: number, sucursales: number): string {
+  const m = Math.max(0, Math.trunc(matrices) || 0);
+  const s = Math.max(0, Math.trunc(sucursales) || 0);
+  return `Sedes en total: ${formatInt(m + s)} (${formatInt(m)} ${m === 1 ? "matriz" : "matrices"} + ${formatInt(s)} ${s === 1 ? "sucursal" : "sucursales"})`;
+}
+
 /** "08 jun" (con año si no es el actual). */
 export function shortDate(iso: string | null | undefined): string {
   if (!iso) return "—";

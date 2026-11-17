@@ -44,6 +44,12 @@
     "branchChanged": "Cambiaste de sede en otra pestaña. Recarga esta página para seguir en la sede que ves; no se guardó nada."
   },
   "logout": "Cerrar sesión",
+  "verComo": {
+    "before": "Estás viendo como",
+    "middle": "soporte de",
+    "until": "La barbería no ve esta barra. La sesión se cierra sola a las",
+    "exit": "Salir y volver a /admin"
+  },
   "navLabel": "Menú principal",
   "unreadChats": "{count} chats sin leer",
   "unreadChat": "1 chat sin leer",

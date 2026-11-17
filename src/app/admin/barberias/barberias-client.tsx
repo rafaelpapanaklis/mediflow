@@ -49,7 +49,10 @@ import {
   shortDate,
   subscriptionFace,
   fullDate,
+  textoSedes,
+  textoSedesTotales,
 } from "@/components/admin/barberias/shared";
+import { BotonVerComoBarberia } from "@/components/admin/barberias/boton-ver-como-barberia";
 import "@/components/admin/barberias/barberias.css";
 
 type SortKey =
@@ -225,7 +228,7 @@ export function AdminBarberiasClient() {
           hero
           hint={
             metrics
-              ? `Matrices dadas de alta · ${formatInt(metrics.branches)} ${metrics.branches === 1 ? "sucursal activa" : "sucursales activas"} aparte`
+              ? `Matrices dadas de alta · ${textoSedesTotales(metrics.accounts, metrics.branches)}`
               : undefined
           }
         />
@@ -493,12 +496,14 @@ export function AdminBarberiasClient() {
                                   {sede ? "↳ " : ""}Sucursal{row.branchName ? ` · ${row.branchName}` : ""}
                                   {row.parentName && !sede ? ` de ${row.parentName}` : ""}
                                 </div>
-                              ) : row.branchCount > 0 ? (
-                                <div className="dcba-note">
-                                  Matriz · {formatInt(row.branchCount)}{" "}
-                                  {row.branchCount === 1 ? "sucursal" : "sucursales"}
-                                </div>
-                              ) : null}
+                              ) : (
+                                // La matriz cuenta como sede: «Sedes: 1 (matriz)», nunca «0 sucursales».
+                                <div className="dcba-note">{textoSedes(row.branchCount)}</div>
+                              )}
+                              {/* «Ver como barbería» (ws6-t1), como «Ver como clínica» en /admin/clinics. */}
+                              <div style={{ marginTop: 6 }}>
+                                <BotonVerComoBarberia barbershopId={row.id} size="sm" />
+                              </div>
                             </div>
                           </td>
                           <td className="dcba-col-wide">

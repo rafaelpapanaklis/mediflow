@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { desconectarCuenta, estadoCuentaMp } from "@/lib/barber/mercadopago";
 import { gateDueno } from "../_gate";
+import { respuestaSiVerComo } from "@/lib/barber/ver-como";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,6 +17,9 @@ export const dynamic = "force-dynamic";
 export async function POST() {
   const gate = await gateDueno();
   if ("response" in gate) return gate.response;
+  // «Ver como barbería» (ws6-t1): esto no es soporte, es de la cuenta del dueño.
+  const bloqueo = respuestaSiVerComo(gate.ctx);
+  if (bloqueo) return bloqueo;
   try {
     await desconectarCuenta(gate.rootId);
     return NextResponse.json({ ok: true, status: await estadoCuentaMp(gate.rootId) });
