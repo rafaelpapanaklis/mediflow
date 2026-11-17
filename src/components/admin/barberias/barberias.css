@@ -591,3 +591,24 @@
   gap: 10px;
   min-width: 0;
 }
+
+/* ── Números de la ficha: pagos a DaleControl y números del negocio (ws6-t1) ── */
+
+.dcba-cifra {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-1);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.dcba-link {
+  color: var(--brand);
+  font-size: 12px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.dcba-link:hover {
+  text-decoration: underline;
+}

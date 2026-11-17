@@ -228,6 +228,8 @@ export interface AdminBarbershopRow {
   branchCount: number;
   barbers: number;
   teamUsers: number;
+  /** Clientes de ESTA sede (como «Pacientes» en la lista de clínicas del dental). */
+  clients: number;
   whatsappConnected: boolean;
   whatsappMode: string;
   messagesUsedPeriod: number;
@@ -358,8 +360,17 @@ export async function listBarbershopsForAdmin(
       }),
     ]);
 
-  // Aparte y sin tumbar nada: sin la tabla de uso el mapa viene vacío.
-  const uso = await usoParaLista(ids);
+  // Aparte y sin tumbar nada: sin la tabla de uso el mapa viene vacío. Los
+  // clientes por sede (ws6-t1) van en la misma tanda: un count agrupado.
+  const [uso, clientCounts] = await Promise.all([
+    usoParaLista(ids),
+    prisma.barberClient.groupBy({
+      by: ["barbershopId"],
+      where: { barbershopId: { in: ids } },
+      _count: { _all: true },
+    }),
+  ]);
+  const clientsBy = new Map(clientCounts.map((r) => [r.barbershopId, r._count._all]));
 
   const barbersBy = new Map(barberCounts.map((r) => [r.barbershopId, r._count._all]));
   const ticketsBy = new Map(ticketCounts.map((r) => [r.barbershopId, r._count._all]));
@@ -397,6 +408,7 @@ export async function listBarbershopsForAdmin(
       branchCount: branchesBy.get(s.id) ?? 0,
       barbers: barbersBy.get(s.id) ?? 0,
       teamUsers: s._count.users,
+      clients: clientsBy.get(s.id) ?? 0,
       whatsappConnected: isWhatsappConnected(s),
       whatsappMode: s.whatsappSenderMode,
       messagesUsedPeriod: s.messagesUsedPeriod,
@@ -914,6 +926,7 @@ export async function getBarbershopDetailForAdmin(
     branchCount: branchRows.filter((b) => b.isActive).length,
     barbers: barbers.filter((b) => b.isActive).length,
     teamUsers: shop._count.users,
+    clients: 0,
     whatsappConnected: isWhatsappConnected(shop),
     whatsappMode: shop.whatsappSenderMode,
     messagesUsedPeriod: shop.messagesUsedPeriod,

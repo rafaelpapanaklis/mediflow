@@ -22,6 +22,7 @@ import {
   Building2,
   CalendarDays,
   CreditCard,
+  Download,
   History,
   LifeBuoy,
   MessageSquare,
@@ -36,7 +37,10 @@ import { KpiCard } from "@/components/ui/design-system/kpi-card";
 import { BARBER_ROLE_LABELS, type BarberRole } from "@/lib/barber/types";
 import { isBarberUnlimited } from "@/lib/barber/plan-shared";
 import type { AdminBarbershopDetail } from "@/lib/barber/admin";
+import type { PagosBarberiaDTO } from "@/lib/barber/admin-pagos-core";
+import type { OrigenBarberiaDTO } from "@/lib/barber/admin-origen";
 import {
+  COBRO_FACE,
   MANUAL_ACTION_LABELS,
   PLAN_TONES,
   TICKET_PRIORITY_FACE,
@@ -56,6 +60,8 @@ import {
 } from "@/components/admin/barberias/manual-action-modal";
 import { BotonVerComoBarberia } from "@/components/admin/barberias/boton-ver-como-barberia";
 import { ActividadPanel } from "@/components/admin/barberias/actividad-panel";
+import { PagosADaleControl } from "@/components/admin/barberias/pagos-a-dalecontrol";
+import { NumerosNegocioPanel } from "@/components/admin/barberias/numeros-negocio";
 import "@/components/admin/barberias/barberias.css";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -67,7 +73,17 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-export function AdminBarbershopDetailClient({ detail }: { detail: AdminBarbershopDetail }) {
+export function AdminBarbershopDetailClient({
+  detail,
+  pagos = null,
+  origen = null,
+}: {
+  detail: AdminBarbershopDetail;
+  /** Cobros de la suscripción a DaleControl (admin-pagos.ts); null = no se pudieron leer. */
+  pagos?: PagosBarberiaDTO | null;
+  /** De dónde llegó (admin-origen.ts); null = no se pudo leer. */
+  origen?: OrigenBarberiaDTO | null;
+}) {
   const router = useRouter();
   const [action, setAction] = useState<ManualActionKind | null>(null);
 
@@ -108,6 +124,18 @@ export function AdminBarbershopDetailClient({ detail }: { detail: AdminBarbersho
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {/* «Ver como barbería» (ws6-t1): abre su panel /barber en otra pestaña, como su dueño. */}
             <BotonVerComoBarberia barbershopId={shop.id} size="sm" />
+            {/* Como «Exportar» de la ficha de clínica: ZIP con CSV (clientes, citas, tickets) + manifest. Solo admin. */}
+            <a
+              href={`/api/admin/barberias/${shop.id}/export`}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={shop.isBranch ? "ZIP con CSV de esta sucursal + manifest" : "ZIP con CSV de la matriz y sus sucursales + manifest"}
+              style={{ textDecoration: "none" }}
+            >
+              <ButtonNew size="sm" variant="secondary" icon={<Download size={14} />}>
+                Exportar
+              </ButtonNew>
+            </a>
             {!shop.isBranch && (
               <>
                 <ButtonNew size="sm" variant="secondary" onClick={() => setAction("plan")}>
@@ -163,7 +191,7 @@ export function AdminBarbershopDetailClient({ detail }: { detail: AdminBarbersho
             hint={`${formatInt(activity.doneThisMonth)} atendidas · ${formatInt(activity.cancelledThisMonth)} canceladas`}
           />
           <KpiCard
-            label="Tickets del mes"
+            label="Tickets de soporte del mes"
             value={formatInt(activity.ticketsThisMonth)}
             icon={MessageSquare}
             tone={activity.openTickets > 0 ? "warning" : undefined}
@@ -192,6 +220,26 @@ export function AdminBarbershopDetailClient({ detail }: { detail: AdminBarbersho
                 </span>
               </Field>
               <Field label="Tamaño declarado">{shop.teamSize || "—"}</Field>
+              {/* Como «Origen» de la ficha de clínica: aquí solo existe el socio que la refirió (ws6-t1). */}
+              <Field label="Origen">
+                {origen === null || !origen.disponible ? (
+                  <span title="Sin la tabla de socios (sql/barber_afiliados.sql) no se sabe">Sin dato</span>
+                ) : origen.referida ? (
+                  <>
+                    Referida por{" "}
+                    <Link href={`/admin/barberias/${origen.referida.porId}`}>{origen.referida.porNombre}</Link>
+                    <div className="dcba-note">
+                      código <span className="mono">{origen.referida.codigo}</span> · {shortDate(origen.referida.alta)}
+                      {origen.referida.primerPago ? ` · pagó desde ${shortDate(origen.referida.primerPago)}` : " · aún no paga"}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    Directo
+                    <div className="dcba-note">sin socio que la refiriera (el alta no guarda anuncio ni UTM)</div>
+                  </>
+                )}
+              </Field>
               <Field label="Mini-web">
                 <a
                   href={`/b/${shop.slug}`}
@@ -219,6 +267,20 @@ export function AdminBarbershopDetailClient({ detail }: { detail: AdminBarbersho
             </div>
             <div className="dcba-fields">
               <Field label="Precio de lista">{formatMoney(shop.planPriceMonthly)}/mes</Field>
+              {/* Lo que paga DE VERDAD (lo que cobra Stripe, anual ÷ 12) y cuándo renueva (ws6-t1). */}
+              <Field label="Paga al mes">
+                {shop.isBranch ? (
+                  "La paga la matriz"
+                ) : (
+                  <>
+                    {formatMoney(shop.pagoMensual)}
+                    <div className="dcba-note">{(COBRO_FACE[shop.cobro] ?? COBRO_FACE.sin_pagar).label}</div>
+                  </>
+                )}
+              </Field>
+              <Field label="Próxima renovación">
+                <span title={fullDate(pagos?.proximaRenovacion)}>{shortDate(pagos?.proximaRenovacion)}</span>
+              </Field>
               <Field label="Estado en BD">
                 <span className="mono">{shop.subscriptionStatus}</span>
               </Field>
@@ -244,6 +306,16 @@ export function AdminBarbershopDetailClient({ detail }: { detail: AdminBarbersho
               editarlos ahí cambia esta ficha sin volver a desplegar.
             </p>
           </CardNew>
+        </div>
+
+        {/* ── Lo que paga a DaleControl: cobros, total, último, rechazados (ws6-t1) ── */}
+        <div className="dcba-section">
+          <PagosADaleControl barbershopId={shop.id} pagos={pagos} matrizNombre={shop.parentName} />
+        </div>
+
+        {/* ── El negocio de la barbería con SUS clientes, por mes y por sede (ws6-t1) ── */}
+        <div className="dcba-section">
+          <NumerosNegocioPanel barbershopId={shop.id} />
         </div>
 
         {/* ── WhatsApp ─────────────────────────────────────────────── */}
