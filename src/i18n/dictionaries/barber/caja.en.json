@@ -382,6 +382,7 @@
     "fromCash": "Paid in cash from the register ({amount})",
     "fromCashHint": "It's recorded as a barber payout in the open register and lowers what should be in the drawer. One record: don't add it again in the register.",
     "fromCashNoSession": "No register is open: open it to pay from the drawer.",
+    "outsideHint": "Unchecked, the payment is recorded as “outside the register”: it counts in Reports and doesn't touch the drawer. Don't add it again in the register.",
     "payAdvances": "− Advances this period (already given)",
     "colToHand": "To hand over",
     "toCash": "Goes into the register in cash ({amount})",

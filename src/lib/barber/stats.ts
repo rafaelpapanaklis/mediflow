@@ -1117,6 +1117,9 @@ export interface ReportBarberRow {
    * cash.view o sin el SQL de caja completa (la columna no viaja).
    */
   paidOut?: number;
+  /** De lo pagado: lo que salió del cajón / lo pagado fuera de caja (decisión 1 del QA E). */
+  paidDrawer?: number;
+  paidOutside?: number;
   advances?: number;
 }
 
@@ -1741,6 +1744,8 @@ export async function getReportsSummary(ctx: BarberContext, opts: ReportsOptions
         for (const row of byBarber) {
           const b = porBarbero.get(row.barberId);
           row.paidOut = b?.paidOut ?? 0;
+          row.paidDrawer = b?.paidDrawer ?? 0;
+          row.paidOutside = b?.paidOutside ?? 0;
           row.advances = b?.advances ?? 0;
         }
       }
@@ -1887,6 +1892,9 @@ export interface ReportsCsvMoneyLabels {
     prevProfit: string;
     cashNet: string;
     note?: string;
+    /** Lo entregado, partido: del cajón / fuera de caja (decisión 1 del QA E). */
+    payoutsDrawer?: string;
+    payoutsOutside?: string;
   };
   /** Textos de las notas (M4 cobros en línea, N5 tope de movimientos). */
   onlineNotIncluded?: string;
@@ -1898,6 +1906,9 @@ export interface ReportsCsvMoneyLabels {
   total: string;
   barber: string;
   paidOut: string;
+  /** Columnas del desglose de «Pagado»; sin ellas (llamador viejo) no se escriben. */
+  paidDrawer?: string;
+  paidOutside?: string;
   advances: string;
   methods: Record<string, string>;
   categories: Record<string, string>;
@@ -1932,6 +1943,10 @@ function cashFlowCsvLines(s: ReportsSummary, L: ReportsCsvLabels, M: ReportsCsvM
   push([M.metrics.profit, c.profit]);
   push([M.metrics.prevProfit, cf.previous.profit]);
   push([M.metrics.payouts, c.payouts.total]);
+  if (M.metrics.payoutsDrawer && M.metrics.payoutsOutside) {
+    push([M.metrics.payoutsDrawer, c.payoutsSplit.drawer]);
+    push([M.metrics.payoutsOutside, c.payoutsSplit.outside]);
+  }
   push([M.metrics.cashNet, c.cashNet]);
   if (M.onlineNotIncluded) push([M.metrics.note ?? "", M.onlineNotIncluded]);
   if (c.truncated && M.truncated) push([M.metrics.note ?? "", M.truncated]);
@@ -2004,12 +2019,13 @@ export function buildReportsCsv(s: ReportsSummary, L: ReportsCsvLabels): string 
   // Pagado y adelantos del periodo (ws6-t5): solo si viajó «Ingresos y gastos».
   const M = moneyLabelsOf(L);
   const paid = Boolean(s.cashFlow && M);
-  if (paid) barberHead.push(M!.paidOut, M!.advances);
+  const paidSplit = paid && typeof M!.paidDrawer === "string" && typeof M!.paidOutside === "string";
+  if (paid) barberHead.push(M!.paidOut, ...(paidSplit ? [M!.paidDrawer, M!.paidOutside] : []), M!.advances);
   push(barberHead);
   for (const b of s.byBarber) {
     const row: unknown[] = [b.nickname || b.name, b.tickets, b.produced, b.tips, b.avgTicket ?? ""];
     if (s.can.commissions) row.push(b.commission ?? "");
-    if (paid) row.push(b.paidOut ?? 0, b.advances ?? 0);
+    if (paid) row.push(b.paidOut ?? 0, ...(paidSplit ? [b.paidDrawer ?? 0, b.paidOutside ?? 0] : []), b.advances ?? 0);
     push(row);
   }
   blank();

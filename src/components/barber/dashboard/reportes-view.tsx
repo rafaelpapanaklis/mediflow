@@ -308,7 +308,17 @@ export function ReportesView({
                       <td className="bdash-num">{b.avgTicket === null ? "—" : fmtMoney(b.avgTicket)}</td>
                       <td className="bdash-num">{fmtMoney(b.tips)}</td>
                       {s.can.commissions && <td className="bdash-num">{b.commission === null ? "—" : fmtMoney(b.commission)}</td>}
-                      {paidCols && <td className="bdash-num">{fmtMoney(b.paidOut ?? 0)}</td>}
+                      {paidCols && (
+                        <td className="bdash-num" data-pagado>
+                          {fmtMoney(b.paidOut ?? 0)}
+                          {/* Decisión 1 del QA E: el desglose «en caja / fuera de caja» de lo pagado. */}
+                          {(b.paidOut ?? 0) > 0 && (
+                            <span className="bdash-paid-split" title={t("money.paidSplitHint")}>
+                              {t("money.paidSplit", { drawer: fmtMoney(b.paidDrawer ?? 0), outside: fmtMoney(b.paidOutside ?? 0) })}
+                            </span>
+                          )}
+                        </td>
+                      )}
                       {paidCols && <td className="bdash-num">{b.advances ? fmtMoney(b.advances) : "—"}</td>}
                     </tr>
                   ))}

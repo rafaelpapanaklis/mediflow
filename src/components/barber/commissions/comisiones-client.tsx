@@ -387,6 +387,10 @@ export function ComisionesClient({
               <span>
                 {t("comisiones.fromCash", { amount: fmtMoney(payRow.totalToPay) })}
                 <span className="bcaja-hint" style={{ display: "block" }}>{cashOut.sessionOpen ? t("comisiones.fromCashHint") : t("comisiones.fromCashNoSession")}</span>
+                {/* Decisión 1 del QA E: sin la casilla el pago queda anotado «fuera de caja». */}
+                {!(fromCash && cashOut.sessionOpen) && (
+                  <span className="bcaja-hint" style={{ display: "block", marginTop: 4 }} data-fuera-de-caja>{t("comisiones.outsideHint")}</span>
+                )}
               </span>
             </label>
           )}

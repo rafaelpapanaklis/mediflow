@@ -1002,6 +1002,14 @@ export interface CommissionPayoutResult {
    * que entregar: «a pagar» ≤ 0).
    */
   movementId?: string | null;
+  /**
+   * Registro «fuera de caja» del pago (decisión 1 del QA E, 16-nov-2026): se
+   * marcó pagado SIN «sale de la caja» y aun así queda su movimiento, sin
+   * turno y por un medio que no es efectivo, para que «Pagado» de Reportes dé
+   * lo mismo que «Ya pagado» de Comisiones. null = no aplica (salió de la
+   * caja, no había nada que entregar o falta el SQL de caja completa).
+   */
+  outsideMovementId?: string | null;
   /** Adelantos/vales del periodo que este pago descontó (ya se le habían entregado). */
   advancesDeducted?: number;
 }
@@ -1010,6 +1018,12 @@ export interface CommissionPayoutResult {
 export interface CommissionCashOut {
   method: CashMovementMethod;
 }
+
+/**
+ * Medio del registro «fuera de caja» de un pago marcado sin «sale de la caja»:
+ * nunca efectivo (el efectivo del cajón solo sale con la casilla marcada).
+ */
+export const OUTSIDE_PAYOUT_METHOD: CashMovementMethod = "OTHER";
 
 /**
  * Paga lo PENDIENTE del barbero en el periodo: marca (paidAt = ahora) todas
@@ -1055,6 +1069,9 @@ export async function markCommissionsPaid(
       throw new BarberCajaError(409, "CAJA_SQL_PENDING", "Falta aplicar sql/barber_caja_completa.sql: el pago no se puede registrar en Caja.");
     }
   }
+  // Sin «sale de la caja»: el pago se anota igual, FUERA de caja, si el SQL de
+  // caja completa está pegado (decisión 1 del QA E). Sin él, como antes.
+  const recordOutside = !cashOut && (await cashMovementsReady(prisma));
   const cashIn = opts.cashIn === true;
   if (cashIn) {
     assertBarberPermission(ctx, "cash.expenses");
@@ -1094,7 +1111,7 @@ export async function markCommissionsPaid(
         advances,
       });
       if (pendingEntryIds.length === 0 && !salaryDue) {
-        return { marked: 0, paidAt: now.toISOString(), paidAmount: 0, movementId: null, advancesDeducted: 0 };
+        return { marked: 0, paidAt: now.toISOString(), paidAmount: 0, movementId: null, outsideMovementId: null, advancesDeducted: 0 };
       }
       if (expected !== null && !expected.equals(money(row.totalToPay))) {
         throw new BarberCajaError(
@@ -1162,6 +1179,33 @@ export async function markCommissionsPaid(
           createdAt: now,
         });
       }
+      // Decisión 1 del QA E (16-nov-2026): marcado SIN «sale de la caja», el
+      // pago deja igual UN registro, «fuera de caja»: sin turno (no entra a
+      // ningún corte) y por un medio que NO es efectivo (no mueve el cajón ni
+      // el esperado). Va ligado como el de caja —mismo barbero, periodo y hora
+      // del pago—, así que anularlo deshace el pago. Con él, lo «Pagado» de
+      // Reportes es lo «Ya pagado» de Comisiones. No pide cash.withdraw: no
+      // sale nada de la caja.
+      let outsideMovementId: string | null = null;
+      if (recordOutside && money(row.totalToPay).gt(ZERO)) {
+        outsideMovementId = randomUUID();
+        await insertMovement(tx, {
+          id: outsideMovementId,
+          barbershopId,
+          sessionId: null,
+          type: "BARBER_PAYOUT",
+          method: OUTSIDE_PAYOUT_METHOD,
+          amount: money(row.totalToPay),
+          category: null,
+          note: null,
+          barberId: params.barberId,
+          payoutKind: barber.commissionType === "SALARY" ? "SALARY" : "COMMISSION",
+          periodKey: params.periodKey,
+          receiptUrl: null,
+          createdByUserId: ctx.barberUserId,
+          createdAt: now,
+        });
+      }
       // Saldo a favor del dueño (renta de silla, o adelantos mayores que lo
       // ganado): lo que el barbero entrega ENTRA al cajón, ligado a este pago.
       if (cashIn && money(row.totalToPay).lt(ZERO)) {
@@ -1193,6 +1237,7 @@ export async function markCommissionsPaid(
         // Lo que de verdad se le entrega: el «a pagar» ya sin los adelantos.
         paidAmount: row.totalToPay,
         movementId,
+        outsideMovementId,
         advancesDeducted: row.advances ?? 0,
       };
     },

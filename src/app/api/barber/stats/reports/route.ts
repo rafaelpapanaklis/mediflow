@@ -111,6 +111,8 @@ function moneyLabelsFor(t: ReturnType<typeof getBarberT>): ReportsCsvMoneyLabels
       profit: c("metrics.profit"),
       prevProfit: c("metrics.prevProfit"),
       cashNet: c("metrics.cashNet"),
+      payoutsDrawer: c("metrics.payoutsDrawer"),
+      payoutsOutside: c("metrics.payoutsOutside"),
     },
     onlineNotIncluded: m("onlineNotIncluded"),
     truncated: m("truncated", { limit: MOVEMENTS_LIMIT }),
@@ -121,6 +123,8 @@ function moneyLabelsFor(t: ReturnType<typeof getBarberT>): ReportsCsvMoneyLabels
     total: c("total"),
     barber: c("barber"),
     paidOut: c("metrics.paidOut"),
+    paidDrawer: c("metrics.paidDrawer"),
+    paidOutside: c("metrics.paidOutside"),
     advances: c("metrics.advances"),
     methods: map("methods", RESUMEN_INCOME_METHODS),
     // N9: las etiquetas de la Caja (barber.caja.mov.cat.*), una sola fuente.

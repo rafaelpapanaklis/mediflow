@@ -186,7 +186,15 @@ export function CashFlowCard({
           <h3 className="bdash-money__sub" style={{ marginTop: 18 }}>{k("byKind")}</h3>
           <div className="bdash-big__label" style={{ margin: "0 0 6px" }}>
             {k("paidOut")}: <strong>{fmtMoney(c.payouts.total)}</strong>
-            {c.payouts.count > 0 ? ` · ${k("payoutsCount", { count: c.payouts.count })}` : ""} · {k("paidOutHint")}
+            {c.payouts.count > 0 ? ` · ${k("payoutsCount", { count: c.payouts.count })}` : ""}
+            {c.payouts.total > 0 ? (
+              <span data-entregado-desglose title={k("paidSplitHint")}>
+                {" · "}
+                {k("paidSplit", { drawer: fmtMoney(c.payoutsSplit.drawer), outside: fmtMoney(c.payoutsSplit.outside) })}
+              </span>
+            ) : null}
+            {" · "}
+            {k("paidOutHint")}
           </div>
           {kinds.length === 0 ? (
             <div className="bdash-empty" style={{ textAlign: "left", padding: "4px 0" }}>{k("byKindEmpty")}</div>

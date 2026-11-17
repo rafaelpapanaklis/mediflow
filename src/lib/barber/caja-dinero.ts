@@ -102,6 +102,10 @@ export interface DineroBarbero {
   tips: number;
   /** Todo lo que se le pagó en el periodo (adelantos, comisión, sueldo, otro). */
   paidOut: number;
+  /** De eso, lo que salió del cajón: efectivo de un turno de caja. */
+  paidDrawer: number;
+  /** De eso, lo pagado fuera de caja: otro medio, sin turno o marcado sin «sale de la caja». */
+  paidOutside: number;
   /** De eso, adelantos/vales (ADVANCE). */
   advances: number;
 }
@@ -117,6 +121,8 @@ export interface DineroPeriodo {
   expenses: CajaResumen["expenses"];
   /** Lo ENTREGADO a los barberos (con propinas, adelantos…): informativo, no resta en la ganancia. */
   payouts: CajaResumen["payouts"];
+  /** payouts.total partido: efectivo del cajón / fuera de caja. drawer + outside = payouts.total. */
+  payoutsSplit: { drawer: number; outside: number };
   /** Lo devengado por los barberos en el periodo, sin propinas: esto sí resta. */
   barberCost: CostoBarberos;
   /** INGRESOS − gastos − barberCost.total. */
@@ -140,6 +146,46 @@ export function adelantosPorBarbero(
     acc.set(m.barberId, D(acc.get(m.barberId)).plus(D(m.amount).abs()));
   }
   return new Map([...acc.entries()].map(([k, v]) => [k, out(v)]));
+}
+
+/** Lo pagado a barberos, partido en «del cajón» y «fuera de caja». */
+export interface PagosPartidos {
+  drawer: number;
+  outside: number;
+  byBarber: Map<string, { drawer: number; outside: number }>;
+}
+
+/**
+ * Parte los pagos a barberos VIVOS (decisión 1 del QA E, 16-nov-2026):
+ *   · «en caja»       = efectivo de un turno de caja (lo único que baja el cajón);
+ *   · «fuera de caja» = todo lo demás: tarjeta, transferencia u otro medio, un
+ *     pago en efectivo sin caja abierta, y lo marcado pagado en Comisiones sin
+ *     «sale de la caja» (commissions.ts lo anota sin turno y sin efectivo).
+ * drawer + outside = payouts.total de cajaResumen (mismos movimientos).
+ */
+export function pagosPartidos(
+  movements: Array<Pick<CashMovementRow, "type" | "method" | "sessionId" | "barberId" | "amount" | "voidedAt">>,
+): PagosPartidos {
+  let drawer = new Prisma.Decimal(0);
+  let outside = new Prisma.Decimal(0);
+  const acc = new Map<string, { drawer: Dec; outside: Dec }>();
+  for (const m of movements) {
+    if (m.voidedAt || m.type !== "BARBER_PAYOUT") continue;
+    const amount = D(m.amount).abs();
+    const enCaja = m.method === "CASH" && Boolean(m.sessionId);
+    if (enCaja) drawer = drawer.plus(amount);
+    else outside = outside.plus(amount);
+    if (!m.barberId) continue;
+    const b = acc.get(m.barberId) ?? { drawer: new Prisma.Decimal(0), outside: new Prisma.Decimal(0) };
+    if (enCaja) b.drawer = b.drawer.plus(amount);
+    else b.outside = b.outside.plus(amount);
+    acc.set(m.barberId, b);
+  }
+  return {
+    drawer: out(drawer),
+    outside: out(outside),
+    byBarber: new Map([...acc.entries()].map(([k, v]) => [k, { drawer: out(v.drawer), outside: out(v.outside) }])),
+  };
 }
 
 export interface CostoBarberoInput {
@@ -204,6 +250,8 @@ export function dineroDe(
   advancesByBarber: Map<string, number> = new Map(),
   barberCost: CostoBarberos = SIN_COSTO,
   truncated = false,
+  /** Sin él (llamadores viejos, pruebas): todo lo pagado se toma como «del cajón» salvo lo que no fue efectivo. */
+  pagos: PagosPartidos | null = null,
 ): DineroPeriodo {
   const charged = D(resumen.income.total);
   const tips = D(resumen.tips.total);
@@ -216,6 +264,9 @@ export function dineroDe(
     income: out(income),
     expenses: resumen.expenses,
     payouts: resumen.payouts,
+    payoutsSplit: pagos
+      ? { drawer: pagos.drawer, outside: pagos.outside }
+      : { drawer: resumen.payouts.cash, outside: out(D(resumen.payouts.total).minus(D(resumen.payouts.cash))) },
     barberCost,
     profit: out(profit),
     cashNet: out(D(resumen.esperado.expected).minus(D(resumen.esperado.opening))),
@@ -226,6 +277,8 @@ export function dineroDe(
         barberName: b.barberName,
         tips: b.tips,
         paidOut: b.paidOut,
+        paidDrawer: pagos ? pagos.byBarber.get(b.barberId)?.drawer ?? 0 : b.paidOut,
+        paidOutside: pagos ? pagos.byBarber.get(b.barberId)?.outside ?? 0 : 0,
         advances: advancesByBarber.get(b.barberId) ?? 0,
       })),
     truncated,
@@ -404,7 +457,7 @@ export async function getDineroPeriodo(
     const sMovements = apart ? apartMovements : movements.filter((m) => m.sessionId === open.id);
     openExpected = cajaResumen({ openingAmount: open.openingAmount, tickets: sTickets.map(ticketOf), movements: sMovements }).expectedCash;
   }
-  return { dinero: dineroDe(resumen, adelantosPorBarbero(movements), barberCost, mov.truncated), openExpected };
+  return { dinero: dineroDe(resumen, adelantosPorBarbero(movements), barberCost, mov.truncated, pagosPartidos(movements)), openExpected };
 }
 
 /** Para pruebas y para quien necesite la forma de un DineroPeriodo vacío. */

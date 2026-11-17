@@ -382,6 +382,7 @@
     "fromCash": "Sale de la caja en efectivo ({amount})",
     "fromCashHint": "Queda como pago a barbero en la caja abierta y baja lo que debe haber en el cajón. Un solo registro: no lo anotes otra vez en Caja.",
     "fromCashNoSession": "No hay caja abierta: ábrela en Caja para pagar desde el cajón.",
+    "outsideHint": "Sin marcar, el pago queda anotado como «fuera de caja»: cuenta en Reportes y no mueve el cajón. No lo anotes otra vez en Caja.",
     "payAdvances": "− Adelantos/vales del periodo (ya se le dieron)",
     "colToHand": "A entregar",
     "toCash": "Entra a la caja en efectivo ({amount})",
