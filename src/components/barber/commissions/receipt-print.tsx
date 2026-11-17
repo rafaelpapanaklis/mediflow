@@ -10,6 +10,7 @@ import { useBarberT } from "@/components/barber/cash/use-barber-t";
 import { fmtDate, fmtDateTime, fmtMoney, fmtPct, fmtPeriod, fmtSigned, fromCents, toCents } from "@/components/barber/cash/money";
 import { upperFirst } from "@/components/barber/upper-first";
 import { salaryLabel } from "@/lib/barber/sueldo-texto";
+import { fmtHireDay } from "./hire-day";
 import "./comisiones.css";
 
 export function ReceiptPrint({
@@ -80,7 +81,16 @@ export function ReceiptPrint({
         {live.some((e) => e.coveredCut) && <div className="bcaja-print__meta" style={{ padding: "4px 0" }}>{t("print.receiptCoveredNote")}</div>}
         <div className="bcaja-print__row"><span>{t("print.receiptCommission")}</span><span>{fmtMoney(row.commissionTotal)}</span></div>
         <div className="bcaja-print__row"><span>{t("print.receiptTips")}</span><span>{fmtMoney(row.tips)}</span></div>
-        {row.chairRent !== null && <div className="bcaja-print__row"><span>{t("print.receiptRent")}</span><span>−{fmtMoney(row.chairRent)}</span></div>}
+        {row.chairRent !== null && (
+          <div className="bcaja-print__row" data-recibo-renta>
+            <span>
+              {t("print.receiptRent")}
+              {/* Decisión 3 del QA E: en el mes de su alta, la renta es proporcional desde ese día. */}
+              {row.chairRentApprox && row.hiredInPeriod ? ` · ${t("comisiones.sinceHire", { date: fmtHireDay(row.hiredInPeriod, locale) })}` : ""}
+            </span>
+            <span>−{fmtMoney(row.chairRent)}</span>
+          </div>
+        )}
         {/* Sueldo del periodo (ws6-t6): con monto capturado, renglón propio; sin él, la nota de siempre. */}
         {row.salaryPeriodTotal != null ? (
           <div className="bcaja-print__row">

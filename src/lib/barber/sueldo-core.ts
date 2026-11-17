@@ -158,8 +158,8 @@ export function salaryForRange(
   return { amount: total.toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP), approx };
 }
 
-/** Sueldo del periodo de Comisiones ("YYYY-MM", mes natural). */
-export function salaryForPeriodKey(salary: BarberSalary, periodKey: string): SalaryForRange {
+/** Los días de un periodo de Comisiones ("YYYY-MM", mes natural): [from, to), fin exclusivo. */
+export function periodKeyDays(periodKey: string): { from: string; to: string } {
   const m = /^(\d{4})-(\d{2})$/.exec(periodKey);
   if (!m) throw new Error(`periodo inválido: ${periodKey}`);
   const y = Number(m[1]);
@@ -168,5 +168,55 @@ export function salaryForPeriodKey(salary: BarberSalary, periodKey: string): Sal
   const ny = mo === 12 ? y + 1 : y;
   const nm = mo === 12 ? 1 : mo + 1;
   const to = `${ny}-${String(nm).padStart(2, "0")}-01`;
-  return salaryForRange(salary, from, to);
+  return { from, to };
+}
+
+// ── Desde el ALTA del barbero (decisión 3 del QA de cierre E, 16-nov-2026) ──
+//
+// Renta de silla y sueldo cuentan desde el día en que se dio de alta al
+// barbero, no desde el día 1 del mes ni en meses anteriores. Antes, un
+// barbero creado el 16 «debía» la renta completa del mes (y la de octubre), y
+// la Ganancia restaba su sueldo de días en que no existía.
+
+/** «YYYY-MM-DD» de un instante en la zona de la barbería (el día de alta). */
+export function dayKeyOf(d: Date, tz: string): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
+}
+
+/**
+ * Recorta [from, to) para que no empiece antes del alta (`since`, día local
+ * «YYYY-MM-DD»; null = sin dato: no se recorta). El día de alta cuenta entero.
+ * Si el alta es el fin del rango o después, queda vacío (= $0 en salaryForRange).
+ */
+export function rangeSince(from: string, to: string, since: string | null | undefined): { from: string; to: string } {
+  if (!since || since <= from) return { from, to };
+  return { from: since, to };
+}
+
+/**
+ * Sueldo del periodo de Comisiones ("YYYY-MM", mes natural). Con `since` (día
+ * de alta) cuenta solo desde ese día: un mes empezado a medias se prorratea
+ * por los días de ese mes («aprox.»), y un mes anterior al alta es $0.
+ */
+export function salaryForPeriodKey(salary: BarberSalary, periodKey: string, since?: string | null): SalaryForRange {
+  const { from, to } = periodKeyDays(periodKey);
+  const r = rangeSince(from, to, since);
+  return salaryForRange(salary, r.from, r.to);
+}
+
+/**
+ * Renta de silla de [from, to): es MENSUAL y se prorratea por días con la
+ * misma regla que un sueldo mensual; con `since`, solo desde el alta.
+ */
+export function chairRentForRange(rent: Prisma.Decimal.Value | null | undefined, from: string, to: string, since?: string | null): SalaryForRange {
+  const amount = new Prisma.Decimal(rent ?? 0);
+  const r = rangeSince(from, to, since);
+  return salaryForRange({ amount: amount.toNumber(), period: "MONTHLY" }, r.from, r.to);
+}
+
+/** ¿El alta cae DENTRO del periodo (después de su primer día)? Entonces renta y sueldo salen proporcionales. */
+export function hiredInside(periodKey: string, since: string | null | undefined): string | null {
+  if (!since) return null;
+  const { from, to } = periodKeyDays(periodKey);
+  return since > from && since < to ? since : null;
 }

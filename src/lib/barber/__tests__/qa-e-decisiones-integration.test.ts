@@ -279,3 +279,122 @@ test("🔴 D2: sin «Ver comisiones» no viajan la Ganancia, «Comisiones y suel
   assert.equal(body(await como("d2recepCom", "stats/inicio")).money.profit, ganancia);
   assert.match(String((await como("d2recepCom", "stats/reports", "range=today&format=csv&section=money")).body), /Ganancia,/);
 });
+
+// ── D3 ──────────────────────────────────────────────────────────────────
+// El caso real de QA-E: «QA-E Renta» ($500 al mes) se dio de alta el 16-nov y
+// Comisiones le cobraba la renta completa de noviembre Y la de octubre («Te
+// deben de renta $500» en un mes en que no existía); la Ganancia de una sede
+// creada ese día decía «Periodo anterior: $258.06».
+
+/** Lo que toca de un monto mensual desde HOY hasta fin de mes (cuenta hecha aparte de sueldo-core). */
+function proporcionalDesdeHoy(mensual: number): { monto: number; completo: boolean; hoy: string } {
+  const partes = new Intl.DateTimeFormat("en-CA", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  const [y, m, d] = partes.split("-").map(Number);
+  const diasDelMes = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  const dias = diasDelMes - d + 1;
+  return { monto: Math.round(((mensual * dias) / diasDelMes) * 100) / 100, completo: d === 1, hoy: partes };
+}
+const r2 = (x: number) => Math.round(x * 100) / 100;
+
+test("🔴 D3 (caso QA-E Renta): la renta y el sueldo cuentan desde el alta — Comisiones del mes, del mes anterior y la Ganancia", { skip: skipDb }, async (t) => {
+  if (!ready) return t.skip("sql/barber_caja_completa.sql no está pegado en esta base");
+  const { ALTA_ANTIGUA } = await import("./_base-local");
+  const shop = await barberia("d3");
+  const ctx = ctxs.d3;
+  // Alta HOY: renta de $3,000 al mes.
+  const nueva = (await prisma.barber.create({ data: { barbershopId: shop.id, name: "QA-E Renta", commissionType: "CHAIR_RENT", chairRent: new Prisma.Decimal(3000) } })).id;
+  // De siempre: la misma renta, completa.
+  const vieja = (await prisma.barber.create({ data: { barbershopId: shop.id, name: "Silla de siempre", commissionType: "CHAIR_RENT", chairRent: new Prisma.Decimal(3000), createdAt: ALTA_ANTIGUA } })).id;
+  let fijo: string | null = null;
+  if (hasSalary) {
+    fijo = (await prisma.barber.create({ data: { barbershopId: shop.id, name: "Fijo nuevo", commissionType: "SALARY" } })).id;
+    await (await import("@/lib/barber/sueldo")).saveSalary(prisma, fijo, { amount: 6000, period: "MONTHLY" });
+  }
+  await cash.openCashSession(ctx, { openingAmount: 0 });
+  await cash.createSale(ctx, { barberId: nueva, items: [{ kind: "service", id: shop.s80 }], paymentMethod: "CASH" }, PRO);
+
+  const renta = proporcionalDesdeHoy(3000);
+  const sueldo = proporcionalDesdeHoy(6000);
+
+  // Comisiones del mes: proporcional para la nueva, completa para la de siempre.
+  const mes = await commissions.getCommissionSummary(ctx, PERIOD);
+  const fn = mes.rows.find((r) => r.barberId === nueva)!;
+  const fv = mes.rows.find((r) => r.barberId === vieja)!;
+  assert.equal(fn.chairRent, renta.monto, "la renta del mes de su alta cuenta desde hoy");
+  assert.equal(fn.chairRentMonthly, 3000, "la de su ficha sigue siendo $3,000");
+  assert.equal(fn.chairRentApprox, !renta.completo);
+  assert.equal(fn.hiredInPeriod ?? null, renta.completo ? null : renta.hoy);
+  assert.equal(fn.totalToPay, r2(80 - renta.monto), "produjo $80 y debe solo la renta desde su alta");
+  assert.equal(fn.chairRentPending, renta.monto);
+  assert.deepEqual([fv.chairRent, fv.chairRentApprox ?? false, fv.hiredInPeriod ?? null, fv.totalToPay], [3000, false, null, -3000]);
+  if (fijo) {
+    const ff = mes.rows.find((r) => r.barberId === fijo)!;
+    assert.deepEqual([ff.salaryPeriodTotal, ff.salaryPending, ff.totalToPay], [sueldo.monto, sueldo.monto, sueldo.monto]);
+    assert.equal(ff.salaryApprox, !sueldo.completo);
+  }
+
+  // El mes ANTERIOR: no existían → ni renta ni sueldo, nada que cobrar ni que pagar.
+  const antes = await commissions.getCommissionSummary(ctx, commissions.shiftPeriodKey(PERIOD, -1));
+  const an = antes.rows.find((r) => r.barberId === nueva)!;
+  assert.deepEqual([an.chairRent, an.totalToPay, an.paidStatus], [0, 0, "EMPTY"], "antes decía «debe $3,000» de un mes en que no estaba");
+  assert.equal(antes.rows.find((r) => r.barberId === vieja)!.totalToPay, -3000, "la de siempre sí la debe");
+  if (fijo) {
+    const af = antes.rows.find((r) => r.barberId === fijo)!;
+    assert.deepEqual([af.salaryPeriodTotal ?? 0, af.totalToPay, af.paidStatus], [0, 0, "EMPTY"]);
+  }
+  // Y el mes siguiente, completos.
+  const despues = await commissions.getCommissionSummary(ctx, commissions.shiftPeriodKey(PERIOD, 1));
+  assert.equal(despues.rows.find((r) => r.barberId === nueva)!.chairRent, 3000);
+
+  // La Ganancia de HOY: un día de renta/sueldo de cada uno (hoy ya existen todos)…
+  const rep = await como("d3", "stats/reports", "range=today");
+  assert.equal(rep.status, 200, JSON.stringify(rep.body).slice(0, 300));
+  const cf = body(rep).cashFlow;
+  const hoy = proporcionalDesdeHoy(1);
+  const [, mm] = hoy.hoy.split("-").map(Number);
+  const yy = Number(hoy.hoy.slice(0, 4));
+  const dim = new Date(Date.UTC(yy, mm, 0)).getUTCDate();
+  assert.equal(cf.current.barberCost.chairRent, r2((6000 * 1) / dim), "dos sillas de $3,000: un día de cada una");
+  if (fijo) assert.equal(cf.current.barberCost.salary, r2(6000 / dim));
+  // …y AYER solo la de siempre: la nueva y el fijo no existían.
+  const ayer = new Date(Date.now() - 86_400_000);
+  const [ay, am] = new Intl.DateTimeFormat("en-CA", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit" }).format(ayer).split("-").map(Number);
+  const dimAyer = new Date(Date.UTC(ay, am, 0)).getUTCDate();
+  assert.equal(cf.previous.profit, r2(3000 / dimAyer), "el periodo anterior solo cuenta a quien ya estaba dado de alta");
+
+  // Pagar: la silla nueva liquida con la renta proporcional (lo que entra a la caja es eso, no $3,000 − 80).
+  if (fn.totalToPay < 0) {
+    const pago = await post("d3", "commissions/pay", { barberId: nueva, periodKey: PERIOD, expectedTotal: fn.totalToPay, toCash: true });
+    assert.equal(pago.status, 200, JSON.stringify(pago.body).slice(0, 300));
+    assert.equal(body(pago).paidAmount, fn.totalToPay);
+    const movs = await movimientosDe(shop.id);
+    const entrada = movs.find((x) => x.type === "DEPOSIT")!;
+    assert.equal(new Prisma.Decimal(entrada.amount).toNumber(), r2(renta.monto - 80));
+    const ya = (await commissions.getCommissionSummary(ctx, PERIOD)).rows.find((r) => r.barberId === nueva)!;
+    assert.deepEqual([ya.totalToPay, ya.paidTotal, ya.chairRent, ya.paidStatus], [0, r2(80 - renta.monto), renta.monto, "PAID"], "ya liquidado, la renta sigue siendo la proporcional");
+  }
+});
+
+test("D3: el sueldo YA pagado queda congelado (lo pagado no se recalcula con el alta)", { skip: skipDb }, async (t) => {
+  if (!ready) return t.skip("sql/barber_caja_completa.sql no está pegado en esta base");
+  if (!hasSalary) return t.skip("sql/barber_sueldo.sql no está pegado en esta base");
+  const shop = await barberia("d3b");
+  const ctx = ctxs.d3b;
+  const fijo = (await prisma.barber.create({ data: { barbershopId: shop.id, name: "Fijo ya pagado", commissionType: "SALARY" } })).id;
+  const sueldo = await import("@/lib/barber/sueldo");
+  await sueldo.saveSalary(prisma, fijo, { amount: 6000, period: "MONTHLY" });
+  // Se le pagó el mes COMPLETO antes de la regla (un renglón de barber_salary_payments).
+  await sueldo.insertSalaryPayment(prisma, {
+    id: `${RUN}-pago-sueldo`,
+    barbershopId: shop.id,
+    barberId: fijo,
+    periodKey: PERIOD,
+    amount: new Prisma.Decimal(6000),
+    approx: false,
+    salary: { amount: 6000, period: "MONTHLY" },
+    paidAt: new Date(),
+    paidByUserId: ctx.barberUserId,
+  });
+  const row = (await commissions.getCommissionSummary(ctx, PERIOD)).rows.find((r) => r.barberId === fijo)!;
+  assert.deepEqual([row.salaryPeriodTotal, row.salaryPaid, row.salaryPending, row.totalToPay, row.paidTotal], [6000, 6000, 0, 0, 6000], "lo pagado es lo pagado");
+});

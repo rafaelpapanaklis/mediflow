@@ -371,6 +371,8 @@
     "colPaid": "Ya pagado",
     "toPayExplain": "«A pagar» es solo lo pendiente: comisión sin pagar + propinas de tickets sin pagar − renta de silla si aún no se descontó. Lo ya pagado se muestra aparte y no vuelve a sumarse.",
     "rentAlreadyDiscounted": "La renta de silla de este periodo ya se descontó en un pago anterior: no vuelve a restarse.",
+    "sinceHire": "desde su alta ({date})",
+    "sinceHireHint": "Se dio de alta el {date}: la renta de silla y el sueldo de este mes cuentan desde ese día, en proporción a los días.",
     "payCommission": "Comisión pendiente",
     "payTips": "Propinas pendientes",
     "payRent": "Renta de silla del periodo",

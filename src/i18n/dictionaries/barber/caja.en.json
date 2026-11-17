@@ -370,6 +370,8 @@
     "kpiRentYouPaid": "Rent you already paid this period: {paid}",
     "colPaid": "Already paid",
     "toPayExplain": "\"To pay\" is only what is pending: unpaid commission + tips from unpaid tickets − chair rent if it has not been deducted yet. What is already paid is shown separately and is not added again.",
+    "sinceHire": "since they joined ({date})",
+    "sinceHireHint": "They joined on {date}: this month's chair rent and wages count from that day, prorated by days.",
     "rentAlreadyDiscounted": "This period's chair rent was already deducted in an earlier payment: it is not subtracted again.",
     "payCommission": "Pending commission",
     "payTips": "Pending tips",

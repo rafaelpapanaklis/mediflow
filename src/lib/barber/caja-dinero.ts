@@ -54,7 +54,7 @@ import {
   type ResumenTicket,
 } from "@/lib/barber/caja-resumen";
 import type { BarberPaymentMethod } from "@/lib/barber/types";
-import { activeSalary, salaryForRange, type BarberSalary } from "@/lib/barber/sueldo-core";
+import { activeSalary, chairRentForRange, dayKeyOf, rangeSince, salaryForRange, type BarberSalary } from "@/lib/barber/sueldo-core";
 import { loadSalaries, salaryReady } from "@/lib/barber/sueldo";
 
 type Dec = Prisma.Decimal;
@@ -198,6 +198,11 @@ export interface CostoBarberoInput {
   chairRent: Prisma.Decimal.Value | null;
   /** Sueldo guardado (sueldo.ts); null = sin sueldo o sin sql/barber_sueldo.sql. */
   salary: BarberSalary | null;
+  /**
+   * Día de ALTA del barbero («YYYY-MM-DD» en la zona de la barbería). Renta y
+   * sueldo cuentan desde ese día (decisión 3 del QA E). null/ausente = sin dato.
+   */
+  since?: string | null;
 }
 
 /**
@@ -209,7 +214,8 @@ export interface CostoBarberoInput {
  *                misma regla que el sueldo, salaryForRange).
  *   SALARY     → sueldo del periodo (salaryForRange) si tiene monto.
  * La comisión cuenta para todo barbero con entradas (también uno ya dado de
- * baja); renta y sueldo, solo para los activos.
+ * baja); renta y sueldo, solo para los activos y SOLO DESDE SU ALTA (decisión
+ * 3 del QA E): los días del periodo anteriores a `since` no cuentan.
  */
 export function costoBarberos(args: {
   entries: Map<string, Prisma.Decimal.Value>;
@@ -225,13 +231,14 @@ export function costoBarberos(args: {
   for (const b of args.barbers) {
     if (!b.isActive) continue;
     if (b.commissionType === "CHAIR_RENT" && b.chairRent !== null && D(b.chairRent).gt(0)) {
-      const r = salaryForRange({ amount: D(b.chairRent).toNumber(), period: "MONTHLY" }, args.fromDay, args.toDay);
+      const r = chairRentForRange(b.chairRent, args.fromDay, args.toDay, b.since);
       rent = rent.plus(r.amount);
       approx = approx || r.approx;
     }
     const s = activeSalary(b.commissionType, b.salary);
     if (s) {
-      const r = salaryForRange(s, args.fromDay, args.toDay);
+      const desde = rangeSince(args.fromDay, args.toDay, b.since);
+      const r = salaryForRange(s, desde.from, desde.to);
       salary = salary.plus(r.amount);
       approx = approx || r.approx;
     }
@@ -364,7 +371,7 @@ async function movementsOf(branchIds: string[], range: { from: Date; to: Date })
 
 /** «YYYY-MM-DD» del instante en la zona de la barbería. */
 function dayKey(d: Date, tz: string): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
+  return dayKeyOf(d, tz);
 }
 
 export interface DineroOpts {
@@ -445,9 +452,9 @@ export async function getDineroPeriodo(
     withProfit
       ? prisma.barber.findMany({
           where: { barbershopId: { in: ids } },
-          select: { id: true, commissionType: true, isActive: true, chairRent: true },
+          select: { id: true, commissionType: true, isActive: true, chairRent: true, createdAt: true },
         })
-      : Promise.resolve([] as Array<{ id: string; commissionType: string; isActive: boolean; chairRent: Prisma.Decimal | null }>),
+      : Promise.resolve([] as Array<{ id: string; commissionType: string; isActive: boolean; chairRent: Prisma.Decimal | null; createdAt: Date }>),
   ]);
   const movements = mov.rows;
 
@@ -462,6 +469,7 @@ export async function getDineroPeriodo(
       isActive: b.isActive,
       chairRent: b.chairRent,
       salary: salaries.get(b.id) ?? null,
+      since: dayKeyOf(b.createdAt, tz),
     })),
     fromDay: dayKey(range.from, tz),
     toDay: dayKey(range.to, tz),

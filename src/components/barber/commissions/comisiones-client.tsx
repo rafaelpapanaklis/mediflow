@@ -15,6 +15,7 @@ import { PeriodNav } from "@/components/barber/cash/period-nav";
 import { useBarberT } from "@/components/barber/cash/use-barber-t";
 import { fmtDateTime, fmtMoney, fmtPct, fmtPeriod, fmtSigned } from "@/components/barber/cash/money";
 import { splitPaid, splitToPay } from "./split-to-pay";
+import { fmtHireDay } from "./hire-day";
 import { salaryLabel } from "@/lib/barber/sueldo-texto";
 import "./comisiones.css";
 
@@ -143,6 +144,10 @@ export function ComisionesClient({
     }
   }
 
+  // Decisión 3 del QA E: renta y sueldo cuentan desde el alta. Si el alta cae en
+  // este mes, salen proporcionales y la pantalla dice desde qué día.
+  const altaTxt = (r: CommissionSummaryRow) => (r.hiredInPeriod ? fmtHireDay(r.hiredInPeriod, locale) : null);
+
   const schemeLabel = (r: CommissionSummaryRow) =>
     r.commissionType === "COMMISSION" ? t("comisiones.schemeCOMMISSION", { pct: r.commissionPct ?? 0 }) : t(`comisiones.scheme${r.commissionType}`);
 
@@ -226,6 +231,7 @@ export function ComisionesClient({
                             <div className="bcaja-hint" style={{ marginTop: 2 }} title={r.salaryApprox ? t("comisiones.salaryApproxHint") : undefined}>
                               {t("comisiones.salaryOfPeriod")} {fmtMoney(r.salaryPeriodTotal)}
                               {r.salaryApprox ? ` ${t("comisiones.salaryApprox")}` : ""}
+                              {altaTxt(r) && r.salaryPaid == null ? <span data-desde-alta> · {t("comisiones.sinceHire", { date: altaTxt(r)! })}</span> : null}
                             </div>
                           )}
                         </td>
@@ -234,7 +240,15 @@ export function ComisionesClient({
                         <td className="bcaja-num" data-label={t("comisiones.colBase")}>{fmtMoney(r.commissionBase)}</td>
                         <td className="bcaja-num" data-label={t("comisiones.colCommission")}>{fmtMoney(r.commissionTotal)}</td>
                         <td className="bcaja-num" data-label={t("comisiones.colTips")}>{fmtMoney(r.tips)}</td>
-                        <td className="bcaja-num" data-label={t("comisiones.colRent")}>{r.chairRent === null ? "—" : `−${fmtMoney(r.chairRent)}`}</td>
+                        <td className="bcaja-num" data-label={t("comisiones.colRent")}>
+                          {/* Sin renta en el periodo (no renta silla, o aún no estaba dado de alta): raya. */}
+                          {!r.chairRent ? "—" : `−${fmtMoney(r.chairRent)}`}
+                          {r.chairRent && r.chairRentApprox && altaTxt(r) ? (
+                            <span className="bcaja-hint" style={{ display: "block", marginTop: 2 }} title={t("comisiones.sinceHireHint", { date: altaTxt(r)! })} data-desde-alta>
+                              {t("comisiones.sinceHire", { date: altaTxt(r)! })}
+                            </span>
+                          ) : null}
+                        </td>
                         <td className="bcaja-num" data-label={t("comisiones.colPaid")}>{r.paidTotal === 0 ? <span className="bcaja-muted">{fmtMoney(0)}</span> : fmtSigned(r.paidTotal)}</td>
                         <td className="bcaja-num" data-label={t("comisiones.colToPay")}>
                           <strong style={{ color: r.totalToPay < 0 ? "var(--danger)" : undefined }}>{fmtSigned(r.totalToPay)}</strong>
@@ -268,6 +282,9 @@ export function ComisionesClient({
                         <tr className="bcom-detail">
                           <td colSpan={12} style={{ background: "var(--bg-elev-2)", whiteSpace: "normal" }}>
                             <div className="bcaja-hint" style={{ marginBottom: 8 }}>{t("comisiones.toPayExplain")}</div>
+                            {altaTxt(r) && (r.chairRentApprox || (r.commissionType === "SALARY" && r.salaryPeriodTotal != null && r.salaryPaid == null)) && (
+                              <div className="bcaja-hint" style={{ marginBottom: 8 }} data-desde-alta>{t("comisiones.sinceHireHint", { date: altaTxt(r)! })}</div>
+                            )}
                             {r.commissionType === "CHAIR_RENT" && r.chairRentDiscounted && <div className="bcaja-hint" style={{ marginBottom: 8 }}>{t("comisiones.rentAlreadyDiscounted")}</div>}
                             {r.commissionType === "SALARY" && (
                               <div className="bcaja-hint" style={{ marginBottom: 8 }}>

@@ -22,6 +22,7 @@ import { createCashMovement, voidCashMovement } from "@/lib/barber/caja-movimien
 import { BarberForbiddenError } from "@/lib/barber/permissions";
 import { resetSalaryReadyCache, salaryReady } from "@/lib/barber/sueldo";
 import { BASE_LOCAL as HAS_DB, skip as skipDb } from "./_base-local";
+import { ALTA_ANTIGUA } from "./_base-local";
 
 const RUN = `cp${Date.now().toString(36)}`;
 const TZ = "America/Mexico_City";
@@ -140,7 +141,7 @@ test("N2: deshacer un pago con adelanto descontado devuelve el adelanto a restar
   assert.equal(ad.settledAt, null);
 
   if (!hasSalary) return;
-  const fijo = (await prisma.barber.create({ data: { barbershopId: ctx.barbershopId, name: "Fijo", commissionType: "SALARY" } })).id;
+  const fijo = (await prisma.barber.create({ data: { barbershopId: ctx.barbershopId, name: "Fijo", commissionType: "SALARY", createdAt: ALTA_ANTIGUA } })).id;
   await prisma.$executeRaw`UPDATE "barber_barbers" SET "salaryAmount" = 500, "salaryPeriod" = 'MONTHLY' WHERE "id" = ${fijo}`;
   const ps = await markCommissionsPaid(ctx, { barberId: fijo, periodKey: PERIOD }, new Date(), { cashOut: { method: "CASH" } });
   const e = await errorOf(voidCashMovement(ctx, ps.movementId!, {}));
@@ -265,7 +266,7 @@ test("G1: un adelanto de OTRO periodo no se resta en este", { skip: skipDb }, as
 test("N3: renta de silla a favor del dueño → «entra a la caja en efectivo» crea una entrada ligada; anularla deshace el pago", { skip: skipDb }, async (t) => {
   if (skip) return t.skip(skip);
   const { ctx, corte } = await shop();
-  const renta = (await prisma.barber.create({ data: { barbershopId: ctx.barbershopId, name: "Silla", commissionType: "CHAIR_RENT", chairRent: new Prisma.Decimal(1000) } })).id;
+  const renta = (await prisma.barber.create({ data: { barbershopId: ctx.barbershopId, name: "Silla", commissionType: "CHAIR_RENT", chairRent: new Prisma.Decimal(1000), createdAt: ALTA_ANTIGUA } })).id;
   await createSale(ctx, { barberId: renta, items: [{ kind: "service", id: corte }], tip: 50, paymentMethod: "CARD" }, FEATURES);
   const antes = (await getCommissionSummary(ctx, PERIOD)).rows.find((r) => r.barberId === renta)!;
   assert.equal(antes.totalToPay, -750, "renta 1,000 − (corte 200 + propina 50, que son suyos): le debe 750");
@@ -291,7 +292,7 @@ test("sueldo: el pago desde la caja queda como SALARY con su monto congelado", {
   if (skip) return t.skip(skip);
   if (!hasSalary) return t.skip("sql/barber_sueldo.sql no está pegado");
   const { ctx } = await shop();
-  const fijo = (await prisma.barber.create({ data: { barbershopId: ctx.barbershopId, name: "Fijo", commissionType: "SALARY" } })).id;
+  const fijo = (await prisma.barber.create({ data: { barbershopId: ctx.barbershopId, name: "Fijo", commissionType: "SALARY", createdAt: ALTA_ANTIGUA } })).id;
   await prisma.$executeRaw`UPDATE "barber_barbers" SET "salaryAmount" = 900, "salaryPeriod" = 'MONTHLY' WHERE "id" = ${fijo}`;
   const r = await markCommissionsPaid(ctx, { barberId: fijo, periodKey: PERIOD, expectedTotal: 900 }, new Date(), { cashOut: { method: "CASH" } });
   assert.equal(r.paidAmount, 900);

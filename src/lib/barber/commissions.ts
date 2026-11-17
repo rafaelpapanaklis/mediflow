@@ -53,7 +53,16 @@ import type {
 import { isDepositLine, isMembershipLine } from "@/lib/barber/memberships-core";
 import { isLoyaltyFreeLine } from "@/lib/barber/loyalty-core";
 // Sueldo opcional del barbero (ws6-t6): núcleo puro + SQL crudo que degrada.
-import { activeSalary, salaryForPeriodKey, type BarberSalary, type BarberSalaryPeriod } from "@/lib/barber/sueldo-core";
+import {
+  activeSalary,
+  chairRentForRange,
+  dayKeyOf,
+  hiredInside,
+  periodKeyDays,
+  salaryForPeriodKey,
+  type BarberSalary,
+  type BarberSalaryPeriod,
+} from "@/lib/barber/sueldo-core";
 import { insertSalaryPayment, loadSalaries, loadSalaryPaid, salaryReady } from "@/lib/barber/sueldo";
 import { cashMovementsReady, insertMovement, loadAdvances, lockOpenSessionShared, retryIfCajaSqlGone, settleAdvances, unsettleAdvances, type AdvanceRow } from "@/lib/barber/cash-movements";
 import { isCashMovementMethod, type CashMovementMethod } from "@/lib/barber/caja-movimientos-core";
@@ -476,7 +485,22 @@ export interface CommissionSummaryRow {
   isActive: boolean;
   commissionType: BarberCommissionType;
   commissionPct: number | null;
+  /**
+   * Renta de silla DEL PERIODO (null si no renta silla). Cuenta desde el alta
+   * del barbero (decisión 3 del QA E): el mes de su alta sale proporcional y
+   * los meses anteriores, en $0.
+   */
   chairRent: number | null;
+  /** La renta mensual de su ficha, tal cual (null si no renta silla). */
+  chairRentMonthly?: number | null;
+  /** La renta del periodo salió proporcional (el alta cae dentro del mes). */
+  chairRentApprox?: boolean;
+  /**
+   * Día de alta («YYYY-MM-DD») si cae DENTRO de este periodo: renta y sueldo
+   * salen proporcionales desde ese día. null = alta anterior (mes completo) o
+   * posterior (todavía no estaba).
+   */
+  hiredInPeriod?: string | null;
   ticketCount: number;
   servicesTotal: number;
   productsTotal: number;
@@ -618,6 +642,7 @@ const LEDGER_BARBER_SELECT = {
   commissionType: true,
   commissionPct: true,
   chairRent: true,
+  createdAt: true,
 } satisfies Prisma.BarberSelect;
 
 type LedgerBarber = Prisma.BarberGetPayload<{ select: typeof LEDGER_BARBER_SELECT }>;
@@ -698,7 +723,7 @@ function ledgerRowFor(
   b: LedgerBarber,
   sales: LedgerSale[],
   entries: LedgerEntry[],
-  sal: { salaries: LedgerSalaries; periodKey: string; advances?: AdvanceRow[] },
+  sal: { salaries: LedgerSalaries; periodKey: string; advances?: AdvanceRow[]; /** Zona de la barbería: para saber en qué DÍA se dio de alta al barbero. */ tz: string },
 ): {
   row: CommissionSummaryRow;
   pendingEntryIds: string[];
@@ -758,12 +783,28 @@ function ledgerRowFor(
   }
   const tipsPending = tips.minus(tipsPaid);
 
-  const chairRent = b.commissionType === "CHAIR_RENT" ? money(b.chairRent ?? 0) : null;
+  // Decisión 3 del QA E (16-nov-2026): renta y sueldo cuentan desde el ALTA del
+  // barbero. El mes de su alta sale proporcional (por días de ese mes) y los
+  // meses anteriores, en $0.
+  const altaDay = dayKeyOf(b.createdAt, sal.tz);
+  const periodDays = periodKeyDays(sal.periodKey);
+  let chairRent: Money | null = null;
+  let chairRentApprox = false;
+  if (b.commissionType === "CHAIR_RENT") {
+    // OJO (límite conocido): la renta descontada en un pago no se guarda en
+    // ningún lado; se recalcula. Un mes de ALTA que ya se había liquidado con
+    // la renta completa antes de esta regla se verá ahora con la proporcional
+    // (su «Ya pagado» cambia por la diferencia). No se usa una fecha de corte:
+    // no hay forma de que coincida con el momento real del despliegue.
+    const r = chairRentForRange(b.chairRent, periodDays.from, periodDays.to, altaDay);
+    chairRent = money(r.amount);
+    chairRentApprox = r.approx;
+  }
 
   // Sueldo del periodo (ws6-t6): cuenta SOLO si hoy cobra por Sueldo.
   const savedSalary = sal.salaries.salaries.get(b.id) ?? null;
   const salary = activeSalary(b.commissionType, savedSalary);
-  const salaryOfPeriod = salary ? salaryForPeriodKey(salary, sal.periodKey) : null;
+  const salaryOfPeriod = salary ? salaryForPeriodKey(salary, sal.periodKey, altaDay) : null;
   const salaryPaidRow = salary ? sal.salaries.paid.get(b.id) ?? null : null;
 
   const split = splitPayout(b.commissionType, {
@@ -803,7 +844,10 @@ function ledgerRowFor(
     isActive: b.isActive,
     commissionType: b.commissionType,
     commissionPct: b.commissionPct === null ? null : toNum(b.commissionPct),
-    chairRent: b.chairRent === null ? null : toNum(b.chairRent),
+    chairRent: chairRent === null ? null : toNum(chairRent),
+    chairRentMonthly: b.commissionType === "CHAIR_RENT" && b.chairRent !== null ? toNum(b.chairRent) : null,
+    chairRentApprox,
+    hiredInPeriod: hiredInside(sal.periodKey, altaDay),
     ticketCount,
     servicesTotal: toNum(services),
     productsTotal: toNum(products),
@@ -876,7 +920,7 @@ async function getCommissionSummaryOnce(
     periodKey,
     tz,
   });
-  const rows = barbers.map((b) => ledgerRowFor(b, sales, entries, { salaries, periodKey, advances }).row);
+  const rows = barbers.map((b) => ledgerRowFor(b, sales, entries, { salaries, periodKey, advances, tz }).row);
 
   const totals = rows.reduce(
     (t, r) => ({
@@ -1109,6 +1153,7 @@ export async function markCommissionsPaid(
         salaries,
         periodKey: params.periodKey,
         advances,
+        tz,
       });
       if (pendingEntryIds.length === 0 && !salaryDue) {
         return { marked: 0, paidAt: now.toISOString(), paidAmount: 0, movementId: null, outsideMovementId: null, advancesDeducted: 0 };
