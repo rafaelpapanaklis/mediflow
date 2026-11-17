@@ -98,7 +98,8 @@ export function ReportesView({
 
   const hasSales = s.totals.tickets > 0;
   // Pagado y adelantos por barbero (ws6-t5): solo si viajó «Ingresos y gastos».
-  const paidCols = Boolean(s.cashFlow);
+  // «Pagado» y «Adelantos» por barbero son de «Ver comisiones» (decisión 2 del QA E), como la columna «Comisión».
+  const paidCols = Boolean(s.cashFlow) && s.can.commissions;
   const occ = s.occupancy;
   const noSchedule = occ.openHours.every((h) => h !== null) && occ.openHours.every((h) => h && h.from === occ.openHours[0]!.from && h.to === occ.openHours[0]!.to);
 

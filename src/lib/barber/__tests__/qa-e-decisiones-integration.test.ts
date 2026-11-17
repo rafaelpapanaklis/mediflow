@@ -198,3 +198,84 @@ test("🔴 D1 (caso QA-E Comi2): pagado sin «sale de la caja» → Reportes «P
   const rep2 = await como("d1", "stats/reports", "range=today");
   assert.deepEqual([filaDe(rep2, comi2).paidOut, filaDe(rep2, comi2).paidDrawer, filaDe(rep2, comi2).paidOutside], [52, 52, 0]);
 });
+
+// ── D2 ──────────────────────────────────────────────────────────────────
+// Recepción nace con «Ver caja» y SIN «Ver comisiones»: veía en Inicio «Te queda
+// hoy» y «Comisiones y sueldos de hoy», y en Reportes y su CSV la Ganancia y
+// «comisión $X · sueldo $Y» (en una barbería con un solo barbero a sueldo, su sueldo).
+test("🔴 D2: sin «Ver comisiones» no viajan la Ganancia, «Comisiones y sueldos» ni lo pagado por barbero o por tipo (Inicio, Reportes, CSV y API)", { skip: skipDb }, async (t) => {
+  if (!ready) return t.skip("sql/barber_caja_completa.sql no está pegado en esta base");
+  const shop = await barberia("d2");
+  const ctx = ctxs.d2;
+  const comi = (await prisma.barber.create({ data: { barbershopId: shop.id, name: "Comi", commissionType: "COMMISSION", commissionPct: new Prisma.Decimal(50) } })).id;
+  if (hasSalary) {
+    const fijo = (await prisma.barber.create({ data: { barbershopId: shop.id, name: "Fijo", commissionType: "SALARY" } })).id;
+    await (await import("@/lib/barber/sueldo")).saveSalary(prisma, fijo, { amount: 6000, period: "MONTHLY" });
+  }
+  await persona("d2recep", shop.id, "RECEPTION"); // de fábrica
+  await persona("d2recepCom", shop.id, "RECEPTION", { permissionsOverride: ["cash.view", "cash.manage", "cash.expenses", "commissions.view"] });
+
+  await cash.openCashSession(ctx, { openingAmount: 500 });
+  await cash.createSale(ctx, { barberId: comi, items: [{ kind: "service", id: shop.s140 }], tip: 10, paymentMethod: "CASH" }, PRO);
+  await movimientos.createCashMovement(ctx, { type: "EXPENSE", amount: 30, category: "SUPPLIES" });
+  const pago = await post("d2", "commissions/pay", { barberId: comi, periodKey: PERIOD, expectedTotal: 80, fromCash: true });
+  assert.equal(pago.status, 200, JSON.stringify(pago.body).slice(0, 300));
+  // Hoy: 140 de ingresos − 30 de gastos − 70 de comisión − 200 del sueldo de un día (6,000 / 30).
+  const ganancia = hasSalary ? -160 : 40;
+
+  // El dueño lo ve todo, como antes.
+  const repDueno = await como("d2", "stats/reports", "range=today");
+  assert.equal(body(repDueno).cashFlow.current.profit, ganancia);
+  assert.equal(body(repDueno).cashFlow.current.barberCost.commission, 70);
+  if (hasSalary) assert.equal(body(repDueno).cashFlow.current.barberCost.salary, 200);
+  assert.equal(body(repDueno).cashFlow.current.payouts.byKind.COMMISSION, 80);
+  assert.equal(filaDe(repDueno, comi).paidOut, 80);
+  const iniDueno = await como("d2", "stats/inicio");
+  assert.equal(body(iniDueno).money.profit, ganancia);
+  assert.equal(body(iniDueno).money.noProfit ?? false, false);
+
+  // Recepción de fábrica («Ver caja», sin «Ver comisiones»).
+  const ini = await como("d2recep", "stats/inicio");
+  assert.equal(ini.status, 200, JSON.stringify(ini.body).slice(0, 300));
+  const m = body(ini).money;
+  assert.ok(m, "el dinero del día sí viaja: tiene «Ver caja»");
+  assert.deepEqual([m.income, m.expenses, m.expensesCash, m.tips], [140, 30, 30, 10]);
+  assert.deepEqual([m.profit, m.barberCost, m.payouts], [null, null, null], "ni «Te queda hoy» ni «Comisiones y sueldos de hoy»");
+  assert.equal(m.noProfit, true);
+  assert.equal(m.unavailable ?? false, false, "no es una falla de lectura");
+  assert.equal(body(ini).cash.expectedCash, 540, "el cajón sí: 500 + 150 − 30 − 80");
+
+  const rep = await como("d2recep", "stats/reports", "range=today");
+  assert.equal(rep.status, 200, JSON.stringify(rep.body).slice(0, 300));
+  const cf = body(rep).cashFlow;
+  assert.ok(cf, "«Ingresos y gastos» sí viaja");
+  assert.deepEqual([cf.current.charged, cf.current.income, cf.current.expenses.total, cf.current.cashNet], [150, 140, 30, 40]);
+  assert.deepEqual([cf.current.profit, cf.current.barberCost, cf.previous.profit, cf.vsPrevProfitPct], [null, null, null, null]);
+  assert.equal(cf.current.payouts.total, 80, "el total entregado es dinero que salió: sí");
+  assert.deepEqual(cf.current.payoutsSplit, { drawer: 80, outside: 0 });
+  assert.ok(Object.values(cf.current.payouts.byKind).every((v) => v === 0), "por tipo (ahí va «Sueldos») no");
+  assert.deepEqual(cf.current.byBarber, [], "por barbero tampoco");
+  const fr = filaDe(rep, comi);
+  assert.equal(fr.commission, null);
+  assert.ok(!("paidOut" in fr) && !("paidDrawer" in fr) && !("paidOutside" in fr) && !("advances" in fr), "«Pagado» y «Adelantos» no viajan");
+  const crudo = JSON.stringify(rep.body) + JSON.stringify(ini.body);
+  assert.doesNotMatch(crudo, /"profit":-?\d/, "ningún número de ganancia en la respuesta");
+  assert.doesNotMatch(crudo, /"barberCost":(\{|-?\d)/, "ni lo devengado");
+  assert.doesNotMatch(crudo, /"salary":\d/);
+
+  const csv = String((await como("d2recep", "stats/reports", "range=today&format=csv&section=money")).body);
+  assert.match(csv, /Ingresos \(sin propinas\),140/);
+  assert.match(csv, /Gastos,30/);
+  assert.match(csv, /Entregado a barberos \(informativo\),80/);
+  assert.doesNotMatch(csv, /Ganancia|devengados|Pagos a barberos por tipo|Sueldos|Comisiones,/);
+  const todo = String((await como("d2recep", "stats/reports", "range=today&format=csv")).body);
+  assert.match(todo, /Ingresos y gastos/);
+  assert.doesNotMatch(todo, /Ganancia|devengados|Pagos a barberos por tipo|Sueldos|Pagado|Adelantos|Comisión/);
+
+  // Con «Ver comisiones» encendido, Recepción lo vuelve a ver todo.
+  const rep2 = await como("d2recepCom", "stats/reports", "range=today");
+  assert.equal(body(rep2).cashFlow.current.profit, ganancia);
+  assert.equal(filaDe(rep2, comi).paidOut, 80);
+  assert.equal(body(await como("d2recepCom", "stats/inicio")).money.profit, ganancia);
+  assert.match(String((await como("d2recepCom", "stats/reports", "range=today&format=csv&section=money")).body), /Ganancia,/);
+});

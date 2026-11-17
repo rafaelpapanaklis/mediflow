@@ -123,10 +123,13 @@ export interface DineroPeriodo {
   payouts: CajaResumen["payouts"];
   /** payouts.total partido: efectivo del cajón / fuera de caja. drawer + outside = payouts.total. */
   payoutsSplit: { drawer: number; outside: number };
-  /** Lo devengado por los barberos en el periodo, sin propinas: esto sí resta. */
-  barberCost: CostoBarberos;
-  /** INGRESOS − gastos − barberCost.total. */
-  profit: number;
+  /**
+   * Lo devengado por los barberos en el periodo, sin propinas: esto sí resta.
+   * null = no viaja: quien lo pide no tiene «Ver comisiones» (decisión 2 del QA E).
+   */
+  barberCost: CostoBarberos | null;
+  /** INGRESOS − gastos − barberCost.total. null = no viaja (sin «Ver comisiones»). */
+  profit: number | null;
   /** Flujo neto de efectivo del periodo (sin fondo): lo que el cajón ganó o perdió. */
   cashNet: number;
   byBarber: DineroBarbero[];
@@ -248,7 +251,8 @@ const SIN_COSTO: CostoBarberos = { commission: 0, salary: 0, chairRent: 0, total
 export function dineroDe(
   resumen: CajaResumen,
   advancesByBarber: Map<string, number> = new Map(),
-  barberCost: CostoBarberos = SIN_COSTO,
+  /** null = sin «Ver comisiones»: ni lo devengado ni la ganancia se calculan. */
+  barberCost: CostoBarberos | null = SIN_COSTO,
   truncated = false,
   /** Sin él (llamadores viejos, pruebas): todo lo pagado se toma como «del cajón» salvo lo que no fue efectivo. */
   pagos: PagosPartidos | null = null,
@@ -256,7 +260,7 @@ export function dineroDe(
   const charged = D(resumen.income.total);
   const tips = D(resumen.tips.total);
   const income = GANANCIA_SIN_PROPINAS ? charged.minus(tips) : charged;
-  const profit = income.minus(D(resumen.expenses.total)).minus(D(barberCost.total));
+  const profit = barberCost === null ? null : income.minus(D(resumen.expenses.total)).minus(D(barberCost.total));
   return {
     charged: out(charged),
     byMethod: resumen.income.byMethod,
@@ -268,7 +272,7 @@ export function dineroDe(
       ? { drawer: pagos.drawer, outside: pagos.outside }
       : { drawer: resumen.payouts.cash, outside: out(D(resumen.payouts.total).minus(D(resumen.payouts.cash))) },
     barberCost,
-    profit: out(profit),
+    profit: profit === null ? null : out(profit),
     cashNet: out(D(resumen.esperado.expected).minus(D(resumen.esperado.opening))),
     byBarber: resumen.byBarber
       .filter((b) => b.tips !== 0 || b.paidOut !== 0)
@@ -367,6 +371,13 @@ export interface DineroOpts {
   /** Turno abierto cuyo cajón también se quiere («En caja ahora» de Inicio). */
   openSession?: { id: string; barbershopId: string; openingAmount: Prisma.Decimal.Value; openedAt: Date } | null;
   now?: Date;
+  /**
+   * false = quien lo pide NO tiene «Ver comisiones» (decisión 2 del QA E,
+   * 16-nov-2026): no se lee ni se devuelve lo que ganan los barberos —la
+   * Ganancia, lo devengado, lo pagado por barbero y por tipo (ahí va «Sueldos»)—.
+   * Lo demás (ingresos, gastos, total entregado, cajón) es de «Ver caja» y viaja.
+   */
+  withProfit?: boolean;
 }
 
 export interface DineroResultado {
@@ -407,6 +418,7 @@ export async function getDineroPeriodo(
     open !== null && ids.includes(open.barbershopId) && open.openedAt.getTime() >= range.from.getTime() && range.to.getTime() > now.getTime();
   const apart = open !== null && !openInside;
   const tz = ctx.barbershop?.timezone || "America/Mexico_City";
+  const withProfit = opts.withProfit !== false;
   const [tickets, mov, apartTickets, apartMovements, entryGroups, barbers] = await Promise.all([
     prisma.$queryRaw<TicketSql[]>`
       ${SELECT_TICKET}
@@ -422,15 +434,20 @@ export async function getDineroPeriodo(
       : Promise.resolve([] as TicketSql[]),
     apart ? loadMovements(prisma, { barbershopId: open.barbershopId, sessionIds: [open.id] }) : Promise.resolve([] as CashMovementRow[]),
     // Comisión devengada del periodo: la misma suma que la columna «Comisión» de Reportes.
-    prisma.barberCommissionEntry.groupBy({
-      by: ["barberId"],
-      where: { barbershopId: { in: ids }, createdAt: { gte: range.from, lt: range.to } },
-      _sum: { amount: true },
-    }),
-    prisma.barber.findMany({
-      where: { barbershopId: { in: ids } },
-      select: { id: true, commissionType: true, isActive: true, chairRent: true },
-    }),
+    // Sin «Ver comisiones» ni se lee.
+    withProfit
+      ? prisma.barberCommissionEntry.groupBy({
+          by: ["barberId"],
+          where: { barbershopId: { in: ids }, createdAt: { gte: range.from, lt: range.to } },
+          _sum: { amount: true },
+        })
+      : Promise.resolve([] as Array<{ barberId: string; _sum: { amount: Prisma.Decimal | null } }>),
+    withProfit
+      ? prisma.barber.findMany({
+          where: { barbershopId: { in: ids } },
+          select: { id: true, commissionType: true, isActive: true, chairRent: true },
+        })
+      : Promise.resolve([] as Array<{ id: string; commissionType: string; isActive: boolean; chairRent: Prisma.Decimal | null }>),
   ]);
   const movements = mov.rows;
 
@@ -457,7 +474,15 @@ export async function getDineroPeriodo(
     const sMovements = apart ? apartMovements : movements.filter((m) => m.sessionId === open.id);
     openExpected = cajaResumen({ openingAmount: open.openingAmount, tickets: sTickets.map(ticketOf), movements: sMovements }).expectedCash;
   }
-  return { dinero: dineroDe(resumen, adelantosPorBarbero(movements), barberCost, mov.truncated, pagosPartidos(movements)), openExpected };
+  const pagos = pagosPartidos(movements);
+  if (!withProfit) {
+    // Sin «Ver comisiones»: el total entregado y su reparto caja/fuera sí (es
+    // dinero que salió); por barbero y por tipo, no.
+    const d = dineroDe(resumen, new Map(), null, mov.truncated, pagos);
+    const sinTipos = Object.fromEntries(Object.keys(d.payouts.byKind).map((k) => [k, 0])) as CajaResumen["payouts"]["byKind"];
+    return { dinero: { ...d, byBarber: [], payouts: { ...d.payouts, byKind: sinTipos } }, openExpected };
+  }
+  return { dinero: dineroDe(resumen, adelantosPorBarbero(movements), barberCost, mov.truncated, pagos), openExpected };
 }
 
 /** Para pruebas y para quien necesite la forma de un DineroPeriodo vacío. */

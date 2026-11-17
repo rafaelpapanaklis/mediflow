@@ -369,6 +369,12 @@ export interface InicioMoney {
   payouts: number | null;
   /** Te queda hoy = ingresos − gastos − lo que les toca a los barberos. */
   profit: number | null;
+  /**
+   * true = sin «Ver comisiones» (decisión 2 del QA E): barberCost, payouts y
+   * profit viajan en null A PROPÓSITO y la pantalla no pinta esos renglones
+   * (no es una falla: no se enseña «—»).
+   */
+  noProfit?: boolean;
 }
 
 export interface InicioAlerts {
@@ -862,6 +868,8 @@ export async function getInicioSummary(ctx: BarberContext, opts: InicioOptions =
   let fullExpected: number | null = null;
   let staleSince: string | null = null;
   let dineroFailed = false;
+  // Decisión 2 del QA E: la Ganancia y lo que les toca a los barberos son de «Ver comisiones».
+  const canProfit = can(ctx, "commissions.view");
   if (canCash) {
     const r = await getDineroPeriodo(
       ctx,
@@ -877,6 +885,7 @@ export async function getInicioSummary(ctx: BarberContext, opts: InicioOptions =
             }
           : null,
         now,
+        withProfit: canProfit,
       },
     ).catch((e: unknown) => {
       // M6 (revisión ws6-t8): si falla, se registra y la pantalla enseña «—».
@@ -905,9 +914,10 @@ export async function getInicioSummary(ctx: BarberContext, opts: InicioOptions =
         expenses: d.expenses.total,
         expensesCount: d.expenses.count,
         expensesCash: d.expenses.cash,
-        barberCost: d.barberCost.total,
-        payouts: d.payouts.total,
-        profit: d.profit,
+        barberCost: canProfit && d.barberCost ? d.barberCost.total : null,
+        payouts: canProfit ? d.payouts.total : null,
+        profit: canProfit ? d.profit : null,
+        ...(canProfit ? {} : { noProfit: true }),
       };
       fullExpected = r.openExpected;
     }
@@ -1130,7 +1140,8 @@ export interface ReportBarberRow {
  */
 export interface ReportCashFlow {
   current: DineroPeriodo;
-  previous: { income: number; expenses: number; payouts: number; profit: number };
+  /** profit null = no viaja (sin «Ver comisiones»). */
+  previous: { income: number; expenses: number; payouts: number; profit: number | null };
   /** Ganancia vs. el periodo anterior de la misma longitud. null = el anterior fue 0. */
   vsPrevProfitPct: number | null;
   vsPrevExpensesPct: number | null;
@@ -1728,20 +1739,22 @@ export async function getReportsSummary(ctx: BarberContext, opts: ReportsOptions
   let cashFlow: ReportCashFlow | null = null;
   if (!selfOnly && features.cash === true && can(ctx, "cash.view")) {
     try {
-      const cur = await getDineroPeriodo(ctx, branchIds, { from: start, to: end });
-      const prev = cur ? await getDineroPeriodo(ctx, branchIds, { from: prevStart, to: start }) : null;
+      // Decisión 2 del QA E: sin «Ver comisiones» no viajan la Ganancia, lo
+      // devengado ni lo pagado por barbero / por tipo (includeCommission).
+      const cur = await getDineroPeriodo(ctx, branchIds, { from: start, to: end }, { withProfit: includeCommission });
+      const prev = cur ? await getDineroPeriodo(ctx, branchIds, { from: prevStart, to: start }, { withProfit: includeCommission }) : null;
       if (cur && prev) {
         const c = cur.dinero;
         const p = prev.dinero;
         cashFlow = {
           current: c,
           previous: { income: p.income, expenses: p.expenses.total, payouts: p.payouts.total, profit: p.profit },
-          vsPrevProfitPct: cambioPct(c.profit, p.profit),
+          vsPrevProfitPct: c.profit === null || p.profit === null ? null : cambioPct(c.profit, p.profit),
           vsPrevExpensesPct: cambioPct(c.expenses.total, p.expenses.total),
           barberFiltered: barberIds !== null,
         };
         const porBarbero = new Map(c.byBarber.map((b) => [b.barberId, b]));
-        for (const row of byBarber) {
+        for (const row of includeCommission ? byBarber : []) {
           const b = porBarbero.get(row.barberId);
           row.paidOut = b?.paidOut ?? 0;
           row.paidDrawer = b?.paidDrawer ?? 0;
@@ -1939,9 +1952,13 @@ function cashFlowCsvLines(s: ReportsSummary, L: ReportsCsvLabels, M: ReportsCsvM
   push([M.metrics.expenses, c.expenses.total]);
   push([M.metrics.expensesCash, c.expenses.cash]);
   // G2: resta lo devengado (sin propinas); lo entregado va como dato, no resta.
-  push([M.metrics.barberCost ?? "barberCost", c.barberCost.total]);
-  push([M.metrics.profit, c.profit]);
-  push([M.metrics.prevProfit, cf.previous.profit]);
+  // Decisión 2 del QA E: sin «Ver comisiones» estas tres filas no se escriben.
+  const conGanancia = c.barberCost !== null && c.profit !== null;
+  if (conGanancia) {
+    push([M.metrics.barberCost ?? "barberCost", c.barberCost!.total]);
+    push([M.metrics.profit, c.profit]);
+    push([M.metrics.prevProfit, cf.previous.profit ?? ""]);
+  }
   push([M.metrics.payouts, c.payouts.total]);
   if (M.metrics.payoutsDrawer && M.metrics.payoutsOutside) {
     push([M.metrics.payoutsDrawer, c.payoutsSplit.drawer]);
@@ -1960,11 +1977,14 @@ function cashFlowCsvLines(s: ReportsSummary, L: ReportsCsvLabels, M: ReportsCsvM
   push([M.sections.byCategory]);
   push([M.category, M.count, M.total]);
   for (const r of c.expenses.byCategory) push([M.categories[r.category] ?? r.category, r.count, r.total]);
-  blank();
+  // Lo entregado por tipo (ahí va «Sueldos»): solo con «Ver comisiones».
+  if (conGanancia) {
+    blank();
 
-  push([M.sections.byKind]);
-  push([M.kind, M.total]);
-  for (const k of BARBER_PAYOUT_KINDS) push([M.kinds[k] ?? k, c.payouts.byKind[k]]);
+    push([M.sections.byKind]);
+    push([M.kind, M.total]);
+    for (const k of BARBER_PAYOUT_KINDS) push([M.kinds[k] ?? k, c.payouts.byKind[k]]);
+  }
   return lines;
 }
 
@@ -2018,7 +2038,7 @@ export function buildReportsCsv(s: ReportsSummary, L: ReportsCsvLabels): string 
   if (s.can.commissions) barberHead.push(L.commission);
   // Pagado y adelantos del periodo (ws6-t5): solo si viajó «Ingresos y gastos».
   const M = moneyLabelsOf(L);
-  const paid = Boolean(s.cashFlow && M);
+  const paid = Boolean(s.cashFlow && M && s.can.commissions);
   const paidSplit = paid && typeof M!.paidDrawer === "string" && typeof M!.paidOutside === "string";
   if (paid) barberHead.push(M!.paidOut, ...(paidSplit ? [M!.paidDrawer, M!.paidOutside] : []), M!.advances);
   push(barberHead);

@@ -46,6 +46,9 @@ export function CashFlowCard({
   const kinds = KINDS.filter((kd) => c.payouts.byKind[kd] > 0);
   const delta = cf.vsPrevProfitPct;
   const bc = c.barberCost;
+  // Decisión 2 del QA E: sin «Ver comisiones» no viajan la Ganancia ni lo que les
+  // toca a los barberos (profit y barberCost llegan en null) y no se pintan.
+  const conGanancia = c.profit !== null && bc !== null;
 
   return (
     <CardNew
@@ -64,18 +67,22 @@ export function CashFlowCard({
       )}
       <div className="bdash-money">
         <div>
-          <div className={`bdash-big${c.profit < 0 ? " bdash-big--neg" : ""}`}>{signed(c.profit)}</div>
-          <div className="bdash-big__label">
-            {k("profit")} · {k("profitHint")}
-          </div>
-          {delta !== null && (
+          {conGanancia && (
+            <>
+              <div className={`bdash-big${(c.profit ?? 0) < 0 ? " bdash-big--neg" : ""}`} data-ganancia>{signed(c.profit ?? 0)}</div>
+              <div className="bdash-big__label">
+                {k("profit")} · {k("profitHint")}
+              </div>
+            </>
+          )}
+          {conGanancia && delta !== null && (
             <div className={`bdash-band__delta bdash-band__delta--${delta >= 0 ? "up" : "down"}`}>
               {delta >= 0 ? <ArrowUpRight size={13} aria-hidden /> : <ArrowDownRight size={13} aria-hidden />}
               {fmtPctSigned(delta, locale)}
               <span>{k("vsPrev")}</span>
             </div>
           )}
-          <div className="bdash-big__label">{k("prevProfit", { amount: signed(cf.previous.profit) })}</div>
+          {conGanancia && cf.previous.profit !== null && <div className="bdash-big__label">{k("prevProfit", { amount: signed(cf.previous.profit) })}</div>}
 
           <dl className="bdash-ledger">
             <div className="bdash-ledger__row">
@@ -106,7 +113,8 @@ export function CashFlowCard({
               </dt>
               <dd>{neg(c.expenses.total)}</dd>
             </div>
-            <div className="bdash-ledger__row bdash-ledger__row--neg">
+            {conGanancia && bc && (
+            <div className="bdash-ledger__row bdash-ledger__row--neg" data-comisiones-y-sueldos>
               <dt>
                 {k("lessBarberCost")}
                 <span className="bdash-ledger__meta">
@@ -120,10 +128,13 @@ export function CashFlowCard({
               {/* Negativo = la renta de silla supera lo que les toca: suma a la ganancia. */}
               <dd>{bc.total < 0 ? `+${fmtMoney(-bc.total)}` : neg(bc.total)}</dd>
             </div>
+            )}
+            {conGanancia && (
             <div className="bdash-ledger__row bdash-ledger__row--total">
               <dt>{k("profit")}</dt>
-              <dd>{signed(c.profit)}</dd>
+              <dd>{signed(c.profit ?? 0)}</dd>
             </div>
+            )}
           </dl>
           <div className="bdash-foot">
             <span>
@@ -183,7 +194,7 @@ export function CashFlowCard({
             </div>
           )}
 
-          <h3 className="bdash-money__sub" style={{ marginTop: 18 }}>{k("byKind")}</h3>
+          <h3 className="bdash-money__sub" style={{ marginTop: 18 }}>{conGanancia ? k("byKind") : k("paidOut")}</h3>
           <div className="bdash-big__label" style={{ margin: "0 0 6px" }}>
             {k("paidOut")}: <strong>{fmtMoney(c.payouts.total)}</strong>
             {c.payouts.count > 0 ? ` · ${k("payoutsCount", { count: c.payouts.count })}` : ""}
@@ -193,10 +204,15 @@ export function CashFlowCard({
                 {k("paidSplit", { drawer: fmtMoney(c.payoutsSplit.drawer), outside: fmtMoney(c.payoutsSplit.outside) })}
               </span>
             ) : null}
-            {" · "}
-            {k("paidOutHint")}
+            {conGanancia ? (
+              <>
+                {" · "}
+                {k("paidOutHint")}
+              </>
+            ) : null}
           </div>
-          {kinds.length === 0 ? (
+          {/* Por tipo va «Sueldos»: solo con «Ver comisiones». */}
+          {!conGanancia ? null : kinds.length === 0 ? (
             <div className="bdash-empty" style={{ textAlign: "left", padding: "4px 0" }}>{k("byKindEmpty")}</div>
           ) : (
             <dl className="bdash-ledger" style={{ marginTop: 0 }}>

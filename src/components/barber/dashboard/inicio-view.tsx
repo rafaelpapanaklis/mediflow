@@ -389,12 +389,17 @@ export function InicioView({
                 </Link>
               }
             >
-              <div className={`bdash-big${(m.profit ?? 0) < 0 ? " bdash-big--neg" : ""}`}>
-                <Money value={signedOrDash(m.profit)} />
-              </div>
-              <div className="bdash-big__label">
-                {k("money.profit")} · {k("money.profitHint")}
-              </div>
+              {/* Decisión 2 del QA E: «Te queda hoy» y lo que les toca a los barberos son de «Ver comisiones». */}
+              {!m.noProfit && (
+                <>
+                  <div className={`bdash-big${(m.profit ?? 0) < 0 ? " bdash-big--neg" : ""}`} data-te-queda-hoy>
+                    <Money value={signedOrDash(m.profit)} />
+                  </div>
+                  <div className="bdash-big__label">
+                    {k("money.profit")} · {k("money.profitHint")}
+                  </div>
+                </>
+              )}
               {m.unavailable && (
                 <div className="bdash-callout bdash-callout--warning" role="status" style={{ marginTop: 10 }}>
                   <span className="bdash-callout__text">{k("money.unavailable")}</span>
@@ -417,16 +422,18 @@ export function InicioView({
                   </dt>
                   <dd>{lessOrDash(m.expenses)}</dd>
                 </div>
-                <div className="bdash-ledger__row">
-                  <dt>
-                    {k("money.barberCost")}
-                    <span className="bdash-ledger__meta">
-                      {k("money.barberCostHint")}
-                      {(m.payouts ?? 0) > 0 ? ` · ${k("money.paidToday", { amount: fmtMoney(m.payouts) })}` : ""}
-                    </span>
-                  </dt>
-                  <dd>{lessOrDash(m.barberCost)}</dd>
-                </div>
+                {!m.noProfit && (
+                  <div className="bdash-ledger__row" data-comisiones-y-sueldos>
+                    <dt>
+                      {k("money.barberCost")}
+                      <span className="bdash-ledger__meta">
+                        {k("money.barberCostHint")}
+                        {(m.payouts ?? 0) > 0 ? ` · ${k("money.paidToday", { amount: fmtMoney(m.payouts) })}` : ""}
+                      </span>
+                    </dt>
+                    <dd>{lessOrDash(m.barberCost)}</dd>
+                  </div>
+                )}
               </dl>
               <div className="bdash-foot">
                 <span>{m.tips === null ? k("money.tipsApartNone") : k("money.tipsApart", { amount: fmtMoney(m.tips) })}</span>
