@@ -183,6 +183,15 @@ export function ActividadPanel({ barbershopId }: { barbershopId: string }) {
                   <tr key={u.userId}>
                     <td>
                       <span style={{ fontSize: 12.5, color: "var(--text-1)" }}>{u.nombre}</span>
+                      {u.enLinea && (
+                        <span
+                          className="dcba-online"
+                          style={{ marginLeft: 6, verticalAlign: "1px" }}
+                          title="En el panel ahora"
+                          role="img"
+                          aria-label="En el panel ahora"
+                        />
+                      )}
                       {!u.activo && (
                         <span style={{ marginLeft: 6 }}>
                           <BadgeNew tone="neutral">Desactivado</BadgeNew>

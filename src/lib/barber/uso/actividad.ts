@@ -15,6 +15,7 @@ import { ZONA_ADMIN, diaAdmin, inicioDelMes } from "@/lib/admin/zona-horaria";
 import { getBarberT } from "@/i18n/dictionaries/barber";
 import { BARBER_NAV_ITEMS } from "@/lib/barber/types";
 import { olvidarSiFaltaTabla, usoListo, type UsoDb } from "./registro";
+import { barberiasEnLinea, desdeEnLinea, estaEnLinea } from "./en-linea-core";
 
 /** Cuántos meses hacia atrás ofrece el selector. */
 export const MESES_EN_SELECTOR = 12;
@@ -126,6 +127,8 @@ export interface UsoUsuario {
   activo: boolean;
   /** De SIEMPRE (no solo del mes). null = nunca registró uso. */
   ultimoAcceso: string | null;
+  /** Usó el panel en los últimos MINUTOS_EN_LINEA (en-linea-core). */
+  enLinea: boolean;
   sesiones: number;
   vistas: number;
   clics: number;
@@ -242,6 +245,7 @@ export async function actividadDeBarberias(
         rol: u.role ?? null,
         activo: u.isActive,
         ultimoAcceso: ult ? new Date(ult).toISOString() : null,
+        enLinea: estaEnLinea(ult ?? null, ahora),
         sesiones: n(m?.sesiones),
         vistas: n(m?.vistas),
         clics: n(m?.clics),
@@ -304,36 +308,82 @@ export interface UsoEnLista {
 
 /**
  * Para la LISTA: último uso (en los últimos DIAS_ULTIMO_USO_LISTA días) y
- * clics del mes en curso de cada barbería. Una sola consulta. Sin la tabla
- * (o si algo falla) → { disponible: false }: la lista enseña «—» como antes.
+ * clics del mes en curso de cada barbería, y cuáles están EN LÍNEA (uso en
+ * los últimos MINUTOS_EN_LINEA; una matriz, si cualquiera de sus sedes lo
+ * está, aunque la lista venga filtrada sin sus sucursales). Una sola
+ * consulta agregada (índice barbershopId+createdAt). Sin la tabla (o si algo
+ * falla) → { disponible: false } y nadie en línea: la lista enseña «—».
  */
 export async function usoParaLista(
   ids: string[],
   db: UsoDb = prisma,
   ahora = new Date(),
-): Promise<{ disponible: boolean; porBarberia: Map<string, UsoEnLista> }> {
+): Promise<{ disponible: boolean; porBarberia: Map<string, UsoEnLista>; enLinea: Set<string> }> {
   const out = new Map<string, UsoEnLista>();
-  if (ids.length === 0) return { disponible: false, porBarberia: out };
+  if (ids.length === 0) return { disponible: false, porBarberia: out, enLinea: new Set() };
   try {
-    if (!(await usoListo(db))) return { disponible: false, porBarberia: out };
+    if (!(await usoListo(db))) return { disponible: false, porBarberia: out, enLinea: new Set() };
     const desdeMes = inicioDelMes(ahora);
     const desdeVentana = new Date(ahora.getTime() - DIAS_ULTIMO_USO_LISTA * 86_400_000);
-    const rows = await db.$queryRaw<Array<{ barbershopId: string; ultimo: Date | null; clics: number }>>`
-      SELECT "barbershopId", MAX("createdAt") AS "ultimo",
-             (COUNT(*) FILTER (WHERE "type" = 'CLICK' AND "createdAt" >= ${desdeMes}))::int AS "clics"
-      FROM "barber_usage_events"
-      WHERE "barbershopId" = ANY(${ids}::text[]) AND "createdAt" >= ${desdeVentana}
-      GROUP BY "barbershopId"`;
+    // Las sedes pedidas MÁS las sucursales de las matrices pedidas: su uso
+    // enciende el punto de la matriz. Cada fila sigue siendo de UNA sede
+    // (último uso y clics no se mezclan entre sedes).
+    const rows = await db.$queryRaw<
+      Array<{ barbershopId: string; parentId: string | null; ultimo: Date | null; clics: number }>
+    >`
+      SELECT e."barbershopId", s."parentId", MAX(e."createdAt") AS "ultimo",
+             (COUNT(*) FILTER (WHERE e."type" = 'CLICK' AND e."createdAt" >= ${desdeMes}))::int AS "clics"
+      FROM "barber_usage_events" e
+      JOIN "barber_shops" s ON s."id" = e."barbershopId"
+      WHERE e."barbershopId" IN (
+              SELECT "id" FROM "barber_shops"
+              WHERE "id" = ANY(${ids}::text[]) OR "parentId" = ANY(${ids}::text[])
+            )
+        AND e."createdAt" >= ${desdeVentana}
+      GROUP BY e."barbershopId", s."parentId"`;
     for (const r of rows) {
       out.set(r.barbershopId, {
         ultimoUso: r.ultimo ? new Date(r.ultimo).toISOString() : null,
         clicsMes: n(r.clics),
       });
     }
-    return { disponible: true, porBarberia: out };
+    return {
+      disponible: true,
+      porBarberia: out,
+      enLinea: barberiasEnLinea(
+        rows.map((r) => ({ barbershopId: r.barbershopId, parentId: r.parentId ?? null, ultimo: r.ultimo })),
+        ahora,
+      ),
+    };
   } catch (e) {
     olvidarSiFaltaTabla(e);
     console.warn("[barber/uso] la lista sigue sin el uso:", e instanceof Error ? e.message : e);
-    return { disponible: false, porBarberia: new Map() };
+    return { disponible: false, porBarberia: new Map(), enLinea: new Set() };
+  }
+}
+
+/**
+ * Para la FICHA: de estas personas, quién usó el panel en los últimos
+ * MINUTOS_EN_LINEA (en cualquier sede). Una consulta (índice userId+createdAt).
+ * Sin la tabla o si algo falla → nadie en línea, sin tronar.
+ */
+export async function usuariosEnLinea(
+  userIds: string[],
+  db: UsoDb = prisma,
+  ahora = new Date(),
+): Promise<Set<string>> {
+  // ⛔ Sin ids no se consulta: un filtro vacío NO es «todos».
+  if (userIds.length === 0) return new Set();
+  try {
+    if (!(await usoListo(db))) return new Set();
+    const rows = await db.$queryRaw<Array<{ userId: string }>>`
+      SELECT "userId" FROM "barber_usage_events"
+      WHERE "userId" = ANY(${userIds}::text[]) AND "createdAt" >= ${desdeEnLinea(ahora)}
+      GROUP BY "userId"`;
+    return new Set(rows.map((r) => String(r.userId)));
+  } catch (e) {
+    olvidarSiFaltaTabla(e);
+    console.warn("[barber/uso] la ficha sigue sin «en línea»:", e instanceof Error ? e.message : e);
+    return new Set();
   }
 }

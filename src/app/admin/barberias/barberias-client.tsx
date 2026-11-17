@@ -53,6 +53,7 @@ import {
   textoSedesTotales,
 } from "@/components/admin/barberias/shared";
 import { BotonVerComoBarberia } from "@/components/admin/barberias/boton-ver-como-barberia";
+import { MINUTOS_EN_LINEA, contarEnLinea } from "@/lib/barber/uso/en-linea-core";
 import "@/components/admin/barberias/barberias.css";
 
 type SortKey =
@@ -204,6 +205,9 @@ export function AdminBarberiasClient() {
     }
   }
 
+  // «N en línea» del resumen, como /admin/clinics: cada barbería una vez.
+  const enLinea = useMemo(() => contarEnLinea(rows), [rows]);
+
   const hasFilters = Boolean(plan || status || (scope && scope !== "all") || appliedQ.trim());
   const showEmpty = loadedOnce && !loading && !error && rows.length === 0;
 
@@ -214,6 +218,11 @@ export function AdminBarberiasClient() {
           <h1 className="dcba-title">Barberías</h1>
           <p className="dcba-sub">
             Vertical DaleControl Barber. Números independientes del panel dental.
+            {enLinea > 0 && (
+              <span title={`Con sesión en el panel en los últimos ${MINUTOS_EN_LINEA} minutos`}>
+                {" · "}<span className="dcba-online" style={{ verticalAlign: "1px" }} /> {enLinea} en línea
+              </span>
+            )}
           </p>
         </div>
         <Link href="/admin/barberias/soporte" style={{ textDecoration: "none" }}>
@@ -498,6 +507,16 @@ export function AdminBarberiasClient() {
                             <div style={{ minWidth: 0 }}>
                               <div style={{ fontSize: 12.5, fontWeight: 500, color: "var(--text-1)" }}>
                                 {row.name}
+                                {/* «En línea», como /admin/clinics (una matriz, si cualquiera de sus sedes). */}
+                                {row.enLinea && (
+                                  <span
+                                    className="dcba-online"
+                                    style={{ marginLeft: 6, verticalAlign: "1px" }}
+                                    title={`En el panel en los últimos ${MINUTOS_EN_LINEA} minutos`}
+                                    role="img"
+                                    aria-label="En línea"
+                                  />
+                                )}
                               </div>
                               <div className="mono dcba-note">{row.slug}</div>
                               {row.isBranch ? (
