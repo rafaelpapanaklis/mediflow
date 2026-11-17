@@ -270,7 +270,11 @@ test("el menú pinta el contador junto a «Productos», al navegar y solo cuando
   const menu = leer("src/components/barber/barber-sidebar.tsx");
   assert.match(menu, /usePedidosPorAtender\(\{/);
   assert.match(menu, /i\.key === "productos"/, "solo si «Productos» está en el menú de la sesión");
-  assert.match(menu, /sondear: conProductos && \(escritorio \|\| mobileOpen\)/, "en celular, solo con el cajón abierto");
+  assert.match(menu, /sondear: conProductos,/, "también en celular con el cajón cerrado (lo avisa el punto del botón)");
+  assert.match(menu, /porAtender > 0 \? <span className="barber-menu-btn__punto" aria-hidden="true" data-punto-pedidos \/> : null/);
+  assert.match(menu, /aria-label=\{porAtender > 0 \? `Abrir menú, \$\{avisoPedidos\}` : "Abrir menú"\}/, "y el lector de pantalla lo oye en el botón");
+  const tema = leer("src/app/barber/barber-theme.css");
+  assert.match(tema, /\.barber-menu-btn__punto \{[^}]*background: var\(--brand\);/, "con tokens del tema");
   assert.match(menu, /ruta: pathname/, "cada navegación vuelve a preguntar");
   assert.match(menu, /productos: \{ n: porAtender, uno: ordersLabelOne, varios: ordersLabel \}/);
   assert.match(menu, /className="sr-only"/, "el lector de pantalla oye la frase, no un número suelto");

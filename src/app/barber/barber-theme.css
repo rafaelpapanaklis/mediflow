@@ -406,6 +406,21 @@ body:has(.barber-shell) {
   width: 40px;
   height: 40px;
 }
+/* Punto de «hay pedidos de la tienda por atender» (16-nov): en celular el
+   número de «Productos» queda dentro del cajón; esto lo dice sin abrirlo.
+   Mismo café que la pastilla del menú, con un aro del color del botón para
+   que no se funda con las rayas. */
+.barber-shell .barber-menu-btn__punto {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--brand);
+  box-shadow: 0 0 0 2px var(--bg-elev);
+  pointer-events: none;
+}
 
 @media (max-width: 1023.98px) {
   .barber-shell .sidebar-new {

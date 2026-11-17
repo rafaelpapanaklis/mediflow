@@ -75,14 +75,16 @@ export function BarberSidebar({
   });
   // Pedidos de la tienda por atender, solo si «Productos» está en el menú
   // (plan con productos + products.view; el servidor lo vuelve a revisar).
-  // Se pregunta al navegar y cada minuto mientras el contador se ve. Ver
+  // Se pregunta al navegar y cada minuto (con la pestaña a la vista). Ver
   // products/pedidos-aviso.ts.
   const conProductos = items.some((i) => i.key === "productos");
   const porAtender = usePedidosPorAtender({
     mostrar: conProductos,
-    sondear: conProductos && (escritorio || mobileOpen),
+    // También en celular con el cajón CERRADO: ahí lo avisa el punto del botón del menú.
+    sondear: conProductos,
     ruta: pathname,
   });
+  const avisoPedidos = porAtender === 1 ? ordersLabelOne : ordersLabel.replace("{count}", String(porAtender));
   // Cada entrada con contador: cuánto y cómo se le dice a un lector de pantalla.
   const cuentas: Record<string, { n: number; uno: string; varios: string }> = {
     mensajes: { n: sinLeer, uno: unreadLabelOne, varios: unreadLabel },
@@ -166,11 +168,14 @@ export function BarberSidebar({
         type="button"
         onClick={() => setMobileOpen(true)}
         className="icon-btn-new barber-menu-btn lg:hidden"
-        aria-label="Abrir menú"
+        aria-label={porAtender > 0 ? `Abrir menú, ${avisoPedidos}` : "Abrir menú"}
         aria-expanded={mobileOpen}
         aria-controls="barber-sidebar"
       >
         <BarberIcon name="rayas" size={18} />
+        {/* En celular el número de «Productos» vive dentro del cajón: este
+            punto dice, sin abrirlo, que hay pedidos de la tienda por atender. */}
+        {porAtender > 0 ? <span className="barber-menu-btn__punto" aria-hidden="true" data-punto-pedidos /> : null}
       </button>
 
       {/* Velo móvil */}

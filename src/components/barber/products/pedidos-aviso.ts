@@ -18,8 +18,8 @@ import { useEffect, useState } from "react";
 //   · al montar y en CADA navegación interna (cambia `ruta`);
 //   · cada minuto, y NUNCA con la pestaña escondida (el reloj se apaga y al
 //     volver se pregunta una vez);
-//   · no en celular con el cajón cerrado: ahí el contador no se ve (al
-//     abrirlo se pregunta en ese momento).
+//   · también en celular con el cajón cerrado: ahí el número no se ve, pero
+//     el botón del menú enseña un punto (barber-menu-btn__punto).
 // Y la pestaña Pedidos le pasa su número con un evento cada vez que recarga
 // su lista: el contador baja en cuanto se atiende, sin esperar al sondeo.
 // ═══════════════════════════════════════════════════════════════════════
@@ -51,7 +51,7 @@ export function usePedidosPorAtender({
 }: {
   /** «Productos» está en el menú de esta sesión. */
   mostrar: boolean;
-  /** El contador se ve ahora (escritorio, o celular con el cajón abierto). */
+  /** Hay dónde enseñarlo (el menú lo pide siempre que «Productos» esté en el menú). */
   sondear: boolean;
   /** La ruta actual: al cambiar, se vuelve a preguntar. */
   ruta: string | null;
