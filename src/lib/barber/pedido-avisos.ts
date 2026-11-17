@@ -8,6 +8,7 @@ import { BarberAdminError } from "@/lib/barber/branches";
 import { parseOrderItems } from "@/lib/barber/tienda-core";
 import {
   ORDER_NOTICE_DEFAULTS,
+  ORDER_NOTICE_WHATSAPP_KINDS,
   ORDER_NOTICE_PANEL_PATH,
   buildOwnerOrderEmail,
   cleanNoticePhone,
@@ -18,6 +19,8 @@ import {
   type OrderNoticeSettings,
   type OrderNoticeStatus,
 } from "@/lib/barber/pedido-avisos-core";
+import { ownerOrderWaParams } from "@/lib/barber/pedido-avisos-wa-core";
+import { barberiaTieneWhatsApp } from "@/lib/barber/wa-conectado";
 
 /**
  * ═══════════════════════════════════════════════════════════════════════
@@ -39,6 +42,18 @@ import {
  *     cuando esto corre (y la ruta lo llama después de responder).
  *   · Interruptor por sede en Configuración → Notificaciones
  *     ("orderNotifyEmail", nace ENCENDIDO).
+ *
+ * WHATSAPP (punto 4): solo por un pedido NUEVO, desde el número de la barbería
+ * al WhatsApp que el dueño escribió en Notificaciones.
+ *   · Interruptor "orderNotifyWhatsapp", nace APAGADO: fuera de la ventana de
+ *     24 h Meta le cobra cada plantilla a la barbería (Rafael, 16-nov: «que a
+ *     ninguna barbería le llegue un cobro de Meta que no esperaba»).
+ *   · La cuenta del dueño (barber_users) NO tiene teléfono, así que el número
+ *     se pide ahí mismo ("orderNotifyPhone"); sin número no se manda.
+ *   · Solo si la barbería tiene SU WhatsApp conectado, con cupo, y —fuera de
+ *     la ventana de 24 h— con la plantilla `dc_barber_pedido_nuevo_dueno`
+ *     APROBADA por Meta. Si no, nada: el correo basta. Lo decide y lo manda
+ *     notifyBarberOwnerOrder (whatsapp.ts); aquí solo se reclama y se anota.
  *
  * Todo depende de sql/barber_pedidos_avisos.sql. Sin él NO se manda ningún
  * aviso (no habría cómo garantizar «una sola vez») y todo lo demás sigue
@@ -87,6 +102,8 @@ export interface OrderNoticeSettingsView extends OrderNoticeSettings {
   persisted: boolean;
   /** A qué correos llegaría hoy un aviso de esta sede (para decirlo en pantalla). */
   recipients: string[];
+  /** La sede tiene SU WhatsApp conectado (sin él, el aviso por WhatsApp no puede salir). */
+  whatsappConnected: boolean;
 }
 
 /** Los correos de los Dueños activos de la sede y de su matriz + el respaldo. */
@@ -103,18 +120,19 @@ async function recipientsFor(db: QueryDb, shopId: string, parentId: string | nul
 
 export async function getOrderNoticeSettings(ctx: BarberContext): Promise<OrderNoticeSettingsView> {
   const shopId = ctx.barbershopId;
-  const base: OrderNoticeSettingsView = { ...ORDER_NOTICE_DEFAULTS, persisted: false, recipients: [] };
+  const base: OrderNoticeSettingsView = { ...ORDER_NOTICE_DEFAULTS, persisted: false, recipients: [], whatsappConnected: false };
   if (!shopId) return base;
   try {
     const recipients = await recipientsFor(prisma, shopId, ctx.barbershop.parentId ?? null, [ctx.barbershop.email ?? null]);
-    if (!(await orderNoticesReady(prisma))) return { ...base, recipients };
+    const whatsappConnected = await barberiaTieneWhatsApp(shopId);
+    if (!(await orderNoticesReady(prisma))) return { ...base, recipients, whatsappConnected };
     const rows = await prisma.$queryRaw<Array<{ e: boolean; w: boolean; p: string | null }>>`
       SELECT "orderNotifyEmail" AS "e", "orderNotifyWhatsapp" AS "w", "orderNotifyPhone" AS "p"
       FROM "barber_shops" WHERE "id" = ${shopId}
     `;
     const r = rows[0];
-    if (!r) return { ...base, recipients };
-    return { email: r.e === true, whatsapp: r.w === true, phone: cleanNoticePhone(r.p), persisted: true, recipients };
+    if (!r) return { ...base, recipients, whatsappConnected };
+    return { email: r.e === true, whatsapp: r.w === true, phone: cleanNoticePhone(r.p), persisted: true, recipients, whatsappConnected };
   } catch (e) {
     console.warn("[barber/pedidos] no se pudo leer Notificaciones:", (e as Error).message);
     return base;
@@ -284,6 +302,18 @@ export interface OrderNoticeDeps {
   sendEmail: (p: { to: string; subject: string; html: string; text?: string }) => Promise<{ delivered: boolean }>;
   /** Raíz del sitio para armar la liga «Ver pedido». */
   siteUrl: string;
+  /**
+   * El WhatsApp al dueño (notifyBarberOwnerOrder de whatsapp.ts: decide si
+   * sale, como texto o con plantilla aprobada, y lo manda desde el número de
+   * la barbería). En pruebas, un doble: nunca se le habla a Meta.
+   */
+  sendWhatsApp: (a: {
+    barbershopId: string;
+    kind: OrderNoticeKind;
+    enabled: boolean;
+    ownerPhone: string | null;
+    params: readonly string[];
+  }) => Promise<{ outcome: "sent" | "skipped" | "queued" | "failed"; reason: string | null }>;
 }
 
 export interface ChannelOutcome {
@@ -300,8 +330,22 @@ export interface OrderNoticeResult {
   channels: ChannelOutcome[];
 }
 
+/**
+ * El emisor de verdad. Se importa al usarlo: whatsapp.ts es grande y solo
+ * hace falta cuando una barbería encendió el aviso por WhatsApp.
+ */
+const waDeVerdad: OrderNoticeDeps["sendWhatsApp"] = async (a) => {
+  const { notifyBarberOwnerOrder } = await import("@/lib/barber/whatsapp");
+  return notifyBarberOwnerOrder(a);
+};
+
 function defaults(over?: Partial<OrderNoticeDeps>): OrderNoticeDeps {
-  return { store: over?.store ?? sqlOrderNoticeStore(), sendEmail: over?.sendEmail ?? sendEmail, siteUrl: over?.siteUrl ?? SITE_URL };
+  return {
+    store: over?.store ?? sqlOrderNoticeStore(),
+    sendEmail: over?.sendEmail ?? sendEmail,
+    siteUrl: over?.siteUrl ?? SITE_URL,
+    sendWhatsApp: over?.sendWhatsApp ?? waDeVerdad,
+  };
 }
 
 async function emailChannel(kind: OrderNoticeKind, o: OrderForNotice, d: OrderNoticeDeps): Promise<ChannelOutcome | null> {
@@ -345,6 +389,41 @@ async function emailChannel(kind: OrderNoticeKind, o: OrderForNotice, d: OrderNo
 }
 
 /**
+ * WHATSAPP al dueño. Solo con el interruptor encendido (nace APAGADO), solo
+ * por un pedido NUEVO y solo si hay a qué número. El resto de las reglas
+ * —WhatsApp de la barbería conectado, cupo, ventana de 24 h, plantilla
+ * APROBADA— las aplica el emisor; lo que no se manda queda SKIPPED con el
+ * porqué. Igual que el correo: una vez por pedido y sin reintento.
+ */
+async function whatsappChannel(kind: OrderNoticeKind, o: OrderForNotice, d: OrderNoticeDeps): Promise<ChannelOutcome | null> {
+  if (!o.settings.whatsapp) return null; // apagado: ni se reclama ni se pregunta nada a Meta
+  if (!ORDER_NOTICE_WHATSAPP_KINDS.includes(kind)) return null;
+  if (!(await d.store.claim(o.order.id, kind, "WHATSAPP", o.barbershopId))) {
+    return { channel: "WHATSAPP", outcome: "duplicate", detail: null };
+  }
+  let outcome: ChannelOutcome;
+  try {
+    const r = await d.sendWhatsApp({
+      barbershopId: o.barbershopId,
+      kind,
+      enabled: o.settings.whatsapp,
+      ownerPhone: o.settings.phone,
+      // La plantilla aprobada está en español: los parámetros también.
+      params: ownerOrderWaParams(o.order, "es"),
+    });
+    outcome =
+      r.outcome === "sent" || r.outcome === "queued"
+        ? { channel: "WHATSAPP", outcome: "sent", detail: r.outcome === "queued" ? "en cola" : null }
+        : { channel: "WHATSAPP", outcome: r.outcome, detail: r.reason };
+  } catch (e) {
+    outcome = { channel: "WHATSAPP", outcome: "failed", detail: (e as Error)?.message ?? "error" };
+  }
+  const status: OrderNoticeStatus = outcome.outcome === "sent" ? "SENT" : outcome.outcome === "skipped" ? "SKIPPED" : "FAILED";
+  await d.store.finish(o.order.id, kind, "WHATSAPP", status, outcome.detail).catch(() => undefined);
+  return outcome;
+}
+
+/**
  * Avisa al dueño de un pedido NUEVO o recién PAGADO en línea. Idempotente por
  * (pedido, motivo, canal). NUNCA lanza.
  */
@@ -361,9 +440,16 @@ export async function notifyOwnerOfOrder(
     // «Pagado» solo se avisa de un pedido que de verdad tiene fecha de pago.
     if (kind === "PAID" && !o.order.paid) return { ran: false, reason: "no_pagado", channels: [] };
 
+    // Cada canal por su cuenta: que uno falle no deja al otro sin avisar.
     const channels: ChannelOutcome[] = [];
-    const mail = await emailChannel(kind, o, d);
-    if (mail) channels.push(mail);
+    for (const canal of [emailChannel, whatsappChannel]) {
+      try {
+        const r = await canal(kind, o, d);
+        if (r) channels.push(r);
+      } catch (e) {
+        console.warn(`[barber/pedidos] un canal del aviso (${kind} ${orderId}) falló:`, (e as Error)?.message ?? e);
+      }
+    }
     return { ran: true, channels };
   } catch (e) {
     console.warn(`[barber/pedidos] aviso al dueño (${kind} ${orderId}) no salió:`, (e as Error)?.message ?? e);

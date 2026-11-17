@@ -224,6 +224,16 @@
       "emailHint": "One email when an order comes in and another when it gets paid online, with the products, the total and the customer.",
       "emailTo": "Goes to: {emails}. They are the owners of this branch and of the main shop (change them in Team).",
       "emailNoOne": "There is no active Owner user with an email: nobody to notify. Check it in Team.",
+      "whatsapp": "Message me on WhatsApp about shop orders",
+      "whatsappHint": "A message from your shop's number to your WhatsApp when an order comes in.",
+      "whatsappCost": "Meta charges you for each notice outside the 24 h window (its utility-template fee, not a charge from us). If you messaged your shop's number in the last 24 hours, the notice is free.",
+      "whatsappPhone": "Your WhatsApp (10 digits)",
+      "whatsappPhoneHint": "The notice goes to this number. It can't be the same number you connected to the shop.",
+      "whatsappPhoneBad": "Enter the 10 digits of your WhatsApp.",
+      "whatsappNotConnected": "Your shop doesn't have its WhatsApp connected yet: without it there is nowhere to send the notice from.",
+      "whatsappConnect": "Connect WhatsApp",
+      "whatsappTemplate": "Outside the 24 h window the notice uses the “Notice for you: new order in your shop” template. Meta has to approve it; if it isn't approved, nothing is sent and you only get the email.",
+      "whatsappTemplateLink": "See my templates",
       "saved": "Saved"
     },
     "password": {

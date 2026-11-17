@@ -103,6 +103,8 @@ test("todo lo transaccional es `utility` — nada se cuela como marketing", () =
     // Promoción real, y solo eso.
     birthday: "MARKETING",
     winback: "MARKETING",
+    // El aviso de «pedido nuevo» al DUEÑO (ws6-t6): transaccional.
+    ownerOrder: "UTILITY",
   };
   for (const tpl of BARBER_WA_TEMPLATES) {
     assert.equal(tpl.category, esperado[tpl.kind], `plantilla ${tpl.kind}`);
@@ -198,6 +200,8 @@ test("🔴 CONTRATO: la cantidad de variables es la que pasa el emisor (132000)"
     portalCode: 1,
     birthday: 3,
     winback: 3,
+    // ownerOrder → ownerOrderWaParams() devuelve 3: folio, total, forma de pago.
+    ownerOrder: 3,
   };
   for (const tpl of BARBER_WA_TEMPLATES) {
     assert.equal(tpl.variables.length, contrato[tpl.kind], `variables de ${tpl.kind}`);

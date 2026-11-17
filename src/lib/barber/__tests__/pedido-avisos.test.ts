@@ -317,7 +317,9 @@ test("si la base falla a media marcha: no lanza y no manda nada", async () => {
     const m = memoria({ falla });
     const e = enviador();
     const r = await sinRuido(() => avisos.notifyOwnerOfOrder("NEW", "ped-1", { store: m.store, sendEmail: e.sendEmail, siteUrl: SITIO }));
-    assert.deepEqual(r, { ran: false, reason: "error", channels: [] });
+    // Sin poder leer el pedido no hay nada que intentar; si lo que falla es la
+    // marca de «avisado», ese canal no manda (no podría garantizar «una vez»).
+    assert.deepEqual(r, falla === "loadOrder" ? { ran: false, reason: "error", channels: [] } : { ran: true, channels: [] });
     assert.equal(e.enviados.length, 0);
   }
 });
@@ -426,7 +428,7 @@ function ctxDe(role: "OWNER" | "MANAGER" | "RECEPTION" | "BARBER", barbershopId 
 test("Notificaciones se lee de la sede en sesión y dice a qué correos llega", async () => {
   base.duenos = ["dueno@prueba.mx", "DUENO@prueba.mx", "socia@prueba.mx"];
   const v = await avisos.getOrderNoticeSettings(ctxDe("OWNER"));
-  assert.deepEqual(v, { email: true, whatsapp: false, phone: null, persisted: true, recipients: ["dueno@prueba.mx", "socia@prueba.mx"] });
+  assert.deepEqual(v, { email: true, whatsapp: false, phone: null, persisted: true, recipients: ["dueno@prueba.mx", "socia@prueba.mx"], whatsappConnected: false });
   const usuarios = base.lecturas.find((l) => l.sql.includes('"barber_users"'));
   assert.deepEqual(usuarios?.valores[0], ["sede-norte", "matriz"], "la sede y su matriz");
   const ajustes = base.lecturas.find((l) => l.sql.includes('"orderNotifyEmail" AS'));

@@ -84,7 +84,8 @@
       "walkinTurn": "You're almost up",
       "bookingConfirmed": "Booking confirmed",
       "birthday": "Birthday message",
-      "winback": "We miss you"
+      "winback": "We miss you",
+      "ownerOrder": "Notice for you: new order in your shop"
     },
     "created": "{count} registered. Meta reviews them, usually within minutes.",
     "noneNeeded": "None missing.",

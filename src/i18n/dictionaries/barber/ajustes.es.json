@@ -224,6 +224,16 @@
       "emailHint": "Un correo cuando entra un pedido y otro cuando te lo pagan en línea, con los productos, el total y el cliente.",
       "emailTo": "Llega a: {emails}. Son los dueños de esta sucursal y de la matriz (se cambian en Equipo).",
       "emailNoOne": "No hay ningún usuario Dueño activo con correo: no hay a quién avisarle. Revísalo en Equipo.",
+      "whatsapp": "Avisarme por WhatsApp de pedidos de la tienda",
+      "whatsappHint": "Un mensaje desde el número de tu barbería a tu WhatsApp cuando entra un pedido.",
+      "whatsappCost": "Meta te cobra cada aviso fuera de las 24 h (es su tarifa por plantilla de utilidad, no un cobro nuestro). Si le escribiste al número de tu barbería en las últimas 24 horas, el aviso sale gratis.",
+      "whatsappPhone": "Tu WhatsApp (10 dígitos)",
+      "whatsappPhoneHint": "A este número llega el aviso. No puede ser el mismo número que conectaste a la barbería.",
+      "whatsappPhoneBad": "Escribe los 10 dígitos de tu WhatsApp.",
+      "whatsappNotConnected": "Tu barbería todavía no tiene su WhatsApp conectado: sin eso no hay desde dónde mandarte el aviso.",
+      "whatsappConnect": "Conectar WhatsApp",
+      "whatsappTemplate": "Fuera de las 24 h el aviso sale con la plantilla «Aviso para ti: pedido nuevo en tu tienda». Tiene que estar aprobada por Meta; si no lo está, no se manda y te avisamos solo por correo.",
+      "whatsappTemplateLink": "Ver mis plantillas",
       "saved": "Guardado"
     },
     "password": {
