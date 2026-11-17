@@ -7030,6 +7030,9 @@ img.dcbw-es-equipo-foto {
 
 .dcbw-barrio .bw-grupo {
   margin-top: 48px;
+  /* Los chips de categoría saltan aquí: sin esto el título del grupo quedaba
+     debajo de la tira fija. */
+  scroll-margin-top: calc(var(--bw-tira) + 14px);
 }
 
 .dcbw-barrio .bw-grupo-titulo {
@@ -7757,7 +7760,9 @@ img.dcbw-es-equipo-foto {
     display: flex;
     margin-right: auto;
     padding-right: 16px;
-    max-width: 320px;
+    /* Sin tope fijo: con 320px «Barbería Prueba DaleControl» salía «BARBERÍA
+       PRUE…» aunque sobrara media tira. La marca es lo único que encoge
+       (min-width: 0 + elipsis); las ligas son `flex: none`. */
   }
 
   .dcbw-barrio .bw-tira nav > a:not(.bw-marca) {
