@@ -22,6 +22,7 @@ import {
   Building2,
   CalendarDays,
   CreditCard,
+  Download,
   History,
   LifeBuoy,
   MessageSquare,
@@ -119,6 +120,18 @@ export function AdminBarbershopDetailClient({
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {/* «Ver como barbería» (ws6-t1): abre su panel /barber en otra pestaña, como su dueño. */}
             <BotonVerComoBarberia barbershopId={shop.id} size="sm" />
+            {/* Como «Exportar» de la ficha de clínica: ZIP con CSV (clientes, citas, tickets) + manifest. Solo admin. */}
+            <a
+              href={`/api/admin/barberias/${shop.id}/export`}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={shop.isBranch ? "ZIP con CSV de esta sucursal + manifest" : "ZIP con CSV de la matriz y sus sucursales + manifest"}
+              style={{ textDecoration: "none" }}
+            >
+              <ButtonNew size="sm" variant="secondary" icon={<Download size={14} />}>
+                Exportar
+              </ButtonNew>
+            </a>
             {!shop.isBranch && (
               <>
                 <ButtonNew size="sm" variant="secondary" onClick={() => setAction("plan")}>
