@@ -28,6 +28,7 @@
 import { useEffect, useRef, useState } from "react";
 import { PlantillaBarberWeb } from "@/components/barber/templates";
 import type { BarberWebData } from "@/components/barber/templates/types";
+import { destinoEnlaceVistaPrevia } from "@/lib/barber/vista-previa-enlaces";
 import { LimiteVistaPrevia } from "./limite-error";
 import type { TFn } from "./controles";
 
@@ -84,6 +85,16 @@ export function VistaPrevia({ data, modo, t }: { data: BarberWebData; modo: Modo
           height: alto || undefined,
           transform: `scale(${escala})`,
           transformOrigin: "top left",
+        }}
+        // Los enlaces de la plantilla son de verdad: «Reservar» o «Tienda»
+        // sacaban al dueño del editor (y de sus cambios sin publicar). Lo que
+        // lleva a OTRA página se abre aparte; las anclas siguen desplazando.
+        onClickCapture={(e) => {
+          const a = (e.target as HTMLElement | null)?.closest?.("a[href]") as HTMLAnchorElement | null;
+          if (!a) return;
+          if (destinoEnlaceVistaPrevia(a.getAttribute("href"), a.getAttribute("target")) !== "pestana-nueva") return;
+          e.preventDefault();
+          window.open(a.href, "_blank", "noopener,noreferrer");
         }}
       >
         {/* El cortafuegos va DENTRO del lienzo y no fuera: un fallo al

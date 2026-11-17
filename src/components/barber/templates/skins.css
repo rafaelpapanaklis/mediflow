@@ -8338,7 +8338,7 @@ img.dcbw-es-equipo-foto {
   z-index: 40;
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 8px;
   padding: 10px 12px 10px 8px;
   padding-bottom: max(10px, env(safe-area-inset-bottom));
   background: color-mix(in srgb, var(--dcbw-rv-superficie) 96%, transparent);
@@ -8346,13 +8346,20 @@ img.dcbw-es-equipo-foto {
   border-top: 1px solid var(--dcbw-borde);
 }
 
+/* QA de cierre B (16-nov): cada liga era una caja flex del MISMO ancho con el
+   texto centrado. Con poco sitio (320 px con los textos de fábrica, o 390 px si
+   la barbería alarga su botón) «Servicios» salía cortada por los DOS lados
+   («ervicio») y sin puntos suspensivos: en una caja flex no se pintan. Ahora
+   van en bloque (los «…» sí salen), cada una mide lo que mide su palabra y el
+   que cede primero es el botón, que nunca baja de 116 px. Medido en Chromium a
+   320, 360 y 390 px: con los textos de fábrica no se corta nada. */
 .dcbw-rv-abajo > a:not(.dcbw-btn) {
-  flex: 1 1 0;
+  flex: 1 1 auto;
   min-width: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: block;
   min-height: 52px;
+  line-height: 52px;
+  text-align: center;
   font-size: 15px;
   font-weight: 500;
   white-space: nowrap;
@@ -8361,12 +8368,27 @@ img.dcbw-es-equipo-foto {
 }
 
 .dcbw-revista .dcbw-rv-abajo-btn {
-  flex: 0 1 auto;
-  min-width: 0;
-  max-width: 60%;
+  display: block;
+  flex: 0 8 auto;
+  min-width: 116px;
+  max-width: 58%;
   margin-left: auto;
-  padding: 0 22px;
+  padding: 0 18px;
+  line-height: 50px;
+  text-align: center;
   overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@container dcbw (max-width: 350px) {
+  .dcbw-rv-abajo > a:not(.dcbw-btn) {
+    font-size: 14px;
+  }
+
+  .dcbw-revista .dcbw-rv-abajo-btn {
+    padding: 0 14px;
+    font-size: 15px;
+  }
 }
 
 /* ── Portada ───────────────────────────────────────────────── */
