@@ -70,7 +70,7 @@ export function PagosADaleControl({
             </Cifra>
             <Cifra
               label="Pagos registrados"
-              sub={pagos.fallidos > 0 ? <span style={{ color: "var(--danger)" }}>{formatInt(pagos.fallidos)} rechazados</span> : "sin rechazos"}
+              sub={pagos.fallidos > 0 ? <span style={{ color: "var(--danger)" }}>{formatInt(pagos.fallidos)} {pagos.fallidos === 1 ? "rechazado" : "rechazados"}</span> : "sin rechazos"}
             >
               {formatInt(pagos.pagados)}
             </Cifra>
