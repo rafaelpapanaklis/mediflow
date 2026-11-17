@@ -288,6 +288,8 @@
       "paidOut": "Handed over to barbers",
       "paidOutHint": "Advances, commissions, wages and tips handed over in the period. For reference: profit already subtracts what they earned.",
       "paidSplit": "from the register {drawer} · outside the register {outside}",
+      "paidDrawerLine": "from the register {amount}",
+      "paidOutsideLine": "outside the register {amount}",
       "paidSplitHint": "From the register: cash that left the drawer. Outside the register: paid by another method or marked as paid without “Paid in cash from the register”.",
       "onlineNotIncluded": "Doesn't include online payments (deposits, memberships and shop)",
       "truncated": "A location has more than {limit} movements in this period: expenses and payouts may be incomplete. Pick a shorter period.",

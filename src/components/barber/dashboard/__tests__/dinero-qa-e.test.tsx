@@ -104,3 +104,15 @@ test("D2: Inicio y Reportes condicionan los renglones a la marca del servidor, n
   const reportes = readFileSync(path.join(dir, "reportes-view.tsx"), "utf8");
   assert.match(reportes, /const paidCols = Boolean\(s\.cashFlow\) && s\.can\.commissions;/);
 });
+
+test("D1: «Pagado» por barbero lleva su desglose en dos renglones y la tarjeta ocupa todo el ancho para que quepa", () => {
+  const dir = path.resolve(__dirname, "..");
+  const reportes = readFileSync(path.join(dir, "reportes-view.tsx"), "utf8");
+  assert.match(reportes, /t\("money\.paidDrawerLine", \{ amount: fmtMoney\(b\.paidDrawer \?\? 0\) \}\)/);
+  assert.match(reportes, /t\("money\.paidOutsideLine", \{ amount: fmtMoney\(b\.paidOutside \?\? 0\) \}\)/);
+  assert.match(reportes, /\(b\.paidOut \?\? 0\) > 0 && \(/, "sin pagos no hay desglose");
+  assert.match(reportes, /className=\{paidCols \? "bdash-card--wide" : undefined\}/);
+  const css = readFileSync(path.join(dir, "dashboard.css"), "utf8");
+  assert.match(css, /\.bdash-grid > \.bdash-card--wide \{ grid-column: 1 \/ -1; \}/);
+  assert.match(css, /\.bdash-paid-split > span \{ display: block; white-space: nowrap; \}/);
+});

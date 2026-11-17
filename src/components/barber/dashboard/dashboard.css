@@ -327,7 +327,10 @@
 .barber-shell .bdash-blocker__cta { flex: none; }
 
 /* «Pagado» por barbero: debajo de la cifra, cuánto salió del cajón y cuánto fuera de caja. */
-.barber-shell .bdash-paid-split { display: block; margin-top: 2px; font-size: 11.5px; font-weight: 400; color: var(--text-3); white-space: nowrap; }
+.barber-shell .bdash-paid-split { display: block; margin-top: 2px; font-size: 11.5px; line-height: 1.35; font-weight: 400; color: var(--text-3); }
+.barber-shell .bdash-paid-split > span { display: block; white-space: nowrap; }
+/* La tarjeta «Por barbero» con las columnas de pagos ocupa las dos columnas de la rejilla. */
+.barber-shell .bdash-grid > .bdash-card--wide { grid-column: 1 / -1; }
 .barber-shell .bdash-blocker__hint { font-size: 12.5px; color: var(--text-3); }
 
 /* ── Arranque (barbería sin datos) ──────────────────────────────────── */

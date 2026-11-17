@@ -77,6 +77,11 @@ test("D1: textos — la columna vuelve a «Pagado», con «en caja / fuera de ca
   assert.equal(es("barber.reportes.money.colPaidOut"), "Pagado");
   assert.equal(es("barber.reportes.money.paidSplit", { drawer: "$52.00", outside: "$71.50" }), "en caja $52.00 · fuera de caja $71.50");
   assert.equal(en("barber.reportes.money.paidSplit", { drawer: "$52.00", outside: "$71.50" }), "from the register $52.00 · outside the register $71.50");
+  // En la tabla por barbero van en dos renglones cortos (uno solo no cabía en la columna).
+  assert.equal(es("barber.reportes.money.paidDrawerLine", { amount: "$52.00" }), "en caja $52.00");
+  assert.equal(es("barber.reportes.money.paidOutsideLine", { amount: "$71.50" }), "fuera de caja $71.50");
+  assert.equal(en("barber.reportes.money.paidDrawerLine", { amount: "$52.00" }), "from the register $52.00");
+  assert.equal(en("barber.reportes.money.paidOutsideLine", { amount: "$71.50" }), "outside the register $71.50");
   for (const k of ["csv.metrics.paidOut", "csv.metrics.paidDrawer", "csv.metrics.paidOutside", "csv.metrics.payoutsDrawer", "csv.metrics.payoutsOutside", "money.paidSplitHint"]) {
     assert.notEqual(es(`barber.reportes.${k}`), `barber.reportes.${k}`, k);
     assert.notEqual(en(`barber.reportes.${k}`), es(`barber.reportes.${k}`), k);

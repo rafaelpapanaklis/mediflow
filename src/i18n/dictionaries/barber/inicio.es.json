@@ -288,6 +288,8 @@
       "paidOut": "Entregado a barberos",
       "paidOutHint": "Adelantos, comisiones, sueldos y propinas entregadas en el periodo. Es informativo: la ganancia ya resta lo que les toca.",
       "paidSplit": "en caja {drawer} · fuera de caja {outside}",
+      "paidDrawerLine": "en caja {amount}",
+      "paidOutsideLine": "fuera de caja {amount}",
       "paidSplitHint": "En caja: efectivo que salió del cajón. Fuera de caja: lo pagado por otro medio o marcado como pagado sin «Sale de la caja».",
       "onlineNotIncluded": "No incluye cobros en línea (anticipos, membresías y tienda)",
       "truncated": "Una sede tiene más de {limit} movimientos en este periodo: los gastos y los pagos pueden estar incompletos. Elige un periodo más corto.",

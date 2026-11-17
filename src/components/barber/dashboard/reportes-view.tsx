@@ -274,7 +274,8 @@ export function ReportesView({
 
       <div className="bdash-grid bdash-grid--even">
         {/* Por barbero */}
-        <CardNew title={t("barbers.title")} noPad={s.byBarber.length > 0}>
+        {/* Con «Pagado» y «Adelantos» la tabla no cabe en media tarjeta (a 1440 quedaban fuera, a la derecha): ancho completo. */}
+        <CardNew title={t("barbers.title")} noPad={s.byBarber.length > 0} className={paidCols ? "bdash-card--wide" : undefined}>
           {s.byBarber.length === 0 ? (
             <div className="bdash-empty">{t("barbers.empty")}</div>
           ) : (
@@ -315,7 +316,8 @@ export function ReportesView({
                           {/* Decisión 1 del QA E: el desglose «en caja / fuera de caja» de lo pagado. */}
                           {(b.paidOut ?? 0) > 0 && (
                             <span className="bdash-paid-split" title={t("money.paidSplitHint")}>
-                              {t("money.paidSplit", { drawer: fmtMoney(b.paidDrawer ?? 0), outside: fmtMoney(b.paidOutside ?? 0) })}
+                              <span>{t("money.paidDrawerLine", { amount: fmtMoney(b.paidDrawer ?? 0) })}</span>
+                              <span>{t("money.paidOutsideLine", { amount: fmtMoney(b.paidOutside ?? 0) })}</span>
                             </span>
                           )}
                         </td>
