@@ -36,6 +36,7 @@ import { cancelSale, createSale, openCashSession } from "@/lib/barber/cash";
 
 // Solo contra una base LOCAL: ver _base-local.ts (crean y borran barberías).
 import { BASE_LOCAL as HAS_DB, skip } from "./_base-local";
+import { ALTA_ANTIGUA } from "./_base-local";
 
 // ═══════════════════════════════════════════════════════════════════════
 // 0. La cuenta, pura
@@ -154,8 +155,8 @@ before(async () => {
   shopId = a.shop.id;
   const [b1, b2, b3] = await Promise.all([
     prisma.barber.create({ data: { barbershopId: shopId, name: "Barbero Uno", nickname: "Uno", commissionType: "COMMISSION", commissionPct: new Prisma.Decimal(50) } }),
-    prisma.barber.create({ data: { barbershopId: shopId, name: "Barbero Dos", commissionType: "CHAIR_RENT", chairRent: new Prisma.Decimal(1500) } }),
-    prisma.barber.create({ data: { barbershopId: shopId, name: "Barbero Tres", commissionType: "SALARY" } }),
+    prisma.barber.create({ data: { barbershopId: shopId, name: "Barbero Dos", commissionType: "CHAIR_RENT", chairRent: new Prisma.Decimal(1500), createdAt: ALTA_ANTIGUA } }),
+    prisma.barber.create({ data: { barbershopId: shopId, name: "Barbero Tres", commissionType: "SALARY", createdAt: ALTA_ANTIGUA } }),
   ]);
   uno = b1.id; dos = b2.id; tres = b3.id;
   const [s1, s2] = await Promise.all([

@@ -22,6 +22,7 @@ import { createCashMovement, voidCashMovement } from "@/lib/barber/caja-movimien
 import { BarberForbiddenError } from "@/lib/barber/permissions";
 import { resetSalaryReadyCache, salaryReady } from "@/lib/barber/sueldo";
 import { BASE_LOCAL as HAS_DB, skip as skipDb } from "./_base-local";
+import { ALTA_ANTIGUA } from "./_base-local";
 
 const RUN = `cp${Date.now().toString(36)}`;
 const TZ = "America/Mexico_City";
@@ -140,7 +141,7 @@ test("N2: deshacer un pago con adelanto descontado devuelve el adelanto a restar
   assert.equal(ad.settledAt, null);
 
   if (!hasSalary) return;
-  const fijo = (await prisma.barber.create({ data: { barbershopId: ctx.barbershopId, name: "Fijo", commissionType: "SALARY" } })).id;
+  const fijo = (await prisma.barber.create({ data: { barbershopId: ctx.barbershopId, name: "Fijo", commissionType: "SALARY", createdAt: ALTA_ANTIGUA } })).id;
   await prisma.$executeRaw`UPDATE "barber_barbers" SET "salaryAmount" = 500, "salaryPeriod" = 'MONTHLY' WHERE "id" = ${fijo}`;
   const ps = await markCommissionsPaid(ctx, { barberId: fijo, periodKey: PERIOD }, new Date(), { cashOut: { method: "CASH" } });
   const e = await errorOf(voidCashMovement(ctx, ps.movementId!, {}));
@@ -170,17 +171,36 @@ test("en efectivo SIN caja abierta → 409 y NO se marca nada; por transferencia
   assert.equal(movs[0].method, "TRANSFER");
 });
 
-test("sin «sale de la caja» todo es como antes (sin movimiento); sin cash.withdraw no se puede pedir", { skip: skipDb }, async (t) => {
+// Decisión 1 del QA E (16-nov-2026): antes no dejaba movimiento; ahora queda anotado FUERA de caja.
+test("sin «sale de la caja» el pago queda anotado fuera de caja (sin turno, sin efectivo) y el cajón no se mueve; sin cash.withdraw no se puede pedir la caja", { skip: skipDb }, async (t) => {
   if (skip) return t.skip(skip);
   const { ctx, juan, corte } = await shop();
   await createSale(ctx, { barberId: juan, items: [{ kind: "service", id: corte }], paymentMethod: "CASH" }, FEATURES);
   const sinRetiro = { ...ctx, user: { ...ctx.user, permissionsOverride: ["commissions.manage", "commissions.view", "cash.view"] } } as BarberContext;
   const e = await errorOf(markCommissionsPaid(sinRetiro, { barberId: juan, periodKey: PERIOD }, new Date(), { cashOut: { method: "CASH" } }));
   assert.ok(e instanceof BarberForbiddenError && e.permission === "cash.withdraw");
-  const r = await markCommissionsPaid(ctx, { barberId: juan, periodKey: PERIOD });
+  assert.equal((await movementsOf(ctx.barbershopId)).length, 0, "el intento rechazado no dejó nada");
+  // Quien no puede sacar efectivo SÍ puede marcar pagado sin la casilla: no sale nada de la caja.
+  const r = await markCommissionsPaid(sinRetiro, { barberId: juan, periodKey: PERIOD });
   assert.equal(r.paidAmount, 100);
-  assert.equal(r.movementId ?? null, null);
-  assert.equal((await movementsOf(ctx.barbershopId)).length, 0);
+  assert.equal(r.movementId ?? null, null, "no es un pago de caja");
+  assert.ok(r.outsideMovementId, "queda su registro fuera de caja");
+  const movs = await movementsOf(ctx.barbershopId);
+  assert.equal(movs.length, 1, "un solo registro");
+  assert.equal(movs[0].type, "BARBER_PAYOUT");
+  assert.equal(movs[0].payoutKind, "COMMISSION");
+  assert.equal(movs[0].sessionId, null, "sin turno: no entra a ningún corte");
+  assert.notEqual(movs[0].method, "CASH", "nunca efectivo");
+  assert.equal(new Prisma.Decimal(movs[0].amount).toNumber(), 100);
+  assert.equal(movs[0].periodKey, PERIOD);
+  const state = await getCashState(ctx);
+  assert.equal(state.open!.expectedCash, 1000 + 200, "el esperado no baja");
+  assert.equal((state.open!.movements ?? []).length, 0, "no aparece en la lista del turno");
+  // Marcar otra vez no duplica el registro.
+  const otra = await markCommissionsPaid(ctx, { barberId: juan, periodKey: PERIOD });
+  assert.equal(otra.marked, 0);
+  assert.equal(otra.outsideMovementId ?? null, null);
+  assert.equal((await movementsOf(ctx.barbershopId)).length, 1);
 });
 
 test("adelanto/vale: se RESTA SOLO de «a pagar» y cuenta como ya pagado (el anulado no cuenta)", { skip: skipDb }, async (t) => {
@@ -246,7 +266,7 @@ test("G1: un adelanto de OTRO periodo no se resta en este", { skip: skipDb }, as
 test("N3: renta de silla a favor del dueño → «entra a la caja en efectivo» crea una entrada ligada; anularla deshace el pago", { skip: skipDb }, async (t) => {
   if (skip) return t.skip(skip);
   const { ctx, corte } = await shop();
-  const renta = (await prisma.barber.create({ data: { barbershopId: ctx.barbershopId, name: "Silla", commissionType: "CHAIR_RENT", chairRent: new Prisma.Decimal(1000) } })).id;
+  const renta = (await prisma.barber.create({ data: { barbershopId: ctx.barbershopId, name: "Silla", commissionType: "CHAIR_RENT", chairRent: new Prisma.Decimal(1000), createdAt: ALTA_ANTIGUA } })).id;
   await createSale(ctx, { barberId: renta, items: [{ kind: "service", id: corte }], tip: 50, paymentMethod: "CARD" }, FEATURES);
   const antes = (await getCommissionSummary(ctx, PERIOD)).rows.find((r) => r.barberId === renta)!;
   assert.equal(antes.totalToPay, -750, "renta 1,000 − (corte 200 + propina 50, que son suyos): le debe 750");
@@ -272,7 +292,7 @@ test("sueldo: el pago desde la caja queda como SALARY con su monto congelado", {
   if (skip) return t.skip(skip);
   if (!hasSalary) return t.skip("sql/barber_sueldo.sql no está pegado");
   const { ctx } = await shop();
-  const fijo = (await prisma.barber.create({ data: { barbershopId: ctx.barbershopId, name: "Fijo", commissionType: "SALARY" } })).id;
+  const fijo = (await prisma.barber.create({ data: { barbershopId: ctx.barbershopId, name: "Fijo", commissionType: "SALARY", createdAt: ALTA_ANTIGUA } })).id;
   await prisma.$executeRaw`UPDATE "barber_barbers" SET "salaryAmount" = 900, "salaryPeriod" = 'MONTHLY' WHERE "id" = ${fijo}`;
   const r = await markCommissionsPaid(ctx, { barberId: fijo, periodKey: PERIOD, expectedTotal: 900 }, new Date(), { cashOut: { method: "CASH" } });
   assert.equal(r.paidAmount, 900);

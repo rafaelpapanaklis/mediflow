@@ -36,6 +36,7 @@ import { listBarbers, updateBarberProfile } from "@/lib/barber/team";
 import { salaryForPeriodKey } from "@/lib/barber/sueldo-core";
 import { resetSalaryReadyCache, salaryReady } from "@/lib/barber/sueldo";
 import { BASE_LOCAL as HAS_DB, skip as skipDb } from "./_base-local";
+import { ALTA_ANTIGUA } from "./_base-local";
 
 const RUN = `s${Date.now().toString(36)}`;
 const FEATURES = FALLBACK_BARBER_PLAN_CONFIG.PROFESIONAL.features;
@@ -71,8 +72,8 @@ before(async () => {
   });
   ctx = { barberUserId: user.id, barbershopId: shopId, barbershop: shop, user, barber: null, role: "OWNER" };
   const [a, b, c] = await Promise.all([
-    prisma.barber.create({ data: { barbershopId: shopId, name: "Fijo Mensual", commissionType: "SALARY" } }),
-    prisma.barber.create({ data: { barbershopId: shopId, name: "Fijo Semanal", commissionType: "SALARY" } }),
+    prisma.barber.create({ data: { barbershopId: shopId, name: "Fijo Mensual", commissionType: "SALARY", createdAt: ALTA_ANTIGUA } }),
+    prisma.barber.create({ data: { barbershopId: shopId, name: "Fijo Semanal", commissionType: "SALARY", createdAt: ALTA_ANTIGUA } }),
     prisma.barber.create({ data: { barbershopId: shopId, name: "A Comisión", commissionType: "COMMISSION", commissionPct: new Prisma.Decimal(50) } }),
   ]);
   fijo = a.id;

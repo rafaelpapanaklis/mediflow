@@ -96,7 +96,8 @@ before(async () => {
 
   const [ba1, ba2, ba3, bb1] = await Promise.all([
     db.barber.create({ data: { barbershopId: A.id, name: "Alan", commissionType: "COMMISSION", commissionPct: new Prisma.Decimal(40) } }),
-    db.barber.create({ data: { barbershopId: A.id, name: "Beto", commissionType: "CHAIR_RENT", chairRent: new Prisma.Decimal(3000) } }),
+    // Alta antigua: la renta cuenta desde el alta (decisión 3 del QA E) y aquí se prueba el mes completo.
+    db.barber.create({ data: { barbershopId: A.id, name: "Beto", commissionType: "CHAIR_RENT", chairRent: new Prisma.Decimal(3000), createdAt: new Date("2020-01-01T12:00:00.000Z") } }),
     db.barber.create({ data: { barbershopId: A.id, name: "Caro", commissionType: "SALARY" } }),
     db.barber.create({ data: { barbershopId: B.id, name: "Bruno", commissionType: "COMMISSION", commissionPct: new Prisma.Decimal(50) } }),
   ]);

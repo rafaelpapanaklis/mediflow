@@ -76,7 +76,7 @@
     "money": {
       "title": "Today's money",
       "profit": "You keep today",
-      "profitHint": "What came in minus what went out today",
+      "profitHint": "Income − expenses − what the barbers earned",
       "income": "Income",
       "expenses": "Today's expenses",
       "expensesCount": { "one": "1 expense", "other": "{count} expenses" },
@@ -297,6 +297,10 @@
       "approx": "approx.",
       "paidOut": "Handed over to barbers",
       "paidOutHint": "Advances, commissions, wages and tips handed over in the period. For reference: profit already subtracts what they earned.",
+      "paidSplit": "from the register {drawer} · outside the register {outside}",
+      "paidDrawerLine": "from the register {amount}",
+      "paidOutsideLine": "outside the register {amount}",
+      "paidSplitHint": "From the register: cash that left the drawer. Outside the register: paid by another method or marked as paid without “Paid in cash from the register”.",
       "onlineNotIncluded": "Doesn't include online payments (deposits, memberships and shop)",
       "truncated": "A location has more than {limit} movements in this period: expenses and payouts may be incomplete. Pick a shorter period.",
       "byMethod": "Income by method",
@@ -380,6 +384,8 @@
         "expenses": "Expenses",
         "expensesCash": "Cash expenses",
         "payouts": "Handed over to barbers (for reference)",
+        "payoutsDrawer": "Handed over from the register (drawer cash)",
+        "payoutsOutside": "Handed over outside the register",
         "barberCost": "Commissions and wages earned (without tips)",
         "note": "Note",
         "profit": "Profit",
@@ -389,6 +395,8 @@
         "kind": "Type",
         "count": "Count",
         "paidOut": "Paid",
+        "paidDrawer": "Paid from the register",
+        "paidOutside": "Paid outside the register",
         "advances": "Advances"
       }
     },

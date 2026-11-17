@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
@@ -14,7 +14,8 @@ import { BarberModal } from "@/components/barber/cash/modal";
 import { PeriodNav } from "@/components/barber/cash/period-nav";
 import { useBarberT } from "@/components/barber/cash/use-barber-t";
 import { fmtDateTime, fmtMoney, fmtPct, fmtPeriod, fmtSigned } from "@/components/barber/cash/money";
-import { splitToPay } from "./split-to-pay";
+import { splitPaid, splitToPay } from "./split-to-pay";
+import { fmtHireDay } from "./hire-day";
 import { salaryLabel } from "@/lib/barber/sueldo-texto";
 import "./comisiones.css";
 
@@ -59,6 +60,10 @@ export function ComisionesClient({
   const [entries, setEntries] = useState<Record<string, CommissionEntryRow[] | "loading">>({});
   const [payRow, setPayRow] = useState<CommissionSummaryRow | null>(null);
   const [busy, setBusy] = useState(false);
+  // El refresco del servidor tarda 1-5 s: mientras tanto la fila sigue diciendo PENDIENTE.
+  // Se avisa «Actualizando…» y el botón de pagar espera (QA de cierre E), como en Caja.
+  const [refreshing, startRefresh] = useTransition();
+  const refresh = () => startRefresh(() => router.refresh());
   // Revisión ws6-t8 (N1): con caja abierta viene MARCADA (lo normal es pagar del cajón).
   const [fromCash, setFromCash] = useState(Boolean(cashOut?.sessionOpen));
   const [toCash, setToCash] = useState(Boolean(cashIn?.sessionOpen));
@@ -69,9 +74,16 @@ export function ComisionesClient({
   // que se le debe a los barberos de lo que los de renta de silla le deben al
   // dueño. El «A pagar» por fila y el recibo siguen siendo los de siempre.
   const { toPayBarbers, rentOwed } = splitToPay(summary.rows);
+  // Lo ya pagado también va partido: la renta que ya le pagaron al dueño no
+  // se resta de lo que él les pagó a los barberos (QA de cierre E).
+  const { paidToBarbers, rentReceived } = splitPaid(summary.rows);
   // Al dueño la tarjeta de renta le sale siempre (como hasta ahora); al
-  // Barbero, solo si de verdad debe renta.
-  const showRentCard = !summary.selfOnly || rentOwed > 0;
+  // Barbero, solo si de verdad debe renta o ya la pagó en el periodo.
+  const showRentCard = !summary.selfOnly || rentOwed > 0 || rentReceived > 0;
+  const rentHint = [
+    summary.selfOnly ? t("comisiones.kpiRentYouOweHint") : t("comisiones.kpiRentOwedHint"),
+    ...(rentReceived > 0 ? [t(summary.selfOnly ? "comisiones.kpiRentYouPaid" : "comisiones.kpiRentReceived", { paid: fmtMoney(rentReceived) })] : []),
+  ].join(" ");
 
   function goPeriod(p: string) {
     router.push(`/barber/comisiones?period=${p}`);
@@ -112,7 +124,7 @@ export function ComisionesClient({
         if (data.code === "PAYOUT_CHANGED") {
           setPayRow(null);
           setEntries({});
-          router.refresh();
+          refresh();
         }
         return;
       }
@@ -124,13 +136,17 @@ export function ComisionesClient({
       setPayRow(null);
       setFromCash(false);
       setEntries({});
-      router.refresh();
+      refresh();
     } catch {
       toast.error(t("common.error"));
     } finally {
       setBusy(false);
     }
   }
+
+  // Decisión 3 del QA E: renta y sueldo cuentan desde el alta. Si el alta cae en
+  // este mes, salen proporcionales y la pantalla dice desde qué día.
+  const altaTxt = (r: CommissionSummaryRow) => (r.hiredInPeriod ? fmtHireDay(r.hiredInPeriod, locale) : null);
 
   const schemeLabel = (r: CommissionSummaryRow) =>
     r.commissionType === "COMMISSION" ? t("comisiones.schemeCOMMISSION", { pct: r.commissionPct ?? 0 }) : t(`comisiones.scheme${r.commissionType}`);
@@ -140,7 +156,7 @@ export function ComisionesClient({
       <div className="bcaja-head">
         <div>
           <h1 className="bcaja-head__title">{t("comisiones.title")}</h1>
-          <p className="bcaja-head__sub">{t("comisiones.subtitle")}</p>
+          <p className="bcaja-head__sub">{refreshing ? <span role="status" aria-live="polite">{t("common.updating")}</span> : t("comisiones.subtitle")}</p>
         </div>
         <div className="bcaja-head__actions">
           <PeriodNav period={summary.periodKey} onChange={goPeriod} locale={locale} prevLabel={t("common.prevPeriod")} nextLabel={t("common.nextPeriod")} maxPeriod={maxPeriod} />
@@ -160,13 +176,13 @@ export function ComisionesClient({
           label={summary.selfOnly ? t("comisiones.kpiToPayYou") : t("comisiones.kpiToPayBarbers")}
           value={fmtMoney(toPayBarbers)}
           icon={Wallet}
-          hint={t("comisiones.kpiToPayBarbersHint", { paid: fmtMoney(summary.totals.paidTotal) })}
+          hint={t("comisiones.kpiToPayBarbersHint", { paid: fmtMoney(paidToBarbers) })}
         />
         {showRentCard && (
           <KpiCard
             label={summary.selfOnly ? t("comisiones.kpiRentYouOwe") : t("comisiones.kpiRentOwed")}
             value={fmtMoney(rentOwed)}
-            hint={summary.selfOnly ? t("comisiones.kpiRentYouOweHint") : t("comisiones.kpiRentOwedHint")}
+            hint={rentHint}
           />
         )}
       </div>
@@ -215,6 +231,7 @@ export function ComisionesClient({
                             <div className="bcaja-hint" style={{ marginTop: 2 }} title={r.salaryApprox ? t("comisiones.salaryApproxHint") : undefined}>
                               {t("comisiones.salaryOfPeriod")} {fmtMoney(r.salaryPeriodTotal)}
                               {r.salaryApprox ? ` ${t("comisiones.salaryApprox")}` : ""}
+                              {altaTxt(r) && r.salaryPaid == null ? <span data-desde-alta> · {t("comisiones.sinceHire", { date: altaTxt(r)! })}</span> : null}
                             </div>
                           )}
                         </td>
@@ -223,7 +240,15 @@ export function ComisionesClient({
                         <td className="bcaja-num" data-label={t("comisiones.colBase")}>{fmtMoney(r.commissionBase)}</td>
                         <td className="bcaja-num" data-label={t("comisiones.colCommission")}>{fmtMoney(r.commissionTotal)}</td>
                         <td className="bcaja-num" data-label={t("comisiones.colTips")}>{fmtMoney(r.tips)}</td>
-                        <td className="bcaja-num" data-label={t("comisiones.colRent")}>{r.chairRent === null ? "—" : `−${fmtMoney(r.chairRent)}`}</td>
+                        <td className="bcaja-num" data-label={t("comisiones.colRent")}>
+                          {/* Sin renta en el periodo (no renta silla, o aún no estaba dado de alta): raya. */}
+                          {!r.chairRent ? "—" : `−${fmtMoney(r.chairRent)}`}
+                          {r.chairRent && r.chairRentApprox && altaTxt(r) ? (
+                            <span className="bcaja-hint" style={{ display: "block", marginTop: 2 }} title={t("comisiones.sinceHireHint", { date: altaTxt(r)! })} data-desde-alta>
+                              {t("comisiones.sinceHire", { date: altaTxt(r)! })}
+                            </span>
+                          ) : null}
+                        </td>
                         <td className="bcaja-num" data-label={t("comisiones.colPaid")}>{r.paidTotal === 0 ? <span className="bcaja-muted">{fmtMoney(0)}</span> : fmtSigned(r.paidTotal)}</td>
                         <td className="bcaja-num" data-label={t("comisiones.colToPay")}>
                           <strong style={{ color: r.totalToPay < 0 ? "var(--danger)" : undefined }}>{fmtSigned(r.totalToPay)}</strong>
@@ -244,7 +269,7 @@ export function ComisionesClient({
                               {t("comisiones.receipt")}
                             </Link>
                             {canManage && r.paidStatus !== "PAID" && r.paidStatus !== "EMPTY" && (
-                              <button type="button" className="bcom-act bcom-act--primary" onClick={() => { setFromCash(Boolean(cashOut?.sessionOpen)); setToCash(Boolean(cashIn?.sessionOpen)); setPayRow(r); }}>
+                              <button type="button" className="bcom-act bcom-act--primary" disabled={refreshing} onClick={() => { setFromCash(Boolean(cashOut?.sessionOpen)); setToCash(Boolean(cashIn?.sessionOpen)); setPayRow(r); }}>
                                 <BadgeCheck size={14} aria-hidden="true" />
                                 {/* Renta de silla mayor que lo producido: el barbero le paga al dueño (lógica L2). */}
                                 {r.totalToPay < 0 ? t("comisiones.markOwed") : t("comisiones.markPaid")}
@@ -257,6 +282,9 @@ export function ComisionesClient({
                         <tr className="bcom-detail">
                           <td colSpan={12} style={{ background: "var(--bg-elev-2)", whiteSpace: "normal" }}>
                             <div className="bcaja-hint" style={{ marginBottom: 8 }}>{t("comisiones.toPayExplain")}</div>
+                            {altaTxt(r) && (r.chairRentApprox || (r.commissionType === "SALARY" && r.salaryPeriodTotal != null && r.salaryPaid == null)) && (
+                              <div className="bcaja-hint" style={{ marginBottom: 8 }} data-desde-alta>{t("comisiones.sinceHireHint", { date: altaTxt(r)! })}</div>
+                            )}
                             {r.commissionType === "CHAIR_RENT" && r.chairRentDiscounted && <div className="bcaja-hint" style={{ marginBottom: 8 }}>{t("comisiones.rentAlreadyDiscounted")}</div>}
                             {r.commissionType === "SALARY" && (
                               <div className="bcaja-hint" style={{ marginBottom: 8 }}>
@@ -376,6 +404,10 @@ export function ComisionesClient({
               <span>
                 {t("comisiones.fromCash", { amount: fmtMoney(payRow.totalToPay) })}
                 <span className="bcaja-hint" style={{ display: "block" }}>{cashOut.sessionOpen ? t("comisiones.fromCashHint") : t("comisiones.fromCashNoSession")}</span>
+                {/* Decisión 1 del QA E: sin la casilla el pago queda anotado «fuera de caja». */}
+                {!(fromCash && cashOut.sessionOpen) && (
+                  <span className="bcaja-hint" style={{ display: "block", marginTop: 4 }} data-fuera-de-caja>{t("comisiones.outsideHint")}</span>
+                )}
               </span>
             </label>
           )}

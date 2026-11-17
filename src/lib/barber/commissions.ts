@@ -53,7 +53,16 @@ import type {
 import { isDepositLine, isMembershipLine } from "@/lib/barber/memberships-core";
 import { isLoyaltyFreeLine } from "@/lib/barber/loyalty-core";
 // Sueldo opcional del barbero (ws6-t6): núcleo puro + SQL crudo que degrada.
-import { activeSalary, salaryForPeriodKey, type BarberSalary, type BarberSalaryPeriod } from "@/lib/barber/sueldo-core";
+import {
+  activeSalary,
+  chairRentForRange,
+  dayKeyOf,
+  hiredInside,
+  periodKeyDays,
+  salaryForPeriodKey,
+  type BarberSalary,
+  type BarberSalaryPeriod,
+} from "@/lib/barber/sueldo-core";
 import { insertSalaryPayment, loadSalaries, loadSalaryPaid, salaryReady } from "@/lib/barber/sueldo";
 import { cashMovementsReady, insertMovement, loadAdvances, lockOpenSessionShared, retryIfCajaSqlGone, settleAdvances, unsettleAdvances, type AdvanceRow } from "@/lib/barber/cash-movements";
 import { isCashMovementMethod, type CashMovementMethod } from "@/lib/barber/caja-movimientos-core";
@@ -476,7 +485,22 @@ export interface CommissionSummaryRow {
   isActive: boolean;
   commissionType: BarberCommissionType;
   commissionPct: number | null;
+  /**
+   * Renta de silla DEL PERIODO (null si no renta silla). Cuenta desde el alta
+   * del barbero (decisión 3 del QA E): el mes de su alta sale proporcional y
+   * los meses anteriores, en $0.
+   */
   chairRent: number | null;
+  /** La renta mensual de su ficha, tal cual (null si no renta silla). */
+  chairRentMonthly?: number | null;
+  /** La renta del periodo salió proporcional (el alta cae dentro del mes). */
+  chairRentApprox?: boolean;
+  /**
+   * Día de alta («YYYY-MM-DD») si cae DENTRO de este periodo: renta y sueldo
+   * salen proporcionales desde ese día. null = alta anterior (mes completo) o
+   * posterior (todavía no estaba).
+   */
+  hiredInPeriod?: string | null;
   ticketCount: number;
   servicesTotal: number;
   productsTotal: number;
@@ -618,6 +642,7 @@ const LEDGER_BARBER_SELECT = {
   commissionType: true,
   commissionPct: true,
   chairRent: true,
+  createdAt: true,
 } satisfies Prisma.BarberSelect;
 
 type LedgerBarber = Prisma.BarberGetPayload<{ select: typeof LEDGER_BARBER_SELECT }>;
@@ -698,7 +723,7 @@ function ledgerRowFor(
   b: LedgerBarber,
   sales: LedgerSale[],
   entries: LedgerEntry[],
-  sal: { salaries: LedgerSalaries; periodKey: string; advances?: AdvanceRow[] },
+  sal: { salaries: LedgerSalaries; periodKey: string; advances?: AdvanceRow[]; /** Zona de la barbería: para saber en qué DÍA se dio de alta al barbero. */ tz: string },
 ): {
   row: CommissionSummaryRow;
   pendingEntryIds: string[];
@@ -758,12 +783,28 @@ function ledgerRowFor(
   }
   const tipsPending = tips.minus(tipsPaid);
 
-  const chairRent = b.commissionType === "CHAIR_RENT" ? money(b.chairRent ?? 0) : null;
+  // Decisión 3 del QA E (16-nov-2026): renta y sueldo cuentan desde el ALTA del
+  // barbero. El mes de su alta sale proporcional (por días de ese mes) y los
+  // meses anteriores, en $0.
+  const altaDay = dayKeyOf(b.createdAt, sal.tz);
+  const periodDays = periodKeyDays(sal.periodKey);
+  let chairRent: Money | null = null;
+  let chairRentApprox = false;
+  if (b.commissionType === "CHAIR_RENT") {
+    // OJO (límite conocido): la renta descontada en un pago no se guarda en
+    // ningún lado; se recalcula. Un mes de ALTA que ya se había liquidado con
+    // la renta completa antes de esta regla se verá ahora con la proporcional
+    // (su «Ya pagado» cambia por la diferencia). No se usa una fecha de corte:
+    // no hay forma de que coincida con el momento real del despliegue.
+    const r = chairRentForRange(b.chairRent, periodDays.from, periodDays.to, altaDay);
+    chairRent = money(r.amount);
+    chairRentApprox = r.approx;
+  }
 
   // Sueldo del periodo (ws6-t6): cuenta SOLO si hoy cobra por Sueldo.
   const savedSalary = sal.salaries.salaries.get(b.id) ?? null;
   const salary = activeSalary(b.commissionType, savedSalary);
-  const salaryOfPeriod = salary ? salaryForPeriodKey(salary, sal.periodKey) : null;
+  const salaryOfPeriod = salary ? salaryForPeriodKey(salary, sal.periodKey, altaDay) : null;
   const salaryPaidRow = salary ? sal.salaries.paid.get(b.id) ?? null : null;
 
   const split = splitPayout(b.commissionType, {
@@ -803,7 +844,10 @@ function ledgerRowFor(
     isActive: b.isActive,
     commissionType: b.commissionType,
     commissionPct: b.commissionPct === null ? null : toNum(b.commissionPct),
-    chairRent: b.chairRent === null ? null : toNum(b.chairRent),
+    chairRent: chairRent === null ? null : toNum(chairRent),
+    chairRentMonthly: b.commissionType === "CHAIR_RENT" && b.chairRent !== null ? toNum(b.chairRent) : null,
+    chairRentApprox,
+    hiredInPeriod: hiredInside(sal.periodKey, altaDay),
     ticketCount,
     servicesTotal: toNum(services),
     productsTotal: toNum(products),
@@ -876,7 +920,7 @@ async function getCommissionSummaryOnce(
     periodKey,
     tz,
   });
-  const rows = barbers.map((b) => ledgerRowFor(b, sales, entries, { salaries, periodKey, advances }).row);
+  const rows = barbers.map((b) => ledgerRowFor(b, sales, entries, { salaries, periodKey, advances, tz }).row);
 
   const totals = rows.reduce(
     (t, r) => ({
@@ -1002,6 +1046,14 @@ export interface CommissionPayoutResult {
    * que entregar: «a pagar» ≤ 0).
    */
   movementId?: string | null;
+  /**
+   * Registro «fuera de caja» del pago (decisión 1 del QA E, 16-nov-2026): se
+   * marcó pagado SIN «sale de la caja» y aun así queda su movimiento, sin
+   * turno y por un medio que no es efectivo, para que «Pagado» de Reportes dé
+   * lo mismo que «Ya pagado» de Comisiones. null = no aplica (salió de la
+   * caja, no había nada que entregar o falta el SQL de caja completa).
+   */
+  outsideMovementId?: string | null;
   /** Adelantos/vales del periodo que este pago descontó (ya se le habían entregado). */
   advancesDeducted?: number;
 }
@@ -1010,6 +1062,12 @@ export interface CommissionPayoutResult {
 export interface CommissionCashOut {
   method: CashMovementMethod;
 }
+
+/**
+ * Medio del registro «fuera de caja» de un pago marcado sin «sale de la caja»:
+ * nunca efectivo (el efectivo del cajón solo sale con la casilla marcada).
+ */
+export const OUTSIDE_PAYOUT_METHOD: CashMovementMethod = "OTHER";
 
 /**
  * Paga lo PENDIENTE del barbero en el periodo: marca (paidAt = ahora) todas
@@ -1055,6 +1113,9 @@ export async function markCommissionsPaid(
       throw new BarberCajaError(409, "CAJA_SQL_PENDING", "Falta aplicar sql/barber_caja_completa.sql: el pago no se puede registrar en Caja.");
     }
   }
+  // Sin «sale de la caja»: el pago se anota igual, FUERA de caja, si el SQL de
+  // caja completa está pegado (decisión 1 del QA E). Sin él, como antes.
+  const recordOutside = !cashOut && (await cashMovementsReady(prisma));
   const cashIn = opts.cashIn === true;
   if (cashIn) {
     assertBarberPermission(ctx, "cash.expenses");
@@ -1092,9 +1153,10 @@ export async function markCommissionsPaid(
         salaries,
         periodKey: params.periodKey,
         advances,
+        tz,
       });
       if (pendingEntryIds.length === 0 && !salaryDue) {
-        return { marked: 0, paidAt: now.toISOString(), paidAmount: 0, movementId: null, advancesDeducted: 0 };
+        return { marked: 0, paidAt: now.toISOString(), paidAmount: 0, movementId: null, outsideMovementId: null, advancesDeducted: 0 };
       }
       if (expected !== null && !expected.equals(money(row.totalToPay))) {
         throw new BarberCajaError(
@@ -1162,6 +1224,33 @@ export async function markCommissionsPaid(
           createdAt: now,
         });
       }
+      // Decisión 1 del QA E (16-nov-2026): marcado SIN «sale de la caja», el
+      // pago deja igual UN registro, «fuera de caja»: sin turno (no entra a
+      // ningún corte) y por un medio que NO es efectivo (no mueve el cajón ni
+      // el esperado). Va ligado como el de caja —mismo barbero, periodo y hora
+      // del pago—, así que anularlo deshace el pago. Con él, lo «Pagado» de
+      // Reportes es lo «Ya pagado» de Comisiones. No pide cash.withdraw: no
+      // sale nada de la caja.
+      let outsideMovementId: string | null = null;
+      if (recordOutside && money(row.totalToPay).gt(ZERO)) {
+        outsideMovementId = randomUUID();
+        await insertMovement(tx, {
+          id: outsideMovementId,
+          barbershopId,
+          sessionId: null,
+          type: "BARBER_PAYOUT",
+          method: OUTSIDE_PAYOUT_METHOD,
+          amount: money(row.totalToPay),
+          category: null,
+          note: null,
+          barberId: params.barberId,
+          payoutKind: barber.commissionType === "SALARY" ? "SALARY" : "COMMISSION",
+          periodKey: params.periodKey,
+          receiptUrl: null,
+          createdByUserId: ctx.barberUserId,
+          createdAt: now,
+        });
+      }
       // Saldo a favor del dueño (renta de silla, o adelantos mayores que lo
       // ganado): lo que el barbero entrega ENTRA al cajón, ligado a este pago.
       if (cashIn && money(row.totalToPay).lt(ZERO)) {
@@ -1193,6 +1282,7 @@ export async function markCommissionsPaid(
         // Lo que de verdad se le entrega: el «a pagar» ya sin los adelantos.
         paidAmount: row.totalToPay,
         movementId,
+        outsideMovementId,
         advancesDeducted: row.advances ?? 0,
       };
     },

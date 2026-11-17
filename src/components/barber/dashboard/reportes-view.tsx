@@ -98,7 +98,8 @@ export function ReportesView({
 
   const hasSales = s.totals.tickets > 0;
   // Pagado y adelantos por barbero (ws6-t5): solo si viajó «Ingresos y gastos».
-  const paidCols = Boolean(s.cashFlow);
+  // «Pagado» y «Adelantos» por barbero son de «Ver comisiones» (decisión 2 del QA E), como la columna «Comisión».
+  const paidCols = Boolean(s.cashFlow) && s.can.commissions;
   const occ = s.occupancy;
   const noSchedule = occ.openHours.every((h) => h !== null) && occ.openHours.every((h) => h && h.from === occ.openHours[0]!.from && h.to === occ.openHours[0]!.to);
 
@@ -163,7 +164,7 @@ export function ReportesView({
           </form>
         )}
         {s.scope.canConsolidate && branches.length > 1 && (
-          <select className="bdash-select" value={currentBranch} aria-label={t("branch.label")} onChange={(e) => go({ branch: e.target.value })}>
+          <select className="bdash-select" value={currentBranch} aria-label={t("branch.label")} onChange={(e) => go({ branch: e.target.value, barber: "" })}>
             {branches.map((b) => (
               <option key={b.id} value={b.id}>
                 {b.label}
@@ -273,7 +274,8 @@ export function ReportesView({
 
       <div className="bdash-grid bdash-grid--even">
         {/* Por barbero */}
-        <CardNew title={t("barbers.title")} noPad={s.byBarber.length > 0}>
+        {/* Con «Pagado» y «Adelantos» la tabla no cabe en media tarjeta (a 1440 quedaban fuera, a la derecha): ancho completo. */}
+        <CardNew title={t("barbers.title")} noPad={s.byBarber.length > 0} className={paidCols ? "bdash-card--wide" : undefined}>
           {s.byBarber.length === 0 ? (
             <div className="bdash-empty">{t("barbers.empty")}</div>
           ) : (
@@ -308,7 +310,18 @@ export function ReportesView({
                       <td className="bdash-num">{b.avgTicket === null ? "—" : fmtMoney(b.avgTicket)}</td>
                       <td className="bdash-num">{fmtMoney(b.tips)}</td>
                       {s.can.commissions && <td className="bdash-num">{b.commission === null ? "—" : fmtMoney(b.commission)}</td>}
-                      {paidCols && <td className="bdash-num">{fmtMoney(b.paidOut ?? 0)}</td>}
+                      {paidCols && (
+                        <td className="bdash-num" data-pagado>
+                          {fmtMoney(b.paidOut ?? 0)}
+                          {/* Decisión 1 del QA E: el desglose «en caja / fuera de caja» de lo pagado. */}
+                          {(b.paidOut ?? 0) > 0 && (
+                            <span className="bdash-paid-split" title={t("money.paidSplitHint")}>
+                              <span>{t("money.paidDrawerLine", { amount: fmtMoney(b.paidDrawer ?? 0) })}</span>
+                              <span>{t("money.paidOutsideLine", { amount: fmtMoney(b.paidOutside ?? 0) })}</span>
+                            </span>
+                          )}
+                        </td>
+                      )}
                       {paidCols && <td className="bdash-num">{b.advances ? fmtMoney(b.advances) : "—"}</td>}
                     </tr>
                   ))}

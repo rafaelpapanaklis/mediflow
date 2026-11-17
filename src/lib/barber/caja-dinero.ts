@@ -54,7 +54,7 @@ import {
   type ResumenTicket,
 } from "@/lib/barber/caja-resumen";
 import type { BarberPaymentMethod } from "@/lib/barber/types";
-import { activeSalary, salaryForRange, type BarberSalary } from "@/lib/barber/sueldo-core";
+import { activeSalary, chairRentForRange, dayKeyOf, rangeSince, salaryForRange, type BarberSalary } from "@/lib/barber/sueldo-core";
 import { loadSalaries, salaryReady } from "@/lib/barber/sueldo";
 
 type Dec = Prisma.Decimal;
@@ -102,6 +102,10 @@ export interface DineroBarbero {
   tips: number;
   /** Todo lo que se le pagó en el periodo (adelantos, comisión, sueldo, otro). */
   paidOut: number;
+  /** De eso, lo que salió del cajón: efectivo de un turno de caja. */
+  paidDrawer: number;
+  /** De eso, lo pagado fuera de caja: otro medio, sin turno o marcado sin «sale de la caja». */
+  paidOutside: number;
   /** De eso, adelantos/vales (ADVANCE). */
   advances: number;
 }
@@ -117,10 +121,15 @@ export interface DineroPeriodo {
   expenses: CajaResumen["expenses"];
   /** Lo ENTREGADO a los barberos (con propinas, adelantos…): informativo, no resta en la ganancia. */
   payouts: CajaResumen["payouts"];
-  /** Lo devengado por los barberos en el periodo, sin propinas: esto sí resta. */
-  barberCost: CostoBarberos;
-  /** INGRESOS − gastos − barberCost.total. */
-  profit: number;
+  /** payouts.total partido: efectivo del cajón / fuera de caja. drawer + outside = payouts.total. */
+  payoutsSplit: { drawer: number; outside: number };
+  /**
+   * Lo devengado por los barberos en el periodo, sin propinas: esto sí resta.
+   * null = no viaja: quien lo pide no tiene «Ver comisiones» (decisión 2 del QA E).
+   */
+  barberCost: CostoBarberos | null;
+  /** INGRESOS − gastos − barberCost.total. null = no viaja (sin «Ver comisiones»). */
+  profit: number | null;
   /** Flujo neto de efectivo del periodo (sin fondo): lo que el cajón ganó o perdió. */
   cashNet: number;
   byBarber: DineroBarbero[];
@@ -142,6 +151,46 @@ export function adelantosPorBarbero(
   return new Map([...acc.entries()].map(([k, v]) => [k, out(v)]));
 }
 
+/** Lo pagado a barberos, partido en «del cajón» y «fuera de caja». */
+export interface PagosPartidos {
+  drawer: number;
+  outside: number;
+  byBarber: Map<string, { drawer: number; outside: number }>;
+}
+
+/**
+ * Parte los pagos a barberos VIVOS (decisión 1 del QA E, 16-nov-2026):
+ *   · «en caja»       = efectivo de un turno de caja (lo único que baja el cajón);
+ *   · «fuera de caja» = todo lo demás: tarjeta, transferencia u otro medio, un
+ *     pago en efectivo sin caja abierta, y lo marcado pagado en Comisiones sin
+ *     «sale de la caja» (commissions.ts lo anota sin turno y sin efectivo).
+ * drawer + outside = payouts.total de cajaResumen (mismos movimientos).
+ */
+export function pagosPartidos(
+  movements: Array<Pick<CashMovementRow, "type" | "method" | "sessionId" | "barberId" | "amount" | "voidedAt">>,
+): PagosPartidos {
+  let drawer = new Prisma.Decimal(0);
+  let outside = new Prisma.Decimal(0);
+  const acc = new Map<string, { drawer: Dec; outside: Dec }>();
+  for (const m of movements) {
+    if (m.voidedAt || m.type !== "BARBER_PAYOUT") continue;
+    const amount = D(m.amount).abs();
+    const enCaja = m.method === "CASH" && Boolean(m.sessionId);
+    if (enCaja) drawer = drawer.plus(amount);
+    else outside = outside.plus(amount);
+    if (!m.barberId) continue;
+    const b = acc.get(m.barberId) ?? { drawer: new Prisma.Decimal(0), outside: new Prisma.Decimal(0) };
+    if (enCaja) b.drawer = b.drawer.plus(amount);
+    else b.outside = b.outside.plus(amount);
+    acc.set(m.barberId, b);
+  }
+  return {
+    drawer: out(drawer),
+    outside: out(outside),
+    byBarber: new Map([...acc.entries()].map(([k, v]) => [k, { drawer: out(v.drawer), outside: out(v.outside) }])),
+  };
+}
+
 export interface CostoBarberoInput {
   id: string;
   commissionType: string;
@@ -149,6 +198,11 @@ export interface CostoBarberoInput {
   chairRent: Prisma.Decimal.Value | null;
   /** Sueldo guardado (sueldo.ts); null = sin sueldo o sin sql/barber_sueldo.sql. */
   salary: BarberSalary | null;
+  /**
+   * Día de ALTA del barbero («YYYY-MM-DD» en la zona de la barbería). Renta y
+   * sueldo cuentan desde ese día (decisión 3 del QA E). null/ausente = sin dato.
+   */
+  since?: string | null;
 }
 
 /**
@@ -160,7 +214,8 @@ export interface CostoBarberoInput {
  *                misma regla que el sueldo, salaryForRange).
  *   SALARY     → sueldo del periodo (salaryForRange) si tiene monto.
  * La comisión cuenta para todo barbero con entradas (también uno ya dado de
- * baja); renta y sueldo, solo para los activos.
+ * baja); renta y sueldo, solo para los activos y SOLO DESDE SU ALTA (decisión
+ * 3 del QA E): los días del periodo anteriores a `since` no cuentan.
  */
 export function costoBarberos(args: {
   entries: Map<string, Prisma.Decimal.Value>;
@@ -176,13 +231,14 @@ export function costoBarberos(args: {
   for (const b of args.barbers) {
     if (!b.isActive) continue;
     if (b.commissionType === "CHAIR_RENT" && b.chairRent !== null && D(b.chairRent).gt(0)) {
-      const r = salaryForRange({ amount: D(b.chairRent).toNumber(), period: "MONTHLY" }, args.fromDay, args.toDay);
+      const r = chairRentForRange(b.chairRent, args.fromDay, args.toDay, b.since);
       rent = rent.plus(r.amount);
       approx = approx || r.approx;
     }
     const s = activeSalary(b.commissionType, b.salary);
     if (s) {
-      const r = salaryForRange(s, args.fromDay, args.toDay);
+      const desde = rangeSince(args.fromDay, args.toDay, b.since);
+      const r = salaryForRange(s, desde.from, desde.to);
       salary = salary.plus(r.amount);
       approx = approx || r.approx;
     }
@@ -202,13 +258,16 @@ const SIN_COSTO: CostoBarberos = { commission: 0, salary: 0, chairRent: 0, total
 export function dineroDe(
   resumen: CajaResumen,
   advancesByBarber: Map<string, number> = new Map(),
-  barberCost: CostoBarberos = SIN_COSTO,
+  /** null = sin «Ver comisiones»: ni lo devengado ni la ganancia se calculan. */
+  barberCost: CostoBarberos | null = SIN_COSTO,
   truncated = false,
+  /** Sin él (llamadores viejos, pruebas): todo lo pagado se toma como «del cajón» salvo lo que no fue efectivo. */
+  pagos: PagosPartidos | null = null,
 ): DineroPeriodo {
   const charged = D(resumen.income.total);
   const tips = D(resumen.tips.total);
   const income = GANANCIA_SIN_PROPINAS ? charged.minus(tips) : charged;
-  const profit = income.minus(D(resumen.expenses.total)).minus(D(barberCost.total));
+  const profit = barberCost === null ? null : income.minus(D(resumen.expenses.total)).minus(D(barberCost.total));
   return {
     charged: out(charged),
     byMethod: resumen.income.byMethod,
@@ -216,8 +275,11 @@ export function dineroDe(
     income: out(income),
     expenses: resumen.expenses,
     payouts: resumen.payouts,
+    payoutsSplit: pagos
+      ? { drawer: pagos.drawer, outside: pagos.outside }
+      : { drawer: resumen.payouts.cash, outside: out(D(resumen.payouts.total).minus(D(resumen.payouts.cash))) },
     barberCost,
-    profit: out(profit),
+    profit: profit === null ? null : out(profit),
     cashNet: out(D(resumen.esperado.expected).minus(D(resumen.esperado.opening))),
     byBarber: resumen.byBarber
       .filter((b) => b.tips !== 0 || b.paidOut !== 0)
@@ -226,6 +288,8 @@ export function dineroDe(
         barberName: b.barberName,
         tips: b.tips,
         paidOut: b.paidOut,
+        paidDrawer: pagos ? pagos.byBarber.get(b.barberId)?.drawer ?? 0 : b.paidOut,
+        paidOutside: pagos ? pagos.byBarber.get(b.barberId)?.outside ?? 0 : 0,
         advances: advancesByBarber.get(b.barberId) ?? 0,
       })),
     truncated,
@@ -307,13 +371,20 @@ async function movementsOf(branchIds: string[], range: { from: Date; to: Date })
 
 /** «YYYY-MM-DD» del instante en la zona de la barbería. */
 function dayKey(d: Date, tz: string): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
+  return dayKeyOf(d, tz);
 }
 
 export interface DineroOpts {
   /** Turno abierto cuyo cajón también se quiere («En caja ahora» de Inicio). */
   openSession?: { id: string; barbershopId: string; openingAmount: Prisma.Decimal.Value; openedAt: Date } | null;
   now?: Date;
+  /**
+   * false = quien lo pide NO tiene «Ver comisiones» (decisión 2 del QA E,
+   * 16-nov-2026): no se lee ni se devuelve lo que ganan los barberos —la
+   * Ganancia, lo devengado, lo pagado por barbero y por tipo (ahí va «Sueldos»)—.
+   * Lo demás (ingresos, gastos, total entregado, cajón) es de «Ver caja» y viaja.
+   */
+  withProfit?: boolean;
 }
 
 export interface DineroResultado {
@@ -354,6 +425,7 @@ export async function getDineroPeriodo(
     open !== null && ids.includes(open.barbershopId) && open.openedAt.getTime() >= range.from.getTime() && range.to.getTime() > now.getTime();
   const apart = open !== null && !openInside;
   const tz = ctx.barbershop?.timezone || "America/Mexico_City";
+  const withProfit = opts.withProfit !== false;
   const [tickets, mov, apartTickets, apartMovements, entryGroups, barbers] = await Promise.all([
     prisma.$queryRaw<TicketSql[]>`
       ${SELECT_TICKET}
@@ -369,15 +441,20 @@ export async function getDineroPeriodo(
       : Promise.resolve([] as TicketSql[]),
     apart ? loadMovements(prisma, { barbershopId: open.barbershopId, sessionIds: [open.id] }) : Promise.resolve([] as CashMovementRow[]),
     // Comisión devengada del periodo: la misma suma que la columna «Comisión» de Reportes.
-    prisma.barberCommissionEntry.groupBy({
-      by: ["barberId"],
-      where: { barbershopId: { in: ids }, createdAt: { gte: range.from, lt: range.to } },
-      _sum: { amount: true },
-    }),
-    prisma.barber.findMany({
-      where: { barbershopId: { in: ids } },
-      select: { id: true, commissionType: true, isActive: true, chairRent: true },
-    }),
+    // Sin «Ver comisiones» ni se lee.
+    withProfit
+      ? prisma.barberCommissionEntry.groupBy({
+          by: ["barberId"],
+          where: { barbershopId: { in: ids }, createdAt: { gte: range.from, lt: range.to } },
+          _sum: { amount: true },
+        })
+      : Promise.resolve([] as Array<{ barberId: string; _sum: { amount: Prisma.Decimal | null } }>),
+    withProfit
+      ? prisma.barber.findMany({
+          where: { barbershopId: { in: ids } },
+          select: { id: true, commissionType: true, isActive: true, chairRent: true, createdAt: true },
+        })
+      : Promise.resolve([] as Array<{ id: string; commissionType: string; isActive: boolean; chairRent: Prisma.Decimal | null; createdAt: Date }>),
   ]);
   const movements = mov.rows;
 
@@ -392,6 +469,7 @@ export async function getDineroPeriodo(
       isActive: b.isActive,
       chairRent: b.chairRent,
       salary: salaries.get(b.id) ?? null,
+      since: dayKeyOf(b.createdAt, tz),
     })),
     fromDay: dayKey(range.from, tz),
     toDay: dayKey(range.to, tz),
@@ -404,7 +482,15 @@ export async function getDineroPeriodo(
     const sMovements = apart ? apartMovements : movements.filter((m) => m.sessionId === open.id);
     openExpected = cajaResumen({ openingAmount: open.openingAmount, tickets: sTickets.map(ticketOf), movements: sMovements }).expectedCash;
   }
-  return { dinero: dineroDe(resumen, adelantosPorBarbero(movements), barberCost, mov.truncated), openExpected };
+  const pagos = pagosPartidos(movements);
+  if (!withProfit) {
+    // Sin «Ver comisiones»: el total entregado y su reparto caja/fuera sí (es
+    // dinero que salió); por barbero y por tipo, no.
+    const d = dineroDe(resumen, new Map(), null, mov.truncated, pagos);
+    const sinTipos = Object.fromEntries(Object.keys(d.payouts.byKind).map((k) => [k, 0])) as CajaResumen["payouts"]["byKind"];
+    return { dinero: { ...d, byBarber: [], payouts: { ...d.payouts, byKind: sinTipos } }, openExpected };
+  }
+  return { dinero: dineroDe(resumen, adelantosPorBarbero(movements), barberCost, mov.truncated, pagos), openExpected };
 }
 
 /** Para pruebas y para quien necesite la forma de un DineroPeriodo vacío. */

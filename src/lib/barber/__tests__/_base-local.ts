@@ -31,3 +31,11 @@ export const skip: false | string = BASE_LOCAL
   : URL_DB
     ? "DATABASE_URL no es local: estas pruebas crean y borran barberías, se saltan"
     : "DATABASE_URL no definido: se salta la integración";
+
+/**
+ * Alta de un barbero «de siempre». Renta de silla y sueldo cuentan DESDE EL ALTA
+ * (decisión 3 del QA de cierre E, 16-nov-2026): un barbero creado hoy sale
+ * proporcional. Las pruebas que hablan del mes completo crean al barbero con
+ * este `createdAt`.
+ */
+export const ALTA_ANTIGUA = new Date("2020-01-01T12:00:00.000Z");
