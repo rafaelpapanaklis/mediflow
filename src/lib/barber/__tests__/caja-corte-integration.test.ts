@@ -17,6 +17,7 @@ import assert from "node:assert/strict";
 import { prisma } from "@/lib/prisma";
 import type { BarberContext } from "@/lib/barber-auth";
 import { BarberCajaError } from "@/lib/barber/commissions";
+import { BarberForbiddenError } from "@/lib/barber/permissions";
 import { closeCashSession, getCashSessionSummary, getCashState, openCashSession } from "@/lib/barber/cash";
 import { cashMovementsReady, resetCashMovementsReadyCache } from "@/lib/barber/cash-movements";
 import { createCashMovement } from "@/lib/barber/caja-movimientos";
@@ -95,8 +96,13 @@ test("M3: sin «Sacar efectivo» el fondo para mañana = lo contado; abrir con o
   });
   const rctx = { ...ctx, barberUserId: recep.id, user: recep, role: "RECEPTION" } as BarberContext;
   await openCashSession(rctx, { openingAmount: 500 });
-  // Recepción intenta llevarse $400 dejando $100: el servidor deja de fondo TODO lo contado.
-  const closed = await closeCashSession(rctx, { countedAmount: 500, leftForNext: 100 });
+  // Recepción intenta llevarse $400 dejando $100 (la llamada del dueño repetida
+  // con su sesión): 403 y el turno SIGUE ABIERTO (QA de cierre D, 16-nov).
+  const sinLlave = await closeCashSession(rctx, { countedAmount: 500, leftForNext: 100 }).then(() => null, (e: unknown) => e);
+  assert.ok(sinLlave instanceof BarberForbiddenError && sinLlave.permission === "cash.withdraw", "pedir llevarse efectivo sin cash.withdraw → 403");
+  assert.ok((await getCashState(rctx)).open, "el 403 no cierra el turno");
+  // Lo que manda su pantalla (sin fondo): cierra y TODO lo contado queda de fondo.
+  const closed = await closeCashSession(rctx, { countedAmount: 500, leftForNext: null });
   assert.equal(closed.session.leftForNext, 500, "sin cash.withdraw no se lleva nada");
   // Abrir con $300 cuando se dejaron $500: 409 con la diferencia; confirmado, se anota.
   const e = await errorOf(openCashSession(rctx, { openingAmount: 300 }));

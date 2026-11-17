@@ -764,6 +764,15 @@ export async function closeCashSession(
   // sacar efectivo: solo con cash.withdraw. Sin ella, todo lo contado se
   // queda de fondo para el siguiente turno.
   if (!hasBarberPermission({ role: ctx.role, permissionsOverride: ctx.user.permissionsOverride }, "cash.withdraw")) {
+    // QA de cierre D (16-nov): si la llamada PIDE llevarse efectivo (fondo <
+    // contado) sin la llave, es un 403 como «Sacar efectivo», y el turno NO
+    // se cierra. Antes cerraba y descartaba el retiro en silencio: quien
+    // tenía el diálogo abierto cuando le quitaron la llave leía «Te llevas
+    // $X» y el corte guardaba otra cosa. La pantalla de quien no tiene la
+    // llave no manda fondo (null): ese cierre sigue igual.
+    if (leftForNext !== null && leftForNext.lt(countedAmount)) {
+      throw new BarberForbiddenError("cash.withdraw");
+    }
     leftForNext = countedAmount;
   }
   const notes = cleanNotes(input.notes);

@@ -58,6 +58,11 @@
     "body": "Esta sección está en construcción. Muy pronto vas a poder administrarla desde aquí.",
     "hint": "El equipo de DaleControl está trabajando en esta área del panel."
   },
+  "notFound": {
+    "title": "No encontramos esta página",
+    "body": "Revisa que la liga esté completa, o vuelve a Inicio y entra desde el menú.",
+    "cta": "Volver a Inicio"
+  },
   "areas": {
     "inicio": "El pulso de tu barbería: citas de hoy, fila, ventas y accesos rápidos.",
     "agenda": "Agenda de citas por barbero: crea, confirma, reagenda y cobra cada visita.",
