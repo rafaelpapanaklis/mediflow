@@ -1,17 +1,18 @@
 /* ═══════════════════════════════════════════════════════════════════════
    «MI TARJETA» en la página web de la barbería — núcleo PURO (ws6-t2).
 
-   El cliente llega a /b/<slug>/mi-tarjeta desde el menú de la página y
-   escribe su teléfono. La tarjeta NUNCA se enseña ahí: cualquiera podría
-   teclear el número de otro. Lo que pasa depende de la barbería:
+   El cliente llega a /b/<slug>/mi-tarjeta desde el menú de la página, escribe
+   su teléfono y, si es cliente de ESA barbería, ve su tarjeta de estrellas
+   ahí mismo (decisión de Rafael, 16-nov: «si se pone el número de teléfono
+   que muestre ahí la tarjeta digital, no pasa nada»). No se manda nada por
+   WhatsApp: no cuesta mensajes de Meta.
 
-     · con WhatsApp conectado y la plantilla aprobada → se le manda SU enlace
-       personal a ESE número y la pantalla dice siempre lo mismo, exista o no
-       el cliente (no sirve de directorio de clientes);
-     · sin eso → «pídele tu tarjeta a la barbería», con WhatsApp / llamar.
+   Lo que se enseña es SOLO la tarjeta: nombre de pila, estrellas, bonos e
+   historial de estrellas. Nada de teléfono completo, citas, pagos ni fotos.
 
-   Sin prisma ni next/*: se prueba sin base (…/__tests__/tarjeta-web.test.ts).
-   La capa con base y WhatsApp es ./tarjeta-web.ts.
+   ⚠️ Este archivo lo importa un componente de NAVEGADOR
+   (components/barber/stars/mi-tarjeta-form.tsx): sin imports de servidor.
+   La capa con base es ./tarjeta-web.ts.
    ═══════════════════════════════════════════════════════════════════════ */
 
 /** Ruta de «Mi tarjeta» (sin dominio). */
@@ -20,28 +21,18 @@ export function rutaMiTarjeta(slug: string): string {
 }
 
 /**
- * Por dónde le llega la tarjeta al cliente.
- *   whatsapp = se le manda su enlace a su número;
- *   barberia = se la pide a la barbería (sin WhatsApp o sin plantilla aprobada).
+ * Freno por IP: cuántas consultas puede hacer un mismo origen. Es lo que
+ * impide usar la pantalla para probar números en serie.
  */
-export type CanalTarjeta = "whatsapp" | "barberia";
-
-/** Freno por IP: cuántas veces puede pedirla un mismo origen. */
-export const TARJETA_IP_LIMIT = { limit: 8, windowSec: 600 } as const;
+export const TARJETA_IP_LIMIT = { limit: 12, windowSec: 600 } as const;
 
 /**
- * Freno por NÚMERO (y barbería): cada envío es un WhatsApp que paga la
- * barbería y que le llega a una persona. Tres por hora alcanzan para «no me
- * llegó, lo pido otra vez» y no dejan usar la página para molestar a nadie.
+ * Freno por NÚMERO (y barbería): un cliente de verdad abre su tarjeta unas
+ * cuantas veces; alguien que vigila la de otro, muchas. Pasado el tope la
+ * pantalla pide esperar.
  */
-export const TARJETA_PHONE_LIMIT = { limit: 3, windowSec: 3600 } as const;
-
-/**
- * Y el tope del DÍA para el mismo número: sin él, alguien insistente (con
- * otras redes y resolviendo el captcha) podría hacerle llegar tres mensajes
- * cada hora a una persona. Cinco al día es de sobra para un uso de verdad.
- */
-export const TARJETA_PHONE_DAY_LIMIT = { limit: 5, windowSec: 86_400 } as const;
+export const TARJETA_PHONE_LIMIT = { limit: 10, windowSec: 3600 } as const;
+export const TARJETA_PHONE_DAY_LIMIT = { limit: 30, windowSec: 86_400 } as const;
 
 /** Clave del freno por número. Solo dígitos: «55…» y «+52 55…» no son dos cubetas. */
 export function claveFrenoTarjeta(barbershopId: string, phoneStored: string, ventana: "hora" | "dia" = "hora"): string {
@@ -49,20 +40,40 @@ export function claveFrenoTarjeta(barbershopId: string, phoneStored: string, ven
   return ventana === "dia" ? `${base}:dia` : base;
 }
 
-/** Dominio público con el que se arma el enlace que viaja por WhatsApp. */
-export const TARJETA_SITE_URL_DEFAULT = "https://www.dalecontrol.com";
-
-/**
- * El dominio del enlace sale SIEMPRE de la configuración del servidor, nunca
- * de la petición: con el `Host` de la petición, quien la manda podría hacer
- * que a otra persona le llegue un enlace a un dominio suyo con el token real.
- */
-export function sitioDeTarjeta(env: Record<string, string | undefined>): string {
-  const raw = (env.NEXT_PUBLIC_SITE_URL ?? "").trim().replace(/\/+$/, "");
-  return /^https:\/\/[a-z0-9.-]+(:\d+)?$/i.test(raw) ? raw : TARJETA_SITE_URL_DEFAULT;
-}
-
-/** Texto con el que el cliente le escribe a la barbería para pedirla. */
+/** Texto con el que el cliente le escribe a la barbería si su número no aparece. */
 export function textoPedirTarjeta(locale: string | null | undefined): string {
   return locale === "en" ? "Hi, I'd like my star card." : "Hola, quiero mi tarjeta de estrellas.";
+}
+
+// ── El número recordado en ESTE navegador ───────────────────────────────
+//
+// Para no teclearlo cada vez. Vive en localStorage del teléfono del cliente
+// (nunca en el servidor), por barbería, y se borra con «No soy yo».
+
+export interface NumeroRecordado {
+  /** País del selector («MX», «US»…). */
+  iso: string;
+  /** Lo que tecleó: solo dígitos. */
+  phone: string;
+}
+
+export function claveNumeroRecordado(slug: string): string {
+  return `dcb-mi-tarjeta:${slug}`;
+}
+
+export function serializarNumeroRecordado(n: NumeroRecordado): string {
+  return JSON.stringify({ iso: n.iso, phone: n.phone });
+}
+
+/** Lee lo guardado. Null ante cualquier cosa rara: lo guardado puede venir tocado. */
+export function leerNumeroRecordado(raw: string | null | undefined): NumeroRecordado | null {
+  if (!raw || raw.length > 80) return null;
+  try {
+    const o = JSON.parse(raw) as { iso?: unknown; phone?: unknown };
+    if (typeof o?.iso !== "string" || typeof o?.phone !== "string") return null;
+    if (!/^[A-Z]{2}$/.test(o.iso) || !/^\d{6,15}$/.test(o.phone)) return null;
+    return { iso: o.iso, phone: o.phone };
+  } catch {
+    return null;
+  }
 }

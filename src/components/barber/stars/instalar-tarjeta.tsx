@@ -66,11 +66,50 @@ function yaInstalada(): boolean {
   }
 }
 
-export function InstalarTarjeta({ slug, labels }: { slug: string; labels: InstalarLabels }) {
+export function InstalarTarjeta({
+  slug,
+  labels,
+  manifestHref,
+  iconHref,
+}: {
+  slug: string;
+  labels: InstalarLabels;
+  /**
+   * Manifest de ESTA tarjeta, cuando la página no lo declara en su <head>
+   * («Mi tarjeta»: la tarjeta aparece después de teclear el teléfono, así
+   * que el manifest —que lleva el enlace personal— no se conoce al pintar la
+   * página). El navegador lo toma al agregarse y entonces ofrece instalar.
+   */
+  manifestHref?: string;
+  /** Ícono para iPhone (apple-touch-icon), mismo caso. */
+  iconHref?: string;
+}) {
   // En el servidor (y hasta montar) no se pinta nada: el aviso depende del teléfono.
   const [aviso, setAviso] = useState<AvisoInstalar>(null);
   const [listo, setListo] = useState(false);
   const oferta = useRef<BeforeInstallPromptEvent | null>(null);
+
+  useEffect(() => {
+    if (!manifestHref) return;
+    const puestos: HTMLLinkElement[] = [];
+    const poner = (rel: string, href: string) => {
+      const link = document.createElement("link");
+      link.rel = rel;
+      link.href = href;
+      link.setAttribute("data-dcb-tarjeta", "");
+      document.head.appendChild(link);
+      puestos.push(link);
+    };
+    // Un solo manifest por página: el que hubiera se aparta mientras dura la tarjeta.
+    const previos = Array.from(document.head.querySelectorAll<HTMLLinkElement>('link[rel="manifest"]'));
+    previos.forEach((l) => l.remove());
+    poner("manifest", manifestHref);
+    if (iconHref) poner("apple-touch-icon", iconHref);
+    return () => {
+      puestos.forEach((l) => l.remove());
+      previos.forEach((l) => document.head.appendChild(l));
+    };
+  }, [manifestHref, iconHref]);
 
   useEffect(() => {
     let vivo = true;

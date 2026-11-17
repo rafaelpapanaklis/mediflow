@@ -227,7 +227,8 @@ test("los componentes de navegador no importan nada de servidor", () => {
     "lib/barber/tarjeta-instalar-aviso.ts",
   ]) {
     const src = readFileSync(join(raiz, archivo), "utf8");
-    const mal = src.split("\n").filter((l) => /^import /.test(l) && prohibidos.test(l));
+    // `import type` se borra al compilar: no arrastra nada.
+    const mal = src.split("\n").filter((l) => /^import /.test(l) && !/^import type /.test(l) && prohibidos.test(l));
     assert.deepEqual(mal, [], `${archivo} importa código de servidor`);
   }
   for (const archivo of ["components/barber/stars/instalar-tarjeta.tsx", "components/barber/stars/mi-tarjeta-form.tsx"]) {

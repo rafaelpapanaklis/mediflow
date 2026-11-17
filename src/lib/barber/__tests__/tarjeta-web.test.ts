@@ -1,29 +1,36 @@
 /* ═══════════════════════════════════════════════════════════════════════
    «MI TARJETA» en la página web (ws6-t2) — con DOBLES: ninguna prueba toca
-   la base, Meta ni manda un WhatsApp.
+   la base.
 
      npx tsx --tsconfig tsconfig.test.json --test \
        src/lib/barber/__tests__/tarjeta-web.test.ts
 
-   Lo que se fija aquí es la promesa de seguridad de la pantalla:
-     · la tarjeta y su enlace NUNCA vuelven a quien pregunta;
-     · la respuesta es la misma exista o no el cliente;
-     · el enlace solo viaja al número guardado, con el dominio del servidor.
+   Desde el cambio de Rafael (16-nov) la tarjeta se ENSEÑA con el teléfono.
+   Lo que se fija aquí:
+     · solo se enseña al cliente de ESA barbería, y solo la tarjeta (nombre
+       de pila, estrellas, bonos, historial de estrellas): ni teléfono, ni
+       apellido, ni nada más;
+     · los frenos por número van antes de mirar la base;
+     · ya no hay plantilla de WhatsApp ni envío.
    ═══════════════════════════════════════════════════════════════════════ */
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
-import { resolveCardToken } from "../stars-core";
-import { BARBER_WA_OPT_OUT_KEY, barberWaTemplate, checkBarberWaTemplate, countBarberWaVariables } from "../whatsapp-core";
-import { canalDeTarjeta, pedirTarjeta, rutaTarjetaDeSesion, type TarjetaDeps } from "../tarjeta-web";
+import { resolveCardToken, type StarsView } from "../stars-core";
+import { BARBER_WA_TEMPLATES } from "../whatsapp-core";
+import { buscarTarjeta, rutaTarjetaDeSesion, type TarjetaDeps } from "../tarjeta-web";
 import {
+  TARJETA_IP_LIMIT,
   TARJETA_PHONE_DAY_LIMIT,
   TARJETA_PHONE_LIMIT,
-  TARJETA_SITE_URL_DEFAULT,
   claveFrenoTarjeta,
+  claveNumeroRecordado,
+  leerNumeroRecordado,
   rutaMiTarjeta,
-  sitioDeTarjeta,
+  serializarNumeroRecordado,
 } from "../tarjeta-web-core";
 
 const SHOP = { id: "shop_aaaaaaaa", slug: "el-corte" };
@@ -38,12 +45,33 @@ interface Cliente {
   blockedAt: Date | null;
 }
 
+/** La vista que arma loadStarsView para el cliente: lo ÚNICO personal es el nombre de pila. */
+function vista(c: Cliente, extra: Partial<StarsView> = {}): StarsView {
+  return {
+    enabled: true,
+    firstName: c.name.split(" ")[0],
+    stars: 4,
+    slots: 6,
+    next: null,
+    available: [],
+    catalog: [],
+    history: [{ id: "e1", at: "2026-11-10T18:00:00.000Z", kind: "visit", reason: "appointment", delta: 1, detail: "Corte clásico" }],
+    usedCount: 0,
+    ...extra,
+  };
+}
+
 function mundo(
-  opts: { estrellas?: boolean; sendable?: boolean; pasa?: boolean | ((key: string) => boolean); clientes?: Cliente[]; sendFalla?: boolean } = {},
+  opts: {
+    estrellas?: boolean;
+    pasa?: boolean | ((key: string) => boolean);
+    clientes?: Cliente[];
+    vistaDe?: (c: Cliente) => StarsView | null;
+  } = {},
 ) {
   const clientes = opts.clientes ?? [];
-  const enviados: { barbershopId: string; phone: string; firstName: string; url: string }[] = [];
   const frenos: { key: string; limit: number; windowSec: number }[] = [];
+  const vistasPedidas: { barbershopId: string; clientId: string; audience: string }[] = [];
   let consultasDeCliente = 0;
   const db = {
     barbershop: {
@@ -61,26 +89,25 @@ function mundo(
   };
   const deps = {
     db,
-    sendable: async () => opts.sendable ?? true,
-    send: async (a: { barbershopId: string; phone: string; firstName: string; url: string }) => {
-      if (opts.sendFalla) throw new Error("Meta caído");
-      enviados.push(a);
-      return true;
-    },
     allow: async (key: string, limit: number, windowSec: number) => {
       frenos.push({ key, limit, windowSec });
       return typeof opts.pasa === "function" ? opts.pasa(key) : (opts.pasa ?? true);
     },
-    siteUrl: "https://www.dalecontrol.com",
+    loadView: async (_db: unknown, a: { barbershopId: string; clientId: string; audience: "client" }) => {
+      vistasPedidas.push(a);
+      const c = clientes.find((x) => x.id === a.clientId && x.barbershopId === a.barbershopId);
+      if (!c) return null;
+      return opts.vistaDe ? opts.vistaDe(c) : vista(c);
+    },
   } as unknown as TarjetaDeps;
-  return { deps, db, enviados, frenos, consultas: () => consultasDeCliente };
+  return { deps, db, frenos, vistasPedidas, consultas: () => consultasDeCliente };
 }
 
 const luis: Cliente = {
   id: "cli_luis0001",
   barbershopId: SHOP.id,
   phone: "5512345678",
-  name: "Luis Pérez",
+  name: "Luis Pérez Gómez",
   preferences: {},
   blockedAt: null,
 };
@@ -92,129 +119,110 @@ test("ruta y clave del freno", () => {
   assert.equal(claveFrenoTarjeta("s1", "5512345678", "dia"), "barber-tarjeta:s1:5512345678:dia");
 });
 
-test("el dominio del enlace sale del servidor y solo si es https", () => {
-  assert.equal(sitioDeTarjeta({ NEXT_PUBLIC_SITE_URL: "https://www.dalecontrol.com/" }), "https://www.dalecontrol.com");
-  assert.equal(sitioDeTarjeta({}), TARJETA_SITE_URL_DEFAULT);
-  assert.equal(sitioDeTarjeta({ NEXT_PUBLIC_SITE_URL: "http://localhost:3000" }), TARJETA_SITE_URL_DEFAULT);
-  assert.equal(sitioDeTarjeta({ NEXT_PUBLIC_SITE_URL: "https://evil.com/x?y=" }), TARJETA_SITE_URL_DEFAULT);
-  assert.equal(sitioDeTarjeta({ NEXT_PUBLIC_SITE_URL: "javascript:alert(1)" }), TARJETA_SITE_URL_DEFAULT);
-});
-
-test("canal: sin estrellas o sin WhatsApp listo, se la pide a la barbería", async () => {
-  assert.equal(await canalDeTarjeta(mundo({ estrellas: false }).deps, SHOP.id), "barberia");
-  assert.equal(await canalDeTarjeta(mundo({ sendable: false }).deps, SHOP.id), "barberia");
-  assert.equal(await canalDeTarjeta(mundo().deps, SHOP.id), "whatsapp");
-  assert.equal(await canalDeTarjeta(mundo().deps, ""), "barberia");
-});
-
-test("sin WhatsApp listo: ni se consulta al cliente ni se manda nada", async () => {
-  const m = mundo({ sendable: false, clientes: [luis] });
-  const r = await pedirTarjeta(m.deps, { shop: SHOP, phone: luis.phone });
-  assert.deepEqual({ canal: r.canal, enviar: r.enviar }, { canal: "barberia", enviar: null });
-  assert.equal(m.consultas(), 0);
-  assert.equal(m.frenos.length, 0);
-});
-
-test("cliente registrado: se le manda SU enlace a SU número, y el enlace abre su tarjeta", async () => {
+test("cliente de la barbería: se le enseña SU tarjeta y su enlace personal abre la misma", async () => {
   const m = mundo({ clientes: [luis] });
-  const r = await pedirTarjeta(m.deps, { shop: SHOP, phone: luis.phone });
-  assert.equal(r.canal, "whatsapp");
-  assert.ok(r.enviar, "hay un envío pendiente");
-  assert.equal(m.enviados.length, 0, "no sale hasta que la ruta lo corre después de responder");
-  await r.enviar!();
-  assert.equal(m.enviados.length, 1);
-  const e = m.enviados[0];
-  assert.equal(e.barbershopId, SHOP.id);
-  assert.equal(e.phone, "5512345678");
-  assert.equal(e.firstName, "Luis");
-  assert.match(e.url, /^https:\/\/www\.dalecontrol\.com\/b\/el-corte\/tarjeta\/[^/]+$/);
-  const token = e.url.split("/tarjeta/")[1];
+  const r = await buscarTarjeta(m.deps, { shop: SHOP, phone: luis.phone });
+  assert.equal(r.estado, "encontrada");
+  if (r.estado !== "encontrada") return;
+  assert.equal(r.view.firstName, "Luis");
+  assert.equal(r.view.stars, 4);
+  assert.match(r.ruta, /^\/b\/el-corte\/tarjeta\/[^/]+$/);
+  const token = r.ruta.split("/tarjeta/")[1];
   assert.deepEqual(await resolveCardToken(m.db as never, SHOP.id, token), { clientId: luis.id });
-  assert.equal(await resolveCardToken(m.db as never, OTRA.id, token), null, "no sirve en otra barbería");
+  assert.equal(await resolveCardToken(m.db as never, OTRA.id, token), null, "el enlace no sirve en otra barbería");
+  assert.deepEqual(m.vistasPedidas, [{ barbershopId: SHOP.id, clientId: luis.id, audience: "client" }], "la vista es la del CLIENTE, no la del personal");
 });
 
-test("la respuesta es la MISMA exista o no el cliente", async () => {
-  const si = await pedirTarjeta(mundo({ clientes: [luis] }).deps, { shop: SHOP, phone: luis.phone });
+test("🔒 lo que vuelve al navegador no lleva ni el teléfono ni el apellido ni el id suelto", async () => {
   const m = mundo({ clientes: [luis] });
-  const no = await pedirTarjeta(m.deps, { shop: SHOP, phone: "5599999999" });
-  assert.equal(no.canal, si.canal);
-  assert.equal(no.enviar, null);
-  assert.equal(m.enviados.length, 0);
-  // Y el trabajo previo es el mismo: los dos frenos y una consulta en los dos casos.
-  assert.equal(m.consultas(), 1);
-  assert.equal(m.frenos.length, 2);
-});
-
-test("lo que vuelve a la ruta no lleva ni el enlace ni el nombre", async () => {
-  const r = await pedirTarjeta(mundo({ clientes: [luis] }).deps, { shop: SHOP, phone: luis.phone });
-  assert.deepEqual(Object.keys(r).sort(), ["canal", "enviar"]);
-  assert.equal(JSON.stringify(r), '{"canal":"whatsapp"}', "al serializar solo queda el canal");
-});
-
-test("cliente de OTRA barbería con el mismo teléfono: no se manda", async () => {
-  const m = mundo({ clientes: [{ ...luis, barbershopId: OTRA.id }] });
-  const r = await pedirTarjeta(m.deps, { shop: SHOP, phone: luis.phone });
-  assert.deepEqual({ canal: r.canal, enviar: r.enviar }, { canal: "whatsapp", enviar: null });
-});
-
-test("bloqueado o dado de baja de WhatsApp: misma respuesta, sin envío", async () => {
-  for (const c of [
-    { ...luis, blockedAt: new Date() },
-    { ...luis, preferences: { [BARBER_WA_OPT_OUT_KEY]: { at: "2026-11-01T00:00:00.000Z" } } },
-  ]) {
-    const m = mundo({ clientes: [c] });
-    const r = await pedirTarjeta(m.deps, { shop: SHOP, phone: c.phone });
-    assert.deepEqual({ canal: r.canal, enviar: r.enviar }, { canal: "whatsapp", enviar: null });
+  const r = await buscarTarjeta(m.deps, { shop: SHOP, phone: luis.phone });
+  const texto = JSON.stringify(r);
+  assert.ok(!texto.includes("5512345678"), "el teléfono no vuelve");
+  assert.ok(!/Pérez|Gómez/.test(texto), "el apellido no vuelve");
+  assert.deepEqual(Object.keys(r).sort(), ["estado", "ruta", "view"]);
+  if (r.estado === "encontrada") {
+    assert.deepEqual(
+      Object.keys(r.view).sort(),
+      ["available", "catalog", "enabled", "firstName", "history", "next", "slots", "stars", "usedCount"],
+      "solo la tarjeta: estrellas, bonos e historial de estrellas",
+    );
   }
 });
 
-test("freno por número: pasado el tope no sale, y la respuesta no cambia", async () => {
+test("un número que no es de un cliente: «no», sin vista ni enlace", async () => {
+  const m = mundo({ clientes: [luis] });
+  const r = await buscarTarjeta(m.deps, { shop: SHOP, phone: "5599999999" });
+  assert.deepEqual(r, { estado: "no" });
+  assert.equal(m.vistasPedidas.length, 0);
+});
+
+test("🔒 el mismo teléfono en OTRA barbería no existe para esta consulta", async () => {
+  const m = mundo({ clientes: [{ ...luis, barbershopId: OTRA.id }] });
+  assert.deepEqual(await buscarTarjeta(m.deps, { shop: SHOP, phone: luis.phone }), { estado: "no" });
+  assert.equal(m.vistasPedidas.length, 0);
+});
+
+test("cliente bloqueado: «no», igual que el enlace por QR", async () => {
+  const m = mundo({ clientes: [{ ...luis, blockedAt: new Date() }] });
+  assert.deepEqual(await buscarTarjeta(m.deps, { shop: SHOP, phone: luis.phone }), { estado: "no" });
+  assert.equal(m.vistasPedidas.length, 0);
+});
+
+test("barbería sin estrellas: «apagada», sin frenos ni consulta", async () => {
+  const m = mundo({ estrellas: false, clientes: [luis] });
+  assert.deepEqual(await buscarTarjeta(m.deps, { shop: SHOP, phone: luis.phone }), { estado: "apagada" });
+  assert.equal(m.consultas(), 0);
+  assert.equal(m.frenos.length, 0);
+  // Y si la vista dice que está apagada (carrera con el interruptor), tampoco se enseña.
+  const m2 = mundo({ clientes: [luis], vistaDe: (c) => vista(c, { enabled: false }) });
+  assert.deepEqual(await buscarTarjeta(m2.deps, { shop: SHOP, phone: luis.phone }), { estado: "apagada" });
+});
+
+test("freno por número: pasado el tope NO se mira la base", async () => {
   const m = mundo({ clientes: [luis], pasa: false });
-  const r = await pedirTarjeta(m.deps, { shop: SHOP, phone: luis.phone });
-  assert.deepEqual({ canal: r.canal, enviar: r.enviar }, { canal: "whatsapp", enviar: null });
+  assert.deepEqual(await buscarTarjeta(m.deps, { shop: SHOP, phone: luis.phone }), { estado: "frenado" });
+  assert.equal(m.consultas(), 0, "quien insiste con un número no llega a consultarlo");
   assert.deepEqual(m.frenos, [
     { key: `barber-tarjeta:${SHOP.id}:5512345678`, limit: TARJETA_PHONE_LIMIT.limit, windowSec: TARJETA_PHONE_LIMIT.windowSec },
     { key: `barber-tarjeta:${SHOP.id}:5512345678:dia`, limit: TARJETA_PHONE_DAY_LIMIT.limit, windowSec: TARJETA_PHONE_DAY_LIMIT.windowSec },
   ]);
-  assert.equal(m.consultas(), 1, "la consulta se hace igual: el tiempo no delata el tope");
 });
 
-test("tope del día: aunque la hora deje pasar, con el día agotado no sale", async () => {
+test("tope del día: aunque la hora deje pasar, con el día agotado no se enseña", async () => {
   const m = mundo({ clientes: [luis], pasa: (key) => !key.endsWith(":dia") });
-  const r = await pedirTarjeta(m.deps, { shop: SHOP, phone: luis.phone });
-  assert.deepEqual({ canal: r.canal, enviar: r.enviar }, { canal: "whatsapp", enviar: null });
-  assert.ok(TARJETA_PHONE_DAY_LIMIT.limit <= 5 && TARJETA_PHONE_LIMIT.limit <= 3, "topes pensados para una persona, no para una campaña");
+  assert.deepEqual(await buscarTarjeta(m.deps, { shop: SHOP, phone: luis.phone }), { estado: "frenado" });
 });
 
-test("enlace revocado: el que se manda lleva la versión vigente", async () => {
+test("los topes: por IP corto para que no se prueben números en serie; por número, de uso normal", () => {
+  assert.ok(TARJETA_IP_LIMIT.limit <= 15 && TARJETA_IP_LIMIT.windowSec >= 600);
+  assert.ok(TARJETA_PHONE_LIMIT.limit <= 12 && TARJETA_PHONE_LIMIT.windowSec === 3600);
+  assert.ok(TARJETA_PHONE_DAY_LIMIT.limit <= 40 && TARJETA_PHONE_DAY_LIMIT.windowSec === 86_400);
+});
+
+test("enlace revocado: el que se devuelve lleva la versión vigente", async () => {
   const c = { ...luis, preferences: { __card: { v: 3 } } };
   const m = mundo({ clientes: [c] });
-  const r = await pedirTarjeta(m.deps, { shop: SHOP, phone: c.phone });
-  await r.enviar!();
-  const token = m.enviados[0].url.split("/tarjeta/")[1];
+  const r = await buscarTarjeta(m.deps, { shop: SHOP, phone: c.phone });
+  assert.equal(r.estado, "encontrada");
+  if (r.estado !== "encontrada") return;
+  const token = r.ruta.split("/tarjeta/")[1];
   assert.equal(token.split(".")[1], "3");
   assert.deepEqual(await resolveCardToken(m.db as never, SHOP.id, token), { clientId: c.id });
 });
 
-test("turista (+E.164): se busca y se manda tal como está guardado", async () => {
+test("turista (+E.164): se busca tal como está guardado", async () => {
   const c = { ...luis, id: "cli_ana00001", phone: "+34612345678", name: "Ana" };
   const m = mundo({ clientes: [c] });
-  const r = await pedirTarjeta(m.deps, { shop: SHOP, phone: "+34612345678" });
-  await r.enviar!();
-  assert.equal(m.enviados[0].phone, "+34612345678");
+  const r = await buscarTarjeta(m.deps, { shop: SHOP, phone: "+34612345678" });
+  assert.equal(r.estado, "encontrada");
   assert.equal(m.frenos[0].key, `barber-tarjeta:${SHOP.id}:34612345678`);
 });
 
-test("si Meta falla al mandar, el envío diferido no lanza", async () => {
-  const m = mundo({ clientes: [luis], sendFalla: true });
-  const r = await pedirTarjeta(m.deps, { shop: SHOP, phone: luis.phone });
-  const original = console.error;
-  console.error = () => {};
-  try {
-    await assert.doesNotReject(r.enviar!());
-  } finally {
-    console.error = original;
-  }
+test("sin barbería o sin teléfono: «no», sin tocar nada", async () => {
+  const m = mundo({ clientes: [luis] });
+  assert.deepEqual(await buscarTarjeta(m.deps, { shop: { id: "", slug: "x" }, phone: luis.phone }), { estado: "no" });
+  assert.deepEqual(await buscarTarjeta(m.deps, { shop: SHOP, phone: "" }), { estado: "no" });
+  assert.equal(m.consultas(), 0);
 });
 
 test("quien ya entró a «Mi cuenta» va directo a SU tarjeta", async () => {
@@ -227,13 +235,55 @@ test("quien ya entró a «Mi cuenta» va directo a SU tarjeta", async () => {
   assert.equal(await rutaTarjetaDeSesion(m.db as never, SHOP, ""), null);
 });
 
-test("la plantilla de WhatsApp cumple las reglas de Meta y es de utilidad", () => {
-  const tpl = barberWaTemplate("starsCardRequest");
-  assert.equal(tpl.name, "dc_barber_mi_tarjeta");
-  assert.equal(tpl.category, "UTILITY");
-  assert.equal(tpl.optional, false);
-  assert.equal(checkBarberWaTemplate(tpl), null);
-  assert.equal(countBarberWaVariables(tpl.body), 3);
-  assert.deepEqual(tpl.variables, ["cliente", "barbería", "enlace de su tarjeta"]);
-  assert.match(tpl.sample[2], /^https:\/\//);
+// ── El número recordado en el navegador ─────────────────────────────────
+
+test("número recordado: se guarda por barbería y se lee solo si tiene buena forma", () => {
+  assert.equal(claveNumeroRecordado("el-corte"), "dcb-mi-tarjeta:el-corte");
+  const ida = serializarNumeroRecordado({ iso: "MX", phone: "5512345678" });
+  assert.deepEqual(leerNumeroRecordado(ida), { iso: "MX", phone: "5512345678" });
+  assert.deepEqual(leerNumeroRecordado('{"iso":"ES","phone":"612345678","extra":"x"}'), { iso: "ES", phone: "612345678" });
+  for (const malo of [
+    null,
+    "",
+    "no es json",
+    "{}",
+    '{"iso":"mx","phone":"5512345678"}',
+    '{"iso":"MX","phone":"55-1234"}',
+    '{"iso":"MX","phone":"123"}',
+    '{"iso":"MX","phone":5512345678}',
+    '{"iso":"<script>","phone":"5512345678"}',
+    `{"iso":"MX","phone":"${"9".repeat(70)}"}`,
+  ]) {
+    assert.equal(leerNumeroRecordado(malo), null, String(malo));
+  }
+});
+
+// ── Lo que ya NO existe ─────────────────────────────────────────────────
+
+test("no queda plantilla de WhatsApp de «Mi tarjeta» en el catálogo (sin costo de Meta)", () => {
+  assert.ok(!BARBER_WA_TEMPLATES.some((t) => t.name === "dc_barber_mi_tarjeta" || (t.kind as string) === "starsCardRequest"));
+});
+
+test("«Mi tarjeta» no importa WhatsApp ni manda nada", () => {
+  const raiz = join(__dirname, "..", "..", "..");
+  for (const archivo of [
+    "lib/barber/tarjeta-web.ts",
+    "lib/barber/tarjeta-web-core.ts",
+    "app/api/barber/public/tarjeta/[slug]/route.ts",
+    "app/b/[slug]/mi-tarjeta/page.tsx",
+    "components/barber/stars/mi-tarjeta-form.tsx",
+  ]) {
+    const src = readFileSync(join(raiz, archivo), "utf8");
+    assert.ok(!/from "@\/lib\/barber\/whatsapp"/.test(src), `${archivo} no debe importar el envío de WhatsApp`);
+    assert.ok(!/sendBarber|sendTemplate|after\(/.test(src), `${archivo} no debe mandar ni diferir nada`);
+  }
+});
+
+test("la ruta contesta sin caché, sin Referer y fuera de buscadores", () => {
+  const src = readFileSync(join(__dirname, "..", "..", "..", "app/api/barber/public/tarjeta/[slug]/route.ts"), "utf8");
+  assert.match(src, /"Cache-Control": "private, no-store"/);
+  assert.match(src, /"Referrer-Policy": "no-referrer"/);
+  assert.match(src, /"X-Robots-Tag": "noindex, nofollow"/);
+  assert.match(src, /persistentRateLimit\(req/);
+  assert.match(src, /checkBarberCaptcha\(req, body\.captchaToken, BARBER_CAPTCHA_ACTIONS\.starsCard\)/);
 });

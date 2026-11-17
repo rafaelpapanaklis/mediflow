@@ -39,7 +39,7 @@ beforeEach(() => {
 const altas = () =>
   graph.filter((c) => c.method === "POST" && c.url.endsWith("/message_templates")).map((c) => c.body);
 
-test("Meta rechaza la de AUTENTICACIÓN: las otras 5 entran y la pantalla recibe el motivo completo", { skip }, async () => {
+test("Meta rechaza la de AUTENTICACIÓN: las otras 4 entran y la pantalla recibe el motivo completo", { skip }, async () => {
   const t = await crearTienda();
   onGraph((call) => {
     if (call.method === "GET" && call.url.includes("/message_templates")) return { status: 200, json: { data: [] } };
@@ -63,7 +63,7 @@ test("Meta rechaza la de AUTENTICACIÓN: las otras 5 entran y la pantalla recibe
 
   const r = await provisionBarberTemplates(t.id);
   assert.equal(r.ok, true);
-  assert.equal(r.created.length, 5, JSON.stringify(r.created)); // 4 de siempre + «Mi tarjeta» (ws6-t2)
+  assert.equal(r.created.length, 4, JSON.stringify(r.created));
   assert.equal(r.failed.length, 1);
   const f = r.failed[0];
   assert.equal(f.name, "dc_barber_codigo_acceso");

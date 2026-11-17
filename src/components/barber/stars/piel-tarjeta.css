@@ -1,0 +1,426 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   LA TARJETA DE ESTRELLAS CON LA PIEL DE LA PLANTILLA (ws6-t2).
+
+   «Mi tarjeta» (/b/<slug>/mi-tarjeta) y la tarjeta por enlace
+   (/b/<slug>/tarjeta/<token>) se visten como la página de la barbería:
+   Oficio, Barrio o Revista, con su acento.
+
+   CÓMO: `.dcb-piel` vive DENTRO de `.barber-shell` y vuelve a declarar los
+   tokens del tema (--bg, --text-*, --caramel-*, --brand…). Todo lo de
+   adentro —la tarjeta (stars.module.css), los botones y campos de
+   barber-public.css, el aviso de instalar— ya se pinta con esos tokens, así
+   que cambia de piel sin tocar ninguno de esos archivos.
+
+   Las fuentes son las MISMAS de las plantillas (autoalojadas en
+   /barber/fuentes); se declaran aquí otra vez, con el mismo nombre, para no
+   cargar skins.css entero en una página que no pinta la plantilla.
+
+   Todo en px y con @container, como barber-public.css.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+@font-face {
+  font-family: "DCBW Abril Fatface";
+  src: url("/barber/fuentes/abril-fatface-400.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "DCBW Libre Franklin";
+  src: url("/barber/fuentes/libre-franklin-400-700.woff2") format("woff2");
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "DCBW Archivo";
+  src: url("/barber/fuentes/archivo-400-900.woff2") format("woff2");
+  font-weight: 400 900;
+  font-stretch: 62% 125%;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "DCBW Revista Serif";
+  src: url("/barber/fuentes/newsreader-300-400.woff2") format("woff2");
+  font-weight: 300 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "DCBW Revista Sans";
+  src: url("/barber/fuentes/hanken-grotesk-400-600.woff2") format("woff2");
+  font-weight: 400 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ── Base: lo que comparten las tres pieles ──────────────────────────── */
+
+.barber-shell .dcb-piel {
+  /* Los cuatro tonos del acento llegan por `style` (piel-tarjeta.tsx). */
+  --piel-acento: #be7a3c;
+  --piel-acento-fuerte: #a2612f;
+  --piel-acento-suave: #f6eadc;
+  --piel-acento-claro: #ddb587;
+
+  /* La rampa «caramelo» del tema pasa a ser el acento de la barbería. */
+  --caramel-50: var(--piel-acento-suave);
+  --caramel-100: var(--piel-acento-suave);
+  --caramel-300: var(--piel-acento-claro);
+  --caramel-400: var(--piel-acento-claro);
+  --caramel-500: var(--piel-acento);
+  --caramel-600: var(--piel-acento-fuerte);
+  --caramel-700: color-mix(in srgb, var(--piel-acento-fuerte) 86%, #000);
+  --brand: var(--piel-acento-fuerte);
+  --brand-400: var(--piel-acento-claro);
+  --brand-700: color-mix(in srgb, var(--piel-acento-fuerte) 86%, #000);
+  --brand-soft: color-mix(in srgb, var(--piel-acento) 14%, transparent);
+  --brand-softer: color-mix(in srgb, var(--piel-acento) 7%, var(--bg-elev));
+  --border-brand: color-mix(in srgb, var(--piel-acento) 42%, transparent);
+  --bg-hover: color-mix(in srgb, var(--piel-acento) 8%, transparent);
+  --ring: 0 0 0 3px color-mix(in srgb, var(--piel-acento) 40%, transparent);
+
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text-1);
+  font-family: var(--piel-texto);
+}
+
+.barber-shell .dcb-piel .dcb-public {
+  min-height: 0;
+  padding-top: 4px;
+  font-family: var(--piel-texto);
+}
+
+/* La barra de la barbería: su marca, como en su página. */
+.dcb-piel__barra {
+  display: flex;
+  align-items: center;
+  min-height: 60px;
+  padding: 8px 16px;
+  background: var(--piel-barra);
+  color: var(--piel-sobre-barra);
+  border-bottom: 1px solid var(--piel-linea-barra);
+}
+
+.dcb-piel__barra-in {
+  width: 100%;
+  max-width: 560px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.dcb-piel__marca {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  min-height: 44px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.dcb-piel__logo {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--piel-radio-logo);
+  object-fit: cover;
+}
+
+.dcb-piel__logo--letra {
+  display: grid;
+  place-items: center;
+  background: var(--piel-acento-fuerte);
+  color: #fff;
+  font: var(--piel-peso-rotulo) 19px/1 var(--piel-rotulo);
+}
+
+.dcb-piel__nombre {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font: var(--piel-peso-rotulo) 19px/1.1 var(--piel-rotulo);
+  letter-spacing: var(--piel-tracking);
+  text-transform: var(--piel-caja);
+  font-stretch: var(--piel-ancho);
+}
+
+/* La sucursal cede antes que el nombre de la barbería. */
+.dcb-piel__sede {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 34%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 12.5px;
+  color: var(--piel-sobre-barra-suave);
+}
+
+.dcb-piel__marca:focus-visible {
+  outline: 3px solid var(--piel-acento-claro);
+  outline-offset: 3px;
+  border-radius: 8px;
+}
+
+/* El filete de la plantilla bajo la barra (el poste de barbero en Oficio). */
+.dcb-piel__filete {
+  height: var(--piel-filete-alto);
+  background: var(--piel-filete);
+}
+
+/* Títulos con la letra de rótulo de la plantilla. */
+.barber-shell .dcb-piel .dcb-title,
+.dcb-piel__hola {
+  margin: 0;
+  font-family: var(--piel-rotulo);
+  font-weight: var(--piel-peso-rotulo);
+  font-stretch: var(--piel-ancho);
+  letter-spacing: var(--piel-tracking);
+  text-transform: var(--piel-caja);
+  color: var(--text-1);
+}
+
+.barber-shell .dcb-piel .dcb-title {
+  font-size: var(--piel-titulo);
+  line-height: 1.08;
+}
+
+.dcb-piel__saludo {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 22px 0 14px;
+}
+
+.dcb-piel__hola {
+  font-size: var(--piel-hola);
+  line-height: 1;
+  overflow-wrap: anywhere;
+}
+
+.dcb-piel__sub {
+  margin: 6px 0 0;
+  font-size: 14px;
+  color: var(--text-2);
+}
+
+.barber-shell .dcb-piel .dcb-piel__nosoy {
+  flex: none;
+  min-height: 44px;
+  padding: 0 4px;
+  font-size: 14px;
+}
+
+.dcb-piel__recordar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  margin: -4px 0 10px;
+  font-size: 14px;
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.dcb-piel__recordar input {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  accent-color: var(--piel-acento-fuerte);
+}
+
+/* El pie y las ligas de texto, con contraste AA sobre el fondo de cada piel. */
+.barber-shell .dcb-piel .dcb-foot,
+.barber-shell .dcb-piel .dcb-foot a {
+  color: var(--text-2);
+}
+
+.barber-shell .dcb-piel .dcb-link {
+  color: var(--piel-liga);
+}
+
+.dcb-piel__enlace {
+  margin-top: 16px;
+}
+
+.dcb-piel__enlace-titulo {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+
+.dcb-piel__enlace-botones {
+  display: grid;
+  gap: 10px;
+}
+
+.dcb-piel__salidas {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+@container dcb (min-width: 480px) {
+  .dcb-piel__enlace-botones {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* ── OFICIO: noche y papel, letra de rótulo, poste de barbero ─────────── */
+
+.barber-shell .dcb-piel--oficio {
+  --bg: #f1e9db;
+  --bg-elev: #fbf6ec;
+  --bg-elev-2: #ede2cf;
+  --text-1: #221813;
+  --text-2: #5c4c41;
+  --text-3: #74655a;
+  --text-4: #a39485;
+  --border-soft: rgba(34, 24, 19, 0.16);
+  --border-strong: rgba(34, 24, 19, 0.3);
+
+  --piel-barra: #1c1410;
+  --piel-sobre-barra: #f3ebdd;
+  --piel-sobre-barra-suave: #c2b3a1;
+  --piel-linea-barra: rgba(243, 235, 221, 0.2);
+  --piel-rotulo: "DCBW Abril Fatface", "Bodoni 72", Didot, Georgia, serif;
+  --piel-texto: "DCBW Libre Franklin", "Franklin Gothic Medium", "Helvetica Neue", Arial, sans-serif;
+  --piel-peso-rotulo: 400;
+  --piel-ancho: normal;
+  --piel-tracking: 0;
+  --piel-caja: none;
+  --piel-titulo: 28px;
+  --piel-hola: 40px;
+  --piel-radio-logo: 50%;
+  --piel-liga: color-mix(in srgb, var(--piel-acento-fuerte) 80%, #221813);
+  --piel-filete-alto: 8px;
+  --piel-filete: repeating-linear-gradient(
+    -45deg,
+    var(--piel-acento) 0 12px,
+    #f1e9db 12px 24px,
+    #1c1410 24px 36px,
+    #f1e9db 36px 48px
+  );
+}
+
+/* ── BARRIO: negro, concreto y letra de cartel ────────────────────────── */
+
+.barber-shell .dcb-piel--barrio {
+  --bg: #0c0c0c;
+  --bg-elev: #1a1a1a;
+  --bg-elev-2: #242424;
+  --text-1: #f6f5f0;
+  --text-2: #c9c7c1;
+  --text-3: #a09e98;
+  --text-4: #75736e;
+  --border-soft: rgba(246, 245, 240, 0.16);
+  --border-strong: rgba(246, 245, 240, 0.32);
+
+  /* Sobre negro, las piezas «llenas» van en el acento claro para que se lean. */
+  --caramel-50: color-mix(in srgb, var(--piel-acento) 22%, #141414);
+  --caramel-100: color-mix(in srgb, var(--piel-acento) 22%, #141414);
+  --caramel-300: color-mix(in srgb, var(--piel-acento) 60%, #141414);
+  --caramel-400: var(--piel-acento-claro);
+  --caramel-500: var(--piel-acento-claro);
+  --brand-700: var(--piel-acento-claro);
+  --brand-softer: color-mix(in srgb, var(--piel-acento) 16%, #141414);
+  --border-brand: color-mix(in srgb, var(--piel-acento) 60%, #141414);
+
+  --piel-barra: #0c0c0c;
+  --piel-sobre-barra: #f6f5f0;
+  --piel-sobre-barra-suave: #a9a7a1;
+  --piel-linea-barra: rgba(246, 245, 240, 0.18);
+  --piel-rotulo: "DCBW Archivo", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+  --piel-texto: "DCBW Archivo", "Helvetica Neue", Arial, sans-serif;
+  --piel-peso-rotulo: 900;
+  --piel-ancho: 70%;
+  --piel-tracking: 0.01em;
+  --piel-caja: uppercase;
+  --piel-titulo: 34px;
+  --piel-hola: 56px;
+  --piel-radio-logo: 9px;
+  --piel-liga: var(--piel-acento-claro);
+  --piel-filete-alto: 6px;
+  --piel-filete: var(--piel-acento);
+}
+
+/* El «costo» y el «+1» de la tarjeta usan --caramel-600 como TEXTO: sobre
+   negro tiene que ser el acento claro. Los botones siguen con el fuerte
+   (texto blanco), por eso se cambia aquí y no en el token. */
+.barber-shell .dcb-piel--barrio .dcb-public {
+  --caramel-600: var(--piel-acento-claro);
+  --caramel-700: var(--piel-acento-claro);
+}
+
+.barber-shell .dcb-piel--barrio .dcb-btn--primary {
+  --caramel-600: var(--piel-acento-fuerte);
+  --caramel-700: color-mix(in srgb, var(--piel-acento-fuerte) 86%, #000);
+}
+
+.barber-shell .dcb-piel--barrio .dcb-piel__nombre {
+  font-stretch: 110%;
+}
+
+.barber-shell .dcb-piel--barrio .dcb-input {
+  color: var(--text-1);
+  background: var(--bg-elev-2);
+}
+
+/* ── REVISTA: papel claro, serif ligera y mucho aire ──────────────────── */
+
+.barber-shell .dcb-piel--revista {
+  --bg: #f3f2ee;
+  --bg-elev: #fbfaf7;
+  --bg-elev-2: #eceae4;
+  --text-1: #1b1d1a;
+  --text-2: #50534d;
+  --text-3: #6f726b;
+  --text-4: #a3a69e;
+  --border-soft: rgba(27, 29, 26, 0.14);
+  --border-strong: rgba(27, 29, 26, 0.32);
+
+  --piel-barra: #f3f2ee;
+  --piel-sobre-barra: #1b1d1a;
+  --piel-sobre-barra-suave: #6f726b;
+  --piel-linea-barra: rgba(27, 29, 26, 0.14);
+  --piel-rotulo: "DCBW Revista Serif", "Iowan Old Style", Georgia, serif;
+  --piel-texto: "DCBW Revista Sans", "Helvetica Neue", Arial, sans-serif;
+  --piel-peso-rotulo: 300;
+  --piel-ancho: normal;
+  --piel-tracking: -0.02em;
+  --piel-caja: none;
+  --piel-titulo: 32px;
+  --piel-hola: 46px;
+  --piel-radio-logo: 0;
+  --piel-liga: color-mix(in srgb, var(--piel-acento-fuerte) 80%, #1b1d1a);
+  --piel-filete-alto: 0px;
+  --piel-filete: transparent;
+}
+
+.barber-shell .dcb-piel--revista .dcb-piel__nombre {
+  font-size: 22px;
+}
+
+.barber-shell .dcb-piel--revista .dcb-card,
+.barber-shell .dcb-piel--revista .dcb-btn {
+  border-radius: 999px;
+}
+
+.barber-shell .dcb-piel--revista .dcb-card {
+  border-radius: 28px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .barber-shell .dcb-piel * {
+    scroll-behavior: auto;
+  }
+}

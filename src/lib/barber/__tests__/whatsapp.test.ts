@@ -103,8 +103,6 @@ test("todo lo transaccional es `utility` — nada se cuela como marketing", () =
     // Promoción real, y solo eso.
     birthday: "MARKETING",
     winback: "MARKETING",
-    // «Mi tarjeta» (ws6-t2): el cliente la pidió en la página; no es promoción.
-    starsCardRequest: "UTILITY",
   };
   for (const tpl of BARBER_WA_TEMPLATES) {
     assert.equal(tpl.category, esperado[tpl.kind], `plantilla ${tpl.kind}`);
@@ -191,9 +189,7 @@ test("🔴 CONTRATO: la cantidad de variables es la que pasa el emisor (132000)"
   //   walkinTurn        → [shop.name, row.body]         son 2
   //   portalCode        → [code]                        es 1
   //   birthday/winback  → [cliente, barbería, promo]    son 3
-  //   starsCardRequest  → sendBarberMiTarjeta()         [cliente, barbería, enlace] son 3
   const contrato: Record<string, number> = {
-    starsCardRequest: 3,
     reminder: 6,
     // La de botones lleva los MISMOS seis parámetros (reminderParamsFrom).
     reminderButtons: 6,

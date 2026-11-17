@@ -47,7 +47,7 @@ export const BARBER_CAPTCHA_ACTIONS = {
   /** Apartar un producto en /b/<slug>/tienda (ws6-t1). */
   shopOrder: "barber-shop-order",
   /** Pedir «Mi tarjeta» de estrellas en /b/<slug>/mi-tarjeta (ws6-t2). */
-  starsCard: "barber-stars-card", // (acción de captcha: nada que ver con la plantilla de WhatsApp)
+  starsCard: "barber-stars-card",
 } as const;
 
 export type BarberCaptchaAction =
