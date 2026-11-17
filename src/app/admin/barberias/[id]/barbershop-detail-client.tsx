@@ -38,6 +38,7 @@ import { BARBER_ROLE_LABELS, type BarberRole } from "@/lib/barber/types";
 import { isBarberUnlimited } from "@/lib/barber/plan-shared";
 import type { AdminBarbershopDetail } from "@/lib/barber/admin";
 import type { PagosBarberiaDTO } from "@/lib/barber/admin-pagos-core";
+import type { OrigenBarberiaDTO } from "@/lib/barber/admin-origen";
 import {
   COBRO_FACE,
   MANUAL_ACTION_LABELS,
@@ -75,10 +76,13 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 export function AdminBarbershopDetailClient({
   detail,
   pagos = null,
+  origen = null,
 }: {
   detail: AdminBarbershopDetail;
   /** Cobros de la suscripción a DaleControl (admin-pagos.ts); null = no se pudieron leer. */
   pagos?: PagosBarberiaDTO | null;
+  /** De dónde llegó (admin-origen.ts); null = no se pudo leer. */
+  origen?: OrigenBarberiaDTO | null;
 }) {
   const router = useRouter();
   const [action, setAction] = useState<ManualActionKind | null>(null);
@@ -216,6 +220,26 @@ export function AdminBarbershopDetailClient({
                 </span>
               </Field>
               <Field label="Tamaño declarado">{shop.teamSize || "—"}</Field>
+              {/* Como «Origen» de la ficha de clínica: aquí solo existe el socio que la refirió (ws6-t1). */}
+              <Field label="Origen">
+                {origen === null || !origen.disponible ? (
+                  <span title="Sin la tabla de socios (sql/barber_afiliados.sql) no se sabe">Sin dato</span>
+                ) : origen.referida ? (
+                  <>
+                    Referida por{" "}
+                    <Link href={`/admin/barberias/${origen.referida.porId}`}>{origen.referida.porNombre}</Link>
+                    <div className="dcba-note">
+                      código <span className="mono">{origen.referida.codigo}</span> · {shortDate(origen.referida.alta)}
+                      {origen.referida.primerPago ? ` · pagó desde ${shortDate(origen.referida.primerPago)}` : " · aún no paga"}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    Directo
+                    <div className="dcba-note">sin socio que la refiriera (el alta no guarda anuncio ni UTM)</div>
+                  </>
+                )}
+              </Field>
               <Field label="Mini-web">
                 <a
                   href={`/b/${shop.slug}`}
