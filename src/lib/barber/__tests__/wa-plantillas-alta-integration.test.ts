@@ -39,7 +39,7 @@ beforeEach(() => {
 const altas = () =>
   graph.filter((c) => c.method === "POST" && c.url.endsWith("/message_templates")).map((c) => c.body);
 
-test("Meta rechaza la de AUTENTICACIÓN: las otras 5 entran y la pantalla recibe el motivo completo", { skip }, async () => {
+test("Meta rechaza la de AUTENTICACIÓN: las otras 6 entran y la pantalla recibe el motivo completo", { skip }, async () => {
   const t = await crearTienda();
   onGraph((call) => {
     if (call.method === "GET" && call.url.includes("/message_templates")) return { status: 200, json: { data: [] } };
@@ -63,8 +63,10 @@ test("Meta rechaza la de AUTENTICACIÓN: las otras 5 entran y la pantalla recibe
 
   const r = await provisionBarberTemplates(t.id);
   assert.equal(r.ok, true);
-  // 5 de utilidad: las 4 de siempre + la tarjeta de estrellas tras el cobro (ws6-t1, 16-nov).
-  assert.equal(r.created.length, 5, JSON.stringify(r.created));
+  // 6 de utilidad: las 4 de siempre + la tarjeta de estrellas tras el cobro (ws6-t1, 16-nov)
+  // + el aviso «pedido nuevo» al dueño (ws6-t6, feat/barber-pedidos-aviso). Unión pase 26 (ws6-t4):
+  // cada rama contaba solo la suya; pedidos-aviso no había tocado esta prueba.
+  assert.equal(r.created.length, 6, JSON.stringify(r.created));
   assert.equal(r.failed.length, 1);
   const f = r.failed[0];
   assert.equal(f.name, "dc_barber_codigo_acceso");
@@ -109,7 +111,7 @@ test("sin respuesta de Meta en el alta: queda como fallo de red, no se pierde", 
 
 const G = "https://graph.facebook.com/v19.0";
 const CODIGO = "dc_barber_codigo_acceso";
-const UTILES = ["dc_barber_recordatorio_cita_botones", "dc_barber_recordatorio_cita", "dc_barber_turno_fila", "dc_barber_reserva_confirmada", "dc_barber_tarjeta_estrellas"];
+const UTILES = ["dc_barber_recordatorio_cita_botones", "dc_barber_recordatorio_cita", "dc_barber_turno_fila", "dc_barber_reserva_confirmada", "dc_barber_tarjeta_estrellas", "dc_barber_pedido_nuevo_dueno"];
 const tpl = (name: string, status = "APPROVED", language = "es_MX") => ({ name, status, language, category: "UTILITY", rejected_reason: "NONE" });
 
 /**
