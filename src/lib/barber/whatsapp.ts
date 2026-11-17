@@ -30,6 +30,18 @@ import {
   type BarberBotOption,
 } from "@/lib/barber/bot-core";
 import { mxTenDigits } from "@/lib/phone-mx";
+import { saleStarsOutcome, type SaleStarsOutcome } from "@/lib/barber/stars-core";
+import {
+  STARS_CARD_MARK_PREFIX,
+  absoluteCardUrl,
+  isStarsCardRow,
+  originOfFirstLink,
+  renderStarsCardText,
+  saleIdOfStarsCardRow,
+  starsCardParams,
+  starsCardRowMayUseTemplate,
+  starsCardTotal,
+} from "@/lib/barber/tarjeta-cobro-core";
 import { getBarberPlan } from "@/lib/barber/plans";
 import { isBarbershopSubscriptionActive, barberPlanHasFeature } from "@/lib/barber/plan-shared";
 import {
@@ -218,6 +230,8 @@ export interface BarberWaCredentials {
 type ShopWaRow = {
   id: string;
   name: string;
+  /** Para el enlace de la tarjeta de estrellas (/b/<slug>/tarjeta/…). */
+  slug: string;
   timezone: string;
   locale: string;
   address: string | null;
@@ -241,6 +255,7 @@ type ShopWaRow = {
 const SHOP_WA_SELECT = {
   id: true,
   name: true,
+  slug: true,
   timezone: true,
   locale: true,
   address: true,
@@ -1175,6 +1190,8 @@ function outboxKindOf(templateName: string | null): BarberOutboxKind {
   if (templateName === barberWaTemplate("bookingConfirmed").name) return "bookingConfirmed";
   // El aviso «pedido nuevo» al DUEÑO (pedido-avisos-wa-core.ts).
   if (templateName === barberWaTemplate("ownerOrder").name) return "ownerOrder";
+  // La tarjeta de estrellas tras el cobro (ws6-t1): marca auto:tarjeta:<ticket>.
+  if (isStarsCardRow(templateName)) return "starsCard";
   return "other";
 }
 
@@ -1193,6 +1210,7 @@ function planDelivery(
   row: OutboxRow,
   kind: BarberOutboxKind,
   appt: ApptForMessage | null,
+  stars: SaleStarsOutcome | null = null,
 ): {
   text: string | null;
   template: { tpl: BarberWaTemplate; params: string[] } | null;
@@ -1228,6 +1246,27 @@ function planDelivery(
         payloads: buttons.map((b) => b.id),
       },
     };
+  }
+  if (kind === "starsCard" && stars) {
+    // Las estrellas se RECUENTAN al mandar (como la cita del recordatorio):
+    // el mensaje dice lo que la tarjeta dice AHORA. El dominio sale del
+    // enlace que se escribió al encolar (la petición de Caja lo conocía);
+    // si no hubiera, el de la app.
+    const origin = originOfFirstLink(row.body) ?? (process.env.NEXT_PUBLIC_APP_URL ?? "").trim().replace(/\/+$/, "");
+    if (origin) {
+      const params = starsCardParams({
+        firstName: stars.firstName,
+        stars: stars.stars,
+        total: starsCardTotal(stars.stars, stars.next),
+        url: absoluteCardUrl(origin, stars.cardPath),
+      });
+      // «Solo cuando sea gratis»: SIN plantilla. Si la ventana ya se cerró,
+      // la fila caduca (más abajo) en vez de salir como plantilla de pago.
+      return {
+        text: renderStarsCardText(params),
+        template: starsCardRowMayUseTemplate(row.templateName) ? { tpl: barberWaTemplate("starsCard"), params } : null,
+      };
+    }
   }
   if (kind === "bookingConfirmed" && appt) {
     const params = bookingParamsFrom(shop, appt);
@@ -1309,12 +1348,21 @@ async function processOutboxRow(
       (kind === "reminder" || kind === "bookingConfirmed") && row.appointmentId
         ? await loadAppt(shop.id, row.appointmentId)
         : null;
-    const stale = barberOutboxStaleReason({
-      kind,
-      createdAt: row.createdAt,
-      now,
-      appointment: appt ? { status: appt.status, startAt: appt.startAt } : null,
-    });
+    // La tarjeta de estrellas: el número fresco del ticket (null = el ticket
+    // ya no tiene cliente o la barbería apagó las estrellas → ya no se manda).
+    const starsSaleId = kind === "starsCard" ? saleIdOfStarsCardRow(row.templateName) : null;
+    const stars = starsSaleId
+      ? await saleStarsOutcome(prisma, { barbershopId: shop.id, slug: shop.slug, saleId: starsSaleId }).catch(() => null)
+      : null;
+    const stale =
+      kind === "starsCard" && !stars
+        ? "la tarjeta de estrellas de ese ticket ya no aplica"
+        : barberOutboxStaleReason({
+            kind,
+            createdAt: row.createdAt,
+            now,
+            appointment: appt ? { status: appt.status, startAt: appt.startAt } : null,
+          });
     if (stale) {
       // Misma marca que usa T1 al mover una cita: no es un rechazo de Meta y
       // la pantalla no lo enseña como un problema de la conexión.
@@ -1354,7 +1402,7 @@ async function processOutboxRow(
 
     let wamid: string | null;
     try {
-      const plan = planDelivery(shop, row, kind, appt);
+      const plan = planDelivery(shop, row, kind, appt, stars);
       const windowOpen = barberWaWindowOpen(await lastInboundAt(shop.id, row.phone), now);
       if (windowOpen && plan.text) {
         // Ventana abierta: texto libre (gratis). El recordatorio lleva además
@@ -3445,6 +3493,8 @@ function deliveredOutboundWhere(barbershopId: string, phone: string) {
         AND: [
           { NOT: { templateName: { startsWith: BARBER_WA_SYS_PREFIX } } },
           { NOT: { templateName: BARBER_WA_ACK_MARK } },
+          // Ni la tarjeta de estrellas tras el cobro (ws6-t1).
+          { NOT: { templateName: { startsWith: STARS_CARD_MARK_PREFIX } } },
         ],
       },
     ],
@@ -4007,7 +4057,8 @@ function toMessageDTO(row: {
       attachment ||
       isBarberWaSysRow(row.templateName) ||
       isBarberWaAskRow(row.templateName) ||
-      isBarberWaAckRow(row.templateName)
+      isBarberWaAckRow(row.templateName) ||
+      isStarsCardRow(row.templateName)
         ? null
         : row.templateName,
     attachment,

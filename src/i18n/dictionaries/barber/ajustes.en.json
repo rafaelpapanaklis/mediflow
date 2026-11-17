@@ -205,6 +205,20 @@
       "cooldownBad": "Enter a whole number from {min} to {max} days.",
       "saved": "Saved"
     },
+    "starsCard": {
+      "title": "Star card on WhatsApp",
+      "sub": "So clients have their card at hand without asking for it.",
+      "enabled": "Send the star card after checkout",
+      "free": "Only when it's free",
+      "freeHint": "It's sent only if the client messaged you on WhatsApp in the last 24 h, so Meta charges nothing. Otherwise Checkout gives you a button to send it yourself.",
+      "always": "Always",
+      "alwaysHint": "Within 24 h it goes out free; outside that window, with the approved “Your stars card” template (WhatsApp → Templates).",
+      "alwaysCost": "Meta charges you for each message sent outside the 24 h window (billed to your WhatsApp Business account).",
+      "off": "Don't send",
+      "offHint": "It isn't sent on its own. Checkout still has the “Send their card” button and the ticket QR.",
+      "note": "When a ticket adds stars (or uses a reward), the client gets “You have 4 of 6 stars” with a link to their card, from the shop's connected WhatsApp. Only once per ticket.",
+      "saved": "Saved"
+    },
     "booking": {
       "title": "Online booking",
       "sub": "What happens when a client books from your page.",

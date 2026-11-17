@@ -84,7 +84,8 @@
       "bookingConfirmed": "Reserva confirmada",
       "birthday": "Felicitación de cumpleaños",
       "winback": "Te extrañamos",
-      "ownerOrder": "Aviso para ti: pedido nuevo en tu tienda"
+      "ownerOrder": "Aviso para ti: pedido nuevo en tu tienda",
+      "starsCard": "Tu tarjeta de estrellas (después de cobrar)"
     },
     "created": "Se dieron de alta {count}. Meta las revisa y suelen aprobarse en minutos.",
     "noneNeeded": "No falta ninguna.",

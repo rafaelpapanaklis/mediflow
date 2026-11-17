@@ -51,6 +51,7 @@ import {
 } from "@/lib/barber/campaigns";
 import type { BarberBookingPolicy } from "@/lib/barber/booking";
 import { getOrderNoticeSettings, type OrderNoticeSettingsView } from "@/lib/barber/pedido-avisos";
+import { readStarsCardSetting } from "@/lib/barber/tarjeta-cobro-ajuste";
 
 // ── Límites ─────────────────────────────────────────────────────────────
 export const SHOP_NAME_MAX = 120;
@@ -117,6 +118,12 @@ export interface BarberShopProfile {
 export interface BarberSettingsView {
   profile: BarberShopProfile;
   slug: string;
+  /**
+   * «Mandar la tarjeta de estrellas después de cobrar» (ws6-t1, 16-nov):
+   * "free" (solo cuando sea gratis, por defecto) | "always" | "off".
+   * persisted=false: falta sql/barber_tarjeta_cobro.sql (vale "free" y no se puede cambiar).
+   */
+  starsCard: { mode: "free" | "always" | "off"; persisted: boolean };
   loyalty: {
     enabled: boolean;
     threshold: number;
@@ -261,12 +268,13 @@ export async function saveBookingPolicy(
 
 export async function getBarberSettings(ctx: BarberContext): Promise<BarberSettingsView> {
   assertBarberPermission(ctx, "settings.edit");
-  const [profile, clients, campaigns, booking, orderNotices] = await Promise.all([
+  const [profile, clients, campaigns, booking, orderNotices, starsCard] = await Promise.all([
     readProfile(ctx),
     getBarberClientsConfig(ctx),
     getBarberCampaignConfig(ctx),
     readBookingPolicySetting(ctx),
     getOrderNoticeSettings(ctx),
+    readStarsCardSetting(ctx.barbershopId),
   ]);
   const { slug, ...rest } = profile;
   return {
@@ -295,6 +303,7 @@ export async function getBarberSettings(ctx: BarberContext): Promise<BarberSetti
     },
     booking,
     orderNotices,
+    starsCard,
     timezones: BARBER_TIMEZONES.includes(profile.timezone)
       ? BARBER_TIMEZONES
       : [profile.timezone, ...BARBER_TIMEZONES],

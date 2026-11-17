@@ -205,6 +205,20 @@
       "cooldownBad": "Escribe un número entero de {min} a {max} días.",
       "saved": "Guardado"
     },
+    "starsCard": {
+      "title": "Tarjeta de estrellas por WhatsApp",
+      "sub": "Que el cliente tenga su tarjeta a la mano sin pedirla.",
+      "enabled": "Mandar la tarjeta de estrellas después de cobrar",
+      "free": "Solo cuando sea gratis",
+      "freeHint": "Le llega solo si el cliente te escribió por WhatsApp en las últimas 24 h: así Meta no cobra nada. Si no, en Caja te queda el botón para mandársela tú.",
+      "always": "Siempre",
+      "alwaysHint": "Dentro de las 24 h le llega gratis; fuera, con la plantilla «Tu tarjeta de estrellas» aprobada (WhatsApp → Plantillas).",
+      "alwaysCost": "Meta te cobra cada aviso fuera de las 24 h (lo paga tu cuenta de WhatsApp Business).",
+      "off": "No mandar",
+      "offHint": "No se manda sola. En Caja sigue el botón «Mandar su tarjeta» y el QR del ticket.",
+      "note": "Al cobrar un ticket que suma estrellas (o usa un bono), al cliente le llega «Llevas 4 de 6 estrellas» con el enlace a su tarjeta, por el WhatsApp conectado de la barbería. Una sola vez por ticket.",
+      "saved": "Guardado"
+    },
     "booking": {
       "title": "Reservas en línea",
       "sub": "Qué pasa cuando un cliente reserva desde tu página.",

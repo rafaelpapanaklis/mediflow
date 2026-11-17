@@ -798,5 +798,27 @@ export async function saleStarsOutcome(
   };
 }
 
+/**
+ * Ruta de la tarjeta del cliente de UN ticket, para el QR del ticket impreso
+ * (ws6-t1, 16-nov): «Escanea y ve tus estrellas». null si el ticket no tiene
+ * cliente, si el cliente está bloqueado o si la barbería tiene la tarjeta
+ * apagada. Filtra por barbershopId: un ticket ajeno no da nada.
+ */
+export async function ticketStarsCardPath(
+  db: LoyaltyDb,
+  args: { barbershopId: string; slug: string; saleId: string },
+): Promise<string | null> {
+  const { barbershopId, saleId } = args;
+  if (!barbershopId || !saleId || !args.slug) return null;
+  const sale = await db.barberSale.findFirst({
+    where: { id: saleId, barbershopId },
+    select: { clientId: true, client: { select: { preferences: true, blockedAt: true } } },
+  });
+  if (!sale?.clientId || !sale.client || sale.client.blockedAt) return null;
+  const catalog = await loadBonusCatalog(db, barbershopId);
+  if (!catalog.rule.enabled) return null;
+  return cardPath(args.slug, signCardToken(barbershopId, sale.clientId, cardVersion(sale.client.preferences)));
+}
+
 // Re-export para quien solo importa este módulo.
 export { APPOINTMENT_GIVES_STAR, NOT_CANCELLED };

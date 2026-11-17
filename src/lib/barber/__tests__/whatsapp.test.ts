@@ -97,6 +97,8 @@ test("todo lo transaccional es `utility` — nada se cuela como marketing", () =
     reminderButtons: "UTILITY",
     walkinTurn: "UTILITY",
     bookingConfirmed: "UTILITY",
+    // La tarjeta de estrellas tras el cobro (ws6-t1, 16-nov): aviso de su cuenta, no promoción.
+    starsCard: "UTILITY",
     // Meta EXIGE authentication para un código de un solo uso; mandarlo como
     // utilidad se rechaza.
     portalCode: "AUTHENTICATION",
@@ -191,6 +193,7 @@ test("🔴 CONTRATO: la cantidad de variables es la que pasa el emisor (132000)"
   //   walkinTurn        → [shop.name, row.body]         son 2
   //   portalCode        → [code]                        es 1
   //   birthday/winback  → [cliente, barbería, promo]    son 3
+  //   starsCard         → starsCardParams()             son 4 (nombre, estrellas, total, enlace)
   const contrato: Record<string, number> = {
     reminder: 6,
     // La de botones lleva los MISMOS seis parámetros (reminderParamsFrom).
@@ -202,6 +205,7 @@ test("🔴 CONTRATO: la cantidad de variables es la que pasa el emisor (132000)"
     winback: 3,
     // ownerOrder → ownerOrderWaParams() devuelve 3: folio, total, forma de pago.
     ownerOrder: 3,
+    starsCard: 4,
   };
   for (const tpl of BARBER_WA_TEMPLATES) {
     assert.equal(tpl.variables.length, contrato[tpl.kind], `variables de ${tpl.kind}`);

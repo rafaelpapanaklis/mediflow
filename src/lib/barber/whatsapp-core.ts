@@ -260,7 +260,8 @@ export type BarberWaKind =
   | "bookingConfirmed"
   | "birthday"
   | "winback"
-  | "ownerOrder";
+  | "ownerOrder"
+  | "starsCard";
 
 export interface BarberWaTemplate {
   kind: BarberWaKind;
@@ -374,6 +375,24 @@ export const BARBER_WA_TEMPLATES: readonly BarberWaTemplate[] = [
       "martes 26 de agosto a las 17:00",
       "Av. Juárez 120, Centro",
     ],
+    optional: false,
+  },
+  {
+    // LA TARJETA DE ESTRELLAS tras el cobro (ws6-t1, 16-nov). Sale sola al
+    // cobrar un ticket con estrellas (src/lib/barber/tarjeta-cobro.ts); con
+    // la ventana de 24 h abierta va como texto con las MISMAS palabras
+    // (renderStarsCardText en tarjeta-cobro-core.ts). Cuatro variables, las
+    // que pidió Rafael; el enlace lleva el slug de la barbería.
+    kind: "starsCard",
+    name: "dc_barber_tarjeta_estrellas",
+    category: "UTILITY",
+    lang: BARBER_WA_LANG,
+    body:
+      "Hola {{1}}, gracias por tu visita. ⭐ Llevas {{2}} de {{3}} estrellas en tu tarjeta.\n\n" +
+      "Ve tu tarjeta aquí: {{4}}\n\n" +
+      "Guárdala para ver tus premios.",
+    variables: ["cliente", "estrellas", "total", "enlace de la tarjeta"],
+    sample: ["Luis", "4", "6", "https://dalecontrol.com/b/el-corte/tarjeta/abc123"],
     optional: false,
   },
   {
@@ -702,7 +721,10 @@ export const BARBER_WALKIN_NOTICE_TTL_MS = 30 * 60 * 1000;
 /** Un «pedido nuevo» al dueño que no salió en este rato ya no es noticia: el correo y el panel ya avisaron. */
 export const BARBER_OWNER_NOTICE_TTL_MS = 2 * 60 * 60 * 1000;
 
-export type BarberOutboxKind = "reminder" | "bookingConfirmed" | "walkinTurn" | "ownerOrder" | "other";
+export type BarberOutboxKind = "reminder" | "bookingConfirmed" | "walkinTurn" | "ownerOrder" | "starsCard" | "other";
+
+/** La tarjeta de estrellas tras el cobro caduca a las 12 h (STARS_CARD_TTL_MS en tarjeta-cobro-core). */
+export const BARBER_STARS_CARD_TTL_MS = 12 * 60 * 60 * 1000;
 
 /**
  * ¿Esta fila de la cola YA NO debe salir? Devuelve el motivo, o null si se
@@ -732,6 +754,11 @@ export function barberOutboxStaleReason(args: {
   if (args.kind === "ownerOrder") {
     return args.now.getTime() - args.createdAt.getTime() > BARBER_OWNER_NOTICE_TTL_MS
       ? "el aviso del pedido caducó antes de poder enviarse"
+      : null;
+  }
+  if (args.kind === "starsCard") {
+    return args.now.getTime() - args.createdAt.getTime() > BARBER_STARS_CARD_TTL_MS
+      ? "la tarjeta de estrellas del cobro caducó antes de poder enviarse"
       : null;
   }
   if (args.kind === "reminder" || args.kind === "bookingConfirmed") {

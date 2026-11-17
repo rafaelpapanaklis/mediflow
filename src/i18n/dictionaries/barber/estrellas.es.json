@@ -141,6 +141,11 @@
     "needsService": "Agrega {service} al ticket para usar este bono.",
     "bonusDiscount": "Bono «{bonus}»",
     "bonusGift": "Entrega: {text}. Queda anotado en el ticket.",
-    "starsShort": "{count} ★"
+    "starsShort": "{count} ★",
+    "cardSentWa": "Le llegó su tarjeta por WhatsApp a {name}.",
+    "cardQueuedWa": "Su tarjeta le está llegando por WhatsApp.",
+    "sendCardManual": "Mandar su tarjeta",
+    "sendCardManualHint": "No salió sola por WhatsApp: ábrela y mándasela desde tu celular.",
+    "sendCardManualHintFree": "No salió sola porque el cliente no te ha escrito en 24 h y Meta la cobraría. Mándasela tú desde tu celular (sin costo)."
   }
 }

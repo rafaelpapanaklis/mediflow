@@ -57,6 +57,7 @@ const SQL_FILES = {
   inactivity: "sql/barber_clientes.sql",
   campaigns: "sql/barber_campanas.sql",
   booking: "sql/barber_settings.sql",
+  starsCard: "sql/barber_tarjeta_cobro.sql",
 } as const;
 
 export function ConfiguracionScreen({
@@ -106,6 +107,11 @@ export function ConfiguracionScreen({
           bonos={starsDict ? { note: st("bonos.configNote"), link: st("bonos.configLink") } : null}
           value={settings.loyalty}
           onSaved={(loyalty) => setSettings((v) => ({ ...v, loyalty }))}
+        />
+        <StarsCardAfterChargeCard
+          t={t}
+          value={settings.starsCard}
+          onSaved={(starsCard) => setSettings((v) => ({ ...v, starsCard }))}
         />
         <InactivityCard
           t={t}
@@ -789,6 +795,84 @@ function CampaignsCard({
           </div>
         )}
       </Field>
+    </Card>
+  );
+}
+
+// ── La tarjeta de estrellas por WhatsApp tras cobrar (ws6-t1) ──────────
+
+function StarsCardAfterChargeCard({
+  t,
+  value,
+  onSaved,
+}: {
+  t: T;
+  value: BarberSettingsView["starsCard"];
+  onSaved: (v: BarberSettingsView["starsCard"]) => void;
+}) {
+  const [mode, setMode] = useState(value.mode);
+  const { saving, error, run } = useSaving();
+  const canSave = value.persisted && mode !== value.mode && !saving;
+
+  async function save() {
+    const done = await run(async () => {
+      const r = await apiCall<{ value: BarberSettingsView["starsCard"] }>("/api/barber/settings", {
+        method: "PATCH",
+        json: { section: "starsCard", mode },
+      });
+      onSaved(r.value);
+    });
+    if (done) toast.success(t("configuracion.starsCard.saved"));
+  }
+
+  // Tres posiciones (Rafael, 16-nov): que a ninguna barbería le llegue un
+  // cobro de Meta que no eligió. «Solo cuando sea gratis» es la de fábrica.
+  const options: Array<{ id: BarberSettingsView["starsCard"]["mode"]; title: string; hint: string; warn?: string }> = [
+    { id: "free", title: t("configuracion.starsCard.free"), hint: t("configuracion.starsCard.freeHint") },
+    { id: "always", title: t("configuracion.starsCard.always"), hint: t("configuracion.starsCard.alwaysHint"), warn: t("configuracion.starsCard.alwaysCost") },
+    { id: "off", title: t("configuracion.starsCard.off"), hint: t("configuracion.starsCard.offHint") },
+  ];
+
+  return (
+    <Card
+      icon={<MessageCircle size={18} />}
+      title={t("configuracion.starsCard.title")}
+      sub={t("configuracion.starsCard.sub")}
+      foot={
+        <>
+          <ErrorText>{error}</ErrorText>
+          <Btn variant="primary" onClick={save} disabled={!canSave}>
+            {saving ? t("common.saving") : t("common.save")}
+          </Btn>
+        </>
+      }
+    >
+      {!value.persisted ? <SqlPending t={t} file={SQL_FILES.starsCard} /> : null}
+      <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)" }}>{t("configuracion.starsCard.enabled")}</div>
+      <div className={s.optionList} role="radiogroup" aria-label={t("configuracion.starsCard.enabled")}>
+        {options.map((o) => (
+          <button
+            key={o.id}
+            type="button"
+            role="radio"
+            aria-checked={mode === o.id}
+            className={s.option}
+            disabled={!value.persisted}
+            onClick={() => setMode(o.id)}
+            data-modo-tarjeta={o.id}
+          >
+            <span className={s.optionDot} aria-hidden="true" />
+            <span style={{ minWidth: 0 }}>
+              <span className={s.optionTitle} style={{ display: "block" }}>{o.title}</span>
+              <span className={s.optionHint} style={{ display: "block" }}>{o.hint}</span>
+              {o.warn ? (
+                <span className={s.optionHint} style={{ display: "block", marginTop: 4, color: "var(--warning)", fontWeight: 600 }}>{o.warn}</span>
+              ) : null}
+            </span>
+          </button>
+        ))}
+      </div>
+      <p className={s.hint}>{t("configuracion.starsCard.note")}</p>
     </Card>
   );
 }
