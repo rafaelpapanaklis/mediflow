@@ -612,3 +612,8 @@
 .dcba-link:hover {
   text-decoration: underline;
 }
+
+/* «En línea» (17-nov-2026): el MISMO punto que .dcp-online de /admin/clinics
+   (src/components/admin/rediseno/admin-rediseno.css), copiado aquí para no
+   depender de una clase del dental. */
+.dcba-online { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--success); box-shadow: 0 0 0 2px var(--success-soft); flex-shrink: 0; }

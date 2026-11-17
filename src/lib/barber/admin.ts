@@ -2,7 +2,7 @@ import "server-only";
 import { Prisma } from "@prisma/client";
 import { createClient as createSupabaseAdmin } from "@supabase/supabase-js";
 import { prisma } from "@/lib/prisma";
-import { usoParaLista } from "@/lib/barber/uso/actividad";
+import { usoParaLista, usuariosEnLinea } from "@/lib/barber/uso/actividad";
 import { isMissingTableError } from "@/lib/barber/db-errors";
 import { getBarberPlans } from "@/lib/barber/plans";
 import {
@@ -244,6 +244,12 @@ export interface AdminBarbershopRow {
    */
   lastUsageAt: string | null;
   clicksThisMonth: number | null;
+  /**
+   * «En línea» como en /admin/clinics: alguien de su equipo usó el panel en
+   * los últimos MINUTOS_EN_LINEA (src/lib/barber/uso/en-linea-core.ts). Una
+   * matriz, si cualquiera de sus sedes. false sin la tabla de uso.
+   */
+  enLinea: boolean;
 }
 
 export interface AdminBarbershopFilters {
@@ -419,6 +425,7 @@ export async function listBarbershopsForAdmin(
       openTickets: ticketsBy.get(s.id) ?? 0,
       lastUsageAt: uso.porBarberia.get(s.id)?.ultimoUso ?? null,
       clicksThisMonth: uso.disponible ? (uso.porBarberia.get(s.id)?.clicsMes ?? 0) : null,
+      enLinea: uso.enLinea.has(s.id),
     };
   });
 }
@@ -664,6 +671,8 @@ export interface AdminBarberTeamMember {
   createdAt: string;
   /** Nombre de la fila `Barber` cuando el usuario además atiende. */
   barberName: string | null;
+  /** Usó el panel en los últimos MINUTOS_EN_LINEA (false sin la tabla de uso). */
+  enLinea: boolean;
 }
 
 export interface AdminBarberOperator {
@@ -935,9 +944,15 @@ export async function getBarbershopDetailForAdmin(
     openTickets,
     lastUsageAt: null,
     clicksThisMonth: null,
+    enLinea: false,
   };
 
-  const manualActions = await listBarberAdminActions(shop.id);
+  // Quién del equipo está en el panel ahora: una consulta, en paralelo con la
+  // bitácora. Sin la tabla de uso → nadie, sin tronar.
+  const [manualActions, equipoEnLinea] = await Promise.all([
+    listBarberAdminActions(shop.id),
+    usuariosEnLinea(team.map((u) => u.id), prisma, now),
+  ]);
 
   return {
     shop: {
@@ -962,6 +977,7 @@ export async function getBarbershopDetailForAdmin(
       lastLogin: iso(u.lastLogin),
       createdAt: u.createdAt.toISOString(),
       barberName: u.barber?.name ?? null,
+      enLinea: equipoEnLinea.has(u.id),
     })),
     barbers: barbers.map((b) => ({
       id: b.id,

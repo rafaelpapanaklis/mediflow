@@ -111,7 +111,19 @@ export function AdminBarbershopDetailClient({
 
         <div className="dcba-head">
           <div style={{ minWidth: 0 }}>
-            <h1 className="dcba-title">{shop.name}</h1>
+            <h1 className="dcba-title">
+              {shop.name}
+              {/* Como la ficha de /admin/clinics: alguien de su equipo (o de sus sedes) en el panel. */}
+              {shop.enLinea && (
+                <span
+                  className="dcba-online"
+                  style={{ marginLeft: 8, verticalAlign: "middle" }}
+                  title="En el panel ahora"
+                  role="img"
+                  aria-label="En el panel ahora"
+                />
+              )}
+            </h1>
             <p className="dcba-sub">
               <span className="mono">{shop.slug}</span>
               {shop.city ? ` · ${shop.city}` : ""}
@@ -409,7 +421,18 @@ export function AdminBarbershopDetailClient({
                   {team.map((m) => (
                     <tr key={m.id}>
                       <td>
-                        <div style={{ fontSize: 12.5, color: "var(--text-1)" }}>{m.name}</div>
+                        <div style={{ fontSize: 12.5, color: "var(--text-1)" }}>
+                          {m.name}
+                          {m.enLinea && (
+                            <span
+                              className="dcba-online"
+                              style={{ marginLeft: 6, verticalAlign: "1px" }}
+                              title="En el panel ahora"
+                              role="img"
+                              aria-label="En el panel ahora"
+                            />
+                          )}
+                        </div>
                         {m.barberName && (
                           <div className="dcba-note">Atiende como {m.barberName}</div>
                         )}
